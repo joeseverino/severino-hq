@@ -7,6 +7,7 @@ is the configuration. Secrets, variables' values and log contents are never
 read, so the schema has nowhere to put them.
 """
 
+from collections.abc import Iterable, Mapping
 from datetime import timedelta
 from typing import Annotated, Any
 
@@ -16,6 +17,10 @@ from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 PROVIDER = "github_app"
 REPOSITORY_KIND = "github.repository"
+# How often each repository is read in full when GitHub's change query sees
+# nothing new: the bound on how stale what the query cannot see gets (alerts,
+# variables, runners, environments, branch rules, access, artifacts).
+FULL_READ_EVERY = timedelta(hours=1)
 
 # Refusable one at a time: a private repository on a free plan has no code
 # scanning, and that should not hide its pull requests.
@@ -94,6 +99,27 @@ class RepositoryRecord(ObservationRecord):
     # Each ``uses:`` of a reusable workflow another repository holds, pinned or
     # not: what it uses in turn is not read here.
     called_workflows: list[str] | None = None
+    # What GitHub's change query answered when this record was read, hashed,
+    # and when it was read in full: the plan HQ sends the controller.
+    fingerprint: str = ""
+    read_at: Stamp = None
+    # Sent in place of a record the change query found unchanged: the record
+    # HQ holds stands (``carry_held``), and none is stored without one.
+    carried: bool = False
+
+
+def carry_held(last: Iterable[Mapping[str, Any]], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The records, each carried one replaced by the one HQ holds of the
+    same repository, and dropped where HQ holds none."""
+
+    held = {str(record.get("repository", "")): dict(record) for record in last}
+    kept = []
+    for record in records:
+        if not record.get("carried"):
+            kept.append(record)
+        elif (standing := held.get(str(record.get("repository", "")))) is not None:
+            kept.append(standing)
+    return kept
 
 
 # What GitHub shows anyone, so no credential reads it: the provider is GitHub
@@ -183,6 +209,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("repository", "")),
         relation="Built from repository",
         console=lambda record: str(record.get("url", "")),
+        from_last=carry_held,
     ),
     ObservationSpec(
         PROFILE_KIND,

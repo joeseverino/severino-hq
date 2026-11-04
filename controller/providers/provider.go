@@ -47,9 +47,9 @@ func recordsOf[T, R any](items []T, record func(T) (R, error)) ([]R, error) {
 // into its own response type. The payload is a provider request struct, url.Values or a string.
 type Transport interface {
 	Request(context.Context, string, string, map[string]string, any) (json.RawMessage, error)
-	// RequestHeader GETs an address for its JSON and one header of the same
-	// response, such as the ETag of the version read.
-	RequestHeader(ctx context.Context, address string, headers map[string]string, name string) (json.RawMessage, string, error)
+	// Exchange is Request with the answer's headers, which a refusal keeps
+	// too: the ETag of the version read, what a rate limit has left.
+	Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error)
 }
 
 // Action is a registered handler as the controller dispatches it: the
@@ -142,6 +142,9 @@ type Registry struct {
 	Extensions []runtime.AdmittedExtension
 	// Profiles is whose public GitHub profile to read and whether it is due, from HQ's registry.
 	Profiles runtime.GitHubProfilePlan
+	// Repositories is each GitHub repository HQ holds, its fingerprint and
+	// whether its full read is due, from HQ's registry.
+	Repositories runtime.GitHubRepositoriesPlan
 	// Updates is which repositories a dependency update run covers and whether
 	// one is due, from HQ's registry.
 	Updates runtime.DependencyUpdatesPlan
@@ -155,6 +158,9 @@ type Registry struct {
 	probes     map[runtime.ConnectionProvider]Probe
 	snapshotMu sync.Mutex
 	snapshot   map[string]*cachedRead
+	// githubLedger is what this sweep has spent of each GitHub App
+	// installation's hourly allowance (github_limit.go).
+	githubLedger *githubLedger
 	// refusedCredentials holds, for this sweep, each Cloudflare credential prefix
 	// refused outright and why; nil outside a sweep.
 	refusedCredentials map[string]string
@@ -269,6 +275,7 @@ func (r *Registry) BeginSnapshot() func() {
 	r.snapshotMu.Lock()
 	r.snapshot = map[string]*cachedRead{}
 	r.refusedCredentials = map[string]string{}
+	r.githubLedger = nil
 	r.snapshotMu.Unlock()
 	return func() {
 		r.snapshotMu.Lock()

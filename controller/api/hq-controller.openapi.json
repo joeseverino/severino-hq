@@ -1555,6 +1555,9 @@
           "github_profiles": {
             "$ref": "#/components/schemas/GitHubProfilePlan"
           },
+          "github_repositories": {
+            "$ref": "#/components/schemas/GitHubRepositoriesPlan"
+          },
           "dependency_updates": {
             "$ref": "#/components/schemas/DependencyUpdatesPlan"
           }
@@ -1570,6 +1573,7 @@
           "connection_credentials",
           "extensions",
           "github_profiles",
+          "github_repositories",
           "dependency_updates"
         ]
       },
@@ -1993,6 +1997,44 @@
         "additionalProperties": false,
         "required": [
           "accounts",
+          "due"
+        ]
+      },
+      "GitHubRepositoriesPlan": {
+        "type": "object",
+        "description": "Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.",
+        "properties": {
+          "held": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepositoryHeld"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "held"
+        ]
+      },
+      "GitHubRepositoryHeld": {
+        "type": "object",
+        "description": "One repository's record as HQ holds it: its owner/name, its fingerprint (empty when none was taken), and whether a full read is due.",
+        "properties": {
+          "repository": {
+            "type": "string",
+            "description": "owner/name, as GitHubRepositoryRecord's repository."
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "due": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "repository",
+          "fingerprint",
           "due"
         ]
       },
@@ -3305,6 +3347,21 @@
               "null"
             ],
             "default": null
+          },
+          "fingerprint": {
+            "default": "",
+            "type": "string"
+          },
+          "read_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "carried": {
+            "default": false,
+            "type": "boolean"
           }
         },
         "required": [

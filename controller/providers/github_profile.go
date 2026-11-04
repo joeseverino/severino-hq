@@ -142,7 +142,9 @@ func githubPublicHeaders(accept, bearer string) map[string]string {
 // githubPublic is one GET of public data from GitHub's API, decoded into T. A
 // missing resource is the zero value and ok false.
 func githubPublic[T any](ctx context.Context, r *Registry, bearer, path, accept, what string) (T, bool, error) {
-	raw, err := r.HTTP.Request(ctx, githubAPI+path, "GET", githubPublicHeaders(accept, bearer), nil)
+	// Under the app's token the read spends the installation's allowance;
+	// anonymous, this address's own.
+	raw, err := r.githubExchange(ctx, http.MethodGet, path, githubPublicHeaders(accept, bearer), nil, bearer)
 	if httpStatus(err) == http.StatusNotFound {
 		var zero T
 		return zero, false, nil

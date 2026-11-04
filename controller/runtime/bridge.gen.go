@@ -1145,7 +1145,10 @@ type ControllerRegistry struct {
 
 	// GithubProfiles Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
 	GithubProfiles GitHubProfilePlan `json:"github_profiles"`
-	Locked         []LockedAction    `json:"locked"`
+
+	// GithubRepositories Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.
+	GithubRepositories GitHubRepositoriesPlan `json:"github_repositories"`
+	Locked             []LockedAction         `json:"locked"`
 
 	// MaterialKinds Kinds whose work needs material HQ holds.
 	MaterialKinds []ResourceKind `json:"material_kinds"`
@@ -1248,6 +1251,20 @@ type GitHubProfileRecord struct {
 	Website     string                   `json:"website,omitempty"`
 }
 
+// GitHubRepositoriesPlan Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.
+type GitHubRepositoriesPlan struct {
+	Held []GitHubRepositoryHeld `json:"held"`
+}
+
+// GitHubRepositoryHeld One repository's record as HQ holds it: its owner/name, its fingerprint (empty when none was taken), and whether a full read is due.
+type GitHubRepositoryHeld struct {
+	Due         bool   `json:"due"`
+	Fingerprint string `json:"fingerprint"`
+
+	// Repository owner/name, as GitHubRepositoryRecord's repository.
+	Repository string `json:"repository"`
+}
+
 // GitHubRepositoryRecord One github.repository record: GitHub repository.
 type GitHubRepositoryRecord struct {
 	Access            map[string]interface{}   `json:"access,omitempty"`
@@ -1255,12 +1272,14 @@ type GitHubRepositoryRecord struct {
 	Archived          bool                     `json:"archived,omitempty"`
 	Artifacts         []map[string]interface{} `json:"artifacts,omitempty"`
 	CalledWorkflows   []string                 `json:"called_workflows,omitempty"`
+	Carried           bool                     `json:"carried,omitempty"`
 	Checks            map[string]interface{}   `json:"checks,omitempty"`
 	ConnectionRef     string                   `json:"connection_ref"`
 	DefaultBranch     string                   `json:"default_branch,omitempty"`
 	DependabotAlerts  []map[string]interface{} `json:"dependabot_alerts,omitempty"`
 	Deployments       []map[string]interface{} `json:"deployments,omitempty"`
 	Environments      []map[string]interface{} `json:"environments,omitempty"`
+	Fingerprint       string                   `json:"fingerprint,omitempty"`
 	Head              map[string]interface{}   `json:"head,omitempty"`
 	Images            []map[string]interface{} `json:"images,omitempty"`
 	Pins              []map[string]interface{} `json:"pins,omitempty"`
@@ -1268,6 +1287,7 @@ type GitHubRepositoryRecord struct {
 	PullRequestChecks []string                 `json:"pull_request_checks,omitempty"`
 	PullRequests      []map[string]interface{} `json:"pull_requests,omitempty"`
 	PushedAt          string                   `json:"pushed_at,omitempty"`
+	ReadAt            string                   `json:"read_at,omitempty"`
 	Release           map[string]interface{}   `json:"release,omitempty"`
 	Repository        string                   `json:"repository"`
 	Rules             map[string]interface{}   `json:"rules,omitempty"`

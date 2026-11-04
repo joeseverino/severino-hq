@@ -62,7 +62,8 @@ func (c tailnetClient) call(ctx context.Context, method, path string, extra map[
 
 // callHeader is a GET that also returns one response header.
 func (c tailnetClient) callHeader(ctx context.Context, path string, extra map[string]string, name string) (json.RawMessage, string, error) {
-	return c.r.HTTP.RequestHeader(ctx, c.base+path, c.headers(extra), name)
+	data, header, err := c.r.HTTP.Exchange(ctx, c.base+path, "GET", c.headers(extra), nil)
+	return data, header.Get(name), err
 }
 
 func (c tailnetClient) headers(extra map[string]string) map[string]string {

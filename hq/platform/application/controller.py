@@ -33,6 +33,7 @@ lazy from .derivations import present
 lazy from .expiry import certificate_expiry, renewal_opens_at, renewal_window
 lazy from .findings import auto_remediable
 lazy from .github_profile import plan as github_profiles
+lazy from .github_repositories import plan as github_repositories
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .security import CONTROLLER_INTERFACE, cli_principal
 
@@ -455,7 +456,8 @@ def controller_registry() -> dict[str, Any]:
     A controller that cannot import these declarations asks for them: which
     actions it may apply, which it must refuse and why, which kinds need material
     HQ holds, which connections can read each kind, which extensions the image
-    composes, whose public GitHub profile is due a read, and which repositories
+    composes, whose public GitHub profile is due a read, which GitHub
+    repositories HQ holds and which are due a full read, and which repositories
     a dependency update run covers and whether one is due.
     """
 
@@ -477,5 +479,6 @@ def controller_registry() -> dict[str, Any]:
         "connection_credentials": sorted(CONNECTION_CREDENTIALS),
         "extensions": [dict(source) for source in admitted_sources()],
         "github_profiles": github_profiles(),
+        "github_repositories": github_repositories(),
         "dependency_updates": dependency_updates(),
     }

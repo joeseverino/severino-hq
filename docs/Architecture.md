@@ -825,6 +825,30 @@ Adding a provider is writing its modules and adding one name to `ADMITTED`.
 `hq/domains/control_plane/provider_adapters/tests/test_admission.py` holds that
 to be enough.
 
+**GitHub's hourly allowance is shared**, so the controller keeps its own reads
+far from it. The installation's allowance (5,000 requests an hour) also pays for
+the deploy pipeline's reports and the dependency update run. Three promises
+follow, each held by `controller/providers/github_spend_test.go`:
+
+- A sweep where no repository changed spends next to nothing.
+  One GraphQL query a sweep, on GraphQL's separate points budget, asks
+  whether each repository changed
+  (`controller/providers/github_probe.go`). The controller reads in full only
+  a repository whose answer moved from the fingerprint its held record was
+  read under, or one HQ's clock makes due. The clock is
+  `observations.github.FULL_READ_EVERY`, at a point in the hour of its own for
+  each repository (`hq/platform/application/github_repositories.py`). Any
+  other repository is sent carried, and HQ keeps its record
+  (`ObservationSpec.from_last`). A conditional request would not do this job:
+  GitHub's ETag follows the token's text, and every sweep mints a new token.
+- A fuse caps each installation's spend
+  (`controller/providers/github_limit.go`). It counts each answer GitHub
+  counts, and stops reads under that installation for the rest of the sweep at
+  a ceiling per sweep, or when GitHub says the installation has fewer requests
+  left than a floor. What is still to read is carried where HQ holds it.
+- A read refused for an allowance names it, with when it lifts ("rate limited
+  until 18:06 UTC, the last reading stands"), never as a permission to grant.
+
 **One address-to-machine resolver**, `hq/platform/application/locate.py`.
 Every surface that draws a line between two things asks it: a proxy and the
 box it forwards to, a credential and the machine it opens, a service and where

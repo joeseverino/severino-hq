@@ -164,6 +164,12 @@ use mints an hour-long token for only what it does:
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
 | Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
 
+Every use under one installation shares its hourly allowance. The controller
+leaves at least 1,000 requests of it to the pipeline and the dependency update
+run, and reads a repository in full only when it changed or its hourly full
+read is due ([Architecture](Architecture.md#providers)). So a deploy's report
+does not wait on the readings.
+
 `mise run wire-github-app` reads the key from 1Password and sets those
 secrets on this repository and each extension's `admission` environment,
 through standard input. The client ID is a secret too: a variable is state

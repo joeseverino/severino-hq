@@ -203,18 +203,20 @@ func githubHeaders(token string) map[string]string {
 	}
 }
 
-// githubRequest is one request to GitHub's API under a bearer credential.
-func (r *Registry) githubRequest(ctx context.Context, method, path, bearer string, payload any) (json.RawMessage, error) {
-	return r.HTTP.Request(ctx, githubAPI+path, method, githubHeaders(bearer), payload)
+// githubRequest is one request to GitHub's API under an installation token,
+// spent from the installation's allowance through the fuse.
+func (r *Registry) githubRequest(ctx context.Context, method, path, token string, payload any) (json.RawMessage, error) {
+	return r.githubExchange(ctx, method, path, githubHeaders(token), payload, token)
 }
 
-// githubAsApp is one request authenticated as the app itself.
+// githubAsApp is one request authenticated as the app itself, on the app's
+// own allowance rather than an installation's.
 func (r *Registry) githubAsApp(ctx context.Context, c githubConnection, method, path string, payload any) (json.RawMessage, error) {
 	jwt, err := r.githubJWT(ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	return r.githubRequest(ctx, method, path, jwt, payload)
+	return r.githubExchange(ctx, method, path, githubHeaders(jwt), payload, "")
 }
 
 // githubRepositoryName is (owner, repository) from owner/repository.
@@ -262,6 +264,9 @@ func (r *Registry) githubMint(ctx context.Context, c githubConnection, installat
 		return "", err
 	}
 	token, err := MintGitHubToken(ctx, r.HTTP, r.Now(), app, installation, repositories, permissions)
+	if err == nil {
+		r.githubSpend().minted(token.Token, installation)
+	}
 	return token.Token, err
 }
 
