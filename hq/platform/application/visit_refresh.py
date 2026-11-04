@@ -16,6 +16,9 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
+from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
+from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND, TAILNET_POLICY_KIND
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
@@ -26,6 +29,7 @@ from .freshness import PAGE_VISIT, freshness
 from .record_errors import RecordNotFound
 from .security import Principal
 lazy from . import machines
+lazy from .connection_security import ingress_kinds
 lazy from .credential_sight import fed_kinds
 lazy from .entity_links import entity_link
 lazy from .service_list import listed_service
@@ -90,15 +94,35 @@ def _resource_reads(key: str) -> Reads | None:
     return None if kind is None else Reads((kind,))
 
 
+def _connection_reads() -> Reads:
+    """How this request reaches HQ is read from the tailnet (the device, its
+    peering and the policy), the containers (the one HQ answered from) and
+    what the posture checks judge. Never GitHub: the deploy-approval check is
+    left to the sweep, so opening the panel costs no GitHub call."""
+
+    return Reads(
+        (TAILNET_KIND, TAILNET_POLICY_KIND, CONTAINER_KIND, FIREWALL_KIND, TAILNET_LOCK_KIND, *ingress_kinds())
+    )
+
+
 # A page about no one thing, by name, and what it is assembled from: the
 # dashboard's queue says what GitHub holds, so opening it asks GitHub again.
-PAGES: dict[str, Reads] = {"dashboard": Reads((REPOSITORY_KIND,))}
+PAGES: dict[str, Callable[[], Reads]] = {
+    "dashboard": lambda: Reads((REPOSITORY_KIND,)),
+    "connection": _connection_reads,
+}
+
+
+def _page_reads(name: str) -> Reads | None:
+    found = PAGES.get(name)
+    return found() if found else None
+
 
 SUBJECTS: dict[str, Callable[[str], Reads | None]] = {
     "machine": _machine_reads,
     "service": _service_reads,
     "resource": _resource_reads,
-    "page": PAGES.get,
+    "page": _page_reads,
 }
 
 

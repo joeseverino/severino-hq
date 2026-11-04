@@ -137,6 +137,16 @@ class VisitRefreshTests(TestCase):
 
         self.assertEqual(result["requested"], [REPOSITORY_KIND])
 
+    def test_opening_the_connection_panel_asks_for_what_it_shows_and_never_github(self):
+        shown = ("tailscale.device", "tailscale.policy", "portainer.container", "host.firewall", "host.tailnet_lock")
+        for kind in (*shown, REPOSITORY_KIND):
+            store(kind, age=OLD)
+
+        result = request_visit_refresh(VisitRefreshCommand("page", "connection"), principal=cli_principal())
+
+        self.assertEqual(set(result["requested"]), set(shown))
+        self.assertNotIn(REPOSITORY_KIND, asked())
+
     def test_only_what_the_page_is_made_of_is_asked_for(self):
         for kind in (FAST, "npm.proxy_host", "tailscale.device"):
             store(kind, age=OLD)

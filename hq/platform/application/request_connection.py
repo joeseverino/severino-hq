@@ -15,6 +15,7 @@ from typing import Any
 from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
 from . import tailnet
+from .freshness import PAGE_VISIT, freshness
 from .labels import dotted, human_bytes
 from .reach import network_of, on_link_networks
 from .request_channel import Channel, channel_for_request, displayed_client_ip, forwarded_chain
@@ -26,7 +27,9 @@ lazy from .entity_links import entity_link
 lazy from .hq_self import hq_machine, hq_service, own_addresses, served_at
 lazy from .infrastructure import declared_machines
 lazy from .locate import index_of
+lazy from .moments import ago
 lazy from .tailnet_presence import tailnet_presence
+lazy from .timestamps import moment
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,10 +56,22 @@ class Peering:
         return self.id == "internet"
 
 
+# Said of what HQ last read, never of now: this request arrived, so a path
+# exists, and a link that has carried nothing lately simply had none to report.
 PEERING_UNKNOWN = Peering(
     "unknown",
     "Not known yet",
-    "This device is on the tailnet but cannot reach HQ's machine right now.",
+    "When HQ last read the tailnet, this device and HQ's machine had no path "
+    "between them, as a link that has carried nothing lately has none. This "
+    "request arrived, so the next read shows which path it took.",
+)
+# The reading has no device at this address: the device may have joined or
+# changed address since, which the next read shows.
+PEERING_UNLISTED = Peering(
+    "unlisted",
+    "Not known yet",
+    "HQ's last reading of the tailnet has no device at this address, so it "
+    "cannot say which network the link runs over.",
 )
 # Not the same statement. "No peering" is a fact about the device; this is a fact about
 # HQ's view of it. Behind a proxy it has not been told to trust, HQ judges the
@@ -265,15 +280,15 @@ class Connection:
 
     @property
     def leg_label(self) -> str:
-        """The tailnet leg in a word or two: direct, relayed and where, or not yet."""
+        """The tailnet leg in a word or two: direct, or relayed and where, as
+        last read. An idle link is connected: this request arrived over it."""
 
         if self.presence is None:
             return "Unknown"
-        return {
-            "direct": "Direct",
-            "relayed": f"Relayed via {self.presence.relay}",
-            "idle": "No path yet",
-        }[self.path]
+        if self.path == "idle":
+            return "Connected"
+        label = "Direct" if self.path == "direct" else f"Relayed via {self.presence.relay}"
+        return label if self.tailnet_current else f"{label} when last read"
 
     @property
     def path_label(self) -> str:
@@ -299,7 +314,18 @@ class Connection:
 
     @property
     def handshake(self) -> str:
-        return self.presence.handshake if self.presence is not None else MISSING
+        """When the two keys last shook hands: an age while the reading is
+        current, and otherwise the age it had when HQ read the tailnet, since
+        a link idle since then says nothing about now."""
+
+        if self.presence is None:
+            return MISSING
+        if self.tailnet_current or not moment(self.presence.last_handshake):
+            return self.presence.handshake
+        age = ago(self.presence.last_handshake, now=self.tailnet_observed_at)
+        if age == "just now":
+            return "as HQ read the tailnet"
+        return f"{age.removesuffix(' ago')} before HQ read the tailnet"
 
     @property
     def carried(self) -> str:
@@ -348,14 +374,25 @@ class Connection:
             # page already holds, so distinguishing the two costs no query.
             if self.observer is None:
                 return PEERING_UNOBSERVED
-            return PEERING_UNKNOWN
+            return PEERING_UNLISTED
         return _peering(self.presence)
 
     @property
     def tailnet_observed_at(self) -> datetime | None:
         """When the device/path evidence was last swept from Tailscale."""
 
-        return self.presence.observed_at if self.presence is not None else None
+        if self.presence is not None:
+            return self.presence.observed_at
+        return self.observer.observed_at if self.observer is not None else None
+
+    @property
+    def tailnet_current(self) -> bool:
+        """Whether the tailnet reading is recent enough that opening the panel
+        would not ask for it again. Only then is a value read from it said as
+        it is now; otherwise as it was when last read, which is no fault."""
+
+        observed = self.tailnet_observed_at
+        return observed is not None and not freshness(PAGE_VISIT, observed).due
 
 
 def connection(request, *, edge=None, firewall=None) -> Connection:

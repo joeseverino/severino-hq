@@ -316,8 +316,8 @@ def _with_leg(hop: Hop, found: Connection) -> Hop:
     # the link said: an idle link is not "no path" to the one using it.
     return replace(
         hop,
-        name="Connected" if found.path == "idle" else found.leg_label,
-        detail=dotted(hop.detail, f"handshake {presence.handshake}"),
+        name=found.leg_label,
+        detail=dotted(hop.detail, f"handshake {found.handshake}"),
         source=HopSource(TAILNET_KIND, presence.connection_ref, presence.observed_at),
     )
 
@@ -395,6 +395,14 @@ def _tailnet_device_check(found: Connection) -> HopCheck:
     gap = why_unread(TAILNET_KIND)
     if gap:
         return HopCheck(UNPROVEN, ended(gap[:1].upper() + gap[1:]))
+    # A device that joined or moved since an old reading is missing from it:
+    # that is the reading's age, not a disagreement, until a current one says so.
+    if not found.tailnet_current:
+        return HopCheck(
+            UNPROVEN,
+            f"The last reading of the tailnet has no device at {ended(found.address)} "
+            "A device that joined or changed address since is in the next read.",
+        )
     return HopCheck(
         CONTRADICTED,
         f"This request came from {found.address}, a tailnet address no device in the tailnet reading has.",
@@ -613,8 +621,8 @@ def _container(hop: Hop, _context: _Context):
         return evidence, HopCheck(PROVEN, ended(f"HQ answered this request from inside {hop.name}"))
     return evidence, HopCheck(
         UNPROVEN,
-        f"HQ answered from a container the last reading did not list as "
-        f"{ended(hop.name)} This is normal just after a deploy, until the next read.",
+        f"The last reading of containers lists another container as {ended(hop.name)} "
+        "A container started since that read, as one is by every deploy, is listed in the next read.",
     )
 
 

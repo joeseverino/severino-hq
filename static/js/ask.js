@@ -13,7 +13,9 @@
 //                     a page loaded mid-flight resumes following it
 //   data-ask-refresh  a selector for the part of the page the result shows
 //                     in, fetched again when the work ends; without one the
-//                     page is loaded again
+//                     page is loaded again. A part around the control that
+//                     names its own address (`data-fragment`, a dialog's
+//                     panel) is fetched from there
 //   [data-ask-button] the button that asks; a form[data-ask-auto] asks when
 //                     the page is showing, with nobody pressing anything
 //   data-ask-outcome  the page draws how the work ended, failure included
@@ -204,7 +206,11 @@
 
   // The named part of this page as the server draws it now, swapped in place.
   // Nobody pressed anything for it, so it never takes the page away.
-  const refresh = (selector) => hqFragment.swap([selector], { renew: false });
+  const refresh = (control, selector) => {
+    const region = control.closest(selector);
+    if (region?.dataset.fragment) return hqFragment.swap(region, { renew: false });
+    return hqFragment.swap([selector], { renew: false });
+  };
 
   const land = async (control, standing) => {
     draw(control, standing);
@@ -214,7 +220,7 @@
     const selector = control.dataset.askRefresh;
     if (!selector) return reload(control);
     try {
-      await refresh(selector);
+      await refresh(control, selector);
     } catch {
       reload(control);
     }
@@ -319,16 +325,31 @@
   // and asks again when it is brought back, which costs nothing if HQ finds
   // the readings still fresh. The server decides what is read and whether it
   // is due; this only says the page is being looked at.
-  const askAuto = () => {
+  // One inside a shut dialog is not being looked at: it asks when the dialog
+  // opens, or when the part holding it arrives in an open one.
+  const askAuto = (root = document) => {
     if (!showing()) return;
-    document.querySelectorAll("[data-ask] form[data-ask-auto]").forEach((form) => {
+    root.querySelectorAll("[data-ask] form[data-ask-auto]").forEach((form) => {
+      if (form.closest("dialog:not([open])")) return;
       ask(form.closest("[data-ask]"), form.action, new FormData(form), { quiet: true });
     });
   };
 
   resume(document);
   askAuto();
-  document.addEventListener("visibilitychange", askAuto);
-  // A part of the page drawn again may hold work already under way.
-  document.addEventListener("hq:fragment", () => resume(document));
+  document.addEventListener("visibilitychange", () => askAuto());
+  // A part of the page drawn again may hold work already under way, or an
+  // ask of its own.
+  document.addEventListener("hq:fragment", (event) => {
+    resume(document);
+    askAuto(event.target);
+  });
+  // `toggle` does not bubble.
+  document.addEventListener(
+    "toggle",
+    (event) => {
+      if (event.target instanceof HTMLDialogElement && event.target.open) askAuto(event.target);
+    },
+    true,
+  );
 })();

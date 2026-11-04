@@ -75,6 +75,33 @@ def _dialog_probe():
 </main></body></html>"""
 
 
+# A dialog's panel, fetched from its own address when the dialog opens: first
+# as last read, with the ask a page about one thing draws; then, once that
+# read has landed, as it is now and with nothing left to ask.
+_PANEL = '<div data-probe="panel" data-fragment="/probe-panel/">{ask}<p>{said}</p></div>'
+
+
+def _asking_dialog_probe():
+    ask = Template(
+        '{% include "partials/_visit_refresh.html" with subject="page" name="example" refresh="[data-probe=panel]" %}'
+    ).render(Context({}))
+    slot = Template('<div data-fragment="/probe-panel/" data-fragment-load>waiting</div>')
+    dialog = Template('{% include "partials/_modal.html" with id="probe" title="Probe" body_template=slot %}').render(
+        Context({"slot": slot})
+    )
+    return (
+        f"""<!doctype html><html><head><title>Probe</title>
+<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+<script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
+</head><body><main>
+<button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
+{dialog}
+</main></body></html>""",
+        _PANEL.format(ask=ask, said="as last read"),
+        _PANEL.format(ask="", said="as it is now"),
+    )
+
+
 _PROBE_STATE = """(failure) => ({
   first: document.querySelector('[data-fragment-part="first"]').kept === true,
   firstOpen: document.querySelector('[data-fragment-part="first"]').open,
@@ -118,6 +145,7 @@ class FragmentBrowserTests(BrowserGate):
         super().start(**options)
         self.asked = []
         self.strip = [' data-fragment-poll="1"', ""]
+        self.asking, *self.panels = _asking_dialog_probe()
 
     @override
     def respond(self, route):
@@ -143,6 +171,14 @@ class FragmentBrowserTests(BrowserGate):
             return self.fulfill(route, _PUSH_PROBE)
         if parts.path == "/probe-dialog/":
             return self.fulfill(route, _dialog_probe())
+        if parts.path == "/probe-asking-dialog/":
+            return self.fulfill(route, self.asking)
+        if parts.path == "/probe-panel/":
+            return self.fulfill(route, self.panels.pop(0) if len(self.panels) > 1 else self.panels[0])
+        if parts.path == reverse("control_plane:visit"):
+            # The read it asked for has already landed.
+            done = '{"state": "done", "live": false, "label": "Done", "note": "Refreshed just now.", "status": ""}'
+            return self.fulfill(route, done, content_type="application/json")
         if (address, part) in self.pages:
             return self.fulfill(route, self.pages[(address, part)])
         return super().respond(route)
@@ -212,6 +248,22 @@ class FragmentBrowserTests(BrowserGate):
         self.page.evaluate("() => document.querySelector('dialog [aria-label=\"Close\"]').click()")
         self.page.wait_for_function("() => !document.querySelector('dialog').open")
         self.assertEqual(self.asked.count(("/probe-slot/", "")), 1)
+
+    def test_a_dialogs_panel_asks_for_its_readings_once_shown_and_fills_in_place(self):
+        visit = (reverse("control_plane:visit"), "")
+        self.page.goto(f"{ORIGIN}/probe-asking-dialog/", wait_until="load")
+        self.page.evaluate("() => { window.kept = true; }")
+        self.page.evaluate(SETTLE)
+        # Shut, it is not being looked at: nothing is fetched or asked.
+        self.assertNotIn(visit, self.asked)
+
+        self.page.evaluate("() => document.querySelector('[data-probe=\"open\"]').click()")
+        self.page.wait_for_function("() => document.querySelector('dialog').textContent.includes('as it is now')")
+
+        self.assertEqual(self.asked.count(visit), 1)
+        # Fetched from the panel's own address, not the page the dialog is on.
+        self.assertEqual(self.asked.count(("/probe-panel/", "")), 2)
+        self.assertTrue(self.page.evaluate("() => window.kept === true"))
 
     def test_paging_the_calendar_asks_for_its_part_and_keeps_the_page(self):
         self.page.goto(f"{ORIGIN}{self.calendar}", wait_until="load")

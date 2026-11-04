@@ -3,7 +3,9 @@ A page about one thing asks for that thing's readings when it is opened.
 
   {% include "partials/_visit_refresh.html" with subject="machine" name=machine.name %}
 
-The page says only which page it is; HQ works out what is behind it, and
+A page shown in a dialog names the region it fills
+(`refresh="[data-connection-panel]"`), which is fetched again from its own
+address when the reading lands. The page says only which page it is; HQ works out what is behind it, and
 whether any of it is old enough to read again. It asks by posting this form
 once the page is showing, so nothing is read for a page nobody has in front of
 them, and without script the page is what HQ holds. It is an ask
@@ -11,7 +13,7 @@ them, and without script the page is what HQ holds. It is an ask
 What it read is swapped into the page in place, everything but itself, so
 the page never reloads or jumps under the reader.
 {% endcomment %}
-<div class="ask ask-quiet" data-ask data-ask-state="idle" data-ask-refresh="#content > :not(.ask-quiet)">
+<div class="ask ask-quiet" data-ask data-ask-state="idle" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}">
   <form method="post" action="{% url 'control_plane:visit' %}" data-ask-auto hidden>
     {% write_token %}
     <input type="hidden" name="subject" value="{{ subject }}">

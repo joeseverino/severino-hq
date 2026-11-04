@@ -759,7 +759,15 @@ somebody opens it, or a reading its queue is drawn from is due (below).
 **A page about one thing asks for that thing's readings.** A machine's page,
 a service's page and a record's page include `partials/_visit_refresh.html`,
 naming which page they are. The dashboard includes it only when a reading its
-queue is drawn from is due (`visit_refresh.PAGES`).
+queue is drawn from is due (`visit_refresh.PAGES`), and the connection panel
+only when the tailnet, container or posture readings it shows are due. The
+panel asks once its dialog is open, and names itself as the part to refresh:
+a region that carries its own address (`data-fragment`) is fetched from
+there, so the panel fills in place on whatever page the dialog opened over.
+
+Until the reading lands, a value from an older reading is said as last seen,
+as of when it was read, never as how things stand now: its age is no fault.
+Only a read that fails says so, in the ask's note, with why.
 
 Once the page is showing, it posts that. HQ works out which kinds the page is
 assembled from and asks the controller for those whose last attempt is older
@@ -769,9 +777,10 @@ than their cadence (`hq/platform/application/freshness.py`).
   is left to the sweep.
 - A page in a background tab asks for nothing, a GET never does, and the
   request cannot name a connection or a kind.
-- When the reading lands the page loads again, once. If somebody has touched
-  it or it reloaded a moment ago, it says a newer reading is in and leaves
-  showing it to them.
+- When the reading lands, the page's content is fetched again and swapped in
+  place, the ask's own line kept. Only if that fails does the page load
+  again, once; if somebody has touched it or it reloaded a moment ago, it says
+  a newer reading is in and leaves showing it to them.
 
 **Asked-for work is an ask.** A button that starts work which outlives the
 request is `partials/_ask.html`, from an `Ask`

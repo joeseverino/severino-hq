@@ -1825,7 +1825,7 @@
               "measured_by": "Another tailnet machine (docker-host-01)",
               "path": "Unknown",
               "summary": "6 failed\u00a0\u00b7 4 not confirmed",
-              "tailnet_observed_at": null,
+              "tailnet_observed_at": "2026-01-15T09:30:00+00:00",
               "transport": "Encryption not confirmed",
               "untrusted_forwarding": false
             },
