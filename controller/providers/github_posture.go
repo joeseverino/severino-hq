@@ -60,9 +60,41 @@ type GitHubAccess struct {
 	// VulnerabilityAlerts is whether GitHub raises the dependency alerts
 	// Renovate opens its security fixes from.
 	VulnerabilityAlerts bool `json:"vulnerability_alerts"`
-	// Security is each security feature's status; nil where the plan offers
-	// none of them, which is not "off".
-	Security map[string]*string `json:"security"`
+	// Security is nil where the plan offers none of the features, which is
+	// not "off".
+	Security *GitHubSecurity `json:"security"`
+}
+
+// GitHubSecurity is the status of each feature of GitHub's
+// security_and_analysis the bridge contract declares, decoded straight from
+// GitHub's answer: a feature GitHub adds is not forwarded until the contract
+// declares it, and one the plan does not offer is absent.
+type GitHubSecurity struct {
+	AdvancedSecurity                      *GitHubFeature `json:"advanced_security,omitempty"`
+	CodeSecurity                          *GitHubFeature `json:"code_security,omitempty"`
+	DependabotSecurityUpdates             *GitHubFeature `json:"dependabot_security_updates,omitempty"`
+	SecretScanning                        *GitHubFeature `json:"secret_scanning,omitempty"`
+	SecretScanningPushProtection          *GitHubFeature `json:"secret_scanning_push_protection,omitempty"`
+	SecretScanningNonProviderPatterns     *GitHubFeature `json:"secret_scanning_non_provider_patterns,omitempty"`
+	SecretScanningValidityChecks          *GitHubFeature `json:"secret_scanning_validity_checks,omitempty"`
+	SecretScanningAIDetection             *GitHubFeature `json:"secret_scanning_ai_detection,omitempty"`
+	SecretScanningDelegatedAlertDismissal *GitHubFeature `json:"secret_scanning_delegated_alert_dismissal,omitempty"`
+	SecretScanningDelegatedBypass         *GitHubFeature `json:"secret_scanning_delegated_bypass,omitempty"`
+}
+
+// GitHubFeature is one feature as GitHub answers it, {"status": "enabled"},
+// forwarded as its status alone.
+type GitHubFeature struct {
+	Status string `json:"status"`
+}
+
+// MarshalJSON is the status, or null for any word but the two the contract
+// takes, so a record never fails HQ's schema over a status GitHub adds.
+func (f GitHubFeature) MarshalJSON() ([]byte, error) {
+	if f.Status != "enabled" && f.Status != "disabled" {
+		return []byte("null"), nil
+	}
+	return json.Marshal(f.Status)
 }
 
 type GitHubCollaborator struct {
@@ -257,12 +289,8 @@ func (g *githubRepository) access(ctx context.Context, repo githubapi.FullReposi
 	if err != nil {
 		return GitHubAccess{}, err
 	}
-	// Which security features the plan offers is which keys are present, so
-	// they are read as a map, not the struct that cannot tell absent from off.
 	security, err := decodeAnswer[struct {
-		SecurityAndAnalysis map[string]*struct {
-			Status *string `json:"status"`
-		} `json:"security_and_analysis"`
+		SecurityAndAnalysis *GitHubSecurity `json:"security_and_analysis"`
 	}](raw, "GitHub repository security")
 	if err != nil {
 		return GitHubAccess{}, err
@@ -283,15 +311,8 @@ func (g *githubRepository) access(ctx context.Context, repo githubapi.FullReposi
 	for _, key := range keys {
 		access.DeployKeys = append(access.DeployKeys, GitHubDeployKey{Title: key.Title, ReadOnly: key.ReadOnly, LastUsed: key.LastUsed, CreatedAt: key.CreatedAt})
 	}
-	if len(security.SecurityAndAnalysis) > 0 {
-		access.Security = map[string]*string{}
-		for feature, setting := range security.SecurityAndAnalysis {
-			if setting != nil {
-				access.Security[feature] = setting.Status
-			} else {
-				access.Security[feature] = nil
-			}
-		}
+	if offered := security.SecurityAndAnalysis; offered != nil && *offered != (GitHubSecurity{}) {
+		access.Security = offered
 	}
 	return access, nil
 }

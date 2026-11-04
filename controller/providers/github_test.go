@@ -455,7 +455,7 @@ func githubRepositoryRoutes() map[string]string {
 	composite := base64.StdEncoding.EncodeToString([]byte("runs:\n  steps:\n    - uses: actions/checkout@v4\n"))
 	return map[string]string{
 		api(""): `{"full_name":"example/app","private":true,"archived":true,"html_url":"https://github.com/example/app","default_branch":"main","pushed_at":"2030-01-02T00:00:00Z","visibility":"private",
-			"security_and_analysis":{"secret_scanning":{"status":"enabled"},"advanced_security":{"status":"disabled"}}}`,
+			"security_and_analysis":{"secret_scanning":{"status":"enabled"},"advanced_security":{"status":"disabled"},"secret_scanning_push_protection":{"status":"paused"},"example_feature":{"status":"enabled"}}}`,
 		api("/commits/main"): `{"sha":"aaaa000000000000000000000000000000000000","html_url":"https://github.com/example/app/commit/aaaa","author":{"login":"octo"},
 			"commit":{"message":"Ship it\n\nbody","author":{"name":"Octo","date":"2030-01-01T00:00:00Z"},"committer":{"name":"Octo","date":"2030-01-02T00:00:00Z"}}}`,
 		api("/actions/runs?per_page=50"): `{"workflow_runs":[
@@ -539,6 +539,9 @@ func TestADeploymentLiveWithACheckFailedSaysSo(t *testing.T) {
 	}
 }
 
+// The security features forwarded are the ones the contract declares, each
+// status one of its two words: the routes' feature GitHub might add is left
+// out, and a status word it might add is none.
 func TestGitHubRepositoryReading(t *testing.T) {
 	routes := githubRepositoryRoutes()
 	h := newGitHubHarness(t, routes, runtime.Environment{})
@@ -569,7 +572,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"rules", record.Rules, `{"pull_request":true,"reviews":2,"required_checks":["lint","test"],"blocks_force_push":true,"blocks_deletion":true}`},
 		{"environments", record.Environments, `[{"name":"production","reviewers":["octo","ops"],"wait_minutes":5,"branches":"protected"},{"name":"preview","reviewers":[],"wait_minutes":0,"branches":"any"}]`},
 		{"runners", record.Runners, `[{"name":"homelab","status":"online","busy":false,"labels":["linux","self-hosted"]}]`},
-		{"access", record.Access, `{"visibility":"private","collaborators":[{"login":"octo","role":"admin"}],"deploy_keys":[{"title":"deploy","read_only":true,"last_used":"2030-01-01T00:00:00Z","created_at":"2029-01-01T00:00:00Z"}],"allowed_actions":"selected","pinning_required":true,"token":"read","token_approves_reviews":false,"vulnerability_alerts":true,"security":{"advanced_security":"disabled","secret_scanning":"enabled"}}`},
+		{"access", record.Access, `{"visibility":"private","collaborators":[{"login":"octo","role":"admin"}],"deploy_keys":[{"title":"deploy","read_only":true,"last_used":"2030-01-01T00:00:00Z","created_at":"2029-01-01T00:00:00Z"}],"allowed_actions":"selected","pinning_required":true,"token":"read","token_approves_reviews":false,"vulnerability_alerts":true,"security":{"advanced_security":"disabled","secret_scanning":"enabled","secret_scanning_push_protection":null}}`},
 		{"variable names, never values", record.Variables, `["REGION"]`},
 		{"every unpinned uses line with the commit its ref names", record.Pins, `[{"path":".github/workflows/ci.yml","uses":"actions/checkout@v4","action":"actions/checkout","ref":"v4","sha":"cccc000000000000000000000000000000000000"},{"path":".github/workflows/ci.yml","uses":"example/shared/.github/workflows/reuse.yml@main","action":"example/shared/.github/workflows/reuse.yml","ref":"main","sha":"dddd000000000000000000000000000000000000"},{"path":".github/actions/local/action.yml","uses":"actions/checkout@v4","action":"actions/checkout","ref":"v4","sha":"cccc000000000000000000000000000000000000"}]`},
 		{"a workflow called from another repository is named", record.CalledWorkflows, `["example/shared/.github/workflows/reuse.yml@main"]`},

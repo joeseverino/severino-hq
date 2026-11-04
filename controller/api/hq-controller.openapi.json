@@ -3231,6 +3231,48 @@
         "type": "object",
         "description": "One github.profile record: GitHub profile."
       },
+      "GitHubRepositoryCollaborator": {
+        "properties": {
+          "login": {
+            "type": "string"
+          },
+          "role": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "login"
+        ],
+        "type": "object"
+      },
+      "GitHubRepositoryDeployKey": {
+        "properties": {
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "read_only": {
+            "default": false,
+            "type": "boolean"
+          },
+          "last_used": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "GitHubRepositoryRecord": {
         "properties": {
           "connection_ref": {
@@ -3362,9 +3404,13 @@
             "type": "array"
           },
           "access": {
-            "type": [
-              "object",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubRepositoryRepositoryAccess"
+              },
+              {
+                "type": "null"
+              }
             ],
             "default": null
           },
@@ -3420,6 +3466,183 @@
         ],
         "type": "object",
         "description": "One github.repository record: GitHub repository."
+      },
+      "GitHubRepositoryRepositoryAccess": {
+        "description": "Who and what can reach a repository, and how its Actions may run.",
+        "properties": {
+          "visibility": {
+            "default": "",
+            "type": "string"
+          },
+          "collaborators": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepositoryCollaborator"
+            },
+            "type": "array"
+          },
+          "deploy_keys": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepositoryDeployKey"
+            },
+            "type": "array"
+          },
+          "allowed_actions": {
+            "default": "",
+            "type": "string"
+          },
+          "pinning_required": {
+            "default": false,
+            "type": "boolean"
+          },
+          "token": {
+            "enum": [
+              "read",
+              "write"
+            ],
+            "type": "string"
+          },
+          "token_approves_reviews": {
+            "default": false,
+            "type": "boolean"
+          },
+          "vulnerability_alerts": {
+            "default": false,
+            "type": "boolean"
+          },
+          "security": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubRepositorySecurity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
+      "GitHubRepositorySecurity": {
+        "description": "Each feature of GitHub's ``security_and_analysis`` HQ reads, by\nGitHub's own name; one the plan does not offer is absent.\n\nDeclared here so the bridge's door takes the names as the contract's own,\nthough several hold the word \"secret\": each holds only a status.",
+        "properties": {
+          "advanced_security": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "code_security": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "dependabot_security_updates": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_push_protection": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_non_provider_patterns": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_validity_checks": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_ai_detection": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_delegated_alert_dismissal": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_delegated_bypass": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
       },
       "HostFirewallRecord": {
         "properties": {

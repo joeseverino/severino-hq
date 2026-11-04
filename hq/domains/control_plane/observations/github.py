@@ -9,7 +9,7 @@ read, so the schema has nowhere to put them.
 
 from collections.abc import Iterable, Mapping
 from datetime import timedelta
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 from pydantic.json_schema import SkipJsonSchema
@@ -58,6 +58,60 @@ PARTS = (
 )
 
 
+class Collaborator(ObservationRecord):
+    login: str
+    role: str = ""
+
+
+class DeployKey(ObservationRecord):
+    title: str = ""
+    read_only: bool = False
+    last_used: Stamp = None
+    created_at: Stamp = None
+
+
+# A feature's status, as GitHub's security_and_analysis answers it; None where
+# GitHub answered no status.
+FeatureStatus = Literal["enabled", "disabled"] | None
+
+
+class Security(ObservationRecord):
+    """Each feature of GitHub's ``security_and_analysis`` HQ reads, by
+    GitHub's own name; one the plan does not offer is absent.
+
+    Declared here so the bridge's door takes the names as the contract's own,
+    though several hold the word "secret": each holds only a status.
+    """
+
+    advanced_security: FeatureStatus = None
+    code_security: FeatureStatus = None
+    dependabot_security_updates: FeatureStatus = None
+    secret_scanning: FeatureStatus = None
+    secret_scanning_push_protection: FeatureStatus = None
+    secret_scanning_non_provider_patterns: FeatureStatus = None
+    secret_scanning_validity_checks: FeatureStatus = None
+    secret_scanning_ai_detection: FeatureStatus = None
+    secret_scanning_delegated_alert_dismissal: FeatureStatus = None
+    secret_scanning_delegated_bypass: FeatureStatus = None
+
+
+class RepositoryAccess(ObservationRecord):
+    """Who and what can reach a repository, and how its Actions may run."""
+
+    visibility: str = ""
+    collaborators: tuple[Collaborator, ...] = ()
+    deploy_keys: tuple[DeployKey, ...] = ()
+    allowed_actions: str = ""
+    pinning_required: bool = False
+    # The workflow token's default permission, GitHub's word for it: a name
+    # the door would strike, holding only one of two words.
+    token: Literal["read", "write"]
+    token_approves_reviews: bool = False
+    vulnerability_alerts: bool = False
+    # None where the plan offers none of the features, which is not "off".
+    security: Security | None = None
+
+
 class RepositoryRecord(ObservationRecord):
     connection_ref: str
     repository: str
@@ -92,8 +146,7 @@ class RepositoryRecord(ObservationRecord):
     environments: list[dict[str, Any]] = []
     runners: list[dict[str, Any]] = []
     images: list[dict[str, Any]] = []
-    # Who and what can reach the repository, and how its Actions may run.
-    access: dict[str, Any] | None = None
+    access: RepositoryAccess | None = None
     # Names only: a variable's value is never read.
     variables: list[str] | None = None
     # ``{path, uses, action, ref, sha}`` per ``uses:`` line not pinned to a

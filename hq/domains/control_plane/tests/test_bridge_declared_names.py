@@ -9,6 +9,7 @@ from django.test import TestCase
 from hq.domains.control_plane import bridge_application
 from hq.domains.control_plane.bridge_actions import ACTIONS, Action
 from hq.domains.control_plane.bridge_contract import contract, operations
+from hq.domains.control_plane.observations import OBSERVATIONS
 
 from . import bridge_client
 
@@ -98,3 +99,42 @@ class DeclaredNameTests(TestCase):
         self.assertEqual(answer.status, 200, answer.body)
         self.assertEqual(ran[0][1][kind]["records"], [{"name": "example", "api_token": REDACTED}])
         self.assertNotIn("must-never-enter-hq", "\n".join(logged.output))
+
+
+# A repository's access as the controller writes it: the workflow token's
+# permission and GitHub's secret scanning statuses carry names the door strikes
+# when the contract does not declare them.
+ACCESS = {
+    "visibility": "private",
+    "collaborators": [{"login": "example", "role": "admin"}],
+    "deploy_keys": [],
+    "allowed_actions": "selected",
+    "pinning_required": True,
+    "token": "read",
+    "token_approves_reviews": False,
+    "vulnerability_alerts": True,
+    "security": {"secret_scanning": "enabled", "secret_scanning_push_protection": "enabled"},
+}
+
+
+class RepositoryAccessTests(TestCase):
+    def test_a_repositorys_access_passes_the_door_and_its_schema_unchanged(self):
+        record = {"connection_ref": "example", "repository": "example/alpha", "access": ACCESS}
+        inventory = {"github.repository": {"ok": True, "records": [record]}}
+        ran: list[tuple[str, Any]] = []
+        answer = _send("inventory", inventory, ran)
+        self.assertEqual(answer.status, 200, answer.body)
+        self.assertEqual(ran, [("inventory", inventory)])
+        kept, refused = OBSERVATIONS["github.repository"].clean([record])
+        self.assertEqual((kept[0]["access"], refused), (ACCESS, 0))
+
+    def test_a_declared_name_holding_anything_but_its_words_is_refused(self):
+        # The names the door takes as the contract's own hold only a status,
+        # so a credential sent under one never reaches a stored record.
+        for access in (
+            {**ACCESS, "token": "not-a-permission-example"},
+            {**ACCESS, "security": {"secret_scanning": "not-a-status-example"}},
+        ):
+            with self.subTest(access=access):
+                record = {"connection_ref": "example", "repository": "example/alpha", "access": access}
+                self.assertEqual(OBSERVATIONS["github.repository"].clean([record]), ([], 1))
