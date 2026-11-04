@@ -302,7 +302,10 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   OIDC issuer as the authorization server and `SEVERINO_API_RESOURCE` as the
   resource a token must name, with HQ's permission keys as `scopes_supported`
   so a native sign-in asks for them. A verified token that grants no HQ permission
-  is a 403 `insufficient_scope` naming `scope="read"`, on both doors. The
+  is a 403 `insufficient_scope` naming `scope="read"`, on both doors. An
+  identity scope a sign-in asks for (`openid`, `profile`, `email`, `groups`,
+  `offline_access`) is never an HQ permission, so a token holding only those
+  is refused, and the Agents page counts none of them. The
   MCP SDK's own pieces answer the 401 and serve the metadata
   (`BearerAuthBackend`, `RequireAuthMiddleware`,
   `ProtectedResourceMetadataHandler`); the 403 is HQ's, since the SDK's names
