@@ -1,9 +1,9 @@
 """Root URL configuration for Severino HQ."""
 
 from django.conf import settings
-from django.contrib.auth import views as auth_views
 from django.contrib.auth.decorators import login_not_required
 from django.urls import URLPattern, include, path
+from mozilla_django_oidc.views import OIDCLogoutView
 
 # Development only (config/devtools.py): the image has no toolbar, so the name
 # is bound lazily and imported only when the setting below calls it.
@@ -83,7 +83,7 @@ urlpatterns = [
     path(
         "accounts/logout/",
         # Signing out writes only for the session it ends.
-        writes(NOTHING)(login_not_required(auth_views.LogoutView.as_view())),
+        writes(NOTHING)(login_not_required(OIDCLogoutView.as_view())),
         name="logout",
     ),
     path("oidc/", public("mozilla_django_oidc.urls", HANDSHAKE)),

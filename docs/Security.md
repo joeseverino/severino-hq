@@ -260,6 +260,16 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   internal interface (`HELD_ONLY_AT`), so no person, device or agent signs
   anyone out through it. A token HQ refuses is a 400, which Pocket ID does not
   retry; an unknown subject is a 200.
+- Sign out (a POST; a GET is refused) ends Pocket ID's session as well as
+  HQ's. The library's `OIDCLogoutView` sends a session signed in through the
+  provider to its end-session endpoint (`end_session_url`) with the ID token
+  as `id_token_hint`, HQ's `client_id`, and the signed-out login page as
+  `post_logout_redirect_uri`; a session with no ID token (a password or CLI
+  sign-in) is signed out of HQ alone. So the ID token is kept in the
+  database-backed session (`OIDC_STORE_ID_TOKEN`). That is safe because HQ
+  accepts no ID token as a credential: it reads one only from its own exchange
+  with the provider's token endpoint, and every door a caller presents a token
+  to asks for an access token's `typ` (`decode`).
 - Only an address the provider verified (`email_verified` true) introduces a
   subject to an account no subject is bound to yet. A username, or an address
   the provider has not verified, finds no account. After the first sign-in the
@@ -509,6 +519,9 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
       Groups are the groups `SEVERINO_OIDC_ROLE_GROUPS` names, so a person who
       loses them is signed out of HQ at once. Each agent client's Allowed User
       Groups are set the same way.
+- [ ] If SSO is enabled, the HQ OIDC client's Logout Callback URL is
+      `https://hq.example.com/accounts/login/?signed_out=1`, so signing out
+      returns to HQ rather than stopping on Pocket ID.
 - [ ] If SSO is enabled, `SEVERINO_OIDC_ROLE_GROUPS=admins=operator` and
       `SEVERINO_OIDC_CLIENT_SECRET` is delivered through the rendered app
       environment file, not the compose interpolation `.env`.
