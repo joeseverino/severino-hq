@@ -56,6 +56,12 @@ Rules:
   stored (`ObservationSpec.admitted`). A provider response is never stored
   whole, and fields carrying secret material (tokens, client secrets,
   environment values, private keys) are never named.
+- **A finding over a reading starts from its connection.** A spec's `facts`
+  turns each record into `(key, value)` pairs on the node of the connection
+  that read it, and a rule walks them with `connections_carrying(estate, key)`
+  (`finding_model.py`), as `dns_findings.py` does. The estate already holds
+  every connection's node, so a new finding of this kind needs no read of its
+  own.
 - **A refused read is an error.** The sweep stores the kind as unreachable with
   the reason, and the page shows it with `requires`. No records means the
   provider has none.
