@@ -3009,6 +3009,56 @@
           "FailureClassNetwork"
         ]
       },
+      "GitHubAllowanceRecord": {
+        "description": "One App installation's hourly REST allowance as a sweep began, and what the sweep spent of it.",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "installation": {
+            "type": "integer"
+          },
+          "account": {
+            "default": "",
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "used": {
+            "type": "integer"
+          },
+          "remaining": {
+            "type": "integer"
+          },
+          "resets_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "spent": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "installation",
+          "limit",
+          "used",
+          "remaining",
+          "spent"
+        ],
+        "type": "object"
+      },
       "GitHubDeliveryProduction": {
         "type": "string",
         "description": "What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.",
@@ -4715,6 +4765,7 @@
           "cloudflare.redirect",
           "cloudflare.tunnel",
           "cloudflare.zone",
+          "github.allowance",
           "github.delivery",
           "github.dependency_run",
           "github.profile",
@@ -4774,6 +4825,7 @@
           "ResourceKindCloudflareRedirect",
           "ResourceKindCloudflareTunnel",
           "ResourceKindCloudflareZone",
+          "ResourceKindGitHubAllowance",
           "ResourceKindGitHubDelivery",
           "ResourceKindGitHubDependencyRun",
           "ResourceKindGitHubProfile",
@@ -4836,6 +4888,7 @@
           "cloudflare.redirect",
           "cloudflare.tunnel",
           "cloudflare.zone",
+          "github.allowance",
           "github.delivery",
           "github.dependency_run",
           "github.profile",
@@ -4880,6 +4933,7 @@
           "SweptCloudflareRedirect",
           "SweptCloudflareTunnel",
           "SweptCloudflareZone",
+          "SweptGitHubAllowance",
           "SweptGitHubDelivery",
           "SweptGitHubDependencyRun",
           "SweptGitHubProfile",

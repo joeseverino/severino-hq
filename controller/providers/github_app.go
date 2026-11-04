@@ -55,6 +55,7 @@ func (r *Registry) admitGitHub() {
 	r.probe(runtime.ConnectionProviderGitHubApp, r.githubProbe)
 	r.reader(runtime.ResourceKindGitHubRepository, r.githubRepositories)
 	r.reader(runtime.ResourceKindGitHubDelivery, r.githubDeliveryInventory)
+	r.tally(runtime.ResourceKindGitHubAllowance, r.githubAllowances)
 	act(r, runtime.ResourceKindGitHubDelivery, "reconcile", r.githubDeliveryReconcile)
 }
 
@@ -265,7 +266,7 @@ func (r *Registry) githubMint(ctx context.Context, c githubConnection, installat
 	}
 	token, err := MintGitHubToken(ctx, r.HTTP, r.Now(), app, installation, repositories, permissions)
 	if err == nil {
-		r.githubSpend().minted(token.Token, installation)
+		r.githubSpend().minted(token.Token, c.ref, installation)
 	}
 	return token.Token, err
 }
@@ -347,6 +348,9 @@ func (r *Registry) githubInstallationRepositories(ctx context.Context, c githubC
 		for _, installation := range installations {
 			if installation.ID == 0 {
 				continue
+			}
+			if account, err := installation.Account.AsSimpleUser(); err == nil {
+				r.githubSpend().named(installation.ID, account.Login)
 			}
 			token, err := r.githubMint(ctx, c, installation.ID, nil, githubapi.AppPermissions{Metadata: githubapi.AppPermissionsMetadataRead})
 			if err != nil {

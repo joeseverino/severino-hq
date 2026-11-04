@@ -849,6 +849,20 @@ follow, each held by `controller/providers/github_spend_test.go`:
 - A read refused for an allowance names it, with when it lifts ("rate limited
   until 18:06 UTC, the last reading stands"), never as a permission to grant.
 
+Each sweep reports the hour it spent from as the `github.allowance` reading,
+one record per installation, from the fuse's own count: the limit, used and
+remaining before the sweep's first request (GitHub's first free `/rate_limit`
+answer, less what the sweep had spent before asking), the reset, and what the
+sweep spent. A reading read from what the others did is a tally
+(`Registry.tally`), read after every other kind of its provider and with any
+of them. HQ derives, as it stores the reading
+(`observations.github.with_others_spent`), what everything else spent between
+two sweeps of the same hour: used at the second's start, less used at the
+first's and the first's own spend. A pair across a reset is not judged.
+`controller/providers/github_allowance_test.go` holds the controller's half
+to GitHub's own count, and the finding that reads it is
+[Security](Security.md#a-leaked-github-app-credential).
+
 **One address-to-machine resolver**, `hq/platform/application/locate.py`.
 Every surface that draws a line between two things asks it: a proxy and the
 box it forwards to, a credential and the machine it opens, a service and where

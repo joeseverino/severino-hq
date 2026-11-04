@@ -54,7 +54,13 @@ type githubFake struct {
 	// against it: every one but /rate_limit, a GraphQL query and a 304.
 	remaining int
 	counted   int
+	// hour, when set, is GitHub's own count of the installation's hour: each
+	// counted answer adds one, and a test adds what others spend.
+	hour *githubFakeHour
 }
+
+// githubFakeHour is an installation's hour as GitHub counts it.
+type githubFakeHour struct{ limit, used int }
 
 // githubFakeNode is a repository as the change query answers it, as GitHub's
 // GraphQL schema shapes it.
@@ -99,6 +105,9 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		case "/rate_limit":
 		default:
 			f.counted++
+			if f.hour != nil {
+				f.hour.used++
+			}
 		}
 		w.Header().Set("X-RateLimit-Resource", resource)
 		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(f.remaining))
@@ -125,6 +134,10 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	case req.Method != http.MethodGet:
 		_, _ = io.WriteString(w, `{"id":1}`)
+		return
+	case key == "/rate_limit" && f.routes[host+" "+key] == "" && f.hour != nil:
+		core := fmt.Sprintf(`{"limit":%d,"remaining":%d,"reset":%d,"used":%d}`, f.hour.limit, f.hour.limit-f.hour.used, githubFakeReset, f.hour.used)
+		_, _ = io.WriteString(w, `{"resources":{"core":`+core+`},"rate":`+core+`}`)
 		return
 	case key == "/rate_limit" && f.routes[host+" "+key] == "":
 		_, _ = fmt.Fprintf(w, `{"resources":{"core":{"limit":5000,"remaining":%d,"reset":%d,"used":%d}},"rate":{"limit":5000,"remaining":%d,"reset":%d,"used":%d}}`,

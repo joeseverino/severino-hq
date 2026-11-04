@@ -428,6 +428,7 @@ const (
 	ResourceKindCloudflareRedirect           ResourceKind = "cloudflare.redirect"
 	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
+	ResourceKindGitHubAllowance              ResourceKind = "github.allowance"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
@@ -505,6 +506,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindCloudflareTunnel:
 		return true
 	case ResourceKindCloudflareZone:
+		return true
+	case ResourceKindGitHubAllowance:
 		return true
 	case ResourceKindGitHubDelivery:
 		return true
@@ -610,6 +613,7 @@ const (
 	SweptCloudflareRedirect           SweptKind = "cloudflare.redirect"
 	SweptCloudflareTunnel             SweptKind = "cloudflare.tunnel"
 	SweptCloudflareZone               SweptKind = "cloudflare.zone"
+	SweptGitHubAllowance              SweptKind = "github.allowance"
 	SweptGitHubDelivery               SweptKind = "github.delivery"
 	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
 	SweptGitHubProfile                SweptKind = "github.profile"
@@ -671,6 +675,8 @@ func (e SweptKind) Valid() bool {
 	case SweptCloudflareTunnel:
 		return true
 	case SweptCloudflareZone:
+		return true
+	case SweptGitHubAllowance:
 		return true
 	case SweptGitHubDelivery:
 		return true
@@ -1196,6 +1202,19 @@ type ForcedRead struct {
 	Kind        ResourceKind   `json:"kind"`
 	Kinds       []ResourceKind `json:"kinds"`
 	RequestedAt time.Time      `json:"requested_at"`
+}
+
+// GitHubAllowanceRecord One App installation's hourly REST allowance as a sweep began, and what the sweep spent of it.
+type GitHubAllowanceRecord struct {
+	Account       string `json:"account,omitempty"`
+	ConnectionRef string `json:"connection_ref"`
+	Installation  int    `json:"installation"`
+	Limit         int    `json:"limit"`
+	Remaining     int    `json:"remaining"`
+	ResetsAt      string `json:"resets_at,omitempty"`
+	Spent         int    `json:"spent"`
+	StartedAt     string `json:"started_at,omitempty"`
+	Used          int    `json:"used"`
 }
 
 // GitHubDeliveryProduction What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.

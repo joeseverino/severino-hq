@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
+	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // GitHub allows each App installation an hour's worth of requests, shared by
@@ -39,10 +42,11 @@ const (
 	githubCore = "core"
 )
 
-// githubLedger is this sweep's budget for each installation, and which
-// installation each token it minted spends.
+// githubLedger is this sweep's budget for each installation, which
+// installation each token it minted spends, and when the sweep began.
 type githubLedger struct {
 	mu      sync.Mutex
+	began   time.Time
 	budgets map[int]*githubBudget
 	tokens  map[string]int
 }
@@ -56,6 +60,16 @@ type githubBudget struct {
 	known     bool
 	resets    time.Time
 	tripped   error
+	// The installation as the sweep's record names it, and the hour as it
+	// stood before the sweep's first request: set by the first /rate_limit
+	// answer, less what the sweep had spent before asking.
+	ref, account string
+	start        *githubStart
+}
+
+type githubStart struct {
+	limit, used, remaining int
+	resets                 time.Time
 }
 
 // githubSpend is the sweep's ledger, made on first use.
@@ -63,16 +77,39 @@ func (r *Registry) githubSpend() *githubLedger {
 	r.snapshotMu.Lock()
 	defer r.snapshotMu.Unlock()
 	if r.githubLedger == nil {
-		r.githubLedger = &githubLedger{budgets: map[int]*githubBudget{}, tokens: map[string]int{}}
+		r.githubLedger = &githubLedger{began: r.Now().UTC(), budgets: map[int]*githubBudget{}, tokens: map[string]int{}}
 	}
 	return r.githubLedger
 }
 
-// minted records which installation a token spends.
-func (l *githubLedger) minted(token string, installation int) {
+// minted records which installation a token spends, and the connection it
+// was minted through.
+func (l *githubLedger) minted(token, ref string, installation int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.tokens[token] = installation
+	budget := l.budget(installation)
+	budget.mu.Lock()
+	budget.ref = ref
+	budget.mu.Unlock()
+}
+
+// named records the account an installation is on.
+func (l *githubLedger) named(installation int, account string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	budget := l.budget(installation)
+	budget.mu.Lock()
+	budget.account = account
+	budget.mu.Unlock()
+}
+
+// budget is one installation's, made on first use; the caller holds l.mu.
+func (l *githubLedger) budget(installation int) *githubBudget {
+	if l.budgets[installation] == nil {
+		l.budgets[installation] = &githubBudget{}
+	}
+	return l.budgets[installation]
 }
 
 // of is the budget a token spends; a token this sweep did not mint shares one
@@ -80,11 +117,7 @@ func (l *githubLedger) minted(token string, installation int) {
 func (l *githubLedger) of(token string) *githubBudget {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	installation := l.tokens[token]
-	if l.budgets[installation] == nil {
-		l.budgets[installation] = &githubBudget{}
-	}
-	return l.budgets[installation]
+	return l.budget(l.tokens[token])
 }
 
 // GitHubSpent is how many requests this sweep has spent of its installations'
@@ -130,11 +163,16 @@ func (b *githubBudget) note(header http.Header, err error, now time.Time) {
 }
 
 // left records what /rate_limit says the installation has, which costs
-// nothing to ask.
-func (b *githubBudget) left(remaining int, resets, now time.Time) {
+// nothing to ask. The first answer of a sweep is also where its hour stood
+// before the sweep began: what the sweep had spent by then is GitHub's count
+// already, so it is taken back out.
+func (b *githubBudget) left(core githubapi.RateLimit, now time.Time) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.remaining, b.known, b.resets = remaining, true, resets
+	b.remaining, b.known, b.resets = core.Remaining, true, time.Unix(int64(core.Reset), 0).UTC()
+	if b.start == nil {
+		b.start = &githubStart{limit: core.Limit, used: max(core.Used-b.spent, 0), remaining: min(core.Remaining+b.spent, core.Limit), resets: b.resets}
+	}
 	b.check(now)
 }
 
@@ -236,7 +274,31 @@ func (r *Registry) githubAllowance(ctx context.Context, token string) error {
 		return err
 	}
 	budget := r.githubSpend().of(token)
-	core := limit.Resources.Core
-	budget.left(core.Remaining, time.Unix(int64(core.Reset), 0).UTC(), r.Now())
+	budget.left(limit.Resources.Core, r.Now())
 	return budget.admit()
+}
+
+// githubAllowances is each installation's hour as this sweep found it and
+// what the sweep spent of it, from the fuse's own count: nothing is asked of
+// GitHub again. An installation the sweep never asked after is not reported,
+// since where its hour stood is not known. HQ derives from consecutive
+// records what everything else holding the App's key spent between them.
+func (r *Registry) githubAllowances(context.Context) ([]any, error) {
+	ledger := r.githubSpend()
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+	found := []any{}
+	for _, installation := range slices.Sorted(maps.Keys(ledger.budgets)) {
+		budget := ledger.budgets[installation]
+		budget.mu.Lock()
+		if installation != 0 && budget.start != nil {
+			found = append(found, runtime.GitHubAllowanceRecord{
+				ConnectionRef: budget.ref, Installation: installation, Account: budget.account,
+				Limit: budget.start.limit, Used: budget.start.used, Remaining: budget.start.remaining,
+				ResetsAt: budget.start.resets.Format(time.RFC3339), StartedAt: ledger.began.Format(time.RFC3339), Spent: budget.spent,
+			})
+		}
+		budget.mu.Unlock()
+	}
+	return found, nil
 }

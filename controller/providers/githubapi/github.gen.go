@@ -1656,8 +1656,10 @@ type PullRequestSimple struct {
 
 // RateLimit defines model for rate-limit.
 type RateLimit struct {
+	Limit     int `json:"limit"`
 	Remaining int `json:"remaining"`
 	Reset     int `json:"reset"`
+	Used      int `json:"used"`
 }
 
 // RateLimitOverview Rate Limit Overview

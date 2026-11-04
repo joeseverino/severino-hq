@@ -12,6 +12,10 @@ from datetime import timedelta
 from typing import Annotated, Any
 
 from pydantic import Field
+from pydantic.json_schema import SkipJsonSchema
+
+lazy from hq.platform.application.moments import when
+lazy from hq.platform.application.timestamps import moment
 
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
@@ -185,6 +189,92 @@ class DependencyRunRecord(ObservationRecord):
     finished_at: Stamp = None
 
 
+ALLOWANCE_KIND = "github.allowance"
+# Others' spend within one hour that is past what the deploy pipeline and the
+# dependency update run take of it, a few requests a deploy and some hundreds
+# a day: more than that is something else holding the App's key or a token.
+OTHERS_SPENT_ATTENTION = 1000
+# The fact a connection's node carries once others' spend passes it, as
+# ``account|requests|since|until``.
+OTHERS_SPENT = "github-others-spent"
+
+
+class AllowanceRecord(ObservationRecord):
+    """One App installation's hourly REST allowance as a sweep began, and what the sweep spent of it."""
+
+    connection_ref: str
+    installation: int
+    account: str = ""
+    limit: int
+    # What GitHub had counted, and had left, before the sweep's first request.
+    used: int
+    remaining: int
+    resets_at: Stamp = None
+    started_at: Stamp = None
+    # The requests the sweep spent, by GitHub's count of each answer.
+    spent: int
+    # What everything else spent between the first sweep of this hour HQ can
+    # judge and this one: HQ's, set as it stores the reading
+    # (with_others_spent), so no controller sends it. None where no earlier
+    # sweep of the same hour is held.
+    others_spent: SkipJsonSchema[int | None] = None
+    others_since: SkipJsonSchema[str | None] = None
+
+
+def _installation(record: Mapping[str, Any]) -> tuple[str, str]:
+    return str(record.get("connection_ref", "")), str(record.get("installation", ""))
+
+
+def _others(before: Mapping[str, Any] | None, record: Mapping[str, Any]) -> tuple[int | None, str | None]:
+    """Others' spend this hour up to ``record``, and since when: the requests
+    GitHub counted between two sweeps beyond the first one's own. A pair across
+    a reset is in two hours and is not judged."""
+
+    if before is None or not record.get("resets_at") or before.get("resets_at") != record.get("resets_at"):
+        return None, None
+    then, now = moment(before.get("started_at")), moment(record.get("started_at"))
+    if then is None or now is None or then >= now:
+        return None, None
+    between = int(record.get("used") or 0) - int(before.get("used") or 0) - int(before.get("spent") or 0)
+    return max(between, 0) + int(before.get("others_spent") or 0), str(
+        before.get("others_since") or before["started_at"]
+    )
+
+
+def with_others_spent(last: Iterable[Mapping[str, Any]], records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Each allowance record with what others spent of its hour, from the
+    same installation's record in the reading last stored."""
+
+    earlier = {_installation(record): record for record in last}
+    for record in records:
+        record["others_spent"], record["others_since"] = _others(earlier.get(_installation(record)), record)
+    return records
+
+
+def _allowance_facts(record: Mapping[str, Any]) -> tuple[tuple[str, str], ...]:
+    spent = record.get("others_spent")
+    if spent is None or int(spent) < OTHERS_SPENT_ATTENTION:
+        return ()
+    value = "|".join(
+        (str(record.get("account", "")), str(spent), str(record.get("others_since", "")), str(record["started_at"]))
+    )
+    return ((OTHERS_SPENT, value),)
+
+
+def _allowance(record: Mapping[str, Any]) -> str:
+    """The hour as one line: "4,210 of 5,000 left, resets 2:00 PM; HQ spent 12, others 30"."""
+
+    said = f"{int(record.get('remaining') or 0):,} of {int(record.get('limit') or 0):,} left"
+    if (resets := moment(record.get("resets_at"))) is not None:
+        said += f", resets {when(resets)}"
+    said += f"; HQ spent {int(record.get('spent') or 0):,}"
+    if (others := record.get("others_spent")) is not None:
+        said += f", others {int(others):,}"
+        if (since := moment(record.get("others_since"))) is not None:
+            said += f" since {when(since)}"
+    return said
+
+
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
         REPOSITORY_KIND,
@@ -239,5 +329,17 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         title=lambda record: str(record.get("owner", "")),
         relation="Dependency updates of",
         every=DEPENDENCY_RUN_EVERY,
+    ),
+    ObservationSpec(
+        ALLOWANCE_KIND,
+        PROVIDER,
+        "GitHub hourly allowance",
+        AllowanceRecord,
+        # GitHub's rate limit answer is free and needs no permission.
+        title=lambda record: str(record.get("account", "") or record.get("installation", "")),
+        describe=_allowance,
+        relation="Hourly allowance of",
+        facts=_allowance_facts,
+        from_last=with_others_spent,
     ),
 )

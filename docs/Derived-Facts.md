@@ -744,6 +744,13 @@ and gives the next pass its result read-only, named by `SEVERINO_DEPENDENCY_RUN`
 again), or the result once it started after `last_started_at`. A token reaches
 only the hand-off file, and no log text reaches HQ.
 
+The `github.allowance` reading is one record per App installation a sweep
+asked after: its hour before the sweep began and what the sweep spent. HQ sets
+`others_spent` and `others_since` as it stores it, from the same
+installation's last record of the same hour, and the connection's node carries
+the `github-others-spent` fact once that passes the usual
+([Security](Security.md#a-leaked-github-app-credential)).
+
 ## Machine roles
 
 What a machine does for the estate is derived from the tailnet readings by the

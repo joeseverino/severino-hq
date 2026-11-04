@@ -151,9 +151,12 @@ type Registry struct {
 	// Picture GETs an image of at most limit bytes: its kind and its bytes. Nil fetches over HTTPS.
 	Picture func(ctx context.Context, address string, limit int) (string, []byte, error)
 	// ACMEHTTP reaches the certificate authority; nil trusts the controller's roots.
-	ACMEHTTP   *http.Client
-	actions    map[actionKey]Action
-	readers    map[string]Reader
+	ACMEHTTP *http.Client
+	actions  map[actionKey]Action
+	readers  map[string]Reader
+	// tallies is the kinds read from what the rest of their provider's kinds
+	// did this sweep, so read after them (tally).
+	tallies    map[string]bool
 	held       map[string]heldSource
 	probes     map[runtime.ConnectionProvider]Probe
 	snapshotMu sync.Mutex
@@ -179,7 +182,7 @@ type cachedRead struct {
 func New(env runtime.Environment, held runtime.Connections, transport Transport) *Registry {
 	r := &Registry{
 		Env: env, Supplied: held, HTTP: transport, Commands: &Commands{Env: env, Supplied: held}, TLS: NetTLSDialer{CAFile: env.CAFile}, Now: time.Now,
-		actions: map[actionKey]Action{}, readers: map[string]Reader{}, held: map[string]heldSource{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
+		actions: map[actionKey]Action{}, readers: map[string]Reader{}, tallies: map[string]bool{}, held: map[string]heldSource{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
 	}
 	r.admitAdGuard()
 	r.admitNPM()
@@ -214,6 +217,13 @@ func (r *Registry) reader(kind runtime.ResourceKind, handler Reader) {
 		panic("duplicate native controller reader: " + string(kind))
 	}
 	r.readers[string(kind)] = handler
+}
+
+// tally declares a reader of what this sweep's other readers of its provider
+// did: it is read after them, and whenever any of them is.
+func (r *Registry) tally(kind runtime.ResourceKind, handler Reader) {
+	r.reader(kind, handler)
+	r.tallies[string(kind)] = true
 }
 
 // heldSource is a kind read from something this controller was given, not

@@ -923,7 +923,7 @@
             }
           ],
           "posture": {
-            "abilities": 48,
+            "abilities": 49,
             "controls": [
               {
                 "detail": "HQ has no reading of an access list for this name.",
@@ -1102,6 +1102,10 @@
                 {
                   "count": 3,
                   "state": "Readable"
+                },
+                {
+                  "count": 1,
+                  "state": "Never read"
                 }
               ]
             },
@@ -1463,21 +1467,21 @@
           },
           "sees": {
             "could_not_read": 0,
-            "never_read": 0,
+            "never_read": 1,
             "not_connected": [],
             "out_of_date": 0,
             "read": 40,
             "readings": [
               {
                 "error": "",
-                "kind": "host.perimeter",
-                "label": "Open-port test",
-                "observed_at": "2026-01-15T09:30:00+00:00",
+                "kind": "github.allowance",
+                "label": "GitHub hourly allowance",
+                "observed_at": null,
                 "out_of_date": false,
-                "provider": "SSH",
-                "records": 1,
+                "provider": "GitHub App",
+                "records": 0,
                 "remedy": "",
-                "state": "readable"
+                "state": "never_swept"
               }
             ]
           },
@@ -1738,7 +1742,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 40,
+          "count": 41,
           "items": [
             {
               "error": "",
@@ -1751,7 +1755,7 @@
             }
           ],
           "next": null,
-          "total": 40,
+          "total": 41,
           "truncated": false
         },
         "ok": true
@@ -2611,9 +2615,9 @@
           ],
           "schema_version": 2,
           "summary": {
-            "edges": 304,
+            "edges": 305,
             "kinds": {
-              "ability": 57,
+              "ability": 58,
               "connection": 10,
               "controller": 1,
               "machine": 3,
@@ -2623,7 +2627,7 @@
               "target": 1,
               "zone": 1
             },
-            "nodes": 124
+            "nodes": 125
           },
           "trace": null
         },

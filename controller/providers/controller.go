@@ -328,9 +328,28 @@ func (c *Controller) Inventory(ctx context.Context, only []runtime.ResourceKind)
 	for _, connection := range c.Supplied.All() {
 		connected[runtime.ConnectionProvider(connection.Provider)] = true
 	}
+	// A tally is read with any kind of its group, so a sweep of only some
+	// kinds still says what it did.
+	for tally := range c.tallies {
+		for _, kind := range only {
+			if c.providerOf(tally) == c.providerOf(string(kind)) {
+				wantedOnly[tally] = true
+			}
+		}
+	}
 	found := runtime.Inventory{}
 	groups := map[string][]string{}
-	for _, kind := range sortedKeys(c.readers) {
+	ordered := sortedKeys(c.readers)
+	slices.SortStableFunc(ordered, func(a, b string) int {
+		if c.tallies[a] == c.tallies[b] {
+			return 0
+		}
+		if c.tallies[a] {
+			return 1
+		}
+		return -1
+	})
+	for _, kind := range ordered {
 		if len(wantedOnly) > 0 && !wantedOnly[kind] {
 			continue
 		}

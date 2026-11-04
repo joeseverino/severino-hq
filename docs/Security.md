@@ -472,6 +472,43 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   sets the actor, interface and capability name for whatever the handler
   records (`_run` in `hq/platform/application/capabilities.py`).
 
+## A leaked GitHub App credential
+
+The controller holds the GitHub App's private key and mints installation
+tokens from it. Whoever else holds the key, or a token minted from it, can read
+what the installation covers, and on a personal account GitHub shows nobody
+when that happens:
+
+- The account's security log records `integration_installation.*` events (an
+  install, repositories added, permissions updated) and `integration.*` events,
+  but no event for an installation token being created, nor for an App
+  private key being generated or deleted.
+- No REST API lists an App's private keys. An App can have up to 25, listed
+  with their fingerprints only on its settings page.
+- Secret scanning has a pattern for installation tokens (`ghs_`), with push
+  protection, and none for App private keys.
+
+What HQ can tell is the installation's hourly allowance, which everything
+holding the key spends together. Each sweep records it, and HQ derives what
+was spent between two sweeps of the same hour beyond HQ's own requests
+([Architecture](Architecture.md#providers)). Once that passes
+`observations.github.OTHERS_SPENT_ATTENTION` in one hour, more than the
+deploy pipeline and the dependency update run take, the
+`github-others-spent` finding names the requests and when, and that it can
+mean a leaked key or token or another program sharing the App (a development
+copy of HQ, a script). Its steps compare the keys GitHub lists with the
+fingerprint of HQ's own, computed as GitHub's "Managing private keys for
+GitHub Apps" gives it, then rotate the key:
+
+```sh
+openssl rsa -in PATH_TO_PEM_FILE -pubout -outform DER | openssl sha256 -binary | openssl base64
+```
+
+What HQ cannot tell: spend below that line, which the pipeline's own use
+hides; spend in an hour HQ did not sweep twice; and GraphQL queries, which
+spend a points budget of their own. A quiet allowance is no proof that
+nothing leaked.
+
 ## Production checklist
 
 - [ ] Generated a strong `DJANGO_SECRET_KEY` (50 random bytes or more).
