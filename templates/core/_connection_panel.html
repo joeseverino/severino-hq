@@ -70,7 +70,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
           {% for standing in posture.standings %}{% if standing.reading.met is None %}
             <div class="conn-row" data-posture-unread="{{ standing.check.id }}">
               <strong>{{ standing.check.label|breakable }}</strong>
-              <span class="conn-row-note">{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %}</span>
+              <span class="conn-row-note prose">{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %}</span>
             </div>
           {% endif %}{% endfor %}
         </div>
