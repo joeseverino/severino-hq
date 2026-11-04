@@ -837,7 +837,7 @@ Security properties:
 - A task answers only the actor and interface that asked. Every task method
   refuses any other id with the same `-32602`, so an agent cannot tell
   another's task from an id nothing holds. A call that repeats what another
-  agent already asked is answered with that agent's request, so it is given
-  the held answer and no task.
+  agent already asked is a request of its own, held as its own task, which
+  only that agent reads.
 - The task methods are under the brake as `prompts/get` is, and answer
   `-32021` to a request that did not declare the extension.
