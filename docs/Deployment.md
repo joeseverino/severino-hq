@@ -459,9 +459,12 @@ names that host. Limit host ingress for 443 to the tailnet interface and
 loopback, and forward it from no router.
 
 With Nginx Proxy Manager, attach an access list whose client rules allow
-exactly the tailnet ranges in `SEVERINO_TRUSTED_NETWORKS`, in that order, and
-keep `satisfy_any` off. NPM generates the final `deny all` itself; HQ records
-that implicit default from its reading. The checklist is in
+exactly Tailscale's two ranges, `100.64.0.0/10` then `fd7a:115c:a1e0::/48`
+(`reach.TAILNET`), and keep `satisfy_any` off. NPM generates the final
+`deny all` itself. HQ declares only the list's id on the proxy host
+(`access_list_id`). It reads the list's rules and judges them against those two
+ranges whatever `SEVERINO_TRUSTED_NETWORKS` holds, so a list that allows
+anything more reads as "Other sources allowed". The checklist is in
 [Security](Security.md#production-checklist).
 
 ## Remote targets
