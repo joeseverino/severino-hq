@@ -114,6 +114,9 @@ capabilities, resources, connections, topology, findings, recent activity and
 health, and `export_year_summary` also records its export in the audit log.
 One, `execute_capability`, can change anything, and it runs a capability the
 same way the API's `POST /api/v2/capabilities/<name>/` does.
+An agent is listed only the tools its grant runs: each tool declares who may
+run it beside its handler (`requires` in `hq/platform/mcp/services.py`), a
+call is refused by that rule and tools/list leaves the tool out by it.
 Every derived read is one `ResourceSpec` that serves the API, MCP, the CLI and
 the SDK alike ([What each surface exposes](API.md#what-each-surface-exposes)).
 

@@ -12,6 +12,7 @@ from mcp import Client
 from hq.platform.application.security import Capability, Principal
 
 from ..identity import set_principal
+from ..listing import widest_caller
 from ..server import mcp
 
 # Where a description is read, and the neighbors it names as the better call for something.
@@ -28,8 +29,8 @@ POINTERS = {
 READER = Principal("example-reader", "mcp", frozenset({Capability.READ}))
 
 
-def _listing():
-    """Each listed name and its description: tools, prompts and fixed resources."""
+def _listing(principal):
+    """Each name listed to ``principal`` and its description: tools, prompts and fixed resources."""
 
     async def listed():
         async with Client(mcp.server) as client:
@@ -42,12 +43,13 @@ def _listing():
             **{str(resource.uri): resource.description for resource in resources},
         }
 
-    return async_to_sync(listed)()
+    with set_principal(principal):
+        return async_to_sync(listed)()
 
 
 class PointerTests(TestCase):
     def test_each_pointer_names_something_the_server_lists_and_its_description_says_it(self):
-        listing = _listing()
+        listing = _listing(widest_caller())
 
         for source, targets in POINTERS.items():
             for target in targets:
@@ -65,4 +67,6 @@ class PointerTests(TestCase):
 
         self.assertEqual(refused.structured_content["error"]["code"], "forbidden")
         self.assertIn(Capability.READ_AUDIT_LOG.value, refused.structured_content["error"]["message"])
-        self.assertIn(Capability.READ_AUDIT_LOG.value, _listing()["recent_activity"])
+        self.assertIn(Capability.READ_AUDIT_LOG.value, _listing(widest_caller())["recent_activity"])
+        # Listed only to a caller it would not refuse.
+        self.assertNotIn("recent_activity", _listing(READER))

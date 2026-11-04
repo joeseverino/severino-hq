@@ -11,14 +11,17 @@ from hq.platform.application.resources import resource_registry
 from ..binding import bind_tools
 from ..contract import served_resources
 from ..declarations import HANDLERS, argument_model, tool_contract
+from ..identity import set_principal
+from ..listing import widest_caller
 from ..server import mcp
 from .registry import registry_patched
 
 
 def _listed():
     async def listed():
-        async with Client(mcp.server) as client:
-            return await client.list_tools()
+        with set_principal(widest_caller()):
+            async with Client(mcp.server) as client:
+                return await client.list_tools()
 
     return {tool.name: tool for tool in async_to_sync(listed)().tools}
 

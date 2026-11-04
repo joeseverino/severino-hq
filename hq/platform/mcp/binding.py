@@ -12,11 +12,14 @@ from django.conf import settings
 from pydantic import BaseModel
 
 from hq.platform.application import agent_admission
+from hq.platform.application.access import ANYONE
 from hq.platform.application.refusal_status import refuse
+from hq.platform.application.security import Principal
 
 from .contract import served_resources
 from .declarations import HANDLERS, argument_model, tool_contract
 from .identity import caller_address, current_principal
+from .shapes import Requirement, declared
 
 logger = logging.getLogger("severino.mcp")
 
@@ -40,10 +43,20 @@ class Tool:
     title: str = ""
     # What its structuredContent meets, success and refusal alike.
     output_schema: Mapping[str, Any] | None = None
+    # Who may run it: a call is refused by it, and tools/list lists the tool
+    # only to a caller it admits. A declared tool's is its declaration's; a
+    # probe's own tool is anyone's.
+    requires: Requirement = ANYONE
     execute: Callable[..., Any] = field(init=False)
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "execute", sync_to_async(partial(_held, self.handler), thread_sensitive=True))
+        run = partial(_held, self.handler, self.requires)
+        object.__setattr__(self, "execute", sync_to_async(run, thread_sensitive=True))
+
+    def offered_to(self, principal: Principal) -> bool:
+        """Whether tools/list names this tool to ``principal``: the rule a call is refused by."""
+
+        return self.requires.admits(principal)
 
     async def call(self, arguments: Mapping[str, Any]) -> Any:
         """The handler's answer, once the arguments pass its model, whose
@@ -71,14 +84,17 @@ class Tool:
         )
 
 
-def _held(handler: Callable[..., Any], **arguments: Any) -> Any:
-    """``handler``'s answer, run while it holds one of its agent's calls at once, on the request's thread.
+def _held(handler: Callable[..., Any], requires: Requirement, **arguments: Any) -> Any:
+    """``handler``'s answer, for a caller ``requires`` admits, run while it
+    holds one of its agent's calls at once, on the request's thread.
 
     The call is given back when the handler returns, so one that outlived its
     timeout still counts against its agent until it ends.
     """
 
-    with agent_admission.at_once(current_principal(), source=caller_address()) as busy:
+    principal = current_principal()
+    requires.check(principal)
+    with agent_admission.at_once(principal, source=caller_address()) as busy:
         if busy is not None:
             return busy.refusal.answer()
         return handler(**arguments)
@@ -102,5 +118,6 @@ def bind_tools() -> dict[str, Tool]:
             handler,
             title=entry["title"],
             output_schema=entry["outputSchema"],
+            requires=declared(handler).requires,
         )
     return tools

@@ -203,12 +203,15 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertEqual(tools["get_resource"].input_schema["properties"]["name"]["enum"], addressable)
 
     def test_each_tool_is_served_once_and_only_execute_writes(self):
+        from hq.platform.mcp.identity import set_principal
+        from hq.platform.mcp.listing import widest_caller
         from hq.platform.mcp.server import mcp as served
 
         async def listed():
             return await served._list(None, None)
 
-        tools = {tool.name: tool for tool in async_to_sync(listed)().tools}
+        with set_principal(widest_caller()):
+            tools = {tool.name: tool for tool in async_to_sync(listed)().tools}
 
         self.assertEqual(set(tools), set(TOOLS))
         for name, read_only in TOOLS.items():

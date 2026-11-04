@@ -5,6 +5,7 @@ from typing import Annotated, Any, cast
 from pydantic import Field, SkipValidation
 
 from hq.platform.application import read_models
+from hq.platform.application.access import ANYONE, READS_A_LIST, READS_A_RECORD, RUNS_A_CAPABILITY, holding
 from hq.platform.application.capabilities import (
     CapabilityCatalog,
     Performed,
@@ -34,13 +35,14 @@ from hq.platform.application.resources import (
     get_resource as get_application_resource,
     list_resource as list_application_resource,
 )
+from hq.platform.application.security import Capability
 from hq.platform.application.topology import TopologyQuery, topology as application_topology
 from hq.platform.application.topology_answer import TopologyAnswer
 from hq.platform.mcp.identity import current_principal
 from hq.platform.mcp.shapes import tool
 
 
-@tool("Capability catalog")
+@tool("Capability catalog", requires=ANYONE)
 def describe_capabilities(name: str = "", resource: str = "") -> CapabilityCatalog:
     """Describe JSON-executable HQ capabilities and their canonical schemas.
 
@@ -57,7 +59,7 @@ def describe_capabilities(name: str = "", resource: str = "") -> CapabilityCatal
 describe_capabilities.__doc__ = f"{describe_capabilities.__doc__}\n{effect_glossary('effect')}\n"
 
 
-@tool("Run a capability")
+@tool("Run a capability", requires=RUNS_A_CAPABILITY)
 def execute_capability(
     name: str,
     payload: dict[str, Any],
@@ -91,7 +93,7 @@ def execute_capability(
     return cast(Performed | HeldCall, answer)
 
 
-@tool("Resource catalog")
+@tool("Resource catalog", requires=ANYONE)
 def describe_resources(name: str | None = None) -> ResourceCatalog:
     """Describe every readable HQ resource, its supported operations, and whether you are permitted each.
 
@@ -103,14 +105,14 @@ def describe_resources(name: str | None = None) -> ResourceCatalog:
     return describe_application_resources(principal=current_principal(), name=name or "")
 
 
-@tool("Connection catalog")
+@tool("Connection catalog", requires=ANYONE)
 def describe_connections() -> ConnectionCatalog:
     """Describe installed connection families, abilities, scopes, routes, and whether you are permitted each."""
 
     return describe_application_connections(principal=current_principal())
 
 
-@tool("Open findings", arguments=FindingsQuery)
+@tool("Open findings", requires=holding(Capability.READ), arguments=FindingsQuery)
 def get_findings(**narrowing: Any) -> Findings:
     """What HQ currently claims is wrong, with evidence and suggested remedies.
 
@@ -127,7 +129,7 @@ def get_findings(**narrowing: Any) -> Findings:
     return application_findings(principal=current_principal(), **narrowing)
 
 
-@tool("Infrastructure topology", arguments=TopologyQuery)
+@tool("Infrastructure topology", requires=holding(Capability.READ), arguments=TopologyQuery)
 def get_topology(**narrowing: Any) -> TopologyAnswer:
     """Return the live infrastructure graph with safe canonical actions.
 
@@ -141,7 +143,7 @@ def get_topology(**narrowing: Any) -> TopologyAnswer:
     return application_topology(principal=current_principal(), **narrowing)
 
 
-@tool("List records")
+@tool("List records", requires=READS_A_LIST)
 def list_resource(
     name: str,
     filters: dict[str, Any] | None = None,
@@ -166,7 +168,7 @@ def list_resource(
 
 
 # One record of its kind, with the fields describe_resources names for it.
-@tool("Read one record")
+@tool("Read one record", requires=READS_A_RECORD)
 def get_resource(
     name: str, identifier: str | int, fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None
 ) -> dict[str, Any]:
@@ -180,7 +182,7 @@ def get_resource(
     return get_application_resource(name, identifier, principal=current_principal(), strict=True, fields=fields)
 
 
-@tool("Undocumented projects and assets")
+@tool("Undocumented projects and assets", requires=holding(Capability.READ))
 def audit_registry() -> RegistryAudit:
     """The Project and Asset records no documentation points to.
 
@@ -191,7 +193,7 @@ def audit_registry() -> RegistryAudit:
     return audit_application_registry(principal=current_principal())
 
 
-@tool("Export a year summary")
+@tool("Export a year summary", requires=holding(Capability.READ))
 def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary:  # noqa: A002 - the MCP tool's parameter, by name
     """One year's summary as text: its expenses, projects, writeups,
     documentation pointers and assets bought, as Markdown or JSON.
@@ -203,7 +205,7 @@ def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary: 
     return export_application_year_summary(year, format, principal=current_principal())
 
 
-@tool("Documentation coverage")
+@tool("Documentation coverage", requires=holding(Capability.READ))
 def documentation_status() -> DocumentationStatus:
     """The documentation HQ points to: counts by status and type, and the
     first page of records, each with its title, system and where it lives.
@@ -217,7 +219,7 @@ def documentation_status() -> DocumentationStatus:
     return read_models.documentation_status(principal=current_principal())
 
 
-@tool("What changed lately")
+@tool("What changed lately", requires=holding(Capability.READ_AUDIT_LOG))
 def recent_activity(*, limit: int = 25) -> RecentActivity:
     """The newest audit-log events, newest first: who did what to which
     record, and when, without the events' metadata.
@@ -229,7 +231,7 @@ def recent_activity(*, limit: int = 25) -> RecentActivity:
     return read_models.recent_activity(principal=current_principal(), limit=limit)
 
 
-@tool("HQ health check")
+@tool("HQ health check", requires=holding(Capability.READ))
 def system_health() -> SystemHealth:
     """Whether HQ answers: its database is checked, and the record count of each domain returned.
 
@@ -240,7 +242,7 @@ def system_health() -> SystemHealth:
     return read_models.system_health(principal=current_principal())
 
 
-@tool("HQ at a glance")
+@tool("HQ at a glance", requires=holding(Capability.READ))
 def dashboard_snapshot() -> OperatingSnapshot:
     """HQ at a glance: its figures, the priority queue, work in progress and recent activity.
 

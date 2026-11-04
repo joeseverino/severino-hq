@@ -697,11 +697,26 @@ every agent make, and the same calls one after another. For each it reports the
 resident and traced memory while they are in flight, and the threads and calls
 at the peak.
 
+tools/list names a caller only the tools it may run. Each tool declares who
+that is beside its handler (`@tool(..., requires=...)`, an access from `hq/platform/application/access.py`, in
+`hq/platform/mcp/services.py`), and the binding refuses a call by the same
+rule, `forbidden`, before the handler runs, so the list and the refusal never
+disagree. The catalogs (`describe_capabilities`, `describe_resources`,
+`describe_connections`) are listed to everyone, since each says `permitted`
+of every entry. `list_resource` and `get_resource` are listed to a caller who
+may read some kind each serves, and `execute_capability` to one who may run
+some capability: a change is held for a person only after its caller's grant
+is checked, so a caller without one has nothing to ask for. The Agents page
+lists as an operator's own device, the widest caller, so it shows every tool.
+
 Each list says how long it stays fresh, through the SDK's cache hints
-(`CACHE_HINTS` in `hq/platform/mcp/server.py`). The lists tools/list,
-prompts/list and resources/list change only with a release, so a client may
-keep them for ten minutes, privately, since only a caller that signed in
-reaches them. The list resources/templates/list is the caller's grants and
+(`CACHE_HINTS` in `hq/platform/mcp/server.py`). The lists prompts/list and
+resources/list change only with a release, and tools/list with a release or
+the caller's grant, so a client may keep them for ten minutes, privately,
+since only a caller that signed in reaches them. HQ serves stateless HTTP, so
+it has no session to send `notifications/tools/list_changed` down, and
+declares `listChanged` false: a client sees a changed grant's tools when it
+lists again. The list resources/templates/list is the caller's grants and
 records, so it is stale at once.
 
 ### MCP prompts and resources

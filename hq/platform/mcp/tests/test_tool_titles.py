@@ -4,13 +4,16 @@ from asgiref.sync import async_to_sync
 from django.test import SimpleTestCase
 from mcp import Client
 
+from ..identity import set_principal
+from ..listing import widest_caller
 from ..server import mcp
 
 
 def _listed():
     async def listed():
-        async with Client(mcp.server) as client:
-            return await client.list_tools()
+        with set_principal(widest_caller()):
+            async with Client(mcp.server) as client:
+                return await client.list_tools()
 
     return async_to_sync(listed)().tools
 
