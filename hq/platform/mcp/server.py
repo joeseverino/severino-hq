@@ -76,8 +76,9 @@ INSTRUCTIONS = "\n\n".join(
         ),
         (
             "A client that declares the io.modelcontextprotocol/tasks extension is answered a held change "
-            "as a task whose id is approval.id: tasks/get reads working until a person decides, then "
-            "completed with the call's answer, or with an error result coded declined, expired or stale. "
+            "as a task whose id is approval.id: tasks/get reads working until a person decides and HQ "
+            "applies it, then completed with the call's answer, or with an error result coded declined, "
+            "expired, stale or operation_failed. "
             "Poll at pollIntervalMs; neither tasks/update nor tasks/cancel decides it, and a task answers "
             "only the agent that asked."
         ),
@@ -325,7 +326,7 @@ class ToolServer:
 
     async def _cancel_task(self, context: Any, params: types.CancelTaskRequestParams) -> dict[str, Any]:
         require_client_extension(context, tasks.IDENTIFIER)
-        return await _read("tasks/cancel", lambda principal: tasks.refuse_cancel(params.task_id, principal))
+        return await _read("tasks/cancel", lambda principal: tasks.cancel(params.task_id, principal))
 
     def served(self) -> Served:
         """A fresh application and the session manager it runs on, as a pair:

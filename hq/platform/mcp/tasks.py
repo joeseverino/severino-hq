@@ -1,9 +1,9 @@
-"""A held change as a task of the MCP tasks extension, which a client waits on while a person decides.
+"""A held change as a task of the MCP tasks extension, which a client waits on while a person decides and HQ applies it.
 
-The task is the hold. Its id is the hold's, its state is read from the hold at
-each ``tasks/get``, and nothing here writes one: a person decides it in HQ, and
-no method of the extension reaches a decision. docs/API.md states the
-properties.
+The task is the hold. Its id is the hold's, its state is read from the hold,
+and from the operation its call queued, at each ``tasks/get``, and nothing
+here writes either: a person decides it in HQ, and no method of the extension
+reaches a decision. docs/API.md states the properties.
 """
 
 from collections.abc import Mapping
@@ -14,13 +14,22 @@ from mcp.shared.exceptions import MCPError
 from mcp_types.version import MODERN_PROTOCOL_VERSIONS
 from pydantic import Field
 
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application import approvals
+from hq.platform.application.held_answer import applying
+from hq.platform.application.refusal_status import refusal_of, refuse
+from hq.platform.application.resource_operations import serialize_operation
 from hq.platform.application.security import Principal
 
 IDENTIFIER = "io.modelcontextprotocol/tasks"
 # A person answers in minutes or hours, so a poll sooner than this only reads
 # the same hold again. It is the longest interval Claude Code honors.
 POLL_INTERVAL_MS = 30_000
+# The controller applies a change in seconds, so an approved one is read again soon.
+APPLYING_POLL_INTERVAL_MS = 2_000
+
+# An operation still to finish, so the call it answers is not yet done.
+_UNFINISHED = frozenset({OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED})
 
 # The one answer for an id this caller did not ask for, whether or not it exists.
 _UNKNOWN = "No task of this caller has that id."
@@ -73,14 +82,13 @@ def acknowledge(task_id: str, principal: Principal) -> dict[str, Any]:
     return {}
 
 
-def refuse_cancel(task_id: str, principal: Principal) -> dict[str, Any]:
-    """``tasks/cancel``'s answer: a held change stays a person's to decide."""
+def cancel(task_id: str, principal: Principal) -> dict[str, Any]:
+    """``tasks/cancel``'s acknowledgement. Cancellation is the server's to honor
+    or not, and a held change stays a person's to decide, so the task goes on
+    as it was."""
 
     _own(task_id, principal)
-    raise MCPError(
-        types.INVALID_REQUEST,
-        "A held change stays waiting for a person, who approves or declines it in HQ; it cannot be cancelled here.",
-    )
+    return {}
 
 
 def _own(task_id: str, principal: Principal) -> Any:
@@ -91,16 +99,47 @@ def _own(task_id: str, principal: Principal) -> Any:
 
 
 def _task(held: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
-    answer = approvals.outcome(held)
+    """The task, and the call's answer once it is done: decided, and applied
+    where the call queued an operation to apply it."""
+
     approval = approvals.serialize_approval(held)
+    settled = approvals.outcome(held)
+    answer, said = _standing(held, settled, approval["review_url"])
     task: dict[str, Any] = {
         "taskId": approval["id"],
         "status": "working" if answer is None else "completed",
         "createdAt": approval["requested_at"],
         "lastUpdatedAt": held.updated_at.isoformat(),
-        "ttlMs": int((held.expires_at - held.created_at).total_seconds() * 1000),
-        "pollIntervalMs": POLL_INTERVAL_MS,
+        # Until a person decides, the request lapses at its expiry. HQ keeps a
+        # settled hold, so its task stays readable however long applying takes.
+        "ttlMs": None if settled else int((held.expires_at - held.created_at).total_seconds() * 1000),
+        "pollIntervalMs": APPLYING_POLL_INTERVAL_MS if settled else POLL_INTERVAL_MS,
+        # On every answer, since a client shows the last one it was sent.
+        "statusMessage": f"{approvals.asked(held)}. {said}",
     }
-    if answer is None:
-        task["statusMessage"] = f"Waiting for a person to decide it in HQ, at {approval['review_url']}."
     return task, answer
+
+
+def _standing(held: Any, settled: dict[str, Any] | None, review_url: str) -> tuple[dict[str, Any] | None, str]:
+    """The call's answer, None until it is done, and the sentence saying where it stands."""
+
+    if settled is None:
+        return None, f"A person decides it in HQ, at {review_url}."
+    if held.state != ApprovalRequest.State.APPROVED:
+        return settled, refusal_of(settled).message
+    queued = applying(held)
+    if queued is None:
+        return settled, "A person approved it in HQ, and it is done."
+    field, operation = queued
+    if operation.state in _UNFINISHED:
+        return None, f"A person approved it in HQ, at {review_url}, and HQ is applying it now."
+    # The call's own answer, carrying its operation as it ended.
+    ended = {**settled, field: serialize_operation(operation)}
+    if operation.state == OperationRequest.State.SUCCEEDED:
+        return ended, "A person approved it in HQ, and it is applied."
+    failed = refuse(
+        "operation_failed",
+        "A person approved this change in HQ, and applying it did not succeed; details carries the operation.",
+        ended,
+    )
+    return failed, "A person approved it in HQ, and applying it did not succeed."

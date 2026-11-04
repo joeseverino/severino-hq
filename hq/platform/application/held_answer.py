@@ -2,11 +2,12 @@
 
 from typing import Annotated, Any, Literal, TypedDict
 
-from hq.domains.control_plane.models import ApprovalRequest
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
 from .describe import listed
+from .hq_self import site_url
 
 
 class HeldRequest(TypedDict):
@@ -37,7 +38,7 @@ class HeldRequest(TypedDict):
             "A digest of the call and of what it was measured against; an approval holds only while both are unchanged."
         ),
     ]
-    review_url: Annotated[str, Describe("Where a person decides it, in HQ's web interface.")]
+    review_url: Annotated[str, Describe("Where a person decides it in HQ's web interface, as an absolute address.")]
 
 
 class AwaitingApproval(TypedDict):
@@ -86,5 +87,28 @@ def serialize_approval(held: ApprovalRequest) -> HeldRequest:
         "requested_at": held.created_at.isoformat(),
         "expires_at": held.expires_at.isoformat(),
         "content_fingerprint": held.content_fingerprint,
-        "review_url": reverse("core:approval_entry", kwargs={"approval_id": held.id}),
+        "review_url": site_url(reverse("core:approval_entry", kwargs={"approval_id": held.id})),
     }
+
+
+# The fields of an answer that carry the operation it queued: ``OperationQueued``'s
+# ``operation``, and ``ResourceSaved``'s ``applying``, null where nothing was queued.
+_OPERATION_FIELDS = ("operation", "applying")
+
+
+def applying(held: ApprovalRequest) -> tuple[str, OperationRequest] | None:
+    """The operation an approved request's call queued, and the field of its answer that carries it.
+
+    None for a request not approved, or one whose call queued nothing, which
+    was done when it ran.
+    """
+
+    if held.state != ApprovalRequest.State.APPROVED or not isinstance(held.result, dict):
+        return None
+    for field in _OPERATION_FIELDS:
+        carried = held.result.get(field)
+        if isinstance(carried, dict) and carried.get("id"):
+            operation = OperationRequest.objects.select_related("resource").filter(pk=carried["id"]).first()
+            if operation is not None:
+                return field, operation
+    return None

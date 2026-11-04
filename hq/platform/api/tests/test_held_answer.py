@@ -55,6 +55,8 @@ def _data(document, response):
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
     SEVERINO_AGENT_ENABLE_WRITES=True,
+    # A held answer links its review page at the declared host.
+    SEVERINO_SITE_HOST="hq.example.com",
 )
 class HeldAnswerTests(TestCase):
     client_class = ContractClient

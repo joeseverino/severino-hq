@@ -2298,7 +2298,7 @@
               "requested_interface": "api",
               "resource_key": "",
               "resource_kind": "projects",
-              "review_url": "/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
+              "review_url": "https://hq.example.com/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
               "state": "pending",
               "target": ""
             },
@@ -9803,7 +9803,7 @@
             "type": "string"
           },
           "review_url": {
-            "description": "Where a person decides it, in HQ's web interface.",
+            "description": "Where a person decides it in HQ's web interface, as an absolute address.",
             "type": "string"
           },
           "state": {

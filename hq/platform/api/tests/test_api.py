@@ -213,6 +213,7 @@ class CompositionCheckTests(SimpleTestCase):
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
     SEVERINO_AGENT_ENABLE_WRITES=True,
+    SEVERINO_SITE_HOST="hq.example.com",
 )
 class TransportTests(SentinelMixin, TestCase):
     # Every response below is also held to the OpenAPI document.

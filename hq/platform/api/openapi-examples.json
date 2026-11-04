@@ -2317,7 +2317,7 @@
             "requested_interface": "api",
             "resource_key": "",
             "resource_kind": "projects",
-            "review_url": "/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
+            "review_url": "https://hq.example.com/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
             "state": "pending",
             "target": ""
           },

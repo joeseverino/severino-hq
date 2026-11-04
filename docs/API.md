@@ -797,29 +797,43 @@ capabilities. A client that declares nothing keeps the held answer.
 
 | Hold | `tasks/get` answers |
 |---|---|
-| Waiting for a person | `working`, with the review page in `statusMessage` |
-| Approved | `completed`, `result` the call's answer as it ran |
+| Waiting for a person | `working` |
+| Approved, its operation queued or running | `working`, polled every 2,000 ms |
+| Approved and applied, or approved with no operation to run | `completed`, `result` the call's answer, carrying its operation as it ended |
+| Approved, and its operation failed or was cancelled | `completed`, `result` a tool error coded `operation_failed`, whose `details` is the call's answer with its operation as it ended |
 | Declined | `completed`, `result` a tool error coded `declined`, with the person's note |
 | Lapsed unanswered, or overtaken by a change to what it acts on | `completed`, `result` a tool error coded `expired` or `stale` |
 
-A decline, a lapse and an overtaken hold are tool errors, not `failed`. The
-extension's specification keeps `failed` for "a JSON-RPC error during
-execution" and says it "MUST NOT be used for non-JSON-RPC errors"
+Every answer carries a `statusMessage`, since a client shows the last one it
+was sent: the sentence the approval card and the audit log say the hold by
+(`approvals.asked`), then where it stands, with the review page's absolute
+address while it waits (`hq_self.site_url`, built from the declared site
+host, never from the request).
+
+A decline, a lapse, an overtaken hold and a failed apply are tool errors, not
+`failed`. The extension's specification keeps `failed` for "a JSON-RPC error
+during execution" and says it "MUST NOT be used for non-JSON-RPC errors"
 (tasks.extensions.modelcontextprotocol.io, specification, `Task` status). HQ
 answers every other refusal as a tool error.
 
-`pollIntervalMs` is 30,000, the longest interval Claude Code honors: a person
-answers in minutes or hours, so a sooner poll only reads the same hold again.
-`ttlMs` is the hold's own window, from its request to its expiry.
+While a person decides, `pollIntervalMs` is 30,000, the longest interval
+Claude Code honors: a person answers in minutes or hours, so a sooner poll
+only reads the same hold again, and `ttlMs` is the hold's own window, from its
+request to its expiry. Once it is settled, the controller applies it in
+seconds, so the poll is 2,000 ms, and `ttlMs` is null: HQ keeps every settled
+hold, so the task never lapses while its change applies.
 
 Security properties:
 
 - The task is the hold, read afresh at each `tasks/get`; no task state is
   kept apart from it. Its id is the hold's random UUID.
 - Nothing in the extension decides a hold. A hold asks for no input, so
-  `tasks/update` acknowledges and changes nothing, and `tasks/cancel` is
-  refused: the change stays a person's to approve or decline in HQ, under the
-  rules every approval keeps.
+  `tasks/update` acknowledges and changes nothing. `tasks/cancel` is
+  acknowledged with the empty result the specification requires and changes
+  nothing either, since cancellation is the server's to honor: the change stays
+  a person's to approve or decline in HQ, under the rules every approval keeps.
+- The review address carries the hold's id and nothing else; reading it
+  takes a person signed in to HQ.
 - A task answers only the actor and interface that asked. Every task method
   refuses any other id with the same `-32602`, so an agent cannot tell
   another's task from an id nothing holds. A call that repeats what another
