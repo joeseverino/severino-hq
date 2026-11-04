@@ -278,7 +278,7 @@
     fetches on first open rather than making every page pay for a panel almost
     nobody opens.
     {% endcomment %}
-    {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How you are connected to HQ right now." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
+    {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How this browser reaches HQ, and each check on the way." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
     {% if saved_copy %}
       {% include "partials/_modal.html" with id="demo-about" title="About this demo" body_template="partials/_demo_about.html" %}
     {% endif %}
