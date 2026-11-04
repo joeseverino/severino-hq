@@ -14,12 +14,12 @@
       {% words "agent.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
     {% endif %}
   </div>
-  <p class="agent-state-facts">
+  <div class="agent-state-facts">
     <span>{{ rule_count|counted:"rule changed from the default,rules changed from the default" }}</span>
     {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count|breakable }}</strong> waiting for your approval</a>{% endif %}
     <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count|breakable }}</strong> refused in the last day</a>
     {% if any_dormant %}<span class="policy-dormant-note">A grayed-out rule does nothing until HQ's settings let agents do that action.</span>{% endif %}
-  </p>
+  </div>
 {% endcard %}
 
 {% comment %}
@@ -57,7 +57,7 @@ use, what it did over the window, and its own block beside the pause above.
                 {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.held_back %}<p>Granted, but off in HQ's settings: {% for name in standing.held_back %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if activity.latest %}
-                  <ul class="agent-events" data-label="Latest">
+                  <ul class="agent-events prose" data-label="Latest">
                     {% for event in activity.latest %}
                       <li{% if event.action == "denied" %} data-refused{% endif %}><a href="{{ event.get_absolute_url }}">{{ event.summary|breakable }}</a>{% if event.metadata.count > 1 %} <span class="muted">{{ event.metadata.count|counted:"time" }}</span>{% endif %} <span class="muted">{{ event.created_at|when:"ago" }}</span></li>
                     {% endfor %}

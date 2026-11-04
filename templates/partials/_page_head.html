@@ -9,7 +9,7 @@ glance (how it is doing, where it runs), beside its name rather than under it.
 {% endcomment %}
 <header class="page-head">
   <div class="page-head-copy">
-    {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</p>{% endif %}
+    {% if page.trail %}<div class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</div>{% endif %}
     <div class="page-title-row">
       <h1>{{ page.title|breakable }}</h1>
       {% for badge in page_badges %}<span class="pill{% if badge.tone %} pill-{{ badge.tone }}{% endif %}"{% if badge.title %} title="{{ badge.title }}"{% endif %}>{{ badge.label|breakable }}</span>{% endfor %}

@@ -440,6 +440,21 @@ Chromium also breaks a part held to one line (`.whole`) that has no box
 part has `overflow-wrap: break-word`. So a box that cuts such a part sets
 `overflow-wrap: normal`.
 
+**A link is underlined only among words.** A link set in a sentence, a
+definition, help text or a muted line differs from the words around it by a
+quiet underline at rest (WCAG 1.4.1): no link color reaches 3:1 against muted
+text while keeping 4.5:1 against the surface, so color alone cannot do it. A
+link that is the whole of its line, row, item or chip is never underlined at
+rest; it reads by its color and underlines on hover and focus, as every link
+does. One rule in `base.css` draws it: words are a `p`, a `small`, a `.muted`
+line, or a value or item marked `.prose` because it reads as a sentence (a
+name followed by a note, a summary with a link in it), and a link with a class
+of its own is a control, `.external-link` aside. A table cell's `prose` stays
+on its part when the column leaves for the row's open line. The survey's
+`links at rest` check reads every link on every page from the rendered layout
+and names one underlined alone or among words without a cue of its own (an
+underline, or a weight, size or face as axe accepts).
+
 An external link's arrow (`.external-link`) is joined to its last word by a
 no-break space. A link whose name is one box (a cut token, a chip in a table)
 lays the name and the arrow out as one row, since a line may break after any

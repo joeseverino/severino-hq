@@ -31,19 +31,23 @@ body {
    not end on one stranded word. */
 p, li, dd, blockquote, figcaption { text-wrap: pretty; }
 a { color: var(--accent-2); text-decoration: none; }
-a:hover { color: var(--accent); text-decoration: underline; }
-/* A link set among words is told apart from them by more than its color
-   (WCAG 1.4.1), which beside muted text is barely a step: a quiet underline,
-   full on hover. A span is a run of words, whatever color a page sets it
-   in. A link with a class of its own is a control, and a row's name stands
-   alone in its cell. */
-:where(p, li, dd, td, span, .muted) a:where(:not([class], td > strong > a, td > a:has(> strong))) {
+a:is(:hover, :focus-visible) { color: var(--accent); text-decoration: underline; }
+/* A link among words differs from them by more than its color (WCAG 1.4.1),
+   which beside muted text no link color can be while it holds its contrast
+   with the page: a quiet underline, full on hover. Words are a paragraph, a
+   line of small print, a muted line, or a value or item that reads as a
+   sentence (`.prose`). Anywhere else a link is the whole of its line, row,
+   item or chip, and a link with a class of its own is a control, so both
+   read by their color and underline on hover and focus. An external link
+   keeps its class and its place among words; a bold link already stands out
+   from them. */
+:where(p, small, .muted, .prose) a:where(:not([class]), .external-link):not(strong a, :has(> strong:only-child)) {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: .18em;
+  &:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
 }
-:where(p, li, dd, td, span, .muted) a:where(:not([class])):hover { text-decoration-color: currentColor; }
 /* A line a link draws never reaches a box of its own inside it, so whatever
    is inside a link draws the line its link draws. */
 a * { text-decoration: inherit; }

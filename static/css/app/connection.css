@@ -326,7 +326,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
   display: grid; gap: var(--space-3);
   margin: 0 var(--space-6) var(--space-4) calc(var(--space-6) + 17px + var(--space-5));
 }
-.conn-layer-body p { margin: 0; font-size: var(--text-xs); color: var(--ink-2); }
+.conn-layer-body :is(p, .conn-hop-page) { margin: 0; font-size: var(--text-xs); color: var(--ink-2); }
 /* A hop's own checks are rows of the hop, not boxes inside it: a tick, the
    statement and its evidence on one line, the sentence when opened. */
 .conn-layer-body .conn-layers { gap: 0; border-top: 1px solid var(--line-2); }

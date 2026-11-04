@@ -18,6 +18,7 @@ from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES, FIELD_CO
 from hq.platform.core.tests.browser.probes.parts import (
     DIALOGS_WITHOUT_OPENERS,
     HIDDEN_IN_SUMMARIES,
+    LINKS_AT_REST,
     PARTS_NOT_UNDERLINED,
     READINGS,
     SELECT_ARROWS,
@@ -172,6 +173,7 @@ _GEOMETRY = {
     "dialogs": (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
     "select arrows": (SELECT_ARROWS, [SELECTORS["dropdown"], SELECTORS["vendored"]]),
     "link underlines": (PARTS_NOT_UNDERLINED, [SELECTORS["link"], SELECTORS["vendored"]]),
+    "links at rest": (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
     "lists of facts": (WRAPPED_BESIDE_A_PAIR, SELECTORS["fact_list"]),
     # Every box and every line of text, not only a card's or code's.
     "gutter": (PAST_THE_GUTTER, ["*", True]),

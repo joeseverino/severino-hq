@@ -222,7 +222,7 @@ own h2 title.
             <div class="conn-layer-body">
               {% comment %}The thing's own page, here rather than in the summary: a link inside
               the control that opens the row is a control inside a control.{% endcomment %}
-              {% if hop.link and hop.link.url %}<p>{% entity hop.link %}</p>{% endif %}
+              {% if hop.link and hop.link.url %}<div class="conn-hop-page">{% entity hop.link %}</div>{% endif %}
               {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}</p>{% endif %}
               {% if hop.check.step %}<p class="conn-agree conn-agree-no">{{ hop.check.step|breakable }}</p>{% endif %}
               {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement|breakable }}</p>{% endif %}

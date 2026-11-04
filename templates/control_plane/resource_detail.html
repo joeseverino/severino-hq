@@ -285,7 +285,7 @@ one thing worth doing then is reading what it was. The certificate's link only w
 saying a thing cannot be done yet is a status report filed in the wrong place.
 {% endcomment %}
 <p class="muted">
-  <a href="{% url 'control_plane:report_download' resource.key %}">Download this record (JSON)</a>{% if resource.status.certificate_pem %}{% dot %}<a href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+  <a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download this record (JSON)</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
   {% endif %}
 </p>
 

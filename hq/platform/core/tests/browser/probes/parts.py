@@ -164,6 +164,69 @@ PARTS_NOT_UNDERLINED = """([links, vendored]) => {
   return found;
 }"""
 
+# A link among words differs from them by more than its color (WCAG 1.4.1):
+# it is underlined at rest, or set in a weight, size, style or face of its
+# own, the cues axe's link-in-text-block accepts. A link that is the whole of
+# its line, row, item or chip is never underlined at rest. The words around a
+# link are the text its nearest box lays out in line with it, outside every
+# link and up to a forced break; a version or a count alone is no words, nor
+# is a box inside that line (a chip, a badge), and a link laid out as a block
+# stands alone unless it is an item in a row of words. Read from the rendered
+# page, so every link on every page is judged at every width, whatever markup
+# or class drew it.
+LINKS_AT_REST = """([links, vendored]) => {
+  const style = (el) => getComputedStyle(el);
+  const atomic = (el) => !['inline', 'contents'].includes(style(el).display);
+  const inLine = (el) => /inline/.test(style(el).display);
+  const row = (el) => /flex|grid/.test(style(el).display);
+  const shown = (node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return [...range.getClientRects()].some((r) => r.width > 1 && r.height > 1);
+  };
+  const lettered = (node) => /\\p{L}/u.test(node.textContent) && shown(node);
+  const among = (link, box) => {
+    const inBox = (el) => {
+      while (el !== box && !atomic(el)) el = el.parentElement;
+      return el === box;
+    };
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    let line = 0;
+    let own = -1;
+    const worded = new Map();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node === link) own = line;
+      else if (node.nodeType === Node.ELEMENT_NODE && node.localName === 'br' && inBox(node.parentElement)) line += 1;
+      else if (node.nodeType === Node.TEXT_NODE && !node.parentElement.closest(links) && inBox(node.parentElement) && lettered(node)) {
+        worded.set(line, worded.get(line) || node.parentElement);
+      }
+    }
+    return worded.get(own);
+  };
+  const face = (el) => ['font-weight', 'font-size', 'font-style', 'font-family'].map((p) => style(el).getPropertyValue(p)).join();
+  const ownText = (link) => {
+    const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) if (lettered(node)) return node.parentElement;
+    return link;
+  };
+  const found = [];
+  for (const link of document.querySelectorAll(links)) {
+    if ((vendored && link.closest(vendored)) || !link.textContent.trim() || !shown(link)) continue;
+    if (link.matches(':hover, :focus-visible')) continue;
+    let box = link.parentElement;
+    while (box && !atomic(box)) box = box.parentElement;
+    const words = box && (inLine(link) || (link.parentElement === box && row(box))) && among(link, box);
+    const underlined = style(link).textDecorationLine.includes('underline');
+    const name = link.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60);
+    const where = box ? [box.localName, ...box.classList].join('.') : 'the page';
+    if (words && !underlined && face(ownText(link)) === face(words)) {
+      found.push(`link ${name} sits among words in ${where} and differs from them only by its color`);
+    }
+    if (!words && underlined) found.push(`link ${name} stands alone in ${where} and is underlined at rest`);
+  }
+  return found;
+}"""
+
 # A dialog a page declares is one a reader can open: some control on the page
 # names it, so drawing a dialog without its control is a finding.
 DIALOGS_WITHOUT_OPENERS = """([dialogs, openers]) => {
