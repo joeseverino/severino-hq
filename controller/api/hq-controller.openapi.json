@@ -1555,6 +1555,9 @@
           "github_profiles": {
             "$ref": "#/components/schemas/GitHubProfilePlan"
           },
+          "github_repositories": {
+            "$ref": "#/components/schemas/GitHubRepositoriesPlan"
+          },
           "dependency_updates": {
             "$ref": "#/components/schemas/DependencyUpdatesPlan"
           }
@@ -1570,6 +1573,7 @@
           "connection_credentials",
           "extensions",
           "github_profiles",
+          "github_repositories",
           "dependency_updates"
         ]
       },
@@ -1993,6 +1997,44 @@
         "additionalProperties": false,
         "required": [
           "accounts",
+          "due"
+        ]
+      },
+      "GitHubRepositoriesPlan": {
+        "type": "object",
+        "description": "Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.",
+        "properties": {
+          "held": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepositoryHeld"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "held"
+        ]
+      },
+      "GitHubRepositoryHeld": {
+        "type": "object",
+        "description": "One repository's record as HQ holds it: its owner/name, its fingerprint (empty when none was taken), and whether a full read is due.",
+        "properties": {
+          "repository": {
+            "type": "string",
+            "description": "owner/name, as GitHubRepositoryRecord's repository."
+          },
+          "fingerprint": {
+            "type": "string"
+          },
+          "due": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "repository",
+          "fingerprint",
           "due"
         ]
       },
@@ -2967,6 +3009,56 @@
           "FailureClassNetwork"
         ]
       },
+      "GitHubAllowanceRecord": {
+        "description": "One App installation's hourly REST allowance as a sweep began, and what the sweep spent of it.",
+        "properties": {
+          "connection_ref": {
+            "type": "string"
+          },
+          "installation": {
+            "type": "integer"
+          },
+          "account": {
+            "default": "",
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "used": {
+            "type": "integer"
+          },
+          "remaining": {
+            "type": "integer"
+          },
+          "resets_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "started_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "spent": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connection_ref",
+          "installation",
+          "limit",
+          "used",
+          "remaining",
+          "spent"
+        ],
+        "type": "object"
+      },
       "GitHubDeliveryProduction": {
         "type": "string",
         "description": "What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.",
@@ -3139,6 +3231,48 @@
         "type": "object",
         "description": "One github.profile record: GitHub profile."
       },
+      "GitHubRepositoryCollaborator": {
+        "properties": {
+          "login": {
+            "type": "string"
+          },
+          "role": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "required": [
+          "login"
+        ],
+        "type": "object"
+      },
+      "GitHubRepositoryDeployKey": {
+        "properties": {
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "read_only": {
+            "default": false,
+            "type": "boolean"
+          },
+          "last_used": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
       "GitHubRepositoryRecord": {
         "properties": {
           "connection_ref": {
@@ -3270,9 +3404,13 @@
             "type": "array"
           },
           "access": {
-            "type": [
-              "object",
-              "null"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubRepositoryRepositoryAccess"
+              },
+              {
+                "type": "null"
+              }
             ],
             "default": null
           },
@@ -3305,6 +3443,21 @@
               "null"
             ],
             "default": null
+          },
+          "fingerprint": {
+            "default": "",
+            "type": "string"
+          },
+          "read_at": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "carried": {
+            "default": false,
+            "type": "boolean"
           }
         },
         "required": [
@@ -3313,6 +3466,183 @@
         ],
         "type": "object",
         "description": "One github.repository record: GitHub repository."
+      },
+      "GitHubRepositoryRepositoryAccess": {
+        "description": "Who and what can reach a repository, and how its Actions may run.",
+        "properties": {
+          "visibility": {
+            "default": "",
+            "type": "string"
+          },
+          "collaborators": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepositoryCollaborator"
+            },
+            "type": "array"
+          },
+          "deploy_keys": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/GitHubRepositoryDeployKey"
+            },
+            "type": "array"
+          },
+          "allowed_actions": {
+            "default": "",
+            "type": "string"
+          },
+          "pinning_required": {
+            "default": false,
+            "type": "boolean"
+          },
+          "token": {
+            "enum": [
+              "read",
+              "write"
+            ],
+            "type": "string"
+          },
+          "token_approves_reviews": {
+            "default": false,
+            "type": "boolean"
+          },
+          "vulnerability_alerts": {
+            "default": false,
+            "type": "boolean"
+          },
+          "security": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/GitHubRepositorySecurity"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "token"
+        ],
+        "type": "object"
+      },
+      "GitHubRepositorySecurity": {
+        "description": "Each feature of GitHub's ``security_and_analysis`` HQ reads, by\nGitHub's own name; one the plan does not offer is absent.\n\nDeclared here so the bridge's door takes the names as the contract's own,\nthough several hold the word \"secret\": each holds only a status.",
+        "properties": {
+          "advanced_security": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "code_security": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "dependabot_security_updates": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_push_protection": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_non_provider_patterns": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_validity_checks": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_ai_detection": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_delegated_alert_dismissal": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          },
+          "secret_scanning_delegated_bypass": {
+            "enum": [
+              "enabled",
+              "disabled"
+            ],
+            "type": [
+              "string",
+              "null"
+            ],
+            "default": null
+          }
+        },
+        "type": "object"
       },
       "HostFirewallRecord": {
         "properties": {
@@ -4658,6 +4988,7 @@
           "cloudflare.redirect",
           "cloudflare.tunnel",
           "cloudflare.zone",
+          "github.allowance",
           "github.delivery",
           "github.dependency_run",
           "github.profile",
@@ -4717,6 +5048,7 @@
           "ResourceKindCloudflareRedirect",
           "ResourceKindCloudflareTunnel",
           "ResourceKindCloudflareZone",
+          "ResourceKindGitHubAllowance",
           "ResourceKindGitHubDelivery",
           "ResourceKindGitHubDependencyRun",
           "ResourceKindGitHubProfile",
@@ -4779,6 +5111,7 @@
           "cloudflare.redirect",
           "cloudflare.tunnel",
           "cloudflare.zone",
+          "github.allowance",
           "github.delivery",
           "github.dependency_run",
           "github.profile",
@@ -4823,6 +5156,7 @@
           "SweptCloudflareRedirect",
           "SweptCloudflareTunnel",
           "SweptCloudflareZone",
+          "SweptGitHubAllowance",
           "SweptGitHubDelivery",
           "SweptGitHubDependencyRun",
           "SweptGitHubProfile",

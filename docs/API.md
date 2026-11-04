@@ -337,8 +337,11 @@ Every adapter reads `fields` beside the query, so no resource query may declare
 a field called `fields`. The registry refuses one at startup.
 
 A list read is one page. `truncated` says more follow it, and `next` is
-`{"cursor": …}`: sent back as the `cursor` filter (`?cursor=` over HTTP) with
-the same filters, it reads the page after, and the last page's `next` is null.
+`{"cursor": …}`: sent back as `cursor` (`?cursor=` over HTTP, and an argument
+of `list_resource` beside its `filters` and `limit`, as `get_findings` and
+`recent_activity` take `limit`) with the same filters, it reads the page
+after, and the last page's `next` is null. On MCP, a `limit` or `cursor` sent
+inside `filters` is refused, so paging has one place on every tool.
 A cursor is opaque and signed, and bound to the kind and filters it was issued
 under: one sent to another list, with other filters, or altered is refused as
 `invalid_input` naming `cursor`. A list cut from a queryset resumes after its
@@ -477,7 +480,12 @@ sentence: `project.create: name is required.`, or
 paths, expected types and declared choices, never a value the request carried.
 `details` holds the structured list the sentence was built from, under the same
 rule: `type`, `loc` and `msg` for a schema error, field names and error codes
-for a domain one, and no submitted value in either.
+for a domain one, and no submitted value in either. A resource's read
+(`InvalidResourceInput` in `hq/platform/application/resources.py`, the one
+place every door's refusal is raised) puts that list under `details.errors`,
+beside `details.filters`, what the kind's list narrows by, and `details.next`,
+`describe_resources` with the kind's `name`, which answers each filter's type
+and choices.
 
 ### Safe retries
 
@@ -611,11 +619,15 @@ handler's signature. A call is validated by that same model before entering
 application code, and `mise run lint` holds the written document to it. A
 resource tool's `name` takes only the resources the registry serves, which
 are the ones the document's paths serve.
-What each resource holds and the filters it takes are `describe_resources`'
-answer, so the list carries the kinds as the schema's enum and, for
-`get_resource`, the field each is addressed by, never the catalog itself.
+What each resource holds and each filter's type and choices are
+`describe_resources`' answer, so the list carries the kinds as the schema's
+enum, the names of each kind's filters in `list_resource`'s description, and,
+for `get_resource`'s, the field each is addressed by, never the catalog
+itself. The filters are read from each kind's query model (`list_filters` in
+`hq/platform/application/resources.py`), so an extension's kind is described
+as it declares itself.
 With no `name`, `describe_resources` lists every kind with the `filters` its
-list narrows by; with one, as `/api/v2/resources/?name=` does, that kind with
+list narrows by, without `limit` and `cursor`, which page it; with one, as `/api/v2/resources/?name=` does, that kind with
 its list's whole `query_schema`. A filter that takes only some values (a
 status, a dimension, a resource kind, an action item's source) declares them
 as a `Literal` read from where they are declared, a model's choices or a
@@ -697,11 +709,26 @@ every agent make, and the same calls one after another. For each it reports the
 resident and traced memory while they are in flight, and the threads and calls
 at the peak.
 
+tools/list names a caller only the tools it may run. Each tool declares who
+that is beside its handler (`@tool(..., requires=...)`, an access from `hq/platform/application/access.py`, in
+`hq/platform/mcp/services.py`), and the binding refuses a call by the same
+rule, `forbidden`, before the handler runs, so the list and the refusal never
+disagree. The catalogs (`describe_capabilities`, `describe_resources`,
+`describe_connections`) are listed to everyone, since each says `permitted`
+of every entry. `list_resource` and `get_resource` are listed to a caller who
+may read some kind each serves, and `execute_capability` to one who may run
+some capability: a change is held for a person only after its caller's grant
+is checked, so a caller without one has nothing to ask for. The Agents page
+lists as an operator's own device, the widest caller, so it shows every tool.
+
 Each list says how long it stays fresh, through the SDK's cache hints
-(`CACHE_HINTS` in `hq/platform/mcp/server.py`). The lists tools/list,
-prompts/list and resources/list change only with a release, so a client may
-keep them for ten minutes, privately, since only a caller that signed in
-reaches them. The list resources/templates/list is the caller's grants and
+(`CACHE_HINTS` in `hq/platform/mcp/server.py`). The lists prompts/list and
+resources/list change only with a release, and tools/list with a release or
+the caller's grant, so a client may keep them for ten minutes, privately,
+since only a caller that signed in reaches them. HQ serves stateless HTTP, so
+it has no session to send `notifications/tools/list_changed` down, and
+declares `listChanged` false: a client sees a changed grant's tools when it
+lists again. The list resources/templates/list is the caller's grants and
 records, so it is stale at once.
 
 ### MCP prompts and resources
@@ -770,33 +797,47 @@ capabilities. A client that declares nothing keeps the held answer.
 
 | Hold | `tasks/get` answers |
 |---|---|
-| Waiting for a person | `working`, with the review page in `statusMessage` |
-| Approved | `completed`, `result` the call's answer as it ran |
+| Waiting for a person | `working` |
+| Approved, its operation queued or running | `working`, polled every 2,000 ms |
+| Approved and applied, or approved with no operation to run | `completed`, `result` the call's answer, carrying its operation as it ended |
+| Approved, and its operation failed or was cancelled | `completed`, `result` a tool error coded `operation_failed`, whose `details` is the call's answer with its operation as it ended |
 | Declined | `completed`, `result` a tool error coded `declined`, with the person's note |
 | Lapsed unanswered, or overtaken by a change to what it acts on | `completed`, `result` a tool error coded `expired` or `stale` |
 
-A decline, a lapse and an overtaken hold are tool errors, not `failed`. The
-extension's specification keeps `failed` for "a JSON-RPC error during
-execution" and says it "MUST NOT be used for non-JSON-RPC errors"
+Every answer carries a `statusMessage`, since a client shows the last one it
+was sent: the sentence the approval card and the audit log say the hold by
+(`approvals.asked`), then where it stands, with the review page's absolute
+address while it waits (`hq_self.site_url`, built from the declared site
+host, never from the request).
+
+A decline, a lapse, an overtaken hold and a failed apply are tool errors, not
+`failed`. The extension's specification keeps `failed` for "a JSON-RPC error
+during execution" and says it "MUST NOT be used for non-JSON-RPC errors"
 (tasks.extensions.modelcontextprotocol.io, specification, `Task` status). HQ
 answers every other refusal as a tool error.
 
-`pollIntervalMs` is 30,000, the longest interval Claude Code honors: a person
-answers in minutes or hours, so a sooner poll only reads the same hold again.
-`ttlMs` is the hold's own window, from its request to its expiry.
+While a person decides, `pollIntervalMs` is 30,000, the longest interval
+Claude Code honors: a person answers in minutes or hours, so a sooner poll
+only reads the same hold again, and `ttlMs` is the hold's own window, from its
+request to its expiry. Once it is settled, the controller applies it in
+seconds, so the poll is 2,000 ms, and `ttlMs` is null: HQ keeps every settled
+hold, so the task never lapses while its change applies.
 
 Security properties:
 
 - The task is the hold, read afresh at each `tasks/get`; no task state is
   kept apart from it. Its id is the hold's random UUID.
 - Nothing in the extension decides a hold. A hold asks for no input, so
-  `tasks/update` acknowledges and changes nothing, and `tasks/cancel` is
-  refused: the change stays a person's to approve or decline in HQ, under the
-  rules every approval keeps.
+  `tasks/update` acknowledges and changes nothing. `tasks/cancel` is
+  acknowledged with the empty result the specification requires and changes
+  nothing either, since cancellation is the server's to honor: the change stays
+  a person's to approve or decline in HQ, under the rules every approval keeps.
+- The review address carries the hold's id and nothing else; reading it
+  takes a person signed in to HQ.
 - A task answers only the actor and interface that asked. Every task method
   refuses any other id with the same `-32602`, so an agent cannot tell
   another's task from an id nothing holds. A call that repeats what another
-  agent already asked is answered with that agent's request, so it is given
-  the held answer and no task.
+  agent already asked is a request of its own, held as its own task, which
+  only that agent reads.
 - The task methods are under the brake as `prompts/get` is, and answer
   `-32021` to a request that did not declare the extension.

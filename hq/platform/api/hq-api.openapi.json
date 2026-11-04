@@ -632,16 +632,29 @@
         "dataValue": {
           "error": {
             "code": "invalid_input",
-            "details": [
-              {
-                "loc": [
-                  "fields",
-                  0
-                ],
-                "msg": "Input should be 'slug', 'name', 'category', 'status', 'description', 'technologies', 'repository_url', 'public_url', 'last_push_at', 'dependency_updates', 'updated_at', 'relationships'",
-                "type": "literal_error"
+            "details": {
+              "errors": [
+                {
+                  "loc": [
+                    "fields",
+                    0
+                  ],
+                  "msg": "Input should be 'slug', 'name', 'category', 'status', 'description', 'technologies', 'repository_url', 'public_url', 'last_push_at', 'dependency_updates', 'updated_at', 'relationships'",
+                  "type": "literal_error"
+                }
+              ],
+              "filters": [
+                "status",
+                "query",
+                "updates"
+              ],
+              "next": {
+                "arguments": {
+                  "name": "projects"
+                },
+                "tool": "describe_resources"
               }
-            ],
+            },
             "message": "projects: fields[0] must be one of slug, name, category, status, description, technologies, repository_url, public_url, last_push_at, dependency_updates, updated_at, relationships."
           },
           "ok": false
@@ -931,7 +944,7 @@
               }
             ],
             "posture": {
-              "abilities": 48,
+              "abilities": 49,
               "controls": [
                 {
                   "detail": "HQ has no reading of an access list for this name.",
@@ -1099,6 +1112,10 @@
                   {
                     "count": 3,
                     "state": "Readable"
+                  },
+                  {
+                    "count": 1,
+                    "state": "Never read"
                   }
                 ]
               },
@@ -1364,15 +1381,27 @@
         "dataValue": {
           "error": {
             "code": "invalid_input",
-            "details": [
-              {
-                "loc": [
-                  "year"
-                ],
-                "msg": "Input should be greater than or equal to 1",
-                "type": "greater_than_equal"
+            "details": {
+              "errors": [
+                {
+                  "loc": [
+                    "year"
+                  ],
+                  "msg": "Input should be greater than or equal to 1",
+                  "type": "greater_than_equal"
+                }
+              ],
+              "filters": [
+                "year",
+                "category"
+              ],
+              "next": {
+                "arguments": {
+                  "name": "expenses"
+                },
+                "tool": "describe_resources"
               }
-            ],
+            },
             "message": "expenses: year must be greater than or equal to 1."
           },
           "ok": false
@@ -1446,21 +1475,21 @@
             },
             "sees": {
               "could_not_read": 0,
-              "never_read": 0,
+              "never_read": 1,
               "not_connected": [],
               "out_of_date": 0,
               "read": 40,
               "readings": [
                 {
                   "error": "",
-                  "kind": "host.perimeter",
-                  "label": "Open-port test",
-                  "observed_at": "2026-01-15T09:30:00+00:00",
+                  "kind": "github.allowance",
+                  "label": "GitHub hourly allowance",
+                  "observed_at": null,
                   "out_of_date": false,
-                  "provider": "SSH",
-                  "records": 1,
+                  "provider": "GitHub App",
+                  "records": 0,
                   "remedy": "",
-                  "state": "readable"
+                  "state": "never_swept"
                 }
               ]
             },
@@ -1520,15 +1549,27 @@
         "dataValue": {
           "error": {
             "code": "invalid_input",
-            "details": [
-              {
-                "loc": [
-                  "kind"
-                ],
-                "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone' or 'cloudflare.contact_inbox'",
-                "type": "literal_error"
+            "details": {
+              "errors": [
+                {
+                  "loc": [
+                    "kind"
+                  ],
+                  "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone' or 'cloudflare.contact_inbox'",
+                  "type": "literal_error"
+                }
+              ],
+              "filters": [
+                "kinds",
+                "kind"
+              ],
+              "next": {
+                "arguments": {
+                  "name": "infrastructure"
+                },
+                "tool": "describe_resources"
               }
-            ],
+            },
             "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
           },
           "ok": false
@@ -1633,15 +1674,28 @@
         "dataValue": {
           "error": {
             "code": "invalid_input",
-            "details": [
-              {
-                "loc": [
-                  "limit"
-                ],
-                "msg": "Input should be a valid integer",
-                "type": "int_parsing"
+            "details": {
+              "errors": [
+                {
+                  "loc": [
+                    "limit"
+                  ],
+                  "msg": "Input should be a valid integer",
+                  "type": "int_parsing"
+                }
+              ],
+              "filters": [
+                "status",
+                "query",
+                "updates"
+              ],
+              "next": {
+                "arguments": {
+                  "name": "projects"
+                },
+                "tool": "describe_resources"
               }
-            ],
+            },
             "message": "projects: limit must be a valid integer."
           },
           "ok": false
@@ -1704,7 +1758,7 @@
       "listReadingsV2OK": {
         "dataValue": {
           "data": {
-            "count": 40,
+            "count": 41,
             "items": [
               {
                 "error": "",
@@ -1717,7 +1771,7 @@
               }
             ],
             "next": null,
-            "total": 40,
+            "total": 41,
             "truncated": false
           },
           "ok": true
@@ -1775,7 +1829,7 @@
               "measured_by": "Another tailnet machine (docker-host-01)",
               "path": "Unknown",
               "summary": "6 failed\u00a0\u00b7 4 not confirmed",
-              "tailnet_observed_at": null,
+              "tailnet_observed_at": "2026-01-15T09:30:00+00:00",
               "transport": "Encryption not confirmed",
               "untrusted_forwarding": false
             },
@@ -2100,7 +2154,7 @@
                 "groups": [
                   {
                     "members": [
-                      "alex@example.com"
+                      "joe@example.com"
                     ],
                     "name": "group:admins"
                   }
@@ -2141,7 +2195,7 @@
                     "accept": [
                       "tag:server:443"
                     ],
-                    "src": "alex@example.com"
+                    "src": "joe@example.com"
                   }
                 ],
                 "unread": []
@@ -2244,7 +2298,7 @@
               "requested_interface": "api",
               "resource_key": "",
               "resource_kind": "projects",
-              "review_url": "/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
+              "review_url": "https://hq.example.com/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
               "state": "pending",
               "target": ""
             },
@@ -2651,9 +2705,9 @@
             ],
             "schema_version": 2,
             "summary": {
-              "edges": 304,
+              "edges": 305,
               "kinds": {
-                "ability": 57,
+                "ability": 58,
                 "connection": 10,
                 "controller": 1,
                 "machine": 3,
@@ -2663,7 +2717,7 @@
                 "target": 1,
                 "zone": 1
               },
-              "nodes": 124
+              "nodes": 125
             },
             "trace": null
           },
@@ -9749,7 +9803,7 @@
             "type": "string"
           },
           "review_url": {
-            "description": "Where a person decides it, in HQ's web interface.",
+            "description": "Where a person decides it in HQ's web interface, as an absolute address.",
             "type": "string"
           },
           "state": {
@@ -10902,7 +10956,7 @@
             "type": "array"
           },
           "filters": {
-            "description": "The fields a listing narrows by; `describe_resources` given this name says each one's type and choices.",
+            "description": "The fields a listing narrows by, without `limit` and `cursor`, which page it; `describe_resources` given this name says each one's type and choices.",
             "items": {
               "type": "string"
             },
@@ -14110,7 +14164,7 @@
         "type": "string"
       },
       "RefusalDetails": {
-        "description": "What gets past the refusal, where something does: `next`, the call that finds what was missing; `field`, the argument to send; for `invalid_input`, each field that was wrong and why."
+        "description": "What gets past the refusal, where something does: `next`, the call that finds what was missing; `field`, the argument to send; for `invalid_input`, each field that was wrong and why, which a list or record read puts under `errors`, beside the `filters` its list takes."
       },
       "RefusalMessage": {
         "description": "HQ's sentence for the refusal, naming no value the request carried.",
@@ -21526,6 +21580,7 @@
                 "unreachable-consumer",
                 "credential-missing-permissions",
                 "credential-expiring",
+                "github-others-spent",
                 "render-failing",
                 "render-stale",
                 "connect-sync-stalled",
@@ -21537,6 +21592,7 @@
                 "certificate-expiring",
                 "registration-lapsing",
                 "names-nothing",
+                "report-refused",
                 "connections-lost",
                 "work-that-keeps-failing",
                 "controller-sweep-stale",

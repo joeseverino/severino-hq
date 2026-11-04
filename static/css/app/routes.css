@@ -156,12 +156,16 @@
 .connection-table td > .connection-ability-list > li:not(:last-child)::after { content: "\a0·" / ""; color: var(--muted-2); }
 .connection-table td > .connection-ability-list > li > * + * { margin-left: var(--space-2); }
 .connection-table td > .connection-ability-more { display: inline; margin: 0 0 0 var(--space-3); font-size: var(--text-2xs); }
-/* Its names wrap one under another, so each line is a target tall. */
-.connection-depends { line-height: var(--target-min); }
+/* Its names wrap one under another, so each line is a target tall. The
+   targets and the dependencies are a list each, one under the other, and
+   each name is an item: a box of its own, the whole of what it links. */
+.connection-depends { display: grid; line-height: var(--target-min); }
+.connection-depends-list { display: flex; flex-wrap: wrap; }
 /* The dot before a name keeps to it: a line breaks only between names, so
-   no dot stands on a line of its own. The name itself still wraps. */
-.connection-depends > span { white-space: nowrap; }
-.connection-depends > span > * { white-space: normal; }
+   no dot stands on a line of its own. The name itself still wraps, and
+   asks its column for the room it holds out for (figures.css). */
+.connection-depends-list > span { white-space: nowrap; }
+.connection-depends-list > span > * { white-space: normal; }
 .connection-depends .row-less { margin-left: var(--space-2); }
 /* Opened, the rest of them, flowing across the line beneath the row. */
 .connection-ability-all { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
@@ -343,18 +347,20 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
   box-shadow: var(--shadow-pop);
 }
 .primary-nav:popover-open > a,
-.primary-nav:popover-open .nav-group > summary {
+.primary-nav:popover-open .nav-group > button {
   min-height: 44px;
   padding: var(--space-4) var(--space-5);
   font-size: var(--text-md);
 }
-/* A section's own links fly out beside the list, not inside it: opened in
-   place, one would push every section below it down the panel. The list is
-   anchored to the right edge, so the room is to its left. */
+.primary-nav:popover-open .nav-group > button { display: flex; inline-size: 100%; }
+/* A section's own links fly out beside the list, from its row down: a
+   popover is drawn over the page, never in the list's flow. The list is
+   anchored to the right edge, so the room is to its left; a screen with
+   none there takes them below the row. */
 .primary-nav:popover-open .nav-group-panel {
-  top: -5px;
-  right: calc(100% + 6px);
-  left: auto;
+  position-area: inline-start span-block-end;
+  position-try-fallbacks: block-end span-inline-start;
+  margin: 0 var(--space-3) 0 0;
   min-width: 168px;
 }
 .primary-nav:popover-open .nav-group-panel a {
@@ -369,30 +375,13 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
      Its track is squared here, beside the rules that square it, which sit in
      the components layer to beat page.css. */
   .site-header { --header-user: var(--control-size); gap: var(--space-4) var(--space-6); padding: var(--space-5) var(--space-7); }
-  .user-menu > summary { width: var(--control-size); padding: 0; }
-  /* Gone, the name still names the summary (its aria-labelledby). */
+  .user-menu > button { width: var(--control-size); padding: 0; }
+  /* Gone, the name still names the button (its aria-labelledby). */
   .user-menu .user-name { display: none; }
   .brand { font-size: var(--text-md); }
   /* The sections live in the toggle's panel from 1080px down, so the bar stays
      a single row here and needs no wrapping rules of its own. */
   .primary-nav a { white-space: nowrap; padding: var(--space-3) var(--space-5); font-size: var(--text-sm); }
-
-  /* The panel joins the flow instead of floating over it. On a phone there is
-     no room to overlay, and a panel that pushes the page down cannot end up
-     covering the controls beneath it and swallowing their taps. */
-  .nav-group { position: static; }
-  .nav-group[open] { width: 100%; }
-  /* In flow, a closed panel keeps its box and would sit invisibly over the
-     open one, catching its taps. */
-  .nav-group:not([open]) .nav-group-panel { display: none; }
-  .nav-group-panel {
-    position: static;
-    width: 100%;
-    min-width: 0;
-    margin-top: var(--space-2);
-    box-shadow: none;
-    border-radius: var(--radius-sm);
-  }
 }
 
 }

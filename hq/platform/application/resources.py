@@ -149,6 +149,17 @@ type SearchLimit = Annotated[
 ]
 
 
+# The fields that page a list rather than narrow it: MCP's list_resource
+# takes them beside its filters, and a listing names its filters without them.
+PAGING = frozenset({"limit", PAGE_FIELD})
+
+
+def list_filters(query: type[BaseModel]) -> tuple[str, ...]:
+    """What a list query narrows by: every field but the ones that page it."""
+
+    return tuple(name for name in query.model_fields if name not in PAGING)
+
+
 class TopQuery(ResourceQuery):
     """A list's first ``limit`` by its own ranking, which a read narrows rather than pages past."""
 
@@ -549,10 +560,18 @@ class UnsupportedResourceOperation(HostRefusal, ResourceError):
 
 
 class InvalidResourceInput(ResourceError):
+    """Input a resource's read refused, said once for every door: each field
+    that was wrong and why, the filters its kind's list takes, and the call
+    that says each one's type, so the next call can be right."""
+
     def __init__(self, name: str, errors: Iterable[Mapping[str, Any]]) -> None:
         refusal = pydantic_refusal(name, errors)
+        spec = resource_registry().get(name)
+        details: dict[str, Any] = {"errors": refusal.details, "next": next_call("describe_resources", name=name)}
+        if spec is not None and spec.list_query_type:
+            details["filters"] = list(list_filters(spec.list_query_type))
         super().__init__(refusal.message)
-        self.errors = refusal.details
+        self.details = details
 
 
 # What a missed identifier adds to its refusal's sentence.
@@ -603,7 +622,8 @@ class ListOperation(TypedDict):
     filters: Annotated[
         list[str],
         Describe(
-            "The fields a listing narrows by; `describe_resources` given this name says each one's type and choices."
+            "The fields a listing narrows by, without `limit` and `cursor`, which page it; `describe_resources` "
+            "given this name says each one's type and choices."
         ),
     ]
     fields: NotRequired[
@@ -690,7 +710,7 @@ def describe_resources(*, principal: Principal | None = None, name: str = "") ->
 def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     if not spec.list_query_type:
         return None
-    listing: ListOperation = {"filters": list(spec.list_query_type.model_fields)}
+    listing: ListOperation = {"filters": list(list_filters(spec.list_query_type))}
     if spec.list_fields:
         listing["fields"] = list(spec.list_fields)
     if whole:

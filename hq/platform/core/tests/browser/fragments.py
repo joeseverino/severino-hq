@@ -15,14 +15,15 @@ from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
-# A region that polls and names its parts, a placeholder behind a closed
-# disclosure, and one whose address answers a whole page.
+# A region that polls and names its parts, a disclosure and a menu, a
+# placeholder behind a closed disclosure, and one whose address answers a
+# whole page.
 _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 <script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
 </head><body><main>
 <section data-fragment="/probe-strip/" data-fragment-poll="1">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
-<details data-fragment-part="second"><summary>Second</summary>as drawn</details>
+<div data-fragment-part="second" data-menu><button popovertarget="second-panel">Second</button><div id="second-panel" popover>as drawn</div></div>
 </section>
 <details data-probe="fold"><summary>More</summary>
 <div data-fragment="/probe-slot/" data-fragment-load data-fragment-failure="Could not be read.">waiting</div>
@@ -32,7 +33,7 @@ _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 
 _PROBE_STRIP = """<section data-fragment="/probe-strip/"{poll}>
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
-<details data-fragment-part="second"><summary>Second</summary>read again</details>
+<div data-fragment-part="second" data-menu><button popovertarget="second-panel">Second</button><div id="second-panel" popover>read again</div></div>
 </section>"""
 
 # A form answered in place whose submitting button shares a field's name,
@@ -74,10 +75,38 @@ def _dialog_probe():
 </main></body></html>"""
 
 
+# A dialog's panel, fetched from its own address when the dialog opens: first
+# as last read, with the ask a page about one thing draws; then, once that
+# read has landed, as it is now and with nothing left to ask.
+_PANEL = '<div data-probe="panel" data-fragment="/probe-panel/">{ask}<p>{said}</p></div>'
+
+
+def _asking_dialog_probe():
+    ask = Template(
+        '{% include "partials/_visit_refresh.html" with subject="page" name="example" refresh="[data-probe=panel]" %}'
+    ).render(Context({}))
+    slot = Template('<div data-fragment="/probe-panel/" data-fragment-load>waiting</div>')
+    dialog = Template('{% include "partials/_modal.html" with id="probe" title="Probe" body_template=slot %}').render(
+        Context({"slot": slot})
+    )
+    return (
+        f"""<!doctype html><html><head><title>Probe</title>
+<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+<script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
+</head><body><main>
+<button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
+{dialog}
+</main></body></html>""",
+        _PANEL.format(ask=ask, said="as last read"),
+        _PANEL.format(ask="", said="as it is now"),
+    )
+
+
 _PROBE_STATE = """(failure) => ({
   first: document.querySelector('[data-fragment-part="first"]').kept === true,
   firstOpen: document.querySelector('[data-fragment-part="first"]').open,
   second: document.querySelector('[data-fragment-part="second"]').textContent,
+  secondOpen: document.querySelector('[data-fragment-part="second"] [popover]').matches(':popover-open'),
   polling: document.querySelector('[data-fragment-poll]') !== null,
   slot: document.querySelector('[data-probe="fold"]').textContent,
   page: [...document.querySelectorAll(failure)].map((line) => line.textContent),
@@ -116,6 +145,7 @@ class FragmentBrowserTests(BrowserGate):
         super().start(**options)
         self.asked = []
         self.strip = [' data-fragment-poll="1"', ""]
+        self.asking, *self.panels = _asking_dialog_probe()
 
     @override
     def respond(self, route):
@@ -141,6 +171,14 @@ class FragmentBrowserTests(BrowserGate):
             return self.fulfill(route, _PUSH_PROBE)
         if parts.path == "/probe-dialog/":
             return self.fulfill(route, _dialog_probe())
+        if parts.path == "/probe-asking-dialog/":
+            return self.fulfill(route, self.asking)
+        if parts.path == "/probe-panel/":
+            return self.fulfill(route, self.panels.pop(0) if len(self.panels) > 1 else self.panels[0])
+        if parts.path == reverse("control_plane:visit"):
+            # The read it asked for has already landed.
+            done = '{"state": "done", "live": false, "label": "Done", "note": "Refreshed just now.", "status": ""}'
+            return self.fulfill(route, done, content_type="application/json")
         if (address, part) in self.pages:
             return self.fulfill(route, self.pages[(address, part)])
         return super().respond(route)
@@ -150,7 +188,8 @@ class FragmentBrowserTests(BrowserGate):
         self.page.goto(f"{ORIGIN}/probe/", wait_until="load")
         self.page.evaluate(
             "() => { const first = document.querySelector('[data-fragment-part=\"first\"]');"
-            " first.kept = true; first.open = true; }"
+            " first.kept = true; first.open = true;"
+            " document.querySelector('[data-fragment-part=\"second\"] [popovertarget]').click(); }"
         )
         # Its first turn reads it again and keeps polling; the second is told to stop.
         self.page.clock.run_for(1000)
@@ -162,10 +201,11 @@ class FragmentBrowserTests(BrowserGate):
         state = self.page.evaluate(_PROBE_STATE, SELECTORS["fragment_failure"])
 
         # The part that did not change is the same node, still open; the one
-        # that did was replaced.
+        # that did was replaced, its menu open as the reader left it.
         self.assertTrue(state["first"])
         self.assertTrue(state["firstOpen"])
         self.assertEqual(state["second"].strip(), "Secondread again")
+        self.assertTrue(state["secondOpen"])
         asked = self.asked.count(("/probe-strip/", ""))
         self.page.clock.run_for(5000)
         # A request after those turns is answered after any they made.
@@ -208,6 +248,22 @@ class FragmentBrowserTests(BrowserGate):
         self.page.evaluate("() => document.querySelector('dialog [aria-label=\"Close\"]').click()")
         self.page.wait_for_function("() => !document.querySelector('dialog').open")
         self.assertEqual(self.asked.count(("/probe-slot/", "")), 1)
+
+    def test_a_dialogs_panel_asks_for_its_readings_once_shown_and_fills_in_place(self):
+        visit = (reverse("control_plane:visit"), "")
+        self.page.goto(f"{ORIGIN}/probe-asking-dialog/", wait_until="load")
+        self.page.evaluate("() => { window.kept = true; }")
+        self.page.evaluate(SETTLE)
+        # Shut, it is not being looked at: nothing is fetched or asked.
+        self.assertNotIn(visit, self.asked)
+
+        self.page.evaluate("() => document.querySelector('[data-probe=\"open\"]').click()")
+        self.page.wait_for_function("() => document.querySelector('dialog').textContent.includes('as it is now')")
+
+        self.assertEqual(self.asked.count(visit), 1)
+        # Fetched from the panel's own address, not the page the dialog is on.
+        self.assertEqual(self.asked.count(("/probe-panel/", "")), 2)
+        self.assertTrue(self.page.evaluate("() => window.kept === true"))
 
     def test_paging_the_calendar_asks_for_its_part_and_keeps_the_page(self):
         self.page.goto(f"{ORIGIN}{self.calendar}", wait_until="load")

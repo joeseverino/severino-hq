@@ -164,6 +164,12 @@ use mints an hour-long token for only what it does:
 | an extension's admission | `HQ_APP_KEY` on its `admission` environment, `main` only | Actions write here: start Compose |
 | Compose and CI's Release | `HQ_APP_KEY` and `HQ_APP_CLIENT_ID` repository secrets | Actions and Contents read the extensions; Actions write here: start the next workflow |
 
+Every use under one installation shares its hourly allowance. The controller
+leaves at least 1,000 requests of it to the pipeline and the dependency update
+run, and reads a repository in full only when it changed or its hourly full
+read is due ([Architecture](Architecture.md#providers)). So a deploy's report
+does not wait on the readings.
+
 `mise run wire-github-app` reads the key from 1Password and sets those
 secrets on this repository and each extension's `admission` environment,
 through standard input. The client ID is a secret too: a variable is state
@@ -459,9 +465,12 @@ names that host. Limit host ingress for 443 to the tailnet interface and
 loopback, and forward it from no router.
 
 With Nginx Proxy Manager, attach an access list whose client rules allow
-exactly the tailnet ranges in `SEVERINO_TRUSTED_NETWORKS`, in that order, and
-keep `satisfy_any` off. NPM generates the final `deny all` itself; HQ records
-that implicit default from its reading. The checklist is in
+exactly Tailscale's two ranges, `100.64.0.0/10` then `fd7a:115c:a1e0::/48`
+(`reach.TAILNET`), and keep `satisfy_any` off. NPM generates the final
+`deny all` itself. HQ declares only the list's id on the proxy host
+(`access_list_id`). It reads the list's rules and judges them against those two
+ranges whatever `SEVERINO_TRUSTED_NETWORKS` holds, so a list that allows
+anything more reads as "Other sources allowed". The checklist is in
 [Security](Security.md#production-checklist).
 
 ## Remote targets

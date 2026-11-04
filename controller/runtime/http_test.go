@@ -78,10 +78,11 @@ func TestProviderResponseFailures(t *testing.T) {
 		})
 	}
 }
-func TestRequestHeaderReadsBodyAndHeaderFromOneAnswer(t *testing.T) {
+func TestExchangeReadsBodyAndHeadersFromOneAnswer(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/gone":
+			w.Header().Set("X-RateLimit-Remaining", "0")
 			w.WriteHeader(http.StatusPreconditionFailed)
 			return
 		case "/broken":
@@ -93,17 +94,18 @@ func TestRequestHeaderReadsBodyAndHeaderFromOneAnswer(t *testing.T) {
 		_, _ = w.Write([]byte(`{"read": true}`))
 	}))
 	defer server.Close()
-	data, etag, err := (&HTTPClient{}).RequestHeader(t.Context(), server.URL, nil, "etag")
-	if err != nil || etag != `"v1"` || string(data) != `{"read": true}` {
-		t.Fatalf("%s %q %v", data, etag, err)
+	data, header, err := (&HTTPClient{}).Exchange(t.Context(), server.URL, "GET", nil, nil)
+	if err != nil || header.Get("etag") != `"v1"` || string(data) != `{"read": true}` {
+		t.Fatalf("%s %v %v", data, header, err)
 	}
 	// A body that fails its JSON check still says which version answered.
-	if _, etag, err := (&HTTPClient{}).RequestHeader(t.Context(), server.URL+"/broken", nil, "etag"); err == nil || etag != `"v2"` {
-		t.Fatalf("%q %v", etag, err)
+	if _, header, err := (&HTTPClient{}).Exchange(t.Context(), server.URL+"/broken", "GET", nil, nil); err == nil || header.Get("etag") != `"v2"` {
+		t.Fatalf("%v %v", header, err)
 	}
+	// A refusal keeps its headers: what a rate limit has left is said there.
 	var provider *ProviderError
-	if _, _, err := (&HTTPClient{}).RequestHeader(t.Context(), server.URL+"/gone", nil, "etag"); !errors.As(err, &provider) || provider.HTTPStatus != 412 {
-		t.Fatalf("%v", err)
+	if _, header, err := (&HTTPClient{}).Exchange(t.Context(), server.URL+"/gone", "GET", nil, nil); !errors.As(err, &provider) || provider.HTTPStatus != 412 || header.Get("X-RateLimit-Remaining") != "0" {
+		t.Fatalf("%v %v", header, err)
 	}
 }
 func TestResponseSizeIsBounded(t *testing.T) {

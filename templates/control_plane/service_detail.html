@@ -74,7 +74,7 @@ is open.
       {% if facet.present and facet.observed %}
         {% with claim=facet.claims.0 %}
           <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst|breakable }}</strong>
-          <span class="readout">
+          <span class="readout prose">
             {% entity claim.link code=True label=facet.observed.name %}
             {% if facet.machine %}on {% entity facet.machine.link %}{% endif %}
           </span>
@@ -149,7 +149,7 @@ is open.
         Never an Edit link. HQ does not manage this and must not imply it could.
         {% endcomment %}
         <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst|breakable }}</strong>
-        <span class="readout"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</span>
+        <span class="readout prose"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</span>
         <details class="control-diagnostics">
           <summary>What is running</summary>
           <dl class="kv compact">

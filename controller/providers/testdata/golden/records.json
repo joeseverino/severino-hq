@@ -1,0 +1,1163 @@
+{
+  "adguard.client": [
+    {
+      "connection_ref": "example",
+      "name": "example",
+      "source": "example",
+      "ids": [
+        "example"
+      ],
+      "addresses": [
+        "example"
+      ],
+      "use_global_settings": true,
+      "filtering_enabled": true
+    },
+    {
+      "connection_ref": "example",
+      "name": "example",
+      "source": "example",
+      "ids": [
+        "example"
+      ],
+      "addresses": [
+        "example"
+      ]
+    }
+  ],
+  "adguard.dns": [
+    {
+      "connection_ref": "example",
+      "version": "example",
+      "running": true,
+      "protection_enabled": true,
+      "dns_addresses": [
+        "example"
+      ],
+      "upstreams": [
+        {
+          "host": "example",
+          "transport": "example",
+          "domains": [
+            "example"
+          ]
+        }
+      ],
+      "upstream_mode": "example",
+      "dnssec_enabled": true,
+      "filtering_enabled": true,
+      "filter_lists": 1,
+      "filter_rules": 1,
+      "querylog_enabled": true,
+      "querylog_retention_hours": 1,
+      "anonymize_client_ip": true,
+      "rewrites_enabled": true
+    }
+  ],
+  "adguard.query_summary": [
+    {
+      "connection_ref": "example",
+      "domain": "example",
+      "queries": 1,
+      "blocked": 1,
+      "client_count": 1,
+      "last_seen": "example",
+      "window_hours": 1,
+      "clients": [
+        {
+          "address": "example",
+          "name": "example",
+          "queries": 1
+        }
+      ]
+    }
+  ],
+  "adguard.rewrite": [
+    {
+      "connection_ref": "example",
+      "domain": "example",
+      "answer": "example",
+      "enabled": true
+    }
+  ],
+  "caddy.route": [
+    {
+      "connection_ref": "example",
+      "domain": "example",
+      "upstream": "example",
+      "to_requested_host": true,
+      "certificate": {
+        "name": "example",
+        "provider": "example",
+        "expires_on": "example",
+        "domains": [
+          "example"
+        ]
+      },
+      "certificate_unread": "example"
+    }
+  ],
+  "cloudflare.access_app": [
+    {
+      "connection_ref": "example",
+      "account_id": "example",
+      "id": "example",
+      "name": "example",
+      "type": "example",
+      "domain": "example",
+      "destinations": [
+        "example"
+      ],
+      "session_duration": "example",
+      "policies": [
+        {
+          "id": "example",
+          "name": "example"
+        }
+      ]
+    }
+  ],
+  "cloudflare.access_service_token": [
+    {
+      "connection_ref": "example",
+      "id": "example",
+      "name": "example",
+      "expires_at": "example",
+      "created_at": "example",
+      "apps": [
+        {
+          "id": "example",
+          "name": "example"
+        }
+      ]
+    }
+  ],
+  "cloudflare.contact_submission": [
+    {
+      "account_id": "example",
+      "admin_notes": "example",
+      "assigned_to": "example",
+      "browser": "example",
+      "connection_ref": "example",
+      "country": "example",
+      "created_at": "example",
+      "database": "example",
+      "database_id": "example",
+      "device": "example",
+      "email": "example",
+      "id": 1,
+      "ip_address": "example",
+      "message": "example",
+      "name": "example",
+      "source_url": "example",
+      "status": "example",
+      "turnstile": "example",
+      "updated_at": "example",
+      "user_agent": "example"
+    }
+  ],
+  "cloudflare.d1_database": [
+    {
+      "connection_ref": "example",
+      "account_id": "example",
+      "name": "example",
+      "uuid": "example",
+      "created_at": "example",
+      "version": "example",
+      "file_size": 1
+    }
+  ],
+  "cloudflare.dns_record": [
+    {
+      "zone": "example",
+      "record_id": "example",
+      "name": "example",
+      "record_type": "example",
+      "content": "example",
+      "priority": 1,
+      "proxied": true,
+      "ttl": 1
+    }
+  ],
+  "cloudflare.edge_certificate": [
+    {
+      "connection_ref": "example",
+      "account_id": "example",
+      "zone": "example",
+      "id": "example",
+      "type": "example",
+      "hosts": [
+        "example"
+      ],
+      "status": "example",
+      "certificate_authority": "example",
+      "expires_on": "example"
+    }
+  ],
+  "cloudflare.pages_project": [
+    {
+      "connection_ref": "example",
+      "account_id": "example",
+      "name": "example",
+      "subdomain": "example",
+      "domains": [
+        "example"
+      ],
+      "production_branch": "example",
+      "deployment_id": "example",
+      "deployment_commit": "example",
+      "deployment_created_on": "example"
+    }
+  ],
+  "cloudflare.redirect": [
+    {
+      "connection_ref": "example",
+      "account_id": "example",
+      "zone": "example",
+      "source": "example",
+      "id": "example",
+      "description": "example",
+      "hostnames": [
+        "example"
+      ],
+      "target": "example",
+      "target_host": "example",
+      "status_code": 1,
+      "preserve_query_string": true,
+      "enabled": true
+    }
+  ],
+  "cloudflare.tunnel": [
+    {
+      "connection_ref": "example",
+      "account_id": "example",
+      "id": "example",
+      "name": "example",
+      "status": "example",
+      "created_at": "example",
+      "conns_active_at": "example",
+      "config_source": "example",
+      "ingress": [
+        {
+          "hostname": "example",
+          "service": "example"
+        }
+      ],
+      "connections": [
+        {
+          "version": "example",
+          "colo": "example",
+          "origin_ip": "example"
+        }
+      ]
+    }
+  ],
+  "cloudflare.zone": [
+    {
+      "zone": "example",
+      "connection_ref": "example",
+      "account_id": "example",
+      "status": "example",
+      "plan": "example",
+      "posture": {
+        "example": "example"
+      },
+      "registration": {}
+    }
+  ],
+  "github.allowance": [
+    {
+      "account": "example",
+      "connection_ref": "example",
+      "installation": 1,
+      "limit": 1,
+      "remaining": 1,
+      "resets_at": "example",
+      "spent": 1,
+      "started_at": "example",
+      "used": 1
+    }
+  ],
+  "github.delivery": [
+    {
+      "repository": "example",
+      "workflow": "example",
+      "branch": "example",
+      "production": "example",
+      "extensions": [
+        {
+          "plugin": "example",
+          "running": "example",
+          "admitted": "example",
+          "stage": "example",
+          "run_url": "example"
+        }
+      ]
+    }
+  ],
+  "github.dependency_run": [
+    {
+      "owner": "example",
+      "repositories": [
+        "example"
+      ],
+      "outcome": "example",
+      "exit_code": 1,
+      "started_at": "example",
+      "finished_at": "example"
+    }
+  ],
+  "github.profile": [
+    {
+      "login": "example",
+      "name": "example",
+      "bio": "example",
+      "url": "example",
+      "followers": 1,
+      "following": 1,
+      "public_repos": 1,
+      "created_at": "example",
+      "company": "example",
+      "location": "example",
+      "website": "example",
+      "social": "example",
+      "public_gists": 1,
+      "hireable": true,
+      "avatar": "example",
+      "starred": 1,
+      "watched": [
+        {
+          "name": "example",
+          "url": "example",
+          "description": "example",
+          "language": "example",
+          "stars": 1,
+          "starred_at": "example",
+          "release": {
+            "tag": "example",
+            "url": "example",
+            "published_at": "example"
+          },
+          "advisories": [
+            {
+              "id": "example",
+              "severity": "example",
+              "summary": "example",
+              "url": "example",
+              "published_at": "example"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "github.repository": [
+    {
+      "connection_ref": "example",
+      "repository": "example",
+      "private": true,
+      "archived": true,
+      "url": "example",
+      "default_branch": "example",
+      "pushed_at": "example",
+      "head": {
+        "sha": "example",
+        "message": "example",
+        "author": "example",
+        "date": "example",
+        "url": "example"
+      },
+      "checks": {
+        "state": "example",
+        "total": 1,
+        "failing": [
+          "example"
+        ],
+        "running": 1,
+        "names": [
+          "example"
+        ]
+      },
+      "pull_requests": [
+        {
+          "number": 1,
+          "title": "example",
+          "url": "example",
+          "author": "example",
+          "draft": true,
+          "created_at": "example",
+          "updated_at": "example",
+          "head": "example",
+          "branch": "example",
+          "labels": [
+            "example"
+          ],
+          "checks": {
+            "state": "example",
+            "total": 1,
+            "failing": [
+              "example"
+            ],
+            "running": 1,
+            "names": [
+              "example"
+            ]
+          }
+        }
+      ],
+      "pull_request_checks": [
+        "example"
+      ],
+      "runs": [
+        {
+          "id": 1,
+          "name": "example",
+          "status": "example",
+          "conclusion": "example",
+          "event": "example",
+          "branch": "example",
+          "sha": "example",
+          "url": "example",
+          "created_at": "example"
+        }
+      ],
+      "waiting": [
+        {
+          "id": 1,
+          "name": "example",
+          "status": "example",
+          "conclusion": "example",
+          "event": "example",
+          "branch": "example",
+          "sha": "example",
+          "url": "example",
+          "created_at": "example",
+          "environments": [
+            "example"
+          ]
+        }
+      ],
+      "release": {
+        "tag": "example",
+        "url": "example",
+        "published_at": "example"
+      },
+      "deployments": [
+        {
+          "environment": "example",
+          "sha": "example",
+          "created_at": "example",
+          "state": "example",
+          "url": "example",
+          "verified": [
+            {
+              "name": "example",
+              "conclusion": "example"
+            }
+          ],
+          "check_failed": true
+        }
+      ],
+      "alerts": {
+        "example": {
+          "example": 1
+        }
+      },
+      "dependabot_alerts": [
+        {
+          "number": 1,
+          "package": "example",
+          "ecosystem": "example",
+          "manifest_path": "example",
+          "severity": "example",
+          "first_patched_version": "example",
+          "url": "example"
+        }
+      ],
+      "artifacts": [
+        {
+          "name": "example",
+          "expires_at": "example",
+          "sha": "example"
+        }
+      ],
+      "rules": {
+        "pull_request": true,
+        "reviews": 1,
+        "required_checks": [
+          "example"
+        ],
+        "blocks_force_push": true,
+        "blocks_deletion": true
+      },
+      "environments": [
+        {
+          "name": "example",
+          "reviewers": [
+            "example"
+          ],
+          "wait_minutes": 1,
+          "branches": "example"
+        }
+      ],
+      "runners": [
+        {
+          "name": "example",
+          "status": "example",
+          "busy": true,
+          "labels": [
+            "example"
+          ]
+        }
+      ],
+      "images": [
+        {
+          "name": "example",
+          "tags": 1,
+          "signed": [
+            "example"
+          ]
+        }
+      ],
+      "access": {
+        "visibility": "example",
+        "collaborators": [
+          {
+            "login": "example",
+            "role": "example"
+          }
+        ],
+        "deploy_keys": [
+          {
+            "title": "example",
+            "read_only": true,
+            "last_used": "example",
+            "created_at": "example"
+          }
+        ],
+        "allowed_actions": "example",
+        "pinning_required": true,
+        "token": "example",
+        "token_approves_reviews": true,
+        "vulnerability_alerts": true,
+        "security": {
+          "advanced_security": null,
+          "code_security": null,
+          "dependabot_security_updates": null,
+          "secret_scanning": null,
+          "secret_scanning_push_protection": null,
+          "secret_scanning_non_provider_patterns": null,
+          "secret_scanning_validity_checks": null,
+          "secret_scanning_ai_detection": null,
+          "secret_scanning_delegated_alert_dismissal": null,
+          "secret_scanning_delegated_bypass": null
+        }
+      },
+      "variables": [
+        "example"
+      ],
+      "pins": [
+        {
+          "path": "example",
+          "uses": "example",
+          "action": "example",
+          "ref": "example",
+          "sha": "example"
+        }
+      ],
+      "called_workflows": [
+        "example"
+      ],
+      "fingerprint": "example",
+      "read_at": "example",
+      "carried": true
+    },
+    {
+      "connection_ref": "example",
+      "repository": "example",
+      "carried": true
+    }
+  ],
+  "host.firewall": [
+    {
+      "record": "example",
+      "interface": "example",
+      "accept_requires_interface": true,
+      "foreign_interface_dropped": true,
+      "read_at": "example"
+    }
+  ],
+  "host.perimeter": [
+    {
+      "record": "example",
+      "connection_ref": "example",
+      "firewall_unit": "example",
+      "public_addresses": [
+        "example"
+      ],
+      "ports_checked": [
+        1
+      ],
+      "answered_publicly": [
+        1
+      ],
+      "read_at": "example"
+    }
+  ],
+  "host.render_status": [
+    {
+      "renderer": "example",
+      "state": "example",
+      "reason": "example",
+      "status": {
+        "schema_version": 1,
+        "last_attempt": {
+          "at": "2030-01-01T00:00:00Z",
+          "outcome": "example",
+          "failure": "example"
+        },
+        "last_success": {
+          "at": "2030-01-01T00:00:00Z",
+          "rendered_at": "2030-01-01T00:00:00Z",
+          "content_version": 1,
+          "attribute_version": 1,
+          "counts": {
+            "items_read": 1,
+            "connections": 1,
+            "app_variables": 1,
+            "identities": 1,
+            "signing_keys": 1
+          }
+        },
+        "connect": {
+          "read_at": "2030-01-01T00:00:00Z",
+          "version": "example",
+          "dependencies": [
+            {
+              "service": "example",
+              "status": "example"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "host.tailnet_lock": [
+    {
+      "enabled": true,
+      "locked_out": [
+        "example"
+      ],
+      "node_key_signed": true,
+      "record": "example",
+      "trusted_keys": 1
+    }
+  ],
+  "host.unit": [
+    {
+      "activates": "example",
+      "active": "example",
+      "condition": "example",
+      "condition_at": "example",
+      "ended_at": "example",
+      "file_state": "example",
+      "last_trigger_at": "example",
+      "load": "example",
+      "main_code": 1,
+      "main_status": 1,
+      "next_elapse_at": "example",
+      "read_at": "example",
+      "result": "example",
+      "started_at": "example",
+      "sub": "example",
+      "title": "example",
+      "unit": "example"
+    }
+  ],
+  "npm.access_list": [
+    {
+      "connection_ref": "example",
+      "id": 1,
+      "name": "example",
+      "satisfy_any": true,
+      "pass_auth": true,
+      "clients": [
+        {
+          "directive": "example",
+          "address": "example"
+        }
+      ],
+      "logins": [
+        "example"
+      ],
+      "protects": [
+        "example"
+      ]
+    }
+  ],
+  "npm.certificate": [
+    {
+      "connection_ref": "example",
+      "id": 1,
+      "name": "example",
+      "provider": "example",
+      "domains": [
+        "example"
+      ],
+      "expires_on": "example",
+      "serves": [
+        "example"
+      ]
+    }
+  ],
+  "npm.dead_host": [
+    {
+      "connection_ref": "example",
+      "id": 1,
+      "hostnames": [
+        "example"
+      ],
+      "certificate": "example",
+      "ssl_forced": true,
+      "enabled": true
+    }
+  ],
+  "npm.proxy_host": [
+    {
+      "domain_names": [
+        "example"
+      ],
+      "forward_scheme": "example",
+      "forward_host": "example",
+      "forward_port": 1,
+      "ssl_forced": true,
+      "http2_support": true,
+      "allow_websocket_upgrade": true,
+      "caching_enabled": true,
+      "block_exploits": true,
+      "access_list_id": 1,
+      "advanced_config": "example",
+      "hsts_enabled": true,
+      "hsts_subdomains": true,
+      "trust_forwarded_proto": true,
+      "enabled": true,
+      "certificate": {
+        "name": "example",
+        "domains": [
+          "example"
+        ],
+        "expires_on": "example",
+        "provider": "example"
+      },
+      "access_policy": {
+        "name": "example",
+        "satisfy_any": true,
+        "pass_auth": true,
+        "authorization_count": 1,
+        "clients": [
+          {
+            "directive": "example",
+            "address": "example"
+          }
+        ],
+        "implicit_deny": true
+      }
+    }
+  ],
+  "npm.redirect": [
+    {
+      "connection_ref": "example",
+      "id": 1,
+      "hostnames": [
+        "example"
+      ],
+      "certificate": "example",
+      "ssl_forced": true,
+      "enabled": true,
+      "target": "example",
+      "target_host": "example",
+      "status_code": 1,
+      "preserve_path": true
+    }
+  ],
+  "npm.stream": [
+    {
+      "connection_ref": "example",
+      "id": 1,
+      "incoming_port": 1,
+      "forwarding_host": "example",
+      "forwarding_port": 1,
+      "tcp": true,
+      "udp": true,
+      "enabled": true
+    }
+  ],
+  "portainer.compose_project": [
+    {
+      "connection_ref": "",
+      "environment_id": 0,
+      "host": "",
+      "host_address": "",
+      "name": "example",
+      "source": "example",
+      "working_dir": "example",
+      "config_files": [
+        "example"
+      ],
+      "status": "example",
+      "entry_point": "example",
+      "containers": [
+        "example"
+      ]
+    }
+  ],
+  "portainer.container": [
+    {
+      "portainer_managed": true,
+      "name": "example",
+      "id": "example",
+      "stack": "example",
+      "working_dir": "example",
+      "image": "example",
+      "source": "example",
+      "revision": "example",
+      "network_mode": "example",
+      "state": "example",
+      "status": "example",
+      "ports": [
+        1
+      ],
+      "port": 1,
+      "reachable": true,
+      "host": "example",
+      "host_address": "example",
+      "connection_ref": "example",
+      "unit": "example"
+    }
+  ],
+  "portainer.environment": [
+    {
+      "connection_ref": "example",
+      "host": "example",
+      "id": 1,
+      "name": "example",
+      "address": "example",
+      "local": true,
+      "type": "example",
+      "status": "example",
+      "agent_version": "example",
+      "docker_version": "example",
+      "containers_running": 1,
+      "containers_total": 1,
+      "snapshot_at": "example"
+    }
+  ],
+  "portainer.image": [
+    {
+      "connection_ref": "",
+      "environment_id": 0,
+      "host": "",
+      "host_address": "",
+      "id": "example",
+      "tags": [
+        "example"
+      ],
+      "digests": [
+        "example"
+      ],
+      "created_at": "example",
+      "size": 1,
+      "containers": [
+        {
+          "container": "example",
+          "reference": "example",
+          "service": "example"
+        }
+      ]
+    }
+  ],
+  "portainer.network": [
+    {
+      "connection_ref": "",
+      "environment_id": 0,
+      "host": "",
+      "host_address": "",
+      "id": "example",
+      "name": "example",
+      "driver": "example",
+      "scope": "example",
+      "internal": true,
+      "subnets": [
+        "example"
+      ],
+      "containers": [
+        "example"
+      ]
+    }
+  ],
+  "portainer.runtime": [
+    {
+      "connection_ref": "",
+      "environment_id": 0,
+      "host": "",
+      "host_address": "",
+      "container": "example",
+      "stack": "example",
+      "service": "example",
+      "image_id": "example",
+      "user": "example",
+      "privileged": true,
+      "read_only_rootfs": true,
+      "network_mode": "example",
+      "pid_mode": "example",
+      "ipc_mode": "example",
+      "cap_add": [
+        "example"
+      ],
+      "cap_drop": [
+        "example"
+      ],
+      "security_opt": [
+        "example"
+      ],
+      "devices": [
+        "example"
+      ],
+      "mounts": [
+        {
+          "type": "example",
+          "source": "example",
+          "destination": "example",
+          "read_only": true
+        }
+      ],
+      "port_bindings": [
+        {
+          "container_port": "example",
+          "host_ip": "example",
+          "host_port": "example"
+        }
+      ],
+      "exposed_ports": [
+        1
+      ],
+      "memory_limit": 1,
+      "cpu_limit": 1,
+      "pids_limit": 1,
+      "restart_policy": "example",
+      "healthcheck": true,
+      "health": "example",
+      "restart_count": 1,
+      "started_at": "example",
+      "memory_usage": 1,
+      "memory_usage_basis": "example",
+      "cpu_time": 1,
+      "usage_read_at": "example"
+    }
+  ],
+  "portainer.volume": [
+    {
+      "connection_ref": "",
+      "environment_id": 0,
+      "host": "",
+      "host_address": "",
+      "type": "example",
+      "name": "example",
+      "driver": "example",
+      "source": "example",
+      "stack": "example",
+      "created_at": "example",
+      "used_by": [
+        {
+          "container": "example",
+          "destination": "example",
+          "read_only": true
+        }
+      ]
+    }
+  ],
+  "tailscale.device": [
+    {
+      "name": "example",
+      "public_key": "example",
+      "dns_name": "example",
+      "online": true,
+      "last_seen": "example",
+      "key_expires": "example",
+      "addresses": [
+        "example"
+      ],
+      "os": "example",
+      "exit_node_in_use": true,
+      "offers_exit_node": true,
+      "self": true,
+      "direct_endpoint": "example",
+      "endpoints": [
+        "example"
+      ],
+      "relay": "example",
+      "last_handshake": "example",
+      "active": true,
+      "rx_bytes": 1,
+      "tx_bytes": 1,
+      "reach": [
+        {
+          "port": 1,
+          "who": [
+            "example"
+          ],
+          "rules": [
+            {
+              "who": [
+                "example"
+              ],
+              "to": [
+                "example"
+              ],
+              "line": 1
+            }
+          ]
+        }
+      ],
+      "user": "example",
+      "tags": [
+        "example"
+      ],
+      "advertised_routes": [
+        "example"
+      ],
+      "enabled_routes": [
+        "example"
+      ],
+      "authorized": true,
+      "lock_error": "example",
+      "update_available": true,
+      "client_version": "example",
+      "ssh_enabled": true,
+      "blocks_incoming": true,
+      "external": true,
+      "key_expiry_disabled": true,
+      "exit_node_approved": true
+    }
+  ],
+  "tailscale.dns": [
+    {
+      "record": "example",
+      "nameservers": [
+        "example"
+      ],
+      "override_local_dns": true,
+      "magic_dns": true,
+      "search_paths": [
+        "example"
+      ],
+      "split_dns": {
+        "example": [
+          "example"
+        ]
+      }
+    }
+  ],
+  "tailscale.policy": [
+    {
+      "record": "example",
+      "document": "example",
+      "hosts": {
+        "example": "example"
+      },
+      "settings": "example",
+      "dns": "example",
+      "groups": [
+        {
+          "name": "example",
+          "members": [
+            "example"
+          ]
+        }
+      ],
+      "tags": [
+        {
+          "name": "example",
+          "owners": [
+            "example"
+          ]
+        }
+      ],
+      "grants": [
+        {
+          "src": [
+            "example"
+          ],
+          "dst": [
+            "example"
+          ],
+          "ip": [
+            "example"
+          ]
+        }
+      ],
+      "tests": "example",
+      "services": [
+        {
+          "name": "example",
+          "addresses": [
+            "example"
+          ],
+          "comment": "example",
+          "ports": [
+            "example"
+          ]
+        }
+      ],
+      "app_connectors": [
+        {
+          "name": "example",
+          "connectors": [
+            "example"
+          ],
+          "domains": [
+            "example"
+          ]
+        }
+      ],
+      "ssh_rules": [
+        {
+          "action": "example",
+          "src": [
+            "example"
+          ],
+          "dst": [
+            "example"
+          ],
+          "users": [
+            "example"
+          ]
+        }
+      ]
+    }
+  ],
+  "tailscale.settings": [
+    {
+      "record": "example",
+      "devices_approval_on": true,
+      "devices_key_duration_days": 1,
+      "devices_auto_updates_on": true,
+      "users_approval_on": true,
+      "regional_routing_on": true,
+      "posture_identity_collection_on": true,
+      "https_enabled": true,
+      "acls_externally_managed_on": true
+    }
+  ],
+  "tailscale.user": [
+    {
+      "id": "example",
+      "display_name": "example",
+      "login_name": "example",
+      "role": "example",
+      "status": "example",
+      "created": "example",
+      "last_seen": "example"
+    }
+  ]
+}

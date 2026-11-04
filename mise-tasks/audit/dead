@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="The names hq/ and hq_sdk/ define that nothing outside tests reads, the composed extensions and templates counted as readers (classes, functions, methods, properties, imports), as vulture finds them, each file:line name kind, sorted and then counted; reach for it before deleting code or to find what only tests keep alive, which is deleted with its tests or, when it is a test's own check or helper, moved beside the tests that read it; read-only"
+#MISE description="The names hq/ and hq_sdk/ define that nothing outside tests reads (a test-support module's, testing.py or *_testing.py, that nothing reads at all), the composed extensions and templates counted as readers (classes, functions, methods, properties, imports), as vulture finds them, each file:line name kind, sorted and then counted; reach for it before deleting code or to find what only tests keep alive, which is deleted with its tests or, when it is a test's own check or helper, moved beside the tests that read it; read-only"
 #MISE hide=true
 #USAGE flag "--fields" help="Also list the variables and attributes, where model columns, Pydantic fields, settings and enum members read by keyword, by a built name or as data make most of what is found"
 
@@ -68,11 +68,26 @@ if [ "${status}" -ne 0 ] && [ "${status}" -ne 3 ]; then
     exit "${status}"
 fi
 
+# A test-support module (testing.py, *_testing.py) is for tests, so a test's
+# read keeps its names alive: they are listed from a second run that reads the
+# tests too, which the CLI's --exclude opens to them.
+status=0
+# shellcheck disable=SC2086
+uv run vulture --exclude '*/__pycache__/*' hq hq_sdk tools tests demo examples manage.py ${frameworks} ${extensions} \
+    "${uses}/names.py" tools/lint/vulture-whitelist.py >"${uses}/with-tests" || status=$?
+if [ "${status}" -ne 0 ] && [ "${status}" -ne 3 ]; then
+    cat "${uses}/with-tests" >&2
+    exit "${status}"
+fi
+support='^[^:]*/([^/:]*_)?testing\.py:'
+grep -v -E "${support}" "${uses}/vulture" >"${uses}/found" || true
+grep -E "${support}" "${uses}/with-tests" >>"${uses}/found" || true
+
 kinds='class|function|method|property|import'
 if [ "${usage_fields:-false}" = true ]; then kinds="${kinds}|variable|attribute"; fi
 # One line per name, sorted by file and line, so two runs are compared by a
 # diff. The closing line holds the total.
-sed -n -E "s#^((hq|hq_sdk)/[^:]+:[0-9]+): unused (${kinds}) '([^']+)'.*#\1 \4 \3#p" "${uses}/vulture" \
+sed -n -E "s#^((hq|hq_sdk)/[^:]+:[0-9]+): unused (${kinds}) '([^']+)'.*#\1 \4 \3#p" "${uses}/found" \
     | grep -v '/migrations/' | sort -t: -k1,1 -k2,2n >"${uses}/listed" || true
 cat "${uses}/listed"
 printf '%s names nothing outside tests reads\n' "$(wc -l <"${uses}/listed" | tr -d ' ')"

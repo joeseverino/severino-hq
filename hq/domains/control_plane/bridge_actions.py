@@ -27,6 +27,7 @@ from hq.platform.application.glance import dashboard_refresh_plan, record_dashbo
 from hq.platform.application.infrastructure import controller_contract
 from hq.platform.application.inventory import record_connections, record_step_failures
 from hq.platform.application.record_errors import CertificateError
+from hq.platform.application.refused_reports import READINGS_ACTION
 from hq.platform.application.scheduled_work import run as run_scheduled
 from hq.platform.application.security import internal_principal
 from hq.platform.application.sweep import record_sweep
@@ -143,7 +144,7 @@ ACTIONS: tuple[Action, ...] = (
     Action("export", _export),
     Action("schedule", _schedule),
     Action("material", _material),
-    Action("inventory", _recorded(record_sweep)),
+    Action(READINGS_ACTION, _recorded(record_sweep)),
     Action("connections", _recorded(record_connections)),
     Action("steps", _recorded(record_step_failures)),
     Action("analytics", _recorded(record_analytics)),

@@ -43,8 +43,8 @@ of its repository instead: the production deploy, and the repository's alerts.
     {% band_fact icon="shield" label="Known vulnerabilities" tone=standing.vulnerability_tone %}
       {% if standing.state == 'vulnerable' %}
         <strong>{{ standing.vulnerabilities|capfirst|breakable }}</strong>
-        {% for advisory in standing.advisories|slice:":2" %}<small>{% entity advisory.url|outside label=advisory.id %} {{ advisory.severity|breakable }}</small>{% endfor %}
-        {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small>{% entity finding.url|outside label=finding.id %} {{ finding.package|breakable }}</small>{% endfor %}{% endif %}
+        {% for advisory in standing.advisories|slice:":2" %}<small>{% entity advisory.url|outside label=advisory.id %} {{ advisory.severity|default:"advisory"|breakable }}</small>{% endfor %}
+        {% if not standing.advisories %}{% for finding in standing.urgent|slice:":2" %}<small>{% entity finding.url|outside label=finding.id %} in {{ finding.package|breakable }}</small>{% endfor %}{% endif %}
       {% elif standing.checked or standing.source %}
         <strong>{% if standing.findings %}None serious{% else %}None known{% endif %}</strong>
         <small>{% if standing.findings %}{{ standing.findings|length }} lower, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<span class="nowrap">{% entity standing.source|add:"/security/advisories"|outside label="its repository" %}</span>{% endif %}</small>

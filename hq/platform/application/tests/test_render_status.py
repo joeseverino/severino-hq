@@ -385,13 +385,14 @@ class StaleTests(TestCase):
 
         self.assertEqual(len(raised("render-stale")), 1)
 
-    def test_a_reading_the_controller_stopped_taking_goes_stale_against_now(self):
+    def test_a_reading_the_controller_stopped_taking_is_unread_not_stale(self):
         # The copy the controller last read said "current"; nothing has read
-        # one since, and the files it described are a day old.
+        # one since, so it no longer says whether the job runs.
         age = timedelta(days=1)
         sweep(read(attempted=age, confirmed=age, rendered=age), age=age)
 
-        self.assertEqual(len(raised("render-stale")), 1)
+        self.assertEqual(raised("render-stale"), [])
+        self.assertEqual(len(raised("render-status-unread")), 1)
 
 
 class SyncTests(TestCase):
@@ -597,12 +598,17 @@ class FactTests(SimpleTestCase):
         self.assertEqual(key, rules.RENDER_STATUS)
         self.assertEqual(rules.Rendering.of(value), rendering)
 
-    def test_the_threshold_is_asked_of_the_estates_now(self):
+    def test_the_threshold_is_judged_as_of_the_reading(self):
         at = datetime(2026, 1, 1, tzinfo=UTC)
-        rendering = rules.Rendering("hq", "read", confirmed_at=at.isoformat(), rendered_at=at.isoformat())
 
-        self.assertFalse(rendering.unconfirmed(at + rules.CONFIRMED_WITHIN))
-        self.assertTrue(rendering.unconfirmed(at + rules.CONFIRMED_WITHIN + timedelta(seconds=1)))
-        self.assertFalse(rendering.unrendered(at + rules.RENDERED_WITHIN))
-        self.assertTrue(rendering.unrendered(at + rules.RENDERED_WITHIN + timedelta(seconds=1)))
-        self.assertTrue(rules.Rendering("hq", "read").unconfirmed(at))
+        def read_after(age: timedelta) -> rules.Rendering:
+            return rules.Rendering(
+                "hq", "read", confirmed_at=at.isoformat(), rendered_at=at.isoformat(), read_at=(at + age).isoformat()
+            )
+
+        second = timedelta(seconds=1)
+        self.assertFalse(read_after(rules.CONFIRMED_WITHIN).unconfirmed)
+        self.assertTrue(read_after(rules.CONFIRMED_WITHIN + second).unconfirmed)
+        self.assertFalse(read_after(rules.RENDERED_WITHIN).unrendered)
+        self.assertTrue(read_after(rules.RENDERED_WITHIN + second).unrendered)
+        self.assertTrue(rules.Rendering("hq", "read").unconfirmed)

@@ -30,7 +30,7 @@
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
 {% card heading="machine-containers-heading" %}
-  <h2 id="machine-containers-heading">Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}read through {% entity docker.connection %}{% endif %}</span>{% endif %}</h2>
+  <h2 id="machine-containers-heading">Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}</span>{% endif %}</h2>
   {% if unused_images %}<ul class="dot-list section-facts"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size|breakable }} can be freed</li></ul>{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
   {% include "partials/_problems.html#lines" with rest=problems_in.containers %}

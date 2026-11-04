@@ -217,7 +217,8 @@ type RefusalDetails = Annotated[
     Field(
         description=(
             "What gets past the refusal, where something does: `next`, the call that finds what was "
-            "missing; `field`, the argument to send; for `invalid_input`, each field that was wrong and why."
+            "missing; `field`, the argument to send; for `invalid_input`, each field that was wrong and why, "
+            "which a list or record read puts under `errors`, beside the `filters` its list takes."
         )
     ),
 ]
@@ -334,8 +335,8 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         refused = django_refusal(name, exc)
         return Refusal("invalid_input", refused.message, refused.details)
     if isinstance(exc, InvalidResourceInput):
-        # ``details`` is the pydantic error list, describing the request sent.
-        return Refusal("invalid_input", exc.reason, exc.errors)
+        # The pydantic error list describing the request sent, beside what the kind takes.
+        return Refusal("invalid_input", exc.reason, exc.details)
     if isinstance(exc, HostRefusal):
         # Host-written text naming no request value (record_errors.py), and
         # what gets past it.

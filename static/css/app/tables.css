@@ -193,10 +193,9 @@
 /* A menu, a toggle and the sort are pressed by their labels, so they wear the Filter button's edge; only the search wears a field's. */
 .table-filter-menu > button, .table-toggle, .table-sort { min-height: var(--control-size); display: flex; justify-content: center; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); font-weight: 500; line-height: 1.45; cursor: pointer; transition: border-color .12s ease, background-color .12s ease; }
 .table-filter-menu > button:hover, .table-toggle:hover, .table-sort:hover { border-color: var(--line-strong); background-color: var(--surface-2); }
-/* A filter that opens to its choices wears the select's chevron, so it reads as a choice, not an action. */
-.table-filter-menu > button {
-  anchor-name: --filter;
-  font-family: inherit;
+.table-filter-menu > button { anchor-name: --filter; font-family: inherit; }
+/* HQ's chevron, set in from the end by --chevron-inset: worn by every select and by a filter that opens to its choices, so it reads as a choice, not an action. Declared here, after the filter button's own padding and background, which it must follow in this layer. */
+:is(select:not([multiple], [size]), .table-filter-menu > button) {
   padding-inline-end: calc(var(--chevron-inset) + 2 * var(--chevron-size) + var(--space-3));
   background-image: var(--chevron-image);
   background-position:

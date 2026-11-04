@@ -25,6 +25,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, Action
 from hq.domains.control_plane.bridge_contract import Operation, Parameter, contract, max_body_bytes, operations
 from hq.domains.control_plane.secret_shapes import struck
+from hq.platform.application import refused_reports
 from hq.platform.application.security import CONTROLLER_INTERFACE
 from hq.platform.application.ui import ended
 from hq.platform.core.attribution import operation_context
@@ -118,14 +119,16 @@ def _properties(node: Any) -> Iterator[str]:
 @cache
 def declared_names() -> frozenset[str]:
     """Every name the contract gives a member or a key: its properties, its
-    query parameters, and the kinds a sweep's inventory is keyed by.
+    query parameters, the kinds a sweep's inventory is keyed by, and the parts
+    a reading's alert counts are keyed by.
 
     Each is the contract's own word, so the door never strikes one as a
     member named as a secret; a member the contract leaves open still is.
     """
 
     schemas = contract()["components"]["schemas"]
-    kinds = (kind for name in ("ResourceKind", "SweptKind") for kind in schemas[name]["enum"])
+    keys = ("ResourceKind", "SweptKind", "ReadingPartName")
+    kinds = (kind for name in keys for kind in schemas[name]["enum"])
     parameters = (parameter.name for operation in operations().values() for parameter in operation.parameters)
     return frozenset((*_properties(schemas), *kinds, *parameters))
 
@@ -178,20 +181,39 @@ def _locations(exc: ValidationError) -> str:
 def _run(action: Action, parameters: dict[str, Any], payload: Any) -> bytes:
     # The bridge's door: whatever an action writes is the controller's.
     with operation_context(interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action.name}"):
-        return json.dumps(action.run(parameters, payload), sort_keys=True).encode()
+        answer = json.dumps(action.run(parameters, payload), sort_keys=True).encode()
+        refused_reports.accepted(action.name, _controller(parameters))
+        return answer
+
+
+def _controller(parameters: dict[str, Any]) -> str:
+    named = parameters.get("controller-id")
+    return named if isinstance(named, str) else ""
+
+
+def _refused(action: Action, controller_id: str, refusal: Refused) -> None:
+    # Kept apart from the action, which a refusal runs nothing of, so a
+    # controller whose reports stop landing is a finding and not a silence.
+    with operation_context(interface=CONTROLLER_INTERFACE, actor=CONTROLLER, operation=f"bridge.{action.name}.refused"):
+        refused_reports.note(action.name, controller_id, int(refusal.status), refusal.detail)
 
 
 def endpoint(action: Action, operation: Operation) -> Callable[[Request], Awaitable[Response]]:
     async def call(request: Request) -> Response:
+        # Named only once the query is held to the contract and holds no secret.
+        controller_id = ""
         try:
             parameters = parameters_of(operation, request)
             _refuse_secrets(operation, parameters)
+            controller_id = _controller(parameters)
             payload = await payload_of(operation, request)
             # Calls in flight together each hold their own connection, and
             # SQLite orders their writes.
             async with thread_of_its_own():
                 answer = await sync_to_async(_run)(action, parameters, payload)
         except Refused as refusal:
+            async with thread_of_its_own():
+                await sync_to_async(_refused)(action, controller_id, refusal)
             return problem(refusal.status, refusal.detail)
         except ClientDisconnect:
             return problem(HTTPStatus.BAD_REQUEST, "The caller went away.")

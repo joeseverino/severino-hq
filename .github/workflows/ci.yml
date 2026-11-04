@@ -231,8 +231,10 @@ jobs:
 
   # Code scanning, on every pull request and push to main: main's analysis is
   # what a pull request's is compared with. Release does not wait for it.
-  # CodeQL's own action, which uploads what it finds; `mise run scan` runs the
-  # same queries on a developer's machine.
+  # CodeQL's own action uploads what it finds, which the ruleset and the
+  # review comments read; scan:alerts then fails the job on any alert GitHub
+  # holds open on the analyzed ref. `mise run scan` runs the same queries on a
+  # developer's machine.
   scan:
     name: Scan
     runs-on: ubuntu-26.04
@@ -252,9 +254,18 @@ jobs:
           # The suite is named in the config, beside the rules it filters.
           config-file: ./.github/codeql/codeql-config.yml
       - name: Perform CodeQL analysis
+        id: analyze
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           category: "/language:python"
+      - uses: ./.github/actions/toolchain
+      - name: No open alert
+        # On the ref the analysis was uploaded for, GITHUB_REF.
+        run: mise run scan:alerts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          CODEQL_SARIF_ID: ${{ steps.analyze.outputs.sarif-id }}
 
   build:
     name: Build

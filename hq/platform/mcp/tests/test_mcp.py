@@ -167,11 +167,11 @@ class ServiceTests(SentinelMixin, TestCase):
         for number in range(105):
             Project.objects.create(name=f"Project {number:03d}")
 
-        result = services.list_resource("projects", {"limit": projection.MAX_PAGE_SIZE})
+        result = services.list_resource("projects", limit=projection.MAX_PAGE_SIZE)
 
         self.assertEqual(result["count"], projection.MAX_PAGE_SIZE)
         with self.assertRaises(InvalidResourceInput):
-            services.list_resource("projects", {"limit": projection.MAX_PAGE_SIZE + 1})
+            services.list_resource("projects", limit=projection.MAX_PAGE_SIZE + 1)
 
     def test_a_missing_record_is_not_found_and_names_nothing_sent(self):
         sent = "sent-by-the-caller-7f3a"
@@ -203,12 +203,15 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertEqual(tools["get_resource"].input_schema["properties"]["name"]["enum"], addressable)
 
     def test_each_tool_is_served_once_and_only_execute_writes(self):
+        from hq.platform.mcp.identity import set_principal
+        from hq.platform.mcp.listing import widest_caller
         from hq.platform.mcp.server import mcp as served
 
         async def listed():
             return await served._list(None, None)
 
-        tools = {tool.name: tool for tool in async_to_sync(listed)().tools}
+        with set_principal(widest_caller()):
+            tools = {tool.name: tool for tool in async_to_sync(listed)().tools}
 
         self.assertEqual(set(tools), set(TOOLS))
         for name, read_only in TOOLS.items():

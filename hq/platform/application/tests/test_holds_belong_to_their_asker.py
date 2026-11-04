@@ -7,6 +7,7 @@ own held requests, wherever they are listed to it; a person reads every one.
 """
 
 from unittest.mock import patch
+from urllib.parse import urlsplit
 
 from django.test import TestCase, override_settings
 
@@ -128,7 +129,11 @@ class HoldsBelongToTheirAskerTests(TestCase):
         def urls(principal):
             return {item["url"] for item in list_resource("action_items", None, principal=principal)["items"]}
 
+        def page(held):
+            # The queue links within HQ; the held answer's link is the same page, absolute.
+            return urlsplit(held["review_url"]).path
+
         read = urls(SECOND)
-        self.assertIn(mine["review_url"], read)
-        self.assertNotIn(theirs["review_url"], read)
-        self.assertLessEqual({mine["review_url"], theirs["review_url"]}, urls(an_operator()))
+        self.assertIn(page(mine), read)
+        self.assertNotIn(page(theirs), read)
+        self.assertLessEqual({page(mine), page(theirs)}, urls(an_operator()))

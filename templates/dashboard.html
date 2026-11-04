@@ -122,7 +122,7 @@ is said here, over the ones most recently changed, and nowhere else on the page.
           </li>
         {% endfor %}
       </ul>
-      <p class="section-foot"><a href="{% url 'projects:list' %}">All projects{% arrow %}</a></p>
+      <div class="section-foot"><a href="{% url 'projects:list' %}">All projects{% arrow %}</a></div>
     {% else %}
       <p class="dash-empty">No active projects. <a href="{% url 'projects:create' %}">Add one{% arrow %}</a></p>
     {% endif %}
@@ -133,10 +133,10 @@ is said here, over the ones most recently changed, and nowhere else on the page.
     {% section_head %}Publishing{% aside %}{% if draft_content_count %}<span class="count">{{ draft_content_count|counted:"draft" }}</span>{% endif %}{% endsection_head %}
     {% if content_rows %}
       {% include "partials/_record_list.html" with rows=content_rows %}
-      <p class="section-foot"><a href="{% url 'content:list' %}?status=draft">Drafts{% arrow %}</a></p>
+      <div class="section-foot"><a href="{% url 'content:list' %}?status=draft">Drafts{% arrow %}</a></div>
     {% else %}
       {% include "partials/_record_list.html" with rows=published_rows %}
-      <p class="section-foot"><a href="{% url 'content:list' %}">All content{% arrow %}</a></p>
+      <div class="section-foot"><a href="{% url 'content:list' %}">All content{% arrow %}</a></div>
     {% endif %}
   {% endcard %}
   {% endif %}

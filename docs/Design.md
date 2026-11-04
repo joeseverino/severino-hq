@@ -371,10 +371,23 @@ button that opens over the navigation, then the sections move behind the
 toggle. The navigation never shrinks below its own content, and the bar's
 controls all take their size from `--control-size`.
 
-**One menu.** `.overflow-menu` for "more actions", the nav dropdown for
-navigation. A dropdown that is a `details` carries `data-menu`, which gives it
-the shared dismissal (outside click, Escape). Inside a menu every control is a
-plain row; a destructive one is only its color.
+**One menu.** `.overflow-menu` for "more actions", a section group's
+dropdown in the header, the user menu and a dashboard reading's panel are one
+primitive: a `[data-menu]` holding a button and the `popover` it names with
+`popovertarget`. The browser opens the panel in the top layer, closes it on
+Escape, a press outside or another menu opening (a menu inside another, a
+section's links in the open sections drawer, leaves the outer one open), and
+hands focus back to the button, with no script. The panel hangs from its own
+button by anchor positioning (`anchor-scope: --menu`, page.css "Menus"):
+below it from its right edge, or from its left where that would cross the
+screen (`position-try-fallbacks: flip-inline`, decided against the viewport);
+a section's links open from its left edge, and in the drawer beside the list.
+A menu opens on a press. A section group also opens on hover where the
+pointer can hover, and a press then keeps it open: WebKit has no
+`interestfor`, so a few lines of app.js do that one job, and the browser
+still opens, closes and dismisses the popover.
+Inside a menu every control is a plain row; a destructive one is only its
+color.
 
 **A table's filter is a popover.** Its button names its panel with
 `popovertarget`. The panel (`popover`, its id `table-filter-<name>`) opens in
@@ -392,7 +405,7 @@ what the account may do, and how long ago they signed in, in hours or days.
 Then what can be set: the two switches share a line, names over tracks, and
 the theme has its row. Then where the menu leads.
 
-**One disclosure.** Every `details` that is not a menu shows the same mark,
+**One disclosure.** Every `details` shows the same mark,
 turned when open. A section that folds (`section-fold`) uses its heading as the
 toggle, with its count beside it; never a separate "Show all".
 
@@ -426,6 +439,21 @@ Chromium also breaks a part held to one line (`.whole`) that has no box
 (`display: contents`) at an element's edge inside it, when the box around the
 part has `overflow-wrap: break-word`. So a box that cuts such a part sets
 `overflow-wrap: normal`.
+
+**A link is underlined only among words.** A link set in a sentence, a
+definition, help text or a muted line differs from the words around it by a
+quiet underline at rest (WCAG 1.4.1): no link color reaches 3:1 against muted
+text while keeping 4.5:1 against the surface, so color alone cannot do it. A
+link that is the whole of its line, row, item or chip is never underlined at
+rest; it reads by its color and underlines on hover and focus, as every link
+does. One rule in `base.css` draws it: words are a `p`, a `small`, a `.muted`
+line, or a value or item marked `.prose` because it reads as a sentence (a
+name followed by a note, a summary with a link in it), and a link with a class
+of its own is a control, `.external-link` aside. A table cell's `prose` stays
+on its part when the column leaves for the row's open line. The survey's
+`links at rest` check reads every link on every page from the rendered layout
+and names one underlined alone or among words without a cue of its own (an
+underline, or a weight, size or face as axe accepts).
 
 An external link's arrow (`.external-link`) is joined to its last word by a
 no-break space. A link whose name is one box (a cut token, a chip in a table)
@@ -731,7 +759,15 @@ somebody opens it, or a reading its queue is drawn from is due (below).
 **A page about one thing asks for that thing's readings.** A machine's page,
 a service's page and a record's page include `partials/_visit_refresh.html`,
 naming which page they are. The dashboard includes it only when a reading its
-queue is drawn from is due (`visit_refresh.PAGES`).
+queue is drawn from is due (`visit_refresh.PAGES`), and the connection panel
+only when the tailnet, container or posture readings it shows are due. The
+panel asks once its dialog is open, and names itself as the part to refresh:
+a region that carries its own address (`data-fragment`) is fetched from
+there, so the panel fills in place on whatever page the dialog opened over.
+
+Until the reading lands, a value from an older reading is said as last seen,
+as of when it was read, never as how things stand now: its age is no fault.
+Only a read that fails says so, in the ask's note, with why.
 
 Once the page is showing, it posts that. HQ works out which kinds the page is
 assembled from and asks the controller for those whose last attempt is older
@@ -741,9 +777,10 @@ than their cadence (`hq/platform/application/freshness.py`).
   is left to the sweep.
 - A page in a background tab asks for nothing, a GET never does, and the
   request cannot name a connection or a kind.
-- When the reading lands the page loads again, once. If somebody has touched
-  it or it reloaded a moment ago, it says a newer reading is in and leaves
-  showing it to them.
+- When the reading lands, the page's content is fetched again and swapped in
+  place, the ask's own line kept. Only if that fails does the page load
+  again, once; if somebody has touched it or it reloaded a moment ago, it says
+  a newer reading is in and leaves showing it to them.
 
 **Asked-for work is an ask.** A button that starts work which outlives the
 request is `partials/_ask.html`, from an `Ask`

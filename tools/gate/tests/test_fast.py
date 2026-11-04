@@ -22,7 +22,7 @@ from django.test.runner import DiscoverRunner
 from django.test.utils import iter_test_cases
 
 from hq.config.sandbox import PREFIX, sweep_abandoned
-from hq.platform.application.tests.tree import tagged
+from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.test_runner import excluded_tags
 from hq.platform.core.tests.task import RefError, Usage, names, trusted_mise
 from tests.mise_tasks import mise_tasks, takes_the_turn
@@ -256,11 +256,15 @@ class FastGateTaskSelectionTests(GateTestCase):
 
 @tag("source")
 class FastGateTreeTests(GateTestCase):
-    def test_a_module_under_hq_or_hq_sdk_reaches_the_tree_tests(self):
-        for path in ("hq/domains/example/models.py", "hq_sdk/ui.py", "hq/platform/core/tests/task.py"):
+    def test_a_module_of_any_package_the_suite_lives_in_reaches_the_tree_tests(self):
+        # A new test file is one the walks read and no import reaches: the
+        # source scans read it, and the tree tag's guard reads its tests.
+        modules = ["hq/domains/example/models.py", "hq_sdk/ui.py", "hq/platform/core/tests/task.py"]
+        modules += [f"{package}/example/tests/test_example.py" for package in SUITE]
+        for path in modules:
             with self.subTest(path=path):
                 self.assertTrue(fast_gate.reaches_tree(["docs/Example.md", path]))
-        for path in ("tools/gate/fast.py", "static/css/app.css", "templates/base.html", "docs/Example.md"):
+        for path in ("static/css/app.css", "templates/base.html", "docs/Example.md"):
             with self.subTest(path=path):
                 self.assertFalse(fast_gate.reaches_tree([path]))
 

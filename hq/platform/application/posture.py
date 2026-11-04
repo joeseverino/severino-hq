@@ -15,7 +15,7 @@ from hq.platform.core.oidc import sso_only
 lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import PROVIDERS, registry_label
 
 from .ui import counted
 lazy from . import cadence, tailnet
@@ -29,8 +29,6 @@ lazy from .hq_context.release_part import repository
 lazy from .hq_self import hq_hostnames
 lazy from .integration_validation import required_capability_names
 lazy from .routes import reverse
-
-NOT_READ = "Not read yet"
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -169,7 +167,7 @@ def _from_control(control, kinds: tuple[str, ...]) -> CheckOutcome:
 
     met = {"good": True, "neutral": None, "attention": None}.get(control.state, False)
     if met is None:
-        return _not_read(kinds, control.evidence)
+        return _not_read(kinds, held=control.detail)
     return CheckOutcome(met=met, evidence="" if met else control.evidence)
 
 
@@ -185,22 +183,38 @@ def _readers(kinds: tuple[str, ...]) -> tuple[str, ...]:
     return tuple(dict.fromkeys(found))
 
 
-def _not_read(kinds: tuple[str, ...], evidence: str = NOT_READ) -> CheckOutcome:
-    """A check nothing has read, with what would read it: the connection to
-    add, else the controller to run, else only that the reading is due."""
+def _not_read(kinds: tuple[str, ...], *, held: str = "") -> CheckOutcome:
+    """A check HQ could not judge, and why, as its evidence: no connection
+    reads it (and which to add), no controller has run, the last read failed,
+    no read has arrived yet, or ``held``, what the reading held instead of an
+    answer."""
 
-    if evidence == "Not read":
-        evidence = NOT_READ
     connected = {row.provider for row in connection_rows()}
     readers = [provider for provider in _readers(kinds) if provider in CONNECTION_LABELS]
     if readers and not connected.intersection(readers):
         labels = " or ".join(CONNECTION_LABELS[provider] for provider in readers)
-        return CheckOutcome(met=None, evidence=evidence, remedy=f"connect {labels}", remedy_url=_setup_url())
+        return CheckOutcome(
+            met=None, evidence=f"No {labels} connection reads it", remedy=f"connect {labels}", remedy_url=_setup_url()
+        )
     if not cadence.controller_standing(present()).known:
         return CheckOutcome(
-            met=None, evidence=evidence, remedy="run the controller", remedy_url=reverse("control_plane:controller")
+            met=None,
+            evidence="No controller has read it",
+            remedy="run the controller",
+            remedy_url=reverse("control_plane:controller"),
         )
-    return CheckOutcome(met=None, evidence=evidence)
+    stored = stored_snapshots()
+    rows = [row for kind in kinds for row in stored.get(kind, ())]
+    if failed := next((row for row in rows if not row.reachable), None):
+        said = failed.error or f"The last read of {registry_label(failed.kind)} failed"
+        return CheckOutcome(met=None, evidence=said.rstrip("."))
+    if rows:
+        labels = " and ".join(dict.fromkeys(registry_label(row.kind) for row in rows))
+        return CheckOutcome(
+            met=None, evidence=held.rstrip(".") or f"The reading of {labels} holds nothing to judge it by"
+        )
+    waited = " or ".join(dict.fromkeys(registry_label(kind) for kind in kinds)) or "it"
+    return CheckOutcome(met=None, evidence=f"Waiting on the first read of {waited}")
 
 
 def _setup_url() -> str:
@@ -252,8 +266,7 @@ def _tailnet_lock(_inputs) -> CheckOutcome:
     lock = tailnet.policy().lock
     if not lock:
         # A read that failed keeps the last reading, so with none it says why.
-        snapshot = next(iter(stored_snapshots().get(TAILNET_LOCK_KIND, ())), None)
-        return _not_read((TAILNET_LOCK_KIND,), (snapshot.error if snapshot is not None else "") or NOT_READ)
+        return _not_read((TAILNET_LOCK_KIND,))
     keys = lock.get("trusted_keys") or 0
     return (
         CheckOutcome(met=True, evidence=counted(keys, "signing key", "signing keys"))
@@ -283,7 +296,7 @@ def _scope(inputs) -> CheckOutcome:
     if not any(connection.instance.credential_model not in ("none", "") for connection in connections):
         return CheckOutcome(met=None, evidence="No connections yet", remedy="add a connection", remedy_url=_setup_url())
     if any(connection.instance.credential_model in ("", "unknown") for connection in connections):
-        return CheckOutcome(met=None, evidence=NOT_READ)
+        return CheckOutcome(met=None, evidence="A connection's credential has not been probed yet")
     return _scoped_where_offered(connections, scoped)
 
 

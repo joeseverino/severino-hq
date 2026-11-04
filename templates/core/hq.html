@@ -33,7 +33,7 @@ they share a row; either alone takes it.
           <dd>{% if release.commit_url %}{% entity release.commit_url|outside label=release.short code=True %}{% elif release.revision %}<code>{{ release.short|breakable }}</code>{% else %}<span class="muted">This build does not say which commit it is.</span>{% endif %}</dd>
         {% if release.repository %}{% with repository=release.repository %}
         <dt>{{ repository.default_branch|default:"Branch"|capfirst|breakable }}</dt>
-          <dd>
+          <dd class="prose">
             {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
             {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7"|breakable }}</code>
             {% else %}<span class="muted">Its head or its production deploy has not been read.</span>{% endif %}
@@ -50,7 +50,7 @@ they share a row; either alone takes it.
         <dt>Signature</dt>
           <dd>{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}</dd>
         <dt>Vulnerabilities</dt>
-          <dd>{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</dd>
+          <dd class="prose">{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</dd>
         {% endif %}
         <dt>Extensions</dt>
           <dd>{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>
@@ -63,10 +63,10 @@ they share a row; either alone takes it.
   {% include "partials/_problems.html#lines" with rest=hq.problems_in.where|not_urgent only %}
   <dl class="kv">
         <dt>Machine</dt>
-          <dd>{% entity machine.link %} <span class="muted">{{ machine.state.0|breakable }}</span></dd>
+          <dd class="prose">{% entity machine.link %} <span class="muted">{{ machine.state.0|breakable }}</span></dd>
         {% if container %}{% with runtime=container.runtime %}
         <dt>Container</dt>
-          <dd><a href="{{ container.url }}">{{ container.running.name|breakable }}</a> <span class="muted">{{ container.uptime|breakable }}</span></dd>
+          <dd class="prose"><a href="{{ container.url }}">{{ container.running.name|breakable }}</a> <span class="muted">{{ container.uptime|breakable }}</span></dd>
         <dt>Health</dt>
           <dd>{{ runtime.health|default:container.running.check|default:container.running.status|capfirst|breakable }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}</dd>
         {% with posture=container.posture %}

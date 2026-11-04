@@ -20,7 +20,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import BinaryIO
 
-from hq.platform.application.tests.tree import tagged
+from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
 from tests.mise_tasks import mise_tasks, run_files, takes_the_turn
 from tools.gate.turn import in_turn
@@ -90,9 +90,11 @@ SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 # test's own imports never select.
 ALWAYS = ("architecture", "new_domain", "test_startup")
 # A test that walks a directory finds a module there through no import, so a
-# change to a module here runs every test tagged tree, in the same run as the
-# rest (hq/platform/application/tests/test_tree_tag.py holds the tag to the walks).
-TREE = ("hq/*.py", "hq_sdk/*.py")
+# change to a module of any package the suite lives in runs every test tagged
+# tree, in the same run as the rest: the walks read every one of them, test
+# files among them (hq/platform/application/tests/test_tree_tag.py holds the
+# tag to the walks and reads each test module of those packages).
+TREE = tuple(f"{package}/*.py" for package in SUITE)
 # The module every test that reads the tasks goes through; a change to a task
 # definition, or to a file a task runs, reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
@@ -422,7 +424,7 @@ def test_labels(
 
 
 def with_tree(labels: list[str], paths: list[str]) -> list[str]:
-    """The selected labels, and every test tagged tree when a module under hq/ or hq_sdk/ changed."""
+    """The selected labels, and every test tagged tree when a module of the suite's packages changed."""
 
     return [*labels, *tagged(ROOT, "tree")] if reaches_tree(paths) else labels
 
@@ -520,7 +522,7 @@ def main(asked: Usage) -> int:
         print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
 
     if reaches_tree([*changed, *deleted]):
-        print("[fast] a module under hq/ or hq_sdk/ changed: every test tagged tree runs too")
+        print(f"[fast] a module under {', '.join(f'{p}/' for p in SUITE)} changed: every test tagged tree runs too")
     labels = with_tree(labels, [*changed, *deleted])
     if gate is None:
         print("\n".join(labels))

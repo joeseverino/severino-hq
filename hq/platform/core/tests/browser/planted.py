@@ -158,6 +158,8 @@ PLANTS = {
     "link underlines": Plant(
         '<p>Example <a href="#"><span style="display: inline-block; text-decoration: none">example-name</span></a></p>'
     ),
+    # A link alone on its line, underlined at rest.
+    "links at rest": Plant('<div><a href="#" style="text-decoration: underline">Example</a></div>'),
     "dialogs": Plant('{% include "partials/_modal.html" with id="orphan" title="Orphan" %}'),
     # A list of names wrapping beside another pair of a four-column list.
     "lists of facts": Plant(

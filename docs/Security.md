@@ -260,6 +260,16 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   internal interface (`HELD_ONLY_AT`), so no person, device or agent signs
   anyone out through it. A token HQ refuses is a 400, which Pocket ID does not
   retry; an unknown subject is a 200.
+- Sign out (a POST; a GET is refused) ends Pocket ID's session as well as
+  HQ's. The library's `OIDCLogoutView` sends a session signed in through the
+  provider to its end-session endpoint (`end_session_url`) with the ID token
+  as `id_token_hint`, HQ's `client_id`, and the signed-out login page as
+  `post_logout_redirect_uri`; a session with no ID token (a password or CLI
+  sign-in) is signed out of HQ alone. So the ID token is kept in the
+  database-backed session (`OIDC_STORE_ID_TOKEN`). That is safe because HQ
+  accepts no ID token as a credential: it reads one only from its own exchange
+  with the provider's token endpoint, and every door a caller presents a token
+  to asks for an access token's `typ` (`decode`).
 - Only an address the provider verified (`email_verified` true) introduces a
   subject to an account no subject is bound to yet. A username, or an address
   the provider has not verified, finds no account. After the first sign-in the
@@ -302,7 +312,10 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   OIDC issuer as the authorization server and `SEVERINO_API_RESOURCE` as the
   resource a token must name, with HQ's permission keys as `scopes_supported`
   so a native sign-in asks for them. A verified token that grants no HQ permission
-  is a 403 `insufficient_scope` naming `scope="read"`, on both doors. The
+  is a 403 `insufficient_scope` naming `scope="read"`, on both doors. An
+  identity scope a sign-in asks for (`openid`, `profile`, `email`, `groups`,
+  `offline_access`) is never an HQ permission, so a token holding only those
+  is refused, and the Agents page counts none of them. The
   MCP SDK's own pieces answer the 401 and serve the metadata
   (`BearerAuthBackend`, `RequireAuthMiddleware`,
   `ProtectedResourceMetadataHandler`); the 403 is HQ's, since the SDK's names
@@ -459,6 +472,43 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   sets the actor, interface and capability name for whatever the handler
   records (`_run` in `hq/platform/application/capabilities.py`).
 
+## A leaked GitHub App credential
+
+The controller holds the GitHub App's private key and mints installation
+tokens from it. Whoever else holds the key, or a token minted from it, can read
+what the installation covers, and on a personal account GitHub shows nobody
+when that happens:
+
+- The account's security log records `integration_installation.*` events (an
+  install, repositories added, permissions updated) and `integration.*` events,
+  but no event for an installation token being created, nor for an App
+  private key being generated or deleted.
+- No REST API lists an App's private keys. An App can have up to 25, listed
+  with their fingerprints only on its settings page.
+- Secret scanning has a pattern for installation tokens (`ghs_`), with push
+  protection, and none for App private keys.
+
+What HQ can tell is the installation's hourly allowance, which everything
+holding the key spends together. Each sweep records it, and HQ derives what
+was spent between two sweeps of the same hour beyond HQ's own requests
+([Architecture](Architecture.md#providers)). Once that passes
+`observations.github.OTHERS_SPENT_ATTENTION` in one hour, more than the
+deploy pipeline and the dependency update run take, the
+`github-others-spent` finding names the requests and when, and that it can
+mean a leaked key or token or another program sharing the App (a development
+copy of HQ, a script). Its steps compare the keys GitHub lists with the
+fingerprint of HQ's own, computed as GitHub's "Managing private keys for
+GitHub Apps" gives it, then rotate the key:
+
+```sh
+openssl rsa -in PATH_TO_PEM_FILE -pubout -outform DER | openssl sha256 -binary | openssl base64
+```
+
+What HQ cannot tell: spend below that line, which the pipeline's own use
+hides; spend in an hour HQ did not sweep twice; and GraphQL queries, which
+spend a points budget of their own. A quiet allowance is no proof that
+nothing leaked.
+
 ## Production checklist
 
 - [ ] Generated a strong `DJANGO_SECRET_KEY` (50 random bytes or more).
@@ -506,6 +556,9 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
       Groups are the groups `SEVERINO_OIDC_ROLE_GROUPS` names, so a person who
       loses them is signed out of HQ at once. Each agent client's Allowed User
       Groups are set the same way.
+- [ ] If SSO is enabled, the HQ OIDC client's Logout Callback URL is
+      `https://hq.example.com/accounts/login/?signed_out=1`, so signing out
+      returns to HQ rather than stopping on Pocket ID.
 - [ ] If SSO is enabled, `SEVERINO_OIDC_ROLE_GROUPS=admins=operator` and
       `SEVERINO_OIDC_CLIENT_SECRET` is delivered through the rendered app
       environment file, not the compose interpolation `.env`.

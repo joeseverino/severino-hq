@@ -3233,16 +3233,24 @@
     "title": "Rate Limit",
     "type": "object",
     "properties": {
+     "limit": {
+      "type": "integer"
+     },
      "remaining": {
       "type": "integer"
      },
      "reset": {
       "type": "integer"
+     },
+     "used": {
+      "type": "integer"
      }
     },
     "required": [
+     "limit",
      "remaining",
-     "reset"
+     "reset",
+     "used"
     ]
    },
    "rate-limit-overview": {

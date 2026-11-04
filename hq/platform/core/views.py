@@ -34,6 +34,7 @@ lazy from hq.platform.application.hq_context import hq_context
 lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS, AddressCommand, stored_address
 lazy from hq.platform.application.posture import estate_posture
 lazy from hq.platform.application.request_path import request_path
+lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
 from .audit import record_event
@@ -458,6 +459,9 @@ class ConnectionPageView(PageMixin, TemplateView):
         context["request_path"] = found
         context["connection"] = found.connection
         context["posture"] = estate_posture(connection_catalog(principal=web_principal(self.request.user)))
+        # Whoever opened the panel is looking at these readings now, so it
+        # asks for those that are due once it is showing.
+        context["ask_readings"] = worth_asking("page", "connection")
         return context
 
 

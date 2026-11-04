@@ -2,6 +2,7 @@
 bare NaN or Infinity is refused as JSON-RPC's parse error, before the SDK's own
 parser could keep the last copy or a value no other parser agrees on."""
 
+from itertools import pairwise
 from unittest import mock
 
 from asgiref.sync import async_to_sync
@@ -30,9 +31,20 @@ def _call(arguments: str) -> bytes:
     ).encode()
 
 
+def _cut(body: bytes, *at: int) -> list[bytes]:
+    """``body`` in pieces, cut at each of the offsets ``at``."""
+
+    edges = (0, *at, len(body))
+    return [body[start:end] for start, end in pairwise(edges)]
+
+
 class StrictBodyTests(TestCase):
     def _post(self, *bodies):
-        """Each of ``bodies`` posted raw to a served MCP application of this test's own."""
+        """Each of ``bodies`` posted raw to a served MCP application of this test's own.
+
+        A body given as a list of pieces is sent one ASGI message a piece, as a
+        client streaming its request is read.
+        """
 
         import httpx2
         from starlette.applications import Starlette
@@ -44,13 +56,22 @@ class StrictBodyTests(TestCase):
             routes=[Mount("/api/mcp", app=MCPBoundary(served.application, gate=gate, admit=admitting(lambda _: AGENT)))]
         )
 
+        async def streamed(pieces):
+            for piece in pieces:
+                yield piece
+
         async def run():
             transport = httpx2.ASGITransport(app=application, client=("100.64.0.10", 50000))
             async with (
                 served.sessions.run(),
                 httpx2.AsyncClient(transport=transport, base_url="http://testserver") as client,
             ):
-                return [await client.post("/api/mcp/", headers=HEADERS, content=body) for body in bodies]
+                return [
+                    await client.post(
+                        "/api/mcp/", headers=HEADERS, content=streamed(body) if isinstance(body, list) else body
+                    )
+                    for body in bodies
+                ]
 
         return async_to_sync(run)()
 
@@ -58,8 +79,8 @@ class StrictBodyTests(TestCase):
         reached = []
         bodies = (
             _call('{"name":"projects","name":"assets"}'),
-            _call('{"name":"projects","filters":{"limit":NaN}}'),
-            _call('{"name":"projects","filters":{"limit":-Infinity}}'),
+            _call('{"name":"projects","limit":NaN}'),
+            _call('{"name":"projects","limit":-Infinity}'),
             b'{"jsonrpc":"2.0","id":1,"id":2,"method":"tools/list"}',
         )
         with mock.patch(TOOL, side_effect=lambda *a, **k: reached.append(a) or {"items": []}):
@@ -73,6 +94,27 @@ class StrictBodyTests(TestCase):
                 self.assertIsNone(answer["id"])
                 self.assertEqual(answer["error"]["code"], PARSE_ERROR)
         self.assertEqual(reached, [])
+
+    def test_a_body_sent_in_pieces_is_judged_whole(self):
+        # Each refused body is cut inside the repeated field or the constant, so
+        # no single piece shows the fault and no piece is JSON on its own.
+        repeated = _call('{"name":"projects","name":"assets"}')
+        constant = _call('{"name":"projects","limit":NaN}')
+        refused = (
+            _cut(repeated, repeated.index(b"proj") + 2, repeated.rindex(b'"name"') + 3),
+            _cut(constant, constant.index(b"NaN") + 2),
+        )
+        accepted = _call('{"name":"projects"}')
+        reached = []
+        with mock.patch(TOOL, side_effect=lambda name, *a, **k: reached.append(name) or {"items": []}):
+            responses = self._post(*refused, _cut(accepted, accepted.index(b"projects") + 3))
+
+        for pieces, response in zip(refused, responses[:-1], strict=True):
+            with self.subTest(body=b"".join(pieces)):
+                self.assertEqual(response.status_code, 400, response.text)
+                self.assertEqual(response.json()["error"]["code"], PARSE_ERROR)
+        self.assertEqual(responses[-1].status_code, 200, responses[-1].text)
+        self.assertEqual(reached, ["projects"])
 
     def test_a_body_read_once_each_still_reaches_its_tool(self):
         reached = []

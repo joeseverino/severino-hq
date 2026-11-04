@@ -408,7 +408,7 @@ class ContainerHopTests(TestCase):
         _, check = self.check(here="ffffffffffff", listed="0123456789ab")
 
         self.assertEqual(check.state, UNPROVEN)
-        self.assertIn("until the next read", check.detail)
+        self.assertIn("next read", check.detail)
 
     def test_its_own_container_is_read_from_its_mounts_on_any_network(self):
         from .. import request_path as module

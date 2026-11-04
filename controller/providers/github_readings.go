@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sync/errgroup"
 
@@ -88,6 +89,13 @@ type GitHubRepositoryRecord struct {
 	Variables         []string                  `json:"variables"`
 	Pins              []GitHubPin               `json:"pins"`
 	CalledWorkflows   []string                  `json:"called_workflows"`
+	// Fingerprint is what GitHub's change query answered before the read,
+	// hashed, and ReadAt when the read was made: what HQ's plan sends back.
+	Fingerprint string `json:"fingerprint"`
+	ReadAt      string `json:"read_at"`
+	// Carried is false on a record read; a carried repository is sent as
+	// githubCarried, which names only itself.
+	Carried bool `json:"carried"`
 }
 
 type GitHubHead struct {
@@ -175,8 +183,10 @@ type GitHubArtifact struct {
 }
 
 // githubRepositories reads every repository the installations cover, a few at
-// once. A repository that cannot be read is refused alone and the rest are
-// reported; every repository refused is a refused read.
+// once, each in full only when GitHub's change query says it moved since the
+// record HQ holds, or HQ's clock says its full read is due; the rest are
+// carried. A repository that cannot be read is refused alone, and carried where
+// HQ holds it; every repository refused is a refused read.
 func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 	c, err := r.githubConnection("")
 	if err != nil {
@@ -186,15 +196,31 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	records := make([]GitHubRepositoryRecord, len(names))
+	held := map[string]runtime.GitHubRepositoryHeld{}
+	for _, repository := range r.Repositories.Held {
+		held[repository.Repository] = repository
+	}
+	// A query that failed leaves every repository unknown, so each is read
+	// in full, as far as the fuse allows.
+	fingerprints, _ := r.githubFingerprints(ctx, c, names)
+	records := make([]any, len(names))
 	failures := make([]error, len(names))
 	var group errgroup.Group
 	group.SetLimit(githubReadConcurrency)
 	for i, name := range names {
+		standing, isHeld := held[name]
+		fingerprint := fingerprints[name]
+		if isHeld && !standing.Due && fingerprint != "" && fingerprint == standing.Fingerprint {
+			records[i] = githubCarried{ConnectionRef: c.ref, Repository: name, Carried: true}
+			continue
+		}
 		group.Go(func() error {
-			if failures[i] = ctx.Err(); failures[i] == nil {
-				records[i], failures[i] = (&githubRepository{r: r, c: c, name: name}).read(ctx)
+			if failures[i] = ctx.Err(); failures[i] != nil {
+				return nil
 			}
+			record, err := (&githubRepository{r: r, c: c, name: name}).read(ctx)
+			record.Fingerprint, record.ReadAt = fingerprint, r.Now().UTC().Format(time.RFC3339)
+			records[i], failures[i] = record, err
 			return nil
 		})
 	}
@@ -206,8 +232,12 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 	var refused []error
 	for i, name := range names {
 		if failures[i] != nil {
-			refused = append(refused, failures[i])
 			refuse(ctx, runtime.PartWhole, c.ref, name, failures[i])
+			if _, isHeld := held[name]; isHeld {
+				found = append(found, githubCarried{ConnectionRef: c.ref, Repository: name, Carried: true})
+				continue
+			}
+			refused = append(refused, failures[i])
 			continue
 		}
 		found = append(found, records[i])
@@ -216,6 +246,14 @@ func (r *Registry) githubRepositories(ctx context.Context) ([]any, error) {
 		return nil, fmt.Errorf("every repository refused its reading: %w", refused[0])
 	}
 	return found, nil
+}
+
+// githubCarried is a repository sent in place of its record: HQ keeps the one
+// it holds.
+type githubCarried struct {
+	ConnectionRef string `json:"connection_ref"`
+	Repository    string `json:"repository"`
+	Carried       bool   `json:"carried"`
 }
 
 // githubRepository is one repository being read.

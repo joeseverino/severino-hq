@@ -1,9 +1,10 @@
 """A held change as a task of the MCP tasks extension, through the SDK's own client.
 
-The client waits on the task while a person decides in HQ: it reads working,
-then the call's answer once a person approves, or a refusal once a person
-declines. Nothing in the extension decides it, and a task answers only the
-caller that asked.
+The client waits on the task while a person decides in HQ and HQ applies it:
+it reads working, saying what it holds and where it is decided, then the
+call's answer once the change is applied, or a refusal once a person declines
+or applying it fails. Nothing in the extension decides it, and a task answers
+only the caller that asked.
 """
 
 import json
@@ -19,9 +20,12 @@ from mcp.client.extension import ClientExtension, ResultClaim
 from mcp.shared.exceptions import MCPError
 from pydantic import Field, TypeAdapter
 
-from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
-from hq.platform.application.approvals import ApproveCommand, RejectCommand, approve, reject
+from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
+from hq.platform.application.approvals import ApproveCommand, RejectCommand, approve, asked, reject
+from hq.platform.application.controller import ControllerReport, claim_next_operation, report_operation
+from hq.platform.application.hq_self import site_host
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
+from hq.platform.application.routes import reverse
 from hq.platform.application.security import Principal, cli_principal, mcp_principal, web_principal
 
 from ..identity import set_principal
@@ -29,6 +33,7 @@ from ..server import mcp
 
 EXTENSION = "io.modelcontextprotocol/tasks"
 POLICY_KEY = "access-policy"
+CONTROLLER = "example-controller"
 ANSWER = TypeAdapter(dict[str, Any])
 
 
@@ -74,13 +79,39 @@ def _ask(client):
     )
 
 
+def _ask_for_a_project(client):
+    """Create a project, which queues nothing, so it is done when it runs."""
+
+    return client.session.call_tool(
+        "execute_capability",
+        {"name": "project.create", "payload": {"idempotency_key": "example-project", "name": "Held project"}},
+        allow_claimed=True,
+    )
+
+
+def _apply(*, success):
+    """The controller's run of the operation an approval queued, through its own door."""
+
+    claimed = claim_next_operation(CONTROLLER)
+    operation = OperationRequest.objects.get(pk=claimed["operation"]["id"])
+    report_operation(
+        str(operation.pk),
+        ControllerReport(
+            success=success,
+            observed_generation=operation.input.get("generation"),
+            message="Applied." if success else "The provider refused it.",
+        ),
+        controller_id=CONTROLLER,
+    )
+
+
 async def _task(client, method, task_id, **fields):
     params = types.GetTaskRequestParams(task_id=task_id)
     request = TaskRequest(method=method, params=params.model_copy(update=fields))
     return await client.session.send_request(request, ANSWER)
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
+@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True, SEVERINO_SITE_HOST="hq.example.com")
 class HeldTaskTests(TestCase):
     def setUp(self):
         from hq.platform.application.adoption_testing import managing_everything
@@ -129,17 +160,80 @@ class HeldTaskTests(TestCase):
         self.assertGreaterEqual(created.poll_interval_ms, 250)
         self.assertFalse(OperationRequest.objects.exists())
 
-    def test_the_task_completes_with_the_call_answer_once_a_person_approves(self):
+    def test_the_task_names_what_it_holds_and_links_where_it_is_decided(self):
+        created, read = self._held_task()
+
+        held = ApprovalRequest.objects.get()
+        link = f"https://{site_host()}{reverse('core:approval_entry', kwargs={'approval_id': held.pk})}"
+        for answer in (created.status_message, read["statusMessage"]):
+            # The sentence the decision card and the audit log say it by.
+            self.assertIn(str(asked(held)), answer)
+            self.assertIn(link, answer)
+
+    def test_an_approved_change_stays_working_until_it_is_applied(self):
         created, _ = self._held_task()
 
         approved = approve(ApproveCommand(created.task_id), principal=self.person)
+        queued = self._read(created.task_id)
+        operation = OperationRequest.objects.get()
+        claim_next_operation(CONTROLLER)
+        applying = self._read(created.task_id)
+
+        for read in (queued, applying):
+            self.assertEqual(read["status"], "working")
+            self.assertNotIn("result", read)
+            self.assertIn(str(asked(ApprovalRequest.objects.get())), read["statusMessage"])
+            # Read again soon, within what Claude Code honors, and never lapsed while it applies.
+            self.assertLess(read["pollIntervalMs"], created.poll_interval_ms)
+            self.assertGreaterEqual(read["pollIntervalMs"], 250)
+            self.assertIsNone(read.get("ttlMs"))
+        self.assertEqual(approved["result"]["operation"]["id"], str(operation.pk))
+
+    def test_the_task_completes_with_the_call_answer_once_the_change_is_applied(self):
+        created, _ = self._held_task()
+
+        approved = approve(ApproveCommand(created.task_id), principal=self.person)
+        _apply(success=True)
         read = self._read(created.task_id)
+
+        self.assertEqual(read["status"], "completed")
+        self.assertIn("statusMessage", read)
+        result = types.CallToolResult.model_validate(read["result"])
+        self.assertFalse(result.is_error)
+        # The call's own answer, its operation as it ended.
+        self.assertEqual(result.structured_content["operation"]["id"], approved["result"]["operation"]["id"])
+        self.assertEqual(result.structured_content["operation"]["state"], OperationRequest.State.SUCCEEDED)
+        self.assertEqual(json.loads(result.content[0].text), result.structured_content)
+
+    def test_a_change_that_fails_to_apply_completes_as_a_tool_error(self):
+        created, _ = self._held_task()
+
+        approve(ApproveCommand(created.task_id), principal=self.person)
+        _apply(success=False)
+        read = self._read(created.task_id)
+
+        # The call failed, not the protocol: completed, with the tool's error.
+        self.assertEqual(read["status"], "completed")
+        result = types.CallToolResult.model_validate(read["result"])
+        self.assertTrue(result.is_error)
+        failed = result.structured_content["error"]
+        self.assertEqual(failed["details"]["operation"]["state"], OperationRequest.State.FAILED)
+
+    def test_a_change_that_queues_nothing_completes_once_a_person_approves(self):
+        CapabilityRule.objects.create(scope="surface", subject="mcp", capability="project.create", rule="approve")
+
+        async def steps(client):
+            return await _ask_for_a_project(client)
+
+        writer = Principal(self.agent.actor, self.agent.interface, self.agent.capabilities | {"write_projects"})
+        created = self._session(steps, principal=writer)
+        approved = approve(ApproveCommand(created.task_id), principal=self.person)
+        read = self._read(created.task_id, principal=writer)
 
         self.assertEqual(read["status"], "completed")
         result = types.CallToolResult.model_validate(read["result"])
         self.assertFalse(result.is_error)
         self.assertEqual(result.structured_content, approved["result"])
-        self.assertEqual(json.loads(result.content[0].text), approved["result"])
 
     def test_the_task_completes_as_a_refusal_once_a_person_declines(self):
         created, _ = self._held_task()
@@ -204,12 +298,13 @@ class HeldTaskTests(TestCase):
 
         async def steps(client):
             updated = await _task(client, "tasks/update", created.task_id, input_responses={"approve": {"ok": True}})
-            with self.assertRaises(MCPError):
-                await _task(client, "tasks/cancel", created.task_id)
-            return updated, await _task(client, "tasks/get", created.task_id)
+            cancelled = await _task(client, "tasks/cancel", created.task_id)
+            return updated, cancelled, await _task(client, "tasks/get", created.task_id)
 
-        _updated, read = self._session(steps)
+        _updated, cancelled, read = self._session(steps)
 
+        # Acknowledged, as the extension requires, and the hold goes on waiting for a person.
+        self.assertEqual(cancelled.keys() - {"resultType", "_meta"}, set())
         self.assertEqual(read["status"], "working")
         self.assertEqual(ApprovalRequest.objects.get().state, ApprovalRequest.State.PENDING)
         self.assertFalse(OperationRequest.objects.exists())

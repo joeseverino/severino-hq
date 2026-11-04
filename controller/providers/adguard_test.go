@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"reflect"
 	"strings"
 	"sync"
@@ -49,14 +50,19 @@ type fakeHTTP struct {
 	headers   map[string]map[string]any // response headers by path
 }
 
-func (h *fakeHTTP) RequestHeader(ctx context.Context, address string, headers map[string]string, name string) (json.RawMessage, string, error) {
-	data, err := h.Request(ctx, address, "GET", headers, nil)
+func (h *fakeHTTP) Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error) {
+	data, err := h.Request(ctx, address, method, headers, payload)
 	if httpStatus(err) != 0 {
-		return nil, "", err
+		return nil, nil, err
 	}
 	path := strings.TrimPrefix(strings.TrimPrefix(address, "https://example.invalid"), "https://api.tailscale.com/api/v2")
-	value, _ := h.headers[path][name].(string)
-	return data, value, err
+	answered := http.Header{}
+	for name, value := range h.headers[path] {
+		if text, ok := value.(string); ok {
+			answered.Set(name, text)
+		}
+	}
+	return data, answered, err
 }
 
 // Request answers from routes, encoded as the real transport would return it.

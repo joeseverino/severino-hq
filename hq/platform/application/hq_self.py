@@ -37,6 +37,20 @@ def site_host() -> str:
     return settings.SEVERINO_SITE_HOST
 
 
+def site_url(path: str) -> str:
+    """The address of one of HQ's own pages, for a reader outside it, such as an agent's client.
+
+    Built from the declared site host over HTTPS, never from the request:
+    HQ is served behind a TLS proxy that it does not take forwarded headers
+    from, so the scheme a request arrives with is the proxy's, not the reader's.
+    With no site host declared it is the path alone, which still names the
+    page, where an address with no host would name none.
+    """
+
+    host = site_host()
+    return f"https://{host}{path}" if host else path
+
+
 def __getattr__(name: str) -> str:
     # ``LABEL`` reads the setting when it is imported, for callers that import it.
     if name == "LABEL":

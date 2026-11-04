@@ -72,9 +72,10 @@ auditor may run any of them.
 | --- | --- | --- |
 | `audit:ruff <rules> [paths]...` | Ruff's findings, counted per rule | `mise run audit:ruff SLF001 '!**/tests/**'` |
 | `audit:ast [globs]...` | per file, the docstrings over 8 lines and the `getattr` calls of a literal name with a default (`tools/audit/ast-grep.yml`) | `mise run audit:ast 'hq/**'` |
-| `audit:dead` | the names `hq/` and `hq_sdk/` define that nothing outside tests reads, as vulture finds them, with what it cannot see handed to it as uses (`[tool.vulture]`, `tools/lint/vulture-whitelist.py`) | `mise run audit:dead --fields` |
+| `audit:dead` | the names `hq/` and `hq_sdk/` define that nothing outside tests reads (a test-support module's, `testing.py` or `*_testing.py`, that nothing reads at all), as vulture finds them, with what it cannot see handed to it as uses (`[tool.vulture]`, `tools/lint/vulture-whitelist.py`) | `mise run audit:dead --fields` |
 | `audit:layers [importer] [imported]` | the imports between core, application and domains, counted per pair both ways, or one pair's listed by module (grimp) | `mise run audit:layers core domains` |
 | `audit:imports <path>` | the files that import one, string imports included | `mise run audit:imports hq/platform/core/static.py` |
+| `audit:churn <since>` | each tracked source file's commits since a date, most first, generated and vendored files left out (`.gitattributes`); reach for it before a refactor or split | `mise run audit:churn 2026-10-01` |
 | `audit:go [linters]` | golangci-lint's findings, counted per linter | `mise run audit:go nilerr,gocritic` |
 | `audit:memory` | each module's own share of Python memory at boot and after a pass over the navigation, extensions composed | `mise run audit:memory --host-alone` |
 | `audit:image [image]` | a built image's layers (size, instruction, the parts of HQ each holds), what a container sees by part, site-packages' largest, and dive's wasted bytes | `mise run audit:image severino-hq:ci-local` |
@@ -154,7 +155,9 @@ command that reruns just those. A gate whose steps queued for the
 working time.
 
 The whole verdict is kept in `var/gate/` beside the run before it, with each
-failed test's exception and traceback and each failed task's last lines. A
+failed test's exception and traceback and each failed task's last lines
+(`HQ_GATE_VERDICTS` names another folder, as a gate tool's test does for
+every process it starts). A
 gate's first line names that file, since the head of a long output is the
 part a reader shown only an excerpt of it always sees.
 
@@ -184,8 +187,8 @@ The tests it selects are:
 - every test that reads the tasks, when a task definition or a file a task's
   run names changed;
 - the architecture tests;
-- every test tagged `tree`, when a module under `hq/` or `hq_sdk/` changed.
-  Such a test finds its files by walking this checkout, which no import shows
+- every test tagged `tree`, when a module under `hq/`, `hq_sdk/`, `tools/` or
+  `tests/` changed, the packages the suite lives in. Such a test finds its files by walking this checkout, which no import shows
   (`test_tree_tag.py` holds the tag to the walks; a test that patches the
   `ROOT` of the code it drives walks a fixture and carries none);
 - the extensions' suites, composed, when `mise.local.toml` names a set and the
@@ -217,7 +220,7 @@ suites share the machine's memory:
 | `test` | the `test:*` gates on every Python in `PYTHON_VERSIONS`, the suite as production configures it with `DJANGO_DEBUG` unset and the coverage floor, then the Go controller's race tests once |
 | `browser` | the browser gates ([Browser layout](#browser-layout)) |
 | `build` | the image build and what an image must pass |
-| `scan` | CodeQL |
+| `scan` | CodeQL's analysis, which finds no alert here; in CI, no alert GitHub holds open on the analyzed ref, so a dismissed one passes |
 
 A setting whose default follows `DEBUG` is held by a test that loads the
 settings both ways. The suite inside an image runs once, in Compose, on the

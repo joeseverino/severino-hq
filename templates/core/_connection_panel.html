@@ -3,8 +3,12 @@ The body of the connection panel, shared by the dialog in the header and the
 page it falls back to. Nothing here knows which one it is in, so each card's
 heading is an h2: the next level under the page's h1, and beside the dialog's
 own h2 title.
+
+It is a region answered from the connection page, so the readings it asks for
+when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
 {% endcomment %}
-<div class="conn" data-connection-panel>
+<div class="conn" data-connection-panel data-fragment="{% url 'connection' %}" data-fragment-name="connection">
+  {% if ask_readings %}{% include "partials/_visit_refresh.html" with subject="page" name="connection" refresh="[data-connection-panel]" %}{% endif %}
   {% include "partials/_example_connection.html" with notice=True %}
   {% if request_path.findings %}
     <section class="conn-findings" aria-label="Where this request disagrees with what HQ read">
@@ -36,7 +40,8 @@ own h2 title.
       <p class="conn-headline"><span class="conn-dot" aria-hidden="true"></span>{{ connection.channel.label|breakable }}</p>
       <span class="conn-link-line" aria-hidden="true"></span>
       <p class="conn-sub">This request: {{ connection.tally|lower|breakable }}{% dot %}{{ connection.path_label|breakable }}{% dot %}{{ connection.transport|breakable }}</p>
-      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line|breakable }}</p>{% endif %}
+      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line|breakable }}</p>
+      {% endif %}
     </div>
     <div class="conn-peer">
       <span class="conn-peer-role">HQ</span>
@@ -49,6 +54,29 @@ own h2 title.
       <span class="conn-row-note">{{ connection.host|breakable }}</span>
     </div>
   </section>
+
+  {% comment %}Each posture check HQ could not judge, with why: folded, since the line above already counts them.{% endcomment %}
+  {% if posture.unread_count %}
+    <details class="conn-protocol conn-unread">
+      <summary>
+        <span>
+          <strong>Not read</strong>
+          <small>Posture checks HQ could not judge, and why</small>
+        </span>
+        <span class="count">{{ posture.unread_count|breakable }}</span>
+      </summary>
+      <div class="conn-protocol-body">
+        <div class="conn-rows">
+          {% for standing in posture.standings %}{% if standing.reading.met is None %}
+            <div class="conn-row" data-posture-unread="{{ standing.check.id }}">
+              <strong>{{ standing.check.label|breakable }}</strong>
+              <span class="conn-row-note prose">{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %}</span>
+            </div>
+          {% endif %}{% endfor %}
+        </div>
+      </div>
+    </details>
+  {% endif %}
 
   {% card %}
     <h2>You</h2>
@@ -121,6 +149,10 @@ own h2 title.
 
   {% card %}
     <h2>The link</h2>
+    {% comment %}A reading older than the panel asks again for is what HQ last saw: every row below is said as of then, never as now.{% endcomment %}
+    {% if connection.tailnet_observed_at and not connection.tailnet_current %}
+      <p class="conn-note" data-last-seen>As last seen when HQ read the tailnet {{ connection.tailnet_observed_at|when }}.</p>
+    {% endif %}
     <dl class="kv">
       <dt>Path</dt>
       <dd>
@@ -222,7 +254,7 @@ own h2 title.
             <div class="conn-layer-body">
               {% comment %}The thing's own page, here rather than in the summary: a link inside
               the control that opens the row is a control inside a control.{% endcomment %}
-              {% if hop.link and hop.link.url %}<p>{% entity hop.link %}</p>{% endif %}
+              {% if hop.link and hop.link.url %}<div class="conn-hop-page">{% entity hop.link %}</div>{% endif %}
               {% if hop.check or hop.source %}<p class="muted">{% if hop.check %}{{ hop.check.label|breakable:"." }} {{ hop.check.detail|breakable }}{% endif %}{% if hop.source %} Read from {% with mark=hop.source.observed_at|then:",|." %}{{ hop.source.phrase|breakable:mark }}{% endwith %}{% if hop.source.observed_at %} {{ hop.source.observed_at|when }}.{% endif %}{% endif %}</p>{% endif %}
               {% if hop.check.step %}<p class="conn-agree conn-agree-no">{{ hop.check.step|breakable }}</p>{% endif %}
               {% if hop.certificate %}<p class="conn-row-note">{{ hop.certificate.statement|breakable }}</p>{% endif %}

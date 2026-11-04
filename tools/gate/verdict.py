@@ -83,7 +83,11 @@ PREFIX = re.compile(r"\[([^\]\s]+)\] ?")
 # Past this many failing tests the line names the first few and counts the rest,
 # and the rerun names their classes.
 SHOWN = 10
-VERDICTS = ROOT / "var" / "gate"
+# The folder verdicts are kept in: var/gate, or the one this variable names,
+# which every process a gate starts inherits. A gate tool's test names its own,
+# so a gate it runs as a subprocess keeps its fixture verdict there too.
+VERDICTS_FOLDER = "HQ_GATE_VERDICTS"
+VERDICTS = Path(os.environ.get(VERDICTS_FOLDER) or ROOT / "var" / "gate")
 # The command that reruns a test by label, by the task or gate it failed under.
 TESTS_RERUN = {"test:composed": "mise run test --composed"}
 TEST_RERUN = "mise run test"

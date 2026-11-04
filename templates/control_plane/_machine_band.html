@@ -8,7 +8,7 @@ for: one band under the head, as a service's and HQ's own page open.
   {% band_fact icon="network" label="Read through" %}
     {% comment %}A connection named for this machine is named by its kind, a word rather than an identifier.{% endcomment %}
     {% with found=reached_links.0 %}<strong>{% if found.0.title %}{% entity found.0 %}{% else %}{% entity found.0 code=True %}{% endif %}</strong>{% endwith %}
-    {% for link, unanswered in reached_links %}{% if not forloop.first or unanswered %}<small>{% if not forloop.first %}{% entity link %}{% endif %}{% if unanswered %} not answering{% endif %}</small>{% endif %}{% endfor %}
+    {% for link, unanswered in reached_links %}{% if forloop.first %}{% if unanswered %}<small>Not answering</small>{% endif %}{% elif unanswered %}<small>{% entity link %} not answering</small>{% else %}<span class="band-note">{% entity link %}</span>{% endif %}{% endfor %}
   {% endband_fact %}
   {% endif %}
   {% if machine.containers %}
@@ -28,7 +28,7 @@ for: one band under the head, as a service's and HQ's own page open.
     {% if machine.roles %}<small>{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>{% endif %}
     {% else %}
     <strong>{% if serves_links %}{{ serves_links|length|counted:"name" }}{% else %}{{ machine.roles.0.label|breakable }}{% endif %}</strong>
-    <small>{% for link in serves_links %}{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label|breakable:")" }}</a>{% endif %}{% if not forloop.last or machine.roles %}{% dot %}{% endif %}{% endfor %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</small>
+    <span class="band-note">{% for link in serves_links %}{% entity link %}{% if forloop.first and machine.runs_hq %} (<a href="{% url 'hq_self' %}">{{ hq_label|breakable:")" }}</a>{% endif %}{% if not forloop.last or machine.roles %}{% dot %}{% endif %}{% endfor %}{% for role in machine.roles %}<span tabindex="0" data-tip="{{ role.detail }}">{{ role.label|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</span>
     {% endif %}
   {% endband_fact %}
   {% endif %}

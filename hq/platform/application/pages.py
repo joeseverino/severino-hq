@@ -353,13 +353,15 @@ def offered(user: Any | None, url: str | Promise) -> bool:
 class Offering:
     """Which links HQ offers one ``user``, by address or by route name, under ``offered``'s rule.
 
-    Their principal is built once, at the first page link it is asked of,
-    since a page asks of every section, action and crumb it draws.
+    Their principal and the routes in force are read once, at the first page
+    link each is asked for, since a page asks of every section, action and
+    crumb it draws.
     """
 
     def __init__(self, user: Any | None) -> None:
         self.user = user
         self._principal: Any = None
+        self._routes: dict[str, Callable[..., Any] | None] | None = None
 
     def __call__(self, url: str | Promise) -> bool:
         parts = urlsplit(str(url))
@@ -369,7 +371,9 @@ class Offering:
         return view is None or self.opens(view)
 
     def route(self, name: str) -> bool:
-        view = route_view(name)
+        if self._routes is None:
+            self._routes = _route_views()
+        view = _route_in(self._routes, name)
         return view is None or self.opens(view)
 
     def opens(self, view: Callable[..., Any]) -> bool:
@@ -395,7 +399,7 @@ def _routed(path: str) -> Callable[..., Any] | None:
 # script prefix its address is reversed under: Django makes a new resolver
 # whenever its URL caches are cleared, so a stale entry is never read, and route
 # names are a fixed set, so this holds a URLconf's worth.
-_ROUTE_VIEWS: WeakKeyDictionary[Any, dict[tuple[str, str], Callable[..., Any] | None]] = WeakKeyDictionary()
+_ROUTE_VIEWS: WeakKeyDictionary[Any, dict[str, dict[str, Callable[..., Any] | None]]] = WeakKeyDictionary()
 
 
 def route_view(name: str) -> Callable[..., Any] | None:
@@ -405,11 +409,19 @@ def route_view(name: str) -> Callable[..., Any] | None:
     is a reverse and a resolve.
     """
 
-    views = _ROUTE_VIEWS.setdefault(get_resolver(get_urlconf()), {})
-    key = (get_script_prefix(), name)
-    if key not in views:
-        views[key] = _routed(urlsplit(str(reverse(name))).path)
-    return views[key]
+    return _route_in(_route_views(), name)
+
+
+def _route_views() -> dict[str, Callable[..., Any] | None]:
+    """The views kept for the URLconf and script prefix in force, by route name."""
+
+    return _ROUTE_VIEWS.setdefault(get_resolver(get_urlconf()), {}).setdefault(get_script_prefix(), {})
+
+
+def _route_in(views: dict[str, Callable[..., Any] | None], name: str) -> Callable[..., Any] | None:
+    if name not in views:
+        views[name] = _routed(urlsplit(str(reverse(name))).path)
+    return views[name]
 
 
 def offered_now(url: str | Promise) -> bool:

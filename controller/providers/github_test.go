@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -43,7 +44,29 @@ type githubFake struct {
 	status map[string]int    // "host /path?query" -> non-2xx status
 	grants map[string]githubapi.AppsCreateInstallationAccessTokenJSONBody
 	calls  []githubFakeCall
+	// headers are sent with one route's answer, by "host /path?query".
+	headers map[string]map[string]string
+	// nodes is what the GraphQL change query answers for a repository, by
+	// owner/name; one not named answers githubFakeNode.
+	nodes map[string]string
+	// remaining is what each answer under an installation token says the
+	// installation has left; counted is how many answers GitHub counts
+	// against it: every one but /rate_limit, a GraphQL query and a 304.
+	remaining int
+	counted   int
+	// hour, when set, is GitHub's own count of the installation's hour: each
+	// counted answer adds one, and a test adds what others spend.
+	hour *githubFakeHour
 }
+
+// githubFakeHour is an installation's hour as GitHub counts it.
+type githubFakeHour struct{ limit, used int }
+
+// githubFakeNode is a repository as the change query answers it, as GitHub's
+// GraphQL schema shapes it.
+const githubFakeNode = `{"pushedAt":"2030-01-02T00:00:00Z","updatedAt":"2030-01-02T00:00:00Z","isArchived":false,` +
+	`"defaultBranchRef":{"name":"main","target":{"oid":"aaaa000000000000000000000000000000000000","checkSuites":{"nodes":[{"status":"COMPLETED","conclusion":"SUCCESS","updatedAt":"2030-01-02T00:00:00Z"}]}}},` +
+	`"pullRequests":{"totalCount":0,"nodes":[]},"releases":{"nodes":[]},"deployments":{"nodes":[]}}`
 
 type githubFakeCall struct {
 	method, host, path, auth string
@@ -74,9 +97,28 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer f.mu.Unlock()
 	f.calls = append(f.calls, githubFakeCall{req.Method, host, key, req.Header.Get("Authorization"), body})
 	w.Header().Set("Content-Type", "application/json")
+	if _, installation := f.grants[strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")]; installation && host == githubFakeAPI {
+		resource := "core"
+		switch req.URL.Path {
+		case "/graphql":
+			resource = "graphql"
+		case "/rate_limit":
+		default:
+			f.counted++
+			if f.hour != nil {
+				f.hour.used++
+			}
+		}
+		w.Header().Set("X-RateLimit-Resource", resource)
+		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(f.remaining))
+		w.Header().Set("X-RateLimit-Reset", strconv.Itoa(githubFakeReset))
+	}
+	for name, value := range f.headers[host+" "+key] {
+		w.Header().Set(name, value)
+	}
 	if code := f.status[host+" "+key]; code != 0 {
 		w.WriteHeader(code)
-		_, _ = io.WriteString(w, `{"message":"refused"}`)
+		_, _ = io.WriteString(w, orDefault(f.routes[host+" "+key], `{"message":"refused"}`))
 		return
 	}
 	switch {
@@ -87,8 +129,19 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		f.grants[token] = grant
 		_, _ = io.WriteString(w, `{"token":"`+token+`","expires_at":"2030-01-01T00:00:00Z"}`)
 		return
+	case req.Method == http.MethodPost && key == "/graphql":
+		_, _ = io.WriteString(w, f.changeQuery(body))
+		return
 	case req.Method != http.MethodGet:
 		_, _ = io.WriteString(w, `{"id":1}`)
+		return
+	case key == "/rate_limit" && f.routes[host+" "+key] == "" && f.hour != nil:
+		core := fmt.Sprintf(`{"limit":%d,"remaining":%d,"reset":%d,"used":%d}`, f.hour.limit, f.hour.limit-f.hour.used, githubFakeReset, f.hour.used)
+		_, _ = io.WriteString(w, `{"resources":{"core":`+core+`},"rate":`+core+`}`)
+		return
+	case key == "/rate_limit" && f.routes[host+" "+key] == "":
+		_, _ = fmt.Fprintf(w, `{"resources":{"core":{"limit":5000,"remaining":%d,"reset":%d,"used":%d}},"rate":{"limit":5000,"remaining":%d,"reset":%d,"used":%d}}`,
+			f.remaining, githubFakeReset, 5000-f.remaining, f.remaining, githubFakeReset, 5000-f.remaining)
 		return
 	}
 	answer, ok := f.routes[host+" "+key]
@@ -98,6 +151,30 @@ func (f *githubFake) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	_, _ = io.WriteString(w, answer)
+}
+
+// githubFakeReset is when the fake's hour starts over: 18:06 UTC on the
+// harness's day, twenty minutes after its clock.
+const githubFakeReset = 1_900_001_200
+
+// changeQuery answers a change query: each aliased repository's node, as the
+// query's variables name them.
+func (f *githubFake) changeQuery(body map[string]any) string {
+	variables, _ := body["variables"].(map[string]any)
+	owner, _ := variables["owner"].(string)
+	data := map[string]json.RawMessage{}
+	for name, value := range variables {
+		index, ok := strings.CutPrefix(name, "n")
+		if repo, named := value.(string); ok && named {
+			node, held := f.nodes[owner+"/"+repo]
+			if !held {
+				node = githubFakeNode
+			}
+			data["r"+index] = json.RawMessage(node)
+		}
+	}
+	encoded, _ := json.Marshal(map[string]any{"data": data})
+	return string(encoded)
 }
 
 // grantOf is the grant a call's token was minted with; ok false for a JWT.
@@ -168,7 +245,8 @@ func newGitHubHarness(t *testing.T, routes map[string]string, extra runtime.Envi
 		githubFakeAPI + " /repos/example/app/installation":  `{"id":7}`,
 		githubFakeAPI + " /repos/example/host/installation": `{"id":7}`,
 		githubFakeAPI + " /repos/example/ext/installation":  `{"id":7}`,
-	}, status: map[string]int{}, grants: map[string]githubapi.AppsCreateInstallationAccessTokenJSONBody{}}
+	}, status: map[string]int{}, grants: map[string]githubapi.AppsCreateInstallationAccessTokenJSONBody{},
+		headers: map[string]map[string]string{}, nodes: map[string]string{}, remaining: 4000}
 	maps.Copy(fake.routes, routes)
 	server := httptest.NewServer(fake)
 	t.Cleanup(server.Close)
@@ -377,7 +455,7 @@ func githubRepositoryRoutes() map[string]string {
 	composite := base64.StdEncoding.EncodeToString([]byte("runs:\n  steps:\n    - uses: actions/checkout@v4\n"))
 	return map[string]string{
 		api(""): `{"full_name":"example/app","private":true,"archived":true,"html_url":"https://github.com/example/app","default_branch":"main","pushed_at":"2030-01-02T00:00:00Z","visibility":"private",
-			"security_and_analysis":{"secret_scanning":{"status":"enabled"},"advanced_security":{"status":"disabled"}}}`,
+			"security_and_analysis":{"secret_scanning":{"status":"enabled"},"advanced_security":{"status":"disabled"},"secret_scanning_push_protection":{"status":"paused"},"example_feature":{"status":"enabled"}}}`,
 		api("/commits/main"): `{"sha":"aaaa000000000000000000000000000000000000","html_url":"https://github.com/example/app/commit/aaaa","author":{"login":"octo"},
 			"commit":{"message":"Ship it\n\nbody","author":{"name":"Octo","date":"2030-01-01T00:00:00Z"},"committer":{"name":"Octo","date":"2030-01-02T00:00:00Z"}}}`,
 		api("/actions/runs?per_page=50"): `{"workflow_runs":[
@@ -461,6 +539,9 @@ func TestADeploymentLiveWithACheckFailedSaysSo(t *testing.T) {
 	}
 }
 
+// The security features forwarded are the ones the contract declares, each
+// status one of its two words: the routes' feature GitHub might add is left
+// out, and a status word it might add is none.
 func TestGitHubRepositoryReading(t *testing.T) {
 	routes := githubRepositoryRoutes()
 	h := newGitHubHarness(t, routes, runtime.Environment{})
@@ -491,7 +572,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		{"rules", record.Rules, `{"pull_request":true,"reviews":2,"required_checks":["lint","test"],"blocks_force_push":true,"blocks_deletion":true}`},
 		{"environments", record.Environments, `[{"name":"production","reviewers":["octo","ops"],"wait_minutes":5,"branches":"protected"},{"name":"preview","reviewers":[],"wait_minutes":0,"branches":"any"}]`},
 		{"runners", record.Runners, `[{"name":"homelab","status":"online","busy":false,"labels":["linux","self-hosted"]}]`},
-		{"access", record.Access, `{"visibility":"private","collaborators":[{"login":"octo","role":"admin"}],"deploy_keys":[{"title":"deploy","read_only":true,"last_used":"2030-01-01T00:00:00Z","created_at":"2029-01-01T00:00:00Z"}],"allowed_actions":"selected","pinning_required":true,"token":"read","token_approves_reviews":false,"vulnerability_alerts":true,"security":{"advanced_security":"disabled","secret_scanning":"enabled"}}`},
+		{"access", record.Access, `{"visibility":"private","collaborators":[{"login":"octo","role":"admin"}],"deploy_keys":[{"title":"deploy","read_only":true,"last_used":"2030-01-01T00:00:00Z","created_at":"2029-01-01T00:00:00Z"}],"allowed_actions":"selected","pinning_required":true,"token":"read","token_approves_reviews":false,"vulnerability_alerts":true,"security":{"advanced_security":"disabled","secret_scanning":"enabled","secret_scanning_push_protection":null}}`},
 		{"variable names, never values", record.Variables, `["REGION"]`},
 		{"every unpinned uses line with the commit its ref names", record.Pins, `[{"path":".github/workflows/ci.yml","uses":"actions/checkout@v4","action":"actions/checkout","ref":"v4","sha":"cccc000000000000000000000000000000000000"},{"path":".github/workflows/ci.yml","uses":"example/shared/.github/workflows/reuse.yml@main","action":"example/shared/.github/workflows/reuse.yml","ref":"main","sha":"dddd000000000000000000000000000000000000"},{"path":".github/actions/local/action.yml","uses":"actions/checkout@v4","action":"actions/checkout","ref":"v4","sha":"cccc000000000000000000000000000000000000"}]`},
 		{"a workflow called from another repository is named", record.CalledWorkflows, `["example/shared/.github/workflows/reuse.yml@main"]`},
@@ -518,7 +599,7 @@ func TestGitHubRepositoryReading(t *testing.T) {
 		if strings.HasPrefix(call.path, "/repos/actions/checkout/commits/") {
 			resolved++
 		}
-		if !minted || call.method != "GET" || strings.HasPrefix(call.path, "/app") || strings.HasSuffix(call.path, "/installation") || strings.HasPrefix(call.path, githubRepositoriesPage) {
+		if !minted || call.method != "GET" || strings.HasPrefix(call.path, "/app") || strings.HasSuffix(call.path, "/installation") || strings.HasPrefix(call.path, githubRepositoriesPage) || call.path == githubRateLimitRoute {
 			continue
 		}
 		encoded, _ := json.Marshal(grant.Permissions)

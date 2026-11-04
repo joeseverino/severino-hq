@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, create_model
 from hq.platform.application.json_schemas import json_schema
 
 from . import services
-from .contract import Resource, ResourceContract, identifiers, served_resources
+from .contract import Resource, ResourceContract, filters, identifiers, served_resources
 from .shapes import answer_schema, answer_type, declared, output_schema
 
 HANDLERS: tuple[Callable[..., Any], ...] = (
@@ -117,6 +117,8 @@ def tool_contract() -> dict[str, Any]:
         if not description.strip():
             # A client chooses a tool by its description; one with none is never chosen right.
             raise ValueError(f"MCP tool {name!r} must have a description.")
+        if handler is services.list_resource:
+            description += "\nFilters: " + filters(resources.listable)
         if handler is services.get_resource:
             description += "\nIdentifiers: " + identifiers(resources.addressable)
         declaration = declared(handler)

@@ -21,8 +21,8 @@ PHONE_NAME = "iphone-16-pro"
 PUBLIC = "198.51.100.7"
 # The person who runs it: their username in HQ, first and last name, and the
 # address they sign in with.
-OWNER_USERNAME = "alex"
-OWNER_NAME = ("Alex", "Rivera")
+OWNER_USERNAME = "joe"
+OWNER_NAME = ("Joe", "Severino")
 OWNER = f"{OWNER_USERNAME}@{ZONE}"
 SSO = "hq.platform.core.oidc.HQOIDCAuthenticationBackend"
 

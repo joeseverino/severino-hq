@@ -31,6 +31,20 @@ def declare(name, *addresses):
     ManagedResource.objects.create(key=name, kind="machine", spec={"name": name, "addresses": list(addresses)})
 
 
+class SiteUrlTests(TestCase):
+    @SITE
+    def test_a_page_is_addressed_at_the_declared_site_over_https(self):
+        from ..hq_self import site_url
+
+        self.assertEqual(site_url("/audit/approval/1/"), "https://hq.example.com/audit/approval/1/")
+
+    @override_settings(SEVERINO_SITE_HOST="")
+    def test_with_no_site_declared_a_page_is_its_path(self):
+        from ..hq_self import site_url
+
+        self.assertEqual(site_url("/audit/approval/1/"), "/audit/approval/1/")
+
+
 class LabelTests(TestCase):
     @override_settings(SEVERINO_SITE_NAME="Example HQ")
     def test_hq_is_called_by_the_configured_site_name(self):

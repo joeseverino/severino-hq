@@ -28,7 +28,7 @@ class TheApiAgreesTests(TestCase):
                     self.assertEqual(response.status_code, 400)
                     error = response.json()["error"]
                     self.assertEqual(error["code"], "invalid_input")
-                    self.assertIn(field, [detail["loc"][0] for detail in error["details"]])
+                    self.assertIn(field, [detail["loc"][0] for detail in error["details"]["errors"]])
 
     def test_the_api_narrows_by_name_as_the_tool_does(self):
         with _serving():

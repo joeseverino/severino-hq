@@ -124,7 +124,8 @@ forbidden_modules = ["hq.platform.api", "hq.platform.mcp"]
 # The application's tests drive a call through the doors end to end.
 ignore_imports = ["hq.platform.application.tests.** -> hq.**"]
 
-# audit:dead: a read in a test does not keep a name alive. A function a
+# audit:dead: a read in a test does not keep a name alive, unless a
+# test-support module (testing.py, *_testing.py) defines it. A function a
 # decorator hands to a caller outside HQ is called: a signal receiver, a system
 # check, an exit hook, a Pydantic validator, and an @override, which its base
 # class calls. Django calls an app's AppConfig by finding it in apps.py, and a
@@ -220,8 +221,6 @@ ignore = [
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
 
 [tool.ruff.lint.per-file-ignores]
-# Development and CI code imports its own package.
-"tools/**" = ["TID251"]
 # A synthetic extension standing in for a separate package, outside the host's product code.
 "tests/fixtures/example_hq_plugin/registry.py" = ["TID251"]
 # vulture's whitelist is attribute reads that do nothing, which vulture counts as uses.

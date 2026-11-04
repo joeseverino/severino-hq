@@ -2,14 +2,27 @@
 and a strike leaves a payload the contract still takes."""
 
 import json
+import string
+import tempfile
 from pathlib import Path
 from typing import Any
+from unittest import skipUnless
 
 from django.conf import settings
 from django.test import SimpleTestCase, tag
 
 from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.secret_shapes import struck
+
+try:
+    from hypothesis import given, settings as examples, strategies as st
+    from hypothesis.configuration import set_hypothesis_home_dir
+except ImportError:  # pragma: no cover - the image does not carry it
+    HYPOTHESIS = False
+else:
+    HYPOTHESIS = True
+    # Outside the checkout, as test_properties.py says.
+    set_hypothesis_home_dir(str(Path(tempfile.gettempdir()) / "severino-hq-hypothesis"))
 
 ROOT = Path(settings.BASE_DIR)
 _REFERENCE = "#/components/schemas/"
@@ -82,3 +95,39 @@ class RecordedPayloadTests(SimpleTestCase):
         for path in recordings:
             with self.subTest(path=str(path.relative_to(ROOT))):
                 self.assertEqual(struck(json.loads(path.read_text()))[1], [])
+
+
+def _shape(value: Any) -> Any:
+    """``value`` with each string read as one placeholder: what a strike may change."""
+
+    if isinstance(value, str):
+        return str
+    if isinstance(value, list):
+        return [_shape(child) for child in value]
+    if isinstance(value, dict):
+        return {key: _shape(child) for key, child in value.items()}
+    return value
+
+
+if HYPOTHESIS:
+    # Names a record carries, several of them read as a secret's.
+    NAME = st.sampled_from(
+        ("name", "high", "count", "token", "api_token", "Password", "client_secret", "private", "credentials")
+    )
+    VALUE = st.recursive(
+        st.none() | st.booleans() | st.integers() | st.text(string.ascii_lowercase, max_size=12),
+        lambda children: st.lists(children, max_size=4) | st.dictionaries(NAME, children, max_size=4),
+        max_leaves=24,
+    )
+
+
+@skipUnless(HYPOTHESIS, "hypothesis is a development tool")
+class StrikeKeepsTheShapeTests(SimpleTestCase):
+    if HYPOTHESIS:
+
+        @examples(max_examples=300, deadline=None)
+        @given(VALUE)
+        def test_a_strike_replaces_only_a_string(self, value):
+            # A reader of a record finds the counts, flags and structure it was
+            # sent, whatever a member is named.
+            self.assertEqual(_shape(struck(value)[0]), _shape(value))

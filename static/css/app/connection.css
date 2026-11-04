@@ -20,23 +20,17 @@
 /* Overflow menu: the actions worth having, without a second row of buttons.
    The panel is the nav's dropdown (same box, same shadow, same radius) so
    there is one dropdown in HQ rather than two that nearly match. */
-.overflow-menu { position: relative; display: flex; align-self: center; }
+.overflow-menu { display: flex; align-self: center; }
 /* Exactly a button's height, stated, so the menu matches the buttons beside it
    whatever its icon measures. */
-.overflow-menu > summary {
-  display: inline-flex; align-items: center; justify-content: center;
+.overflow-menu > button {
+  justify-content: center;
   box-sizing: border-box; height: var(--control-size); min-width: 38px;
   padding: 0 var(--space-5);
-  border: 1px solid var(--line); border-radius: var(--radius-sm);
-  background: var(--surface); color: var(--ink);
-  box-shadow: var(--shadow-sm); cursor: pointer;
-  font-size: var(--text-sm); font-weight: 500; line-height: 1;
-  list-style: none;
+  line-height: 1;
 }
-.overflow-menu > summary:hover,
-.overflow-menu[open] > summary { border-color: var(--line-strong); background: var(--surface-2); }
+.overflow-menu > button:has(+ :popover-open) { border-color: var(--line-strong); background: var(--surface-2); }
 .overflow-menu-panel {
-  position: absolute; z-index: 40; top: calc(100% + 6px); right: 0;
   min-width: 200px; max-width: min(320px, calc(100vw - 32px));
   display: flex; flex-direction: column; gap: 1px;
   padding: var(--space-2); background: var(--surface);
@@ -332,7 +326,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
   display: grid; gap: var(--space-3);
   margin: 0 var(--space-6) var(--space-4) calc(var(--space-6) + 17px + var(--space-5));
 }
-.conn-layer-body p { margin: 0; font-size: var(--text-xs); color: var(--ink-2); }
+.conn-layer-body :is(p, .conn-hop-page) { margin: 0; font-size: var(--text-xs); color: var(--ink-2); }
 /* A hop's own checks are rows of the hop, not boxes inside it: a tick, the
    statement and its evidence on one line, the sentence when opened. */
 .conn-layer-body .conn-layers { gap: 0; border-top: 1px solid var(--line-2); }

@@ -1,6 +1,7 @@
 """What each MCP tool declares beside its handler: the title a person reads
-it by, and the query model of a read the API serves too. What it answers is its
-handler's return annotation, the type the application returns, listed as its
+it by, who may run it, and the query model of a read the API serves too.
+What it answers is its handler's return annotation, the type the application
+returns, listed as its
 ``outputSchema`` (docs/API.md says why every one is ``anyOf`` its success and
 ``REFUSED``).
 """
@@ -12,11 +13,15 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from hq.platform.application.access import Access
 from hq.platform.application.json_schemas import LOCAL, AnswerSchema, json_schema
 from hq.platform.application.refusal_status import RefusalEnvelope
 
 type Handler = Callable[..., Any]
 type Schema = dict[str, Any]
+# Who may run a tool, decided in the application: a call is refused by it and
+# tools/list leaves the tool out by it, so the two read one rule.
+type Requirement = Access
 
 # What a schema says in words: docs/API.md says what each field holds.
 _WORDS = frozenset({"title", "description", "examples", "$defs"})
@@ -103,6 +108,7 @@ def output_schema(success: Schema) -> Schema:
 @dataclass(frozen=True, slots=True)
 class Declared:
     title: str
+    requires: Requirement
     # The read's own query model, which the API's query is read by too.
     arguments: type[BaseModel] | None = None
 
@@ -110,14 +116,17 @@ class Declared:
 _DECLARED: dict[Handler, Declared] = {}
 
 
-def tool[F: Handler](title: str, *, arguments: type[BaseModel] | None = None) -> Callable[[F], F]:
+def tool[F: Handler](
+    title: str, *, requires: Requirement, arguments: type[BaseModel] | None = None
+) -> Callable[[F], F]:
     """Declare a handler a tool: ``title`` is what a client shows a person for
-    it. A read the API serves too names its query model as ``arguments``, which
-    validates its arguments in place of its signature and calls the handler
-    with them field by field."""
+    it, and ``requires`` who may run it, which every call is refused by and
+    tools/list is narrowed by. A read the API serves too names its query model
+    as ``arguments``, which validates its arguments in place of its signature
+    and calls the handler with them field by field."""
 
     def declare(handler: F) -> F:
-        _DECLARED[handler] = Declared(title, arguments)
+        _DECLARED[handler] = Declared(title, requires, arguments)
         return handler
 
     return declare

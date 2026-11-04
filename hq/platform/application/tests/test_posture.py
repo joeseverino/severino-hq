@@ -10,7 +10,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.platform.application.tests.markup import text
 
 from ..connection_catalog import connection_catalog
@@ -18,7 +18,7 @@ from ..inventory_testing import store
 from ..posture import STANDARD, estate_posture
 from ..security import cli_principal
 from ..sweep import record_sweep
-from .test_tailnet_posture import raised
+from .test_tailnet_posture import raised, tailnet_connection
 
 RULE = "posture-unmet"
 PASSWORDS = ["hq.platform.core.oidc.HQOIDCAuthenticationBackend", "django.contrib.auth.backends.ModelBackend"]
@@ -88,17 +88,17 @@ class ReadingTests(TestCase):
         found = standing("tailnet-lock")
 
         self.assertIsNone(found.reading.met)
-        self.assertEqual(found.reading.evidence, "Not read yet")
+        self.assertEqual(found.icon, "clock")
 
     def test_an_unread_check_names_the_connection_that_would_read_it(self):
         found = standing("tailnet-policy")
 
+        self.assertEqual(found.reading.evidence, "No Tailscale connection reads it")
         self.assertEqual(found.reading.remedy, "connect Tailscale")
         self.assertEqual(found.reading.remedy_url, reverse("control_plane:connections") + "#connection-setup-heading")
         self.assertEqual(found.icon, "clock")
 
     def test_once_connected_an_unread_check_only_waits(self):
-        from hq.domains.control_plane.models import ProviderConnection
 
         ProviderConnection.objects.create(
             controller_id="example-controller",
@@ -154,6 +154,59 @@ class ReadingTests(TestCase):
         found = standing("tailnet-lock")
         self.assertIsNone(found.reading.met)
         self.assertEqual(found.reading.evidence, LAUNCHER_REFUSED)
+
+    # No heartbeat: only the readings say whether a controller has run.
+    @override_settings(SEVERINO_CONTROLLER_HEARTBEAT="/nonexistent/example-heartbeat")
+    def test_an_unread_check_says_which_cause_holds_it(self):
+        tailnet_connection()
+        cases = (
+            ("no controller has run", lambda: None, "No controller has read it"),
+            (
+                "no read has arrived",
+                lambda: store("example.other"),
+                "Waiting on the first read of",
+            ),
+            (
+                "the last read failed",
+                lambda: store("tailscale.policy", reachable=False, error="Tailscale refused the token."),
+                "Tailscale refused the token",
+            ),
+            (
+                "the reading held no answer",
+                lambda: store("tailscale.policy", {"record": "example"}),
+                "holds nothing to judge it by",
+            ),
+        )
+        for cause, arrange, said in cases:
+            with self.subTest(cause=cause):
+                ProviderInventory.objects.all().delete()
+                arrange()
+
+                found = standing("tailnet-policy").reading
+
+                self.assertIsNone(found.met)
+                self.assertIn(said, found.evidence)
+                self.assertFalse(found.evidence.endswith("."), "the panel ends the sentence")
+
+    def test_no_unread_check_lacks_its_cause(self):
+        for estate, arrange in (
+            ("nothing connected", lambda: None),
+            ("connected, no controller", tailnet_connection),
+            ("connected and read", lambda: (tailnet_connection(), store("example.other"))),
+        ):
+            with self.subTest(estate=estate):
+                ProviderConnection.objects.all().delete()
+                arrange()
+                unread = [
+                    found
+                    for found in estate_posture(connection_catalog(principal=cli_principal())).standings
+                    if found.reading.met is None
+                ]
+
+                self.assertTrue(unread)
+                for found in unread:
+                    self.assertTrue(found.reading.evidence, found.check.id)
+                    self.assertNotEqual(found.reading.evidence.lower(), "not read yet", found.check.id)
 
     def test_an_unread_check_is_not_counted_as_unmet(self):
         policy(grants=[{"src": ["group:admins"]}], lock={"enabled": True, "trusted_keys": 2})

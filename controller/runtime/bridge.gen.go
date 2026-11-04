@@ -170,6 +170,204 @@ func (e GitHubDeliveryProduction) Valid() bool {
 	}
 }
 
+// Defines values for GitHubRepositoryRepositoryAccessToken.
+const (
+	GitHubRepositoryRepositoryAccessTokenRead  GitHubRepositoryRepositoryAccessToken = "read"
+	GitHubRepositoryRepositoryAccessTokenWrite GitHubRepositoryRepositoryAccessToken = "write"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositoryRepositoryAccessToken enum.
+func (e GitHubRepositoryRepositoryAccessToken) Valid() bool {
+	switch e {
+	case GitHubRepositoryRepositoryAccessTokenRead:
+		return true
+	case GitHubRepositoryRepositoryAccessTokenWrite:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecurityAdvancedSecurity.
+const (
+	GitHubRepositorySecurityAdvancedSecurityDisabled GitHubRepositorySecurityAdvancedSecurity = "disabled"
+	GitHubRepositorySecurityAdvancedSecurityEnabled  GitHubRepositorySecurityAdvancedSecurity = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecurityAdvancedSecurity enum.
+func (e GitHubRepositorySecurityAdvancedSecurity) Valid() bool {
+	switch e {
+	case GitHubRepositorySecurityAdvancedSecurityDisabled:
+		return true
+	case GitHubRepositorySecurityAdvancedSecurityEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecurityCodeSecurity.
+const (
+	GitHubRepositorySecurityCodeSecurityDisabled GitHubRepositorySecurityCodeSecurity = "disabled"
+	GitHubRepositorySecurityCodeSecurityEnabled  GitHubRepositorySecurityCodeSecurity = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecurityCodeSecurity enum.
+func (e GitHubRepositorySecurityCodeSecurity) Valid() bool {
+	switch e {
+	case GitHubRepositorySecurityCodeSecurityDisabled:
+		return true
+	case GitHubRepositorySecurityCodeSecurityEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecurityDependabotSecurityUpdates.
+const (
+	GitHubRepositorySecurityDependabotSecurityUpdatesDisabled GitHubRepositorySecurityDependabotSecurityUpdates = "disabled"
+	GitHubRepositorySecurityDependabotSecurityUpdatesEnabled  GitHubRepositorySecurityDependabotSecurityUpdates = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecurityDependabotSecurityUpdates enum.
+func (e GitHubRepositorySecurityDependabotSecurityUpdates) Valid() bool {
+	switch e {
+	case GitHubRepositorySecurityDependabotSecurityUpdatesDisabled:
+		return true
+	case GitHubRepositorySecurityDependabotSecurityUpdatesEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecuritySecretScanning.
+const (
+	GitHubRepositorySecuritySecretScanningDisabled GitHubRepositorySecuritySecretScanning = "disabled"
+	GitHubRepositorySecuritySecretScanningEnabled  GitHubRepositorySecuritySecretScanning = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecuritySecretScanning enum.
+func (e GitHubRepositorySecuritySecretScanning) Valid() bool {
+	switch e {
+	case GitHubRepositorySecuritySecretScanningDisabled:
+		return true
+	case GitHubRepositorySecuritySecretScanningEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecuritySecretScanningAiDetection.
+const (
+	GitHubRepositorySecuritySecretScanningAiDetectionDisabled GitHubRepositorySecuritySecretScanningAiDetection = "disabled"
+	GitHubRepositorySecuritySecretScanningAiDetectionEnabled  GitHubRepositorySecuritySecretScanningAiDetection = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecuritySecretScanningAiDetection enum.
+func (e GitHubRepositorySecuritySecretScanningAiDetection) Valid() bool {
+	switch e {
+	case GitHubRepositorySecuritySecretScanningAiDetectionDisabled:
+		return true
+	case GitHubRepositorySecuritySecretScanningAiDetectionEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecuritySecretScanningDelegatedAlertDismissal.
+const (
+	GitHubRepositorySecuritySecretScanningDelegatedAlertDismissalDisabled GitHubRepositorySecuritySecretScanningDelegatedAlertDismissal = "disabled"
+	GitHubRepositorySecuritySecretScanningDelegatedAlertDismissalEnabled  GitHubRepositorySecuritySecretScanningDelegatedAlertDismissal = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecuritySecretScanningDelegatedAlertDismissal enum.
+func (e GitHubRepositorySecuritySecretScanningDelegatedAlertDismissal) Valid() bool {
+	switch e {
+	case GitHubRepositorySecuritySecretScanningDelegatedAlertDismissalDisabled:
+		return true
+	case GitHubRepositorySecuritySecretScanningDelegatedAlertDismissalEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecuritySecretScanningDelegatedBypass.
+const (
+	GitHubRepositorySecuritySecretScanningDelegatedBypassDisabled GitHubRepositorySecuritySecretScanningDelegatedBypass = "disabled"
+	GitHubRepositorySecuritySecretScanningDelegatedBypassEnabled  GitHubRepositorySecuritySecretScanningDelegatedBypass = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecuritySecretScanningDelegatedBypass enum.
+func (e GitHubRepositorySecuritySecretScanningDelegatedBypass) Valid() bool {
+	switch e {
+	case GitHubRepositorySecuritySecretScanningDelegatedBypassDisabled:
+		return true
+	case GitHubRepositorySecuritySecretScanningDelegatedBypassEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecuritySecretScanningNonProviderPatterns.
+const (
+	GitHubRepositorySecuritySecretScanningNonProviderPatternsDisabled GitHubRepositorySecuritySecretScanningNonProviderPatterns = "disabled"
+	GitHubRepositorySecuritySecretScanningNonProviderPatternsEnabled  GitHubRepositorySecuritySecretScanningNonProviderPatterns = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecuritySecretScanningNonProviderPatterns enum.
+func (e GitHubRepositorySecuritySecretScanningNonProviderPatterns) Valid() bool {
+	switch e {
+	case GitHubRepositorySecuritySecretScanningNonProviderPatternsDisabled:
+		return true
+	case GitHubRepositorySecuritySecretScanningNonProviderPatternsEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecuritySecretScanningPushProtection.
+const (
+	GitHubRepositorySecuritySecretScanningPushProtectionDisabled GitHubRepositorySecuritySecretScanningPushProtection = "disabled"
+	GitHubRepositorySecuritySecretScanningPushProtectionEnabled  GitHubRepositorySecuritySecretScanningPushProtection = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecuritySecretScanningPushProtection enum.
+func (e GitHubRepositorySecuritySecretScanningPushProtection) Valid() bool {
+	switch e {
+	case GitHubRepositorySecuritySecretScanningPushProtectionDisabled:
+		return true
+	case GitHubRepositorySecuritySecretScanningPushProtectionEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GitHubRepositorySecuritySecretScanningValidityChecks.
+const (
+	GitHubRepositorySecuritySecretScanningValidityChecksDisabled GitHubRepositorySecuritySecretScanningValidityChecks = "disabled"
+	GitHubRepositorySecuritySecretScanningValidityChecksEnabled  GitHubRepositorySecuritySecretScanningValidityChecks = "enabled"
+)
+
+// Valid indicates whether the value is a known member of the GitHubRepositorySecuritySecretScanningValidityChecks enum.
+func (e GitHubRepositorySecuritySecretScanningValidityChecks) Valid() bool {
+	switch e {
+	case GitHubRepositorySecuritySecretScanningValidityChecksDisabled:
+		return true
+	case GitHubRepositorySecuritySecretScanningValidityChecksEnabled:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for GlancePanelID.
 const (
 	GlancePanelIDInfrastructure GlancePanelID = "infrastructure"
@@ -428,6 +626,7 @@ const (
 	ResourceKindCloudflareRedirect           ResourceKind = "cloudflare.redirect"
 	ResourceKindCloudflareTunnel             ResourceKind = "cloudflare.tunnel"
 	ResourceKindCloudflareZone               ResourceKind = "cloudflare.zone"
+	ResourceKindGitHubAllowance              ResourceKind = "github.allowance"
 	ResourceKindGitHubDelivery               ResourceKind = "github.delivery"
 	ResourceKindGitHubDependencyRun          ResourceKind = "github.dependency_run"
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
@@ -505,6 +704,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindCloudflareTunnel:
 		return true
 	case ResourceKindCloudflareZone:
+		return true
+	case ResourceKindGitHubAllowance:
 		return true
 	case ResourceKindGitHubDelivery:
 		return true
@@ -610,6 +811,7 @@ const (
 	SweptCloudflareRedirect           SweptKind = "cloudflare.redirect"
 	SweptCloudflareTunnel             SweptKind = "cloudflare.tunnel"
 	SweptCloudflareZone               SweptKind = "cloudflare.zone"
+	SweptGitHubAllowance              SweptKind = "github.allowance"
 	SweptGitHubDelivery               SweptKind = "github.delivery"
 	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
 	SweptGitHubProfile                SweptKind = "github.profile"
@@ -671,6 +873,8 @@ func (e SweptKind) Valid() bool {
 	case SweptCloudflareTunnel:
 		return true
 	case SweptCloudflareZone:
+		return true
+	case SweptGitHubAllowance:
 		return true
 	case SweptGitHubDelivery:
 		return true
@@ -1145,7 +1349,10 @@ type ControllerRegistry struct {
 
 	// GithubProfiles Whose public GitHub profile the controller reads, and whether to read now. The accounts are the ones a person's sign-in names. The profile keeps a slower clock than the sweep, which HQ holds: due says the reading is old enough or somebody asked.
 	GithubProfiles GitHubProfilePlan `json:"github_profiles"`
-	Locked         []LockedAction    `json:"locked"`
+
+	// GithubRepositories Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.
+	GithubRepositories GitHubRepositoriesPlan `json:"github_repositories"`
+	Locked             []LockedAction         `json:"locked"`
 
 	// MaterialKinds Kinds whose work needs material HQ holds.
 	MaterialKinds []ResourceKind `json:"material_kinds"`
@@ -1193,6 +1400,19 @@ type ForcedRead struct {
 	Kind        ResourceKind   `json:"kind"`
 	Kinds       []ResourceKind `json:"kinds"`
 	RequestedAt time.Time      `json:"requested_at"`
+}
+
+// GitHubAllowanceRecord One App installation's hourly REST allowance as a sweep began, and what the sweep spent of it.
+type GitHubAllowanceRecord struct {
+	Account       string `json:"account,omitempty"`
+	ConnectionRef string `json:"connection_ref"`
+	Installation  int    `json:"installation"`
+	Limit         int    `json:"limit"`
+	Remaining     int    `json:"remaining"`
+	ResetsAt      string `json:"resets_at,omitempty"`
+	Spent         int    `json:"spent"`
+	StartedAt     string `json:"started_at,omitempty"`
+	Used          int    `json:"used"`
 }
 
 // GitHubDeliveryProduction What a github.delivery record says of production once every extension's latest admission runs there. Until then it says what stands between.
@@ -1248,35 +1468,130 @@ type GitHubProfileRecord struct {
 	Website     string                   `json:"website,omitempty"`
 }
 
+// GitHubRepositoriesPlan Each GitHub repository HQ holds a record of, with the fingerprint of what GitHub's change query answered when that record was read, and whether its full read is due on HQ's clock. A repository whose answer still has that fingerprint, and is not due, is carried: the controller sends only its name and HQ keeps the record.
+type GitHubRepositoriesPlan struct {
+	Held []GitHubRepositoryHeld `json:"held"`
+}
+
+// GitHubRepositoryCollaborator defines model for GitHubRepositoryCollaborator.
+type GitHubRepositoryCollaborator struct {
+	Login string `json:"login"`
+	Role  string `json:"role,omitempty"`
+}
+
+// GitHubRepositoryDeployKey defines model for GitHubRepositoryDeployKey.
+type GitHubRepositoryDeployKey struct {
+	CreatedAt string `json:"created_at,omitempty"`
+	LastUsed  string `json:"last_used,omitempty"`
+	ReadOnly  bool   `json:"read_only,omitempty"`
+	Title     string `json:"title,omitempty"`
+}
+
+// GitHubRepositoryHeld One repository's record as HQ holds it: its owner/name, its fingerprint (empty when none was taken), and whether a full read is due.
+type GitHubRepositoryHeld struct {
+	Due         bool   `json:"due"`
+	Fingerprint string `json:"fingerprint"`
+
+	// Repository owner/name, as GitHubRepositoryRecord's repository.
+	Repository string `json:"repository"`
+}
+
 // GitHubRepositoryRecord One github.repository record: GitHub repository.
 type GitHubRepositoryRecord struct {
-	Access            map[string]interface{}   `json:"access,omitempty"`
-	Alerts            map[string]interface{}   `json:"alerts,omitempty"`
-	Archived          bool                     `json:"archived,omitempty"`
-	Artifacts         []map[string]interface{} `json:"artifacts,omitempty"`
-	CalledWorkflows   []string                 `json:"called_workflows,omitempty"`
-	Checks            map[string]interface{}   `json:"checks,omitempty"`
-	ConnectionRef     string                   `json:"connection_ref"`
-	DefaultBranch     string                   `json:"default_branch,omitempty"`
-	DependabotAlerts  []map[string]interface{} `json:"dependabot_alerts,omitempty"`
-	Deployments       []map[string]interface{} `json:"deployments,omitempty"`
-	Environments      []map[string]interface{} `json:"environments,omitempty"`
-	Head              map[string]interface{}   `json:"head,omitempty"`
-	Images            []map[string]interface{} `json:"images,omitempty"`
-	Pins              []map[string]interface{} `json:"pins,omitempty"`
-	Private           bool                     `json:"private,omitempty"`
-	PullRequestChecks []string                 `json:"pull_request_checks,omitempty"`
-	PullRequests      []map[string]interface{} `json:"pull_requests,omitempty"`
-	PushedAt          string                   `json:"pushed_at,omitempty"`
-	Release           map[string]interface{}   `json:"release,omitempty"`
-	Repository        string                   `json:"repository"`
-	Rules             map[string]interface{}   `json:"rules,omitempty"`
-	Runners           []map[string]interface{} `json:"runners,omitempty"`
-	Runs              []map[string]interface{} `json:"runs,omitempty"`
-	URL               string                   `json:"url,omitempty"`
-	Variables         []string                 `json:"variables,omitempty"`
-	Waiting           []map[string]interface{} `json:"waiting,omitempty"`
+	Access            GitHubRepositoryRepositoryAccess `json:"access,omitempty"`
+	Alerts            map[string]interface{}           `json:"alerts,omitempty"`
+	Archived          bool                             `json:"archived,omitempty"`
+	Artifacts         []map[string]interface{}         `json:"artifacts,omitempty"`
+	CalledWorkflows   []string                         `json:"called_workflows,omitempty"`
+	Carried           bool                             `json:"carried,omitempty"`
+	Checks            map[string]interface{}           `json:"checks,omitempty"`
+	ConnectionRef     string                           `json:"connection_ref"`
+	DefaultBranch     string                           `json:"default_branch,omitempty"`
+	DependabotAlerts  []map[string]interface{}         `json:"dependabot_alerts,omitempty"`
+	Deployments       []map[string]interface{}         `json:"deployments,omitempty"`
+	Environments      []map[string]interface{}         `json:"environments,omitempty"`
+	Fingerprint       string                           `json:"fingerprint,omitempty"`
+	Head              map[string]interface{}           `json:"head,omitempty"`
+	Images            []map[string]interface{}         `json:"images,omitempty"`
+	Pins              []map[string]interface{}         `json:"pins,omitempty"`
+	Private           bool                             `json:"private,omitempty"`
+	PullRequestChecks []string                         `json:"pull_request_checks,omitempty"`
+	PullRequests      []map[string]interface{}         `json:"pull_requests,omitempty"`
+	PushedAt          string                           `json:"pushed_at,omitempty"`
+	ReadAt            string                           `json:"read_at,omitempty"`
+	Release           map[string]interface{}           `json:"release,omitempty"`
+	Repository        string                           `json:"repository"`
+	Rules             map[string]interface{}           `json:"rules,omitempty"`
+	Runners           []map[string]interface{}         `json:"runners,omitempty"`
+	Runs              []map[string]interface{}         `json:"runs,omitempty"`
+	URL               string                           `json:"url,omitempty"`
+	Variables         []string                         `json:"variables,omitempty"`
+	Waiting           []map[string]interface{}         `json:"waiting,omitempty"`
 }
+
+// GitHubRepositoryRepositoryAccess Who and what can reach a repository, and how its Actions may run.
+type GitHubRepositoryRepositoryAccess struct {
+	AllowedActions       string                                `json:"allowed_actions,omitempty"`
+	Collaborators        []GitHubRepositoryCollaborator        `json:"collaborators,omitempty"`
+	DeployKeys           []GitHubRepositoryDeployKey           `json:"deploy_keys,omitempty"`
+	PinningRequired      bool                                  `json:"pinning_required,omitempty"`
+	Security             GitHubRepositorySecurity              `json:"security,omitempty"`
+	Token                GitHubRepositoryRepositoryAccessToken `json:"token"`
+	TokenApprovesReviews bool                                  `json:"token_approves_reviews,omitempty"`
+	Visibility           string                                `json:"visibility,omitempty"`
+	VulnerabilityAlerts  bool                                  `json:"vulnerability_alerts,omitempty"`
+}
+
+// GitHubRepositoryRepositoryAccessToken defines model for GitHubRepositoryRepositoryAccess.Token.
+type GitHubRepositoryRepositoryAccessToken string
+
+// GitHubRepositorySecurity Each feature of GitHub's “security_and_analysis“ HQ reads, by
+// GitHub's own name; one the plan does not offer is absent.
+//
+// Declared here so the bridge's door takes the names as the contract's own,
+// though several hold the word "secret": each holds only a status.
+type GitHubRepositorySecurity struct {
+	AdvancedSecurity                      GitHubRepositorySecurityAdvancedSecurity                      `json:"advanced_security,omitempty"`
+	CodeSecurity                          GitHubRepositorySecurityCodeSecurity                          `json:"code_security,omitempty"`
+	DependabotSecurityUpdates             GitHubRepositorySecurityDependabotSecurityUpdates             `json:"dependabot_security_updates,omitempty"`
+	SecretScanning                        GitHubRepositorySecuritySecretScanning                        `json:"secret_scanning,omitempty"`
+	SecretScanningAiDetection             GitHubRepositorySecuritySecretScanningAiDetection             `json:"secret_scanning_ai_detection,omitempty"`
+	SecretScanningDelegatedAlertDismissal GitHubRepositorySecuritySecretScanningDelegatedAlertDismissal `json:"secret_scanning_delegated_alert_dismissal,omitempty"`
+	SecretScanningDelegatedBypass         GitHubRepositorySecuritySecretScanningDelegatedBypass         `json:"secret_scanning_delegated_bypass,omitempty"`
+	SecretScanningNonProviderPatterns     GitHubRepositorySecuritySecretScanningNonProviderPatterns     `json:"secret_scanning_non_provider_patterns,omitempty"`
+	SecretScanningPushProtection          GitHubRepositorySecuritySecretScanningPushProtection          `json:"secret_scanning_push_protection,omitempty"`
+	SecretScanningValidityChecks          GitHubRepositorySecuritySecretScanningValidityChecks          `json:"secret_scanning_validity_checks,omitempty"`
+}
+
+// GitHubRepositorySecurityAdvancedSecurity defines model for GitHubRepositorySecurity.AdvancedSecurity.
+type GitHubRepositorySecurityAdvancedSecurity string
+
+// GitHubRepositorySecurityCodeSecurity defines model for GitHubRepositorySecurity.CodeSecurity.
+type GitHubRepositorySecurityCodeSecurity string
+
+// GitHubRepositorySecurityDependabotSecurityUpdates defines model for GitHubRepositorySecurity.DependabotSecurityUpdates.
+type GitHubRepositorySecurityDependabotSecurityUpdates string
+
+// GitHubRepositorySecuritySecretScanning defines model for GitHubRepositorySecurity.SecretScanning.
+type GitHubRepositorySecuritySecretScanning string
+
+// GitHubRepositorySecuritySecretScanningAiDetection defines model for GitHubRepositorySecurity.SecretScanningAiDetection.
+type GitHubRepositorySecuritySecretScanningAiDetection string
+
+// GitHubRepositorySecuritySecretScanningDelegatedAlertDismissal defines model for GitHubRepositorySecurity.SecretScanningDelegatedAlertDismissal.
+type GitHubRepositorySecuritySecretScanningDelegatedAlertDismissal string
+
+// GitHubRepositorySecuritySecretScanningDelegatedBypass defines model for GitHubRepositorySecurity.SecretScanningDelegatedBypass.
+type GitHubRepositorySecuritySecretScanningDelegatedBypass string
+
+// GitHubRepositorySecuritySecretScanningNonProviderPatterns defines model for GitHubRepositorySecurity.SecretScanningNonProviderPatterns.
+type GitHubRepositorySecuritySecretScanningNonProviderPatterns string
+
+// GitHubRepositorySecuritySecretScanningPushProtection defines model for GitHubRepositorySecurity.SecretScanningPushProtection.
+type GitHubRepositorySecuritySecretScanningPushProtection string
+
+// GitHubRepositorySecuritySecretScanningValidityChecks defines model for GitHubRepositorySecurity.SecretScanningValidityChecks.
+type GitHubRepositorySecuritySecretScanningValidityChecks string
 
 // GlanceMachineTarget defines model for GlanceMachineTarget.
 type GlanceMachineTarget struct {

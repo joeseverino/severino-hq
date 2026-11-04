@@ -56,6 +56,12 @@ Rules:
   stored (`ObservationSpec.admitted`). A provider response is never stored
   whole, and fields carrying secret material (tokens, client secrets,
   environment values, private keys) are never named.
+- **A finding over a reading starts from its connection.** A spec's `facts`
+  turns each record into `(key, value)` pairs on the node of the connection
+  that read it, and a rule walks them with `connections_carrying(estate, key)`
+  (`finding_model.py`), as `dns_findings.py` does. The estate already holds
+  every connection's node, so a new finding of this kind needs no read of its
+  own.
 - **A refused read is an error.** The sweep stores the kind as unreachable with
   the reason, and the page shows it with `requires`. No records means the
   provider has none.
@@ -207,7 +213,11 @@ unit's name. `HostUnitRecord` in
 the bridge contract is emitted from the model of that name
 (`hq/domains/control_plane/observations/host.py`): it holds no command line, environment or path, and a
 unit that is not installed is a record saying so. Each record carries when it
-was read, and a unit's state is judged as of then.
+was read, and a unit's state is judged as of then, never against the present
+moment. A reading older than the slowest the controller ever reads is judged by
+no rule: `unit-state-unread` says when it was read and, while the bridge
+refuses the controller's sweep, why (`reading_facts.unjudged`, held for every
+rule by `test_no_rule_measures_an_aged_reading_from_now`).
 
 `hq/platform/application/unit_findings.py` raises, on the same node:
 
@@ -216,7 +226,7 @@ was read, and a unit's state is judged as of then.
 | `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer, path or socket starts again |
 | `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer, path, socket or mount is not active | serious |
 | `timer-stalled` | an active timer is not running its unit. Nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
-| `unit-state-unread` | the launcher mounted no answer, or the answer was refused | attention |
+| `unit-state-unread` | the launcher mounted no answer, or the answer was refused, or the reading is too old to judge | attention |
 
 The rules name no unit. A renderer whose own status says its run failed is
 `render-failing`'s to report, with the failure's class, so `unit-failed` leaves
@@ -739,6 +749,13 @@ and gives the next pass its result read-only, named by `SEVERINO_DEPENDENCY_RUN`
 (`handed_off`, until its result comes back, so the plan does not hand it off
 again), or the result once it started after `last_started_at`. A token reaches
 only the hand-off file, and no log text reaches HQ.
+
+The `github.allowance` reading is one record per App installation a sweep
+asked after: its hour before the sweep began and what the sweep spent. HQ sets
+`others_spent` and `others_since` as it stores it, from the same
+installation's last record of the same hour, and the connection's node carries
+the `github-others-spent` fact once that passes the usual
+([Security](Security.md#a-leaked-github-app-credential)).
 
 ## Machine roles
 

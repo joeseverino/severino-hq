@@ -35,7 +35,15 @@ from .topology_model import (
     gate_covers,
     newest_stamp,
 )
-lazy from . import certificate_expiry, docker_estate, reference_findings, render_status_findings, tailnet, unit_findings
+lazy from . import (
+    certificate_expiry,
+    docker_estate,
+    reading_facts,
+    reference_findings,
+    render_status_findings,
+    tailnet,
+    unit_findings,
+)
 lazy from .hq_self import hq_service
 lazy from .machines import declares_host
 lazy from .service_facets import zone_holding
@@ -481,12 +489,14 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
-    """What provider-specific joins add: container edges, and image, render status, unit and certificate facts."""
+    """What provider-specific joins add: container edges, and image, render
+    status, unit, refused report and certificate facts."""
 
     if estate.machine_ids:
         docker_estate.add(nodes, estate.machine)
     render_status_findings.add(nodes, estate.machine)
     unit_findings.add(nodes, estate.machine)
+    reading_facts.add_refusals(nodes, estate.machine)
     reference_findings.add(nodes, resources)
     by_ref, by_provider = _reader_index(nodes)
     certificate_expiry.add(

@@ -220,7 +220,7 @@ class CarriageTests(TestCase):
 
         a_tailnet(a_device("hq-host", "100.64.0.9", observer=True))
         found = connection(a_request())
-        self.assertEqual(found.peering.id, "unknown")
+        self.assertEqual(found.peering.id, "unlisted")
 
     def test_the_address_panel_is_offered_only_where_there_is_one_to_ask_about(self):
         """The wiring, asserted at the template rather than by hand.

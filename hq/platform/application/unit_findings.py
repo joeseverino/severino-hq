@@ -25,7 +25,7 @@ from .finding_model import (
     machine_step,
 )
 from .moments import ago, duration
-from .reading_facts import FactRow, rows_of, state_on_controller, stated
+from .reading_facts import FactRow, rows_of, state_on_controller, stated, unjudged
 from .timestamps import moment
 from .topology_model import TopologyNode
 from .ui import counted, ended
@@ -67,6 +67,7 @@ class UnitState(FactRow):
     """One unit as its fact carries it: words and instants, in field order."""
 
     KEY = UNIT_STATE
+    KIND = UNIT_KIND
 
     unit: str = ""
     load: str = ""
@@ -132,8 +133,8 @@ class UnitState(FactRow):
     def behind(self, stamp: str, by: timedelta) -> bool:
         """Whether ``stamp`` was more than ``by`` before the unit was read."""
 
-        # Judged as of the reading, never now: the reading's own age is the
-        # sweep's to say.
+        # Judged as of the reading, never now: a reading too old to judge is
+        # ``unit-state-unread``'s to say.
         then, read = moment(stamp), moment(self.read_at)
         return then is not None and read is not None and read - then > by
 
@@ -170,7 +171,7 @@ def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
     state_on_controller(
         nodes,
         machine,
-        UNIT_KIND,
+        UnitState,
         lambda snapshot: rows_of(snapshot, unit_state, lambda reason: UnitState(reason=reason)),
     )
 
@@ -211,7 +212,7 @@ def _failed(estate: FindingEstate) -> tuple[Finding, ...]:
 
     found = []
     for node, units in _units(estate):
-        said = render_status_findings.failed_units(node)
+        said = render_status_findings.failed_units(estate, node)
         failed = tuple(unit for unit in units if unit.failed and unit.unit not in said)
         if not failed:
             continue
@@ -396,13 +397,16 @@ def _stalled_finding(
 
 
 def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
-    """A machine whose unit state could not be read.
+    """A machine whose unit state could not be read, or was read too long ago
+    to say how its units stand now.
 
     HQ cannot say whether its units run, which is not the same as saying
     they do.
     """
 
-    found = []
+    found = [
+        aged.finding("unit-state-unread", UNIT_KIND, _cannot_check(aged.node)) for aged in unjudged(estate, UnitState)
+    ]
     for node, rows in stated(estate, UnitState):
         reasons = tuple(dict.fromkeys(row.reason for row in rows if row.reason))
         if not reasons:
@@ -412,7 +416,7 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
                 rule="unit-state-unread",
                 subject=node.id,
                 scope=UNIT_KIND,
-                title=f"HQ cannot check the background jobs on {node.label}",
+                title=_cannot_check(node),
                 severity="attention",
                 explanation="If one of them failed, HQ would not know.",
                 evidence=tuple(("Why", UNREAD_REASONS.get(reason, "Could not be read")) for reason in reasons),
@@ -426,6 +430,10 @@ def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
             )
         )
     return tuple(found)
+
+
+def _cannot_check(node: TopologyNode) -> str:
+    return f"HQ cannot check the background jobs on {node.label}"
 
 
 # The rules this module raises, beside the detectors that decide them.

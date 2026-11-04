@@ -27,6 +27,7 @@ ESTATE_READS: tuple[str, ...] = (
     "control_plane.CertificateMaterial",
     "control_plane.AddressReading",
     "control_plane.CapabilityRule",
+    "control_plane.RefusedReport",
     "core.UpstreamReading",
     "projects.Project",
     "analytics.AnalyticsSite",

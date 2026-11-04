@@ -17,7 +17,7 @@ from asgiref.sync import async_to_sync
 from django.conf import settings
 from mcp import Client, types
 
-from hq.platform.application.security import mcp_principal
+from hq.platform.application.security import DEVICE_INTERFACE, Principal, operator_capabilities
 
 from .identity import set_principal
 from .security import metadata_url
@@ -97,6 +97,16 @@ LISTS: tuple[tuple[str, str, str, str], ...] = (
 )
 
 
+def widest_caller() -> Principal:
+    """The caller that every list names everything to: an operator's own device.
+
+    What a list holds depends on the caller (tools and resource templates do),
+    so the page shows everything any MCP caller can be listed.
+    """
+
+    return Principal("agents-page", DEVICE_INTERFACE, operator_capabilities())
+
+
 def endpoint() -> Endpoint | None:
     """The MCP endpoint and what it lists, or None while no API resource is set and it is off."""
 
@@ -126,9 +136,7 @@ def _ask() -> tuple[str, str, tuple[Offer, ...]]:
 
 
 async def _listed() -> tuple[str, str, tuple[Offer, ...]]:
-    # What a list holds can depend on the caller (resource templates do), so
-    # the page shows what an agent holding the deployment's whole ceiling sees.
-    with set_principal(mcp_principal()):
+    with set_principal(widest_caller()):
         async with Client(mcp.server) as client:
             declared = client.server_capabilities
             offers = []

@@ -2,7 +2,8 @@
 {% comment %}
 A fragment region (static/js/fragment.js): while a reading is on its way the
 server draws `data-fragment-poll` and the strip is asked again; each panel is a
-part, so only a panel that changed is replaced and an open one stays open.
+part, so only a panel that changed is replaced, and its popover, found by its
+id, is shown again if it was open.
 {% endcomment %}
 <section class="dashboard-glance" data-fragment="{% url 'dashboard_glance' %}"{% if dashboard_refreshing %} data-fragment-poll="3"{% endif %}>
   {% comment %}
@@ -14,8 +15,8 @@ part, so only a panel that changed is replaced and an open one stays open.
   {% if dashboard_due %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% write_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
   <div class="glance-panels">
     {% for panel in dashboard_panels %}
-      <details data-fragment-part="{{ panel.id }}" class="glance-panel status-{{ panel.payload.status|default:'neutral' }}{% if panel.due %} is-due{% endif %}{% if panel.outdated %} is-outdated{% endif %}" data-menu{% if panel.refreshing %} data-refreshing{% endif %}>
-        <summary class="glance-panel-head">
+      <div data-fragment-part="{{ panel.id }}" class="glance-panel status-{{ panel.payload.status|default:'neutral' }}{% if panel.due %} is-due{% endif %}{% if panel.outdated %} is-outdated{% endif %}" data-menu{% if panel.refreshing %} data-refreshing{% endif %}>
+        <button type="button" class="glance-panel-head" id="glance-{{ panel.id }}-head" popovertarget="glance-{{ panel.id }}">
           <span class="glance-symbol">{% include "partials/_icon.html" with name=panel.icon %}</span>
           {% if panel.lead %}
             <span class="glance-lead" title="{{ panel.lead.label }}{% if panel.lead.detail %} · {{ panel.lead.detail }}{% endif %}"><strong>{{ panel.lead.value|breakable }}</strong>{% if panel.head_labels %} {{ panel.lead.short_label|breakable }}{% endif %}</span>
@@ -34,8 +35,8 @@ part, so only a panel that changed is replaced and an open one stays open.
               {% if panel.refreshing %}{% refreshing %}{% elif panel.payload.refresh_failed %}Refresh failed{% else %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
             </span>
           {% endif %}
-        </summary>
-        <div class="glance-expanded">
+        </button>
+        <div class="glance-expanded" id="glance-{{ panel.id }}" popover>
           <header class="glance-expanded-head">
             <strong>{{ panel.label|breakable }}</strong>
             {% if panel.payload.summary %}<span>{{ panel.payload.summary|breakable }}</span>{% endif %}
@@ -75,7 +76,7 @@ part, so only a panel that changed is replaced and an open one stays open.
             </span>
           </footer>
         </div>
-      </details>
+      </div>
     {% endfor %}
   </div>
   <span class="glance-status visually-hidden" data-fragment-status role="status"></span>

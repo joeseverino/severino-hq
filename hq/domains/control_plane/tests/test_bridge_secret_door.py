@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from django.test import SimpleTestCase, TestCase
+from django.test import TestCase
 from pydantic import BaseModel
 
 from hq.domains.control_plane import bridge_application
@@ -137,7 +137,7 @@ def _send(action: str, payload: Any, app: Any) -> bridge_client.Answer:
     return bridge_client.request(f"/{action}", query=_query(action), body=json.dumps(payload).encode(), app=app)
 
 
-class InboundDoorTests(SimpleTestCase):
+class InboundDoorTests(TestCase):
     def test_every_action_with_a_payload_has_an_example_that_conforms_and_passes(self):
         taking = {name for name, operation in operations().items() if operation.takes_body}
         self.assertEqual(set(EXAMPLES), taking)
@@ -189,15 +189,21 @@ class InboundDoorTests(SimpleTestCase):
         self.assertIn("/controller-id", answer.json()["detail"])
         self.assertEqual(ran, [])
 
-    def test_a_member_the_contract_leaves_open_is_struck_by_a_secret_name(self):
+    def test_a_member_the_contract_leaves_open_has_its_strings_struck_by_a_secret_name(self):
+        # Struck in place, so a reader of the record finds the shape it was sent.
+        cases = (
+            ("must-never-enter-hq", REDACTED),
+            ({"value": "x", "count": 7}, {"value": REDACTED, "count": 7}),
+            (["x", None, True], [REDACTED, None, True]),
+        )
         for key in ("api_token", "Password", "client_secret", "private_key", "credentials"):
-            for value in ("must-never-enter-hq", {"value": "x"}, ["x"], 7):
+            for value, kept in cases:
                 ran: list[tuple[str, Any]] = []
                 report = {**EXAMPLES["report"], "status": {"nested": {key: value}}}
                 with self.subTest(key=key, value=value), self.assertLogs("severino.bridge", "WARNING"):
                     answer = _send("report", report, _recording(ran))
                     self.assertEqual(answer.status, 200, answer.body)
-                    self.assertEqual(ran[0][1]["status"], {"nested": {key: REDACTED}})
+                    self.assertEqual(ran[0][1]["status"], {"nested": {key: kept}})
 
     def test_a_flag_named_like_a_secret_holds_none_and_passes(self):
         # A repository's ``private`` is the contract's own member.
@@ -256,7 +262,7 @@ class OutsiderTextTests(TestCase):
                 self.assertEqual(len(ProviderInventory.objects.get(kind="adguard.rewrite").records), 1)
 
 
-class AnswerTests(SimpleTestCase):
+class AnswerTests(TestCase):
     def _app(self, run) -> Any:
         return bridge_application.bridge(
             tuple(Action(action.name, run if action.name == "steps" else action.run) for action in ACTIONS)

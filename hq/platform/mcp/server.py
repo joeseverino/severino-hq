@@ -76,8 +76,9 @@ INSTRUCTIONS = "\n\n".join(
         ),
         (
             "A client that declares the io.modelcontextprotocol/tasks extension is answered a held change "
-            "as a task whose id is approval.id: tasks/get reads working until a person decides, then "
-            "completed with the call's answer, or with an error result coded declined, expired or stale. "
+            "as a task whose id is approval.id: tasks/get reads working until a person decides and HQ "
+            "applies it, then completed with the call's answer, or with an error result coded declined, "
+            "expired, stale or operation_failed. "
             "Poll at pollIntervalMs; neither tasks/update nor tasks/cancel decides it, and a task answers "
             "only the agent that asked."
         ),
@@ -85,10 +86,13 @@ INSTRUCTIONS = "\n\n".join(
 )
 
 
-# How long a client may keep a list. The tools, prompts and fixed views change
-# only with a release, and are the same for every caller, though only one
-# signed in reaches them, so private; the resource templates are the caller's
-# grants and records, so they are asked for afresh.
+# How long a client may keep a list, privately, since only a caller that
+# signed in reaches one. The prompts and fixed views change only with a
+# release. The tools are the ones the caller's grant runs, which change with a
+# release or a grant, and a client re-lists within the ten minutes: HQ is
+# stateless, so it has no session to push tools/list_changed down. The
+# resource templates are the caller's grants and records, so they are asked
+# for afresh.
 STATIC_FOR = 10 * 60 * 1000
 CACHE_HINTS: dict[CacheableMethod, CacheHint] = {
     "tools/list": CacheHint(ttl_ms=STATIC_FOR, scope="private"),
@@ -230,6 +234,8 @@ class ToolServer:
         return None if tool is None else tool.input_schema
 
     async def _list(self, _context: Any, _params: Any) -> types.ListToolsResult:
+        # Unbraked, as every list is, so a paused agent keeps its connection.
+        offered = await _read("tools/list", self._offered, braked=False)
         return types.ListToolsResult(
             tools=[
                 types.Tool(
@@ -240,9 +246,14 @@ class ToolServer:
                     output_schema=None if tool.output_schema is None else dict(tool.output_schema),
                     annotations=types.ToolAnnotations.model_validate(dict(tool.annotations)),
                 )
-                for tool in self.tools.values()
+                for tool in offered
             ]
         )
+
+    def _offered(self, principal: Principal) -> list[Tool]:
+        """The tools ``principal`` may run, each by the rule its call is refused by."""
+
+        return [tool for tool in self.tools.values() if tool.offered_to(principal)]
 
     async def _call(self, context: Any, params: types.CallToolRequestParams) -> types.CallToolResult | dict[str, Any]:
         tool = self.tools.get(params.name)
@@ -315,7 +326,7 @@ class ToolServer:
 
     async def _cancel_task(self, context: Any, params: types.CancelTaskRequestParams) -> dict[str, Any]:
         require_client_extension(context, tasks.IDENTIFIER)
-        return await _read("tasks/cancel", lambda principal: tasks.refuse_cancel(params.task_id, principal))
+        return await _read("tasks/cancel", lambda principal: tasks.cancel(params.task_id, principal))
 
     def served(self) -> Served:
         """A fresh application and the session manager it runs on, as a pair:

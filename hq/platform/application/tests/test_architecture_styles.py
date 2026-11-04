@@ -217,7 +217,7 @@ class StyleContractTests(SimpleTestCase):
 
         root = Path(__file__).resolve().parents[4]
         template = (root / "templates" / "base.html").read_text(encoding="utf-8")
-        panel = template.split('<div class="user-menu-panel">', 1)[1].split("</details>", 1)[0]
+        panel = template.split('<div class="user-menu-panel"', 1)[1].split("</header>", 1)[0]
         rows = re.findall(r"<(?:a|button)\b[^>]*>", panel, re.DOTALL)
 
         self.assertTrue(rows)

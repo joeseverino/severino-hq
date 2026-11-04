@@ -103,15 +103,18 @@ class FiltersInTheSchemaTests(TestCase):
     def test_a_value_outside_a_filters_choices_is_refused_naming_the_field(self):
         asked = [
             *((kind, {field: OUTSIDE}, field) for kind, field, _ in declared_choices()),
-            ("projects", {"limit": MAX_PAGE_SIZE + 1}, "limit"),
         ]
-        answers = calls(*(("list_resource", {"name": kind, "filters": filters}) for kind, filters, _ in asked))
+        answers = calls(
+            *(("list_resource", {"name": kind, "filters": filters}) for kind, filters, _ in asked),
+            ("list_resource", {"name": "projects", "limit": MAX_PAGE_SIZE + 1}),
+        )
+        asked.append(("projects", {}, "limit"))
         for (kind, _, field), answer in zip(asked, answers, strict=True):
             with self.subTest(kind=kind, field=field):
                 self.assertTrue(answer.is_error)
                 error = answer.structured_content["error"]
                 self.assertEqual(error["code"], "invalid_input")
-                self.assertIn(field, [detail["loc"][0] for detail in error["details"]])
+                self.assertIn(field, [detail["loc"][0] for detail in error["details"]["errors"]])
 
     def test_a_value_among_the_choices_lists(self):
         Project.objects.create(name="Chosen", slug="chosen", status=Project.Status.PAUSED)
@@ -146,9 +149,9 @@ class DescribeResourcesNarrowsTests(TestCase):
         (entry,) = answer.structured_content["resources"]
 
         self.assertEqual(entry["name"], "projects")
-        self.assertEqual(
-            set(entry["operations"]["list"]["query_schema"]["properties"]), set(entry["operations"]["list"]["filters"])
-        )
+        # Its filters are what narrows it; limit and cursor page it, beside them.
+        listing = entry["operations"]["list"]
+        self.assertEqual(set(listing["query_schema"]["properties"]), {*listing["filters"], "limit", "cursor"})
 
     def test_a_name_is_one_of_the_kinds_composed_at_the_call(self):
         # The server is reached first with no extension installed, as an

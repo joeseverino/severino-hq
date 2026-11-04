@@ -17,7 +17,7 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
-from hq.platform.core.tests.browser.gate import add_css, with_script
+from hq.platform.core.tests.browser.gate import add_css, tab_key, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
@@ -448,7 +448,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # arrow chooses the next. WebKit drops :focus-visible when an arrow
         # moves focus within a radio group, so past that the ring may be gone,
         # but it is never left on another tab.
-        self.page.keyboard.press("Alt+Tab" if self.browser.browser_type.name == "webkit" else "Tab")
+        self.page.keyboard.press(tab_key(self.browser))
         self.assertEqual((chosen(), shown(), ringed()), ([0], [0], [0]))
         self.page.keyboard.press("ArrowRight")
         self.assertEqual((chosen(), shown()), ([1], [1]))
@@ -1034,17 +1034,16 @@ class ComponentLayoutTests(LayoutBrowserTests):
             }
             return p;
           };
-          const menu = document.createElement('details');
+          const menu = document.createElement('div');
           menu.dataset.menu = '';
-          menu.open = true;
-          const summary = document.createElement('summary');
-          summary.textContent = 'menu';
           const panel = document.createElement('div');
+          panel.popover = 'manual';
           panel.append(line('example covering', '300px', '40px'), line('example first', '400px', '40px'), line('example second', '400px', '40px'));
-          menu.append(summary, panel);
+          menu.append(panel);
           const main = document.querySelector('main');
           main.append(line('example covered', '300px', '40px'), menu, line('example clashed', '500px', '40px'));
           main.append(line('example under', '500px', '40px'));
+          panel.showPopover();
         }""")
         found = self.page.evaluate(OVERLAPPING_TEXT, SELECTORS["floating"])
         pairs = {tuple(sorted(part.split('"')[1] for part in finding.split(" over "))) for finding in found}

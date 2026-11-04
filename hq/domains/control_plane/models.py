@@ -271,6 +271,34 @@ class NotManaged(TimestampedModel):
         return f"{self.kind} {self.label or self.token}"
 
 
+class RefusedReport(models.Model):
+    """A controller call the bridge refused, kept until that call is next accepted.
+
+    A refused report writes nothing else, so this row is the only record that a
+    controller's work stopped landing (``application.refused_reports``). It
+    holds what the bridge already answered the controller: the action, the
+    controller the call named once its query was held to the contract, and the
+    refusal's detail, struck of secrets and cut to the problem's length. Never
+    the payload. One row per action and controller.
+    """
+
+    action = models.CharField(max_length=64)
+    controller_id = models.CharField(max_length=160, blank=True)
+    status = models.PositiveSmallIntegerField()
+    detail = models.CharField(max_length=500)
+    refused_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ("action", "controller_id")
+        constraints = [
+            models.UniqueConstraint(fields=("action", "controller_id"), name="one_refused_report_per_action_controller")
+        ]
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.action} refused for {self.controller_id or 'a controller'}"
+
+
 class DashboardRefreshRequest(TimestampedModel):
     """A credential-free request the controller may claim by panel id."""
 

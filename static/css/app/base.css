@@ -31,19 +31,23 @@ body {
    not end on one stranded word. */
 p, li, dd, blockquote, figcaption { text-wrap: pretty; }
 a { color: var(--accent-2); text-decoration: none; }
-a:hover { color: var(--accent); text-decoration: underline; }
-/* A link set among words is told apart from them by more than its color
-   (WCAG 1.4.1), which beside muted text is barely a step: a quiet underline,
-   full on hover. A span is a run of words, whatever color a page sets it
-   in. A link with a class of its own is a control, and a row's name stands
-   alone in its cell. */
-:where(p, li, dd, td, span, .muted) a:where(:not([class], td > strong > a, td > a:has(> strong))) {
+a:is(:hover, :focus-visible) { color: var(--accent); text-decoration: underline; }
+/* A link among words differs from them by more than its color (WCAG 1.4.1),
+   which beside muted text no link color can be while it holds its contrast
+   with the page: a quiet underline, full on hover. Words are a paragraph, a
+   line of small print, a muted line, or a value or item that reads as a
+   sentence (`.prose`). Anywhere else a link is the whole of its line, row,
+   item or chip, and a link with a class of its own is a control, so both
+   read by their color and underline on hover and focus. An external link
+   keeps its class and its place among words; a bold link already stands out
+   from them. */
+:where(p, small, .muted, .prose) a:where(:not([class]), .external-link):not(strong a, :has(> strong:only-child)) {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-decoration-thickness: 1px;
   text-underline-offset: .18em;
+  &:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
 }
-:where(p, li, dd, td, span, .muted) a:where(:not([class])):hover { text-decoration-color: currentColor; }
 /* A line a link draws never reaches a box of its own inside it, so whatever
    is inside a link draws the line its link draws. */
 a * { text-decoration: inherit; }
@@ -228,8 +232,8 @@ pre ::selection { color: var(--code-ink); }
   flex-wrap: nowrap;
   gap: var(--space-1);
   /* Never squeezed below its own content, which its track gives it, and
-     `overflow` stays visible: an overflow scroll container clips absolutely
-     positioned descendants, the group dropdowns included. */
+     `overflow` stays visible: the popover's own `overflow: auto` would make
+     the bar a scroll container. */
   overflow: visible;
 }
 .primary-nav a {
@@ -238,36 +242,12 @@ pre ::selection { color: var(--code-ink); }
   white-space: nowrap;
   transition: background .12s ease, color .12s ease;
 }
-.primary-nav > a, .nav-group > summary { color: var(--muted); font-weight: 500; font-size: var(--text-sm); padding: var(--space-2) var(--space-5); border-radius: 6px; white-space: nowrap; }
+.primary-nav > a { color: var(--muted); font-weight: 500; font-size: var(--text-sm); padding: var(--space-2) var(--space-5); border-radius: 6px; white-space: nowrap; }
 .primary-nav a:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
 .primary-nav a[aria-current] { color: var(--ink); background: var(--bg-tint); }
 
-/* Grouped sections. A <details> dropdown keeps the bar to a fixed number of
-   controls as sections are added, instead of overflowing behind a hidden
-   scrollbar where the tail becomes unreachable. */
-.nav-group { position: relative; }
-/* Safari stops toggling <details> when `display` on <summary> is changed away
-   from list-item, so the summary keeps its default display and an inner span
-   does the layout. Chromium toggles either way, so this has to be checked in
-   Safari rather than assumed. */
-.nav-group > summary {
-  display: list-item; list-style: none;
-  cursor: pointer; user-select: none;
-  transition: background .12s ease, color .12s ease;
-}
-.nav-group > summary::marker { content: ""; }
 .nav-group-label { display: inline-flex; align-items: center; gap: var(--space-2); }
-.nav-group > summary:hover, .nav-group[open] > summary { color: var(--ink); background: var(--bg-tint); }
-.nav-group > summary[aria-current] { color: var(--ink); background: var(--bg-tint); }
 .nav-caret { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
-.nav-group[open] .nav-caret { transform: rotate(180deg); }
-.nav-group-panel {
-  position: absolute; z-index: 40; top: calc(100% + 6px); left: 0;
-  min-width: 176px; display: flex; flex-direction: column; gap: 1px;
-  padding: var(--space-2); background: var(--surface);
-  border: 1px solid var(--line); border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
 .nav-group-panel a { padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm); font-size: var(--text-sm); }
 
 /* Gives way before the sections do: below the breakpoint it is an icon. */
@@ -338,21 +318,11 @@ select:not([multiple], [size]) {
   block-size: var(--control-size);
   padding-block: 0;
 }
-/* A select wears HQ's chevron, set in from its end by --chevron-inset, in
-   every browser and however it is drawn. The browser's own arrow is a filled
-   triangle where the page styles the select and the platform's glyph where it
-   does not, so two forms would read as two kinds of control. A list box stays
-   native. */
-select:not([multiple], [size]) {
-  appearance: none;
-  padding-inline-end: calc(var(--chevron-inset) + 2 * var(--chevron-size) + var(--space-3));
-  background-image: var(--chevron-image);
-  background-position:
-    calc(100% - var(--chevron-inset) - var(--chevron-size)) 50%,
-    calc(100% - var(--chevron-inset)) 50%;
-  background-size: var(--chevron-size) var(--chevron-size);
-  background-repeat: no-repeat;
-}
+/* A select wears HQ's chevron (tables.css draws it), in every browser and
+   however it is drawn. The browser's own arrow is a filled triangle where the
+   page styles the select and the platform's glyph where it does not, so two
+   forms would read as two kinds of control. A list box stays native. */
+select:not([multiple], [size]) { appearance: none; }
 /* Where the browser lets a page style its select (`base-select`), its list of
    choices is framed as HQ's other panels. */
 @supports (appearance: base-select) {

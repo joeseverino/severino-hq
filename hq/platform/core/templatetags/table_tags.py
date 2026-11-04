@@ -114,7 +114,8 @@ class _Entry:
     how: str
     cut: list[_Span] = field(default_factory=list)
     column: int = -1
-    data: bool = False
+    # The cell's classes its part keeps on the open line (``_CARRIED``).
+    css: tuple[str, ...] = ()
     # Named for a screen reader alone: a column with no heading.
     unseen: bool = False
 
@@ -365,6 +366,12 @@ def _column_name(names: list[str], index: int, cell: _Cell) -> tuple[str, bool]:
     return name, False
 
 
+# What a cell is that its part stays when the column leaves for the open line:
+# data laid out as data, and a value that reads as a sentence, whose links
+# are underlined among its words (base.css).
+_CARRIED = ("cell-data", "prose")
+
+
 def _column_entry(index: int, cell: _Cell, content: _Span, names: list[str], *, dropped: bool) -> _Entry | None:
     """What a cell shows under its column's name on the open line: all a
     column that may leave holds, its blocks cut out, or the narrow parts of a
@@ -375,7 +382,8 @@ def _column_entry(index: int, cell: _Cell, content: _Span, names: list[str], *, 
         if cell.says_nothing:
             return None
         cut = [span for _, span in _finished(cell, "below")]
-        return _Entry(name, [content], "column", cut, index, "cell-data" in _classes(cell.attrs), unseen)
+        carried = tuple(kind for kind in _CARRIED if kind in _classes(cell.attrs))
+        return _Entry(name, [content], "column", cut, index, carried, unseen)
     narrow = [span for _, span in _finished(cell, "narrow")]
     return _Entry(name, narrow, "narrow", unseen=unseen) if narrow else None
 
@@ -471,7 +479,7 @@ def _detail_row(markup: _Markup, width: int, blocks: list[_Span], entries: list[
             continue
         how = f' data-column="{entry.column}"' if entry.how == "column" else f" data-{entry.how}"
         term = ' class="visually-hidden"' if entry.unseen else ""
-        css = ' class="cell-data"' if entry.data else ""
+        css = f' class="{" ".join(entry.css)}"' if entry.css else ""
         listed.append(f"<dt{how}{term}>{escape(entry.name)}</dt><dd{how}{css}>{shown}</dd>")
     if not drawn and not listed:
         return ""

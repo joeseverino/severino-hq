@@ -4,11 +4,12 @@ while a member the contract leaves open is still struck by a secret name."""
 import json
 from typing import Any
 
-from django.test import SimpleTestCase
+from django.test import TestCase
 
 from hq.domains.control_plane import bridge_application
 from hq.domains.control_plane.bridge_actions import ACTIONS, Action
 from hq.domains.control_plane.bridge_contract import contract, operations
+from hq.domains.control_plane.observations import OBSERVATIONS
 
 from . import bridge_client
 
@@ -46,7 +47,7 @@ def _send(action: str, payload: Any, ran: list[tuple[str, Any]]):
     return bridge_client.request(f"/{action}", query=query, body=json.dumps(payload).encode(), app=_recording(ran))
 
 
-class DeclaredNameTests(SimpleTestCase):
+class DeclaredNameTests(TestCase):
     def test_every_kind_an_inventory_is_keyed_by_passes_unchanged(self):
         kinds = _kinds()
         self.assertTrue(kinds)
@@ -70,6 +71,18 @@ class DeclaredNameTests(SimpleTestCase):
         self.assertEqual(answer.status, 200, answer.body)
         self.assertEqual(ran[0][1]["status"], status)
 
+    def test_every_reading_part_a_record_is_keyed_by_passes_unchanged(self):
+        # A record's alert counts are keyed by part, and a part's name may
+        # sound like a secret (leaked credentials).
+        parts = [part for part in contract()["components"]["schemas"]["ReadingPartName"]["enum"] if part]
+        self.assertTrue(parts)
+        record = {"name": "example", "by_part": dict.fromkeys(parts, "example")}
+        inventory = {min(_kinds()): {"ok": True, "records": [record]}}
+        ran: list[tuple[str, Any]] = []
+        answer = _send("inventory", inventory, ran)
+        self.assertEqual(answer.status, 200, answer.body)
+        self.assertEqual(ran, [("inventory", inventory)])
+
     def test_every_query_parameter_the_contract_declares_is_taken(self):
         for operation in operations().values():
             with self.subTest(action=operation.name):
@@ -86,3 +99,42 @@ class DeclaredNameTests(SimpleTestCase):
         self.assertEqual(answer.status, 200, answer.body)
         self.assertEqual(ran[0][1][kind]["records"], [{"name": "example", "api_token": REDACTED}])
         self.assertNotIn("must-never-enter-hq", "\n".join(logged.output))
+
+
+# A repository's access as the controller writes it: the workflow token's
+# permission and GitHub's secret scanning statuses carry names the door strikes
+# when the contract does not declare them.
+ACCESS = {
+    "visibility": "private",
+    "collaborators": [{"login": "example", "role": "admin"}],
+    "deploy_keys": [],
+    "allowed_actions": "selected",
+    "pinning_required": True,
+    "token": "read",
+    "token_approves_reviews": False,
+    "vulnerability_alerts": True,
+    "security": {"secret_scanning": "enabled", "secret_scanning_push_protection": "enabled"},
+}
+
+
+class RepositoryAccessTests(TestCase):
+    def test_a_repositorys_access_passes_the_door_and_its_schema_unchanged(self):
+        record = {"connection_ref": "example", "repository": "example/alpha", "access": ACCESS}
+        inventory = {"github.repository": {"ok": True, "records": [record]}}
+        ran: list[tuple[str, Any]] = []
+        answer = _send("inventory", inventory, ran)
+        self.assertEqual(answer.status, 200, answer.body)
+        self.assertEqual(ran, [("inventory", inventory)])
+        kept, refused = OBSERVATIONS["github.repository"].clean([record])
+        self.assertEqual((kept[0]["access"], refused), (ACCESS, 0))
+
+    def test_a_declared_name_holding_anything_but_its_words_is_refused(self):
+        # The names the door takes as the contract's own hold only a status,
+        # so a credential sent under one never reaches a stored record.
+        for access in (
+            {**ACCESS, "token": "not-a-permission-example"},
+            {**ACCESS, "security": {"secret_scanning": "not-a-status-example"}},
+        ):
+            with self.subTest(access=access):
+                record = {"connection_ref": "example", "repository": "example/alpha", "access": access}
+                self.assertEqual(OBSERVATIONS["github.repository"].clean([record]), ([], 1))

@@ -135,15 +135,15 @@ func (h *HTTPClient) Request(ctx context.Context, address, method string, header
 	return data, nil
 }
 
-// RequestHeader GETs address and returns its validated JSON with one response
-// header from the same answer, such as the ETag of the version read. The header
-// is kept even when the body fails its checks.
-func (h *HTTPClient) RequestHeader(ctx context.Context, address string, headers map[string]string, name string) (json.RawMessage, string, error) {
-	data, header, err := h.do(ctx, address, "GET", headers, nil)
+// Exchange is Request with the answer's headers: the ETag of the version read,
+// what a rate limit has left. The headers come with any answer, a refusal or a
+// body that fails its checks included, and are nil only when nothing answered.
+func (h *HTTPClient) Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error) {
+	data, header, err := h.do(ctx, address, method, headers, payload)
 	if len(data) == 0 {
 		data = nil
 	}
-	return data, header.Get(name), err
+	return data, header, err
 }
 
 func (h *HTTPClient) do(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error) {
@@ -227,7 +227,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		refusal := HTTPRefusal(response.StatusCode)
 		refusal.Body, _ = io.ReadAll(io.LimitReader(response.Body, maxRefusalBytes))
-		return nil, nil, refusal
+		return nil, response.Header, refusal
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
 	if err != nil {

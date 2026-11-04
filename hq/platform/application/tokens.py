@@ -39,6 +39,12 @@ GRANT_CLAIMS = ("scope", "scp")
 # its own (docs/Security.md#agents).
 DEVICE_SCOPE = "own_device"
 
+# The scopes a sign-in asks Pocket ID for about the person and the session
+# (its `standardScopes`), which a delegated token carries beside HQ's own
+# permissions. They say who signed in, never what HQ allows, so none of them
+# is ever a permission here.
+IDENTITY_SCOPES = frozenset({"openid", "profile", "email", "groups", "offline_access"})
+
 # The header `typ` of each kind of token HQ verifies, compared without case,
 # so a token the provider signs for one use is refused at the other. An RFC
 # 9068 access token names its media type or the short form; Pocket ID's ID
@@ -247,16 +253,16 @@ def _refused(exc: jwt.PyJWTError) -> TokenError:
 
 
 def granted(claims: dict[str, Any]) -> frozenset[str]:
-    """The permissions the token actually carries, in HQ's own vocabulary."""
+    """The permissions the token actually carries, in HQ's own vocabulary: never an identity scope."""
 
     for name in GRANT_CLAIMS:
         raw = claims.get(name)
         if raw is None:
             continue
         if isinstance(raw, str):
-            return frozenset(raw.split())
+            return frozenset(raw.split()) - IDENTITY_SCOPES
         if isinstance(raw, (list, tuple)):
-            return frozenset(str(item) for item in raw)
+            return frozenset(str(item) for item in raw) - IDENTITY_SCOPES
     return frozenset()
 
 

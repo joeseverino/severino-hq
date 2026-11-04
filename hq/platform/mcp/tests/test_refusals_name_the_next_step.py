@@ -42,7 +42,9 @@ class NamedNextCallTests(TestCase):
         self.enterContext(set_principal(mcp_principal()))
 
     def test_an_unknown_capability_names_the_catalog_and_the_catalog_answers(self):
-        refused = _call("execute_capability", {"name": "example.missing", "payload": {}})
+        # A caller that may run some capability, so execute_capability is its to call.
+        with set_principal(WRITER):
+            refused = _call("execute_capability", {"name": "example.missing", "payload": {}})
 
         self.assertEqual(refused["error"]["code"], "unknown_capability")
         catalog = _followed(refused["error"]["details"]["next"])

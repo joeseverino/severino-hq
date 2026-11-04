@@ -60,22 +60,22 @@ class CutOffListSaysSoTests(TestCase):
             )
 
     def test_a_full_page_says_it_was_cut_off_and_how_to_ask_for_the_rest(self):
-        page = services.list_resource("infrastructure", {"limit": 2})
+        page = services.list_resource("infrastructure", limit=2)
 
         self.assertEqual(page["count"], 2)
         self.assertEqual(page["total"], 3)
         self.assertTrue(page["truncated"])
         self.assertEqual(set(page["next"]), {"cursor"})
-        rest = services.list_resource("infrastructure", {"limit": 2, **page["next"]})
+        rest = services.list_resource("infrastructure", limit=2, **page["next"])
         self.assertEqual((rest["count"], rest["truncated"], rest["next"]), (1, False, None))
 
     def test_a_page_holding_every_match_says_so(self):
-        page = services.list_resource("infrastructure", {"limit": 5})
+        page = services.list_resource("infrastructure", limit=5)
 
         self.assertEqual((page["count"], page["total"], page["truncated"], page["next"]), (3, 3, False, None))
 
     def test_a_field_mask_keeps_the_notice(self):
-        page = services.list_resource("infrastructure", {"limit": 2}, fields=["key"])
+        page = services.list_resource("infrastructure", limit=2, fields=["key"])
 
         self.assertTrue(page["truncated"])
         self.assertEqual(page["total"], 3)

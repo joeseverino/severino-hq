@@ -14,10 +14,9 @@ import signal
 import socket
 import subprocess
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 
+from hq.platform.application import http_read
 from hq.platform.core.tests.task import PREFIX, trusted_mise
 from tools.perf import parse
 lazy from hq.platform.core import seeds
@@ -92,13 +91,10 @@ def readiness(url: str) -> int | None:
     """The status ``url`` answers its readiness probe with, or None while nothing answers."""
 
     try:
-        with urllib.request.urlopen(url + READY, timeout=2) as response:
-            return response.status
-    except urllib.error.HTTPError as error:
-        with error:
-            return error.code
-    except OSError:
+        response, _ = http_read.fetch("GET", url + READY, headers={}, timeout=2, limit=0)
+    except http_read.UNREACHABLE:
         return None
+    return response.status_code
 
 
 def wait_ready(url: str, deadline_s: float, alive=lambda: True) -> float:

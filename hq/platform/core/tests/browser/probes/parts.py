@@ -110,20 +110,21 @@ HIDDEN_IN_SUMMARIES = (
 }"""
 )
 
-# Every select that opens to its choices wears HQ's chevron and no arrow of
-# the browser's own, whichever way the engine draws it (base-select or
-# native), so no two forms read as two kinds of control. The chevron is
+# Every select that opens to its choices, and every filter button that opens
+# to them, wears HQ's chevron, and a select no arrow of the browser's own,
+# whichever way the engine draws it (base-select or native), so no two forms
+# read as two kinds of control. The chevron is
 # compared with the token painted where the select sits, since its ink is
 # light-dark(). A vendored widget draws its own.
 SELECT_ARROWS = """([dropdowns, vendored]) => {
   const named = (el) => el.name || el.getAttribute('aria-label') || el.id || 'unnamed';
   return [...document.querySelectorAll(dropdowns)]
-    .filter((el) => !el.multiple && el.size <= 1 && !(vendored && el.closest(vendored)))
+    .filter((el) => !(el instanceof HTMLSelectElement && (el.multiple || el.size > 1)) && !(vendored && el.closest(vendored)))
     .flatMap((el) => {
       const style = getComputedStyle(el);
-      const own = style.appearance === 'base-select'
+      const own = el instanceof HTMLSelectElement && (style.appearance === 'base-select'
         ? getComputedStyle(el, '::picker-icon').display !== 'none'
-        : style.appearance !== 'none';
+        : style.appearance !== 'none');
       const mark = document.createElement('span');
       mark.style.setProperty('background-image', 'var(--chevron-image)');
       el.parentElement.append(mark);
@@ -131,7 +132,7 @@ SELECT_ARROWS = """([dropdowns, vendored]) => {
       mark.remove();
       return [
         own && `select ${named(el)} draws the browser's own arrow`,
-        style.backgroundImage !== chevron && `select ${named(el)} does not wear HQ's chevron`,
+        style.backgroundImage !== chevron && `${el.localName} ${named(el) === 'unnamed' ? el.textContent.trim().slice(0, 30) : named(el)} does not wear HQ's chevron`,
       ].filter(Boolean);
     });
 }"""
@@ -159,6 +160,69 @@ PARTS_NOT_UNDERLINED = """([links, vendored]) => {
         break;
       }
     }
+  }
+  return found;
+}"""
+
+# A link among words differs from them by more than its color (WCAG 1.4.1):
+# it is underlined at rest, or set in a weight, size, style or face of its
+# own, the cues axe's link-in-text-block accepts. A link that is the whole of
+# its line, row, item or chip is never underlined at rest. The words around a
+# link are the text its nearest box lays out in line with it, outside every
+# link and up to a forced break; a version or a count alone is no words, nor
+# is a box inside that line (a chip, a badge), and a link laid out as a block
+# stands alone unless it is an item in a row of words. Read from the rendered
+# page, so every link on every page is judged at every width, whatever markup
+# or class drew it.
+LINKS_AT_REST = """([links, vendored]) => {
+  const style = (el) => getComputedStyle(el);
+  const atomic = (el) => !['inline', 'contents'].includes(style(el).display);
+  const inLine = (el) => /inline/.test(style(el).display);
+  const row = (el) => /flex|grid/.test(style(el).display);
+  const shown = (node) => {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    return [...range.getClientRects()].some((r) => r.width > 1 && r.height > 1);
+  };
+  const lettered = (node) => /\\p{L}/u.test(node.textContent) && shown(node);
+  const among = (link, box) => {
+    const inBox = (el) => {
+      while (el !== box && !atomic(el)) el = el.parentElement;
+      return el === box;
+    };
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT);
+    let line = 0;
+    let own = -1;
+    const worded = new Map();
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (node === link) own = line;
+      else if (node.nodeType === Node.ELEMENT_NODE && node.localName === 'br' && inBox(node.parentElement)) line += 1;
+      else if (node.nodeType === Node.TEXT_NODE && !node.parentElement.closest(links) && inBox(node.parentElement) && lettered(node)) {
+        worded.set(line, worded.get(line) || node.parentElement);
+      }
+    }
+    return worded.get(own);
+  };
+  const face = (el) => ['font-weight', 'font-size', 'font-style', 'font-family'].map((p) => style(el).getPropertyValue(p)).join();
+  const ownText = (link) => {
+    const walker = document.createTreeWalker(link, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) if (lettered(node)) return node.parentElement;
+    return link;
+  };
+  const found = [];
+  for (const link of document.querySelectorAll(links)) {
+    if ((vendored && link.closest(vendored)) || !link.textContent.trim() || !shown(link)) continue;
+    if (link.matches(':hover, :focus-visible')) continue;
+    let box = link.parentElement;
+    while (box && !atomic(box)) box = box.parentElement;
+    const words = box && (inLine(link) || (link.parentElement === box && row(box))) && among(link, box);
+    const underlined = style(link).textDecorationLine.includes('underline');
+    const name = link.textContent.trim().replace(/\\s+/g, ' ').slice(0, 60);
+    const where = box ? [box.localName, ...box.classList].join('.') : 'the page';
+    if (words && !underlined && face(ownText(link)) === face(words)) {
+      found.push(`link ${name} sits among words in ${where} and differs from them only by its color`);
+    }
+    if (!words && underlined) found.push(`link ${name} stands alone in ${where} and is underlined at rest`);
   }
   return found;
 }"""

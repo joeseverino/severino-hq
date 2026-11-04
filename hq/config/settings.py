@@ -629,6 +629,9 @@ OIDC_OP_AUTHORIZATION_ENDPOINT = f"{OIDC_ISSUER}/authorize"
 OIDC_OP_TOKEN_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/token"
 OIDC_OP_USER_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/userinfo"
 OIDC_OP_JWKS_ENDPOINT = f"{OIDC_ISSUER}/.well-known/jwks.json"
+OIDC_OP_LOGOUT_ENDPOINT = f"{OIDC_ISSUER}/api/oidc/end-session"
+# Sign out ends the provider's session too, from the ID token the sign-in kept.
+OIDC_OP_LOGOUT_URL_METHOD = "hq.platform.core.oidc_end_session.end_session_url"
 
 # A form submitted after its session has expired is redirected on to sign in at
 # the provider, and form-action governs every redirect a submission follows.
@@ -656,7 +659,9 @@ OIDC_USE_PKCE = True
 # call the exchange makes (token, keys, userinfo) gives up after this long.
 OIDC_TIMEOUT = 10
 OIDC_STORE_ACCESS_TOKEN = False
-OIDC_STORE_ID_TOKEN = False
+# Kept in the session as the end-session request's `id_token_hint`; HQ takes
+# no ID token as a credential (docs/Security.md, "Sign out").
+OIDC_STORE_ID_TOKEN = True
 OIDC_AUTHENTICATION_CALLBACK_URL = "oidc_authentication_callback"
 OIDC_CALLBACK_CLASS = "hq.platform.core.oidc_views.HQCallbackView"
 

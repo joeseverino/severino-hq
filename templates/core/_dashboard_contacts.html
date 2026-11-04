@@ -6,6 +6,6 @@ carrying a card that says so.
 {% card %}
   {% section_head %}Messages{% aside %}{% if unread_contacts_count %}<span class="count">{{ unread_contacts_count|breakable }} unread</span>{% endif %}{% endsection_head %}
   {% include "partials/_record_list.html" with rows=recent_contacts %}
-  <p class="section-foot"><a href="{% url 'contacts:list' %}">All messages{% arrow %}</a></p>
+  <div class="section-foot"><a href="{% url 'contacts:list' %}">All messages{% arrow %}</a></div>
 {% endcard %}
 {% endif %}

@@ -9,7 +9,7 @@ glance (how it is doing, where it runs), beside its name rather than under it.
 {% endcomment %}
 <header class="page-head">
   <div class="page-head-copy">
-    {% if page.trail %}<p class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</p>{% endif %}
+    {% if page.trail %}<div class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</div>{% endif %}
     <div class="page-title-row">
       <h1>{{ page.title|breakable }}</h1>
       {% for badge in page_badges %}<span class="pill{% if badge.tone %} pill-{{ badge.tone }}{% endif %}"{% if badge.title %} title="{{ badge.title }}"{% endif %}>{{ badge.label|breakable }}</span>{% endfor %}
@@ -29,12 +29,12 @@ glance (how it is doing, where it runs), beside its name rather than under it.
     <div class="page-actions">
       {% for action in split.0 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}
       {% if split.1 %}
-        <details class="overflow-menu" data-menu>
-          <summary aria-label="More actions">{% include "partials/_icon.html" with name="more" %}</summary>
-          <div class="overflow-menu-panel">
+        <div class="overflow-menu" data-menu>
+          <button type="button" popovertarget="page-actions-more" aria-label="More actions">{% include "partials/_icon.html" with name="more" %}</button>
+          <div class="overflow-menu-panel" id="page-actions-more" popover>
             {% for action in split.1 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}
           </div>
-        </details>
+        </div>
       {% endif %}
     </div>
     {% endwith %}

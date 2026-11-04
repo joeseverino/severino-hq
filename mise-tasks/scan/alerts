@@ -1,0 +1,56 @@
+#!/bin/sh
+#MISE description="GitHub holds no open CodeQL alert on the analyzed ref"
+#MISE timeout="10m"
+#MISE hide=true
+#USAGE arg "[ref]" env="GITHUB_REF" help="The analyzed ref: refs/pull/<n>/merge for a pull request, refs/heads/<branch> for a push"
+#USAGE arg "[sarif]" env="CODEQL_SARIF_ID" help="The upload the answer must include, as CodeQL's analyze action names it"
+
+# CI's scan job judges its analysis here, by the alerts GitHub holds open
+# rather than the SARIF it uploaded: a dismissal lives on GitHub, so these are
+# the alerts the ruleset refuses a merge for. scan:codeql judges a local
+# checkout's SARIF; `mise run scan` gives no ref, and there is nothing here
+# to read.
+set -eu
+
+ref="${usage_ref:-}"
+sarif="${usage_sarif:-}"
+if [ -z "$ref" ]; then
+    echo "[codeql] no analyzed ref, so GitHub's open alerts are not read"
+    exit 0
+fi
+
+# GitHub answers a ref it holds no analysis of with no alerts, so the upload
+# is first seen processed and recorded against this ref. The analyze action
+# waits for processing only so long before it carries on.
+if [ -n "$sarif" ]; then
+    tries=0
+    while :; do
+        status="$(gh api "repos/{owner}/{repo}/code-scanning/sarifs/${sarif}" --jq .processing_status)"
+        case "$status" in
+            complete) break ;;
+            failed)
+                echo "[security] Code scanning could not process upload ${sarif}." >&2
+                exit 1
+                ;;
+        esac
+        tries=$((tries + 1))
+        if [ "$tries" -ge 10 ]; then
+            echo "[security] Upload ${sarif} is still ${status}; its alerts are not readable yet." >&2
+            exit 1
+        fi
+        sleep 30
+    done
+    found="$(gh api "repos/{owner}/{repo}/code-scanning/analyses?ref=${ref}&sarif_id=${sarif}" --jq length)"
+    if [ "$found" = 0 ]; then
+        echo "[security] GitHub holds no analysis of ${ref} from upload ${sarif}." >&2
+        exit 1
+    fi
+fi
+
+answer="$(mktemp)"
+trap 'rm -f "${answer}"' EXIT
+gh api --paginate --slurp \
+    "repos/{owner}/{repo}/code-scanning/alerts?ref=${ref}&state=open&tool_name=CodeQL&per_page=100" \
+    >"${answer}"
+jq -r -f tools/pipeline/codeql_report.jq "${answer}"
+echo "[codeql] no open alert on ${ref}"

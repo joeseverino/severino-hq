@@ -53,8 +53,10 @@ SELECTORS = {
     # The queue's own filter: a choice of urgency, applied by its button.
     "queue_urgency": "form.filter-bar select[name=status]",
     "queue_apply": "form.filter-bar button[type=submit]",
-    # The header's menus, and on a phone the drawer that holds them.
-    "nav_menu": ".primary-nav details[data-menu]",
+    # The header's menus, a group's button and the links it opens, and on a
+    # phone the drawer that holds them.
+    "nav_menu": ".primary-nav [data-menu] > [popovertarget]",
+    "nav_menu_panel": ".primary-nav [data-menu] > [popover]",
     "nav_drawer": ".primary-nav",
     "nav_toggle": "[popovertarget=primary-navigation]",
     "highlights": ".dashboard-highlights > .highlight-card",
@@ -67,7 +69,7 @@ SELECTORS = {
     "link": "a[href]",
     # A select; the probes that judge one that opens to its choices leave out a
     # list box (multiple or sized), which Django's widgets mark, not a template.
-    "dropdown": "select",
+    "dropdown": "select, .table-filter-menu > button",
     # A control pressed or picked from rather than typed into: a button, a
     # disclosure's handle, a label drawn around a select or a checkbox.
     "pressed": (
@@ -96,12 +98,12 @@ SELECTORS = {
     "selectable_table": "[data-selectable-table]",
     # What a parser leaves where a <p> was closed early by a block inside it.
     "broken_paragraph": "main p:empty:not([hidden])",
-    # What an open menu or a dialog draws over the page, its toggle aside.
-    "floating": "dialog, [popover], [data-menu] > :not(summary)",
+    # What an open menu or a dialog draws over the page.
+    "floating": "dialog, [popover]",
     # Where the contrast check samples text: the page and the header over it.
     "contrast_scope": "main, .site-header",
-    # A disclosure in the page, rather than a menu's.
-    "disclosure": "main details:not([data-menu])",
+    # A disclosure in the page.
+    "disclosure": "main details",
     # Where the API reference mounts its viewer.
     "reference": "#api-reference-root",
     # A block of code the reference's viewer draws: a request or answer.
@@ -129,7 +131,7 @@ SELECTORS = {
     "palette_option": "[data-command-center-option]",
     "palette_hint": ".command-center-enter-hint",
     # The header's sections, an entry or a group's handle.
-    "nav_entry": ".primary-nav > a, .nav-group > summary",
+    "nav_entry": ".primary-nav > a, .nav-group > button",
     # A value and the one it changes into, its arrow, and what the arrow points at.
     "change": "main .change",
     # A chip set in a line: an identifier, wherever it is not a block of code, or a tag.

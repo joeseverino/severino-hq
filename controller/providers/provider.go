@@ -47,9 +47,9 @@ func recordsOf[T, R any](items []T, record func(T) (R, error)) ([]R, error) {
 // into its own response type. The payload is a provider request struct, url.Values or a string.
 type Transport interface {
 	Request(context.Context, string, string, map[string]string, any) (json.RawMessage, error)
-	// RequestHeader GETs an address for its JSON and one header of the same
-	// response, such as the ETag of the version read.
-	RequestHeader(ctx context.Context, address string, headers map[string]string, name string) (json.RawMessage, string, error)
+	// Exchange is Request with the answer's headers, which a refusal keeps
+	// too: the ETag of the version read, what a rate limit has left.
+	Exchange(ctx context.Context, address, method string, headers map[string]string, payload any) (json.RawMessage, http.Header, error)
 }
 
 // Action is a registered handler as the controller dispatches it: the
@@ -142,19 +142,28 @@ type Registry struct {
 	Extensions []runtime.AdmittedExtension
 	// Profiles is whose public GitHub profile to read and whether it is due, from HQ's registry.
 	Profiles runtime.GitHubProfilePlan
+	// Repositories is each GitHub repository HQ holds, its fingerprint and
+	// whether its full read is due, from HQ's registry.
+	Repositories runtime.GitHubRepositoriesPlan
 	// Updates is which repositories a dependency update run covers and whether
 	// one is due, from HQ's registry.
 	Updates runtime.DependencyUpdatesPlan
 	// Picture GETs an image of at most limit bytes: its kind and its bytes. Nil fetches over HTTPS.
 	Picture func(ctx context.Context, address string, limit int) (string, []byte, error)
 	// ACMEHTTP reaches the certificate authority; nil trusts the controller's roots.
-	ACMEHTTP   *http.Client
-	actions    map[actionKey]Action
-	readers    map[string]Reader
+	ACMEHTTP *http.Client
+	actions  map[actionKey]Action
+	readers  map[string]Reader
+	// tallies is the kinds read from what the rest of their provider's kinds
+	// did this sweep, so read after them (tally).
+	tallies    map[string]bool
 	held       map[string]heldSource
 	probes     map[runtime.ConnectionProvider]Probe
 	snapshotMu sync.Mutex
 	snapshot   map[string]*cachedRead
+	// githubLedger is what this sweep has spent of each GitHub App
+	// installation's hourly allowance (github_limit.go).
+	githubLedger *githubLedger
 	// refusedCredentials holds, for this sweep, each Cloudflare credential prefix
 	// refused outright and why; nil outside a sweep.
 	refusedCredentials map[string]string
@@ -173,7 +182,7 @@ type cachedRead struct {
 func New(env runtime.Environment, held runtime.Connections, transport Transport) *Registry {
 	r := &Registry{
 		Env: env, Supplied: held, HTTP: transport, Commands: &Commands{Env: env, Supplied: held}, TLS: NetTLSDialer{CAFile: env.CAFile}, Now: time.Now,
-		actions: map[actionKey]Action{}, readers: map[string]Reader{}, held: map[string]heldSource{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
+		actions: map[actionKey]Action{}, readers: map[string]Reader{}, tallies: map[string]bool{}, held: map[string]heldSource{}, probes: map[runtime.ConnectionProvider]Probe{}, zoneIDs: map[string]string{},
 	}
 	r.admitAdGuard()
 	r.admitNPM()
@@ -208,6 +217,13 @@ func (r *Registry) reader(kind runtime.ResourceKind, handler Reader) {
 		panic("duplicate native controller reader: " + string(kind))
 	}
 	r.readers[string(kind)] = handler
+}
+
+// tally declares a reader of what this sweep's other readers of its provider
+// did: it is read after them, and whenever any of them is.
+func (r *Registry) tally(kind runtime.ResourceKind, handler Reader) {
+	r.reader(kind, handler)
+	r.tallies[string(kind)] = true
 }
 
 // heldSource is a kind read from something this controller was given, not
@@ -269,6 +285,7 @@ func (r *Registry) BeginSnapshot() func() {
 	r.snapshotMu.Lock()
 	r.snapshot = map[string]*cachedRead{}
 	r.refusedCredentials = map[string]string{}
+	r.githubLedger = nil
 	r.snapshotMu.Unlock()
 	return func() {
 		r.snapshotMu.Lock()

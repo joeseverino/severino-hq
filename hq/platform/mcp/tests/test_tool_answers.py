@@ -89,7 +89,9 @@ class UnlistedCodeTests(TestCase):
                 return result
 
         patched = mock.patch("hq.platform.mcp.services.execute_application_capability", return_value=raw)
-        with set_principal(AGENT), patched, self.assertLogs("severino.capabilities", "ERROR") as logged:
+        # A caller that may run some capability, so the call reaches the handler.
+        writer = Principal("example-writer", "mcp", frozenset({Capability.READ, "write_projects"}))
+        with set_principal(writer), patched, self.assertLogs("severino.capabilities", "ERROR") as logged:
             answer = async_to_sync(run)()
 
         self.assertTrue(answer.is_error)

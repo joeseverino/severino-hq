@@ -104,7 +104,7 @@ class DashboardGlanceTests(TestCase):
             (head,) = (element for element in with_class(html, "glance-caption") if part in element.ancestors)
             self.assertIn(name, head.text)
 
-    def test_compact_summary_preserves_full_readings_in_native_details(self):
+    def test_compact_summary_preserves_full_readings_in_the_menu_it_opens(self):
         readings.record(
             readings.machine_telemetry(self.machine.key),
             {
@@ -119,10 +119,11 @@ class DashboardGlanceTests(TestCase):
         html = render_to_string("core/_dashboard_glance.html", {"dashboard_panels": [panel]})
 
         self.assertEqual((panel["lead"]["label"], panel["lead"]["value"]), ("CPU", "12%"))
-        (part,) = select(html, "data-fragment-part", panel["id"])
-        self.assertEqual(part.tag, "details")
+        (opener,) = select(html, "popovertarget")
+        (opened,) = select(html, "id", opener.attrs["popovertarget"])
+        self.assertIn("popover", opened.attrs)
         for metric in ("12%", "Memory", "579 MB", "Storage", "3 GB"):
-            self.assertIn(metric, part.text)
+            self.assertIn(metric, opened.text)
 
     def setUp(self):
         self.machine = ManagedResource.objects.create(
