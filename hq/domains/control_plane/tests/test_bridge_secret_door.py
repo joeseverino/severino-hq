@@ -189,15 +189,21 @@ class InboundDoorTests(TestCase):
         self.assertIn("/controller-id", answer.json()["detail"])
         self.assertEqual(ran, [])
 
-    def test_a_member_the_contract_leaves_open_is_struck_by_a_secret_name(self):
+    def test_a_member_the_contract_leaves_open_has_its_strings_struck_by_a_secret_name(self):
+        # Struck in place, so a reader of the record finds the shape it was sent.
+        cases = (
+            ("must-never-enter-hq", REDACTED),
+            ({"value": "x", "count": 7}, {"value": REDACTED, "count": 7}),
+            (["x", None, True], [REDACTED, None, True]),
+        )
         for key in ("api_token", "Password", "client_secret", "private_key", "credentials"):
-            for value in ("must-never-enter-hq", {"value": "x"}, ["x"], 7):
+            for value, kept in cases:
                 ran: list[tuple[str, Any]] = []
                 report = {**EXAMPLES["report"], "status": {"nested": {key: value}}}
                 with self.subTest(key=key, value=value), self.assertLogs("severino.bridge", "WARNING"):
                     answer = _send("report", report, _recording(ran))
                     self.assertEqual(answer.status, 200, answer.body)
-                    self.assertEqual(ran[0][1]["status"], {"nested": {key: REDACTED}})
+                    self.assertEqual(ran[0][1]["status"], {"nested": {key: kept}})
 
     def test_a_flag_named_like_a_secret_holds_none_and_passes(self):
         # A repository's ``private`` is the contract's own member.

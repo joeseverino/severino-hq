@@ -119,14 +119,16 @@ def _properties(node: Any) -> Iterator[str]:
 @cache
 def declared_names() -> frozenset[str]:
     """Every name the contract gives a member or a key: its properties, its
-    query parameters, and the kinds a sweep's inventory is keyed by.
+    query parameters, the kinds a sweep's inventory is keyed by, and the parts
+    a reading's alert counts are keyed by.
 
     Each is the contract's own word, so the door never strikes one as a
     member named as a secret; a member the contract leaves open still is.
     """
 
     schemas = contract()["components"]["schemas"]
-    kinds = (kind for name in ("ResourceKind", "SweptKind") for kind in schemas[name]["enum"])
+    keys = ("ResourceKind", "SweptKind", "ReadingPartName")
+    kinds = (kind for name in keys for kind in schemas[name]["enum"])
     parameters = (parameter.name for operation in operations().values() for parameter in operation.parameters)
     return frozenset((*_properties(schemas), *kinds, *parameters))
 

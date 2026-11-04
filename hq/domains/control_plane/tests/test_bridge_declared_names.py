@@ -70,6 +70,18 @@ class DeclaredNameTests(SimpleTestCase):
         self.assertEqual(answer.status, 200, answer.body)
         self.assertEqual(ran[0][1]["status"], status)
 
+    def test_every_reading_part_a_record_is_keyed_by_passes_unchanged(self):
+        # A record's alert counts are keyed by part, and a part's name may
+        # sound like a secret (leaked credentials).
+        parts = [part for part in contract()["components"]["schemas"]["ReadingPartName"]["enum"] if part]
+        self.assertTrue(parts)
+        record = {"name": "example", "by_part": dict.fromkeys(parts, "example")}
+        inventory = {min(_kinds()): {"ok": True, "records": [record]}}
+        ran: list[tuple[str, Any]] = []
+        answer = _send("inventory", inventory, ran)
+        self.assertEqual(answer.status, 200, answer.body)
+        self.assertEqual(ran, [("inventory", inventory)])
+
     def test_every_query_parameter_the_contract_declares_is_taken(self):
         for operation in operations().values():
             with self.subTest(action=operation.name):
