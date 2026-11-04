@@ -80,7 +80,7 @@ class ListPagingTests(TestCase):
 
         with self.assertRaises(InvalidResourceInput) as refused:
             list_resource("projects", {"limit": 5, "query": "example-1", **first["next"]}, principal=READER)
-        self.assertEqual(refused.exception.errors[0]["loc"], ["cursor"])
+        self.assertEqual(refused.exception.details["errors"][0]["loc"], ["cursor"])
 
     def test_a_cursor_of_another_list_or_not_issued_by_hq_is_refused(self):
         cursor = list_resource("projects", {"limit": 5}, principal=READER)["next"]["cursor"]
@@ -92,7 +92,7 @@ class ListPagingTests(TestCase):
         ):
             with self.subTest(name=name, sent=sent), self.assertRaises(InvalidResourceInput) as refused:
                 list_resource(name, {"limit": 5, "cursor": sent}, principal=READER)
-            self.assertEqual(refused.exception.errors[0]["loc"], ["cursor"])
+            self.assertEqual(refused.exception.details["errors"][0]["loc"], ["cursor"])
 
     def test_the_last_page_offers_no_cursor(self):
         page = list_resource("projects", {"limit": MAX_PAGE_SIZE, "query": "example-00"}, principal=READER)

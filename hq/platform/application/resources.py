@@ -560,10 +560,18 @@ class UnsupportedResourceOperation(HostRefusal, ResourceError):
 
 
 class InvalidResourceInput(ResourceError):
+    """Input a resource's read refused, said once for every door: each field
+    that was wrong and why, the filters its kind's list takes, and the call
+    that says each one's type, so the next call can be right."""
+
     def __init__(self, name: str, errors: Iterable[Mapping[str, Any]]) -> None:
         refusal = pydantic_refusal(name, errors)
+        spec = resource_registry().get(name)
+        details: dict[str, Any] = {"errors": refusal.details, "next": next_call("describe_resources", name=name)}
+        if spec is not None and spec.list_query_type:
+            details["filters"] = list(list_filters(spec.list_query_type))
         super().__init__(refusal.message)
-        self.errors = refusal.details
+        self.details = details
 
 
 # What a missed identifier adds to its refusal's sentence.

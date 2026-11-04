@@ -114,7 +114,7 @@ class FiltersInTheSchemaTests(TestCase):
                 self.assertTrue(answer.is_error)
                 error = answer.structured_content["error"]
                 self.assertEqual(error["code"], "invalid_input")
-                self.assertIn(field, [detail["loc"][0] for detail in error["details"]])
+                self.assertIn(field, [detail["loc"][0] for detail in error["details"]["errors"]])
 
     def test_a_value_among_the_choices_lists(self):
         Project.objects.create(name="Chosen", slug="chosen", status=Project.Status.PAUSED)
