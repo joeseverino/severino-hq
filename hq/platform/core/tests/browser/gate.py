@@ -48,7 +48,7 @@ from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.shots import shoot_page
 from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
-from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, SWEEP_STEP, WIDEST, viewport, viewport_queries
+from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, query_edges, viewport, viewport_queries
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
@@ -549,41 +549,45 @@ class BrowserGate(SimpleTestCase):
         width from the narrowest phone up, with the first width it was found
         at; the page is left at the width it was loaded at.
 
-        Between two changes of the layout's shape (`TABLE_LAYOUT`) a region
-        grows with the window and a table at its narrowest asks no more than it
-        did, so a table that fits at the first width of a shape fits at every
-        width of it. The window grows by `SWEEP_STEP` to find where the shape
-        changes, and halves each step it changed in down to the first width of
-        the new shape, where the table has the least room."""
+        A table's room changes only where the layout around it changes shape
+        (`TABLE_LAYOUT`): at an edge of the stylesheet's viewport queries, and
+        between two edges wherever a box around it wraps or adds a track, which
+        moves one way as the window grows. So the sweep reads each span between
+        edges at its two ends, and halves a span whose ends differ down to the
+        first width of each new shape. Within a shape a region grows with the
+        window and a table at its narrowest asks no more than it did, so a
+        table that fits at the first width of a shape fits at every width of
+        it."""
 
         loaded = self.page.viewport_size
-        arg = [SELECTORS["table_scroll"], viewport_queries(stylesheet())]
+        queries = viewport_queries(stylesheet())
+        arg = [SELECTORS["table_scroll"], queries]
         found: dict[str, str] = {}
+        shapes: dict[int, str] = {}
 
         def read(width):
             self.page.set_viewport_size(viewport(width))
-            layout, sizes, misfits = self.page.evaluate(TABLE_LAYOUT, arg)
+            shape, sizes, misfits = self.page.evaluate(TABLE_LAYOUT, arg)
             for misfit in misfits:
                 table, _, by = misfit.rpartition(" +")
                 found.setdefault(table, f"+{by} at {width}px")
-            return layout, sizes
+            shapes[width] = shape
+            return sizes
 
-        def between(low, low_read, high, high_read):
-            if high - low > 1 and low_read[0] != high_read[0]:
+        def between(low, high):
+            if high - low > 1 and shapes[low] != shapes[high]:
                 middle = (low + high) // 2
-                middle_read = read(middle)
-                between(low, low_read, middle, middle_read)
-                between(middle, middle_read, high, high_read)
+                read(middle)
+                between(low, middle)
+                between(middle, high)
 
-        low, low_read = NARROWEST, read(NARROWEST)
-        # A page with no table region has nothing to sweep. Past the widest
-        # width the gates read, once no region grows nothing changes again.
-        for high in range(NARROWEST + SWEEP_STEP, LARGEST + 1, SWEEP_STEP) if low_read[1] else ():
-            high_read = read(high)
-            between(low, low_read, high, high_read)
-            if high >= WIDEST and high_read == low_read:
-                break
-            low, low_read = high, high_read
+        # A page with no table region has nothing to sweep.
+        if read(NARROWEST):
+            edges = query_edges(queries)
+            for low, high in zip([NARROWEST, *edges], [edge - 1 for edge in edges] + [LARGEST], strict=True):
+                for width in {low, high} - shapes.keys():
+                    read(width)
+                between(low, high)
         self.page.set_viewport_size(loaded)
         self.page.evaluate(SETTLE)
         return found

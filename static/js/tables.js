@@ -329,6 +329,19 @@
     });
   };
   const markCuts = () => document.querySelectorAll(`${REGION} > .data-table`).forEach(markCut);
+  // Rows opened or closed together (a reader's taps, a find's matches) are
+  // measured for their cuts once, in the next frame: measured after each, a
+  // table of many rows is laid out again for every one.
+  const unmeasured = new Set();
+  const markCutSoon = (table) => {
+    if (!unmeasured.size) {
+      requestAnimationFrame(() => {
+        unmeasured.forEach(markCut);
+        unmeasured.clear();
+      });
+    }
+    unmeasured.add(table);
+  };
 
   // Opening a row must not move the table. Left to itself the browser sizes
   // every column again around what the open row now shows whole, and each
@@ -391,7 +404,7 @@
     }
     // An open row shows its values whole, so it keeps no title for a cut;
     // closed again, it is measured for them.
-    markCut(table);
+    markCutSoon(table);
     button?.setAttribute("aria-expanded", String(expanding));
     button?.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");
     // Open what was folded, and on the way back close only what this opened.

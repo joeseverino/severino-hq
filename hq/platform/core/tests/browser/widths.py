@@ -24,10 +24,8 @@ NARROWEST = 320
 # a table region stops growing on most pages.
 WIDEST = 1680
 
-# How far apart a sweep reads a page as it widens the window, looking for
-# where the layout changes shape, and the widest it goes on a page whose
-# regions are still growing.
-SWEEP_STEP = 32
+# The widest window a sweep reads, far past where any page stops changing
+# shape: past the last viewport query a region only grows.
 LARGEST = 3840
 
 # The sparse estate is read across the stylesheet's media queries as well: at
@@ -89,6 +87,20 @@ def viewport_queries(css):
 
     css = re.sub(r"/\*.*?\*/", " ", css, flags=re.DOTALL)
     return sorted({query.strip() for query in re.findall(r"@media([^{]*\bwidth\b[^{]*)\{", css)})
+
+
+def query_edges(queries):
+    """The first width at which each of the viewport ``queries`` starts or
+    stops holding, from the narrowest phone to the widest sweep: between two
+    of them every query holds as it did."""
+
+    edges = set()
+    for query in queries:
+        bounds = re.findall(r"\((min|max)-width:\s*(\d+)px\)", query)
+        if not bounds:
+            raise AssertionError(f"The stylesheet asks a viewport query the sweep cannot read the edge of: {query}")
+        edges |= {int(width) + (bound == "max") for bound, width in bounds}
+    return sorted(edge for edge in edges if NARROWEST < edge <= LARGEST)
 
 
 # The stylesheet's phone breakpoint: `@media (max-width: 640px)`.
