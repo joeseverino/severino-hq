@@ -161,7 +161,7 @@ class ExampleEstateTests(TestCase):
         # An agent a viewer signed in: what of its grant is in force, and what is beyond their role.
         row = " ".join(element.words for element in within(page, "data-agent", "example-reader"))
         self.assertTrue(within(page, "data-role", "viewer"))
-        self.assertIn("In force: read", row)
+        self.assertIn("Permissions: read", row)
         self.assertIn("beyond riley's role: write_calendar", row)
         # An agent whose last sign-in did not carry a permission HQ offers, named with its fix.
         missing = within(page, "data-missing")

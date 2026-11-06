@@ -15,9 +15,9 @@ from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.controller import ControllerReport, report_operation
 from hq.platform.application.finding_model import Finding
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.markup import actions, hrefs, select, text
-from hq.platform.application.tests.writers import form_keyed
 from hq.platform.application.topology_model import TopologyNode
 
 from ..models import DashboardMachine, ManagedResource, OperationRequest, ProviderConnection

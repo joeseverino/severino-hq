@@ -62,9 +62,9 @@ def agent_name(identity: AgentIdentity) -> str:
 # What each standing is called on the page, and its pill's tone.
 _STANDING_WORDS = {
     DeviceStanding.APPROVED: ("Approved", "pill-good"),
-    DeviceStanding.AWAITING: ("Awaiting approval", "pill-attention"),
+    DeviceStanding.AWAITING: ("Needs approval", "pill-attention"),
     DeviceStanding.BLOCKED: ("Blocked", "pill-serious"),
-    DeviceStanding.UNSEEN: ("Not seen yet", ""),
+    DeviceStanding.UNSEEN: ("Unknown", ""),
 }
 
 

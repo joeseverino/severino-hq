@@ -18,8 +18,8 @@ from hq.domains.docs_index.importer import ManifestImportError, import_manifest_
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.markup import text
-from hq.platform.application.tests.writers import form_keyed
 
 from .signed_in_case import _AuthedTestCase
 

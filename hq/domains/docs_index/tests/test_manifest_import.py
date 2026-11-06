@@ -9,8 +9,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.platform.application.documentation import MAX_MANIFEST_ITEMS, SYNC
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import Capability, Principal
-from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 from ..models import DocumentationRecord

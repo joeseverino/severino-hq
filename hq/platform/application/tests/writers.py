@@ -20,10 +20,6 @@ from typing import Any
 lazy from django.http import HttpResponse
 
 from .apart import apart
-
-# A test that posts a form it did not open: the host's post with the copy
-# hq_sdk.testing gives the extensions'.
-lazy from ..plugin_testing import form_keyed  # noqa: F401 - the tests import it from here
 lazy from ..web_writes import RETRY_KEY_FIELD
 lazy from .markup import all_elements
 lazy from .source import source_files

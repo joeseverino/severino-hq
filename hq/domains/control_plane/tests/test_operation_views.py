@@ -11,9 +11,10 @@ from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.approvals import DESTRUCTIVE_EFFECT, ApproveCommand, approve, asked, preview
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.capability_policy import Rule
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal, web_principal
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
 CONTAINER = {"connection_ref": "example-portainer", "host": "example-host", "name": "example-web"}

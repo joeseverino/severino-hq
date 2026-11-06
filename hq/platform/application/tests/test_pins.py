@@ -8,7 +8,8 @@ nobody chose, which is the whole reason the list needed one.
 
 from django.test import TestCase
 
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 
 
 class ServiceFavoriteTests(TestCase):

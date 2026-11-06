@@ -13,7 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 
 from ..connection_context import ConnectionsContext, connections_context
 from ..field_masks import WHOLE_RECORD

@@ -112,8 +112,8 @@ before HQ ever sees a token, and a client made in the admin UI admits nobody
 until a group is chosen.
 
 The steps for an agent's client, one a person signs in or one that runs
-unattended, are on HQ's Agents page, under **Adding an agent**
-(`/agents/#adding-an-agent`). Its permissions step links back here for the
+unattended, are on HQ's Agents page, under **Setup**
+(`/agents/#setup`). Its permissions step links back here for the
 task above. The page also names, on each agent's row, a permission HQ offers
 that its last sign-in did not carry, so one a release adds is granted before
 a sign-in asks for it.

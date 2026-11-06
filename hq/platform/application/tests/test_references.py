@@ -22,10 +22,10 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from .. import references
 from ..assets import AssetCommand, save_asset
 from ..calendar_entries import EntryCommand, save_entry
+from ..plugin_testing import form_keyed
 from ..references import Referable, Reference, ReferenceField, Target
 from ..security import Principal, cli_principal, internal_principal
 from .markup import all_elements, elements, hrefs, links, select, text, texts
-from .writers import form_keyed
 
 
 def one(items):

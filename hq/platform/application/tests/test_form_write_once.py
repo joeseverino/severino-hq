@@ -28,9 +28,10 @@ from hq.domains.projects.models import Project
 
 from .. import records
 from ..expenses import ExpenseCommand, save_expense
+from ..plugin_testing import form_keyed
 from ..web_writes import RETRY_KEY_FIELD, run_posted
 from .markup import text
-from .writers import drawn_key, form_keyed
+from .writers import drawn_key
 
 # The delete page's one button posts the page's shared form.
 CONFIRM = ("id", "hq-post")

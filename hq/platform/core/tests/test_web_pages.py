@@ -27,10 +27,10 @@ from hq.platform.application import readings
 from hq.platform.application.action_links import command_url
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.labels import DOT
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.markup import elements, hrefs, select, text
-from hq.platform.application.tests.writers import form_keyed
 
 from .signed_in_case import _AuthedTestCase
 

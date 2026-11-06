@@ -82,9 +82,9 @@ shellcheck = "0.11.0"
 # Runs the Go tests (test:controller) and renders go test's JSON events, which
 # it also keeps in a file for a reader that decides from them.
 "aqua:gotestyourself/gotestsum" = "1.13.0"
-jactionlint = { version = "2.4.0", workflow = "release.yaml" }
+jactionlint = { version = "2.5.0", workflow = "release.yaml" }
 # The workflows' security audit (lint:workflows), offline.
-zizmor = "1.31.1"
+zizmor = "1.32.0"
 # The prose linter: HQ's wording rules, in tools/lint/vale/.vale.ini (lint:prose).
 # 3.25 no longer masks a template's {% comment %} block, so lint:prose reads
 # comments as shown text; renovate.json skips 3.25.x.
@@ -94,7 +94,7 @@ vale = "3.24.0"
 ast-grep = "0.51.1"
 yq = "4.54.1"
 jq = "1.8.2"
-uv = "0.13.6"
+uv = "0.13.7"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
 # Lazy, as age is: only lint:scorecard runs it.
 scorecard = { version = "5.6.0", lazy = true }
@@ -102,7 +102,7 @@ scorecard = { version = "5.6.0", lazy = true }
 # `mise install` leaves it to its first use, held to mise.lock all the same.
 age = { version = "1.3.2", lazy = true }
 # The image scan, here (image:trivy) and in Compose. Lazy, as age is.
-trivy = { version = "0.76.1", lazy = true }
+trivy = { version = "0.76.2", lazy = true }
 # The secret scan over a repository's commits (scan:secrets), which the
 # extensions' plugin checks run from this lock. Lazy, as age is.
 gitleaks = { version = "8.30.1", lazy = true }
@@ -115,7 +115,7 @@ hyperfine = { version = "2.0.0", lazy = true }
 # Signs and verifies the composition, here, in CI, in an extension's admission
 # and on the host, whose verifier is generated from this lock's linux-x64 entry
 # (controller/host/verifier.gen.go). Lazy, as age is.
-cosign = { version = "3.1.3", lazy = true }
+cosign = { version = "3.1.4", lazy = true }
 # Known advisories in the npm tools' lock and the controller's modules, the
 # Go ones judged by whether the controller calls the vulnerable code
 # (lint:audit). Lazy, as age is.
@@ -148,7 +148,7 @@ linux-arm64 = { asset_pattern = "codebase-memory-mcp-linux-arm64-portable.tar.gz
 # src/defaults.json), so the local analysis runs the queries CI runs. Bump with
 # that action. Lazy, as age is: only scan:codeql runs it.
 [tools."github:github/codeql-action"]
-version = "2.27.3"
+version = "2.27.4"
 version_prefix = "codeql-bundle-v"
 bin_path = "codeql"
 lazy = true

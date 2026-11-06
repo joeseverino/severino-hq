@@ -44,7 +44,7 @@ or out of date.
     something looks wrong, not on every visit, and thirty rows of it push the
     page's own content off a phone.
     {% endcomment %}
-    <details class="sweep section-fold">
+    {% card element="details" css="sweep section-fold" %}
       <summary><h2>What was read, and when <span class="heading-aside">{{ inventory|length }}</span></h2></summary>
       <div class="sweep-grid">
         {% for snapshot in inventory %}
@@ -62,6 +62,6 @@ or out of date.
           </div>
         {% endfor %}
       </div>
-    </details>
+    {% endcard %}
   {% endif %}
 {% endif %}

@@ -9,7 +9,8 @@ from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import ActionItemRead, AuditLog
 
 from ..action_items import (

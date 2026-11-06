@@ -8,7 +8,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
 
 from ..agent_access import AGENT_BLOCKED, AGENTS_PAUSED, SET_AGENT_BLOCK, blocked, refusal

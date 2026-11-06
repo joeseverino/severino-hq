@@ -23,10 +23,10 @@ from ..capabilities import execute_capability
 from ..content import ContentCommand, save_content
 from ..documentation import sync_documentation
 from ..expenses import ExpenseCommand, save_expense
+from ..plugin_testing import form_keyed
 from ..projects import ProjectCommand, refresh_project, save_project
 from ..record_errors import RecordConflict, RecordNotFound
 from ..security import OPERATOR_CAPABILITIES, Principal, cli_principal, mcp_principal
-from .writers import form_keyed
 
 
 def as_mcp_caller(call):

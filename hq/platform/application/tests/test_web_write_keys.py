@@ -13,10 +13,11 @@ from django.conf import settings
 from django.test import SimpleTestCase, TestCase, tag
 
 from ..capabilities import capability_registry, run_capability
+from ..plugin_testing import form_keyed
 from ..security import Principal
 from ..web_writes import RETRY_KEY_FIELD
 from .source import source_files
-from .writers import drawn_key, form_keyed
+from .writers import drawn_key
 
 ROOT = Path(settings.BASE_DIR)
 TEMPLATE_ROOTS = (ROOT / "templates", ROOT / "tests" / "fixtures" / "example_hq_plugin" / "templates")

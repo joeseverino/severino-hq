@@ -9,8 +9,8 @@ from django.test import Client, TestCase
 
 from hq.domains.control_plane.models import ProviderInventory, ReadRequest
 from hq.domains.jobs.models import Job
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.host_only import host_only
-from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.bench import Seeded, seed
 from hq.platform.core.management.commands.bench_pages import (
     ACTIONS,

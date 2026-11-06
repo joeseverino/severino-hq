@@ -17,6 +17,7 @@ from hq.platform.core.tests.browser.probes.boxes import (
 )
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES, FIELD_CONTRAST, FIELD_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
+    BARE_FOLDS,
     DIALOGS_WITHOUT_OPENERS,
     HIDDEN_IN_SUMMARIES,
     LINKS_AT_REST,
@@ -177,6 +178,7 @@ _GEOMETRY = {
     "link underlines": (PARTS_NOT_UNDERLINED, [SELECTORS["link"], SELECTORS["vendored"]]),
     "links at rest": (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
     "lists of facts": (WRAPPED_BESIDE_A_PAIR, SELECTORS["fact_list"]),
+    "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
     # Every box and every line of text, not only a card's or code's.
     "gutter": (PAST_THE_GUTTER, ["*", True]),
     # How far the page moved by itself since it began to load, scored from the

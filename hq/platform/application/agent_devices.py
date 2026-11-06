@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
+from ipaddress import ip_address
 from typing import Annotated, Literal, TypedDict
 
 from django.db import DatabaseError, IntegrityError, transaction
@@ -29,11 +30,12 @@ from .linked_accounts import SIGN_IN
 from .reach import network_of
 from .record_errors import RecordNotFound
 from .security import AGENT_SURFACES, AuthorizationError, Principal, person
-lazy from .action_links import READ_NOW_CAPABILITY
+lazy from .action_links import READ_NOW_CAPABILITY, read_now_link
 lazy from .cadence import sweep_interval
 lazy from .hq_self import site_url
 lazy from .moments import duration
 lazy from .routes import reverse
+lazy from .workflow_contracts import ActionLink
 
 logger = logging.getLogger("severino.agents")
 
@@ -81,7 +83,9 @@ def place(address: str) -> Placement:
     try:
         known = tailnet.devices()
     except DatabaseError:
-        logger.warning("Tailnet reading unreadable; %s is unseen.", address, extra={"event": "agents.device.unread"})
+        # Logged as the address it parsed as, so the line holds nothing else the caller sent.
+        caller = ip_address(address.strip())
+        logger.warning("Tailnet reading unreadable; %s is unseen.", caller, extra={"event": "agents.device.unread"})
         return UNSEEN
     if not known:
         return NOWHERE
@@ -221,11 +225,18 @@ def unseen_reason() -> str:
     when the next reading comes, and the command that reads the tailnet now."""
 
     return (
-        "HQ has not seen this device on the tailnet yet, so nobody has approved it for this client. "
+        "No device in HQ's last Tailscale reading has this address, so nobody has approved it for this client. "
         f"HQ reads the tailnet within {duration(sweep_interval())}, or at once through "
         f"{READ_NOW_CAPABILITY} for {TAILNET_KIND}; then the person it acts for approves "
-        "the device on HQ's Agents page."
+        "the device under Needs approval on HQ's Agents page."
     )
+
+
+def read_tailnet(principal: Principal) -> ActionLink | None:
+    """The read of the tailnet an address it did not hold waits on, offered
+    beside that address when ``principal`` may ask for it."""
+
+    return read_now_link(principal, kind=TAILNET_KIND)
 
 
 def blocked_askers() -> Q:

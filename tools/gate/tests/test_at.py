@@ -476,7 +476,8 @@ class MeasuredNarrowRunTests(GateTestCase):
 
     def test_a_narrow_run_runs_again_under_the_measurer(self):
         environ = {"MISE_TASK_LOCKS": "", "HQ_MEASURED": ""}
-        (command,), _asked = self.take(environ)
+        (command,), asked = self.take(environ)
+        self.assertTrue(asked)
         self.assertEqual(command, [at.MEASURER, sys.executable, "-m", "tools.gate.at"])
         self.assertTrue(os.access(at.MEASURER, os.X_OK))
 

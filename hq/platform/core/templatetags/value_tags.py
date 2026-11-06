@@ -943,6 +943,7 @@ def _card(name: str, given: dict) -> dict:
         "aria-labelledby": given.get("heading"),
         "aria-label": given.get("label"),
         "aria-busy": "true" if given.get("busy") else None,
+        "open": True if given.get("open") else None,
     }
     named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
     drawn = [(key, value) for key, value in named.items() if _drawn(value)]
@@ -964,6 +965,6 @@ slotted(
     "card",
     "partials/_card.html",
     ("content",),
-    frozenset(("element", "id", "css", "heading", "label", "busy")),
+    frozenset(("element", "id", "css", "heading", "label", "busy", "open")),
     shape=_card,
 )

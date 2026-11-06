@@ -20,7 +20,7 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     ProviderInventory,
 )
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 
 from ..capabilities import capability_words
 from ..machines import machine, machine_catalog

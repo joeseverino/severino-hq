@@ -1,13 +1,15 @@
-"""Which tests of a checkout carry which tags, and which of them walk a tree or run git, read from their source.
+"""Which tests of a checkout carry which tags, and which of them walk a tree or run a program the image lacks, read from their source.
 
 The guard in test_tree_tag.py holds the ``tree`` tag to the walks, and
 ``mise run fast`` runs the tests it finds tagged ``tree``. The guard in
-test_git_tag.py holds a test that runs git to the ``source`` tag. Each walk
+test_unshipped_tag.py holds a test that runs git or a tool mise pins to the
+``source`` tag. Each walk
 runs apart (apart.py), so the trees it parses leave with its process.
 """
 
 import ast
 import re
+import tomllib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -38,13 +40,25 @@ def is_walk(node: ast.AST) -> bool:
     return node.func.attr == "rglob" or (node.func.attr == "walk" and isinstance(owner, ast.Name) and owner.id == "os")
 
 
-def is_git(node: ast.AST) -> bool:
-    """A command line that runs git: a list or tuple whose first item is ``"git"``."""
+def unshipped(root: Path) -> frozenset[str]:
+    """The programs a checkout runs that its image lacks: git, and each tool
+    mise.toml pins (by its name, an ``aqua:`` one by its repository's), since
+    the image ships Python and the base system only."""
 
-    if not (isinstance(node, (ast.List, ast.Tuple)) and node.elts):
-        return False
-    head = node.elts[0]
-    return isinstance(head, ast.Constant) and head.value == "git"
+    pinned = tomllib.loads((root / "mise.toml").read_text(encoding="utf-8")).get("tools", {})
+    return frozenset({"git", *(name.rpartition("/")[2].rpartition(":")[2] for name in pinned)})
+
+
+def runs(programs: frozenset[str]) -> Callable[[ast.AST], bool]:
+    """Whether a node is a command line that runs one of ``programs``: a list or tuple whose first item names it."""
+
+    def found(node: ast.AST) -> bool:
+        if not (isinstance(node, (ast.List, ast.Tuple)) and node.elts):
+            return False
+        head = node.elts[0]
+        return isinstance(head, ast.Constant) and head.value in programs
+
+    return found
 
 
 def tags(decorators: list[ast.expr]) -> set[str]:
@@ -297,18 +311,41 @@ def shipped(root: Path) -> tuple[str, ...]:
     return tuple(package for package in SUITE if package in admitted)
 
 
-def runs_git_untagged(root: Path) -> list[str]:
-    """Every test the image ships that runs git, itself or through what it
-    reaches by name, without the ``source`` tag: no image ships git."""
+def runs_unshipped_untagged(root: Path) -> list[str]:
+    """Every test the image ships that runs a program the image lacks
+    (``unshipped``), itself or through what it reaches by name, without the
+    ``source`` tag."""
 
-    return apart(_runs_git_untagged, root)
+    return apart(_runs_unshipped_untagged, root)
 
 
-def _runs_git_untagged(root: str) -> list[str]:
-    reach = Reach(Path(root), is_git)
+def _runs_unshipped_untagged(root: str) -> list[str]:
+    reach = Reach(Path(root), runs(unshipped(Path(root))))
+    asks = Reach(Path(root), is_which)
     return [
         f"{dotted}.{cls.name}.{method.name}"
         for dotted in test_modules(reach.root, shipped(reach.root))
         for cls, method, held, own in reach.methods(dotted)
-        if "source" not in held | own and reach.reached(dotted, cls, method)
+        if "source" not in held | own
+        and reach.reached(dotted, cls, method)
+        and not skips_without_a_program(asks, dotted, cls, method)
     ]
+
+
+def is_which(node: ast.AST) -> bool:
+    """A call of ``shutil.which``, which asks whether a program is installed."""
+
+    return isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) == "which"
+
+
+def skips_without_a_program(asks: Reach, dotted: str, cls: ast.ClassDef, method: ast.FunctionDef) -> bool:
+    """Whether a test, or its class, is skipped by a ``skipIf`` or ``skipUnless``
+    whose condition asks for a program (``asks`` finds ``shutil.which``), so an
+    image without it skips the test rather than fails it."""
+
+    return any(
+        isinstance(decorator, ast.Call)
+        and getattr(decorator.func, "attr", getattr(decorator.func, "id", "")) in ("skipIf", "skipUnless")
+        and any(asks.reaches(dotted, condition, cls) for condition in decorator.args[:1])
+        for decorator in [*cls.decorator_list, *method.decorator_list]
+    )

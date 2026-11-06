@@ -34,6 +34,7 @@ from ..approvals import (
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation, schedule_automatic_operations
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
+from ..plugin_testing import form_keyed
 from ..security import (
     AuthorizationError,
     Capability,
@@ -43,7 +44,7 @@ from ..security import (
     web_principal,
 )
 from .markup import text
-from .writers import form_keyed, keyed
+from .writers import keyed
 
 POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"

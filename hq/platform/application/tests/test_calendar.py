@@ -10,7 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.calendars.models import Entry, Preference
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
 from ..calendar import (

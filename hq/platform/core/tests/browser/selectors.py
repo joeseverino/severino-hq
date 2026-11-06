@@ -12,6 +12,9 @@ SELECTORS = {
     # holding one, and the calendar it pages in place.
     "fragment_failure": "main > [data-fragment-load] > .notice",
     "fragment_fold": "details:has(> [data-fragment-load]) > summary",
+    # A folded section, and a part of one drawn only once it opens.
+    "section_fold": "details.section-fold",
+    "drawn_when_opened": "[data-fragment-load]",
     "calendar_period": "#calendar-period",
     "calendar_next": '#calendar a[rel="next"]',
     "decisions": "[data-attention-item]",

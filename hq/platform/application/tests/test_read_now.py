@@ -15,8 +15,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory, ReadRequest
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.markup import text
-from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 from ..action_links import read_now_link, read_now_payload

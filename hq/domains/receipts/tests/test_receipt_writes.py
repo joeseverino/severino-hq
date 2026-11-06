@@ -19,10 +19,10 @@ from hq.domains.receipts import validation
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BASE64_CHARS
 from hq.platform.application.capabilities import execute_capability
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.receipts import REPLACE, UPDATE, UPLOAD
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal
 from hq.platform.application.tests.markup import text
-from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog, IdempotencyRecord
 
 GRANTED = frozenset(Capability) | OPERATOR_CAPABILITIES

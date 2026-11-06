@@ -19,7 +19,8 @@ from hq.domains.control_plane.models import ProviderConnection, ProviderInventor
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.testing import held_jobs
 from hq.domains.projects.models import Project
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
 from ..capabilities import execute_capability

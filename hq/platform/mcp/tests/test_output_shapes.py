@@ -17,7 +17,7 @@ from pydantic import TypeAdapter
 
 from hq.domains.control_plane.models import CapabilityRule
 from hq.domains.projects.models import Project
-from hq.platform.application.security import Capability, Principal
+from hq.platform.application.security import Principal, operator_capabilities
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
@@ -26,8 +26,8 @@ from ..identity import set_principal
 from ..server import mcp
 from ..shapes import answer_type
 
-# An agent holding every capability, so each kind is read rather than refused.
-READER = Principal("example-reader", "mcp", frozenset(Capability))
+# An agent holding every grant, an extension's too, so each kind is read rather than refused.
+READER = Principal("example-reader", "mcp", operator_capabilities())
 WRITER = Principal("example-writer", "mcp", frozenset({"write_projects", "read"}))
 # An agent whose changes wait for a person, so a held answer is read too.
 HELD = Principal("example-held", "mcp", frozenset({"write_projects", "read"}))
@@ -53,6 +53,16 @@ def _successes(lenses):
         else:
             yield from ((name, arguments) for arguments in ARGUMENTS.get(name, ({},)))
     yield from (("get_topology", {"lens": lens}) for lens in lenses)
+
+
+def _refused_a_grant(answers):
+    """Each call refused for a grant its principal lacks, so a kind that passed by refusal is named."""
+
+    return [
+        (name, arguments)
+        for name, arguments, result in answers
+        if result.is_error and result.structured_content["error"]["code"] in {"forbidden", "insufficient_scope"}
+    ]
 
 
 def _refusals():
@@ -165,6 +175,7 @@ class OutputShapeTests(TestCase):
         reads = [(name, arguments) for name, arguments in _successes(lenses) if name != "execute_capability"]
 
         _, answered = self._checked(READER, [*reads, *_refusals()])
+        self.assertEqual(_refused_a_grant(answered[: len(reads)]), [], "READER holds every grant, an extension's too")
         _, written = self._checked(WRITER, writes)
         _, held = self._checked(HELD, [("execute_capability", {"name": "project.create", "payload": HELD_PROJECT})])
         self.assertEqual(held[0][2].structured_content.get("status"), "awaiting_approval")

@@ -8,8 +8,8 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource
 from hq.domains.projects.models import Project
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.markup import text
-from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 

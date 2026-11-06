@@ -12,9 +12,9 @@ from hq.platform.core.example_estate.testing import throwaway_media
 from ..integrations import integration_graph
 from ..plugins import plugin_resource_specs
 from ..resources import EmptyQuery, ResourceSpec, describe_resources, get_resource, list_resource, resource_registry
-from ..security import Capability, Principal
+from ..security import Principal, operator_capabilities
 
-OPERATOR = Principal("example-operator", "test", frozenset(Capability))
+OPERATOR = Principal("example-operator", "test", operator_capabilities())
 
 
 def _declaring():

@@ -186,12 +186,14 @@ async def listening(application, principal, body, *, protocol=MODERN, **claims):
         "client": ("100.64.0.10", 50000),
         "server": ("testserver", 80),
     }
-    task = asyncio.create_task(application(scope, receive, send))
-    try:
-        yield Reply(sent)
-    finally:
-        gone.set()
-        await task
+    # The group waits for the application to finish once the client has left,
+    # and raises what it raised.
+    async with asyncio.TaskGroup() as group:
+        group.create_task(application(scope, receive, send))
+        try:
+            yield Reply(sent)
+        finally:
+            gone.set()
 
 
 def _run(steps):

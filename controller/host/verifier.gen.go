@@ -5,7 +5,7 @@ package host
 // The cosign release mise.lock records for linux-x64: the verifier the host
 // installs is the release every workflow signs and verifies with.
 const (
-	CosignVersion = "v3.1.3"
-	CosignSHA256  = "4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
-	CosignURL     = "https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-linux-amd64"
+	CosignVersion = "v3.1.4"
+	CosignSHA256  = "424e2c97d0b45fd7a6b608a87f090f35633f4c23ece5f092d48bba11aaf4bbfa"
+	CosignURL     = "https://github.com/sigstore/cosign/releases/download/v3.1.4/cosign-linux-amd64"
 )

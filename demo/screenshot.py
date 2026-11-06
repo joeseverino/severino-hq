@@ -45,7 +45,7 @@ class Shot:
 SHOTS = (
     Shot("dashboard.png", "/", width=1440),
     Shot("service.png", "/infrastructure/services/hq.example.com/", width=1440),
-    Shot("ai/agents.png", "/agents/", frame=("header.site-header", "summary:has-text('Every other action')")),
+    Shot("ai/agents.png", "/agents/", frame=("header.site-header", "summary:has-text('Defaults')")),
     Shot("ai/audit.png", "/audit/", frame=("main .page-head", "main tr:has-text('Access denied')"), below=0),
     Shot(
         "ai/approvals.png",

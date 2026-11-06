@@ -172,6 +172,10 @@ PLANTS = {
         '<span class="code-list"><code>example-one</code><code>example-two</code><code>example-three</code></span>'
         "</dd><dt>Other</dt><dd>Example</dd></dl>"
     ),
+    # A folded section whose steps sit bare on the page, closed as most are.
+    "bare folds": Plant(
+        '<details class="section-fold"><summary><h2>Example</h2></summary><p>Example step</p></details>'
+    ),
     "gutter": Plant('<div style="inline-size: calc(100% + 2rem)">Example</div>'),
     # A box cut to four lines that scrolls the rest, with no cap that says so.
     "audit": Plant(

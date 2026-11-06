@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 
 from ..findings import derive_findings
 from ..plugin_testing import offering

@@ -413,7 +413,10 @@ the theme has its row. Then where the menu leads.
 
 **One disclosure.** Every `details` shows the same mark,
 turned when open. A section that folds (`section-fold`) uses its heading as the
-toggle, with its count beside it; never a separate "Show all".
+toggle, with its count beside it; never a separate "Show all". What it holds
+sits on a panel like its neighbors: a fold of one table has the table's
+region, and any other fold is the card (`{% card element="details" %}`), its
+heading inside it (the survey's "bare folds").
 
 **One filter bar.** `.filter-bar`: a search field, selects, Apply, and Clear
 when anything is set. No chip walls.

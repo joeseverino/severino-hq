@@ -68,6 +68,16 @@ def _abandoned(candidate: Path) -> bool:
         return False
 
 
+class _Owner:
+    """The descriptor this process holds OWNER locked through, for the run it started.
+
+    It is never closed: it stays open for the process's life and across an
+    exec of itself, since closing it lets the lock go.
+    """
+
+    held: int | None = None
+
+
 def _run_directory() -> Path:
     """This run's temporary directory, made and locked in the process that starts the run."""
 
@@ -77,6 +87,7 @@ def _run_directory() -> Path:
                 shutil.rmtree(candidate, ignore_errors=True)
         run = Path(tempfile.mkdtemp(prefix=RUN_PREFIX))
         owner = os.open(run / OWNER, os.O_RDWR | os.O_CREAT, 0o600)
+        _Owner.held = owner
         os.set_inheritable(owner, True)  # noqa: FBT003 - positional only; held across an exec of this process
         fcntl.flock(owner, fcntl.LOCK_EX)
         os.write(owner, str(os.getpid()).encode())

@@ -10,12 +10,12 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import AddressReading
 from hq.platform.application.lookup import LOOK_UP_ADDRESS
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.request_connection import connection
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal
 from hq.platform.application.tests.connection_requests import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
 from hq.platform.application.tests.markup import select, text
 from hq.platform.application.tests.test_lookup import AN_ADDRESS, AN_ALLOCATION, GLOBAL as ADDRESS
-from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 STORED = {

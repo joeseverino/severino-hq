@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
 
 from ..adoption import (

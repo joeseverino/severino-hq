@@ -45,10 +45,11 @@ from hq.platform.application.approvals import entry_event, is_held
 from hq.platform.application.asks import READ_WAITING
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.services import CONTAINER_KIND
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core import seeds
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.browser.gate import answered

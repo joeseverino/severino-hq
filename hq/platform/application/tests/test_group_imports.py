@@ -264,6 +264,7 @@ class GroupImportTests(SimpleTestCase):
         )
 
 
+@tag("source", "tree")
 class LoadedImportTests(SimpleTestCase):
     def test_an_import_that_waits_or_may_fail_is_not_loaded_with_its_module(self):
         source = (

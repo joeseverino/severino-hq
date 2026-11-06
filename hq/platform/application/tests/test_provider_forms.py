@@ -16,8 +16,8 @@ from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.providers import PROVIDERS
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.markup import text, with_class
-from hq.platform.application.tests.writers import form_keyed
 
 from ..provider_forms import spec_form_class
 

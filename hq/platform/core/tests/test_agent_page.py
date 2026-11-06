@@ -5,6 +5,7 @@ asked of the server only when opened."""
 import re
 from pathlib import Path
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, tag
@@ -14,7 +15,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
-from hq.platform.application.security import Capability, Principal, agent_grantable, agent_principal
+from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
 from hq.platform.application.tests.markup import select, text, within
 from hq.platform.application.tokens import DEVICE_SCOPE
 from hq.platform.core.audit import operation_context
@@ -96,7 +97,7 @@ class AgentRowTests(TestCase):
 
 # Written out, so the module imports at a base without them.
 CLIENT_SETUP = "#setting-up-a-client"
-ADDING_AN_AGENT = "adding-an-agent"
+ADDING_AN_AGENT = "setup"
 ROOT = Path(__file__).resolve().parents[4]
 
 
@@ -140,7 +141,7 @@ class MissingPermissionTests(TestCase):
         page = self.signed_in(agent_grantable())
 
         self.assertFalse(select(page, "data-missing"))
-        self.assertNotIn("not carried", " ".join(element.words for element in within(page, "data-agent", AGENT)))
+        self.assertNotIn("not granted", " ".join(element.words for element in within(page, "data-agent", AGENT)))
 
     def test_the_devices_permission_is_never_missing_for_an_agent(self):
         page = self.signed_in(agent_grantable() - {DEVICE_SCOPE})
@@ -158,7 +159,9 @@ class MissingPermissionTests(TestCase):
             viewer = get_user_model().objects.create_user("riley")
         roles.assign(viewer, roles.Role.VIEWER)
 
-        page = self.signed_in({str(Capability.READ)}, person=viewer)
+        # Every permission offered that a viewer holds, whatever the installed
+        # set offers: what is left out is only what the role lacks.
+        page = self.signed_in(agent_grant(agent_grantable(), roles.grants(roles.Role.VIEWER)), person=viewer)
 
         self.assertFalse(select(page, "data-missing"))
 
@@ -312,7 +315,9 @@ class AgentDeviceTests(TestCase):
 
         self.assertIn("example-machine wants to act from example-server", said)
 
-    def test_an_address_the_tailnet_reading_does_not_hold_is_drawn_unseen_with_nothing_to_press(self):
+    def unseen_row(self):
+        """The row of a call from an address the last tailnet reading did not hold, and what is in it."""
+
         ProviderInventory.objects.create(
             kind="tailscale.device",
             observed_at=timezone.now(),
@@ -321,10 +326,27 @@ class AgentDeviceTests(TestCase):
         with operation_context(interface="mcp", actor=AGENT, operation="example"):
             denials.record_denial(interface="mcp", reason="device_awaiting_approval", actor=AGENT, source=UNSEEN_AT)
         page = self.page()
-
         (row,) = select(page, "data-device-standing", "unseen")
+        return row, within(page, "id", row.attrs["id"])
+
+    def test_an_address_the_tailnet_reading_does_not_hold_says_so_and_offers_a_read_of_the_tailnet(self):
+        row, inside = self.unseen_row()
+
         self.assertIn(UNSEEN_AT, row.words)
-        self.assertFalse([element for element in within(page, "id", row.attrs["id"]) if element.tag == "form"])
+        self.assertTrue([element for element in inside if "data-unseen" in element.attrs], "why its call was refused")
+        (pressed,) = [element for element in inside if element.attrs.get("type") == "submit"]
+        asked = urlsplit(pressed.attrs["formaction"])
+        self.assertEqual(asked.path, reverse("control_plane:read_now"))
+        self.assertEqual(parse_qs(asked.query), {"kind": ["tailscale.device"]})
+
+    def test_a_reader_who_may_not_read_the_tailnet_is_offered_nothing_to_press(self):
+        roles.assign(self.person, roles.Role.VIEWER)
+
+        _row, inside = self.unseen_row()
+
+        self.assertFalse(
+            [element for element in inside if element.attrs.get("type") == "submit" or element.tag == "form"]
+        )
 
     def test_a_devices_calls_are_counted_on_its_row(self):
         device = self.device(approved_at=timezone.now(), approved_by=self.person)
@@ -393,7 +415,7 @@ class EndpointTests(TestCase):
         said = text(part)
         for words in ("Tools", "example_tool", "Example later list", "example-entry", ENDPOINT.url, ENDPOINT.protocol):
             self.assertIn(words, said)
-        self.assertNotIn("Your devices", said)
+        self.assertNotIn("Your apps", said)
         standings.assert_not_called()
 
     def test_without_script_the_address_asks_for_it(self):
@@ -401,7 +423,7 @@ class EndpointTests(TestCase):
             page = self.client.get(reverse("agent_policy"), {"endpoint": 1})
 
         self.assertIn("example_tool", text(page))
-        self.assertIn("Your devices", text(page))
+        self.assertIn("Your apps", text(page))
 
     def test_with_no_api_resource_it_says_agents_cannot_connect(self):
         with self.settings(SEVERINO_API_RESOURCE=""):

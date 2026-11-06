@@ -171,7 +171,7 @@ off, over the default. From [Security](Security.md#what-hq-enforces):
 > on every request to the machine API (`/api/v2/`) and on every tool call on
 > `/api/mcp/`, and fails closed.
 
-![The Agents page: agents allowed, a button to block all agents, example-assistant waiting for approval to act from a laptop, each agent with its person, what is in force and one permission its last sign-in did not carry, example-agent holding 1 of 16 update streams open and example-assistant all 16, each agent's devices approved, awaiting approval, not seen yet or blocked, and example-agent's three rules changed from the default: stopping a container on, record changes ask first, and allowing a Tailscale connection off](images/ai/agents.png)
+![The Agents page: agents allowed, a button to block all agents, example-assistant needing approval to act from a laptop, each agent with its person, its permissions and one its last sign-in did not grant, example-agent holding 1 of 16 update streams open and example-assistant all 16, each agent's devices approved, needing approval, unknown with a Refresh to read the tailnet, or blocked, and example-agent's three rules: stopping a container on, record changes ask first, and allowing a Tailscale connection off](images/ai/agents.png)
 
 A held call waits in the audit log's approvals queue (`/audit/?awaiting=1`)
 and on the "Needs you" list, where a person approves or rejects it. In the

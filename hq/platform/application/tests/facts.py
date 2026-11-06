@@ -4,7 +4,7 @@ ast-grep parses in a process of its own, so a check reads back only the nodes
 its rules match, and no test process holds a parsed tree. A rule is ast-grep's
 rule object (https://ast-grep.github.io/reference/rule.html) as a dict, and a
 check runs all of its rules in one scan. The image ships no ast-grep, so only
-a test tagged ``source`` scans.
+a test tagged ``source`` scans, which test_unshipped_tag.py holds.
 """
 
 import ast

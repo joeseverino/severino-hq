@@ -14,9 +14,9 @@ from hq.domains.assets.models import Asset
 from hq.domains.expenses.models import Expense
 from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BYTES, validate_receipt_file
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import InputError
 from hq.platform.application.tests.markup import links, text
-from hq.platform.application.tests.writers import form_keyed
 
 
 def _receipt(**fields):

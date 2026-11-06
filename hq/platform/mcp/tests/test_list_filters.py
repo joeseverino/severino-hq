@@ -24,7 +24,7 @@ from hq.platform.application.domains import all_domains
 from hq.platform.application.json_schemas import fields
 from hq.platform.application.plugins import ATTENTION_ORDER
 from hq.platform.application.projection import MAX_PAGE_SIZE
-from hq.platform.application.security import Capability, Principal
+from hq.platform.application.security import Principal, operator_capabilities
 from hq.platform.application.tests.host_only import host_only
 
 from ..contract import served_resources
@@ -32,7 +32,7 @@ from ..identity import set_principal
 from ..server import mcp
 from .registry import KIND, example_kind, registry_patched, with_kind
 
-READER = Principal("example-reader", "mcp", frozenset(Capability))
+READER = Principal("example-reader", "mcp", operator_capabilities())
 OUTSIDE = "example-outside"
 
 

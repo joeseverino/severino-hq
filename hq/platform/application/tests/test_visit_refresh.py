@@ -18,7 +18,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.providers import registry_label
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
 
 from .. import cadence, visit_refresh

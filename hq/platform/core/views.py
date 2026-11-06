@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
-from hq.platform.application import agent_activity, capability_policy, fragments
+from hq.platform.application import agent_activity, agent_devices, capability_policy, fragments
 from hq.platform.application.agent_access import SET_AGENT_ACCESS, SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
@@ -266,10 +266,13 @@ class AgentPolicyView(PageMixin, TemplateView):
             return context
         context["standings"] = agent_activity.standings(self.request.user)
         context["prompts"] = agent_activity.prompts(context["standings"])
+        # The steps for adding an agent start open until one has connected.
+        context["setup_open"] = not context["standings"]
         context["device_groups"] = [standing for standing in context["standings"] if standing.devices]
         context["recent_days"] = agent_activity.RECENT.days
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
+        context["read_tailnet"] = agent_devices.read_tailnet(web_principal(self.request.user))
         context["devices"] = devices_of(self.request.user)
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
