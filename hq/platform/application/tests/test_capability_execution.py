@@ -5,7 +5,7 @@ from io import StringIO
 from unittest import mock
 
 from django.core.management import call_command
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase
 
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
@@ -16,7 +16,7 @@ from hq_sdk.capabilities import StrictCommand
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
 from ..documentation import sync_documentation
 from ..projects import ProjectCommand, save_project
-from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal
+from ..security import AuthorizationError, Capability, Principal, agent_principal, cli_principal
 from .writers import keyed
 
 
@@ -52,11 +52,11 @@ class CapabilityTests(TestCase):
         self.assertEqual(project["resource"], "projects")
         self.assertIn("name", project["input_schema"]["properties"])
 
-    def test_mcp_writes_fail_closed_by_default(self):
+    def test_an_agent_not_granted_a_write_is_refused_it(self):
         with self.assertRaisesRegex(AuthorizationError, "write_projects"):
             save_project(
                 ProjectCommand(name="Denied", slug="denied"),
-                principal=mcp_principal(),
+                principal=agent_principal("example-agent", "mcp", frozenset({"read"})),
             )
         self.assertFalse(Project.objects.filter(slug="denied").exists())
 
@@ -196,7 +196,7 @@ class CapabilityTests(TestCase):
 
         result = execute_capability(
             "hq.sync",
-            {"manifest": [], "topology": {}, "manifets": []},
+            {"manifest": [], "manifets": [], "topology": {}},
             principal=cli_principal(),
         )
 
@@ -207,8 +207,8 @@ class CapabilityTests(TestCase):
             "hq.sync: manifets is not a known field; topology is not a known field.",
         )
         self.assertEqual(
-            [detail["loc"] for detail in result["error"]["details"]],
-            [["manifets"], ["topology"]],
+            [(detail["type"], detail["loc"]) for detail in result["error"]["details"]],
+            [("extra_forbidden", ["manifets"]), ("extra_forbidden", ["topology"])],
         )
 
     def _refusal(self, command_type, payload):
@@ -362,22 +362,20 @@ class CapabilityTests(TestCase):
         self.assertEqual(event.metadata["operation"], "project.delete")
         self.assertEqual(event.metadata["interface"], "cli")
 
-    @override_settings(
-        SEVERINO_AGENT_ENABLE_WRITES=True,
-        SEVERINO_AGENT_ENABLE_DELETES=False,
-    )
-    def test_mcp_deletes_are_gated_separately_from_writes(self):
+    def test_an_agent_granted_writes_is_not_granted_deletes(self):
         project = Project.objects.create(name="Protected", slug="protected")
 
         result = execute_capability(
             "project.delete",
             {"confirm": project.slug},
-            principal=mcp_principal(),
+            principal=agent_principal("example-agent", "mcp", frozenset({"read", "write_projects"})),
             target=project.slug,
         )
 
         self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "forbidden")
+        # A grant the identity provider could add, so the refusal names it.
+        self.assertEqual(result["error"]["code"], "insufficient_scope")
+        self.assertEqual(result["error"]["details"], {"scope": "delete_projects"})
         self.assertTrue(Project.objects.filter(pk=project.pk).exists())
 
     def call_as_operator(self, request):
@@ -399,7 +397,7 @@ class CapabilityTests(TestCase):
         )
         self.assertTrue(created["ok"])
         self.assertIn("orphan_projects", self.call_as_operator({"tool": "audit_registry"}))
-        # The operator is never the MCP ceiling, and never left bound afterwards.
+        # The operator is never an MCP agent, and never left bound afterwards.
         from hq.platform.mcp.identity import current_principal
 
         with self.assertRaises(AuthorizationError):
@@ -439,15 +437,11 @@ class CapabilityTests(TestCase):
         self.assertEqual(receipt.vendor, "Updated Vendor")
         self.assertEqual(receipt.original_filename, "fixture.pdf")
 
-    @override_settings(
-        SEVERINO_AGENT_ENABLE_WRITES=True,
-        SEVERINO_AGENT_ENABLE_PRUNE=False,
-    )
-    def test_mcp_prune_is_a_separate_capability(self):
+    def test_prune_is_a_separate_capability(self):
         with self.assertRaisesRegex(AuthorizationError, "prune_documentation"):
             sync_documentation(
                 [],
-                principal=mcp_principal(),
+                principal=agent_principal("example-agent", "mcp", frozenset({"read", "sync_documentation"})),
                 prune_orphans=True,
                 confirm_prune=True,
             )
@@ -456,11 +450,10 @@ class CapabilityTests(TestCase):
 class DocumentationSyncCapabilityTests(SimpleTestCase):
     """`hq sync` must be grantable without handing over every other write."""
 
-    def test_doc_sync_flag_grants_only_documentation_sync(self):
-        from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
+    def test_a_doc_sync_grant_holds_only_documentation_sync(self):
+        from hq.platform.application.security import AuthorizationError, Capability, agent_principal
 
-        with self.settings(SEVERINO_AGENT_ENABLE_DOC_SYNC=True, SEVERINO_AGENT_ENABLE_WRITES=False):
-            principal = mcp_principal()
+        principal = agent_principal("example-agent", "mcp", frozenset({"read", "sync_documentation"}))
         principal.require(Capability.SYNC_DOCUMENTATION)
         for withheld in (
             "write_expenses",
@@ -473,45 +466,30 @@ class DocumentationSyncCapabilityTests(SimpleTestCase):
             with self.assertRaises(AuthorizationError):
                 principal.require(withheld)
 
-    def test_broad_writes_still_imply_doc_sync(self):
-        from hq.platform.application.security import Capability, mcp_principal
+    def test_record_writes_do_not_imply_doc_sync(self):
+        from hq.platform.application.security import AuthorizationError, Capability, agent_principal
 
-        with self.settings(SEVERINO_AGENT_ENABLE_WRITES=True, SEVERINO_AGENT_ENABLE_DOC_SYNC=False):
-            mcp_principal().require(Capability.SYNC_DOCUMENTATION)
-
-    def test_both_flags_off_withholds_doc_sync(self):
-        from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
-
-        with (
-            self.settings(SEVERINO_AGENT_ENABLE_WRITES=False, SEVERINO_AGENT_ENABLE_DOC_SYNC=False),
-            self.assertRaises(AuthorizationError),
-        ):
-            mcp_principal().require(Capability.SYNC_DOCUMENTATION)
+        with self.assertRaises(AuthorizationError):
+            agent_principal(
+                "example-agent", "mcp", frozenset({"read", "write_projects", "write_documentation"})
+            ).require(Capability.SYNC_DOCUMENTATION)
 
 
 class InfrastructureCapabilityTests(SimpleTestCase):
     """Declaring topology and requesting certificates are different powers."""
 
-    def test_infrastructure_flag_does_not_grant_certificate_renewal(self):
-        from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
+    def test_an_infrastructure_grant_does_not_hold_certificate_renewal(self):
+        from hq.platform.application.security import AuthorizationError, Capability, agent_principal
 
-        with self.settings(
-            SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True,
-            SEVERINO_AGENT_ENABLE_CERT_RENEWAL=False,
-        ):
-            principal = mcp_principal()
+        principal = agent_principal("example-agent", "mcp", frozenset({"read", "manage_infrastructure"}))
         principal.require(Capability.MANAGE_INFRASTRUCTURE)
         with self.assertRaises(AuthorizationError):
             principal.require(Capability.REQUEST_CERTIFICATE_RENEWAL)
 
     def test_certificate_renewal_is_grantable_on_its_own(self):
-        from hq.platform.application.security import AuthorizationError, Capability, mcp_principal
+        from hq.platform.application.security import AuthorizationError, Capability, agent_principal
 
-        with self.settings(
-            SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=False,
-            SEVERINO_AGENT_ENABLE_CERT_RENEWAL=True,
-        ):
-            principal = mcp_principal()
+        principal = agent_principal("example-agent", "mcp", frozenset({"read", "request_certificate_renewal"}))
         principal.require(Capability.REQUEST_CERTIFICATE_RENEWAL)
         with self.assertRaises(AuthorizationError):
             principal.require(Capability.MANAGE_INFRASTRUCTURE)

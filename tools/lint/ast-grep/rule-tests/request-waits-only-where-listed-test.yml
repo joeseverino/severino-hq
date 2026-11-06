@@ -1,0 +1,14 @@
+id: request-waits-only-where-listed
+valid:
+  - 'from hq.platform.core.outbound import allowed'
+  - 'permitted = policy.allowed("oidc")'
+  - |
+    def allowed(name):
+        pass
+invalid:
+  - |
+    with allowed("oidc"):
+        exchange()
+  - |
+    with allowed(name):
+        exchange()

@@ -16,24 +16,26 @@ from hq.platform.application.capability_policy import (
     PolicyCell,
     Row,
     Rule,
-    Scope,
     field_name,
     split_by_default,
     submitted_rules,
 )
 from hq.platform.application.tests.markup import all_elements, elements, hrefs, select, text, with_class, within
-from hq.platform.core.models import AuditLog
+from hq.platform.core.models import AgentIdentity, AuditLog
 
 # The name the page's placeholder asks for the every-rule part by, written out:
 # the test holds what a fetch asks for, whatever the view calls it.
 EVERY_PART = "every_rule"
 
 
+AGENT = AgentIdentity(client_id="example-agent", interfaces=["mcp"])
+COLUMNS = (Column(AGENT.client_id, AGENT.client_id, "MCP", AGENT),)
+
+
 def _row(name: str, rule: str | None) -> Row:
-    column = Column(Scope.SURFACE, "mcp", "All MCP agents", "MCP")
+    (column,) = COLUMNS
     cell = PolicyCell(
-        field=f"rule:{column.scope}:{column.subject}:{name}",
-        scope=column.scope,
+        field=field_name(column.subject, name),
         column=column.label,
         rule=rule,
         options=(("", "Default"), ("deny", "Refuse")),
@@ -45,7 +47,6 @@ GROUPS = (
     Group("Example records", (_row("example.create", None), _row("example.delete", "deny"))),
     Group("Example notes", (_row("example.note", None),)),
 )
-COLUMNS = (Column(Scope.SURFACE, "mcp", "All MCP agents", "MCP"),)
 
 
 class AgentRulesTests(TestCase):
@@ -122,13 +123,14 @@ class FoldedSaveTests(TestCase):
     def setUp(self):
         self.owner = get_user_model().objects.create_superuser("owner", "owner@example.test", "pw")
         self.client.force_login(self.owner)
-        self.changed = field_name(Scope.SURFACE, "mcp", "project.delete")
+        AgentIdentity.objects.create(client_id="example-agent", granted=["read", "write_projects", "delete_projects"])
+        self.changed = field_name("example-agent", "project.delete")
         CapabilityRule.objects.create(
-            scope=Scope.SURFACE, subject="mcp", capability="project.delete", rule=Rule.DENY, changed_by=self.owner
+            subject="example-agent", capability="project.delete", rule=Rule.DENY, changed_by=self.owner
         )
 
-    def held(self) -> set[tuple[str, str, str, str]]:
-        return set(CapabilityRule.objects.values_list("scope", "subject", "capability", "rule"))
+    def held(self) -> set[tuple[str, str, str]]:
+        return set(CapabilityRule.objects.values_list("subject", "capability", "rule"))
 
     def test_a_save_with_the_fold_never_opened_changes_no_rule(self):
         before = self.held()
@@ -149,8 +151,8 @@ class FoldedSaveTests(TestCase):
         self.client.post(reverse("agent_policy"), posted)
 
         (opened,) = submitted_rules({first: Rule.DENY})
-        self.assertIn((opened["scope"], opened["subject"], opened["capability"], Rule.DENY), self.held())
-        self.assertIn((Scope.SURFACE, "mcp", "project.delete", Rule.DENY), self.held())
+        self.assertIn((opened["subject"], opened["capability"], Rule.DENY), self.held())
+        self.assertIn(("example-agent", "project.delete", Rule.DENY), self.held())
 
 
 class AuditLogReadRequestTests(TestCase):

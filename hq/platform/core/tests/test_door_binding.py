@@ -5,14 +5,13 @@ operation id), so a row a door wrote is told from the test's by carrying the
 door's interface and an id of its own.
 """
 
-import ast
 import threading
 from datetime import timedelta
 from unittest import mock
 
 from asgiref.sync import async_to_sync, sync_to_async
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings, tag
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane import bridge_application
@@ -20,13 +19,10 @@ from hq.domains.control_plane.bridge_actions import ACTIONS, Action
 from hq.domains.control_plane.tests import bridge_client
 from hq.domains.jobs.runner import start
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
-from hq.platform.application.tests.tree import ROOT
 from hq.platform.core.audit import audit_operation, operation_context, record_event, record_operation
 from hq.platform.core.models import AuditLog
 
 PASSWORD = "correct-horse-battery"
-# The interface the test runner binds a test's own thread to.
-TEST_INTERFACE = "test"
 
 
 def _example_row(message: str) -> None:
@@ -247,30 +243,3 @@ class UnboundTests(TestCase):
             (row.metadata["interface"], row.metadata["actor"], row.metadata["operation"]),
             ("cli", "example-operator", "example.inner"),
         )
-
-
-@tag("source", "tree")
-class TestBindingStaysInTestsTests(SimpleTestCase):
-    def test_only_the_test_runner_and_tests_name_the_test_interface(self):
-        """A product path that bound itself as a test would pass every door's
-        test while writing rows nobody can attribute."""
-
-        def names_it(node: ast.AST) -> bool:
-            if isinstance(node, ast.Name):
-                return node.id == "TEST_INTERFACE"
-            return (
-                isinstance(node, ast.keyword)
-                and node.arg == "interface"
-                and isinstance(node.value, ast.Constant)
-                and node.value.value == TEST_INTERFACE
-            )
-
-        named = [
-            f"{relative}:{node.lineno}"
-            for path in sorted((ROOT / "hq").rglob("*.py"))
-            if "/tests/" not in (relative := path.relative_to(ROOT).as_posix())
-            and relative != "hq/platform/core/test_runner.py"
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-            if names_it(node)
-        ]
-        self.assertEqual(named, [])

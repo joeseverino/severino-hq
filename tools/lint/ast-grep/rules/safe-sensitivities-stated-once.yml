@@ -1,0 +1,20 @@
+# Which documentation an AI-facing surface may name is one set,
+# sensitivity.SAFE_SENSITIVITIES, which the documentation record reads too. A
+# second copy is how one surface ends up wider than the rest. The scope is
+# every module in hq/platform/application, its tests included, since no test
+# needs a set of its own either.
+id: safe-sensitivities-stated-once
+language: python
+severity: error
+message: A module states its own SAFE_SENSITIVITIES.
+note: Import SAFE_SENSITIVITIES from hq.platform.application.sensitivity.
+files:
+  - "hq/platform/application/**"
+ignores:
+  - "hq/platform/application/sensitivity.py"
+rule:
+  kind: assignment
+  has:
+    field: left
+    kind: identifier
+    regex: ^SAFE_SENSITIVITIES$

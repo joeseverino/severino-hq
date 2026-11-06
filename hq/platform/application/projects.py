@@ -5,6 +5,7 @@ transaction, validation, persistence, audit attribution, and canonical result
 shape; adapters only parse input and render output.
 """
 
+import logging
 import secrets
 from collections.abc import Callable
 from dataclasses import dataclass, fields, replace
@@ -50,6 +51,8 @@ lazy from .timestamps import moment
 
 # A project's fields as its command writes them and its row reads them back, each said once.
 type ProjectName = Annotated[str, Describe("What the project is called.")]
+logger = logging.getLogger("severino.projects")
+
 _CATEGORY = one_of(PROJECT_CATEGORY_CHOICES)
 _STATUS = one_of(Project.Status.values)
 type ProjectCategory = Annotated[_CATEGORY, Describe("What type of project it is.")]
@@ -519,9 +522,16 @@ def sync_repositories(*, principal: Principal) -> dict[str, Any]:
         named = unattached.pop(repository.short.lower(), None)
         try:
             result = _take_on(repository, named, principal=principal)
-        except ValidationError, RecordConflict, RecordNotFound:
-            # One repository that cannot be a project must not stop the rest;
-            # the next sweep tries it again.
+        except (ValidationError, RecordConflict, RecordNotFound) as error:
+            # One repository that cannot be a project must not stop the rest,
+            # and the next sweep tries it again. One that never can is said
+            # each time.
+            logger.warning(
+                "HQ could not make the repository %s a project: %s",
+                repository.name,
+                error,
+                extra={"event": "projects.repository.refused"},
+            )
             continue
         known.add(key)
         (attached if named else created).append(result["project"]["slug"])

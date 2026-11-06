@@ -1,5 +1,7 @@
 """Capability policy: what an operator decided must happen before a credential acts."""
 
+from dataclasses import replace
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -13,11 +15,11 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..approvals import APPROVE, DELETING_FLAGS, ApproveCommand, approve
 from ..capabilities import capability_registry, execute_capability, validate_command
-from ..capability_policy import RULE_LABELS, Rule, Scope, decide, field_name, matrix, set_rule
+from ..capability_policy import RULE_LABELS, Rule, decide, field_name, matrix, set_rule
 from ..certificates import UPLOAD
 from ..integration_specs import capability_schema
 from ..labels import human_label
-from ..security import AuthorizationError, Capability, Principal, cli_principal, web_principal
+from ..security import Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 from .writers import keyed
 
@@ -48,8 +50,8 @@ class PolicyTestCase(TestCase):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.operator = web_principal(self.user)
 
-    def rule(self, scope, subject, capability, rule):
-        CapabilityRule.objects.create(scope=scope, subject=subject, capability=capability, rule=rule)
+    def rule(self, subject, capability, rule):
+        CapabilityRule.objects.create(subject=subject, capability=capability, rule=rule)
 
 
 class DefaultTests(PolicyTestCase):
@@ -153,7 +155,7 @@ class DestructiveDefaultTests(PolicyTestCase):
         self.assertFalse(ApprovalRequest.objects.exists())
 
     def test_an_explicit_allow_for_one_agent_lifts_it_for_that_agent_alone(self):
-        self.rule(Scope.AGENT, "trusted-agent", "project.delete", Rule.ALLOW)
+        self.rule("trusted-agent", "project.delete", Rule.ALLOW)
         first = Project.objects.create(name="First")
         second = Project.objects.create(name="Second")
 
@@ -164,15 +166,6 @@ class DestructiveDefaultTests(PolicyTestCase):
         self.assertFalse(Project.objects.filter(pk=first.pk).exists())
         self.assertEqual(held["status"], "awaiting_approval")
 
-    def test_an_agent_allow_still_cannot_loosen_an_explicit_surface_rule(self):
-        self.rule(Scope.SURFACE, "mcp", "project.delete", Rule.DENY)
-        self.rule(Scope.AGENT, "trusted-agent", "project.delete", Rule.ALLOW)
-        project = Project.objects.create(name="Stays")
-
-        result = self.delete(agent("trusted-agent", capabilities=DELETES), project.slug)
-
-        self.assertEqual(result["error"]["code"], "denied_by_policy")
-
     def test_the_operator_and_the_cli_are_not_held(self):
         for principal in (self.operator, cli_principal()):
             with self.subTest(principal=principal.interface):
@@ -182,15 +175,17 @@ class DestructiveDefaultTests(PolicyTestCase):
                 )
 
 
-class SurfaceRuleTests(PolicyTestCase):
+class AgentRuleTests(PolicyTestCase):
+    """A rule names one agent and one action, over whichever surface it calls through."""
+
     def setUp(self):
         super().setUp()
         from hq.platform.application.adoption_testing import managing_everything
 
         managing_everything()
 
-    def test_require_approval_holds_any_capability_and_applies_on_approval(self):
-        self.rule(Scope.SURFACE, "mcp", "project.create", Rule.APPROVE)
+    def test_ask_me_first_holds_any_capability_and_applies_on_approval(self):
+        self.rule("example-agent", "project.create", Rule.APPROVE)
 
         held = execute_capability("project.create", keyed({"name": "Held"}), principal=agent())
 
@@ -201,7 +196,7 @@ class SurfaceRuleTests(PolicyTestCase):
 
     def test_a_held_change_to_a_record_goes_stale_if_the_record_moves(self):
         project = Project.objects.create(name="Original")
-        self.rule(Scope.SURFACE, "mcp", "project.update", Rule.APPROVE)
+        self.rule("example-agent", "project.update", Rule.APPROVE)
         held = execute_capability("project.update", keyed({"name": "Renamed"}), principal=agent(), target=project.slug)
         Project.objects.filter(pk=project.pk).update(description="changed underneath")
 
@@ -212,8 +207,8 @@ class SurfaceRuleTests(PolicyTestCase):
             ApprovalRequest.State.STALE,
         )
 
-    def test_deny_refuses_and_is_recorded_as_a_denial(self):
-        self.rule(Scope.SURFACE, "mcp", "project.create", Rule.DENY)
+    def test_off_refuses_and_is_recorded_as_a_denial(self):
+        self.rule("example-agent", "project.create", Rule.DENY)
 
         result = execute_capability("project.create", keyed({"name": "Nope"}), principal=agent())
 
@@ -223,9 +218,9 @@ class SurfaceRuleTests(PolicyTestCase):
         self.assertEqual(row.metadata["reason"], "denied_by_policy")
         self.assertEqual(row.metadata["actor"], "example-agent")
 
-    def test_allowing_a_gated_declaration_is_consent_and_says_whose(self):
+    def test_on_over_a_held_declaration_is_consent_and_says_whose(self):
         declare_policy()
-        self.rule(Scope.SURFACE, "mcp", "infrastructure.resource.update", Rule.ALLOW)
+        self.rule("example-agent", "infrastructure.resource.update", Rule.ALLOW)
 
         result = execute_capability(
             "infrastructure.resource.update",
@@ -242,19 +237,10 @@ class SurfaceRuleTests(PolicyTestCase):
         updating = spec("infrastructure.resource.update")
         decision = decide(updating, agent(), validate_command(updating, update_payload("x")), POLICY_KEY)
         self.assertTrue(decision.overrides_a_hold)
-        self.assertEqual(decision.source, "mcp policy")
+        self.assertEqual(decision.source, "example-agent policy")
 
-    def test_a_surface_rule_binds_only_its_surface(self):
-        self.rule(Scope.SURFACE, "mcp", "project.create", Rule.DENY)
-
-        result = execute_capability("project.create", keyed({"name": "Over the API"}), principal=agent(interface="api"))
-
-        self.assertTrue(result["ok"])
-
-
-class AgentRuleTests(PolicyTestCase):
-    def test_an_agent_rule_tightens_for_that_agent_alone(self):
-        self.rule(Scope.AGENT, "held-agent", "project.create", Rule.APPROVE)
+    def test_a_rule_tightens_for_that_agent_alone(self):
+        self.rule("held-agent", "project.create", Rule.APPROVE)
 
         held = execute_capability("project.create", keyed({"name": "A"}), principal=agent("held-agent"))
         runs = execute_capability("project.create", keyed({"name": "B"}), principal=agent("free-agent"))
@@ -262,35 +248,45 @@ class AgentRuleTests(PolicyTestCase):
         self.assertEqual(held["status"], "awaiting_approval")
         self.assertTrue(runs["ok"])
 
-    def test_an_agent_rule_cannot_loosen_its_surface(self):
-        self.rule(Scope.SURFACE, "mcp", "project.create", Rule.DENY)
-        self.rule(Scope.AGENT, "example-agent", "project.create", Rule.ALLOW)
+    def test_a_rule_holds_on_every_surface_the_agent_calls_through(self):
+        self.rule("example-agent", "project.create", Rule.DENY)
 
-        result = execute_capability("project.create", keyed({"name": "Nope"}), principal=agent())
+        for interface in ("mcp", "api"):
+            with self.subTest(interface=interface):
+                decision = decide(spec("project.create"), agent(interface=interface), {}, None)
 
-        self.assertEqual(result["error"]["code"], "denied_by_policy")
+                self.assertEqual((decision.rule, decision.source), (Rule.DENY, "example-agent policy"))
+
+    def test_with_no_rule_the_agent_gets_the_default(self):
+        self.rule("other-agent", "project.delete", Rule.ALLOW)
+
+        decision = decide(spec("project.delete"), agent(capabilities=DELETES), {"confirm": "x"}, "x")
+
+        self.assertEqual((decision.rule, decision.source), (Rule.APPROVE, "default"))
 
 
 class OutOfScopeTests(PolicyTestCase):
     def test_the_operator_is_never_held_or_refused_by_policy(self):
-        self.rule(Scope.SURFACE, "mcp", "project.create", Rule.DENY)
+        self.rule(self.user.get_username(), "project.create", Rule.DENY)
 
         self.assertEqual(decide(spec("project.create"), self.operator, {}, None).rule, Rule.ALLOW)
 
     def test_the_cli_keeps_todays_behavior(self):
-        self.rule(Scope.SURFACE, "mcp", "project.create", Rule.DENY)
+        self.rule(cli_principal().actor, "project.create", Rule.DENY)
 
         self.assertEqual(decide(spec("project.create"), cli_principal(), {}, None).rule, Rule.ALLOW)
 
 
 class SettingTests(PolicyTestCase):
+    def setUp(self):
+        super().setUp()
+        AgentIdentity.objects.create(client_id="example-agent", granted=["read", "write_projects", "delete_projects"])
+
     def set(self, **overrides):
         arguments = {
-            "scope": Scope.SURFACE,
-            "subject": "mcp",
+            "subject": "example-agent",
             "spec": spec("project.delete"),
             "rule": Rule.APPROVE,
-            "principal": self.operator,
             "user": self.user,
         }
         return set_rule(**{**arguments, **overrides})
@@ -316,23 +312,49 @@ class SettingTests(PolicyTestCase):
         self.assertEqual(AuditLog.objects.filter(object_type="Capability policy").count(), 1)
 
     def test_nothing_governed_by_policy_may_set_it(self):
-        for credential in (agent(), cli_principal()):
-            with self.subTest(interface=credential.interface), self.assertRaises(AuthorizationError):
-                self.set(principal=credential)
+        """Whatever its grant, and a person behind it or not: the policy is a person's in the browser."""
+
+        everything = frozenset(Capability)
+        cell = {"subject": "example-agent", "capability": "project.delete", "rule": Rule.ALLOW}
+        for credential in (
+            agent(capabilities=everything),
+            replace(agent(capabilities=everything), person_key="example-key"),
+            replace(agent(interface="api", capabilities=everything), person_key="example-key"),
+            cli_principal(),
+        ):
+            with self.subTest(interface=credential.interface, person=credential.person_key):
+                result = execute_capability("agent.policy.set", keyed({"rules": [cell]}), principal=credential)
+
+                self.assertEqual(result["error"]["code"], "forbidden")
+        self.assertFalse(CapabilityRule.objects.exists())
 
     def test_a_read_can_be_denied_but_not_held(self):
         with self.assertRaisesMessage(ValueError, "Look up a name only reads."):
             self.set(spec=spec("lookup.name.read"))
 
-    def test_an_agent_rule_cannot_reach_past_its_pocket_id_grant(self):
-        AgentIdentity.objects.create(client_id="example-agent", granted=["read", "write_projects"])
+    def test_a_rule_cannot_reach_past_its_pocket_id_grant(self):
+        AgentIdentity.objects.filter(client_id="example-agent").update(granted=["read", "write_projects"])
 
-        with self.assertRaisesMessage(ValueError, "Pocket ID does not allow example-agent to use Delete a project."):
-            self.set(scope=Scope.AGENT, subject="example-agent")
+        with self.assertRaisesMessage(
+            ValueError, "The sign-in service does not allow example-agent to use Delete a project."
+        ):
+            self.set()
 
-    def test_an_agent_rule_needs_an_agent_that_has_been_seen(self):
+    def test_a_persons_own_settings_take_a_rule_only_for_an_agent_a_person_signed_in(self):
+        AgentIdentity.objects.create(client_id="example-machine", granted=["pin_favorites"])
+        AgentIdentity.objects.create(client_id="example-assistant", granted=["pin_favorites"], person=self.user)
+
+        self.assertTrue(self.set(subject="example-assistant", spec=spec("pin.toggle")))
+        with self.assertRaisesMessage(ValueError, "example-machine signs in as itself"):
+            self.set(subject="example-machine", spec=spec("pin.toggle"))
+        _columns, groups = matrix()
+        row = next(row for group in groups for row in group.rows if row.name == "pin.toggle")
+        offered = {cell.column: bool(cell.options) for cell in row.cells}
+        self.assertEqual((offered["example-assistant"], offered["example-machine"]), (True, False))
+
+    def test_a_rule_needs_an_agent_that_has_been_seen(self):
         with self.assertRaisesMessage(ValueError, "No agent named nobody has connected yet."):
-            self.set(scope=Scope.AGENT, subject="nobody")
+            self.set(subject="nobody")
 
 
 class PageTests(PolicyTestCase):
@@ -345,19 +367,15 @@ class PageTests(PolicyTestCase):
         # Every action: the page opens on the rules that differ, and here none do.
         return self.client.get(reverse("agent_policy"), {"all": 1})
 
-    def test_it_shows_both_surfaces_and_every_agent_seen_and_offers_only_what_was_granted(self):
+    def test_it_shows_a_column_per_agent_seen_and_offers_only_what_was_granted(self):
         page = self.page()
         columns, _groups = matrix()
 
-        self.assertEqual(
-            [(column.scope, column.subject) for column in columns],
-            [(Scope.SURFACE, "mcp"), (Scope.SURFACE, "api"), (Scope.AGENT, "example-agent")],
-        )
-        for column in columns:
-            self.assertContains(page, column.label)
-        self.assertContains(page, f'name="{field_name(Scope.AGENT, "example-agent", "project.create")}"')
-        self.assertContains(page, "Pocket ID does not allow this")
-        self.assertNotContains(page, f'name="{field_name(Scope.AGENT, "example-agent", "project.delete")}"')
+        self.assertEqual([column.subject for column in columns], ["example-agent"])
+        self.assertContains(page, "example-agent")
+        self.assertContains(page, f'name="{field_name("example-agent", "project.create")}"')
+        self.assertIn("Not granted", text(page))
+        self.assertNotContains(page, f'name="{field_name("example-agent", "project.delete")}"')
 
     def test_what_only_a_person_can_do_has_no_rule_for_agents(self):
         _columns, groups = matrix()
@@ -368,11 +386,9 @@ class PageTests(PolicyTestCase):
         self.assertIn("infrastructure.resource.reconcile", shown)
         with self.assertRaises(ValueError):
             set_rule(
-                scope=Scope.SURFACE,
-                subject="mcp",
+                subject="example-agent",
                 spec=spec(APPROVE),
                 rule=Rule.ALLOW,
-                principal=self.operator,
                 user=self.user,
             )
         self.assertFalse(CapabilityRule.objects.exists())
@@ -385,32 +401,30 @@ class PageTests(PolicyTestCase):
         self.assertNotIn(Rule.APPROVE, options)
 
     def test_saving_a_change_records_it_and_marks_the_cell(self):
-        field = field_name(Scope.SURFACE, "mcp", "project.delete")
+        field = field_name("example-agent", "project.create")
 
         response = self.client.post(reverse("agent_policy"), form_keyed({field: Rule.APPROVE}), follow=True)
 
         self.assertContains(response, "Saved 1 change")
         self.assertEqual(CapabilityRule.objects.get().rule, Rule.APPROVE)
-        # Deletes are off for MCP in this deployment: the rule is armed for
-        # the day they are switched on.
         _columns, groups = matrix()
         cell = next(cell for group in groups for row in group.rows for cell in row.cells if cell.field == field)
-        self.assertEqual((cell.rule, cell.dormant), (Rule.APPROVE, True))
+        self.assertEqual(cell.rule, Rule.APPROVE)
 
     def test_saving_an_unchanged_page_records_nothing(self):
         response = self.client.post(
-            reverse("agent_policy"), form_keyed({field_name(Scope.SURFACE, "mcp", "project.delete"): ""}), follow=True
+            reverse("agent_policy"), form_keyed({field_name("example-agent", "project.create"): ""}), follow=True
         )
 
         self.assertContains(response, "Nothing changed.")
         self.assertFalse(AuditLog.objects.filter(object_type="Capability policy").exists())
 
     def test_a_forged_rule_past_the_grant_is_refused_in_words(self):
-        field = field_name(Scope.AGENT, "example-agent", "project.delete")
+        field = field_name("example-agent", "project.delete")
 
         response = self.client.post(reverse("agent_policy"), form_keyed({field: Rule.ALLOW}), follow=True)
 
-        self.assertIn("Pocket ID does not allow example-agent to use Delete a project.", text(response))
+        self.assertIn("The sign-in service does not allow example-agent to use Delete a project.", text(response))
         self.assertFalse(CapabilityRule.objects.exists())
 
     def test_signed_out_it_cannot_be_reached(self):
@@ -456,10 +470,9 @@ class PageTests(PolicyTestCase):
 
         self.assertEqual(rows["project.delete"].default, RULE_LABELS[Rule.APPROVE])
         self.assertEqual(rows["project.create"].default, RULE_LABELS[Rule.ALLOW])
-        self.assertTrue(rows["infrastructure.resource.update"].default.startswith(f"{RULE_LABELS[Rule.APPROVE]} for "))
-        self.assertLessEqual(
-            {row.default for row in rows.values()} - {rows["infrastructure.resource.update"].default}, choices
-        )
+        named = f"{RULE_LABELS[Rule.APPROVE]} for "
+        self.assertTrue(rows["infrastructure.resource.update"].default.startswith(named))
+        self.assertLessEqual({row.default for row in rows.values() if not row.default.startswith(named)}, choices)
 
     def test_only_acronyms_are_capitalized(self):
         self.assertEqual(human_label("example.pace.set"), "Example Pace Set")
@@ -469,13 +482,11 @@ class PageTests(PolicyTestCase):
         def arrange(count):
             for index in range(AgentIdentity.objects.count(), count):
                 AgentIdentity.objects.create(client_id=f"agent-{index}", granted=["read"])
-                CapabilityRule.objects.create(
-                    scope=Scope.AGENT, subject=f"agent-{index}", capability="project.create", rule=Rule.DENY
-                )
+                CapabilityRule.objects.create(subject=f"agent-{index}", capability="project.create", rule=Rule.DENY)
 
         def agents(drawn):
             columns, _groups = drawn
-            return sum(column.scope == Scope.AGENT for column in columns)
+            return len(columns)
 
         assert_cost_does_not_grow(self, sizes=(1, 8), arrange=arrange, draw=lambda _count: matrix(), rows=agents)
 

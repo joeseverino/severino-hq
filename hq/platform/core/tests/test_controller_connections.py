@@ -18,7 +18,7 @@ class RendererDeliveryTests(unittest.TestCase):
 
     def test_the_unit_runs_the_binary_the_image_ships_in_the_root_tree(self):
         dockerfile = DOCKERFILE.read_text()
-        copied = "COPY --from=controller /out/hq-secrets /out/hq-host /app/deploy/bin/"
+        copied = "COPY --from=programs /hq-secrets /hq-host /app/deploy/bin/"
         # After the checkout is copied, so a checkout cannot supply them.
         self.assertLess(dockerfile.index(" . /app\n"), dockerfile.index(copied))
         started = [line for line in UNIT.read_text().splitlines() if line.startswith("ExecStart=")]

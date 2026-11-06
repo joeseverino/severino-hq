@@ -212,7 +212,6 @@ class CompositionCheckTests(SimpleTestCase):
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
     SEVERINO_SITE_HOST="hq.example.com",
 )
 class TransportTests(SentinelMixin, TestCase):
@@ -273,7 +272,7 @@ class TransportTests(SentinelMixin, TestCase):
         with _serving():
             response = self._post("project.create", {"payload": {}}, token=_token(scope="example.write"))
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"]["code"], "forbidden")
+        self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
 
     def test_a_paused_agent_is_refused_on_the_machine_api(self):
         """The same brake /mcp/ applies, on the other door.
@@ -438,7 +437,6 @@ class TransportTests(SentinelMixin, TestCase):
         from hq.domains.control_plane.models import CapabilityRule
 
         CapabilityRule.objects.update_or_create(
-            scope=CapabilityRule.Scope.AGENT,
             subject="example-automation",
             capability=capability,
             defaults={"rule": rule},
@@ -986,7 +984,7 @@ class TransportTests(SentinelMixin, TestCase):
                 HTTP_AUTHORIZATION=f"Bearer {_token(scope='example.write')}",
             )
         self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"]["code"], "forbidden")
+        self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
 
     def test_a_response_is_never_cacheable(self):
         with _serving():

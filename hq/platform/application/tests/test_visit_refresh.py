@@ -178,6 +178,17 @@ class VisitRefreshTests(TestCase):
         with page(FAST):
             self.assertEqual(self.ask()["requested"], [FAST])
 
+    def test_a_kind_no_read_has_answered_is_judged_by_its_last_attempt(self):
+        row = ProviderInventory.objects.create(kind=FAST, records=[], reachable=False, observed_at=None)
+        tried = ProviderInventory.objects.filter(pk=row.pk)
+
+        tried.update(updated_at=timezone.now() - timedelta(seconds=10))
+        with page(FAST):
+            self.assertEqual(self.ask()["requested"], [])
+        tried.update(updated_at=timezone.now() - VISIT_EVERY - timedelta(seconds=5))
+        with page(FAST):
+            self.assertEqual(self.ask()["requested"], [FAST])
+
     def test_opening_a_page_never_asks_for_a_kind_whose_reader_logs_in(self):
         for kind in LOGS_IN:
             store(kind, age=timedelta(days=30))

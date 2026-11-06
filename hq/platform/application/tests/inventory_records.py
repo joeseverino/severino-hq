@@ -23,3 +23,13 @@ A_PROXY = {
 
 def a_sweep(**kinds) -> dict:
     return {kind: {"ok": True, "records": records} for kind, records in kinds.items()}
+
+
+def kind_read(kind: str, when) -> None:
+    """Record that a sweep read ``kind`` at ``when``, unless a later read stands."""
+
+    from hq.domains.control_plane.models import ProviderInventory
+
+    read = ProviderInventory.objects.filter(kind=kind).first()
+    if read is None or read.observed_at < when:
+        ProviderInventory.objects.update_or_create(kind=kind, defaults={"observed_at": when})

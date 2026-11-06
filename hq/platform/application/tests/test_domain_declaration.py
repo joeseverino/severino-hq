@@ -12,7 +12,7 @@ from unittest.mock import patch
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import TransactionTestCase, modify_settings, override_settings
+from django.test import TransactionTestCase, modify_settings
 from django.urls import clear_url_caches, reverse
 
 from hq.config import urls
@@ -92,9 +92,7 @@ class NewDomainDeclarationTests(TransactionTestCase):
 
     def test_its_permissions_are_granted_where_record_permissions_are(self):
         self.assertTrue(web_principal(self.user).permits("write_widgets", "delete_widgets"))
-        self.assertFalse(mcp_principal().permits("write_widgets"))
-        with override_settings(SEVERINO_AGENT_ENABLE_WRITES=True, SEVERINO_AGENT_ENABLE_DELETES=True):
-            self.assertTrue(mcp_principal().permits("write_widgets", "delete_widgets"))
+        self.assertTrue(mcp_principal().permits("write_widgets", "delete_widgets"))
 
     def test_it_is_created_counted_and_deleted_through_its_commands(self):
         operator = web_principal(self.user)

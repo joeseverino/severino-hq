@@ -22,6 +22,7 @@ import (
 
 	"golang.org/x/crypto/acme"
 
+	"github.com/joeseverino/severino-hq/controller/edge"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -160,7 +161,7 @@ func TestIssuanceRegistersANewAccountOnce(t *testing.T) {
 			t.Fatalf("account key: %v %v", info, err)
 		}
 		data, _ := os.ReadFile(path)
-		key, err := firstPrivateKey(data)
+		key, err := edge.FirstPrivateKey(data)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -216,7 +217,7 @@ func TestIssuanceKeepsCertbotsAccount(t *testing.T) {
 			t.Fatalf("certbot's account was not the one used: registrations %+v", f.authority.registrations)
 		}
 		data, _ := os.ReadFile(accountKeyPath(f.acmeDir, f.authority.directory()))
-		saved, err := firstPrivateKey(data)
+		saved, err := edge.FirstPrivateKey(data)
 		if err != nil || !key.PublicKey.Equal(saved.Public()) {
 			t.Fatalf("the controller did not keep certbot's key: %v", err)
 		}

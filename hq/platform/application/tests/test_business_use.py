@@ -173,7 +173,6 @@ class ServiceTests(TestCase):
                 self.assertEqual(expense["business_use_percentage"], value)
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class MCPTests(TestCase):
     def _call(self, name: str, payload: dict) -> dict:
         async def call():
@@ -214,7 +213,6 @@ class MCPTests(TestCase):
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class APITests(TestCase):
     TOKEN_SCOPE = "write_assets write_expenses"

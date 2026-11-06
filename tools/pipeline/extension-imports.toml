@@ -1,0 +1,20 @@
+# What an extension's source may not import, held by Ruff's banned-api
+# (TID251), which refuses a module and everything under it, in any import
+# form. check-plugin.sh runs it alone over the package's src, whatever
+# the package's own Ruff config selects.
+target-version = "py315"
+
+[lint]
+select = ["TID251"]
+
+# The host's top-level packages, each an implementation an extension reaches
+# only through hq_sdk; tools/pipeline/tests/test_extension_imports.py holds
+# the list to the packages of the host's tree.
+[lint.flake8-tidy-imports.banned-api]
+"hq".msg = "the host's implementation; import it from hq_sdk (docs/Plugins.md)."
+"demo".msg = "the host's implementation; import it from hq_sdk (docs/Plugins.md)."
+"tests".msg = "the host's implementation; import it from hq_sdk (docs/Plugins.md)."
+"tools".msg = "the host's implementation; import it from hq_sdk (docs/Plugins.md)."
+# A cache the host cannot see serves a stale answer: hq_sdk.reads.derivation
+# keeps a derived read (docs/Plugins.md, Derived reads).
+"django.core.cache".msg = "keep a derived read with hq_sdk.reads.derivation (docs/Plugins.md, Derived reads)."

@@ -1,0 +1,35 @@
+# hq/platform/application/money.money is the one place a dollar sign meets a
+# number: it writes a negative amount as −$5.00, where a dollar sign typed
+# before {value} writes $-5.00. So no other f-string puts a dollar sign right
+# before a value it interpolates, within one string or across an implicit
+# concatenation.
+id: amount-written-by-money
+language: python
+severity: error
+message: An f-string writes a dollar sign before a value itself.
+note: Write the amount with money(value) from hq.platform.application.money.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/application/money.py"
+rule:
+  kind: interpolation
+  any:
+    # f"Total ${amount}"
+    - follows:
+        kind: string_content
+        regex: \$$
+    # "Total $" f"{amount}"
+    - follows:
+        kind: string_start
+        inside:
+          kind: string
+          follows:
+            kind: string
+            has:
+              kind: string_content
+              regex: \$$
+              precedes:
+                kind: string_end

@@ -1,15 +1,18 @@
-"""`mise run audit:memory [--seed <name>] [--host-alone] [--top <n>]`: what each module costs in memory.
+"""`mise run audit:memory [--seed <name>] [--host-alone] [--top <n>] [--after <paths>]`: what each module costs in memory.
 
 Each module's and package's own share of HQ's Python memory, at boot and after a pass over the
 navigation's pages, ranked, as tools.perf.memory_probe counts it in a process of its own. The
 database is a throwaway one, seeded as dev:scratch seeds it, and the extensions are the ones
-dev:scratch composes. The probe serves as the image does, with DEBUG off. Each run is kept as
-var/perf/memory-<commit>-<time>.json, the share of every module in it.
+dev:scratch composes. The probe serves as the image does, with DEBUG off. With ``--after``, each
+path boot never takes (memory_probe.AFTER) is a stage of its own after the pass, its modules'
+import times read from ``python -X importtime`` in a second, untraced run. Each run is kept as
+var/perf/memory-<commit>-<time>.json, the share of every module and every package's row in it.
 """
 
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -27,7 +30,7 @@ lazy from django.test import override_settings
 from hq.platform.core.attribution import from_the_shell
 from hq.platform.core.tests.task import usage
 from tools.perf import parse, runs
-from tools.perf.memory_probe import BOOT, PASS, READY
+from tools.perf.memory_probe import AFTER, BOOT, MARK, PASS, READY
 from tools.perf.report import commit_of
 from tools.perf.table import aligned
 lazy from hq.platform.core import seeds
@@ -41,6 +44,9 @@ MEASURED = "Python's allocator, as tracemalloc counts it: no C library's own all
 # apart; any other by its top-level name.
 DEPTH = {"hq": 3, "django": 2}
 STAGES = {BOOT: "at boot", PASS: "added by the pass"}
+# A line python -X importtime writes: a module's own microseconds, then with its imports, then its
+# name, indented by its depth.
+_IMPORT_TIME = re.compile(r"^import time:\s+(\d+) \|\s+(\d+) \| +(\S+)$")
 
 
 def group(module: str) -> str:
@@ -61,6 +67,26 @@ def ranked(modules: dict[str, dict[str, Any]], stage: str, *, by=group) -> list[
     return sorted(((name, size[name], count[name]) for name in size), key=lambda row: (-row[1], row[0]))
 
 
+def stages(result: dict[str, Any]) -> dict[str, str]:
+    """Each stage the run measured, in order, by how it is said."""
+
+    return STAGES | {path: f"added by {path}" for path in result.get("after", {})}
+
+
+def import_times(said: str) -> dict[str, dict[str, Any]]:
+    """Each module python -X importtime timed after the pass, by the path whose load it was in: its
+    own microseconds and those with the imports it started."""
+
+    timed: dict[str, dict[str, Any]] = {}
+    path = ""
+    for line in said.splitlines():
+        if line.startswith(MARK):
+            path = line.removeprefix(MARK).strip()
+        elif path and (found := _IMPORT_TIME.match(line)):
+            timed[found[3]] = {"self": int(found[1]), "cumulative": int(found[2]), "stage": path}
+    return timed
+
+
 def _mb(size: int) -> str:
     return f"{size / 1e6:.2f}"
 
@@ -76,10 +102,11 @@ def totals(result: dict[str, Any]) -> dict[str, dict[str, int]]:
 
     found = {}
     held = 0
-    for stage in STAGES:
+    for stage in stages(result):
         entries = [entry["own"] for entry in result["modules"].values() if entry["stage"] == stage]
-        traced = result[stage] - held
-        held = result[stage]
+        reached = result["after"][stage] if stage in result.get("after", {}) else result[stage]
+        traced = reached - held
+        held = reached
         found[stage] = {
             "traced": traced,
             "modules": len(entries),
@@ -111,16 +138,29 @@ def render(kept: dict[str, Any], top: int) -> str:
         f"Peak: {_mb(result['peak'])} MB",
         "",
     ]
-    for stage, said in STAGES.items():
+    timed = kept.get("import_times", {})
+    for stage, said in stages(result).items():
         total = counted[stage]
+        took = sum(entry["self"] for entry in timed.values() if entry["stage"] == stage)
         lines.append(
             f"{said.capitalize()}: {_mb(total['traced'])} MB over {total['modules']} modules loaded, "
             f"{_mb(total['own'])} MB their own, {_mb(total['outside'])} MB allocated outside any load"
+            + (f"; {took / 1000:.1f} ms importing, untraced" if stage in result.get("after", {}) else "")
         )
     lines.append(f"After the pass: {_mb(result[PASS])} MB")
-    for stage, said in STAGES.items():
+    for path, reached in result.get("after", {}).items():
+        lines.append(f"After {path}: {_mb(reached)} MB")
+    for stage, said in stages(result).items():
         lines += ["", *_table(f"By package, {said}:", ranked(result["modules"], stage), top)]
         lines += ["", *_table(f"By module, {said}:", ranked(result["modules"], stage, by=str), top)]
+        if stage in result.get("after", {}):
+            slowest = sorted(
+                ((name, entry) for name, entry in timed.items() if entry["stage"] == stage),
+                key=lambda row: (-row[1]["self"], row[0]),
+            )
+            shown = [["ms", "with imports", "module"]]
+            shown += [[f"{e['self'] / 1000:.1f}", f"{e['cumulative'] / 1000:.1f}", name] for name, e in slowest[:top]]
+            lines += ["", f"Slowest imports, {said}:", *("  " + line for line in aligned(shown))]
     return "\n".join(lines)
 
 
@@ -143,42 +183,49 @@ def prepare(out: str) -> None:
     )
 
 
-def _child(argv: list[str], env: dict[str, str]) -> None:
+def _child(argv: list[str], env: dict[str, str]) -> str:
+    """What the child said on stderr, once it exited 0."""
+
     done = subprocess.run([sys.executable, *argv], cwd=ROOT, env=env, capture_output=True, text=True, check=False)
     if done.returncode:
         said = (done.stderr or done.stdout).strip().splitlines()[-30:]
         raise SystemExit(f"audit:memory: {' '.join(argv)} exited {done.returncode}:\n" + "\n".join(said))
+    return done.stderr
 
 
-def measure(env: dict[str, str], seed: str) -> dict[str, Any]:
-    """The probe's result, measured in a scratch folder removed however it ends, beside the
-    throwaway database, which goes with it.
+def measure(env: dict[str, str], seed: str, paths: list[str]) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """The probe's result and the import times of ``paths``, measured in a scratch folder removed
+    however it ends, its database and every file it writes in it.
 
     The probe serves as the image does: DEBUG off, its assets collected, so the readiness probe
     that ends its boot reads their manifest as production's does."""
 
-    database = Path(env["SEVERINO_DATABASE_PATH"])
-    try:
-        with tempfile.TemporaryDirectory(prefix="audit-memory-") as scratch:
-            work = Path(scratch)
-            places = {name: work / name for name in ("static", "media", "exports")}
-            for place in places.values():
-                place.mkdir()
-            env = env | {
-                "DJANGO_STATIC_ROOT": str(places["static"]),
-                "SEVERINO_MEDIA_ROOT": str(places["media"]),
-                "SEVERINO_EXPORTS_ROOT": str(places["exports"]),
-            }
-            _child(["-m", "tools.perf.memory", "prepare", str(work / "prepared.json")], env)
-            plan = json.loads((work / "prepared.json").read_text(encoding="utf-8"))
-            served = env | dict(seeds.get(seed).settings) | {"DJANGO_DEBUG": "0"}
-            _child(["manage.py", "collectstatic", "--noinput", "--verbosity", "0"], served)
-            asked = {"MEMORY_PAGES": " ".join(plan["pages"]), "MEMORY_SESSION": plan["session"]}
-            _child(["-m", "tools.perf.memory_probe", str(work / "measured.json")], served | asked)
-            return json.loads((work / "measured.json").read_text(encoding="utf-8"))
-    finally:
-        for left in database.parent.glob(database.name + "*"):
-            left.unlink()
+    with tempfile.TemporaryDirectory(prefix="audit-memory-") as scratch:
+        work = Path(scratch)
+        places = {name: work / name for name in ("static", "media", "exports")}
+        for place in places.values():
+            place.mkdir()
+        env = env | {
+            "SEVERINO_DATABASE_PATH": str(work / "db.sqlite3"),
+            "DJANGO_STATIC_ROOT": str(places["static"]),
+            "SEVERINO_MEDIA_ROOT": str(places["media"]),
+            "SEVERINO_EXPORTS_ROOT": str(places["exports"]),
+        }
+        _child(["-m", "tools.perf.memory", "prepare", str(work / "prepared.json")], env)
+        plan = json.loads((work / "prepared.json").read_text(encoding="utf-8"))
+        served = env | dict(seeds.get(seed).settings) | {"DJANGO_DEBUG": "0"}
+        _child(["manage.py", "collectstatic", "--noinput", "--verbosity", "0"], served)
+        asked = {
+            "MEMORY_PAGES": " ".join(plan["pages"]),
+            "MEMORY_SESSION": plan["session"],
+            "MEMORY_AFTER": " ".join(paths),
+        }
+        _child(["-m", "tools.perf.memory_probe", str(work / "measured.json")], served | asked)
+        timed = {}
+        if paths:
+            said = _child(["-X", "importtime", "-m", "tools.perf.memory_probe"], served | asked | {"MEMORY_TIMED": "1"})
+            timed = import_times(said)
+        return json.loads((work / "measured.json").read_text(encoding="utf-8")), timed
 
 
 def main() -> int:
@@ -192,6 +239,10 @@ def main() -> int:
     if not top.isdigit():
         print(f"audit:memory: --top {top!r} is not a count of rows", file=sys.stderr)
         return 2
+    paths = [path for path in asked.text("after").split(",") if path]
+    if unknown := [path for path in paths if path not in AFTER]:
+        print(f"audit:memory: no path {', '.join(unknown)}. Paths: {', '.join(AFTER)}", file=sys.stderr)
+        return 2
     alone = asked.switch("host_alone")
     plugins = "" if alone else os.environ.get("HQ_LOCAL_PLUGINS", "")
     env = os.environ | {
@@ -202,7 +253,7 @@ def main() -> int:
         "MEMORY_SEED": seed,
     }
     started = time.monotonic()
-    result = measure(env, seed)
+    result, timed = measure(env, seed, paths)
     commit = commit_of(ROOT)
     kept = runs.Run.start(
         OUT,
@@ -213,9 +264,17 @@ def main() -> int:
         measured=MEASURED,
         seconds=round(time.monotonic() - started, 1),
         totals=totals(result),
+        packages={stage: ranked(result["modules"], stage) for stage in stages(result)},
+        import_times=timed,
         result=result,
     )
-    print(render(kept.doc, int(top)), "", f"Kept: {kept.path.relative_to(ROOT)}", sep="\n")
+    print(
+        render(kept.doc, int(top)),
+        "",
+        f"Every row the tables leave out, each module's and each package's by stage, is in "
+        f"{kept.path.relative_to(ROOT)} (.result.modules, .packages, .import_times)",
+        sep="\n",
+    )
     return 0 if all(landed["status"] == 200 for landed in answered(result).values()) else 1
 
 

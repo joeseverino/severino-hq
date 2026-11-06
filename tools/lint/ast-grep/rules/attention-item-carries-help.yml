@@ -1,0 +1,45 @@
+# Every item HQ raises comes with help, never a problem alone: a remedy among
+# its actions=, a command, instruction or reason in its workflow=, or the
+# page the work is done on (action= with url=). An Insight the host builds
+# with none of those, and no ** that could carry one, is a problem alone.
+# application/item_help names the kinds; test_item_help's gauge reads them.
+id: attention-item-carries-help
+language: python
+severity: error
+message: An attention item is built without help.
+note: Give it one of the kinds of help in hq.platform.application.item_help.
+files:
+  - "hq/**"
+  - "demo/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/migrations/**"
+rule:
+  kind: call
+  has:
+    field: function
+    regex: (^|\.)Insight$
+  not:
+    has:
+      field: arguments
+      any:
+        - has:
+            kind: dictionary_splat
+        - has:
+            kind: keyword_argument
+            has:
+              field: name
+              regex: ^(workflow|actions)$
+        - all:
+            - has:
+                kind: keyword_argument
+                has:
+                  field: name
+                  regex: ^action$
+            - has:
+                kind: keyword_argument
+                has:
+                  field: name
+                  regex: ^url$

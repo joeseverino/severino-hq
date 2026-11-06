@@ -16,11 +16,6 @@ from hq.platform.mcp.identity import set_principal
 
 from .tokens import ISSUER, RESOURCE, _serving, _token
 
-EVERY_AGENT_SWITCH = {
-    f"SEVERINO_AGENT_ENABLE_{switch}": True
-    for switch in ("WRITES", "DOC_SYNC", "INFRASTRUCTURE", "PRUNE", "DELETES", "CERT_RENEWAL", "LOOKUP", "CALENDAR")
-}
-
 
 def _scope(spec) -> str:
     named = {Capability.READ.value}
@@ -33,7 +28,6 @@ def _scope(spec) -> str:
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    **EVERY_AGENT_SWITCH,
 )
 class UnkeyedWriteTests(TestCase):
     def _runnable(self, interface):

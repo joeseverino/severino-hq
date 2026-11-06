@@ -1,6 +1,7 @@
 package host
 
 import (
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"path/filepath"
 	"time"
 )
@@ -29,7 +30,7 @@ func (w Web) Args() []string {
 		period = HealthStartPeriod
 	}
 	args := []string{
-		"run", "--rm", "--name", Container,
+		"run", "--rm", "--name", hostcore.Container,
 		// The real socket peer reaches HQ, not a bridge gateway address.
 		"--network", "host",
 		"--cap-drop", "ALL",
@@ -48,19 +49,19 @@ func (w Web) Args() []string {
 		// again, so the temporary space is on the data volume, not the
 		// RAM-backed /tmp.
 		"--env", "TMPDIR=/data/tmp",
-		"--env", "SEVERINO_CONTROLLER_DOORBELL=" + RunDir + "/controller-doorbell",
+		"--env", "SEVERINO_CONTROLLER_DOORBELL=" + hostcore.RunDir + "/controller-doorbell",
 		"--env", "SEVERINO_BRIDGE_SOCKET=" + BridgeSocket,
 		"--env", "SEVERINO_SCHEMA_SNAPSHOT=/data/" + SchemaSnapshot,
 	}
 	for _, volume := range Volumes {
 		args = append(args, "--mount", "type=volume,source="+volume.Name+",target="+volume.Target)
 	}
-	appEnv := "/run/secrets/" + AppEnvName
+	appEnv := "/run/secrets/" + hostcore.AppEnvName
 	// A bind's source must exist: --mount refuses a missing one instead of
 	// creating a directory where a file belongs.
 	args = append(args,
-		"--mount", "type=bind,source="+RunDir+",target="+RunDir,
-		"--mount", "type=bind,source="+filepath.Join(WebSecretDir, AppEnvName)+",target="+appEnv+",readonly",
+		"--mount", "type=bind,source="+hostcore.RunDir+",target="+hostcore.RunDir,
+		"--mount", "type=bind,source="+filepath.Join(WebSecretDir, hostcore.AppEnvName)+",target="+appEnv+",readonly",
 		// HQ reads its environment from where it is mounted, told here once.
 		"--env", "SEVERINO_APP_ENV_PATH="+appEnv,
 	)

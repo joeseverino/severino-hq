@@ -6,6 +6,8 @@
 #MISE depends=["image:build"]
 #MISE depends_post=["image:docker stop"]
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 # The build stage deletes what HQ never loads (Dockerfile). Every module of
 # what stays is imported, so one that reaches for a deleted part fails here
 # rather than on a request, and whatever stays without being loaded is named.

@@ -1316,7 +1316,7 @@ wheels = [
 name = "severino-hq"
 version = "0.0.0"
 source = { virtual = "." }
-default-groups = ["dev", "tools"]
+default-groups = ["dev", "source-tests", "tools"]
 dependencies = [
     { name = "argon2-cffi" },
     { name = "asgiref" },
@@ -1346,6 +1346,12 @@ dev = [
     { name = "django-debug-toolbar" },
     { name = "watchfiles" },
 ]
+fuzz = [
+    { name = "schemathesis" },
+]
+source-tests = [
+    { name = "pyyaml" },
+]
 tools = [
     { name = "complexipy" },
     { name = "coverage" },
@@ -1355,9 +1361,7 @@ tools = [
     { name = "hypothesis" },
     { name = "import-linter" },
     { name = "mypy" },
-    { name = "pyyaml" },
     { name = "ruff" },
-    { name = "schemathesis" },
     { name = "time-machine" },
     { name = "types-jsonschema" },
     { name = "vulture" },
@@ -1391,6 +1395,8 @@ dev = [
     { name = "django-debug-toolbar", specifier = "==8.0.0" },
     { name = "watchfiles", specifier = "==1.3.0" },
 ]
+fuzz = [{ name = "schemathesis", specifier = "==4.33.0" }]
+source-tests = [{ name = "pyyaml", specifier = "==6.0.3" }]
 tools = [
     { name = "complexipy", specifier = "==8.3.0" },
     { name = "coverage", specifier = "==7.17.0" },
@@ -1400,9 +1406,7 @@ tools = [
     { name = "hypothesis", specifier = "==6.170.14" },
     { name = "import-linter", specifier = "==2.15" },
     { name = "mypy", specifier = "==2.4.1" },
-    { name = "pyyaml", specifier = "==6.0.3" },
     { name = "ruff", specifier = "==0.17.3" },
-    { name = "schemathesis", specifier = "==4.33.0" },
     { name = "time-machine", specifier = "==3.6.0" },
     { name = "types-jsonschema", specifier = "==4.26.0.20261006" },
     { name = "vulture", specifier = "==2.16" },

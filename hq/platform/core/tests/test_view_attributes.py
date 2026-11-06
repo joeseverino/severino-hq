@@ -7,7 +7,6 @@ is read off the installed Django's generic view modules, minus the names a
 subclass is meant to set.
 """
 
-import ast
 import importlib
 import inspect
 from pathlib import Path
@@ -16,6 +15,7 @@ from django.test import SimpleTestCase, tag
 from django.views.generic import base, dates, detail, edit, list as listing
 
 import hq
+from hq.platform.application.tests.facts import module_name, scan
 
 # Attributes Django documents as a subclass's to set, each why it is safe.
 MEANT_TO_SET = {
@@ -87,22 +87,29 @@ def django_owned() -> set[str]:
 RESERVED = (django_owned() | INSTANCE_STATE) - MEANT_TO_SET.keys()
 
 
-def view_like(node: ast.ClassDef) -> bool:
-    bases = (b.attr if isinstance(b, ast.Attribute) else getattr(b, "id", "") for b in node.bases)
-    return any(name.endswith(("View", "Mixin")) for name in bases)
+# A class with a base named, or reached as an attribute named, ...View or ...Mixin.
+VIEW_LIKE = {
+    "kind": "class_definition",
+    "has": {"field": "name", "pattern": "$NAME"},
+    "all": [
+        {
+            "has": {
+                "field": "superclasses",
+                "has": {"any": [{"kind": "identifier"}, {"kind": "attribute"}], "regex": r"(View|Mixin)$"},
+            }
+        }
+    ],
+}
 
 
-def view_classes(root: Path) -> list[type]:
+def view_classes(*paths: Path) -> list[type]:
+    """Each view-like class defined at the top of a module under ``paths``."""
+
     classes = []
-    for path in sorted(root.rglob("*.py")):
-        source = path.read_text(encoding="utf-8")
-        if "View" not in source and "Mixin" not in source:
-            continue
-        found = [n.name for n in ast.walk(ast.parse(source)) if isinstance(n, ast.ClassDef) and view_like(n)]
-        if not found:
-            continue
-        module = importlib.import_module(".".join(("hq", *path.relative_to(root).with_suffix("").parts)))
-        classes += [getattr(module, name) for name in found if isinstance(getattr(module, name, None), type)]
+    for found in scan({"view-like": VIEW_LIKE}, *paths):
+        value = getattr(importlib.import_module(module_name(found.path)), found.captured["NAME"], None)
+        if isinstance(value, type):
+            classes.append(value)
     return classes
 
 

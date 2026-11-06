@@ -13,7 +13,7 @@ carries any of it).
 | `lib/` | shell libraries the file tasks source: the heavy-gate lock, the tree export, the composed set, the source URL |
 | `pipeline/` | CI and release programs: reports, composition, image checks, the release rehearsals |
 | `structural/` | the structural bar and its baseline |
-| `lint/` | the locked lint tools (axe-core, browser-compat-data, ESLint, Redocly, Stylelint), installed by `setup:lint-tools` |
+| `lint/` | the locked lint tools (axe-core, ESLint, Redocly, Stylelint), installed by `setup:lint-tools`; `lint/bcd/`, browser-compat-data, which `audit:bcd` installs for itself |
 | `tests/` | the tests of the top-level modules |
 
 The top level holds the credential minting (`credentials.py`) and the

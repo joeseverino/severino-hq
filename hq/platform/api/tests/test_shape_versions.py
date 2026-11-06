@@ -11,6 +11,7 @@ from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.topology import topology
 from hq.platform.mcp.declarations import tool_contract
+from hq.platform.mcp.finding_actions import agent_findings
 
 from .. import openapi
 
@@ -23,11 +24,15 @@ class ShapeVersionTests(TestCase):
                 "describe_capabilities": ("CapabilityRequestCatalog", describe_capabilities(principal=principal)),
                 "describe_resources": ("ResourceCatalog", describe_resources(principal=principal)),
                 "describe_connections": ("ConnectionCatalog", describe_connections(principal=principal)),
-                "get_findings": (None, findings(principal=principal)),
+                "get_findings": (None, agent_findings(principal=principal)),
                 "get_topology": (None, topology(principal=principal)),
             }
+            # MCP writes findings in a shape of its own, versioned apart from the API's.
+            shared = findings(principal=principal)
             schemas = openapi.document()["components"]["schemas"]
             tools = tool_contract()
+
+        self.assertEqual(schemas["Findings"]["properties"]["schema_version"].get("const"), shared["schema_version"])
 
         for tool, (catalog, answer) in answers.items():
             with self.subTest(tool=tool):

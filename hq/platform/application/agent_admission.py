@@ -2,23 +2,24 @@
 
 Each door parses its own transport and answers in its own protocol; what it
 asks is answered here, once. ``admit`` says who a token is, ``refused``
-whether that caller may act right now, and ``at_once`` holds one of its calls
-at once. They are apart because the doors ask them at different moments: the
-machine API at the door, MCP at each tool call, so a paused or throttled agent
-keeps its connection and its next call after that runs on it.
+whether that caller may act right now, ``at_once`` holds one of its calls at
+once, and ``stream_opened`` one of its listen streams. They are apart because
+the doors ask them at different moments: the machine API at the door, MCP at
+each tool call, so a paused or throttled agent keeps its connection and its
+next call after that runs on it.
 """
 
 import contextlib
 from collections.abc import Iterator
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
-from . import agent_access, agent_limits
+from . import agent_access, agent_devices, agent_limits
 from .agent_access import AgentRefusal
-from .agent_limits import Limited
+from .agent_limits import Limited, Slot
 from .agent_registry import observe
 from .denials import record_denial, record_limited, settle
-from .security import AuthorizationError, Principal
+from .security import AuthorizationError, Capability, Principal
 from .tokens import TokenError, token_principal, verify
 
 
@@ -30,6 +31,12 @@ class Unadmitted:
     code: str
     reason: str
     verified: bool
+
+    @property
+    def scope(self) -> str:
+        """The permission a verified token's 403 names: the least that gets in."""
+
+        return Capability.READ.value if self.verified else ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,8 +59,9 @@ def admit(bearer: str, *, interface: str, source: str) -> Principal | Throttled 
     A refused token is recorded against ``source``, the peer that sent it,
     since no identity was established. An admitted one spends one call of its
     rate before anything is written, so a flood costs no write past its
-    refusal's; within its rate it is observed, before any brake, so a paused
-    agent is still registered.
+    refusal's; within its rate it is placed on the tailnet device at
+    ``source`` and observed, before any brake, so a paused agent and a device
+    awaiting approval are still registered.
     """
 
     if not bearer:
@@ -71,7 +79,9 @@ def admit(bearer: str, *, interface: str, source: str) -> Principal | Throttled 
             if limited is not None:
                 return Throttled(principal, limited)
             settle(principal.actor)
-            observe(principal)
+            placed = agent_devices.place(source)
+            principal = replace(principal, device=placed.node_id)
+            observe(principal, placed.device)
             return principal
     record_denial(interface=interface, reason=unadmitted.code, source=source, authenticated=False)
     return unadmitted
@@ -99,11 +109,23 @@ def refused(caller: Principal | Throttled, *, source: str = "") -> AgentRefusal 
     principal = caller.principal if isinstance(caller, Throttled) else caller
     limited = caller.refusal if isinstance(caller, Throttled) else _carried.get()
     if limited is not None:
-        record_limited(interface=principal.interface, reason=limited.code, actor=principal.actor, source=source)
+        record_limited(
+            interface=principal.interface,
+            reason=limited.code,
+            actor=principal.actor,
+            source=source,
+            device=principal.device,
+        )
         return limited
-    applies = agent_access.refusal(principal)
+    applies = agent_access.refusal(principal, source=source)
     if applies is not None:
-        record_denial(interface=principal.interface, reason=applies.code, actor=principal.actor, source=source)
+        record_denial(
+            interface=principal.interface,
+            reason=applies.code,
+            actor=principal.actor,
+            source=source,
+            device=principal.device,
+        )
     return applies
 
 
@@ -114,8 +136,42 @@ def at_once(principal: Principal, *, source: str = "") -> Iterator[Limited | Non
 
     held = agent_limits.LIMITS.occupy(principal.actor)
     if isinstance(held, Limited):
-        record_limited(interface=principal.interface, reason=held.code, actor=principal.actor, source=source)
+        record_limited(
+            interface=principal.interface,
+            reason=held.code,
+            actor=principal.actor,
+            source=source,
+            device=principal.device,
+        )
         yield held
         return
     with held:
         yield None
+
+
+def stream_opened(principal: Principal, *, source: str = "") -> Slot | Limited:
+    """One of ``principal``'s listen streams, held until the slot is given back,
+    or the refusal, recorded, when the agent has all of them open."""
+
+    held = agent_limits.LIMITS.listen(principal.actor)
+    if isinstance(held, Limited):
+        record_limited(
+            interface=principal.interface,
+            reason=held.code,
+            actor=principal.actor,
+            source=source,
+            device=principal.device,
+        )
+    return held
+
+
+def challenge(*params: tuple[str, str]) -> str:
+    """A ``WWW-Authenticate: Bearer`` value of ``params``, as either door writes one."""
+
+    return "Bearer " + ", ".join(f'{name}="{_quoted(value)}"' for name, value in params)
+
+
+def _quoted(value: str) -> str:
+    """``value`` as the inside of an HTTP quoted-string (RFC 9110 section 5.6.4)."""
+
+    return value.replace("\\", "\\\\").replace('"', '\\"')

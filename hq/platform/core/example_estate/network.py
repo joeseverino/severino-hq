@@ -29,6 +29,7 @@ from .names import (
     hexed,
     iso,
     magic_dns,
+    node_id,
     now,
     tailnet_v4,
     tailnet_v6,
@@ -244,11 +245,13 @@ def tailnet():
 
     at = now()
 
-    # As the controller writes a device: both addresses, the MagicDNS name
-    # without its trailing dot, the node key and the client's full version.
+    # As the controller writes a device: its stable id, both addresses, the
+    # MagicDNS name without its trailing dot, the node key and the client's
+    # full version.
     def device(name, os, **extra):
         return {
             "name": name,
+            "node_id": node_id(name),
             "addresses": [tailnet_v4(name), tailnet_v6(name)],
             "dns_name": magic_dns(name),
             "os": os,

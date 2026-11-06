@@ -69,7 +69,8 @@ type Output struct {
 	SigningKeys int
 }
 
-func text(value *string) string {
+// Text is an optional Connect string, empty when Connect left it out.
+func Text(value *string) string {
 	if value == nil {
 		return ""
 	}
@@ -88,9 +89,9 @@ func fields(item connectapi.FullItem) []connectapi.Field {
 func byLabel(item connectapi.FullItem, label string) (string, error) {
 	found, value := 0, ""
 	for _, field := range fields(item) {
-		if text(field.Label) == label {
+		if Text(field.Label) == label {
 			found++
-			value = text(field.Value)
+			value = Text(field.Value)
 		}
 	}
 	if found > 1 {
@@ -103,7 +104,7 @@ func byLabel(item connectapi.FullItem, label string) (string, error) {
 func named(items []connectapi.FullItem, name string) []connectapi.FullItem {
 	var found []connectapi.FullItem
 	for _, item := range items {
-		if text(item.Id) == name || text(item.Title) == name {
+		if Text(item.Id) == name || Text(item.Title) == name {
 			found = append(found, item)
 		}
 	}
@@ -123,7 +124,7 @@ func appEnvironment(input Input) ([]byte, int, error) {
 	count := 0
 	seen := map[string]bool{}
 	for _, field := range fields(matches[0]) {
-		label, value := text(field.Label), text(field.Value)
+		label, value := Text(field.Label), Text(field.Value)
 		// A field with no value renders no variable, so none renders empty.
 		if !appVariable.MatchString(label) || value == "" {
 			continue
@@ -217,7 +218,7 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 	}
 	// Every field, projected or not: a connection item holds single-line values.
 	for _, field := range fields(item) {
-		if strings.ContainsAny(text(field.Value), "\x00\r\n") {
+		if strings.ContainsAny(Text(field.Value), "\x00\r\n") {
 			return nil, refuse("Invalid controller field value.")
 		}
 	}
@@ -273,9 +274,9 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 			}
 			matched := 0
 			for _, field := range fields(item) {
-				if (kind == "id" && field.Id == selector) || (kind == "label" && text(field.Label) == selector) {
+				if (kind == "id" && field.Id == selector) || (kind == "label" && Text(field.Label) == selector) {
 					matched++
-					value = text(field.Value)
+					value = Text(field.Value)
 				}
 			}
 			if matched == 0 && entry.Optional {
@@ -320,7 +321,7 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 	found = typed
 	// Where the credential is kept, so HQ can name the item a replacement is
 	// stored into.
-	found.Store = connections.Store{Vault: input.Vault.Configured, Item: text(item.Id)}
+	found.Store = connections.Store{Vault: input.Vault.Configured, Item: Text(item.Id)}
 	if hasControl(input.Vault.Configured) || input.Vault.Configured == "" {
 		return nil, refuse("The vault name is not a single line.")
 	}
@@ -341,7 +342,7 @@ func connection(input Input, item connectapi.FullItem) (*projected, error) {
 // valid answer here; whether it may be installed is Project's to say.
 func inventory(input Input) (connections.Document, error) {
 	items := append([]connectapi.FullItem{}, input.Items...)
-	slices.SortFunc(items, func(a, b connectapi.FullItem) int { return cmp.Compare(text(a.Id), text(b.Id)) })
+	slices.SortFunc(items, func(a, b connectapi.FullItem) int { return cmp.Compare(Text(a.Id), Text(b.Id)) })
 	refs, prefixes := map[string]bool{}, map[string]bool{}
 	document := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{}}
 	for _, item := range items {

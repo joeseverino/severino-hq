@@ -2,7 +2,8 @@
 
 The guard in test_tree_tag.py holds the ``tree`` tag to the walks, and
 ``mise run fast`` runs the tests it finds tagged ``tree``. The guard in
-test_git_tag.py holds a test that runs git to the ``source`` tag.
+test_git_tag.py holds a test that runs git to the ``source`` tag. Each walk
+runs apart (apart.py), so the trees it parses leave with its process.
 """
 
 import ast
@@ -11,7 +12,8 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from hq.platform.application.tests.source import parsed, source_files
+from hq.platform.application.tests.apart import apart
+lazy from hq.platform.application.tests.source import source_files
 
 ROOT = Path(__file__).resolve().parents[4]
 SUITE = ("hq", "hq_sdk", "tools", "tests")
@@ -22,10 +24,14 @@ Found = tuple[str, ast.AST]
 
 
 def is_walk(node: ast.AST) -> bool:
-    """``x.rglob(...)``, ``os.walk(...)``, or ``ls-files`` in a string."""
+    """``x.rglob(...)``, ``os.walk(...)``, ``ls-files`` in a string, or a command line that runs ast-grep
+    on files, which one that reads ``--stdin`` does not."""
 
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return "ls-files" in node.value.split()
+    if isinstance(node, (ast.List, ast.Tuple)) and node.elts:
+        words = [each.value for each in node.elts if isinstance(each, ast.Constant)]
+        return words[:1] == ["ast-grep"] and "--stdin" not in words
     if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
         return False
     owner = node.func.value
@@ -60,7 +66,8 @@ class Module:
         self.defined: dict[str, ast.AST] = {}
         # A local name -> (the module it came from, the name there, or None for the module itself).
         self.imported: dict[str, tuple[str, str | None]] = {}
-        for node in parsed(path).body:
+        # Parsed once per module by Reach, in a process that exits, so no cache keeps it.
+        for node in ast.parse(path.read_text(encoding="utf-8"), filename=str(path)).body:
             self.read(node, package)
 
     def read(self, node: ast.stmt, package: str) -> None:
@@ -74,12 +81,18 @@ class Module:
                 local = alias.asname or alias.name.partition(".")[0]
                 self.imported[local] = (alias.name if alias.asname else local, None)
         elif isinstance(node, ast.ImportFrom):
-            head = node.module or ""
-            if node.level:
-                base = package.split(".")[: len(package.split(".")) - node.level + 1]
-                head = ".".join([*base, *([node.module] if node.module else [])])
+            head = _imported_from(node, package)
             for alias in node.names:
                 self.imported[alias.asname or alias.name] = (head, alias.name)
+
+
+def _imported_from(node: ast.ImportFrom, package: str) -> str:
+    """The dotted name of the module a ``from`` import in ``package`` reads, a relative one resolved."""
+
+    if not node.level:
+        return node.module or ""
+    base = package.split(".")[: len(package.split(".")) - node.level + 1]
+    return ".".join([*base, *([node.module] if node.module else [])])
 
 
 @dataclass(frozen=True)
@@ -226,9 +239,13 @@ def replaces_root(nodes: list[ast.AST]) -> bool:
 def tagged(root: Path, tag: str) -> list[str]:
     """The label of every test carrying ``tag``: its class's, when every test of the class does."""
 
-    walks = Reach(root)
+    return apart(_tagged, root, tag)
+
+
+def _tagged(root: str, tag: str) -> list[str]:
+    walks = Reach(Path(root))
     labels = []
-    for dotted in test_modules(root):
+    for dotted in test_modules(walks.root):
         by_class: dict[str, list[tuple[str, bool]]] = {}
         for cls, method, held, own in walks.methods(dotted):
             by_class.setdefault(f"{dotted}.{cls.name}", []).append((method.name, tag in held | own))
@@ -252,9 +269,14 @@ def misplaced(root: Path) -> tuple[list[str], list[str]]:
     one tag rather than one per method.
     """
 
-    walks = Reach(root)
+    untagged, idle = apart(_misplaced, root)
+    return untagged, idle
+
+
+def _misplaced(root: str) -> tuple[list[str], list[str]]:
+    walks = Reach(Path(root))
     untagged, idle = [], []
-    for dotted in test_modules(root):
+    for dotted in test_modules(walks.root):
         by_class: dict[str, list[Unit]] = {}
         for unit in walks.units(dotted):
             by_class.setdefault(unit.label.rpartition(".")[0], []).append(unit)
@@ -279,10 +301,14 @@ def runs_git_untagged(root: Path) -> list[str]:
     """Every test the image ships that runs git, itself or through what it
     reaches by name, without the ``source`` tag: no image ships git."""
 
-    reach = Reach(root, is_git)
+    return apart(_runs_git_untagged, root)
+
+
+def _runs_git_untagged(root: str) -> list[str]:
+    reach = Reach(Path(root), is_git)
     return [
         f"{dotted}.{cls.name}.{method.name}"
-        for dotted in test_modules(root, shipped(root))
+        for dotted in test_modules(reach.root, shipped(reach.root))
         for cls, method, held, own in reach.methods(dotted)
         if "source" not in held | own and reach.reached(dotted, cls, method)
     ]

@@ -15,6 +15,7 @@ from hq.platform.application.web_writes import execute_posted
 lazy from hq.platform.application import outbound_work
 lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
+lazy from hq.platform.application.refusal_status import WANTS_A_GRANT
 lazy from hq.platform.application.scheduled_work import job_names
 
 from .models import Job
@@ -156,7 +157,7 @@ class WorkAskView(View):
         back = reverse("jobs:list")
         if not result.get("ok"):
             error = result.get("error", {})
-            if error.get("code") == "forbidden":
+            if error.get("code") in WANTS_A_GRANT:
                 raise PermissionDenied(error.get("message", ""))
             return answer(request, Standing(FAILED, error.get("message", "")), fallback=back)
         job = Job.objects.filter(pk=result["job"]).first() if result.get("job") else None

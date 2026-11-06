@@ -133,7 +133,7 @@ def _policy_verdicts(
             continue
         try:
             port = int(str(item.get("port", "")) or 0)
-        except ValueError:
+        except ValueError:  # noqa: S112 - a consumer with no port number has no port to open
             continue
         if not port:
             continue

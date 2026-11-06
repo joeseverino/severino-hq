@@ -11,17 +11,22 @@ without anybody listing it.
 import ast
 import secrets
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from functools import partial
 from pathlib import Path
 from typing import Any
 
-from django.http import HttpResponse
+# Every import of Django or HQ is lazy, so the walk's own process (apart.py) loads none.
+lazy from django.http import HttpResponse
 
-from .. import plugin_testing
-from ..web_writes import RETRY_KEY_FIELD
-from .markup import all_elements
-from .source import parsed, source_files
+from .apart import apart
+
+# A test that posts a form it did not open: the host's post with the copy
+# hq_sdk.testing gives the extensions'.
+lazy from ..plugin_testing import form_keyed  # noqa: F401 - the tests import it from here
+lazy from ..web_writes import RETRY_KEY_FIELD
+lazy from .markup import all_elements
+lazy from .source import source_files
 
 # The chokepoint as a browser's form reaches it, under the key the form
 # posted, and the runner beneath it that a door carrying a key of its own
@@ -165,7 +170,7 @@ def _modules(root: Path, also: Sequence[Path], packages: Sequence[Path]) -> dict
     found = {}
     for path in sorted({*walked, *also}):
         module = _module_name(root, path, packages)
-        tree = parsed(path)
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         local = {
             node.name for node in tree.body if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
         }
@@ -210,25 +215,39 @@ def _functions(modules: dict[str, _Module], classes: dict[str, set[str]]) -> Ite
         for node in entry.tree.body:
             if isinstance(node, ast.ClassDef):
                 classes[f"{module}.{node.name}"] = _bases(node, module, entry, modules)
-            members = [(node.name, child) for child in node.body] if isinstance(node, ast.ClassDef) else [("", node)]
-            for owner, child in members:
-                if not isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-                    continue
-                found = _Function(child.name, module, child, owner)
-                called = partial(_called, module=module, owner=owner, bound=entry.bound, local=entry.defines)
+            for owner, child in _members(node):
+                yield _read(child, module, owner, entry, modules)
 
-                def resolve(call: ast.Call, called: Callable[[ast.Call], str] = called) -> str:
-                    return _canonical(called(call), modules)
 
-                for call, under_key in _runs(child, resolve, module):
-                    name = resolve(call)
-                    if under_key:
-                        found.keyed_calls.update({name} - {""})
-                        continue
-                    found.writes = found.writes or _writes_directly(call)
-                    if name:
-                        found.calls.add(name)
-                yield found
+def _members(node: ast.stmt) -> Iterator[tuple[str, ast.FunctionDef | ast.AsyncFunctionDef]]:
+    """Each function a top-level statement defines, with the class that owns it, or "" at the top level."""
+
+    owner, children = (node.name, node.body) if isinstance(node, ast.ClassDef) else ("", [node])
+    for child in children:
+        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            yield owner, child
+
+
+def _read(
+    node: ast.FunctionDef | ast.AsyncFunctionDef, module: str, owner: str, entry: _Module, modules: dict[str, _Module]
+) -> _Function:
+    """The function ``node`` defines, with what it calls, what it calls under a posted key, and whether it writes."""
+
+    found = _Function(node.name, module, node, owner)
+    called = partial(_called, module=module, owner=owner, bound=entry.bound, local=entry.defines)
+
+    def resolve(call: ast.Call) -> str:
+        return _canonical(called(call), modules)
+
+    for call, under_key in _runs(node, resolve, module):
+        name = resolve(call)
+        if under_key:
+            found.keyed_calls.update({name} - {""})
+            continue
+        found.writes = found.writes or _writes_directly(call)
+        if name:
+            found.calls.add(name)
+    return found
 
 
 def _runs(
@@ -312,6 +331,14 @@ def view_writes(root: Path, view_modules: list[Path], packages: Sequence[Path] =
     are among ``view_modules``, each read whole, as the host's ``hq`` is.
     """
 
+    return [ViewWrite(**write) for write in apart(_view_writes, root, view_modules, packages)]
+
+
+def _view_writes(root: str, view_modules: list[str], packages: list[str]) -> list[dict[str, str]]:
+    return [asdict(write) for write in _found(Path(root), [*map(Path, view_modules)], [*map(Path, packages)])]
+
+
+def _found(root: Path, view_modules: list[Path], packages: list[Path]) -> list[ViewWrite]:
     functions, writing, classes = writers(root, view_modules, packages)
     view_names = {_module_name(root, path, packages) for path in view_modules}
     keyed = _keyed(functions, classes)
@@ -369,11 +396,6 @@ def keyed(payload: dict[str, Any] | None = None) -> dict[str, Any]:
     test whose subject is not the key (``run_capability`` refuses one without)."""
 
     return {**(payload or {}), "idempotency_key": f"example-{secrets.token_hex(8)}"}
-
-
-# A test that posts a form it did not open: the host's post with the copy
-# hq_sdk.testing gives the extensions'.
-form_keyed = plugin_testing.form_keyed
 
 
 def drawn_key(response: HttpResponse, attribute: str, value: str | None = None) -> str:

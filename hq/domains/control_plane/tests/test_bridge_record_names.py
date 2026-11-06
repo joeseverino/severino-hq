@@ -14,7 +14,7 @@ from typing import Any
 from django.conf import settings
 from django.test import SimpleTestCase, tag
 
-from hq.domains.control_plane.bridge_application import declared_names
+from hq.domains.control_plane.bridge_contract import declared_names
 from hq.domains.control_plane.secret_shapes import struck
 
 GOLDEN = Path(settings.BASE_DIR) / "controller/providers/testdata/golden/records.json"

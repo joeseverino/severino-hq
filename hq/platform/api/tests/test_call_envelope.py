@@ -37,7 +37,6 @@ def _envelope(name):
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class CallEnvelopeTests(TestCase):
     client_class = ContractClient

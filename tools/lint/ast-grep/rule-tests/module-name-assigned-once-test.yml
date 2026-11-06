@@ -1,0 +1,40 @@
+id: module-name-assigned-once
+valid:
+  - |
+    FIRST = 1
+    SECOND: int = 2
+  - |
+    LIMIT = 1
+    if DEBUG:
+        LIMIT = 5
+  - |
+    class Settings:
+        LIMIT = 1
+        LIMIT = 2
+  - |
+    def limit():
+        found = 1
+        found = 2
+        return found
+  - |
+    LEFT, RIGHT = 1, 2
+    LEFT = 0
+  - |
+    TOTAL = 1
+    TOTAL += 1
+invalid:
+  - |
+    LIMIT = 1
+    LIMIT = 2
+  - |
+    LIMIT: int = 1
+    LIMIT = 2
+  - |
+    LIMIT: int
+    LIMIT = 2
+  - |
+    FIRST = SECOND = 1
+    SECOND = 2
+  - |
+    SECOND = 2
+    FIRST = SECOND = 1

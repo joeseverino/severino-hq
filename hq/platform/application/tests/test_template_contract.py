@@ -45,7 +45,7 @@ OUTSIDE = {
         "{% card %}{% section_head %}A{% aside %}B{% endsection_head %}{% aside %}C{% endcard %}\n"
         "{% aside %}D\n"
         '{% card css="kv invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
-        '{% post_button "Go" url css="invented-button" %}\n{% table_heading "A" note_css="invented-note" %}'
+        '{% post_button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}'
     ),
     "templatetags/example_tags.py": (
         "from django import template\n\nregister = template.Library()\n\n\n"

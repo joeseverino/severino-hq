@@ -40,7 +40,6 @@ def _operation():
     return {"idempotency_key": "once", "reason": "Stated reason for the change."}
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class DeclarationRefusalTests(RefusalCase):
     def setUp(self):
         managing_everything()
@@ -81,7 +80,6 @@ class DeclarationRefusalTests(RefusalCase):
         self.assertNotIn("adguard.rewrite", error["message"])
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class PolicyAmendmentRefusalTests(RefusalCase):
     """The policy is the tailnet's document: neither its parse error nor its names are HQ's words."""
 
@@ -148,7 +146,6 @@ class ReadOnlyAdoptionRefusalTests(RefusalCase):
         self.assertFalse(ManagedResource.objects.exists())
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class ApprovalRefusalTests(RefusalCase):
     def test_a_held_request_for_something_gone_is_refused_without_its_name(self):
         managing_everything()

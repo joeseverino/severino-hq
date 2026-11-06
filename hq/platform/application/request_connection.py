@@ -405,8 +405,9 @@ def _tailnet_current(observed: datetime | None) -> bool:
     return observed is not None and not freshness(PAGE_VISIT, observed).due
 
 
-def connection(request, *, edge=None, firewall=None) -> Connection:
-    """Everything HQ can say about the request in front of it."""
+def connection(request, *, edge=None, firewall=None, principal=None) -> Connection:
+    """Everything HQ can say about the request in front of it; ``principal``
+    is the caller an agent's door authenticated, judged by its device's approval."""
 
     address = client_ip(request)
     peer = socket_peer(request)
@@ -425,7 +426,7 @@ def connection(request, *, edge=None, firewall=None) -> Connection:
     forwarder = tailnet.device_at(peer, known) if forwarded else None
     reported_address = displayed_client_ip(request) if untrusted_forwarding else ""
     reported_device = tailnet.device_at(reported_address, known)
-    identity = identity_of(request, None if untrusted_forwarding else device)
+    identity = identity_of(request, None if untrusted_forwarding else device, principal)
 
     declared = declared_machines()
 

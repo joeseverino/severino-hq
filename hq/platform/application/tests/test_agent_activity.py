@@ -3,14 +3,15 @@ audit log over a window, and no dearer for a longer log or more agents."""
 
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application import agent_activity, agent_registry, denials, roles
+from hq.platform.application import agent_activity, agent_limits, agent_registry, denials, roles
 from hq.platform.application.agent_limits import RATE_LIMITED
 from hq.platform.application.linked_accounts import bind_sign_in
 from hq.platform.application.security import AuthorizationError, agent_principal
@@ -96,18 +97,25 @@ class ActivityTests(TestCase):
 
         self.assertEqual(agent_activity.recent_activity([AGENT]), {})
 
-    def test_the_grant_is_split_by_the_deployments_ceiling(self):
-        _seen(AGENT, granted=("read", "write_calendar"))
+    def test_a_machines_whole_grant_is_in_force(self):
+        _seen(AGENT, granted=("read", "write_calendar", "read_audit_log"))
 
-        with self.settings(SEVERINO_AGENT_ENABLE_CALENDAR=False):
-            (standing,) = agent_activity.standings()
+        (standing,) = agent_activity.standings()
 
-        self.assertEqual((standing.in_force, standing.held_back), (("read",), ("write_calendar",)))
+        self.assertEqual((standing.in_force, standing.beyond_role), (("read", "read_audit_log", "write_calendar"), ()))
+
+    def test_a_machine_holds_none_of_a_persons_own_settings_in_force(self):
+        # Written out: what keeps something of a person's, which a machine's token is refused.
+        personal = ("set_preferences", "pin_favorites", "set_aside_action_items")
+        _seen(AGENT, granted=("read", *personal))
+
+        (standing,) = agent_activity.standings()
+
+        self.assertEqual(standing.in_force, ("read",))
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_CALENDAR=True)
 class PersonRoleTests(TestCase):
-    """An agent a person signed in holds its grant within the agent ceiling and that person's role."""
+    """An agent a person signed in holds its grant within that person's role."""
 
     GRANTED = ("read", "write_calendar")
 
@@ -131,6 +139,17 @@ class PersonRoleTests(TestCase):
 
                 self.assertEqual(set(standing.in_force), set(principal.capabilities))
 
+    def test_what_the_page_says_is_missing_is_what_a_refusal_tells_its_person_to_grant(self):
+        for role in roles.Role:
+            with self.subTest(role):
+                AgentIdentity.objects.all().delete()
+                _seen(AGENT, granted=self.GRANTED, person=_person(f"missing-{role}", role))
+                principal = agent_principal(AGENT, "mcp", frozenset(self.GRANTED), person_key=f"missing-{role}")
+
+                (standing,) = agent_activity.standings()
+
+                self.assertEqual(set(standing.missing), set(principal.grantable))
+
     def test_a_person_without_a_role_has_an_agent_refused_and_shown_with_nothing_in_force(self):
         _seen(AGENT, granted=self.GRANTED, person=_person("nobody"))
 
@@ -141,13 +160,60 @@ class PersonRoleTests(TestCase):
         with self.assertRaises(AuthorizationError):
             agent_principal(AGENT, "mcp", frozenset(self.GRANTED), person_key="nobody")
 
-    def test_a_machines_own_token_acts_for_nobody_and_is_bounded_by_the_ceiling_alone(self):
+    def test_a_machines_own_token_acts_for_nobody_and_holds_its_grant(self):
         _seen(AGENT, granted=self.GRANTED)
 
         (standing,) = agent_activity.standings()
 
         self.assertEqual((standing.in_force, standing.role), (self.GRANTED, ""))
         self.assertFalse(standing.acts_for_nobody)
+
+
+def _listening(client_id: str, streams: int) -> None:
+    """``client_id`` holding ``streams`` listen streams open, as the MCP door holds each."""
+
+    for _ in range(streams):
+        held = agent_limits.LIMITS.listen(client_id)
+        assert isinstance(held, agent_limits.Slot), held
+
+
+class StreamTests(TestCase):
+    """The update streams each agent holds open now, against its cap."""
+
+    def _streams(self, client_id: str = AGENT):
+        (standing,) = [found for found in agent_activity.standings() if found.identity.client_id == client_id]
+        return standing.streams
+
+    def test_an_agent_holding_none_has_none_and_is_not_full(self):
+        _seen(AGENT)
+
+        streams = self._streams()
+
+        self.assertEqual(streams.open, 0)
+        self.assertFalse(streams.full)
+
+    def test_an_agent_holding_one_has_it_counted_against_the_cap(self):
+        _seen(AGENT)
+        _seen(OTHER)
+        _listening(AGENT, 1)
+
+        streams = self._streams()
+
+        self.assertEqual((streams.open, streams.cap), (1, settings.SEVERINO_AGENT_STREAMS_AT_ONCE))
+        self.assertFalse(streams.full)
+        self.assertEqual(self._streams(OTHER).open, 0, "a stream is its own agent's")
+
+    def test_an_agent_at_the_cap_is_full_as_its_next_stream_is_refused(self):
+        _seen(AGENT)
+        _listening(AGENT, settings.SEVERINO_AGENT_STREAMS_AT_ONCE)
+
+        streams = self._streams()
+
+        self.assertEqual(streams.open, streams.cap)
+        self.assertTrue(streams.full)
+        refused = agent_limits.LIMITS.listen(AGENT)
+        self.assertIsInstance(refused, agent_limits.Limited)
+        self.assertEqual(refused.code, agent_limits.TOO_MANY_CALLS)
 
 
 class QueryBudgetTests(TestCase):
@@ -183,6 +249,22 @@ class PageTests(TestCase):
         self.assertContains(page, "kim")
         self.assertContains(page, 'data-role="none"')
 
+    def test_a_row_says_its_open_streams_and_warns_only_at_the_cap(self):
+        _seen(AGENT)
+        _seen(OTHER)
+        _seen("example-quiet")
+        _listening(AGENT, 1)
+        _listening(OTHER, settings.SEVERINO_AGENT_STREAMS_AT_ONCE)
+        self.client.force_login(get_user_model().objects.create_user("operator"))
+
+        page = self.client.get(reverse("agent_policy")).content.decode()
+
+        rows = {client: _row(page, client) for client in (AGENT, OTHER, "example-quiet")}
+        self.assertIn('data-streams="open"', rows[AGENT])
+        self.assertNotIn('data-streams="full"', rows[AGENT])
+        self.assertIn('data-streams="full"', rows[OTHER])
+        self.assertNotIn("data-streams", rows["example-quiet"], "an agent holding none shows nothing more")
+
     def test_the_refused_headline_counts_what_the_rows_count(self):
         _seen(AGENT)
         denials.record_denial(interface="mcp", reason=RATE_LIMITED, actor=AGENT)
@@ -197,3 +279,10 @@ class PageTests(TestCase):
         rows = sum(standing.activity.refused for standing in page.context["standings"])
         self.assertEqual(page.context["refused_count"], rows)
         self.assertEqual(rows, 15)
+
+
+def _row(page: str, client_id: str) -> str:
+    """The markup of ``client_id``'s row on the Agents page."""
+
+    start = page.index(f'data-agent="{client_id}"')
+    return page[start : page.index("</tr>", start)]

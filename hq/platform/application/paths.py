@@ -17,7 +17,7 @@ from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, read_spec, record_spec
 lazy from hq.platform.core.network import split_host_port
 
 from .entity_links import EntityLink, entity_link, kind_label
@@ -90,10 +90,12 @@ def why_unread(kind: str) -> str:
 
 
 def _names(provider, spec) -> tuple[str, ...]:
-    try:
-        return tuple(normalized_hostname(str(name)) for name in provider.hostnames(spec))
-    except KeyError, TypeError, ValueError:
-        return ()
+    names = read_spec(
+        provider.kind,
+        spec,
+        lambda declared: tuple(normalized_hostname(str(name)) for name in provider.hostnames(declared)),
+    )
+    return names or ()
 
 
 def _swept(kind: str) -> dict[str, list[_Row]]:
@@ -107,9 +109,8 @@ def _swept(kind: str) -> dict[str, list[_Row]]:
         if not snapshot.reachable or provider.from_record is None:
             continue
         for record in snapshot.records or ():
-            try:
-                spec = provider.from_record(record)
-            except KeyError, TypeError, ValueError:
+            spec = record_spec(kind, record)
+            if spec is None:
                 continue
             source = HopSource(kind, str(record.get("connection_ref", "") or ""), snapshot.observed_at)
             declaration = declared.get(record_identity(kind, spec), "")
@@ -297,20 +298,14 @@ def _forward_records(kind: str, connection: str) -> tuple[Joined, ...]:
 
 def _answer(row: _Row) -> str:
     provider = PROVIDERS[row.kind]
-    try:
-        return str(provider.origin(row.spec) or "")
-    except KeyError, TypeError, ValueError:
-        return ""
+    return str(read_spec(row.kind, row.spec, provider.origin) or "")
 
 
 def _fronted(row: _Row) -> bool:
     provider = PROVIDERS[row.kind]
     if provider.fronts is None:
         return False
-    try:
-        return bool(provider.fronts(row.spec))
-    except KeyError, TypeError, ValueError:
-        return False
+    return bool(read_spec(row.kind, row.spec, provider.fronts))
 
 
 def _from_dns(name: str, row: _Row, depth: int) -> list[Hop]:

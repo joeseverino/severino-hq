@@ -2,10 +2,9 @@ package host
 
 import (
 	"fmt"
-	"io/fs"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"path/filepath"
-	"syscall"
 )
 
 // Rendered reports whether dir holds the application environment as the
@@ -17,26 +16,16 @@ func Rendered(dir string, rootUID, webUID int) error {
 	if err != nil {
 		return fmt.Errorf("%s is not there yet", dir)
 	}
-	if uid, _, ok := Ownership(info); !ok || !info.IsDir() || uid != rootUID || info.Mode().Perm() != 0o700 {
+	if uid, _, ok := hostcore.Ownership(info); !ok || !info.IsDir() || uid != rootUID || info.Mode().Perm() != 0o700 {
 		return fmt.Errorf("%s is not a directory only root can enter", dir)
 	}
-	file := filepath.Join(dir, AppEnvName)
+	file := filepath.Join(dir, hostcore.AppEnvName)
 	info, err = os.Lstat(file)
 	if err != nil {
 		return fmt.Errorf("%s is not rendered yet", file)
 	}
-	if uid, links, ok := Ownership(info); !ok || !info.Mode().IsRegular() || uid != webUID || links != 1 {
+	if uid, links, ok := hostcore.Ownership(info); !ok || !info.Mode().IsRegular() || uid != webUID || links != 1 {
 		return fmt.Errorf("%s is not the file the renderer installs", file)
 	}
 	return nil
-}
-
-// Ownership is a file's owner and how many names it has, from what Lstat or
-// Stat returned; ok is false where the platform does not say.
-func Ownership(info fs.FileInfo) (uid int, links uint64, ok bool) {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, 0, false
-	}
-	return int(stat.Uid), uint64(stat.Nlink), true
 }

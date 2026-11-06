@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"log/slog"
 	"os"
@@ -60,8 +61,8 @@ func (r *WebRunner) Run(ctx context.Context) error {
 	// A container left by a crash, or by the compose deployment this
 	// replaces, holds the name. It is stopped as a deploy would stop it,
 	// then removed. Nothing else may run as HQ.
-	_ = r.Docker(ctx, "stop", "--time", StopSeconds, Container).Run()
-	_ = r.Docker(ctx, "rm", "--force", Container).Run()
+	_ = r.Docker(ctx, "stop", "--time", StopSeconds, hostcore.Container).Run()
+	_ = r.Docker(ctx, "rm", "--force", hostcore.Container).Run()
 
 	// Not ctx: cancelling it would kill the client; the stop below ends HQ.
 	web := Web{Image: image, StartPeriod: r.StartPeriod}
@@ -92,7 +93,7 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 			return fmt.Errorf("the container stopped on its own: %w", err)
 		case <-ctx.Done():
 			_ = r.Notify("STOPPING=1")
-			_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, Container).Run()
+			_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, hostcore.Container).Run()
 			<-exited //nolint:errcheck // stopped on purpose, so how it exited says nothing
 			return nil
 		case <-ticker.C:
@@ -109,7 +110,7 @@ func (r *WebRunner) supervise(ctx context.Context, exited <-chan error) error {
 			case "unhealthy":
 				// Past its start period and failing: the start fails now,
 				// so a deploy of an image that cannot serve rolls back.
-				_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, Container).Run()
+				_ = r.Docker(context.WithoutCancel(ctx), "stop", "--time", StopSeconds, hostcore.Container).Run()
 				<-exited //nolint:errcheck // stopped on purpose, so how it exited says nothing
 				return errors.New("HQ did not become healthy")
 			}
@@ -128,7 +129,7 @@ func (r *WebRunner) sealPublic() bool {
 		if err != nil {
 			return false
 		}
-		uid, _, ok := Ownership(info)
+		uid, _, ok := hostcore.Ownership(info)
 		if !ok || uid != r.RootUID || info.Mode().Perm()&0o022 != 0 {
 			return false
 		}
@@ -170,7 +171,7 @@ func (r *WebRunner) awaitRendered(ctx context.Context) error {
 }
 
 func (r *WebRunner) health(ctx context.Context) string {
-	out, err := r.Docker(ctx, "inspect", "--format", "{{.State.Health.Status}}", Container).Output()
+	out, err := r.Docker(ctx, "inspect", "--format", "{{.State.Health.Status}}", hostcore.Container).Output()
 	if err != nil {
 		return ""
 	}

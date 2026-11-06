@@ -1,0 +1,58 @@
+# A provider hook's failure on a declared spec is caught in read_spec in
+# hq/domains/control_plane/providers.py, which logs the spec its provider
+# cannot read. The same catch anywhere else drops the declaration from a page
+# without a word, so validate_spec and the provider's hooks can disagree with
+# nobody told.
+#
+# The exceptions read a spec where a failure is ordinary state or is said
+# where it happens:
+# - infrastructure.resolved_spec and desired_state.desired_fingerprint: a
+#   spec that will not resolve (a target that no longer exists) stands in as
+#   authored, which the page then shows as covering nothing.
+# - service_declarations._readings, adoption's readout and
+#   providers.readout_rows: a readout is a description, and a spec without
+#   one is shown without it.
+# - connections._one_name: a connection names the one name its resource
+#   holds, and a resource without exactly one is the ordinary answer "".
+# - service_facets' _refused: an applies hook that cannot judge the context
+#   refuses nothing.
+# - controller.py and provider_forms.py: the failure is the answer, said to
+#   the caller or on the form.
+id: spec-read-in-one-place
+language: python
+severity: error
+message: A provider hook's failure on a spec is caught outside read_spec, which says when its provider cannot read it.
+note: >-
+  Call read_spec(kind, spec, read) from hq.domains.control_plane.providers for
+  what read makes of the spec through the provider's hooks.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/domains/control_plane/providers.py"
+  - "hq/domains/control_plane/desired_state.py"
+  - "hq/platform/application/adoption.py"
+  - "hq/platform/application/connections.py"
+  - "hq/platform/application/controller.py"
+  - "hq/platform/application/infrastructure.py"
+  - "hq/platform/application/provider_forms.py"
+  - "hq/platform/application/service_facets.py"
+rule:
+  kind: except_clause
+  not:
+    inside:
+      stopBy: end
+      kind: function_definition
+      has:
+        field: name
+        regex: ^_readings$
+  # Read from the clause's own line, up to its colon, in either form
+  # (`except A, B, C:` or a parenthesized tuple) and any order.
+  all:
+    - regex: ^except[^:]*\bKeyError\b
+    - regex: ^except[^:]*\bTypeError\b
+    - regex: ^except[^:]*\bValueError\b

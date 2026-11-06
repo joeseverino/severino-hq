@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/providers/cfapi"
@@ -89,12 +90,12 @@ func caaParts(content string) (int, string, string, bool) {
 }
 
 // normalizedRecordContent is one spelling of a value, so desired and observed
-// compare: a TXT value comes back quoted, a hostname lowercased, a CAA value
-// re-emitted with single spaces.
+// compare: a TXT value comes back as quoted strings, a hostname lowercased, a
+// CAA value re-emitted with single spaces.
 func normalizedRecordContent(recordType, content string) string {
 	value := strings.TrimSpace(content)
-	if recordType == "TXT" && (!strings.HasPrefix(value, `"`) || !strings.HasSuffix(value, `"`)) {
-		value = `"` + value + `"`
+	if recordType == "TXT" {
+		value = txtStrings(value)
 	}
 	if recordType == "CNAME" || recordType == "MX" {
 		value = hostname(value)
@@ -105,6 +106,34 @@ func normalizedRecordContent(recordType, content string) string {
 		}
 	}
 	return value
+}
+
+// txtStringBytes is the most bytes one TXT character-string holds (RFC 1035);
+// Cloudflare splits a longer one into strings of this many.
+const txtStringBytes = 255
+
+// txtStrings is a TXT value as the quoted strings Cloudflare stores it as: one
+// string over 255 bytes comes back split, never inside a character, and a
+// value already written as several strings is kept as written.
+func txtStrings(value string) string {
+	if strings.HasPrefix(value, `"`) && strings.HasSuffix(value, `"`) {
+		if len(value) < 2 || strings.Contains(value[1:len(value)-1], `"`) {
+			return value
+		}
+		value = value[1 : len(value)-1]
+	}
+	var quoted []string
+	for {
+		cut := min(len(value), txtStringBytes)
+		for cut < len(value) && !utf8.RuneStart(value[cut]) {
+			cut--
+		}
+		quoted = append(quoted, `"`+value[:cut]+`"`)
+		value = value[cut:]
+		if value == "" {
+			return strings.Join(quoted, " ")
+		}
+	}
 }
 
 type cfCAAData struct {

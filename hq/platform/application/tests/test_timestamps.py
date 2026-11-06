@@ -1,80 +1,104 @@
-"""The one timestamp parser, edge by edge, and the call sites it corrected."""
+"""The one timestamp parser, edge by edge, and the call sites it corrected.
 
-import ast
-from datetime import UTC, date, datetime, timedelta, timezone
-from pathlib import Path
-from unittest import mock
+The parser's own promises are properties: Hypothesis writes the stamps, as
+many as the run's profile asks for (``hypothesis_profiles`` in the test
+runner). It is a development tool the image lacks, so there they are skipped.
+"""
 
-from django.test import SimpleTestCase, tag
+from datetime import UTC, date, datetime, time, timedelta, timezone
+from unittest import mock, skipUnless
+
+from django.test import SimpleTestCase
 
 from hq.platform.application.tests.markup import text
 
 from ..timestamps import moment
-from .source import parsed, source_files
 
-PLUS_TWO = timezone(timedelta(hours=2))
-ROOT = Path(__file__).resolve().parents[4]
+try:
+    from hypothesis import example, given, strategies as st
+except ImportError:  # pragma: no cover - the image does not carry it
+    HYPOTHESIS = False
+else:
+    HYPOTHESIS = True
+
+if HYPOTHESIS:
+    NAIVE_MODES = st.sampled_from(("utc", "keep", "refuse"))
+    # Any offset a stamp can carry, to the microsecond Python writes.
+    OFFSET = st.timedeltas(min_value=-timedelta(hours=23, minutes=59), max_value=timedelta(hours=23, minutes=59)).map(
+        timezone
+    )
+    # Go's zero day is the one day ``moment`` reads as never, so an instant is
+    # any time after it.
+    NAIVE = st.datetimes(min_value=datetime(1, 1, 2))
+    PADDING = st.text(" \t\n\r", max_size=3)
 
 
-class MomentTests(SimpleTestCase):
-    def test_an_aware_stamp_keeps_its_own_offset(self):
-        for naive in ("utc", "keep", "refuse"):
-            with self.subTest(naive=naive):
-                self.assertEqual(
-                    moment("2026-07-25T10:00:00+02:00", naive=naive),
-                    datetime(2026, 7, 25, 10, tzinfo=PLUS_TWO),
-                )
+def _written(instant: datetime, *, z: bool) -> str:
+    """``instant`` as a provider writes it, with a trailing Z for UTC when ``z``."""
 
-    def test_a_trailing_z_is_utc(self):
-        self.assertEqual(moment("2026-07-25T10:00:00Z"), datetime(2026, 7, 25, 10, tzinfo=UTC))
+    written = instant.isoformat()
+    return written.removesuffix("+00:00") + "Z" if z and written.endswith("+00:00") else written
 
-    def test_naive_is_read_as_utc_by_default(self):
-        self.assertEqual(moment("2026-07-25T10:00:00"), datetime(2026, 7, 25, 10, tzinfo=UTC))
 
-    def test_naive_can_be_kept_or_refused(self):
-        self.assertEqual(moment("2026-07-25T10:00:00", naive="keep"), datetime(2026, 7, 25, 10))
-        self.assertIsNone(moment("2026-07-25T10:00:00", naive="refuse"))
+@skipUnless(HYPOTHESIS, "hypothesis is a development tool")
+class MomentProperties(SimpleTestCase):
+    if HYPOTHESIS:
 
-    def test_the_zero_time_means_never(self):
-        for stamp in (
-            "0001-01-01T00:00:00Z",
-            "0001-01-01T00:00:00",
-            datetime.min,
-            datetime.min.replace(tzinfo=UTC),
-        ):
-            with self.subTest(stamp=stamp):
-                self.assertIsNone(moment(stamp))
-                self.assertIsNone(moment(stamp, naive="keep"))
+        @given(NAIVE, OFFSET, NAIVE_MODES, PADDING, PADDING, st.booleans())
+        def test_an_aware_stamp_round_trips(self, naive, offset, mode, before, after, z):
+            instant = naive.replace(tzinfo=offset)
 
-    def test_the_zero_time_can_be_read_as_an_instant(self):
-        self.assertEqual(
-            moment("0001-01-01T00:00:00Z", zero_is_never=False),
-            datetime.min.replace(tzinfo=UTC),
+            read = moment(f"{before}{_written(instant, z=z)}{after}", naive=mode)
+
+            self.assertEqual((read, read.utcoffset()), (instant, instant.utcoffset()))
+            self.assertIs(moment(instant, naive=mode), instant)
+
+        @given(NAIVE, PADDING, PADDING)
+        def test_a_naive_stamp_is_utc_kept_or_refused_as_asked(self, naive, before, after):
+            for stamp in (f"{before}{naive.isoformat()}{after}", naive):
+                self.assertEqual(moment(stamp), naive.replace(tzinfo=UTC))
+                self.assertEqual(moment(stamp, naive="keep"), naive)
+                self.assertIsNone(moment(stamp, naive="refuse"))
+            self.assertIs(moment(naive, naive="keep"), naive)
+
+        @given(clock=st.times(), offset=st.none() | OFFSET, mode=NAIVE_MODES, as_text=st.booleans())
+        @example(clock=time(), offset=UTC, mode="utc", as_text=True)
+        @example(clock=time(), offset=None, mode="keep", as_text=True)
+        def test_the_zero_day_means_never_unless_asked(self, clock, offset, mode, as_text):
+            instant = datetime.combine(date.min, clock, tzinfo=offset)
+            stamp = _written(instant, z=True) if as_text else instant
+
+            self.assertIsNone(moment(stamp, naive=mode))
+            if offset is not None:
+                self.assertEqual(moment(stamp, naive=mode, zero_is_never=False), instant)
+
+        @given(st.dates(min_value=date(1, 1, 2)))
+        def test_a_date_reads_as_its_midnight(self, day):
+            self.assertEqual(moment(day), datetime.combine(day, time(), tzinfo=UTC))
+
+        @given(
+            value=st.one_of(st.text(), st.none(), st.integers(), st.floats(), st.binary(), st.lists(st.integers())),
+            mode=NAIVE_MODES,
+            zero_is_never=st.booleans(),
         )
+        @example(value="", mode="utc", zero_is_never=True)
+        @example(value="   ", mode="utc", zero_is_never=True)
+        @example(value="soon", mode="utc", zero_is_never=True)
+        @example(value="None", mode="utc", zero_is_never=True)
+        @example(value="2026-13-01T00:00:00Z", mode="utc", zero_is_never=True)
+        @example(value=0, mode="utc", zero_is_never=True)
+        @example(value=[], mode="utc", zero_is_never=True)
+        def test_any_value_is_an_instant_or_none(self, value, mode, zero_is_never):
+            """Never raises; text without a digit names no instant, and an answer
+            it was not asked to keep naive carries an offset."""
 
-    def test_nothing_and_nonsense_are_none(self):
-        for stamp in (None, "", "   ", "soon", "2026-13-01T00:00:00Z", 0, [], "None"):
-            with self.subTest(stamp=stamp):
-                self.assertIsNone(moment(stamp))
+            read = moment(value, naive=mode, zero_is_never=zero_is_never)
 
-    def test_surrounding_whitespace_is_ignored(self):
-        self.assertEqual(moment(" 2026-07-25T10:00:00Z\n"), datetime(2026, 7, 25, 10, tzinfo=UTC))
-
-    def test_a_datetime_is_taken_as_given_and_held_to_the_same_rules(self):
-        aware = datetime(2026, 7, 25, 10, tzinfo=PLUS_TWO)
-        naive = datetime(2026, 7, 25, 10)
-        self.assertIs(moment(aware), aware)
-        self.assertIs(moment(naive, naive="keep"), naive)
-        self.assertEqual(moment(naive), naive.replace(tzinfo=UTC))
-        self.assertIsNone(moment(naive, naive="refuse"))
-
-    def test_a_date_reads_as_its_midnight(self):
-        self.assertEqual(moment(date(2026, 7, 25)), datetime(2026, 7, 25, tzinfo=UTC))
-
-    def test_extensions_are_handed_the_one_parser(self):
-        from .. import timestamps
-
-        self.assertIs(timestamps.moment, moment)
+            if not any(character.isdigit() for character in str(value or "")):
+                self.assertIsNone(read)
+            if read is not None:
+                self.assertIsInstance(read, datetime)
+                self.assertTrue(mode == "keep" or read.tzinfo is not None, read)
 
 
 class CorrectedCallSiteTests(SimpleTestCase):
@@ -134,36 +158,3 @@ class CorrectedCallSiteTests(SimpleTestCase):
         self.assertEqual(_parse_date("2026-07-25T23:30:00Z"), date(2026, 7, 25))
         self.assertIsNone(_parse_date("0001-01-01T00:00:00Z"))
         self.assertIsNone(_parse_date(None))
-
-
-@tag("source", "tree")
-class OneParserTests(SimpleTestCase):
-    """A new ``datetime.fromisoformat`` outside the kept list is a new copy."""
-
-    # Kept on purpose; each has an edge ``moment`` does not share. See the
-    # module docstring of ``hq/platform/application/timestamps.py``.
-    KEPT = {
-        "hq/platform/application/timestamps.py",
-        "hq/domains/docs_index/importer.py",
-    }
-
-    def test_no_other_module_parses_an_iso_instant_itself(self):
-        offenders = []
-        for path in source_files(ROOT, "*.py"):
-            relative = str(path.relative_to(ROOT))
-            if relative in self.KEPT or path.name.startswith("test") or "/migrations/" in relative:
-                continue
-            offenders.extend(
-                f"{relative}:{node.lineno}"
-                for node in ast.walk(parsed(path))
-                if isinstance(node, ast.Attribute)
-                and node.attr == "fromisoformat"
-                and isinstance(node.value, ast.Name)
-                and node.value.id == "datetime"
-            )
-        self.assertEqual(
-            offenders,
-            [],
-            "parse through hq.platform.application.timestamps.moment, or "
-            "tools/pipeline/ci_timings.when outside the app",
-        )

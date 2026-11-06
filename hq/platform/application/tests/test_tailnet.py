@@ -15,7 +15,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
 
-from ..tailnet import may_reach, proposed_grant
+from ..tailnet import device_at, may_reach, proposed_grant
 
 
 def a_tailnet(*devices):
@@ -232,3 +232,13 @@ class SpokenAsDevicesTests(TestCase):
             ("a-server: 22, 53, 443",),
         )
         self.assertEqual(by_device(("autogroup:internet",), owners), ("autogroup:internet",))
+
+
+class StableIdTests(TestCase):
+    def test_a_device_at_an_address_carries_the_stable_id_the_sweep_read(self):
+        a_tailnet({**a_device("laptop"), "node_id": "nLAPTOP", "public_key": "nodekey:1", "addresses": ["192.0.2.7"]})
+
+        found = device_at("192.0.2.7")
+
+        self.assertIsNotNone(found)
+        self.assertEqual(found.node_id, "nLAPTOP")

@@ -5,6 +5,7 @@ time by the people and machines that made it."""
 from datetime import timedelta
 
 from django.test import Client, TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.analytics.models import RumDaily
@@ -16,12 +17,14 @@ from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
 from hq.platform.application import agent_registry, analytics, approvals, github_profile, own_devices
+from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
+from hq.platform.application.tests.markup import with_class, within
 from hq.platform.core import seeds
 from hq.platform.core.audit import ANONYMOUS
-from hq.platform.core.example_estate.agents import AGENT
+from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED
 from hq.platform.core.example_estate.testing import sign_in, throwaway_media
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
 
@@ -143,6 +146,40 @@ class ExampleEstateTests(TestCase):
         partial = Expense.objects.exclude(business_use_percentage=100)
 
         self.assertTrue(partial.exists())
+
+    def test_the_agents_page_draws_every_state_a_rule_and_an_agent_can_be_in(self):
+        client = Client()
+        sign_in(client, self.user)
+        page = client.get(reverse("agent_policy"), {"all": 1})
+
+        # A rule is each state RULE_LABELS names, or the default.
+        drawn = {
+            name for each in with_class(page, "policy-select") for name in each.classes if name.startswith("rule-")
+        }
+        self.assertEqual(drawn, {f"rule-{state}" for state in ("default", *RULE_LABELS)})
+        self.assertTrue(with_class(page, "policy-unavailable"), "a cell past an agent's grant")
+        # An agent a viewer signed in: what of its grant is in force, and what is beyond their role.
+        row = " ".join(element.words for element in within(page, "data-agent", "example-reader"))
+        self.assertTrue(within(page, "data-role", "viewer"))
+        self.assertIn("In force: read", row)
+        self.assertIn("beyond riley's role: write_calendar", row)
+        # An agent whose last sign-in did not carry a permission HQ offers, named with its fix.
+        missing = within(page, "data-missing")
+        self.assertTrue(missing, "an agent missing a permission")
+        self.assertIn(str(NOT_CARRIED), {element.words for element in missing if element.tag == "code"})
+
+    def test_the_agents_page_draws_every_standing_a_device_can_be_in(self):
+        from hq.platform.application.agent_devices import DeviceStanding
+        from hq.platform.application.tests.markup import select
+
+        client = Client()
+        sign_in(client, self.user)
+        page = client.get(reverse("agent_policy"))
+
+        drawn = {row.attrs["data-device-standing"] for row in select(page, "data-device-standing")}
+        # Unplaced is a call on no device, which has no row.
+        self.assertEqual(drawn, {standing.value for standing in DeviceStanding} - {DeviceStanding.UNPLACED.value})
+        self.assertTrue(select(page, "data-prompt"), "a device waits for the owner")
 
     def test_the_agents_held_request_reads_as_a_before_and_after(self):
         (held,) = approvals.pending(principal=cli_principal())

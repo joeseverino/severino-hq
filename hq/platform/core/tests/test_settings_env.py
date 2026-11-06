@@ -17,6 +17,8 @@ from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.facts import TOP, grouped, scan
+
 REPO_ROOT = Path(__file__).resolve().parents[4]
 
 # Names that switch the extension set on. Cleared from every subprocess below,
@@ -145,91 +147,136 @@ def _is_environ(node: ast.AST) -> bool:
     )
 
 
-def _key(node: ast.AST) -> ast.AST | None:
-    """The name expression an environment read looks up, or None for anything else."""
+def _argument(position: int, key: str) -> dict:
+    """A call whose argument at ``position``, a positional one, is ``key``."""
 
-    if isinstance(node, ast.Call) and node.args:
-        func = node.func
-        if isinstance(func, ast.Name) and func.id in READERS:
-            return node.args[0]
-        if isinstance(func, ast.Attribute) and (
-            func.attr == "getenv" or (func.attr == "get" and _is_environ(func.value))
-        ):
-            return node.args[0]
-    if isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Load) and _is_environ(node.value):
-        return node.slice
-    if (
-        isinstance(node, ast.Compare)
-        and len(node.ops) == 1
-        and isinstance(node.ops[0], ast.In | ast.NotIn)
-        and _is_environ(node.comparators[0])
-    ):
-        return node.left
-    return None
+    return {
+        "kind": "call",
+        "has": {
+            "field": "arguments",
+            "has": {
+                "nthChild": position + 1,
+                "pattern": key,
+                "not": {"any": [{"kind": kind} for kind in ("keyword_argument", "list_splat", "dictionary_splat")]},
+            },
+        },
+    }
 
 
-def _key_through(node: ast.AST, forwarders: dict[str, int]) -> ast.AST | None:
-    """The name a read looks up, directly or through a helper that is handed it."""
+def _reads(key: str) -> list[dict]:
+    """Each form of a read of the environment variable ``key`` names: a reader's
+    or a getenv's first argument, an environ subscript that is not written, or
+    a test of membership in environ."""
 
-    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in forwarders:
-        position = forwarders[node.func.id]
-        return node.args[position] if len(node.args) > position else None
-    return _key(node)
+    environ = r"(^|\.)environ$"
+    return [
+        {
+            "all": [
+                {
+                    "kind": "call",
+                    "has": {
+                        "field": "function",
+                        "pattern": "$READER",
+                        "regex": rf"^({'|'.join(sorted(READERS))})$|\.getenv$|(^|\.)environ\.get$",
+                    },
+                },
+                _argument(0, key),
+            ]
+        },
+        {
+            "kind": "subscript",
+            "all": [
+                {"kind": "subscript", "has": {"field": "value", "regex": environ}},
+                {"kind": "subscript", "has": {"field": "subscript", "pattern": key}},
+            ],
+            "not": {
+                "any": [
+                    {"inside": {"kind": "assignment", "field": "left"}},
+                    {"inside": {"kind": "augmented_assignment", "field": "left"}},
+                    {"inside": {"kind": "delete_statement", "stopBy": "end"}},
+                ]
+            },
+        },
+        {
+            "kind": "comparison_operator",
+            "any": [{"pattern": f"{key} in $ENVIRON"}, {"pattern": f"{key} not in $ENVIRON"}],
+            "has": {"nthChild": {"position": 1, "reverse": True}, "regex": environ},
+        },
+    ]
 
 
-def _forwarded_parameter(function: ast.FunctionDef, forwarders: dict[str, int]) -> int | None:
-    params = [arg.arg for arg in function.args.args]
-    for node in ast.walk(function):
-        key = _key_through(node, forwarders)
-        if isinstance(key, ast.Name) and key.id in params:
-            return params.index(key.id)
-    return None
+# Every read, each module-level constant a key may name, and each read of the
+# variable a parameter of its function names, with the function.
+RULES = {
+    "read": {"any": _reads("$KEY")},
+    "constant": {"pattern": "$NAME = $VALUE", **TOP},
+    "forwarded": {
+        "any": _reads("$P"),
+        "inside": {
+            "stopBy": "end",
+            "kind": "function_definition",
+            "all": [
+                {"kind": "function_definition", "has": {"field": "name", "pattern": "$NAME"}},
+                {
+                    "kind": "function_definition",
+                    "has": {
+                        "field": "parameters",
+                        "pattern": "$PARAMETERS",
+                        "has": {"stopBy": "end", "kind": "identifier", "pattern": "$P"},
+                    },
+                },
+            ],
+        },
+    },
+}
 
 
-def _forwarders(tree: ast.Module) -> dict[str, int]:
-    """Functions that read the variable a parameter names, and that parameter's position.
+def names_read(*paths: Path) -> set[str]:
+    """Every environment variable the modules under ``paths`` read by name,
+    directly or through a function of their own that is handed it."""
 
-    Followed through any chain of such functions in the module, so a helper
-    that takes the name as an argument hides nothing.
-    """
-
-    functions = [node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-    forwarders: dict[str, int] = {}
-    while True:
-        found = {
-            function.name: position
-            for function in functions
-            if function.name not in forwarders and (position := _forwarded_parameter(function, forwarders)) is not None
-        }
-        if not found:
-            return forwarders
-        forwarders |= found
-
-
-def names_read(sources) -> set[str]:
-    """Every environment variable the given module sources read by name."""
-
+    found = grouped(each for each in scan(RULES, *paths) if "tests" not in each.path.parts)
+    constants = {(each.path, each.captured["NAME"]): each.value("VALUE") for each in found.get("constant", [])}
+    reads = [*found.get("read", []), *_forwarded_reads(_forwarders(found.get("forwarded", [])))]
     names = set()
-    for source in sources:
-        tree = ast.parse(source)
-        constants = {
-            target.id: node.value.value
-            for node in tree.body
-            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
-            for target in node.targets
-            if isinstance(target, ast.Name) and isinstance(node.value.value, str)
-        }
-        forwarders = _forwarders(tree)
-        for node in ast.walk(tree):
-            key = _key_through(node, forwarders)
-            if isinstance(key, ast.Name):
-                key = ast.Constant(constants.get(key.id))
-            if not isinstance(key, ast.Constant) or not isinstance(key.value, str):
-                continue
-            names.add(key.value)
-            if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "env_secret":
-                names.add(f"{key.value}_FILE")
+    for each in reads:
+        key = each.captured["KEY"]
+        name = constants.get((each.path, key)) if key.isidentifier() else each.value("KEY")
+        if isinstance(name, str):
+            names.add(name)
+            if each.captured.get("READER") == "env_secret":
+                names.add(f"{name}_FILE")
     return {name for name in names if not name.startswith(TASK_ARGUMENT)}
+
+
+def _forwarders(forwarded) -> dict[tuple[Path, str], int]:
+    """Each function of a module's own that hands one of its parameters to a
+    read, by its module and name, to that parameter's position."""
+
+    forwarders = {}
+    for each in forwarded:
+        (signature,) = ast.parse(f"def _{each.captured['PARAMETERS']}: pass").body
+        assert isinstance(signature, ast.FunctionDef)
+        parameters = [argument.arg for argument in signature.args.args]
+        if each.captured["P"] in parameters:
+            forwarders[each.path, each.captured["NAME"]] = parameters.index(each.captured["P"])
+    return forwarders
+
+
+def _forwarded_reads(forwarders: dict[tuple[Path, str], int]) -> list:
+    """Each call of a forwarder in its own module, read as the read it forwards to."""
+
+    if not forwarders:
+        return []
+    calls = {
+        f"{name}@{position}": {
+            **_argument(position, "$KEY"),
+            "all": [{"kind": "call", "has": {"field": "function", "regex": f"^{name}$"}}],
+        }
+        for (_path, name), position in forwarders.items()
+    }
+    modules = sorted({path for path, _name in forwarders})
+    return [each for each in scan(calls, *modules) if (each.path, each.rule.partition("@")[0]) in forwarders]
 
 
 def table_rows(markdown: str) -> list[tuple[str, str]]:
@@ -249,13 +296,6 @@ def drift(read: set[str], listed: set[str]) -> dict[str, set[str]]:
     return {"read but not in the table": read - listed, "in the table but read nowhere": listed - read}
 
 
-def product_sources():
-    for root in SOURCE_ROOTS:
-        for path in sorted((REPO_ROOT / root).rglob("*.py")):
-            if "tests" not in path.relative_to(REPO_ROOT).parts:
-                yield path.read_text(encoding="utf-8")
-
-
 @tag("source", "tree")
 class ConfigurationTableTests(SimpleTestCase):
     """Every variable HQ reads is in docs/Deployment.md's table, and nothing else is."""
@@ -263,7 +303,7 @@ class ConfigurationTableTests(SimpleTestCase):
     def test_the_table_lists_exactly_what_hq_reads(self):
         rows = table_rows(TABLE.read_text(encoding="utf-8"))
         listed = [name for name, _ in rows]
-        read = names_read(product_sources())
+        read = names_read(*(REPO_ROOT / root for root in SOURCE_ROOTS))
 
         self.assertIn("DJANGO_SECRET_KEY", read)
         self.assertEqual(
@@ -285,17 +325,24 @@ class ConfigurationTableTests(SimpleTestCase):
             "PRESENT = _NAMED in os.environ\n"
             "ARGUMENT = os.environ.get('usage_example')\n"
             "os.environ.setdefault('EXAMPLE_WRITTEN', '1')\n"
+            "INDEXED = os.environ['EXAMPLE_INDEXED']\n"
+            "os.environ['EXAMPLE_SET'] = '1'\n"
+            "del os.environ['EXAMPLE_DELETED']\n"
         )
         table = (
             f"# Deployment\n\n{TABLE_SECTION}\n\n| Variable | Set by | Does |\n| :--- | :--- | :--- |\n"
             "| `EXAMPLE_SECRET`, `EXAMPLE_SECRET_FILE` | installer | a secret |\n"
+            "| `EXAMPLE_INDEXED` | installer | read by its key |\n"
             "| `EXAMPLE_FORWARDED` | platform | read through a helper |\n"
             "| `EXAMPLE_CONSTANT` | development | named by a constant |\n"
             "| `EXAMPLE_STALE` | installer | read by nothing |\n"
             "\n## Next\n\n| `EXAMPLE_ELSEWHERE` | installer | another section's table |\n"
         )
 
-        found = drift(names_read([source]), {name for name, _ in table_rows(table)})
+        with tempfile.TemporaryDirectory() as directory:
+            module = Path(directory) / "example.py"
+            module.write_text(source)
+            found = drift(names_read(module), {name for name, _ in table_rows(table)})
 
         self.assertEqual(found["read but not in the table"], {"EXAMPLE_UNLISTED"})
         self.assertEqual(found["in the table but read nowhere"], {"EXAMPLE_STALE"})

@@ -1,0 +1,19 @@
+# HQ reads an ISO instant through hq/platform/application/timestamps.moment,
+# which agrees on a trailing Z, a naive stamp and Go's zero day; a
+# datetime.fromisoformat of its own is a parser that answers those its own
+# way. The docs importer keeps one on purpose, for an edge moment does not
+# share (timestamps.py's docstring). Test modules are left out (their names
+# start with test), and the tests' helper modules are held.
+id: instant-parsed-by-moment
+language: python
+severity: error
+message: An ISO instant is parsed outside timestamps.moment.
+note: Parse through hq.platform.application.timestamps.moment, or tools/pipeline/ci_timings.when outside the app.
+ignores:
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/migrations/**"
+  - "hq/platform/application/timestamps.py"
+  - "hq/domains/docs_index/importer.py"
+rule:
+  pattern: datetime.fromisoformat

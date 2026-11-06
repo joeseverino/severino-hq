@@ -8,13 +8,14 @@ printer and the offline CA, which nothing will ever sweep.
 """
 
 from dataclasses import dataclass, field, replace
+from functools import partial
 from typing import Any
 
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, read_spec
 
 from .containers import Running, container_watchers
 from .hq_self import hq_hostnames, hq_machine, scoped_served_at
@@ -483,6 +484,10 @@ def _declarations() -> dict[str, Declared]:
     return result
 
 
+def _origin_and_names(provider: Any, spec: dict[str, Any]) -> tuple[str, tuple[str, ...]]:
+    return provider.origin(spec), tuple(provider.hostnames(spec))
+
+
 def _services_by_host(index: Machines) -> dict[str, set[str]]:
     """Which names are served from which machine.
 
@@ -501,11 +506,10 @@ def _services_by_host(index: Machines) -> dict[str, set[str]]:
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.origin is None or provider.hostnames is None:
             continue
-        try:
-            origin = provider.origin(resource.spec)
-            names = tuple(provider.hostnames(resource.spec))
-        except KeyError, TypeError, ValueError:
+        read = read_spec(resource.kind, resource.spec, partial(_origin_and_names, provider))
+        if read is None:
             continue
+        origin, names = read
         if not origin:
             continue
         rank = routed if origin_is_authoritative(provider) else resolved
@@ -580,11 +584,10 @@ def _served_by() -> dict[tuple[str, str], set[str]]:
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.origin is None or provider.hostnames is None:
             continue
-        try:
-            origin = provider.origin(resource.spec)
-            names = tuple(provider.hostnames(resource.spec))
-        except KeyError, TypeError, ValueError:
+        read = read_spec(resource.kind, resource.spec, partial(_origin_and_names, provider))
+        if read is None:
             continue
+        origin, names = read
         if not origin:
             continue
         located = locate(origin, machines, at)

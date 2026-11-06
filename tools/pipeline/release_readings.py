@@ -52,7 +52,7 @@ def serving(proc: Path) -> list[tuple[int, str, str]]:
         try:
             argv = (entry / "cmdline").read_bytes().split(b"\0")
             cgroup = (entry / "cgroup").read_text(encoding="utf-8")
-        except OSError:
+        except OSError:  # noqa: S112 - a process that exits mid-read serves nothing
             continue
         if SERVING.encode() in argv and (scope := SCOPE.search(cgroup)):
             found.append((int(entry.name), scope.group(1), scope.group(2)))

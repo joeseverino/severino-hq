@@ -1,6 +1,7 @@
 #!/bin/sh
 #MISE description="Each tracked source file's commits since a date, most first, generated and vendored files (.gitattributes) left out; reach for it to find where change concentrates before a refactor or a split; read-only"
 #MISE hide=true
+#MISE extends="audit"
 #USAGE arg "<since>" help="A date git log --since reads (2026-10-01, 3.months)"
 
 # git counts the commits itself: one name for each file a commit touched,
@@ -11,12 +12,6 @@
 set -euf
 
 since="${usage_since:?}"
-case "${since}" in
--* | *[!A-Za-z0-9.:\ -]*)
-    printf 'audit:churn: %s is not a date of letters, digits, spaces and . : -\n' "${since}" >&2
-    exit 2
-    ;;
-esac
 
 work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT

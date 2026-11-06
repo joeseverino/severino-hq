@@ -58,6 +58,16 @@ def the_clock(moment: datetime) -> None:
     reads.day_span(date(2026, 1, 1), last=3)  # type: ignore[arg-type]
 
 
+def a_held_clock(moment: datetime) -> None:
+    # A test holds the clock every derivation and reads.present() read.
+    with testing.frozen(moment) as held:
+        assert_type(held, datetime)
+    with testing.frozen():
+        assert_type(reads.present(), datetime)
+
+    testing.frozen(date(2026, 1, 1))  # type: ignore[arg-type]
+
+
 @reads.derivation("example.count", reads=("example.Thing",))
 def count(limit: int, *, open_only: bool = False) -> int:
     return limit if open_only else 0
@@ -142,6 +152,8 @@ def work() -> None:
 
 
 def as_someone(principal: capabilities.Principal) -> None:
+    # The tailnet device an agent's call came from, or "" where HQ placed none.
+    assert_type(principal.device, str)
     assert_type(outbound.run_now("example.work", principal=principal), jobs.Job)
     assert_type(
         capabilities.execute_capability("example.do", {"name": "x"}, principal=principal),
@@ -363,6 +375,19 @@ class Things(tables.TableListMixin, pages.PageMixin):
     table_room = "shared"
 
 
+class Refreshed(pages.PageMixin):
+    """A page action may be an ``ask``, the control that asks for declared work."""
+
+    @override
+    def get_page_actions(self) -> tuple[pages.PageAction | pages.Ask, ...]:
+        return (outbound.ask("example.lookup", primary=True), pages.PageAction("Things", "/example/things/"))
+
+
+def an_asked_action(page: Refreshed) -> None:
+    assert_type(outbound.ask("example.lookup"), pages.Ask)
+    assert_type(page.get_page_actions(), tuple[pages.PageAction | pages.Ask, ...])
+
+
 class AThing(pages.PageMixin):
     # A record's page two levels down: the pages above it, then the record's own.
     page_trail = (("Example", reverse_lazy("example:home")), ("Things", reverse_lazy("example:things")))
@@ -441,6 +466,21 @@ class Miscounted(writes.WriteMessages):
 
 class Unsaid(writes.ServiceDeleteMixin):
     deleted_message = None  # type: ignore[assignment]
+
+
+def saving(command: Any, *, principal: Any) -> dict[str, Any]:
+    return {}
+
+
+class Saved(writes.CommandFormMixin):
+    """A command view names its service as a staticmethod, which the declaration takes."""
+
+    service = staticmethod(saving)
+    success_message = "Saved."
+
+
+class Unserviced(writes.CommandFormMixin):
+    service = "saving"  # type: ignore[assignment]
 
 
 def announcements() -> None:

@@ -239,8 +239,11 @@
       },
       "403": {
         "error": {
-          "code": "forbidden",
-          "message": "api principal 'example-automation' lacks 'write_expenses'."
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "write_expenses"
+          },
+          "message": "api principal 'example-automation' lacks 'write_expenses': its token does not carry it. Grant 'write_expenses' to the client 'example-automation' in Pocket ID, then sign in again."
         },
         "ok": false
       }
@@ -508,7 +511,7 @@
             "expiry": null,
             "health": {
               "label": "Working",
-              "message": "Matches HQ's settings.",
+              "message": "Matches HQ's config.",
               "reason": "Observed",
               "state": "healthy"
             },
@@ -541,7 +544,7 @@
           "resource": {
             "conditions": [
               {
-                "message": "Matches HQ's settings.",
+                "message": "Matches HQ's config.",
                 "reason": "Observed",
                 "since": "2026-01-15T09:30:00+00:00",
                 "status": true,
@@ -552,7 +555,7 @@
             "generation": 1,
             "health": {
               "label": "Working",
-              "message": "Matches HQ's settings.",
+              "message": "Matches HQ's config.",
               "reason": "Observed",
               "state": "healthy"
             },
@@ -885,8 +888,11 @@
     "responses": {
       "403": {
         "error": {
-          "code": "forbidden",
-          "message": "api principal 'example-automation' lacks 'read_calendar'."
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read_calendar"
+          },
+          "message": "api principal 'example-automation' lacks 'read_calendar': its token does not carry it. Grant 'read_calendar' to the client 'example-automation' in Pocket ID, then sign in again."
         },
         "ok": false
       }
@@ -979,8 +985,11 @@
       },
       "403": {
         "error": {
-          "code": "forbidden",
-          "message": "api principal 'example-automation' lacks 'read'."
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read"
+          },
+          "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
         },
         "ok": false
       }
@@ -990,8 +999,11 @@
     "responses": {
       "403": {
         "error": {
-          "code": "forbidden",
-          "message": "api principal 'example-automation' lacks 'manage_contacts'."
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "manage_contacts"
+          },
+          "message": "api principal 'example-automation' lacks 'manage_contacts': its token does not carry it. Grant 'manage_contacts' to the client 'example-automation' in Pocket ID, then sign in again."
         },
         "ok": false
       }
@@ -1724,8 +1736,11 @@
       },
       "403": {
         "error": {
-          "code": "forbidden",
-          "message": "api principal 'example-automation' lacks 'read'."
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read"
+          },
+          "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
         },
         "ok": false
       },
@@ -1809,6 +1824,7 @@
             "channel": "loopback",
             "channel_label": "Loopback",
             "device": "No tailnet device at this address",
+            "device_standing": "unplaced",
             "forwarded": false,
             "handshake": "\u2013",
             "identity_agrees": false,
@@ -2272,7 +2288,7 @@
   "projectCreateV2": {
     "request": {
       "payload": {
-        "name": "Capped",
+        "name": "Granted",
         "slug": "from-the-phone",
         "status": "active"
       }
@@ -2286,7 +2302,7 @@
             "dependency_updates": false,
             "description": "",
             "last_push_at": null,
-            "name": "Capped",
+            "name": "Granted",
             "public_url": "",
             "relationships": {
               "assets": [],
@@ -2438,8 +2454,11 @@
       },
       "403": {
         "error": {
-          "code": "forbidden",
-          "message": "api principal 'example-automation' lacks 'write_projects'."
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "write_projects"
+          },
+          "message": "api principal 'example-automation' lacks 'write_projects': its token does not carry it. Grant 'write_projects' to the client 'example-automation' in Pocket ID, then sign in again."
         },
         "ok": false
       },
@@ -2463,8 +2482,11 @@
     "responses": {
       "403": {
         "error": {
-          "code": "forbidden",
-          "message": "api principal 'example-automation' lacks 'read_audit_log'."
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read_audit_log"
+          },
+          "message": "api principal 'example-automation' lacks 'read_audit_log': its token does not carry it. Grant 'read_audit_log' to the client 'example-automation' in Pocket ID, then sign in again."
         },
         "ok": false
       },
@@ -2506,8 +2528,8 @@
               "web_route": "core:audit_list"
             }
           ],
-          "schema_version": 2,
-          "schemas": "Each list's whole query_schema, with its types and choices, is describe_resources with name set to its resource."
+          "schema_version": 3,
+          "schemas": "Each list's query_schema, its filters' types and choices, and its paging, the most limit may ask for, are describe_resources with name set to its resource."
         },
         "ok": true
       },
@@ -2651,8 +2673,11 @@
       },
       "403": {
         "error": {
-          "code": "forbidden",
-          "message": "api principal 'example-automation' lacks 'read'."
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read"
+          },
+          "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
         },
         "ok": false
       }

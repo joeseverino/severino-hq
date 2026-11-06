@@ -67,7 +67,7 @@ def pydantic_refusal(subject: str, errors: Iterable[Mapping[str, Any]]) -> Input
             "loc": list(error.get("loc", ())),
             "msg": _safe_msg(error) or _OPAQUE_MSG,
         }
-        for error in errors
+        for error in map(_unknown_as_extra, errors)
     ]
     problems = [(_path(error["loc"]), _pydantic_reason(error)) for error in details]
     return InputRefusal(_message(subject, problems), details)
@@ -89,17 +89,19 @@ def django_refusal(subject: str, exc: DjangoValidationError) -> InputRefusal:
     return InputRefusal(_message(subject, problems), details)
 
 
-def unknown_field_errors(fields: Sequence[str]) -> list[dict[str, Any]]:
-    """Pydantic's ``extra_forbidden`` shape, for a field a dataclass does not have."""
+_EXTRA = {"type": "extra_forbidden", "msg": "Extra inputs are not permitted"}
 
-    return [
-        {
-            "type": "extra_forbidden",
-            "loc": [field],
-            "msg": "Extra inputs are not permitted",
-        }
-        for field in fields
-    ]
+
+def unknown_field_errors(fields: Sequence[str]) -> list[dict[str, Any]]:
+    """Pydantic's ``extra_forbidden`` shape, for a field no Pydantic type refused."""
+
+    return [{**_EXTRA, "loc": [field]} for field in fields]
+
+
+def _unknown_as_extra(error: Mapping[str, Any]) -> Mapping[str, Any]:
+    # A dataclass refuses a field it does not have as an unexpected keyword
+    # argument, a model or TypedDict as an extra input: one refusal, told one way.
+    return {**error, **_EXTRA} if error.get("type") == "unexpected_keyword_argument" else error
 
 
 def _message(subject: str, problems: list[tuple[str, str]]) -> str:

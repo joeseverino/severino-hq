@@ -4,14 +4,16 @@ A module loaded at start is memory every process holds, idle or not; a module
 first needed by one kind of request loads on that request.
 """
 
-import ast
 import json
 import os
 import subprocess
 import sys
+import tempfile
+from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.facts import imports, scan
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 # How many modules each start loads, the host alone as production starts it
@@ -75,42 +77,63 @@ class StartupBudgetTests(SimpleTestCase):
         self.assertLessEqual(len(self.setup), SETUP_BUDGET, "an app's ready() reaches it eagerly; reach it lazily")
 
 
-def lazy_names_in_class_annotations(source: str) -> list[str]:
-    """Each class-body annotation that names one of its module's lazy imports, as ``line Class.field: Name``.
+# A name a class-body field's annotation reads, with the class and the field:
+# an ast.Name, so neither an attribute's own name nor a keyword's.
+ANNOTATION_NAME = {
+    "kind": "identifier",
+    "not": {
+        "any": [
+            {"inside": {"kind": "attribute", "field": "attribute"}},
+            {"inside": {"kind": "keyword_argument", "field": "name"}},
+        ]
+    },
+    "inside": {
+        "stopBy": "end",
+        "kind": "type",
+        "inside": {
+            "field": "type",
+            "kind": "assignment",
+            "has": {"field": "left", "pattern": "$FIELD"},
+            "inside": {
+                "kind": "expression_statement",
+                "inside": {
+                    "kind": "block",
+                    "inside": {
+                        "field": "body",
+                        "kind": "class_definition",
+                        "has": {"field": "name", "pattern": "$CLASS"},
+                    },
+                },
+            },
+        },
+    },
+}
+
+
+def lazy_names_in_class_annotations(*paths: Path, root: Path = REPO_ROOT) -> list[str]:
+    """Each class-body annotation under ``paths`` that names one of its module's lazy imports, as ``path:line Class.field: Name``.
 
     A dataclass, a pydantic model or a NamedTuple reads its annotations' values
     as the class is made, and a base in another module can make any class one,
     so such a name loads its lazy import with the module that declares it.
     """
 
-    tree = ast.parse(source)
-    lazy = {
-        (alias.asname or alias.name).partition(".")[0]
-        for node in tree.body
-        if isinstance(node, (ast.Import, ast.ImportFrom)) and node.is_lazy
-        for alias in node.names
-    }
-    return [
-        f"{field.lineno} {cls.name}.{ast.unparse(field.target)}: {name}"
-        for cls in ast.walk(tree)
-        if isinstance(cls, ast.ClassDef)
-        for field in cls.body
-        if isinstance(field, ast.AnnAssign)
-        for name in sorted({node.id for node in ast.walk(field.annotation) if isinstance(node, ast.Name)} & lazy)
-    ]
+    lazy: dict[Path, set[str]] = {}
+    for each in imports(*paths):
+        if each.top and "lazy" in each.waits:
+            lazy.setdefault(each.path, set()).update(each.bound())
+    return sorted(
+        f"{named.path.relative_to(root)}:{named.line} {named.captured['CLASS']}.{named.captured['FIELD']}: {named.text}"
+        for named in scan({"named": ANNOTATION_NAME}, *paths)
+        if named.text in lazy.get(named.path, ())
+    )
 
 
 @tag("source", "tree")
 class LazyImportAnnotationTests(SimpleTestCase):
     def test_no_class_annotation_names_a_lazy_import(self):
-        found = [
-            f"{path.relative_to(REPO_ROOT)}:{hit}"
-            for root in PYTHON_ROOTS
-            for path in sorted((REPO_ROOT / root).rglob("*.py"))
-            for hit in lazy_names_in_class_annotations(path.read_text(encoding="utf-8"))
-        ]
         self.assertEqual(
-            found,
+            lazy_names_in_class_annotations(*(REPO_ROOT / root for root in PYTHON_ROOTS)),
             [],
             "import an annotation-only name under `if TYPE_CHECKING:`; one also used at run time, by its module",
         )
@@ -130,4 +153,10 @@ class LazyImportAnnotationTests(SimpleTestCase):
             "    row: Row\n"
             "    def named(self) -> Link: ...\n"
         )
-        self.assertEqual(lazy_names_in_class_annotations(planted), ["9 Mention.link: Link", "10 Mention.kind: example"])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            (root / "planted.py").write_text(planted)
+
+            found = lazy_names_in_class_annotations(root, root=root)
+
+        self.assertEqual(found, ["planted.py:10 Mention.kind: example", "planted.py:9 Mention.link: Link"])

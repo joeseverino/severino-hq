@@ -113,8 +113,7 @@ def _next_step(item: dict[str, Any], taken: set[tuple[str, str]]) -> tuple[list[
 
 def _decided_here(actions: list[dict[str, Any]]) -> bool:
     """Whether the card's own buttons decide what its meaning describes, as an
-    approval's do: its meaning is then shown whole, never cut to a line, so
-    nothing is approved on half of what it changes."""
+    approval's do: the page that shows it whole is then its request's own."""
 
     return any(_plain(action).get("name") in (APPROVE, REJECT) for action in actions)
 
@@ -154,11 +153,15 @@ def _anchor(key: str) -> str:
     return "item-" + hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
-def _own_page(subject: dict[str, Any], anchor: str) -> str:
-    """The page that shows an item's whole card: the thing it is about, or the
-    queue with its card in view."""
+def _own_page(item: dict[str, Any], subject: dict[str, Any], actions: list[dict[str, Any]], anchor: str) -> str:
+    """The page that shows an item's whole card: the thing it is about, the
+    request its buttons decide, or the queue with its card in view."""
 
-    return subject.get("url") or f"{reverse('action_items')}#{anchor}"
+    if subject.get("url"):
+        return subject["url"]
+    if item.get("url") and _decided_here(actions):
+        return item["url"]
+    return f"{reverse('action_items')}#{anchor}"
 
 
 def decision(item: dict[str, Any]) -> dict[str, Any]:
@@ -181,10 +184,9 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         **item,
         "href": subject.get("url") or item.get("url") or "",
         "anchor": anchor,
-        "page": _own_page(subject, anchor),
+        "page": _own_page(item, subject, actions, anchor),
         "urgency": NOTICE if item.get("notice") else urgency(item.get("status", "")),
         "actions": _one_primary(actions + links),
-        "whole": _decided_here(actions),
         "facts": _facts(item.get("facts", ())),
         "origin": _origin(item),
         "advice": advice,

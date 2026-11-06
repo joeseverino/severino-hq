@@ -485,9 +485,58 @@ def _lock_layer(device: tailnet.Device | None) -> Layer | None:
     )
 
 
-def _identity_agreement_layer(identity: Identity) -> Layer:
-    """Compare the independently observed device owner and signed-in person."""
+# What an agent's token call is told of its device, by its standing
+# (``agent_devices.DeviceStanding``): whether it holds, whether HQ could tell,
+# and why. A token has no session to compare, so the person's approval of the
+# device for that agent is the link between them and its tailnet owner.
+_AGENT_DEVICE = {
+    "approved": (True, True, "{approver} approved {agent} from this device, which links them to its tailnet owner."),
+    "awaiting": (
+        False,
+        True,
+        "Nobody has approved {agent} from this device yet. The person it acts for approves it on HQ's Agents page.",
+    ),
+    "blocked": (False, True, "{agent} is blocked on this device. It is allowed again on HQ's Agents page."),
+    "unseen": (
+        False,
+        False,
+        "Nobody has approved {agent} from this address: HQ's last reading of the tailnet holds no device there.",
+    ),
+    "unplaced": (
+        False,
+        False,
+        "HQ cannot place this call on a tailnet device, so {agent}'s own rules are the finest it answers for.",
+    ),
+}
 
+
+def _agent_device_layer(identity: Identity) -> Layer:
+    """An agent's call: whether a person approved the device it came from for it."""
+
+    holds, conclusive, detail = _AGENT_DEVICE[identity.device_standing]
+    approver = identity.approved_by or "A person"
+    return Layer(
+        "identity-agreement",
+        "The person it acts for approved this device",
+        holds=holds,
+        detail=detail.format(agent=identity.agent, approver=approver),
+        evidence=dotted(
+            identity.device_standing.capitalize(),
+            f"device owner {identity.tailnet_user}" if identity.tailnet_user else "",
+            f"approved by {identity.approved_by}" if identity.approved_by else "",
+        ),
+        boundary="Identity correlation",
+        mechanism="The person's approval of the agent's device",
+        conclusive=conclusive,
+    )
+
+
+def _identity_agreement_layer(identity: Identity) -> Layer:
+    """Compare the independently observed device owner and signed-in person,
+    or for an agent's token call, read the person's approval of its device."""
+
+    if identity.agent:
+        return _agent_device_layer(identity)
     if not identity.tailnet_user:
         return Layer(
             "identity-agreement",

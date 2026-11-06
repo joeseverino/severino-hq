@@ -652,7 +652,7 @@ def _deploying(resource, health: dict[str, str]) -> Insight:
 
 
 def _apply_help(resource) -> dict:
-    """Apply HQ's settings again, where its type allows; otherwise say where to change it."""
+    """Apply HQ's config again, where its type allows; otherwise say where to change it."""
 
     provider = PROVIDERS.get(resource.kind)
     policy = provider.actions.get("reconcile") if provider else None

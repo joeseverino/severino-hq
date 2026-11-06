@@ -1,26 +1,21 @@
 #!/bin/sh
 #MISE description="The imports between hq/platform/core, hq/platform/application and hq/domains, both directions, counted per pair as grimp (import-linter's graph) reads them, or each importing module of one pair listed; reach for it before moving code between the layers or to see which way they lean; read-only"
 #MISE hide=true
-#USAGE arg "[importer]" help="With imported, list this pair's imports instead of counting: core, application or domains"
-#USAGE arg "[imported]" help="The layer the importer imports from: core, application or domains"
+#MISE extends="audit"
+#USAGE arg "[importer]" help="With imported, list this pair's imports instead of counting" {
+#USAGE   choices "core" "application" "domains"
+#USAGE }
+#USAGE arg "[imported]" help="The layer the importer imports from" {
+#USAGE   choices "core" "application" "domains"
+#USAGE }
 #USAGE flag "--tests" help="Count the layers' tests as importers too; without it, only the code the image runs"
 
 # grimp builds the graph lint:imports holds its contracts to, lazy imports
 # included, with no cache so nothing is written. An import is a direct one
 # from a module of one layer to a module of another; the counts are its
-# matching imports and the modules they come from. Each word is held to a
-# layer's name before Python sees it.
+# matching imports and the modules they come from.
 set -eu
 
-for word in "${usage_importer:-}" "${usage_imported:-}"; do
-    case "${word}" in
-    "" | core | application | domains) ;;
-    *)
-        printf 'audit:layers: %s is not a layer: core, application or domains\n' "${word}" >&2
-        exit 2
-        ;;
-    esac
-done
 if [ -n "${usage_importer:-}" ] && [ -z "${usage_imported:-}" ]; then
     printf 'audit:layers: name the layer %s imports from as well\n' "${usage_importer}" >&2
     exit 2

@@ -8,8 +8,7 @@ Unix socket is the authorization: docs/Architecture.md#the-controller.
 
 import json
 import logging
-from collections.abc import Awaitable, Callable, Iterator
-from functools import cache
+from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 from typing import Any
 
@@ -23,7 +22,13 @@ from starlette.routing import Route
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from hq.domains.control_plane.bridge_actions import ACTIONS, CONTROLLER, Action
-from hq.domains.control_plane.bridge_contract import Operation, Parameter, contract, max_body_bytes, operations
+from hq.domains.control_plane.bridge_contract import (
+    Operation,
+    Parameter,
+    declared_names,
+    max_body_bytes,
+    operations,
+)
 from hq.domains.control_plane.secret_shapes import struck
 from hq.platform.application import refused_reports
 from hq.platform.application.security import CONTROLLER_INTERFACE
@@ -102,35 +107,6 @@ async def _body(request: Request, limit: int) -> bytes:
         if len(received) > limit:
             raise Refused(HTTPStatus.CONTENT_TOO_LARGE, "The payload is larger than the bridge accepts.")
     return bytes(received)
-
-
-def _properties(node: Any) -> Iterator[str]:
-    if isinstance(node, dict):
-        members = node.get("properties")
-        if isinstance(members, dict):
-            yield from members
-        for child in node.values():
-            yield from _properties(child)
-    elif isinstance(node, list):
-        for child in node:
-            yield from _properties(child)
-
-
-@cache
-def declared_names() -> frozenset[str]:
-    """Every name the contract gives a member or a key: its properties, its
-    query parameters, the kinds a sweep's inventory is keyed by, and the parts
-    a reading's alert counts are keyed by.
-
-    Each is the contract's own word, so the door never strikes one as a
-    member named as a secret; a member the contract leaves open still is.
-    """
-
-    schemas = contract()["components"]["schemas"]
-    keys = ("ResourceKind", "SweptKind", "ReadingPartName")
-    kinds = (kind for name in keys for kind in schemas[name]["enum"])
-    parameters = (parameter.name for operation in operations().values() for parameter in operation.parameters)
-    return frozenset((*_properties(schemas), *kinds, *parameters))
 
 
 async def payload_of(operation: Operation, request: Request) -> Any:

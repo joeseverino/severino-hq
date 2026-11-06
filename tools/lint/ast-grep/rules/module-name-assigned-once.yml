@@ -1,0 +1,32 @@
+# Python keeps the later of two module-level assignments without a word, so a
+# second constant of the same name quietly replaces the first everywhere it is
+# read, a probe string included. Ruff's F811 covers functions and imports
+# only. Every module, its tests included.
+id: module-name-assigned-once
+language: python
+severity: error
+message: A module-level name is assigned a second time.
+note: Give each value its own name.
+rule:
+  kind: identifier
+  pattern: $NAME
+  inside:
+    field: left
+    kind: assignment
+    inside:
+      # Through a chain (a = b = 1) to the statement it starts.
+      stopBy:
+        not:
+          kind: assignment
+      kind: expression_statement
+      inside:
+        kind: module
+      follows:
+        stopBy: end
+        kind: expression_statement
+        has:
+          stopBy: end
+          kind: assignment
+          has:
+            field: left
+            pattern: $NAME

@@ -1,12 +1,9 @@
 """Who an operation's rows name is whoever started it: a binding opened inside
 cannot replace the actor, and only the host's held changes rebind on purpose."""
 
-import ast
-
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import TestCase
 
 from hq.platform.application.security import CLI_ACTOR, Principal, cli_principal
-from hq.platform.application.tests.tree import ROOT
 from hq.platform.core.audit import audit_operation, operation_context, record_operation
 from hq.platform.core.models import AuditLog
 from hq_sdk import audit as sdk_audit
@@ -96,59 +93,3 @@ class ANestedBindingKeepsTheActorTests(TestCase):
             row = _example_row("replayed")
 
         self.assertEqual((row.metadata["interface"], row.metadata["actor"]), ("cli", CLI_ACTOR))
-
-
-@tag("source", "tree")
-class WhoMayRebindTests(SimpleTestCase):
-    def test_only_the_approvals_service_passes_rebinds(self):
-        """A rebinding anywhere else writes an operation's rows as someone who
-        did not start it; the approvals service runs an approved change as its
-        requester and lapses an expired one as HQ."""
-
-        passing = [
-            f"{relative}:{node.lineno}"
-            for path in sorted([*(ROOT / "hq").rglob("*.py"), *(ROOT / "hq_sdk").rglob("*.py")])
-            if "/tests/" not in (relative := path.relative_to(ROOT).as_posix())
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-            if isinstance(node, ast.keyword)
-            and node.arg == "rebinds"
-            and not (isinstance(node.value, ast.Constant) and node.value.value is False)
-            and not (isinstance(node.value, ast.Name) and node.value.id == "rebinds")
-        ]
-        self.assertTrue(passing, "the walk found the approvals service's rebinding")
-        self.assertEqual({entry.split(":")[0] for entry in passing}, {"hq/platform/application/approvals.py"})
-
-    def test_only_a_door_binds_nobody_yet(self):
-        """A binding naming nobody starts an operation of its own, so code inside
-        another's operation that bound one would write its rows as nobody's."""
-
-        doors = {
-            "hq/platform/core/attribution.py",
-            "hq/platform/core/middleware.py",
-            "hq/platform/core/example_estate/doors.py",
-            "hq/platform/core/test_runner.py",
-        }
-        binding = [
-            f"{relative}:{node.lineno}"
-            for path in sorted([*(ROOT / "hq").rglob("*.py"), *(ROOT / "hq_sdk").rglob("*.py")])
-            if "/tests/" not in (relative := path.relative_to(ROOT).as_posix())
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-            if isinstance(node, ast.Call)
-            and any(
-                keyword.arg == "actor" and isinstance(keyword.value, ast.Constant) and keyword.value.value == ""
-                for keyword in node.keywords
-            )
-        ]
-        self.assertTrue(binding, "the walk found the doors")
-        self.assertLessEqual({entry.split(":")[0] for entry in binding}, doors, binding)
-
-    def test_only_the_job_runner_and_the_estates_doors_open_a_door_of_their_own(self):
-        opening = {
-            path.relative_to(ROOT).as_posix()
-            for path in sorted([*(ROOT / "hq").rglob("*.py"), *(ROOT / "hq_sdk").rglob("*.py")])
-            if "/tests/" not in path.as_posix()
-            for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
-            if isinstance(node, ast.Call)
-            and getattr(node.func, "id", getattr(node.func, "attr", "")) == "door_of_its_own"
-        }
-        self.assertEqual(opening, {"hq/domains/jobs/runner.py", "hq/platform/core/example_estate/doors.py"})

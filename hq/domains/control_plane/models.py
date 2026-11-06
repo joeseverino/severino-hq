@@ -1,6 +1,7 @@
 """Desired state and operation queue; credentials live only in the controller."""
 
 import uuid
+from datetime import datetime
 from typing import override
 
 from django.conf import settings
@@ -140,6 +141,18 @@ class ManagedResource(TimestampedModel):
         return rows or self.kind_label
 
 
+def attempted_at(observed_at: datetime | None, updated_at: datetime) -> datetime:
+    """When a stored reading was last tried, from its two columns.
+
+    A failed read stores nothing new, so its try is ``updated_at``; a row no
+    read has answered has no ``observed_at``, and its last try stands alone.
+    Taken from the columns rather than a row, for the readers that ask
+    ``values_list`` for them.
+    """
+
+    return updated_at if observed_at is None else max(observed_at, updated_at)
+
+
 class ProviderInventory(TimestampedModel):
     """What a provider actually holds, as a controller last saw it.
 
@@ -162,8 +175,9 @@ class ProviderInventory(TimestampedModel):
     # ``control_plane.reading_parts.clean_refused_parts`` stores them.
     refused_parts = models.JSONField(default=list, blank=True)
     # A row is only a claim about a moment, and a surface showing it has to be
-    # able to say how old that moment is.
-    observed_at = models.DateTimeField()
+    # able to say how old that moment is: the last read that answered, or none
+    # when no read has.
+    observed_at = models.DateTimeField(null=True, blank=True)
     controller_id = models.CharField(max_length=160, blank=True)
 
     class Meta:
@@ -432,7 +446,7 @@ class OperationRequest(TimestampedModel):
         """Each action in the words of the button that asks for it, which a
         capability that queues one says too."""
 
-        RECONCILE = "reconcile", "Apply HQ's settings"
+        RECONCILE = "reconcile", "Apply HQ's config"
         RENEW = "renew", "Renew certificate"
         DELETE = "delete", "Remove"
         # Lifecycle, not convergence. Restarting a container does not move the
@@ -464,6 +478,9 @@ class OperationRequest(TimestampedModel):
     )
     requested_actor = models.CharField(max_length=160)
     requested_interface = models.CharField(max_length=32)
+    # The tailnet device the asker called from (``Principal.device``), so a
+    # block on that device holds what it asked for (``agent_access.held_askers``).
+    requested_device = models.CharField(max_length=64, blank=True)
     reason = models.CharField(max_length=300, blank=True)
     idempotency_key = models.CharField(max_length=200, unique=True)
     input = models.JSONField(default=dict, blank=True)
@@ -556,6 +573,13 @@ class ApprovalRequest(TimestampedModel):
     content_fingerprint = models.CharField(max_length=64)
     requested_actor = models.CharField(max_length=160)
     requested_interface = models.CharField(max_length=32)
+    # The tailnet device the asker called from (``Principal.device``), so a
+    # block on that device holds what it asked for (``agent_access.held_askers``).
+    requested_device = models.CharField(max_length=64, blank=True)
+    # The sign-in key of the person a token asked for (``Principal.person_key``),
+    # so an approved personal write replays as that person's; blank for a
+    # machine's token.
+    requested_person_key = models.CharField(max_length=100, blank=True)
     reason = models.CharField(max_length=300, blank=True)
     state = models.CharField(max_length=20, choices=State.choices, default=State.PENDING)
     # A request nobody answers lapses, so a click weeks later applies nothing.
@@ -639,21 +663,16 @@ class AddressReading(models.Model):
 
 
 class CapabilityRule(models.Model):
-    """An operator's rule for one capability, bound to a surface or an agent.
+    """An operator's rule for one capability and one agent, named by its client id.
 
-    No row means the default. Where both apply, the stricter rule wins.
+    No row means the default.
     """
-
-    class Scope(models.TextChoices):
-        SURFACE = "surface", "Surface"
-        AGENT = "agent", "Agent"
 
     class Rule(models.TextChoices):
         ALLOW = "allow", "Allow"
         APPROVE = "approve", "Require approval"
         DENY = "deny", "Deny"
 
-    scope = models.CharField(max_length=16, choices=Scope.choices)
     subject = models.CharField(max_length=160)
     capability = models.CharField(max_length=64)
     rule = models.CharField(max_length=16, choices=Rule.choices)
@@ -667,11 +686,9 @@ class CapabilityRule(models.Model):
     changed_at = models.DateTimeField(default=timezone.now)
 
     class Meta:
-        constraints = [
-            models.UniqueConstraint(fields=("scope", "subject", "capability"), name="unique_capability_rule")
-        ]
-        ordering = ("scope", "subject", "capability")
+        constraints = [models.UniqueConstraint(fields=("subject", "capability"), name="unique_capability_rule")]
+        ordering = ("subject", "capability")
 
     @override
     def __str__(self) -> str:
-        return f"{self.scope}:{self.subject}:{self.capability}={self.rule}"
+        return f"{self.subject}:{self.capability}={self.rule}"

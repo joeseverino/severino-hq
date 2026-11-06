@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/joeseverino/severino-hq/controller/api"
+	"github.com/joeseverino/severino-hq/controller/edge"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -19,21 +20,12 @@ import (
 // the one HQ-owned Caddyfile the edge imports. Routes in the operator's own
 // file are read, never written.
 
-// The SSH operations an edge target answers.
-const (
-	caddyRoutesOperation       = "routes"
-	caddyRoutesWriteOperation  = "routes:write"
-	caddyCertificatesOperation = "certificates"
-	// caddyCertificateOperation is a target older than version 4: the one leaf
-	// in its certificate directory.
-	caddyCertificateOperation = "certificate"
-	caddyRole                 = "caddy"
-)
+const caddyRole = "caddy"
 
 // Why a route carries no certificate, when the edge could not say.
 const (
-	caddyNoCertificateOperation = "the edge target does not report its certificates; redeploy it at version 4 or later"
-	caddySomeUnreported         = "the edge loads %d certificates from files and its target reports %d; redeploy it at version 4 or later"
+	caddyNoCertificateOperation = "the edge target does not report its certificates; redeploy it at version " + edge.Version + " or later"
+	caddySomeUnreported         = "the edge loads %d certificates from files and its target reports %d; redeploy it at version " + edge.Version + " or later"
 	caddyManagesCertificate     = "Caddy manages this name's certificate itself, and the edge reports only the certificate it loads from a file"
 )
 
@@ -145,13 +137,13 @@ func (r *Registry) caddyRoutes(ctx context.Context) ([]any, error) {
 	}
 	found := []any{}
 	for _, ref := range refs {
-		payload, err := r.commands().SSH(ctx, ref, caddyRoutesOperation, nil)
+		payload, err := r.commands().SSH(ctx, ref, edge.OperationRoutes, nil)
 		if err != nil {
 			continue
 		}
 		var config caddyConfig
 		if err := json.Unmarshal(payload, &config); err != nil {
-			r.commands().record("SSH "+caddyRoutesOperation+" for "+ref, ref, "config did not decode")
+			r.commands().record("SSH "+edge.OperationRoutes+" for "+ref, ref, "config did not decode")
 			continue
 		}
 		certificates, unread := r.caddyServed(ctx, ref, config)
@@ -245,9 +237,9 @@ func (r *Registry) caddyServed(ctx context.Context, ref string, config caddyConf
 	if len(loaded) == 0 {
 		return nil, caddyManagesCertificate
 	}
-	leaves, err := r.commands().SSH(ctx, ref, caddyCertificatesOperation, nil)
+	leaves, err := r.commands().SSH(ctx, ref, edge.OperationCertificates, nil)
 	if err != nil {
-		if leaves, err = r.commands().SSH(ctx, ref, caddyCertificateOperation, nil); err != nil {
+		if leaves, err = r.commands().SSH(ctx, ref, edge.OperationCertificate, nil); err != nil {
 			return nil, caddyNoCertificateOperation
 		}
 	}
@@ -386,7 +378,7 @@ func (r *Registry) caddyReconcile(ctx context.Context, spec CaddyRouteSpec, _ Ob
 	if !apply {
 		return Result{Status: status, Conditions: []Condition{}, Message: "Would write the routes this edge serves."}, nil
 	}
-	if _, err := r.commands().SSH(ctx, spec.ConnectionRef, caddyRoutesWriteOperation, []byte(rendered)); err != nil {
+	if _, err := r.commands().SSH(ctx, spec.ConnectionRef, edge.OperationRoutesWrite, []byte(rendered)); err != nil {
 		return Result{}, err
 	}
 	return result(true, status, "Written", "Caddy reloaded with these routes.", "Routes written and Caddy reloaded."), nil

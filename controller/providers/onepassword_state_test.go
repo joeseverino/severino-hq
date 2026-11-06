@@ -2,6 +2,8 @@ package providers
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -25,5 +27,10 @@ func TestOpIsGivenAPrivateDirectoryForItsState(t *testing.T) {
 	}
 	if len(env) != 2 {
 		t.Fatalf("op is given more than its token and its directory: %v", env)
+	}
+	// It lives as long as the process, so a test run's goes with the run's
+	// own temporary directory (TestMain) rather than staying in the shared one.
+	if run := filepath.Base(os.TempDir()); !strings.HasPrefix(run, "hq-providers-test-") || filepath.Dir(dir) != os.TempDir() {
+		t.Fatalf("OP_CONFIG_DIR %q is outside the run's own temporary directory", dir)
 	}
 }

@@ -6,10 +6,10 @@ model and decides no number.
 """
 
 from dataclasses import asdict
+from functools import partial
 from typing import Any, TypedDict
 
 from django.utils import timezone
-lazy from django.core.exceptions import ImproperlyConfigured
 
 from . import sections
 from .attention import contacts_state, readable_by
@@ -23,6 +23,7 @@ from .domains import (
     provided,
     reader_variant,
 )
+from .plugins import source_overview
 from .projection import projection_scope
 from .read_models import ActivityEvent, recent_activity
 from .security import Capability, Principal
@@ -58,10 +59,7 @@ CARD_FIGURES = 3
 
 def _overview(domain, principal: Principal) -> DomainOverview | None:
     provider = domain.integration.overview
-    overview = provided(provider, principal) if provider else None
-    if overview is not None and not isinstance(overview, DomainOverview):
-        raise ImproperlyConfigured("Domain overview must return DomainOverview.")
-    return overview
+    return source_overview(domain.id, partial(provided, provider, principal)) if provider else None
 
 
 def _holds_a_card(cards, overview: DomainOverview | None) -> bool:

@@ -1,0 +1,30 @@
+# A link that runs a command says the command's declared words. Only
+# action_links builds an ActionLink or TopologyAction with a capability,
+# because it reads those words from the declaration; a link built elsewhere
+# brings a label of its own, which drifts from the command it runs.
+id: capability-linked-by-action-links
+language: python
+severity: error
+message: A link puts a capability on itself outside action_links.
+note: Build it with hq.platform.application.action_links.command_action, which reads the command's words.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/*_tests.py"
+  - "hq/platform/application/action_links.py"
+rule:
+  kind: call
+  all:
+    - has:
+        field: function
+        regex: (^|\.)(ActionLink|TopologyAction)$
+    - has:
+        field: arguments
+        has:
+          kind: keyword_argument
+          has:
+            field: name
+            regex: ^capability$

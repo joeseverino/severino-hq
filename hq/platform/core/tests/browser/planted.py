@@ -97,8 +97,13 @@ PLANTS = {
     # A clamp the box's display leaves inert.
     "past the clamp": Plant(f'<p style="display: block; -webkit-line-clamp: 1; inline-size: 8rem">{_LINES}</p>'),
     "cut decisions": Plant(
-        '<p class="attention-detail" data-whole style="max-block-size: 1.5em; overflow: hidden; inline-size: 8rem">'
-        f"{_LINES}</p>"
+        f'<p class="attention-detail" style="max-block-size: 1.5em; overflow: hidden; inline-size: 8rem">{_LINES}</p>'
+    ),
+    # An item's meaning held to a measure, an empty band between it and its buttons.
+    "short of its buttons": Plant(
+        '<ul class="attention-list"><li class="attention-row" data-attention-item><div class="attention-body">'
+        '<p class="attention-detail" style="max-inline-size: 8rem">Example</p></div>'
+        '<div class="attention-end"><a class="btn" href="/">Example</a></div></li></ul>'
     ),
     # A name in a sentence cut at a cap, as a cell cuts its own identifier.
     "cut code in text": Plant(

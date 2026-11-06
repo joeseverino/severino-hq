@@ -1,0 +1,33 @@
+id: tree-parsed-apart
+valid:
+  - tree = ast.parse(SETTINGS.read_text())
+  - |
+    for relative in ("hq/a.py", "hq/b.py"):
+        tree = ast.parse((ROOT / relative).read_text())
+  - |
+    for found in scan({"strings": STRINGS}, "hq"):
+        literal = ast.parse(found.text, mode="eval")
+  - "[ast.parse(source) for source in SOURCES]"
+  - |
+    for path in sorted(ROOT.glob("*.py")):
+        text = path.read_text()
+  - |
+    for source in SOURCES:
+        functions = [node for node in ast.walk(ast.parse(source))]
+  - |
+    for found in scan({"function": RULE}, *sorted(path.relative_to(ROOT) for path in APPLICATION.glob("*.py"))):
+        (node,) = ast.parse(found.text).body
+invalid:
+  - |
+    for path in sorted(APPLICATION.glob("*.py")):
+        for node in ast.parse(path.read_text()).body:
+            pass
+  - |
+    for module, path in browser_modules().items():
+        tree = ast.parse(path.read_text())
+  - "[ast.parse(path.read_text()) for module, path in browser_modules().items() if module != skipped]"
+  - "{path: ast.parse(path.read_text()) for path in source_files(ROOT, '*.py')}"
+  - |
+    for directory, _, names in os.walk(ROOT):
+        trees = [ast.parse(Path(directory, name).read_text()) for name in names]
+  - "any(ast.parse(path.read_text()) for path in (*a.rglob('*.py'), *b.glob('*.py')))"

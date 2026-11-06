@@ -3,6 +3,7 @@
 import hashlib
 import inspect
 import itertools
+import logging
 import marshal
 import os
 import pickle
@@ -21,15 +22,18 @@ from django.core.exceptions import ImproperlyConfigured
 from hq.platform.application.routes import reverse
 
 from .demo import showing_demo
-from .derivations import derivation, forget
-from .ui import STATUS_VALUES, DomainOverview
+from .derivations import derivation, forget, holds_until, present
+from .ui import STATUS_VALUES, DomainOverview, Insight
 lazy from .domains import NAVIGATION_GROUPS
 lazy from .integrations import clear_integration_graph_cache
+lazy from .item_help import instructions
 lazy from .outbound_work import clear_outbound_work_cache
 lazy from .plugin_admission import enforce_plugin_admission
 lazy from .security import host_capabilities
 
-PLUGIN_API_VERSION = 8
+logger = logging.getLogger("severino.composition")
+
+PLUGIN_API_VERSION = 9
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -199,7 +203,6 @@ class PluginManifest:
     navigation: tuple[NavigationItem, ...] = ()
     operator_capabilities: tuple[str, ...] = ()
     mcp_read_capabilities: tuple[str, ...] = ()
-    mcp_write_capabilities: tuple[str, ...] = ()
     # What the domain holds, in a sentence a reader of HQ's machine contract
     # reads under its name, as a host section's ``DomainDescriptor.description``.
     description: str = ""
@@ -258,14 +261,13 @@ MANIFEST_CHECKS: tuple[Check, ...] = (
     ),
     *(
         check
-        for name in ("operator_capabilities", "mcp_read_capabilities", "mcp_write_capabilities")
+        for name in ("operator_capabilities", "mcp_read_capabilities")
         for check in (
             (name, _each_matches(CAPABILITY_NAME), "names one that is not a dotted lowercase name: {value!r}"),
             (name, _distinct, "repeats one: {value!r}"),
         )
     ),
     ("mcp_read_capabilities", _held_by_its_operator, "grants MCP what its operator does not hold: {value!r}"),
-    ("mcp_write_capabilities", _held_by_its_operator, "grants MCP what its operator does not hold: {value!r}"),
 )
 
 
@@ -294,7 +296,7 @@ def _references() -> tuple[str, ...]:
 def _claims_no_host_capability(manifest: PluginManifest) -> None:
     """A plugin grants only capabilities of its own, which needs the host's to tell."""
 
-    declared = {*manifest.operator_capabilities, *manifest.mcp_read_capabilities, *manifest.mcp_write_capabilities}
+    declared = {*manifest.operator_capabilities, *manifest.mcp_read_capabilities}
     claimed = sorted(declared & {str(capability) for capability in host_capabilities()})
     if claimed:
         raise ImproperlyConfigured(
@@ -578,6 +580,117 @@ def _provided(attribute: str) -> tuple[Any, ...]:
     )
 
 
+def read_source[T](source_id: str, ask: Callable[[], T], unreadable: Callable[[], T]) -> T:
+    """What one source of a composed surface answers, or ``unreadable()`` in its place when asking raises.
+
+    Every page, queue and snapshot composes many sources, and one that fails
+    must not take the rest down with it. The stand-in holds for no time, so no
+    derivation that composed it is stored and the next ask tries the source
+    again; the failure is logged with its traceback under the request's id.
+    """
+
+    try:
+        return ask()
+    except Exception:  # whatever one source raises is that source's failure alone
+        logger.exception("%s could not be read.", source_id, extra={"event": "composition.source.unreadable"})
+        holds_until(present())
+        return unreadable()
+
+
+def source_attention(
+    source_id: str, label: str, provider: Callable[[], Iterable[Any]], read_capabilities: tuple[str, ...] = ()
+) -> tuple[Any, ...]:
+    """A source's attention items, or one item saying it could not be read.
+
+    The stand-in is gated on ``read_capabilities``, what a reader of the
+    source holds, so it tells no reader more than the source would.
+    """
+
+    return read_source(
+        source_id,
+        lambda: checked_attention(source_id, tuple(provider())),
+        lambda: (
+            Insight(
+                status="attention",
+                eyebrow=label,
+                title=f"{label} could not be read",
+                value="",
+                body="What it reports is missing from this queue until it reads again. The failure is logged.",
+                key=f"unreadable:{source_id}",
+                workflow=instructions(
+                    f"unreadable:{source_id}",
+                    "Find the line in HQ's log whose event is composition.source.unreadable and whose message "
+                    f"names {source_id}; the traceback under it says what failed.",
+                ),
+                read_capabilities=read_capabilities,
+            ),
+        ),
+    )
+
+
+def source_cards(
+    source_id: str, label: str, url: str, provider: Callable[[], Iterable[dict[str, Any]]]
+) -> tuple[dict[str, Any], ...]:
+    """A source's dashboard cards, or one card saying it could not be read."""
+
+    return read_source(
+        source_id,
+        lambda: checked_cards(source_id, tuple(provider())),
+        lambda: (
+            {
+                "id": f"{source_id}.unreadable",
+                "label": label,
+                "value": "Unreadable",
+                "url": url,
+                "detail": "Could not be read",
+                "status": "attention",
+            },
+        ),
+    )
+
+
+def source_overview(source_id: str, provider: Callable[[], Any]) -> DomainOverview | None:
+    """A source's overview; None for none, or for one that could not be read,
+    whose section its cards then fill."""
+
+    return read_source(source_id, lambda: checked_overview(source_id, provider()), lambda: None)
+
+
+# What one source's answer must be, by the provider that gives it: a source
+# whose answer is not is that source's failure (``read_source``), and the
+# extension kit names it (``plugin_testing.providers_derived_again``).
+def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
+    for item in items:
+        status = getattr(item, "status", None)
+        if status not in STATUS_VALUES:
+            raise ImproperlyConfigured(
+                f"{source_id!r} produced an attention item with status "
+                f"{status!r}; expected one of {', '.join(sorted(STATUS_VALUES))}."
+            )
+    return items
+
+
+def checked_cards(source_id: str, cards: tuple[Any, ...]) -> tuple[dict[str, Any], ...]:
+    _validate_dashboard_cards(cards)
+    ids = [card["id"] for card in cards]
+    if len(ids) != len(set(ids)):
+        raise ImproperlyConfigured(f"{source_id!r} produced two dashboard cards with one id.")
+    return cards
+
+
+def checked_overview(source_id: str, overview: Any) -> DomainOverview | None:
+    if overview is not None and not isinstance(overview, DomainOverview):
+        raise ImproperlyConfigured(f"{source_id!r} overview must return DomainOverview.")
+    return overview
+
+
+SOURCE_CHECKS: dict[str, Callable[[str, Any], Any]] = {
+    "attention": lambda source_id, answer: checked_attention(source_id, tuple(answer)),
+    "dashboard": lambda source_id, answer: checked_cards(source_id, tuple(answer)),
+    "overview": checked_overview,
+}
+
+
 # A card is a scalar and a link, plus optional interpretation. Kept deliberately
 # small: the aggregate is rendered by surfaces that compose many extensions at
 # once, so a card must be cheap to produce and safe to show beside any other.
@@ -602,15 +715,10 @@ def plugin_dashboard_sections() -> tuple[dict[str, Any], ...]:
     for plugin, integration in installed_integrations():
         if integration.dashboard is None:
             continue
-        cards = tuple(integration.dashboard())
-        _validate_dashboard_cards(cards)
+        home = reverse(plugin.navigation[0].route) if plugin.navigation else ""
+        cards = source_cards(plugin.id, plugin.name, home, integration.dashboard)
         sections.append(
-            {
-                "id": plugin.id,
-                "label": plugin.name,
-                "url": (reverse(plugin.navigation[0].route) if plugin.navigation else cards[0]["url"] if cards else ""),
-                "cards": cards,
-            }
+            {"id": plugin.id, "label": plugin.name, "url": home or (cards[0]["url"] if cards else ""), "cards": cards}
         )
     return tuple(sections)
 
@@ -618,15 +726,12 @@ def plugin_dashboard_sections() -> tuple[dict[str, Any], ...]:
 def gather_cards(
     sources: Iterable[tuple[str, Callable[[], Iterable[dict[str, Any]]] | None]],
 ) -> tuple[dict[str, Any], ...]:
-    """Flatten and validate dashboard cards from any ``(id, provider)`` sources.
-
-    The counterpart to ``gather_attention``: one validator serves the host's own
-    sections and installed extensions, so a malformed card fails the same way
-    whoever produced it.
+    """Flatten dashboard cards from any ``(id, provider)`` sources, each already
+    read through ``source_cards``, refusing an id two of them share: no one
+    source owns that failure.
     """
 
     cards = tuple(card for _, provider in sources if provider is not None for card in provider())
-    _validate_dashboard_cards(cards)
     ids = [card["id"] for card in cards]
     if len(ids) != len(set(ids)):
         raise ImproperlyConfigured("Duplicate dashboard card id across HQ sections and extensions.")
@@ -639,9 +744,9 @@ def plugin_overviews() -> tuple[dict[str, Any], ...]:
     for plugin, integration in installed_integrations():
         if integration.overview is None:
             continue
-        overview = integration.overview()
-        if not isinstance(overview, DomainOverview):
-            raise ImproperlyConfigured(f"Plugin {plugin.id!r} overview must return DomainOverview.")
+        overview = source_overview(plugin.id, integration.overview)
+        if overview is None:
+            continue
         sections.append({"id": plugin.id, "label": plugin.name, "overview": overview})
     return tuple(sections)
 
@@ -674,11 +779,13 @@ ATTENTION_ORDER = ("serious", "attention")
 
 
 def gather_attention(
-    sources: Iterable[tuple[str, str, Callable[[], Iterable[Any]] | None]],
+    sources: Iterable[tuple[str, str, Callable[[], Iterable[Any]] | None, tuple[str, ...]]],
 ) -> tuple[dict[str, Any], ...]:
     """Collect, validate, attribute and order attention items from any sources.
 
-    ``sources`` is ``(id, label, provider)`` per contributor, so the host's own
+    ``sources`` is ``(id, label, provider, read_capabilities)`` per
+    contributor, the last gating the item that stands in for a source that
+    could not be read (``source_attention``), so the host's own
     sections and installed extensions are gathered by one implementation that
     cannot drift on what "urgent" means. Each entry carries its source, so a
     surface can say where an item came from; the order is the status
@@ -686,17 +793,11 @@ def gather_attention(
     """
 
     gathered: list[dict[str, Any]] = []
-    for source_id, label, provider in sources:
+    for source_id, label, provider, read_capabilities in sources:
         if provider is None:
             continue
-        for item in provider():
-            status = getattr(item, "status", None)
-            if status not in STATUS_VALUES:
-                raise ImproperlyConfigured(
-                    f"{source_id!r} produced an attention item with status "
-                    f"{status!r}; expected one of {', '.join(sorted(STATUS_VALUES))}."
-                )
-            if status not in ATTENTION_ORDER:
+        for item in source_attention(source_id, label, provider, read_capabilities):
+            if item.status not in ATTENTION_ORDER:
                 continue
             gathered.append({"item": item, "source": label, "source_id": source_id})
     return ordered_attention(gathered)
@@ -737,7 +838,8 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
     return tuple(
         entry
         for entry in gather_attention(
-            (plugin.id, plugin.name, integration.attention) for plugin, integration in installed_integrations()
+            (plugin.id, plugin.name, integration.attention, plugin.mcp_read_capabilities)
+            for plugin, integration in installed_integrations()
         )
         if not entry["item"].notice
     )
@@ -774,7 +876,6 @@ def plugin_capabilities(kind: str) -> frozenset[str]:
     attribute = {
         "operator": "operator_capabilities",
         "mcp_read": "mcp_read_capabilities",
-        "mcp_write": "mcp_write_capabilities",
     }[kind]
     return frozenset(capability for plugin in installed_plugins() for capability in getattr(plugin, attribute))
 

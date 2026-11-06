@@ -1,0 +1,27 @@
+# HQ words an age one way, from hq/platform/application/moments.py's ago. A
+# second ago, or ago imported under another name, is how two pages come to
+# say "5 hours ago" and "5h" of the same moment. value_tags.py registers the
+# template filter, which is itself named ago.
+id: age-worded-by-ago
+language: python
+severity: error
+message: An age is worded outside moments.ago.
+note: Import ago from hq.platform.application.moments, under its own name.
+files:
+  - "hq/**"
+ignores:
+  - "**/tests/**"
+  - "**/moments.py"
+  - "**/value_tags.py"
+rule:
+  any:
+    - kind: function_definition
+      has:
+        field: name
+        regex: ^_?ago$
+    - kind: aliased_import
+      inside:
+        kind: import_from_statement
+      has:
+        field: name
+        regex: ^ago$

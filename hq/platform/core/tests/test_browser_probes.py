@@ -7,6 +7,7 @@ from django.test import SimpleTestCase
 from hq.platform.core.stylesheets import SHEETS
 from hq.platform.core.tests.browser import (
     accessibility,
+    agent_devices,
     catalog,
     command_forms,
     components,
@@ -51,6 +52,7 @@ from hq.platform.core.tests.browser_modules import browser_modules
 # tests in the fast gate; test_every_browser_module_is_read holds the list whole.
 MODULES = (
     accessibility,
+    agent_devices,
     catalog,
     command_forms,
     components,

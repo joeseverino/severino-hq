@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import cache
 from typing import Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, TypeAdapter
 
 from .json_schemas import fields, json_schema
 from .search_contracts import SearchDefinition
@@ -37,13 +37,29 @@ TARGET_KINDS: dict[str, TargetKind] = {
 
 
 @cache
+def command_adapter(command_type: type) -> TypeAdapter[Any]:
+    """The one validator of a command and of the schema published for it,
+    closed at every depth: a field the command does not have is refused, never
+    dropped, so a misspelled or retired field cannot return success for work
+    the caller did not ask for.
+
+    A stdlib dataclass or TypedDict with no config of its own takes the config
+    of whatever holds it, so the command and every such type inside it take
+    this one. Pydantic accepts a config only for a type that has none of its
+    own to hold, which an alias of the command is. A Pydantic model keeps its
+    own config: an extension's is a ``StrictCommand``.
+    """
+
+    alias: Any = TypeAliasType(command_type.__name__, command_type)
+    return TypeAdapter(alias, config=ConfigDict(extra="forbid"))
+
+
+@cache
 def command_schema(command_type: type) -> dict[str, Any]:
     """Build an immutable command type's closed JSON Schema once; each field's
     ``command_fields`` markers write themselves in."""
 
-    schema = json_schema(command_type)
-    schema.setdefault("additionalProperties", False)
-    return schema
+    return json_schema(command_adapter(command_type))
 
 
 # The machine API's contract version (``/api/v2/``), which a retry key's

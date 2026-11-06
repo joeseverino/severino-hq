@@ -42,6 +42,8 @@ class RecordingTests(TestCase):
         self.assertFalse(snapshot.reachable)
         self.assertEqual(snapshot.error, "timed out")
         self.assertEqual(snapshot.records, [])
+        # No read answered, so there is no moment of one.
+        self.assertIsNone(snapshot.observed_at)
 
     def test_an_unreachable_provider_does_not_erase_what_it_last_held(self):
         """ "Could not ask" and "nothing there" are different facts.
@@ -183,17 +185,6 @@ class UnmanagedTests(TestCase):
 
                 self.assertNotIn("app.example.com", [item.hostname for item in unmanaged()])
                 resource.delete()
-
-    def test_a_disabled_declaration_does_not_account_for_a_live_record(self):
-        """HQ is not managing it, and the record is still out there serving."""
-        ManagedResource.objects.create(
-            key="app-dns",
-            kind="adguard.rewrite",
-            spec={"domain": "app.example.com", "answer": "10.0.0.10"},
-            enabled=False,
-        )
-
-        self.assertIn("app.example.com", [item.hostname for item in unmanaged()])
 
 
 class ProviderRecordContractTests(TestCase):

@@ -23,8 +23,7 @@ mise prints the tasks live, so this file does not list them:
 What the listing does not say:
 
 - `fast` selects through Python imports and app names, so a rule held only by
-  a string or a template needs `check`. A worker runs `fast`, per its house
-  rules.
+  a string or a template needs `check`.
 - A new test is proven to fail without the fix by `mise run test --at <base>
   <labels>`, never by a base worktree, snapshot or checkout made by hand.
 - An agent runs `dev:scratch` in its own worktree, never `dev`.
@@ -36,8 +35,7 @@ A CI job is named for the task it runs (`lint`, `test`, `browser`, `build`,
 The composed suite (`mise run test --composed`, run as the image runs it) is where the
 host and its extensions first meet, which CI cannot reach. It loads the set
 the gitignored `mise.local.toml` names. A worktree Claude Code makes gets a
-copy of the main checkout's through `.worktreeinclude`, and an agent leaves
-it as it is. It names the extensions' main checkouts, so composing an
+copy of the main checkout's through `.worktreeinclude`. It names the extensions' main checkouts, so composing an
 extension worktree instead is
 [one variable on the command line](docs/Development.md#the-extension-set).
 
@@ -204,12 +202,10 @@ a host whose release nothing verified; the check says how to verify it.
 
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
-- `mise run check` passes, and `mise run test --composed` when a change
-  touches `hq_sdk`.
 - A change to templates or CSS passes `mise run browser` and is walked in a
   real browser through the workflow it serves.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits
   enter the diff.
-- Push, deploy and changes to private repositories wait for an explicit ask;
-  committing follows the orchestrating session's rules.
+- A push or a deploy waits for an explicit ask; committing follows the
+  orchestrating session's rules.

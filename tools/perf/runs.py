@@ -55,7 +55,7 @@ class Run:
             try:
                 with path.open("x", encoding="utf-8"):
                     pass
-            except FileExistsError:
+            except FileExistsError:  # noqa: S112 - a name another run holds is skipped for the next
                 continue
             run = cls(path, {"run": path.stem, "started_at": now(), **fields})
             run.save()
@@ -99,7 +99,7 @@ def _reports(out: Path) -> Iterator[tuple[str, Report]]:
     for path in sorted(out.glob("*.json")):
         try:
             doc = json.loads(path.read_text(encoding="utf-8"))
-        except OSError, ValueError:
+        except OSError, ValueError:  # noqa: S112 - a file that is no run report is no report
             continue
         if not isinstance(doc, dict):
             continue

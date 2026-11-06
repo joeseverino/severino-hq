@@ -1,0 +1,37 @@
+id: page-trail-declared
+valid:
+  - |
+    class Page(PageMixin, DetailView):
+        page_trail = (*ABOVE, (L, U))
+  - |
+    def get_page_trail(self):
+        x = 1
+        return (x,)
+  - |
+    def get_page_trail(self):
+        crumbs = []
+        if self.home:
+            crumbs.append((self.home.label, self.home.url))
+        return tuple(crumbs)
+  - |
+    def get_page_trail(self):
+        return (*super().get_page_trail(),) if self.request.GET else ()
+  - |
+    def get_page_crumbs(self):
+        return (A,)
+invalid:
+  - |
+    def get_page_trail(self):
+        return (A,)
+  - |
+    def get_page_trail(self):
+        return (*ABOVE, (L, U))
+  - |
+    def get_page_trail(self):
+        return A, B
+  - |
+    class Page(PageMixin, DetailView):
+        def get_page_trail(self):
+            """The trail above the record."""
+            # The pages above it.
+            return (*ABOVE, (self.object.name, self.object.url))

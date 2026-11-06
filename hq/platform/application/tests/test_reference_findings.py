@@ -153,7 +153,7 @@ class NamesNoConnectionTests(TestCase):
         self.assertEqual(
             finding["explanation"],
             "It names the connection example-edge-2. No controller has one called that, so "
-            "nothing reads on-nothing and nothing applies HQ's settings to it.",
+            "nothing reads on-nothing and nothing applies HQ's config to it.",
         )
         self.assertIn({"label": "Connection it names", "value": "example-edge-2"}, finding["evidence"])
         self.assertEqual([remedy["label"] for remedy in finding["remedies"]], [capability_words(UPDATE_CAPABILITY)])

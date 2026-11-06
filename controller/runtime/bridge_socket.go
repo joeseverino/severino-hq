@@ -3,12 +3,11 @@ package runtime
 import (
 	"context"
 	"errors"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
-
-	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 // socketMode is the only mode a bridge socket is served with.
@@ -58,7 +57,7 @@ func trustedSocket(path string, uid int) error {
 	if !directory.IsDir() {
 		return &BridgeError{"the bridge socket's directory is not a directory"}
 	}
-	if owner, _, ok := host.Ownership(directory); !ok || owner != uid {
+	if owner, _, ok := hostcore.Ownership(directory); !ok || owner != uid {
 		return &BridgeError{"the bridge socket's directory belongs to another account"}
 	}
 	if directory.Mode().Perm()&0o077 != 0 {
@@ -74,7 +73,7 @@ func trustedSocket(path string, uid int) error {
 	if socket.Mode().Type() != fs.ModeSocket {
 		return &BridgeError{"the bridge socket path is not a socket"}
 	}
-	if owner, _, ok := host.Ownership(socket); !ok || owner != uid {
+	if owner, _, ok := hostcore.Ownership(socket); !ok || owner != uid {
 		return &BridgeError{"the bridge socket belongs to another account"}
 	}
 	if socket.Mode().Perm() != socketMode {

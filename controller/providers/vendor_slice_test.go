@@ -30,7 +30,23 @@ func recordVendorCall(vendor, method, path string) {
 }
 
 func TestMain(m *testing.M) {
+	// The package's tests make their temporary files in a directory of the
+	// run's own, removed when it ends: op's state directory lives for the
+	// process (opState), and nothing else would remove it.
+	run, err := os.MkdirTemp("", "hq-providers-test-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if err := os.Setenv("TMPDIR", run); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	code := m.Run()
+	if err := os.RemoveAll(run); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		code = 1
+	}
 	if flag.Lookup("test.run").Value.String() == "" && flag.Lookup("test.skip").Value.String() == "" && flag.Lookup("test.list").Value.String() == "" {
 		if err := checkVendorOperations(); err != nil {
 			fmt.Fprintln(os.Stderr, err)

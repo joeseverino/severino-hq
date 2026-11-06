@@ -9,7 +9,7 @@ from django.test import TestCase
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.plugins import gather_attention
-from hq.platform.application.tests.markup import hrefs, select, with_class
+from hq.platform.application.tests.markup import hrefs, select, with_class, within
 from hq.platform.application.ui import DomainOverview, Insight
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.application.workflows import claim_resolution_plan
@@ -56,7 +56,7 @@ class DashboardQueueTests(TestCase):
                 "No decision needed.",
             ),
         )
-        entries = gather_attention((("example.utility", "Example", lambda: insights),))
+        entries = gather_attention((("example.utility", "Example", lambda: insights, ()),))
         self.source = patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries)
         self.source.start()
         self.addCleanup(self.source.stop)
@@ -93,6 +93,14 @@ class DashboardQueueTests(TestCase):
     def test_a_queue_with_something_urgent_in_it_is_triaged_on_the_dashboard(self):
         self.assertContains(self.client.get("/"), "data-triage-routes", count=1)
 
+    def test_the_urgent_cards_are_named_without_a_heading_row(self):
+        response = self.client.get("/")
+
+        (card,) = select(response, "data-triage-routes")
+        self.assertEqual(card.attrs.get("aria-label"), "Needs you")
+        inside = within(response, "data-triage-routes")
+        self.assertEqual([element for element in inside if element.tag in {"h1", "h2", "h3", "h4", "h5", "h6"}], [])
+
     def test_a_queue_with_nothing_urgent_is_only_the_count(self):
         calm = [item for item in work_queue() if item["status"] != "serious"]
         with patch("hq.platform.application.dashboard.work_queue", return_value=calm):
@@ -118,7 +126,7 @@ class DashboardQueueTests(TestCase):
             workflow=commands("example-failing", (("See the failing runs", "example-tool runs --failing"),)),
             observed_at=timezone.now(),
         )
-        entries = gather_attention((("example.utility", "Example", lambda: (urgent,)),))
+        entries = gather_attention((("example.utility", "Example", lambda: (urgent,), ()),))
         with patch("hq.platform.application.dashboard.domain_attention_items", return_value=entries):
             dashboard = self.client.get("/")
             (page,) = [title.attrs["href"] for title in with_class(dashboard, "attention-title")]

@@ -279,6 +279,20 @@ def _address(name: str) -> str | None:
     return address
 
 
+def _one_page(name: str, named: Sequence[str], records: Records | None, record_routes: set[str]) -> str:
+    """The address of the one page ``name`` asks for, a record's or the
+    estate's, or PageRefused saying why it is none, with the names it would take."""
+
+    if name.startswith(TEMPLATE) or name in record_routes:
+        return _record(name, records)
+    if (address := _address(name)) is None:
+        offers = nearest(urlsplit(estate_path(name)).path if is_estate(name) else name, named)
+        raise PageRefused(f"No page {name}" + ("; type one of these instead:" if offers else "") + _offered(offers))
+    if records is not None and _takes_a_record(address) and records.at(address) is None:
+        raise PageRefused(_no_record(address, records))
+    return address
+
+
 def pages(
     asked: Sequence[str], every: Sequence[str], named: Sequence[str] = (), records: Records | None = None
 ) -> list[str]:
@@ -299,18 +313,11 @@ def pages(
             found += every
         elif name in named:
             found.append(name)
-        elif name.startswith(TEMPLATE) or name in record_routes:
+        else:
             try:
-                found.append(_record(name, records))
+                found.append(_one_page(name, named, records, record_routes))
             except PageRefused as said:
                 refused.append(str(said))
-        elif (address := _address(name)) is None:
-            offers = nearest(urlsplit(estate_path(name)).path if is_estate(name) else name, named)
-            refused.append(f"No page {name}" + ("; type one of these instead:" if offers else "") + _offered(offers))
-        elif records is not None and _takes_a_record(address) and records.at(address) is None:
-            refused.append(_no_record(address, records))
-        else:
-            found.append(address)
     if refused:
         kinds = "estate/<path>, a path, a route name" + (", a page by name" if named else "")
         kinds += ", a route that takes a record, template:<name>" if records is not None else ""

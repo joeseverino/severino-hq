@@ -1,3 +1,5 @@
+import inspect
+from annotationlib import Format
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -14,7 +16,35 @@ from hq.platform.core.models import AuditLog
 from hq_sdk.audit import audit_operation, record_operation
 from hq_sdk.capabilities import StrictCommand
 from hq_sdk.plugin import NavigationItem as SdkNavigationItem, PluginManifest as SdkPluginManifest
-from hq_sdk.validation import unsupported_hq_imports
+
+
+def _routines(name, value):
+    """An export that is a routine, or each public function of an export that is a class
+    other than an exception, by its qualified name: what an extension calls."""
+
+    if inspect.isroutine(value):
+        yield name, value
+    elif inspect.isclass(value) and not issubclass(value, BaseException):
+        for member, function in vars(value).items():
+            if not member.startswith("_") and inspect.isfunction(function):
+                yield f"{name}.{member}", function
+
+
+def _untyped(name, routine):
+    """Each parameter of ``routine`` but ``self`` or ``cls``, and its return, that carries no annotation."""
+
+    try:
+        signature = inspect.signature(routine, annotation_format=Format.STRING)
+    except TypeError, ValueError:
+        return []
+    gaps = [
+        f"{name}({parameter.name})"
+        for parameter in signature.parameters.values()
+        if parameter.name not in ("self", "cls") and parameter.annotation is inspect.Parameter.empty
+    ]
+    if signature.return_annotation is inspect.Signature.empty:
+        gaps.append(f"{name} -> ?")
+    return gaps
 
 
 class SdkContractTests(SimpleTestCase):
@@ -24,37 +54,15 @@ class SdkContractTests(SimpleTestCase):
         calls it, so the whole surface is typed or the suite fails."""
 
         import importlib
-        import inspect
-        from annotationlib import Format
 
         from hq_sdk.contract import exports, module_names
-
-        def untyped(name, routine):
-            try:
-                signature = inspect.signature(routine, annotation_format=Format.STRING)
-            except TypeError, ValueError:
-                return []
-            gaps = [
-                f"{name}({parameter.name})"
-                for parameter in signature.parameters.values()
-                if parameter.name not in ("self", "cls") and parameter.annotation is inspect.Parameter.empty
-            ]
-            if signature.return_annotation is inspect.Signature.empty:
-                gaps.append(f"{name} -> ?")
-            return gaps
 
         gaps = []
         for module_name in module_names():
             module = importlib.import_module(f"hq_sdk.{module_name}")
             for export in exports(module):
-                value = getattr(module, export)
-                qualified = f"{module_name}.{export}"
-                if inspect.isroutine(value):
-                    gaps += untyped(qualified, value)
-                elif inspect.isclass(value) and not issubclass(value, BaseException):
-                    for member, function in vars(value).items():
-                        if not member.startswith("_") and inspect.isfunction(function):
-                            gaps += untyped(f"{qualified}.{member}", function)
+                for qualified, routine in _routines(f"{module_name}.{export}", getattr(module, export)):
+                    gaps += _untyped(qualified, routine)
         self.assertEqual(gaps, [])
 
     def test_style_validation_reads_the_host_bundle_after_package_moves(self):
@@ -101,96 +109,6 @@ class SdkContractTests(SimpleTestCase):
         self.assertEqual(fields["tone"]["enum"], ["plain"])
         self.assertEqual(fields["tone"]["x-enumDescriptions"], {"plain": "Plain"})
         self.assertEqual(fields["about"]["x-hq-reference"], {"model": "calendars.entry", "field": "about"})
-
-    def test_plugin_source_can_use_only_the_sdk(self):
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "valid.py").write_text(
-                "from hq_sdk.capabilities import CapabilitySpec\n",
-                encoding="utf-8",
-            )
-            self.assertEqual(unsupported_hq_imports(root), [])
-
-    def test_the_installed_sdk_rejects_the_hq_namespace_without_host_discovery(self):
-        from hq_sdk import validation
-
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "plugin.py").write_text(
-                "from hq.platform import application\n"
-                "from hq import platform\n"
-                "import hq.domains.projects\n"
-                "from hq_sdk import ui\n",
-                encoding="utf-8",
-            )
-            with patch("hq_sdk.validation.HOST_INTERNAL_PACKAGES", validation._FLOOR):
-                self.assertEqual(
-                    unsupported_hq_imports(root),
-                    ["plugin.py:1: hq.platform", "plugin.py:2: hq", "plugin.py:3: hq.domains.projects"],
-                )
-
-    def test_plugin_source_reports_host_internal_imports(self):
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "invalid.py").write_text(
-                "from hq.platform.application.capabilities import CapabilitySpec\nimport hq.domains.core\n",
-                encoding="utf-8",
-            )
-            self.assertEqual(
-                unsupported_hq_imports(root),
-                ["invalid.py:1: hq.platform.application.capabilities", "invalid.py:2: hq.domains.core"],
-            )
-
-    def test_a_plugin_package_named_like_a_host_app_is_its_own(self):
-        from hq_sdk import validation
-
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "plugin.py").write_text(
-                "from core import audit\nimport jobs.runner\nfrom calendars.models import Entry\n",
-                encoding="utf-8",
-            )
-            with patch("hq_sdk.validation.HOST_INTERNAL_PACKAGES", validation._FLOOR):
-                self.assertEqual(unsupported_hq_imports(root), [])
-
-    def test_the_host_packages_are_the_packages_of_its_tree_and_nothing_else(self):
-        from hq_sdk import validation
-
-        root = Path(validation.__file__).resolve().parents[1]
-        top_level = {
-            entry.name
-            for entry in root.iterdir()
-            if entry.is_dir() and (entry / "__init__.py").exists() and entry.name != "hq_sdk"
-        }
-        self.assertEqual(validation.HOST_INTERNAL_PACKAGES, top_level)
-
-    def test_a_relative_import_is_the_plugins_own_whatever_it_is_called(self):
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "plugin.py").write_text(
-                "from .calendars import sources\nfrom ..core import helpers\nfrom hq.domains.calendars import Entry\n",
-                encoding="utf-8",
-            )
-            self.assertEqual(unsupported_hq_imports(root), ["plugin.py:3: hq.domains.calendars"])
-
-    def test_the_import_boundary_reads_every_form_and_every_file(self):
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "pkg").mkdir()
-            (root / "pkg" / "deep.py").write_text(
-                "import os, hq.jobs.runner\n"
-                "from hq_sdk import ui\n"
-                "from . import sibling\n"
-                "def f():\n"
-                "    from hq import audit; from hq import audit\n",
-                encoding="utf-8",
-            )
-            (root / "broken.py").write_text("def (:\n", encoding="utf-8")
-
-            found = unsupported_hq_imports(root)
-
-        self.assertEqual(found[1:], ["pkg/deep.py:1: hq.jobs.runner", "pkg/deep.py:5: hq"])
-        self.assertTrue(found[0].startswith("broken.py:1: "))
 
     def test_capability_spec_is_available_from_the_sdk(self):
         from hq_sdk.capabilities import CapabilitySpec as SdkCapabilitySpec
@@ -291,7 +209,7 @@ class SdkShapeTests(SimpleTestCase):
         committed = describe()
         current = copy.deepcopy(committed)
         current["modules"]["capabilities"]["execute_capability"]["parameters"].append("surprise")
-        del current["modules"]["web"]["safe_next"]
+        del current["modules"]["web"]["capability_required"]
         current["modules"]["ui"]["Brand"] = {"kind": "value", "type": "str"}
 
         differences = drift(committed, current)
@@ -299,7 +217,7 @@ class SdkShapeTests(SimpleTestCase):
         self.assertEqual(len(differences), 3)
         self.assertTrue(differences[0].startswith("~ hq_sdk.capabilities.execute_capability: parameters:"))
         self.assertEqual(differences[1], "+ hq_sdk.ui.Brand")
-        self.assertEqual(differences[2], "- hq_sdk.web.safe_next")
+        self.assertEqual(differences[2], "- hq_sdk.web.capability_required")
 
     def test_a_reshaped_export_names_each_member_gained_lost_and_changed(self):
         from hq_sdk.contract import drift

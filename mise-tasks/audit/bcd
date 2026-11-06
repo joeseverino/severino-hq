@@ -1,37 +1,23 @@
 #!/bin/sh
 #MISE description="Each browser's first version that supports the features given, Safari first, with its release date, from @mdn/browser-compat-data; read-only"
 #MISE hide=true
+#MISE extends="audit"
+#MISE depends=["setup:bcd", "setup:sandbox"]
 #USAGE arg "<features>" var=#true help="Feature paths as browser-compat-data names them, dotted (css.properties.field-sizing html.global_attributes.popover); a path that names a group says what it holds"
 
-# The answer is a jq read of the package's own data.json, which tools/lint
-# pins (Renovate moves it), so it is the same on every machine and offline.
-# Each browser's statements come in BCD's order, its current support first,
-# and what qualifies one (a flag, a prefix, another name, partial support, a
-# removal) is said beside its version. Each word is held to a
-# feature path's characters before jq sees it as an argument. The words are
-# mise's shell-quoted parse of the arguments.
+# The answer is a jq read of the package's own data.json, which tools/lint/bcd
+# pins (Renovate moves it), so it is the same on every machine and offline
+# once installed. It is a package of its own, kept out of the lint tools every
+# gate installs, and setup:bcd installs it, a dependency outside the sandbox
+# that mise skips while node_modules is current. Each browser's statements
+# come in BCD's order, its current support first, and what qualifies one (a
+# flag, a prefix, another name, partial support, a removal) is said beside its
+# version. The words are mise's shell-quoted parse of the arguments.
 set -euf
 
-paths=""
 eval "set -- ${usage_features:-}"
-for word; do
-    case "${word}" in
-    "" | -* | *[!A-Za-z0-9_.-]*)
-        printf 'audit:bcd: %s is not a feature path of letters, digits and _ . -\n' "${word}" >&2
-        exit 2
-        ;;
-    *) paths="${paths} ${word}" ;;
-    esac
-done
+data=tools/lint/bcd/node_modules/@mdn/browser-compat-data/data.json
 
-data=tools/lint/node_modules/@mdn/browser-compat-data/data.json
-if [ ! -f "${data}" ]; then
-    printf 'audit:bcd: %s is not installed; mise run setup:lint-tools installs it\n' "${data}" >&2
-    exit 1
-fi
-
-# paths holds words without spaces or globs.
-# shellcheck disable=SC2086
 jq -r '
     . as $bcd
     | ["safari", "safari_ios", "chrome", "chrome_android", "edge", "firefox", "firefox_android"] as $browsers
@@ -73,4 +59,4 @@ jq -r '
             | select(length > 0)
             | "  subfeatures, each a path of its own: \(join(", "))")
       end
-' "${data}" --args ${paths}
+' "${data}" --args "$@"

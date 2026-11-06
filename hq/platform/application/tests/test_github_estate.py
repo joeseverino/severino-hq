@@ -4,6 +4,7 @@ from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.github import PARTS, REPOSITORY_KIND
 
 from ..dashboard import work_queue
@@ -348,6 +349,26 @@ ALPHA = "https://github.com/example/alpha"
 class AlertPageTests(SimpleTestCase):
     def test_every_part_that_reads_alerts_has_its_list_on_github(self):
         self.assertEqual(set(ALERT_PAGES), {part for part in PARTS if part.label.endswith(" alerts")})
+
+    def test_a_record_holds_alert_counts_only_as_numbers_by_an_alert_part(self):
+        reading = OBSERVATIONS[REPOSITORY_KIND]
+        base = {"connection_ref": "github", "repository": "example/alpha"}
+        refused = (
+            {"leaked_credentials": {"leaked": "[redacted]"}},
+            {"dependabot": {"high": "2"}},
+            {"dependabot": {"high": True}},
+            {"dependabot": {"high": -1}},
+            {"dependabot": "[redacted]"},
+            {"branch_rules": {"high": 1}},
+        )
+        for alerts in refused:
+            with self.subTest(alerts=alerts):
+                self.assertEqual(reading.clean([{**base, "alerts": alerts}]), ([], 1))
+        # Every part whose alerts have a list on GitHub may hold counts.
+        alerts = {part.name: {"high": 1} for part in ALERT_PAGES}
+        kept, refused_count = reading.clean([{**base, "alerts": alerts}])
+        self.assertEqual(refused_count, 0)
+        self.assertEqual(Repository("example/alpha", kept[0], None).open_alerts, len(ALERT_PAGES))
 
     def test_a_repository_lists_its_alerts_where_the_worst_are_or_its_overview_when_clear(self):
         cases = (

@@ -43,7 +43,7 @@ def tailscale_machine(record: Mapping[str, Any]) -> str:
     for value in record.get("addresses") or ():
         try:
             address = ipaddress.ip_address(str(value))
-        except ValueError:
+        except ValueError:  # noqa: S112 - a value that is no address names no device page
             continue
         if address.version == 4:
             return f"{TAILSCALE_ADMIN}/machines/{address}"

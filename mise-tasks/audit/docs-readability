@@ -1,6 +1,7 @@
 #!/bin/sh
 #MISE description="How easily each doc reads: its Flesch-Kincaid grade, its words, and its longest paragraph and sentence in words with the line each ends on, longest paragraph first, read-only"
 #MISE hide=true
+#MISE extends="audit"
 #USAGE flag "--sentences-over <words>" help="Instead, every sentence of this many words or more, at the line it ends on"
 #USAGE flag "--paragraphs-over <words>" help="Instead, every paragraph (a list item counts as one) of this many words or more, at the line it ends on"
 

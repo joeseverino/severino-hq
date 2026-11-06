@@ -58,3 +58,14 @@ class OneRefusedImageTests(TestCase):
         found = self.report(LookupUnavailable)
 
         self.assertFalse(found["ok"])
+
+
+class NeverAnsweredTests(TestCase):
+    def test_a_kind_no_read_has_answered_is_read_again(self):
+        ProviderInventory.objects.create(
+            kind=public_registry.DIGEST_KIND, reachable=False, records=[], observed_at=None
+        )
+
+        found = public_registry._report(public_registry.DIGEST_KIND, "digest", [], dict, timezone.now())
+
+        self.assertIsNotNone(found)

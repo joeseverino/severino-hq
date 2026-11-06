@@ -12,6 +12,7 @@ from django.core.cache import caches
 from django.core.exceptions import ImproperlyConfigured
 from django.db import connection, transaction
 from django.test import SimpleTestCase, TestCase, TransactionTestCase, override_settings
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
@@ -228,6 +229,19 @@ class DerivationTests(TestCase):
                 count()
                 with self.assertNumQueries(0):
                     count()
+
+    def test_a_call_outside_any_projection_costs_what_a_projections_first_does(self):
+        # Outside a projection nothing is read once, so each read of the
+        # revisions is a query of its own: a stored answer is served on one.
+        with declared("test.unscoped", reads=("core.UpstreamReading",)) as (register, _calls):
+            count = register(_readings)
+            count()
+
+            with projection_scope(), CaptureQueriesContext(connection) as scoped:
+                count()
+            with CaptureQueriesContext(connection) as unscoped:
+                count()
+            self.assertEqual(len(unscoped), len(scoped))
 
     def test_arguments_are_answered_apart(self):
         with declared("test.vary", reads=("core.UpstreamReading",), vary=lambda prefix: prefix.lower()) as (
@@ -511,8 +525,13 @@ class DeclaredDerivationTests(TestCase):
         for name in SAMPLES:
             self._run(name)
         # An installed extension's providers are derivations the host
-        # declares as it meets them; ``test_provided`` holds those.
-        host = {name for name in DERIVATIONS if not name.startswith(("test.", "extension."))}
+        # declares as it meets them (``test_provided`` holds those), and the
+        # extension declares its own from its package through the SDK.
+        host = {
+            name
+            for name, declared in DERIVATIONS.items()
+            if declared.compute.__module__.partition(".")[0] == "hq" and not name.startswith(("test.", "extension."))
+        }
 
         self.assertEqual(host, set(SAMPLES))
 

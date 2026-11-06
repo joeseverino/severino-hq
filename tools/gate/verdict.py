@@ -4,7 +4,8 @@ last lines.
 
 Each failed task is named as mise names it and each failed test as the test
 runner records it, and `var/gate/<name>.txt` keeps the lines whole, beside the
-run before it in `<name>.prev.txt` (docs/Development.md, The gates).
+run before it in `<name>.prev.txt`, under a first line naming the tree the gate
+judged (docs/Development.md, The gates).
 `python -m tools.gate.verdict <name> <command...>` runs one command so, and
 `--step <label> <command...>...` several.
 """
@@ -25,6 +26,8 @@ from collections.abc import Collection
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import BinaryIO
+
+from tools.gate.tree import working_tree
 
 ROOT = Path(__file__).resolve().parents[2]
 # The folder a step's test runs write their failed tests into, a JSON list of
@@ -61,9 +64,10 @@ SPAN = {"h": 3600.0, "m": 60.0, "s": 1.0}
 # The runner's heading over a failed test's traceback, under the task whose
 # run printed it: the test's id is in the parentheses.
 FAILED_UNDER = re.compile(r"^(?:\[[^\]\s]+\] )*\[([^\]\s]+)\] (?:FAIL|ERROR): \S+ \(([^)\s]+)\)")
-# The line mise prints after a task that passed, its time as Rust prints a
-# Duration: in seconds from one second up, in ms, µs or ns below.
-TIMED = re.compile(r"\[([^\]\s]+)\] Finished in (\d+(?:\.\d+)?)(ns|µs|ms|s)\b")
+# The line mise prints after a task that passed, as its default output says
+# it and as summary output does, its time as Rust prints a Duration: in
+# seconds from one second up, in ms, µs or ns below.
+TIMED = re.compile(r"\[([^\]\s]+)\] (?:Finished|passed) in (\d+(?:\.\d+)?)(ns|µs|ms|s)\b")
 UNITS = {"ns": 1e-9, "µs": 1e-6, "ms": 1e-3, "s": 1.0}
 # A terminal escape sequence. mise colors its task lines on a CI runner even
 # into a pipe (and wherever CLICOLOR_FORCE is set), so a line is read without
@@ -88,6 +92,14 @@ SHOWN = 10
 # so a gate it runs as a subprocess keeps its fixture verdict there too.
 VERDICTS_FOLDER = "HQ_GATE_VERDICTS"
 VERDICTS = Path(os.environ.get(VERDICTS_FOLDER) or ROOT / "var" / "gate")
+# The verdict file's first line: the tree the gate judged, or UNSETTLED when
+# the checkout changed while it ran, or git could not say.
+TREE_LINE = "tree {}"
+UNSETTLED = "-"
+# The checkout a gate judges: this one, or the one this variable names, which
+# every process a gate starts inherits (an extension's check judges its own).
+JUDGED_FOLDER = "HQ_GATE_TREE"
+JUDGED = Path(os.environ.get(JUDGED_FOLDER) or ROOT)
 # The command that reruns a test by label, by the task or gate it failed under.
 TESTS_RERUN = {"test:composed": "mise run test --composed"}
 TEST_RERUN = "mise run test"
@@ -359,14 +371,30 @@ class Gate:
     from its first part, loses the last line, and the head is the one part
     every cut copy shows. `close` is reached only through an opened gate, so
     no gate ends on a verdict without having said where it is kept.
+
+    The kept file opens on the tree the gate judged, taken as it opens and
+    again as it closes, so a pass is attested from the file alone: it holds
+    for a commit whose tree that line names. A checkout that changed in the
+    run judged no one tree, and the line says so.
     """
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, root: Path = JUDGED) -> None:
         self.name = name
+        self.root = root
         self.started = time.monotonic()
+        self.tree = tree_now(root)
+        self.ended: str | None = None
         self.stem = re.sub(r"[^\w.-]+", "-", name).strip("-")
         self.path = VERDICTS / f"{self.stem}.txt"
         print(f"[{name}] verdict: the last line, kept whole in {self.path}", flush=True)
+
+    def judged(self) -> str | None:
+        """The tree the gate judged: the checkout's when it opened, if the
+        checkout still holds it now; None if it changed in the run."""
+
+        if self.ended is None:
+            self.ended = tree_now(self.root) or UNSETTLED
+        return self.tree if self.tree and self.tree == self.ended else None
 
     def close(
         self,
@@ -399,13 +427,23 @@ class Gate:
         with tempfile.NamedTemporaryFile(
             "w", dir=path.parent, prefix=f".{self.stem}.", suffix=".txt", delete=False
         ) as whole:
-            whole.write("\n".join([line, *named, *ended, *timings(steps), *kept]) + "\n")
+            judged = TREE_LINE.format(self.judged() or UNSETTLED)
+            whole.write("\n".join([judged, line, *named, *ended, *timings(steps), *kept]) + "\n")
         Path(whole.name).replace(path)
         for task, said in tails.items():
             shown = (f"[{name}]   {said_line}" for said_line in said[-TAIL_SHOWN:])
             print(f"[{name}] {task} ended on:", *shown, sep="\n", flush=True)
         print(f"[{name}] verdict kept in {path}", flush=True)
         print(line, flush=True)
+
+
+def tree_now(root: Path) -> str | None:
+    """The checkout's tree as it stands, or None where git cannot say (no repository, no git)."""
+
+    try:
+        return working_tree(root)
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
 
 USAGE = "usage: python -m tools.gate.verdict <name> (<command...> | --step <label> <command...>...)"

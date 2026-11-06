@@ -91,7 +91,7 @@ def _readable(value):
     if isinstance(value, (dict, list, tuple)):
         try:
             return json.loads(json.dumps(value, cls=DjangoJSONEncoder))
-        except TypeError, ValueError:
+        except TypeError, ValueError:  # noqa: S110 - a value JSON cannot hold is kept as its text below
             pass
     return str(value)[:VALUE_CHARS]
 
@@ -221,6 +221,7 @@ def audit_operation(
         actor=getattr(principal, "actor", None) or (outer.actor if outer else ""),
         operation=operation,
         operation_id=operation_id,
+        device=getattr(principal, "device", None) or "",
         rebinds=rebinds,
     ):
         yield
@@ -469,6 +470,7 @@ def record_event(
         "interface": context.interface,
         "actor": _actor(context, user, stamped_user="user" in stamps),
         "operation": context.operation,
+        **({"device": context.device} if context.device else {}),
         **facet_metadata(facets),
         **(metadata or {}),
         **stamps.get("metadata", {}),
@@ -519,6 +521,7 @@ def _line(row: AuditLog) -> dict[str, Any]:
         "user_id": row.user_id,
         "actor": metadata.get("actor"),
         "interface": metadata.get("interface"),
+        "device": metadata.get("device"),
         "object_type": row.object_type,
         "object_id": row.object_id,
         "object_repr": row.object_repr,

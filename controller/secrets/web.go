@@ -2,9 +2,8 @@ package secrets
 
 import (
 	"context"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"strings"
-
-	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 // Web is the web container: the one consumer that has to be restarted to load
@@ -25,7 +24,7 @@ type UnitWeb struct{ Unit, Container string }
 // environment this run replaces. A unit that is neither reads the file when
 // it next starts.
 func (u UnitWeb) Installed(ctx context.Context) bool {
-	out, err := host.Command(ctx, "systemctl", "show", "--property", "ActiveState", "--value", u.Unit).Output()
+	out, err := hostcore.Command(ctx, "systemctl", "show", "--property", "ActiveState", "--value", u.Unit).Output()
 	if err != nil {
 		return false
 	}
@@ -39,11 +38,11 @@ func (u UnitWeb) Installed(ctx context.Context) bool {
 // Restart returns once HQ is healthy on the new environment, or failed to
 // be: the unit is ready only when HQ answers its health check.
 func (u UnitWeb) Restart(ctx context.Context) error {
-	return host.Command(ctx, "systemctl", "restart", u.Unit).Run()
+	return hostcore.Command(ctx, "systemctl", "restart", u.Unit).Run()
 }
 
 func (u UnitWeb) Health(ctx context.Context) string {
-	out, err := host.Command(ctx, "docker", "inspect", "--format", "{{.State.Health.Status}}", u.Container).Output()
+	out, err := hostcore.Command(ctx, "docker", "inspect", "--format", "{{.State.Health.Status}}", u.Container).Output()
 	if err != nil {
 		return ""
 	}

@@ -17,8 +17,9 @@ class ControllerBinaryTests(SimpleTestCase):
 
     def test_the_entrypoint_is_the_binary_the_image_builds(self):
         dockerfile = DOCKERFILE.read_text()
-        built = re.search(r"^COPY --from=controller /out/hq-controller (\S+)$", dockerfile, re.MULTILINE)
+        built = re.search(r"^COPY --from=programs /hq-controller (\S+)$", dockerfile, re.MULTILINE)
 
+        self.assertIn("FROM scratch AS programs\nCOPY --from=controller /out/ /\n", dockerfile)
         self.assertIsNotNone(built)
         self.assertIn(f'"--entrypoint", "{built.group(1)}"', LAUNCHER.read_text())
 

@@ -6,9 +6,11 @@ from hq.domains.control_plane.models import ManagedResource
 from ..attention import infrastructure
 from ..findings import estate_findings
 from ..security import cli_principal
+from .inventory_records import kind_read
 
 
 def rewrite(key: str, *, generation: int = 1, observed_generation: int = 1, **fields) -> ManagedResource:
+    kind_read("adguard.rewrite", timezone.now())
     return ManagedResource.objects.create(
         key=key,
         kind="adguard.rewrite",

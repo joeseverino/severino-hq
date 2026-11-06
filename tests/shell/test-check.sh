@@ -30,7 +30,7 @@ for package in hq hq/platform hq/platform/core hq/platform/core/tests; do
     cp "${package}/__init__.py" "${repo}/${package}/"
 done
 cp hq/platform/core/tests/task.py "${repo}/hq/platform/core/tests/"
-cp tools/gate/__init__.py tools/gate/check.py tools/gate/host.py tools/gate/verdict.py "${repo}/tools/gate/"
+cp tools/gate/__init__.py tools/gate/check.py tools/gate/host.py tools/gate/tree.py tools/gate/verdict.py "${repo}/tools/gate/"
 # Hermetic: the fixture is a throwaway repository, so no signing and no hooks.
 git_() {
     git -C "${repo}" -c user.name=test -c user.email=test@example.com \

@@ -10,7 +10,7 @@ from django.test.utils import CaptureQueriesContext
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application.search import apply_search, global_search, search_ids, search_records
-from hq.platform.application.security import AuthorizationError, cli_principal, mcp_principal
+from hq.platform.application.security import MCP_INTERFACE, AuthorizationError, agent_principal, cli_principal
 from hq.platform.core.models import AuditLog
 
 from ..backends import _fts_query, search_backend, snippet_parts
@@ -18,6 +18,8 @@ from ..models import SearchDocument
 from ..services import rebuild_search_index
 
 OPERATOR = cli_principal()
+# An agent granted only the baseline read.
+READER = agent_principal("example-agent", MCP_INTERFACE, frozenset({"read"}))
 
 
 class IndexedSearchTests(TestCase):
@@ -273,20 +275,20 @@ class SingleStatementSearchTests(TestCase):
 
     def test_scopes_the_principal_lacks_are_not_read_from_the_index(self):
         with mock.patch.object(search_backend, "search_scopes", wraps=search_backend.search_scopes) as read:
-            outcome = global_search("ledger", principal=mcp_principal())
+            outcome = global_search("ledger", principal=READER)
 
         scopes = read.call_args.kwargs["scopes"]
         self.assertNotIn("audit", scopes)
         self.assertIn("projects", scopes)
         self.assertNotIn("audit", {group["scope"] for group in outcome["groups"]})
         with CaptureQueriesContext(connection) as queries:
-            global_search("ledger", principal=mcp_principal())
+            global_search("ledger", principal=READER)
         self.assertFalse([query["sql"] for query in queries if "audit" in query["sql"]])
 
     def test_fallback_orders_and_omits_like_the_index_path(self):
         with mock.patch("hq.platform.application.search._fts5_available", return_value=False):
             with CaptureQueriesContext(connection) as queries:
-                outcome = global_search("ledger", principal=mcp_principal())
+                outcome = global_search("ledger", principal=READER)
             listed = apply_search(
                 Project.objects.all(),
                 scope="projects",
@@ -381,7 +383,7 @@ class SearchedListTests(TestCase):
                 AuditLog.objects.all(),
                 scope="audit",
                 query="login",
-                principal=mcp_principal(),
+                principal=READER,
             )
 
 
@@ -487,7 +489,7 @@ class GlobalSearchTests(TestCase):
         AuditLog.objects.create(action="login", object_type="user", message="hq login")
 
         operator_scopes = {g["scope"] for g in global_search("hq", principal=OPERATOR)["groups"]}
-        limited_scopes = {g["scope"] for g in global_search("hq", principal=mcp_principal())["groups"]}
+        limited_scopes = {g["scope"] for g in global_search("hq", principal=READER)["groups"]}
 
         self.assertIn("audit", operator_scopes)
         self.assertNotIn("audit", limited_scopes)
@@ -510,7 +512,7 @@ class GlobalSearchTests(TestCase):
 class SearchAuthorizationTests(TestCase):
     def test_baseline_read_principal_cannot_search_the_audit_trail(self):
         AuditLog.objects.create(action="login", object_type="user", message="operator login")
-        limited = mcp_principal()
+        limited = READER
 
         with self.assertRaises(AuthorizationError):
             search_ids("audit", "login", principal=limited)

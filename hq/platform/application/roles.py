@@ -15,6 +15,7 @@ from django.utils import timezone
 lazy from hq.platform.core.audit import record_event
 lazy from hq.platform.core.models import AuditLog, PersonRole
 
+lazy from . import agent_registry
 lazy from .linked_accounts import SIGN_IN
 lazy from .plugins import plugin_capabilities
 lazy from .security import Capability, operator_capabilities
@@ -39,7 +40,7 @@ def grants(role: str) -> frozenset[Capability | str]:
 
 
 def viewer_capabilities() -> frozenset[Capability | str]:
-    """The read base: HQ's own reads and every extension's, which every agent's ceiling starts from too."""
+    """The read base: HQ's own reads and every extension's, what a viewer holds."""
 
     return frozenset({Capability.READ, *plugin_capabilities("mcp_read")})
 
@@ -121,6 +122,9 @@ def assign(user, role: str) -> None:
             user=user,
             required=True,
         )
+        # A token this person signed in holds what their role holds, so each
+        # stream an agent of theirs holds open is told to list its tools again.
+        agent_registry.persons_tools_changed(user)
     user.person_role = row
 
 

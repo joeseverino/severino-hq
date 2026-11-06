@@ -69,6 +69,12 @@ class NarrowRunTests(GateTestCase):
                 self.assertFalse(narrow([label]))
                 self.assertFalse(narrow([label, "--parallel", "1"]))
 
+    def test_a_serial_run_of_a_label_that_does_not_import_is_narrow_and_a_parallel_one_is_heavy(self):
+        label = f"{MODULE}.GateReferenceTests"
+        with mock.patch("django.test.runner.DiscoverRunner.build_suite", side_effect=ImportError("example")):
+            self.assertTrue(narrow([label, "--parallel", "1"]))
+            self.assertFalse(narrow([label, "--parallel", "auto"]))
+
     def test_a_run_manage_py_refuses_is_heavy(self):
         self.assertFalse(narrow(["--example-no-such-option", MODULE]))
 
@@ -133,12 +139,13 @@ class HeavyTaskTests(GateTestCase):
                 self.assertTrue(HEAVY.search(run), f"{name} takes the turn and runs nothing that loads the machine")
 
     def test_a_task_that_weighs_its_run_bounds_its_heavy_run_itself(self):
-        """The turn task's timeout is its caller's: a file task names its bound before it takes the turn."""
+        """The turn task's timeout is its caller's: a file task names its bound before it takes the turn.
+        One that takes the lock in its header is bounded by its own timeout."""
 
         weighing = {
             name: body(task)
             for name, task in mise_tasks().items()
-            if task["file"] and SOURCES_THE_TURN.search(body(task))
+            if task["file"] and SOURCES_THE_TURN.search(body(task)) and LOCK not in locks(name)
         }
         self.assertGreater(len(weighing), 3)
         for name, run in weighing.items():
@@ -166,6 +173,26 @@ class HeavyTaskTests(GateTestCase):
             with self.subTest(task=name):
                 self.assertRegex(task["timeout"] or "", r"^\d+[smh]$")
 
+    def test_every_task_that_takes_the_lock_runs_under_the_measurer(self):
+        """Each heavy run ends with the line on what its process tree spent
+        (tools/lib/measured): a TOML task through its template's shell, a file
+        task through the line it sources, and the turn task by running its command
+        under it. A task that weighs its own run reaches it through the turn."""
+
+        locking = {name: task for name, task in mise_tasks().items() if LOCK in locks(name)}
+        self.assertGreater(len(locking), 10)
+        for name, task in locking.items():
+            with self.subTest(task=name):
+                if not task["file"]:
+                    self.assertRegex(task["shell"] or "", rf"^{re.escape(MEASURER)} ")
+                elif name == "turn":
+                    self.assertRegex(body(task), rf"(?m)^exec \./{re.escape(MEASURER)} \"\$@\"$")
+                else:
+                    sourced(code(body(task)))
+
+
+# What ends a heavy run with the line on what its process tree spent.
+MEASURER = "tools/lib/measured"
 
 # A command that loads the machine whatever its arguments.
 LOADS = re.compile(

@@ -16,6 +16,8 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // phase is how far a run got, which decides how it is put back.
@@ -384,6 +386,9 @@ func (r *run) execute() int {
 	if err := os.Rename(staged, r.pinFile); err != nil {
 		return r.fault(err)
 	}
+	if err := atomicfile.SyncDir(filepath.Dir(r.pinFile)); err != nil {
+		return r.fault(err)
+	}
 	r.override = r.pinFile
 	if r.serviceImage(r.override) != r.req.To {
 		r.step("pin", false, "compose does not resolve the pin")
@@ -602,6 +607,9 @@ func (r *run) rollBack() int {
 		if err = copyFile(before, restored); err == nil {
 			err = os.Rename(restored, r.pinFile)
 		}
+		if err == nil {
+			err = atomicfile.SyncDir(filepath.Dir(r.pinFile))
+		}
 	} else {
 		if err = os.Remove(r.pinFile); errors.Is(err, fs.ErrNotExist) {
 			err = nil
@@ -673,13 +681,9 @@ func (r *run) finish(outcome string, code int) int {
 		steps = []Step{}
 	}
 	write(&body, Result{r.req.Operation, outcome, r.req.Service, r.req.To, steps})
-	part := filepath.Join(r.state, "result.part")
 	err := os.WriteFile(filepath.Join(r.state, "exit"), []byte(strconv.Itoa(code)+"\n"), 0o600)
 	if err == nil {
-		err = os.WriteFile(part, body.Bytes(), 0o600)
-	}
-	if err == nil {
-		err = os.Rename(part, filepath.Join(r.state, "result.json"))
+		err = atomicfile.WriteFile(filepath.Join(r.state, "result.json"), body.Bytes(), 0o600)
 	}
 	if err != nil {
 		fmt.Fprintln(r.u.Err, "hq-host upgrade: the result could not be recorded in", r.state)

@@ -2,7 +2,7 @@
 
 import hashlib
 import json
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from typing import Annotated, Any, Literal, NotRequired, TypedDict, override
 
 from django.core import signing
@@ -49,7 +49,7 @@ from .input_errors import pydantic_refusal
 from .integration_specs import PAGE_FIELD, ResourceSpec
 from .integration_validation import required_capability_names
 from .integrations import integration_graph
-from .json_schemas import json_schema
+from .json_schemas import json_schema, narrowed
 from .projection import MAX_PAGE_SIZE, CursorRefusal, NextPage, PageScope, page_size, paging
 from .record_errors import HostRefusal, RecordNotFound
 from .refusal_status import next_call
@@ -75,6 +75,17 @@ from .resource_records import (
     ServiceRow,
     UpgradeRecord,
     UpgradeRow,
+)
+from .resource_refusals import (
+    FOUND_BY,
+    INFRASTRUCTURE,
+    READINGS,
+    ResourceError,
+    UnsupportedResourceOperation,
+    missed,
+    undetailed,
+    unknown,
+    unlisted,
 )
 from .search_contracts import SearchDefinition, search_lines
 from .security import Capability, Principal, require_all
@@ -150,7 +161,8 @@ type SearchLimit = Annotated[
 
 
 # The fields that page a list rather than narrow it: MCP's list_resource
-# takes them beside its filters, and a listing names its filters without them.
+# takes them beside its filters, and a listing describes them apart from its
+# filters, as its ``paging``.
 PAGING = frozenset({"limit", PAGE_FIELD})
 
 
@@ -296,7 +308,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             web_route="core:audit_list",
         ),
         ResourceSpec(
-            "infrastructure",
+            INFRASTRUCTURE,
             "Records",
             "Everything HQ manages: what HQ expects and what is live.",
             Capability.READ,
@@ -432,7 +444,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             row_type=Problem,
         ),
         ResourceSpec(
-            "readings",
+            READINGS,
             "Readings",
             "Each type of reading, when it was last read, and the records it holds.",
             Capability.READ,
@@ -518,6 +530,7 @@ def connections() -> tuple[ResourceSpec, ...]:
             derived_reads.list_request_path,
             EmptyQuery,
             web_route="connection",
+            pass_principal=True,
             row_type=HopRow,
         ),
     )
@@ -539,26 +552,6 @@ def search() -> tuple[ResourceSpec, ...]:
     )
 
 
-class ResourceError(ValueError):
-    """Base for resource failures: ``reason`` is this module's own text.
-
-    Adapters answer a caller with ``reason``, never ``str(exc)``: a relayed
-    handler message can name internals the caller has no business seeing.
-    """
-
-    def __init__(self, reason: str = "", *args: object) -> None:
-        super().__init__(reason, *args)
-        self.reason = reason
-
-
-class UnknownResource(HostRefusal, ResourceError):
-    code = "unknown_resource"
-
-
-class UnsupportedResourceOperation(HostRefusal, ResourceError):
-    code = "unsupported_operation"
-
-
 class InvalidResourceInput(ResourceError):
     """Input a resource's read refused, said once for every door: each field
     that was wrong and why, the filters its kind's list takes, and the call
@@ -574,32 +567,38 @@ class InvalidResourceInput(ResourceError):
         self.details = details
 
 
-# What a missed identifier adds to its refusal's sentence.
-FOUND_BY = (
-    " details.identifier names the field this resource's records are addressed by, and details.next "
-    "the listing that finds a record's value."
-)
+def _held(spec: ResourceSpec, principal: Principal) -> list[object]:
+    """The identifiers on the first page of ``spec``'s list read as
+    ``principal``, so a miss never names a record the caller could not list."""
+
+    if not (spec.list_handler and spec.list_query_type and spec.identifier):
+        return []
+    query = {"limit": MAX_PAGE_SIZE} if "limit" in spec.list_query_type.model_fields else {}
+    try:
+        page = list_resource(spec.name, query, principal=principal, fields=[spec.identifier])
+    except HostRefusal, ResourceError:
+        # A list that needs a filter only the caller can choose, or whose
+        # rows do not carry the identifier, holds no candidates.
+        return []
+    return [item[spec.identifier] for item in page["items"] if spec.identifier in item]
 
 
-def _found_by(spec: ResourceSpec) -> dict[str, Any]:
-    """What finds a record no identifier matched: the field its resource is
-    addressed by, and the listing that holds each record's value."""
-
-    details: dict[str, Any] = {"identifier": spec.identifier}
-    if spec.list_query_type:
-        details["next"] = next_call("list_resource", name=spec.name)
-    return details
+# Each resource tool, and the refusal of a resource that does not serve its read.
+_TOOL_READS: dict[str, Callable[[ResourceSpec], UnsupportedResourceOperation | None]] = {
+    "describe_resources": lambda _spec: None,
+    "list_resource": lambda spec: None if spec.list_handler and spec.list_query_type else unlisted(spec),
+    "get_resource": lambda spec: None if spec.detail_handler and spec.identifier else undetailed(spec),
+}
 
 
-def _served(spec: ResourceSpec) -> dict[str, Any]:
-    """The read a resource does serve, for a refusal of one it does not: its
-    listing, or one record by the field it is addressed by, or else the catalog."""
+def name_refusal(tool: str, name: object) -> HostRefusal | None:
+    """What ``tool`` raises for a resource ``name`` it cannot read, for a door
+    that checks the name first; None for any other tool or a name not a string."""
 
-    if spec.list_handler and spec.list_query_type:
-        return {"next": next_call("list_resource", name=spec.name)}
-    if spec.detail_handler and spec.identifier:
-        return {"identifier": spec.identifier, "next": next_call("get_resource", name=spec.name)}
-    return {"next": next_call("describe_resources")}
+    if tool not in _TOOL_READS or not isinstance(name, str):
+        return None
+    spec = resource_registry().get(name)
+    return unknown(name, resource_registry()) if spec is None else _TOOL_READS[tool](spec)
 
 
 def resource_registry() -> dict[str, ResourceSpec]:
@@ -635,7 +634,20 @@ class ListOperation(TypedDict):
     query_schema: NotRequired[
         Annotated[
             dict[str, Any],
-            Describe("The JSON Schema of what a listing takes; only in a read of this one resource."),
+            Describe(
+                "The JSON Schema of the `filters` a listing takes, each one's type and choices; only in a read of "
+                "this one resource."
+            ),
+        ]
+    ]
+    paging: NotRequired[
+        Annotated[
+            dict[str, Any],
+            Describe(
+                "The JSON Schema of `limit`, with the most it may ask for, and `cursor`, where the list takes them: "
+                "`list_resource` takes each as an argument of its own beside `filters`, and the machine API as a "
+                "query parameter beside them. Only in a read of this one resource; absent, the list takes neither."
+            ),
         ]
     ]
 
@@ -674,12 +686,13 @@ class ResourceDescription(TypedDict):
 
 # What the catalog of every resource says in place of each list's whole schema.
 WHOLE_SCHEMA = (
-    "Each list's whole query_schema, with its types and choices, is describe_resources with name set to its resource."
+    "Each list's query_schema, its filters' types and choices, and its paging, the most limit may ask for, are "
+    "describe_resources with name set to its resource."
 )
 
 
 # The shape describe_resources answers in; it moves when that shape does.
-RESOURCES_SCHEMA_VERSION = 2
+RESOURCES_SCHEMA_VERSION = 3
 
 
 class ResourceCatalog(TypedDict):
@@ -714,7 +727,11 @@ def _listing(spec: ResourceSpec, *, whole: bool) -> ListOperation | None:
     if spec.list_fields:
         listing["fields"] = list(spec.list_fields)
     if whole:
-        listing["query_schema"] = json_schema(spec.list_query_type)
+        schema = json_schema(spec.list_query_type)
+        properties = schema.get("properties", {})
+        listing["query_schema"] = narrowed(schema, properties.keys() - PAGING)
+        if PAGING & properties.keys():
+            listing["paging"] = narrowed(schema, PAGING)
     return listing
 
 
@@ -740,10 +757,7 @@ def _resource(name: str) -> ResourceSpec:
     try:
         return resource_registry()[name]
     except KeyError as exc:
-        raise UnknownResource(
-            "HQ serves no resource by that name; describe_resources names each one.",
-            details={"next": next_call("describe_resources")},
-        ) from exc
+        raise unknown(name, resource_registry()) from exc
 
 
 def _authorize(spec: ResourceSpec, principal: Principal) -> None:
@@ -774,9 +788,7 @@ def list_resource(
     spec = _resource(name)
     _authorize(spec, principal)
     if not spec.list_handler or not spec.list_query_type:
-        raise UnsupportedResourceOperation(
-            "This resource cannot be listed; details.next is what it does serve.", details=_served(spec)
-        )
+        raise unlisted(spec)
     try:
         parsed = spec.list_query_type.model_validate(query or {}, strict=strict)
     except ValidationError as exc:
@@ -943,9 +955,7 @@ def get_resource(
     spec = _resource(name)
     _authorize(spec, principal)
     if not spec.detail_handler or not spec.identifier:
-        raise UnsupportedResourceOperation(
-            "This resource has no detail view; details.next is what it does serve.", details=_served(spec)
-        )
+        raise undetailed(spec)
     try:
         parsed: Any = TypeAdapter(spec.identifier_type).validate_python(identifier, strict=strict)
     except ValidationError as exc:
@@ -954,12 +964,12 @@ def get_resource(
         result = spec.detail_handler(parsed, **_caller(spec, principal))
     except RecordNotFound as exc:
         # The host's own sentence, with what finds the record beside it.
-        exc.details = _found_by(spec)
-        raise
+        raise missed(exc, spec, parsed, _held(spec, principal)) from None
     except spec.not_found_errors as exc:
         # An extension declares these types; their text is written for the
         # extension, not for a caller, so answer with this module's own.
-        raise RecordNotFound("No record matches the requested identifier." + FOUND_BY, details=_found_by(spec)) from exc
+        refusal = RecordNotFound("No record matches the requested identifier." + FOUND_BY)
+        raise missed(refusal, spec, parsed, _held(spec, principal)) from exc
     if not isinstance(result, dict):
         raise TypeError(f"Resource {name!r} detail handler returned a non-object.")
     if fields is None or asks_whole(fields):

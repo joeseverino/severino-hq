@@ -10,7 +10,7 @@ from typing import Any, NamedTuple
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, read_spec
 from hq.platform.application.routes import reverse
 
 from .entity_links import EntityLink, entity_link
@@ -135,7 +135,7 @@ def _read_declaration(provider, spec) -> tuple | None:
     take every other name on the board down with it.
     """
 
-    try:
+    def read(spec: dict[str, Any]) -> tuple:
         # Filtered once here: whether a name can be answered at is a property
         # of the name, not of the provider that published it.
         hostnames = tuple(
@@ -144,9 +144,9 @@ def _read_declaration(provider, spec) -> tuple | None:
         origin = provider.origin(spec) if provider.origin else ""
         resolves_to = provider.answers(spec) if provider.answers else ()
         certificate = provider.certificate(spec) if provider.certificate else ""
-    except KeyError, TypeError, ValueError:
-        return None
-    return hostnames, origin, resolves_to, certificate
+        return hostnames, origin, resolves_to, certificate
+
+    return read_spec(provider.kind, spec, read)
 
 
 def _split_aliases(declared, origins, aliases) -> dict[str, list[tuple[str, Claim]]]:
@@ -292,10 +292,7 @@ def runtime_claim(origin: Origin | None, containers: dict[tuple[str, str], Any])
 def _slot(provider: Any, resource: ManagedResource) -> str:
     if provider.slot is None:
         return ""
-    try:
-        return provider.slot(resource.spec)
-    except KeyError, TypeError, ValueError:
-        return ""
+    return read_spec(resource.kind, resource.spec, provider.slot) or ""
 
 
 def _fronted(provider: Any, resource: ManagedResource) -> bool:
@@ -303,10 +300,7 @@ def _fronted(provider: Any, resource: ManagedResource) -> bool:
 
     if provider.fronts is None:
         return False
-    try:
-        return bool(provider.fronts(resource.spec))
-    except KeyError, TypeError, ValueError:
-        return False
+    return bool(read_spec(resource.kind, resource.spec, provider.fronts))
 
 
 def _readings(provider: Any, resource: ManagedResource) -> tuple[ResourceFact, ...]:

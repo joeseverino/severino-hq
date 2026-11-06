@@ -1,7 +1,7 @@
 """A held update needs only its target too: it is held as sent, and applied
 once agreed to with every field it was not sent kept."""
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource
 
@@ -12,7 +12,6 @@ from .test_approvals import GATED_KIND, POLICY_KEY, an_operator, declare_policy,
 from .writers import keyed
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class AHeldUpdateKeepsTests(TestCase):
     def setUp(self):
         from hq.platform.application.adoption_testing import managing_everything

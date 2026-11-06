@@ -39,6 +39,20 @@ class ChallengeTests(test_mcp.MCPBoundaryTests):
                 self.assertEqual(challenge["resource_metadata"], METADATA)
                 self.assertEqual(body["error"], "invalid_token")
 
+    def test_the_401_names_no_set_smaller_than_the_metadata_lists(self):
+        """A client asks first for the scope a 401 names, so a narrower one would cap every sign-in."""
+
+        from ..security import token_scopes
+
+        for token in (None, "wrong"):
+            with self.subTest(token=token):
+                headers = {}
+                self._request(token=token, headers_seen=headers)
+
+                named = _challenge(headers)[1].get("scope")
+                if named is not None:
+                    self.assertEqual(set(named.split()), set(token_scopes()))
+
     def test_a_token_granting_nothing_usable_is_told_the_scope_it_needs(self):
         def ungranted(bearer):
             raise AuthorizationError('This token grants no HQ permissions. "Add" them.')
@@ -259,6 +273,16 @@ class MetadataTests(TestCase):
         self.assertLessEqual(
             listed, {item.value if isinstance(item, Capability) else item for item in operator_capabilities()}
         )
+
+    def test_it_lists_every_permission_a_token_is_held_to(self):
+        """A sign-in asks for what is listed, and the identity provider refuses one asking for less
+        than a refusal tells a person to grant, so the list is the agent's whole grantable set."""
+
+        from hq.platform.application.security import agent_grant, operator_capabilities
+
+        listed = set(self._get()[1]["scopes_supported"])
+
+        self.assertEqual(listed, set(agent_grant(str(name) for name in operator_capabilities())))
 
     def test_it_stands_behind_the_gates_of_mcp(self):
         for refused, expected in (

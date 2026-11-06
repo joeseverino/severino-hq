@@ -518,7 +518,7 @@ func TestTailscaleUsersFromTheOfficialModel(t *testing.T) {
 }
 
 const apiDevices = `{"devices": [
-	{"hostname": "an-edge", "name": "an-edge.example.ts.net", "nodeKey": "node-key-1", "connectedToControl": true,
+	{"hostname": "an-edge", "name": "an-edge.example.ts.net", "id": "1001", "nodeId": "nEDGE1CNTRL", "nodeKey": "node-key-1", "connectedToControl": true,
 	 "expires": "2027-01-01T00:00:00Z", "keyExpiryDisabled": false, "addresses": ["192.0.2.2"], "os": "linux",
 	 "authorized": true, "user": "ops@example.com", "tags": ["tag:server", "tag:edge"],
 	 "advertisedRoutes": ["0.0.0.0/0", "::/0"], "enabledRoutes": ["0.0.0.0/0"],
@@ -533,6 +533,9 @@ func TestDeviceInventoryFromTheAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	edge, laptop := records[0].(TailscaleDeviceRecord), records[1].(TailscaleDeviceRecord)
+	if edge.NodeID != "nEDGE1CNTRL" {
+		t.Fatalf("a device is keyed by the API's stable nodeId, never its legacy id: %q", edge.NodeID)
+	}
 	if edge.Name != "an-edge" || !edge.Online || edge.KeyExpires != "2027-01-01T00:00:00Z" || !edge.Authorized ||
 		!reflect.DeepEqual(edge.Tags, []string{"tag:edge", "tag:server"}) || !edge.OffersExitNode || !edge.ExitNodeApproved ||
 		!reflect.DeepEqual(edge.Endpoints, []string{"192.0.2.10:41641"}) || edge.KeyExpiryDisabled == nil || *edge.KeyExpiryDisabled {
@@ -557,6 +560,9 @@ func TestDeviceInventoryFromTheLocalReading(t *testing.T) {
 		t.Fatalf("%v %#v", err, records)
 	}
 	self, edge, server := records[0].(TailscaleDeviceRecord), records[1].(TailscaleDeviceRecord), records[2].(TailscaleDeviceRecord)
+	if self.NodeID != "nSELF" || edge.NodeID != "nEDGE" || server.NodeID != "nSERV" {
+		t.Fatalf("each device carries the daemon's stable id: %q %q %q", self.NodeID, edge.NodeID, server.NodeID)
+	}
 	if !self.Self || edge.Self || edge.User != "ops@example.com" || !edge.ExitNodeApproved || server.KeyExpiryDisabled != nil || !server.Authorized {
 		t.Fatalf("%#v\n%#v\n%#v", self, edge, server)
 	}

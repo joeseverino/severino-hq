@@ -7,6 +7,7 @@ from django.db.models import Manager
 
 from hq.domains.jobs.testing import held_jobs
 from hq.platform.application.demo import demo_scope
+from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.plugin_testing import (
     ComposedPluginTestCase,
     form_keyed,
@@ -18,7 +19,6 @@ from hq.platform.application.plugin_testing import (
 from hq.platform.core.interface_text import unclosed_template_comments
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import OutboundInRequest
-from hq_sdk.validation import unsupported_hq_imports
 
 
 def audit_writer() -> Manager[AuditLog]:
@@ -73,6 +73,7 @@ __all__ = [
     "audit_writer",
     "demo_scope",
     "form_keyed",
+    "frozen",
     "held_jobs",
     "holding",
     "plain",
@@ -81,5 +82,4 @@ __all__ = [
     "sibling",
     "unclosed_template_comments",
     "undefined_style_classes",
-    "unsupported_hq_imports",
 ]

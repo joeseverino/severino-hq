@@ -13,7 +13,7 @@ from hq.platform.core import interface_text
 UNAGREEABLE = "x = counted(n, 'zone band')\n"
 
 
-def read(files, plugin_apps=(), worded=("host",)):
+def read(files, plugin_apps=(), worded=("host",), **given):
     """Findings over a scratch tree, each path relative to it."""
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp).resolve()
@@ -31,7 +31,7 @@ def read(files, plugin_apps=(), worded=("host",)):
             ),
             patch.object(sys, "path", [str(root), *sys.path]),
         ):
-            reading = interface_text.read([root / name for name in worded])
+            reading = interface_text.read([root / name for name in worded], **given)
 
     def relative(found):
         return [(path.relative_to(root).as_posix(), *rest) for path, *rest in found]
@@ -94,6 +94,17 @@ class ReadingTests(SimpleTestCase):
             found = read(files)
         self.assertEqual(found["files"], 5)
         self.assertEqual(parse.call_count, 5)
+
+    def test_the_walk_run_apart_finds_what_it_finds_here(self):
+        from hq.platform.application.tests.apart import apart
+
+        files = {
+            "host/page.html": '<form>\n<form>\n{{ n|pluralize }}\n{# open\n{{ n|counted:"zone band" }}\n',
+            "host/views.py": f"{UNAGREEABLE}a = 's' if n != 1 else ''\n",
+        }
+        here = read(files)
+        self.assertEqual(read(files, run=apart), here)
+        self.assertEqual(here["files"], 2)
 
     def test_a_root_inside_another_is_read_once(self):
         found = read({"host/inner/views.py": UNAGREEABLE}, worded=("host", "host/inner"))

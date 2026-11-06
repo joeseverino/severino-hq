@@ -21,7 +21,7 @@ from django.test import tag
 from django.test.runner import DiscoverRunner
 from django.test.utils import iter_test_cases
 
-from hq.config.sandbox import PREFIX, sweep_abandoned
+from hq.config.sandbox import RUN
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.test_runner import excluded_tags
 from hq.platform.core.tests.task import RefError, Usage, names, trusted_mise
@@ -63,13 +63,21 @@ def run_main(
     changed: tuple[str, ...] = (), selected: tuple[str, ...] = (), step: Any = None, **fakes: Any
 ) -> tuple[int, list[str]]:
     """fast's run on a change to ``changed``, its quick gates ``selected``, each step through ``step``
-    when given: its exit code and printed lines."""
+    when given: its exit code and printed lines. The gate judged no one tree unless ``judged`` is faked,
+    so no run records a pass in this repository."""
 
-    fakes = {"merge_base": "0" * 40, "changed_paths": (list(changed), []), "selected_tasks": selected, **fakes}
+    fakes = {
+        "merge_base": "0" * 40,
+        "changed_paths": (list(changed), []),
+        "selected_tasks": selected,
+        **fakes,
+    }
+    judged = fakes.pop("judged", None)
     out = io.TextIOWrapper(io.BytesIO(), write_through=True)
     with ExitStack() as stack:
         for name, value in fakes.items():
             stack.enter_context(patch.object(fast_gate, name, return_value=value))
+        stack.enter_context(patch.object(fast_gate.Gate, "judged", return_value=judged))
         if step is not None:
             stack.enter_context(patch.object(fast_gate, "step", side_effect=step))
         stack.enter_context(patch("sys.stdout", new=out))
@@ -248,10 +256,48 @@ class FastGateTaskSelectionTests(GateTestCase):
         both = ["hq/platform/core/tests/test_example.py", "hq/platform/core/example.py"]
         self.assertIn("lint:structural", fast_gate.selected_tasks(both))
 
+    def test_a_change_to_tests_alone_runs_the_complexity_bound_and_a_migration_alone_does_not(self):
+        self.assertIn("lint:complexity", fast_gate.selected_tasks(["hq/platform/core/tests/test_example.py"]))
+        self.assertIn("lint:complexity", fast_gate.selected_tasks(["tests/example/consumer.py"]))
+        self.assertNotIn("lint:complexity", fast_gate.selected_tasks(["hq/domains/example/migrations/0001_initial.py"]))
+
     def test_a_change_to_what_every_gate_reads_runs_them_all(self):
         for changed in ("uv.lock", "mise-tasks/lint.toml"):
             with self.subTest(changed=changed):
                 self.assertEqual(set(fast_gate.selected_tasks([changed])), {*fast_gate.TASKS, "lint:shell"})
+
+
+@tag("source")
+class FastGateLintPlacementTests(GateTestCase):
+    """Every lint gate is either selected by the paths it reads or named as one fast leaves out, with why,
+    so a new gate is never skipped unseen."""
+
+    def test_every_lint_task_is_a_quick_gate_the_shell_gate_or_named_unselected(self):
+        lint = sorted(name for name in mise_tasks() if name.startswith("lint:"))
+        self.assertTrue(lint, "mise lists no lint:* task, so this holds nothing")
+        placed = {*fast_gate.TASKS, fast_gate.SHELL, *fast_gate.UNSELECTED}
+        unplaced = [task for task in lint if task not in placed]
+        self.assertFalse(
+            unplaced,
+            f"{', '.join(unplaced)}: add each to TASKS in tools/gate/fast.py with the paths it reads,"
+            " or to UNSELECTED with why fast leaves it out",
+        )
+
+    def test_each_unselected_gate_is_a_lint_task_fast_never_selects_with_its_reason(self):
+        tasks = mise_tasks()
+        for task, reason in fast_gate.UNSELECTED.items():
+            with self.subTest(task=task):
+                self.assertIn(task, tasks, f"{task} is no task; drop it from UNSELECTED")
+                self.assertTrue(task.startswith("lint:"))
+                self.assertNotIn(task, {*fast_gate.TASKS, fast_gate.SHELL}, f"{task} is selected and unselected")
+                self.assertTrue(reason.strip(), f"{task} is left out with no reason")
+
+    def test_a_change_to_mise_toml_or_a_workflow_runs_the_gates_that_read_them(self):
+        self.assertLessEqual({"lint:mise-format", "lint:workflows"}, set(fast_gate.selected_tasks(["mise.toml"])))
+        self.assertIn("lint:mise-format", fast_gate.selected_tasks(["mise-tasks/lint/mise-format"]))
+        self.assertIn("lint:workflows", fast_gate.selected_tasks([".github/workflows/ci.yml"]))
+        self.assertIn("lint:workflows", fast_gate.selected_tasks([".github/actions/toolchain/action.yml"]))
+        self.assertNotIn("lint:workflows", fast_gate.selected_tasks(["docs/Example.md"]))
 
 
 @tag("source")
@@ -272,7 +318,10 @@ class FastGateTreeTests(GateTestCase):
     def test_a_module_change_adds_every_tree_test_to_the_one_run(self):
         tree = tagged(ROOT, "tree")
         self.assertIn("hq.platform.application.tests.test_tree_tag.TreeTagTests", tree)
-        labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["hq/domains/example/models.py"])
+        # The walk above is this checkout's; with_tree asks for it once and adds what it answers.
+        with patch.object(fast_gate, "tagged", return_value=tree) as walked:
+            labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["hq/domains/example/models.py"])
+        walked.assert_called_once_with(fast_gate.ROOT, "tree")
         self.assertEqual(set(labels), {"hq.a.tests.test_b", *tree})
         self.assertEqual(fast_gate.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"]), ["hq.a.tests.test_b"])
         command = fast_gate.test_command(labels, "2")
@@ -441,10 +490,46 @@ class FastGateNestedLayoutTests(GateTestCase):
         self.assertIn("tests.test_reads", listed)
         self.assertNotIn("tests.test_unrelated", listed)
 
-    def test_fuzz_modules_are_test_labels_but_fixture_modules_are_dependencies(self):
-        self.assertTrue(fast_gate.is_test(Path("tests/fuzz/api_properties.py")))
-        self.assertFalse(fast_gate.is_test(Path("tests/fixtures/example_hq_plugin/views.py")))
-        self.assertFalse(fast_gate.is_test(Path("tests/fuzz/__init__.py")))
+    def test_only_a_test_named_module_of_a_package_is_a_label(self):
+        """A module run in a dependency group's environment, or run as a harness, is no label of the default run."""
+        self.assertTrue(fast_gate.is_test(Path("tools/gate/tests/test_fast.py")))
+        for path in (
+            "tests/fuzz/api_properties.py",
+            "tests/fuzz/parsers.py",
+            "tests/fuzz/__init__.py",
+            "tests/fixtures/example_hq_plugin/views.py",
+        ):
+            with self.subTest(path=path):
+                self.assertFalse(fast_gate.is_test(Path(path)))
+
+
+# A test module only a test task's dependency group can import, and that task.
+GROUP_MODULE, GROUP_TASK = "tests/fuzz/api_properties.py", "test:api-properties"
+
+
+@tag("source", "tree")
+class FastGateGroupTaskTests(GateTestCase):
+    """A test module a test task runs in a dependency group's environment is selected as that task, never as a
+    label of the default run, which cannot import it."""
+
+    def run_on(self, changed: str) -> tuple[list[str], list[str]]:
+        """The labels fast's test run is given on a change to ``changed``, and the quick gates it runs."""
+
+        recorder = Recorder()
+        run_main((changed,), (), recorder, touches_shared_ui=False)
+        commands = dict(recorder.calls)
+        gates = [word for label, cmd in recorder.calls if label != "tests" for word in cmd]
+        return commands["tests"], gates
+
+    def test_a_change_that_reaches_the_module_runs_its_task_and_no_label_for_it(self):
+        labels, gates = self.run_on(GROUP_MODULE)
+        self.assertNotIn(fast_gate.module_name(Path(GROUP_MODULE)), labels)
+        self.assertIn(GROUP_TASK, gates)
+
+    def test_a_change_that_does_not_reach_the_module_runs_neither(self):
+        labels, gates = self.run_on("hq/domains/projects/models.py")
+        self.assertNotIn(fast_gate.module_name(Path(GROUP_MODULE)), labels)
+        self.assertNotIn(GROUP_TASK, gates)
 
 
 # What a failing `mise run -c` prints at its end, as it prints it.
@@ -513,7 +598,7 @@ class GateVerdictTests(GateTestCase):
         *_, named, last = out.getvalue().splitlines()
         path = Path(named.rsplit(" ", 1)[-1])
         self.assertEqual(path.parent, gate_verdict.VERDICTS)
-        line, *every = path.read_text().splitlines()
+        _, line, *every = path.read_text().splitlines()
         self.assertEqual(line, last)
         self.assertIn("and 2 more", last)
         self.assertEqual(every, ["lint:ruff", *tests])
@@ -568,7 +653,8 @@ class GateVerdictTests(GateTestCase):
 
     def test_each_time_is_read_in_its_unit_and_kept_slowest_first(self):
         step = gate_verdict.Step("checks")
-        for line in ("[a] Finished in 9.3ms", "[b] Finished in 61.01s", "[c] Finished in 12µs", "[d] Finished in 1.5s"):
+        # Summary output says a task passed where the default output says it finished.
+        for line in ("[a] Finished in 9.3ms", "[b] Finished in 61.01s", "[c] Finished in 12µs", "[d] passed in 1.5s"):
             step.read(f"[checks] {line}")
         self.assertEqual(
             {task: round(seconds, 6) for task, seconds in step.took.items()},
@@ -629,7 +715,74 @@ class FastGateTurnTests(GateTestCase):
         for label, cmd in recorder.calls:
             with self.subTest(step=label):
                 self.assertEqual(" ".join(IN_TURN) in " ".join(cmd), label == "tests")
+        # Summary output holds each task's lines until it ends, a wait for the turn among them,
+        # so only the light gates' run, the first, has it.
+        summarized = [label for label, cmd in recorder.calls if "--output summary" in " ".join(cmd)]
+        self.assertEqual(summarized, labels[:1])
         self.assertFalse(takes_the_turn(mise_tasks()["fast"]))
+
+
+TREE = "1" * 40
+BASE_TREE = "2" * 40
+
+
+@tag("source", "tree")
+class FastGatePassRecordTests(GateTestCase):
+    """A passing run on a tree that held still records the tree when the run proves it: the whole suite ran, or the
+    base's tree passed and the run selected what changed from it."""
+
+    def setUp(self):
+        self.folder = Path(self.enterContext(tempfile.TemporaryDirectory())) / "severino" / "fast-passes"
+
+    def run_fast(self, *, still=True, ok=True, whole=False, labels=("hq.example.tests.test_x",)) -> list[str]:
+        total = len(labels) if whole else len(labels) + 5
+        selected = (*fast_gate.TASKS, fast_gate.SHELL) if whole else ()
+        groups = tuple(fast_gate.group_tests().values()) if whole else ()
+        result = gate_verdict.Step("tests", ok=ok)
+        with patch.object(fast_gate, "passes", return_value=self.folder):
+            run_main(
+                selected=selected,
+                group_tasks=groups,
+                step=lambda label, cmd: result if label == "tests" else gate_verdict.Step(label),
+                affected=(set(), set()),
+                test_labels=(list(labels), total),
+                judged=TREE if still else None,
+                tree_of=BASE_TREE,
+                touches_shared_ui=False,
+            )
+        return sorted(path.name for path in self.folder.iterdir()) if self.folder.is_dir() else []
+
+    def test_a_passing_run_of_the_whole_suite_on_a_tree_that_held_still_records_it(self):
+        self.assertEqual(self.run_fast(whole=True), [TREE])
+
+    def test_a_passing_run_over_a_passed_base_records_the_tree(self):
+        self.folder.mkdir(parents=True)
+        (self.folder / BASE_TREE).touch()
+        self.assertEqual(self.run_fast(), sorted([BASE_TREE, TREE]))
+
+    def test_a_tree_changed_in_the_run_or_a_failed_run_records_nothing(self):
+        for case in ({"still": False}, {"ok": False}):
+            with self.subTest(**case):
+                self.assertEqual(self.run_fast(whole=True, **case), [])
+
+    def test_a_selection_from_an_unpassed_base_records_nothing(self):
+        """A clean branch equal to its base selects nothing it changed, so its pass says nothing about the tree."""
+        for labels in ((), ("hq.example.tests.test_x",)):
+            with self.subTest(labels=labels):
+                self.assertEqual(self.run_fast(labels=labels), [])
+
+    def test_the_record_is_shared_by_every_worktree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo, other = Path(directory) / "repo", Path(directory) / "other"
+            repo.mkdir()
+            git = fixture_git(repo)
+            git("init", "-q")
+            (repo / "a.txt").write_text("a\n")
+            git("add", "a.txt")
+            git("commit", "--quiet", "--no-verify", "-m", "a")
+            git("worktree", "add", "-q", str(other))
+            self.assertEqual(fast_gate.passes(other), fast_gate.passes(repo))
+            self.assertEqual(fast_gate.passes(repo), (repo / ".git").resolve().joinpath("severino", "fast-passes"))
 
 
 @tag("source", "tree")
@@ -786,8 +939,9 @@ class ShellSourcesTests(GateTestCase):
 
 
 WRITE = """
-import os, sqlite3
-path = os.environ["SEVERINO_DATABASE_PATH"]
+import sqlite3
+from django.conf import settings
+path = settings.DATABASES["default"]["NAME"]
 connection = sqlite3.connect(path, timeout=0)
 connection.execute("PRAGMA journal_mode=WAL")
 connection.execute("CREATE TABLE gate (x)")
@@ -798,7 +952,7 @@ print("database=" + path)
 
 @tag("source")
 class GateDatabaseTests(GateTestCase):
-    def test_gates_run_side_by_side_each_write_a_database_the_next_test_run_sweeps(self):
+    def test_gates_run_side_by_side_each_write_a_database_of_its_own_and_leave_nothing(self):
         # Two processes making one new SQLite file WAL at once: one is refused.
         (ROOT / "var").mkdir(exist_ok=True)
         with (
@@ -810,10 +964,18 @@ class GateDatabaseTests(GateTestCase):
             (Path(config) / "mise.toml").write_text(
                 "".join(f'[tasks."gate:{n}"]\nextends = "django"\nrun = {run}\n' for n in range(4))
             )
+            # Started outside this run, as a gate is, so each makes a run of its own.
+            outside = {name: value for name, value in os.environ.items() if name != RUN}
             result = subprocess.run(
                 [shutil.which("mise") or "mise", "run", "-c", "--jobs", "4", "gate:*"],
                 cwd=config,
-                env={**os.environ, **trusted_mise(config, Path(config, "state")), "TMPDIR": scratch},
+                env={
+                    **outside,
+                    **trusted_mise(config, Path(config, "state")),
+                    "TMPDIR": scratch,
+                    "PYTHONPATH": str(ROOT),
+                    "DJANGO_SETTINGS_MODULE": "hq.config.settings",
+                },
                 capture_output=True,
                 text=True,
                 check=False,
@@ -822,5 +984,4 @@ class GateDatabaseTests(GateTestCase):
             paths = re.findall(r"database=(\S+)", result.stdout)
             self.assertEqual(len(set(paths)), 4)
             self.assertTrue(all(Path(path).is_relative_to(scratch) for path in paths))
-            sweep_abandoned(Path(scratch), os.getpid())
-            self.assertFalse([path for path in Path(scratch).iterdir() if path.name.startswith(PREFIX)])
+            self.assertEqual(list(Path(scratch).iterdir()), [])

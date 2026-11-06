@@ -63,7 +63,7 @@ lazy from hq.platform.application.page_relations import for_container
 from .models import ManagedResource, OperationRequest
 from .provider_adapters.portainer import CONTAINER_KIND
 from .provider_adapters.tls import CERTIFICATE_KIND
-from .providers import PROVIDERS, describe_providers, readout_rows, shown_spec
+from .providers import PROVIDERS, describe_providers, read_spec, readout_rows, shown_spec
 lazy from .container_views import container_detail
 
 
@@ -159,12 +159,9 @@ def _removal_note(resource) -> str:
     note = PROVIDERS[resource.kind].removal_note
     if note is None:
         return ""
-    try:
-        return note(resource.spec)
-    except KeyError, TypeError, ValueError:
-        # A confirmation page that cannot render is worse than one missing a
-        # sentence, and this is the page an operator uses to stop.
-        return ""
+    # A confirmation page that cannot render is worse than one missing a
+    # sentence, and this is the page an operator uses to stop.
+    return read_spec(resource.kind, resource.spec, note) or ""
 
 
 class ResourceRemoveView(View):

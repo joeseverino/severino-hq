@@ -176,7 +176,6 @@ class PolicyTests(TestCase):
 
     def rule(self, rule):
         CapabilityRule.objects.update_or_create(
-            scope=CapabilityRule.Scope.AGENT,
             subject="example-agent",
             capability="project.create",
             defaults={"rule": rule},

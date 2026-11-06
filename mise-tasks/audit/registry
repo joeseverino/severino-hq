@@ -1,7 +1,7 @@
 #!/bin/sh
 #MISE description="Every capability and resource HQ declares, one tab-separated line each, as describe_capabilities and describe_resources tell an agent: a capability's name, effect, target, resource and label; a resource's name, label, list fields and identifier"
 #MISE hide=true
-#MISE extends="django"
+#MISE extends="audit"
 #USAGE flag "--composed" help="With the extensions mise.local.toml names, as dev:scratch loads them"
 set -eu
 

@@ -1,0 +1,15 @@
+id: byte-counts-said-by-human-bytes
+valid:
+  - 'said = human_bytes(size)'
+  - '# Not filesizeformat(size), which says it its own way.'
+  - 'FILTER = "filesizeformat"'
+invalid:
+  - 'from django.template.defaultfilters import filesizeformat'
+  - |
+    from django.template.defaultfilters import (
+        filesizeformat,
+        floatformat,
+    )
+  - 'lazy from django.template.defaultfilters import filesizeformat as sized'
+  - 'said = filesizeformat(size)'
+  - 'said = defaultfilters.filesizeformat(size)'

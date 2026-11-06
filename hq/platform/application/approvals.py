@@ -9,6 +9,7 @@ and may not do is docs/Security.md#what-hq-enforces.
 
 import hashlib
 import json
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import timedelta
@@ -22,7 +23,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 from hq.platform.core.audit import audit_operation
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import PROVIDERS, record_spec
 lazy from hq.platform.core.models import AuditLog
 
 from . import derivations
@@ -30,7 +31,7 @@ from .command_fields import Describe
 from .derivations import holds_until
 from .held_answer import ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .payload_words import ChangeRow, changed_words, document, field_words, value_words
-from .record_errors import PolicyError, RecordNotFound, Sentence
+from .record_errors import PolicyError, RecordNotFound
 from .refusal_status import refuse
 from .security import (
     INTERNAL_INTERFACE,
@@ -50,7 +51,8 @@ lazy from .integration_specs import TARGET, capability_fields
 lazy from .labels import human_label, lower_first
 lazy from .resource_capabilities import LIFECYCLE_VERBS
 lazy from .resource_operations import ACTION_CAPABILITY
-lazy from .resources import InvalidResourceInput, UnsupportedResourceOperation
+lazy from .resource_refusals import UnsupportedResourceOperation
+lazy from .resources import InvalidResourceInput
 lazy from .ui import counted
 
 # How many outstanding requests one actor may hold. A caller that has already
@@ -219,51 +221,6 @@ def _record_subject(spec, target: Any) -> ApprovalSubject | None:
     return ApprovalSubject(kind, str(target), baseline)
 
 
-def may_be_held_by_default(spec) -> bool:
-    """The capability-level half of held_by_default, for describing a default without a target."""
-
-    return spec.effect != READ_EFFECT and spec.subject_resource == DECLARATIONS
-
-
-def held_by_default(spec, command: Any, target: Any) -> bool:
-    """The default before any operator rule: a change to a gated declaration waits."""
-
-    if not may_be_held_by_default(spec):
-        return False
-    if target is not None:
-        kind = ManagedResource.objects.filter(key=str(target)).values_list("kind", flat=True).first()
-        return kind is not None and _gated(kind)
-    return _gated(str(getattr(command, "kind", "")))
-
-
-def _gated(kind: str) -> bool:
-    # The unit is the resource kind, never the capability effect: an effect says
-    # how forceful an act is, not how much stands behind what it acts on, and
-    # gating it would put every container restart in front of a person.
-    provider = PROVIDERS.get(kind)
-    return bool(provider is not None and provider.requires_approval)
-
-
-def consent_gap(kind: str, *, principal: Principal) -> Sentence:
-    """Why this act has no consent behind it, or "" when it has.
-
-    The hold's rule, asked again from inside the use cases that write, since
-    the hold sees only capabilities that declare they act on an infrastructure
-    resource and one that writes a declaration without saying so would pass it.
-    A string, so the caller raises its own domain error and this module imports
-    none of the use cases that call it.
-    """
-
-    if not _gated(kind):
-        return ""
-    if is_interactive(principal) or principal.approved_by:
-        return ""
-    return (
-        "This change needs a person to approve it. Ask for it through the API or "
-        "MCP, which records the request, then approve it in the browser, signed in."
-    )
-
-
 def hold_for_approval(
     spec, payload: dict[str, Any], command: Any, target: Any, *, principal: Principal
 ) -> HeldCall | None:
@@ -316,6 +273,8 @@ def hold_for_approval(
         content_fingerprint=digest,
         requested_actor=principal.actor,
         requested_interface=principal.interface,
+        requested_device=principal.device,
+        requested_person_key=principal.person_key,
         reason=reason,
         expires_at=timezone.now() + _window(),
     )
@@ -638,6 +597,8 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         held.requested_interface,
         principal.capabilities,
         approved_by=principal.actor,
+        person_key=held.requested_person_key,
+        device=held.requested_device,
     )
     with transaction.atomic():
         # Re-read under a lock. Two people can have this page open, and an
@@ -784,7 +745,6 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     if spec is not None and spec.subject_resource != DECLARATIONS:
         return _record_preview(spec, held)
     declared = dict(held.baseline.get("spec") or {})
-    provider = PROVIDERS.get(held.resource_kind)
     requested = held.payload.get("spec")
     if isinstance(requested, dict):
         return compare(declared, requested, label="Would change", amends=True)
@@ -795,11 +755,8 @@ def preview(held: ApprovalRequest) -> ChangePreview:
         # approved is the act its sentence names.
         return ChangePreview(label="", rows=(), lines=())
     observed = held.baseline.get("observed") or {}
-    if provider is not None and provider.from_record is not None and observed:
-        try:
-            live = provider.from_record(observed)
-        except AttributeError, KeyError, TypeError, ValueError:
-            live = {}
+    if isinstance(observed, Mapping) and observed:
+        live = record_spec(held.resource_kind, observed)
         if live:
             return compare(live, declared, label="The live record would change")
     return compare({}, declared, label="Would be applied")

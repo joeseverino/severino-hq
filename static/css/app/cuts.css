@@ -84,7 +84,7 @@
   & > .whole { vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }
 /* A line clamped to a preview (`.table-clamp`) is cut by its clamp, and WebKit draws a grid on a line past the clamp, so there a part is an inline box held to its column's share. */
-.data-table td :is(.attention-detail, .table-clamp) .token:not([data-sole]) > .whole:not(code *, [data-entity] *, .cut *) {
+.data-table td .table-clamp .token:not([data-sole]) > .whole:not(code *, [data-entity] *, .cut *) {
   display: inline-block; max-width: var(--hold); vertical-align: top; overflow: hidden; text-overflow: ellipsis;
 }
 /* The muted line under a row's name: one line. */
@@ -108,13 +108,8 @@
   padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint); overflow: hidden; text-overflow: ellipsis;
 }
 
-/* The queue and its glance: a detail's one line. */
+/* A row dismissed in place on the dashboard: its title, on one line. */
 .attention-row[data-dismissed]::before { content: attr(data-dismissed); flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* What a row's own buttons decide (data-whole, an approval's change) is never cut: it wraps in the row. */
-.queue-table .attention-detail:not([data-whole]) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; overflow: hidden; }
-/* At a glance a card's meaning is one line; the rest is on the page its title
-   opens. What the card's own buttons decide (data-whole) wraps instead. */
-.attention-glance .attention-detail:not([data-whole]) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* The calendar: a day's events on one line each, inside the day. */
 /* A span is one bar across its days: rounded only where it starts and ends,

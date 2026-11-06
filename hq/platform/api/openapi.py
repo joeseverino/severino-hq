@@ -374,10 +374,10 @@ class _Builder:
         self.recordings: dict[str, Any] = {}
         # Each request body's first name, by what it says.
         self.requests: dict[str, str] = {}
-        # What a token could ever run: /api/v2 is called with tokens.
-        self.capabilities = describe_capabilities(principal=Principal("openapi", API_INTERFACE, frozenset()))[
-            "capabilities"
-        ]
+        # What a token could ever run: /api/v2 is called with tokens, the
+        # widest of them one a person signed in (``security.NEEDS_A_PERSON``).
+        widest = Principal("openapi", API_INTERFACE, frozenset(), person_key="openapi")
+        self.capabilities = describe_capabilities(principal=widest)["capabilities"]
         self.resources = [describe_resources(name=name)["resources"][0] for name in resource_registry()]
         self.resource_specs = resource_registry()
         self.tags = _Tags(self.resource_specs, capability_registry())
@@ -490,6 +490,22 @@ class _Builder:
                 "WWW-Authenticate",
                 {"description": "How to authenticate.", "schema": {"type": "string", "const": views.REALM}},
             )
+        if "insufficient_scope" in codes:
+            # One component every 403 that can answer the code shares.
+            response["headers"] = {
+                "WWW-Authenticate": self.component(
+                    "headers",
+                    self.headers,
+                    _pascal("insufficient_scope") + _pascal("WWW-Authenticate"),
+                    {
+                        "description": (
+                            'On `insufficient_scope`: `Bearer` with `error="insufficient_scope"` and `scope`, the '
+                            "permission `error.details.scope` names (RFC 6750 section 3.1)."
+                        ),
+                        "schema": {"type": "string"},
+                    },
+                )
+            }
         if later:
             response["headers"] = self.header(
                 name,
@@ -707,8 +723,8 @@ class _Builder:
             if listing is None:
                 continue
             name = spec["name"]
-            query = listing["query_schema"]
-            required = query.get("required", [])
+            # The machine API reads a list's paging from the query string, beside its filters.
+            parts = [listing["query_schema"], *([listing["paging"]] if "paging" in listing else [])]
             self.operation(
                 template.replace("{name}", name),
                 method,
@@ -721,7 +737,9 @@ class _Builder:
                 description=spec["summary"],
                 # Emit usable client filters and retain the whole strict query contract.
                 parameters=[
-                    self.filter(query, field, required=field in required) for field in query.get("properties", {})
+                    self.filter(part, field, required=field in part.get("required", []))
+                    for part in parts
+                    for field in part.get("properties", {})
                 ]
                 + [_FIELDS],
                 answer=self.page_of(self.resource_specs[name].row_type),

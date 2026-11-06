@@ -14,7 +14,7 @@ from typing import Any
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.adguard import QUERY_KIND
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, record_spec
 lazy from hq.domains.control_plane.observations.contract import container_key
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
@@ -436,11 +436,8 @@ def _holder_edges(nodes, edges, resources) -> None:
 
 
 def _mirrored_identity(kind: str, record) -> tuple[str, ...]:
-    try:
-        spec = PROVIDERS[kind].from_record(dict(record))
-    except KeyError, TypeError, ValueError:
-        return ()
-    return record_identity(kind, spec)
+    spec = record_spec(kind, record)
+    return () if spec is None else record_identity(kind, spec)
 
 
 def _holders(provider, record, by_ref, by_provider) -> list[str]:

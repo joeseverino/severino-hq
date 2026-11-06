@@ -1,6 +1,7 @@
 package host
 
 import (
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"net"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ func TestTheContainerRunsUnprivilegedAndIsTheUnitsToRestart(t *testing.T) {
 	joined := strings.Join(args, " ")
 
 	for _, want := range []string{
-		"run --rm --name " + Container,
+		"run --rm --name " + hostcore.Container,
 		"--network host",
 		"--cap-drop ALL",
 		"--security-opt no-new-privileges:true",
@@ -57,7 +58,7 @@ func TestEveryVolumeIsMountedAndNoBindIsCreated(t *testing.T) {
 			t.Errorf("volume %s is not mounted at %s: %v", volume.Name, volume.Target, mounts)
 		}
 	}
-	env := "type=bind,source=" + filepath.Join(WebSecretDir, AppEnvName) + ",target=/run/secrets/" + AppEnvName + ",readonly"
+	env := "type=bind,source=" + filepath.Join(WebSecretDir, hostcore.AppEnvName) + ",target=/run/secrets/" + hostcore.AppEnvName + ",readonly"
 	if !slices.Contains(mounts, env) {
 		t.Errorf("the environment is not bound read-only: %v", mounts)
 	}
@@ -101,7 +102,7 @@ func TestTheRenderedEnvironmentIsTheRenderersFile(t *testing.T) {
 	}
 
 	// What docker leaves at a missing bind source: a directory at the name.
-	file := filepath.Join(dir, AppEnvName)
+	file := filepath.Join(dir, hostcore.AppEnvName)
 	if err := os.Mkdir(file, 0o755); err != nil {
 		t.Fatal(err)
 	}

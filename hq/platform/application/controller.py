@@ -6,7 +6,7 @@ from datetime import timedelta
 from typing import Any
 
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Case, F, JSONField, Q, Value, When
 from django.utils import timezone
 lazy from django.conf import settings
 
@@ -25,6 +25,7 @@ from . import agent_access
 from .adoption import manages_through, observes_only
 from .conditions import stamped
 from .infrastructure import controller_contract, resolved_spec, serialize_resource
+from .inventory import strike_removed
 from .plugin_admission import admitted_sources
 from .resource_operations import enqueue, serialize_operation
 lazy from .cadence import request_reading, swept
@@ -76,6 +77,47 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     now = timezone.now()
     ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND, spec__connection_ref__in=reached).update(
         last_observed_at=now, updated_at=now
+    )
+
+
+def _release_lapsed(now) -> None:
+    """Put back the work whose lease ran out, or end it if its record is off.
+
+    Switching a record off cancels its queued work (``save_managed_resource``)
+    and leaves claimed work to finish. Claimed work whose lease lapses would
+    otherwise queue again for a record HQ was told to leave alone, so it ends
+    cancelled instead, all but a removal, in the one statement that releases it.
+    """
+
+    switched_off = Q(
+        resource__in=ManagedResource.objects.filter(enabled=False).values("pk"),
+    ) & ~Q(action=OperationRequest.Action.DELETE)
+    OperationRequest.objects.filter(
+        state=OperationRequest.State.CLAIMED,
+        lease_expires_at__lte=now,
+    ).update(
+        state=Case(
+            When(switched_off, then=Value(OperationRequest.State.CANCELLED)),
+            default=Value(OperationRequest.State.QUEUED),
+        ),
+        completed_at=Case(When(switched_off, then=Value(now)), default=None),
+        result=Case(
+            When(
+                switched_off,
+                then=Value(
+                    {
+                        "ok": False,
+                        "message": "The record was switched off in HQ, and its lease ran out before it reported.",
+                        "reason": "SwitchedOff",
+                    },
+                    output_field=JSONField(),
+                ),
+            ),
+            default=F("result"),
+        ),
+        claimed_by="",
+        claimed_at=None,
+        lease_expires_at=None,
     )
 
 
@@ -148,7 +190,7 @@ def _automatic_reconcile(resource: ManagedResource) -> tuple[bool, str, str]:
     if resource.kind == CERTIFICATE_KIND and not_after and _certificate_expiry(resource) is None:
         return True, "Automatic: the certificate's expiry could not be read.", "invalid-expiry"
     if resource.generation != resource.observed_generation:
-        return True, "Automatic: HQ's settings for it changed.", "generation"
+        return True, "Automatic: HQ's config for it changed.", "generation"
     drifted = any(
         item.get("status") is True and item.get("type") in {"Drifted", "Degraded"} for item in resource.conditions
     )
@@ -283,15 +325,7 @@ def claim_next_operation(
     if not controller_id:
         raise ValueError("A claim names the controller making it.")
     now = timezone.now()
-    OperationRequest.objects.filter(
-        state=OperationRequest.State.CLAIMED,
-        lease_expires_at__lte=now,
-    ).update(
-        state=OperationRequest.State.QUEUED,
-        claimed_by="",
-        claimed_at=None,
-        lease_expires_at=None,
-    )
+    _release_lapsed(now)
     operations = (
         OperationRequest.objects.select_for_update(skip_locked=True)
         .select_related("resource")
@@ -440,6 +474,9 @@ def report_operation(
             "removed": True,
         }
         OperationRequest.objects.filter(resource=resource).delete()
+        # The stored list still holds the record: struck here, where HQ learns
+        # it is gone, so no reader of a stored list takes it back on.
+        strike_removed(resource.kind, resource.spec)
         resource.delete()
         return answer
 

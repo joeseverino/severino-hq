@@ -1,9 +1,8 @@
 """A token a person signed in never does more than that person's role, through either door.
 
-A delegated agent holds its grant within the agent ceiling and the person's
-role; a person's own device holds its grant within their role; a machine's own
-token holds its grant within the ceiling; a token naming a person with no role
-is refused.
+A delegated agent and a person's own device hold their grant within the
+person's role; a machine's own token holds its grant; a token naming a person
+with no role is refused.
 """
 
 from django.contrib.auth import get_user_model
@@ -15,7 +14,7 @@ from hq.platform.application import roles, tokens
 from hq.platform.application.agent_admission import admit
 from hq.platform.application.agent_registry import observe
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
-from hq.platform.application.security import AuthorizationError, Capability, DevicePrincipal, agent_ceiling
+from hq.platform.application.security import DEVICE_INTERFACE, AuthorizationError, Capability
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
 from hq.platform.core.test_runner import no_default_role
 
@@ -33,7 +32,6 @@ ASKED = "read write_projects manage_infrastructure"
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class RoleBoundTokenTests(TestCase):
     def setUp(self):
@@ -47,18 +45,16 @@ class RoleBoundTokenTests(TestCase):
     def _principal(self, scope, *, client=AGENT, sub=PERSON, interface="api"):
         return tokens.token_principal({"client_id": client, "sub": sub, "scope": scope}, interface)
 
-    def test_a_delegated_agent_holds_its_grant_within_the_ceiling_and_its_persons_role(self):
-        for role, writes in ((roles.Role.OPERATOR, True), (roles.Role.VIEWER, False)):
+    def test_a_delegated_agent_holds_its_grant_within_its_persons_role(self):
+        # A viewer's agent is held to the read, whatever else its token grants.
+        for role, held in ((roles.Role.OPERATOR, ASKED.split()), (roles.Role.VIEWER, ["read"])):
             self._hold(role)
             for interface in ("api", "mcp"):
                 with self.subTest(role=role, interface=interface):
                     principal = self._principal(ASKED, interface=interface)
 
                     self.assertEqual(principal.actor, AGENT)
-                    self.assertTrue(principal.permits(Capability.READ))
-                    self.assertEqual(principal.permits("write_projects"), writes)
-                    # Outside the ceiling, whatever the person may do.
-                    self.assertFalse(principal.permits(Capability.MANAGE_INFRASTRUCTURE))
+                    self.assertEqual(principal.capabilities, frozenset(held))
                     self.assertEqual(principal.granted, frozenset(ASKED.split()))
 
     def test_a_persons_device_holds_its_grant_within_their_role(self):
@@ -68,14 +64,14 @@ class RoleBoundTokenTests(TestCase):
             with self.subTest(role=role):
                 principal = self._principal(f"{ASKED} own_device", client=PHONE)
 
-                self.assertIsInstance(principal, DevicePrincipal)
+                self.assertEqual(principal.interface, DEVICE_INTERFACE)
                 self.assertTrue(principal.permits(Capability.READ))
                 self.assertEqual(principal.permits(Capability.MANAGE_INFRASTRUCTURE), changes)
 
-    def test_a_machines_own_token_holds_its_grant_within_the_ceiling(self):
+    def test_a_machines_own_token_holds_its_grant(self):
         principal = self._principal(ASKED, sub=f"client-{AGENT}")
 
-        self.assertEqual(principal.capabilities, frozenset(ASKED.split()) & agent_ceiling())
+        self.assertEqual(principal.capabilities, frozenset(ASKED.split()))
 
     def test_a_token_naming_a_person_with_no_role_is_refused(self):
         OwnDevice.objects.create(user=self.person, client_id=PHONE)

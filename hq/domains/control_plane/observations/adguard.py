@@ -233,7 +233,7 @@ def _listen_addresses(record: Mapping[str, Any]) -> tuple[str, ...]:
     for item in record.get("dns_addresses") or ():
         try:
             address = ip_address(str(item))
-        except ValueError:
+        except ValueError:  # noqa: S112 - an entry that is no address is no address served on
             continue
         if not address.is_unspecified:
             found.append(str(address))

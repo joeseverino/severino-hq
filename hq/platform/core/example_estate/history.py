@@ -19,11 +19,11 @@ from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
-from hq.platform.application import agent_registry, linked_accounts
+from hq.platform.application import agent_devices, agent_registry, linked_accounts
 from hq.platform.application.documentation import SYNC as DOCUMENTATION_SYNC
 from hq.platform.application.security import JOB_INTERFACE, MCP_INTERFACE
 from hq.platform.core.audit import audited_labels, stamped
-from hq.platform.core.models import AgentIdentity, AuditLog, LinkedAccount
+from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog, LinkedAccount
 lazy from hq.domains.assets.models import Asset
 lazy from hq.domains.content.models import ContentItem
 lazy from hq.domains.docs_index.models import DocumentationRecord
@@ -139,6 +139,8 @@ KINDS = (
     ),
     # Its first call names the door it was first seen through (``agents.seen``).
     (AgentIdentity, None, lambda a: (_days_back(AGENT_DAYS, a.client_id),) * 2),
+    # Its device, seen at its first call and approved the same day.
+    (AgentDevice, None, lambda d: (_days_back(AGENT_DAYS, d.identity.client_id),) * 2),
 )
 
 
@@ -151,7 +153,12 @@ def dated(owner=None) -> Iterator[None]:
     """
 
     owner = owner or get_user_model().objects.order_by("pk").first()
-    labels = {**audited_labels(), LinkedAccount: linked_accounts.AUDIT_LABEL, AgentIdentity: agent_registry.AUDIT_LABEL}
+    labels = {
+        **audited_labels(),
+        LinkedAccount: linked_accounts.AUDIT_LABEL,
+        AgentIdentity: agent_registry.AUDIT_LABEL,
+        AgentDevice: agent_devices.AUDIT_LABEL,
+    }
     kinds = {model: (labels[model], door, made) for model, door, made in KINDS}
 
     def stamp(record, action, object_type):

@@ -1,6 +1,7 @@
 #!/bin/sh
-#MISE description="The names hq/ and hq_sdk/ define that nothing outside tests reads (a test-support module's, testing.py or *_testing.py, that nothing reads at all), the composed extensions and templates counted as readers (classes, functions, methods, properties, imports), as vulture finds them, each file:line name kind, sorted and then counted; reach for it before deleting code or to find what only tests keep alive, which is deleted with its tests or, when it is a test's own check or helper, moved beside the tests that read it; read-only"
+#MISE description="The names hq/ and hq_sdk/ define that nothing outside tests reads (a test-support module's, testing.py or *_testing.py, that nothing reads at all), the composed extensions and templates counted as readers (classes, functions, methods, properties, imports), as vulture finds them, each file:line name kind, sorted and then counted; reach for it before deleting code or to find what only tests keep alive, which is deleted with its tests or, when it is a test's own check or helper, moved beside the tests that read it; blind to an hq_sdk export no extension imports, since vulture counts __all__ and a re-export as reads, so grep the extension checkouts for those; read-only"
 #MISE hide=true
+#MISE extends="audit"
 #USAGE flag "--fields" help="Also list the variables and attributes, where model columns, Pydantic fields, settings and enum members read by keyword, by a built name or as data make most of what is found"
 
 # vulture reads every path it is given as uses and reports what none of them

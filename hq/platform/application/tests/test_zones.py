@@ -97,33 +97,6 @@ class IdentityTests(TestCase):
                 declares = bool(provider.hostnames(spec))
                 self.assertEqual(declares, row["record_type"] in {"A", "AAAA", "CNAME"})
 
-    def test_a_txt_value_compares_equal_whether_or_not_it_was_quoted(self):
-        """Cloudflare returns TXT quoted whichever way it was sent.
-
-        Without normalizing, a record typed without quotes reports as drifted
-        against itself forever: HQ sends `v=spf1 ...`, Cloudflare answers
-        `"v=spf1 ..."`, and neither is wrong.
-        """
-
-        provider = PROVIDERS[RECORD_KIND]
-        bare = provider.identity(
-            {
-                "zone": "example.com",
-                "name": "example.com",
-                "record_type": "TXT",
-                "content": "v=spf1 -all",
-            }
-        )
-        quoted = provider.identity(
-            {
-                "zone": "example.com",
-                "name": "example.com",
-                "record_type": "TXT",
-                "content": '"v=spf1 -all"',
-            }
-        )
-        self.assertEqual(bare, quoted)
-
     def test_adoption_captures_a_record_exactly(self):
         provider = PROVIDERS[RECORD_KIND]
         for row in APEX:

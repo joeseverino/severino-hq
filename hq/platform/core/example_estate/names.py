@@ -53,6 +53,12 @@ MAGIC_DNS = "tailc0ffee.ts.net"
 DEVICES = {MACHINE: 103, LAPTOP_NAME: 104, PHONE_NAME: 105}
 
 
+def node_id(device):
+    """Its stable id, as Tailscale writes one."""
+
+    return f"nExample{DEVICES[device]}CNTRL"
+
+
 def tailnet_v4(device):
     return f"100.101.102.{DEVICES[device]}"
 

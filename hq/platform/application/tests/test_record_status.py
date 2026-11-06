@@ -15,9 +15,10 @@ from ..inventory import confirm_observed
 from ..projection import projection_scope
 from ..resource_context import record_status
 from ..resource_operations import changes, operation_summary
+from .inventory_records import kind_read
 from .markup import all_elements, select, texts
 
-READY = [{"type": "Ready", "status": True, "reason": "Observed", "message": "Matches HQ's settings."}]
+READY = [{"type": "Ready", "status": True, "reason": "Observed", "message": "Matches HQ's config."}]
 
 
 def rewrite(key: str = "app-dns", **fields) -> ManagedResource:
@@ -90,7 +91,7 @@ class RecordPageTests(TestCase):
         # Its two settings are its name and its readout, so nothing is left to repeat.
         self.assertNotContains(response, "Other settings")
         self.assertTrue(select(response, "data-record-status", "working"))
-        self.assertContains(response, "Matches HQ&#x27;s settings.")
+        self.assertContains(response, "Matches HQ&#x27;s config.")
 
     def test_the_list_names_it_and_gives_one_state(self):
         response = self.client.get(reverse("control_plane:list"))
@@ -123,7 +124,7 @@ class RecordStatusTests(TestCase):
         status = record_status(rewrite(conditions=READY, last_observed_at=self.now))
 
         self.assertEqual((status.state, status.label), ("working", "Working"))
-        self.assertEqual(status.detail, "Matches HQ's settings.")
+        self.assertEqual(status.detail, "Matches HQ's config.")
 
     def test_a_record_not_read_with_the_rest_of_its_type_is_never_working(self):
         stale = rewrite(conditions=READY, last_observed_at=self.now - timedelta(days=14))
@@ -193,6 +194,7 @@ class ReportedFieldTests(TestCase):
         self.client.force_login(user)
 
     def read(self, production: str) -> None:
+        kind_read(KIND, timezone.now())
         confirm_observed({KIND: {"ok": True, "records": [{**self.spec, "production": production, "extensions": []}]}})
         self.resource.refresh_from_db()
 
@@ -214,7 +216,7 @@ class ReportedFieldTests(TestCase):
         self.assertContains(response, "Deploy run 9 finished without deploying it.")
         for dead_end in (
             "Keep the live version",
-            "Apply HQ's settings",
+            "Apply HQ's config",
             "In sync",
             "Drift detected",
             "Changed outside HQ",
@@ -242,7 +244,7 @@ class ReportedFieldTests(TestCase):
         self.read(CURRENT)
 
         (condition,) = self.resource.conditions
-        self.assertEqual((condition["type"], condition["message"]), ("Ready", "Matches HQ's settings."))
+        self.assertEqual((condition["type"], condition["message"]), ("Ready", "Matches HQ's config."))
 
 
 class HistoryShowsChangesTests(TestCase):

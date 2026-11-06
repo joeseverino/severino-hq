@@ -28,8 +28,9 @@ mkdir -p "${work}/bin" "${work}/plain" "${work}/project" "${work}/colima/_lima/c
 cat >"${work}/bin/colima" <<SH
 #!/bin/sh
 echo "\$*" >>"${work}/colima.log"
-perl -e 'my @l = stat shift or exit; for (3 .. 63) { open my \$f, "<&=", \$_ or next; my @s = stat \$f; print "fd \$_\n" if \$s[0] == \$l[0] && \$s[1] == \$l[1] }' \
-    "${work}/cache/severino/docker/lock" >>"${work}/leaks"
+echo "\${MISE_TASK_LOCKS:-}" >>"${work}/colima.locks"
+perl -e 'for my \$lock (glob shift) { my @l = stat \$lock or next; for (3 .. 63) { open my \$f, "<&=", \$_ or next; my @s = stat \$f; print "fd \$_\n" if \$s[0] == \$l[0] && \$s[1] == \$l[1] } }' \
+    "${work}/mise-state/task-locks/*" >>"${work}/leaks"
 case "\$1" in
     start) : >"${work}/up"; echo "\$\$" >"${work}/colima/_lima/colima/ha.pid" ;;
     stop) rm -f "${work}/up" "${work}/colima/_lima/colima/ha.pid" ;;
@@ -49,9 +50,15 @@ ln -s "${mise_bin}" "${work}/bin/mise"
 ln -s "${mise_bin}" "${work}/plain/mise"
 
 task="${repo}/mise-tasks/image/docker"
+# The task's own lock, as its header declares it, since the shell under test
+# runs the file here and mise reads no header of a file it does not run.
+lock="$(sed -n 's/^#MISE lock=//p' "${task}")"
+[ -n "${lock}" ] || fail "image:docker declares no lock to take turns under"
+lock_name="$(echo "${lock}" | tr -d '"')"
 cat >"${work}/project/mise.toml" <<TOML
 [tasks."image:docker"]
 usage = 'arg "<action>"'
+lock = ${lock}
 run = '${shell} ${task}'
 
 [tasks.work]
@@ -67,6 +74,11 @@ run = '${mise_bin} run work && test -e "${work}/up" && ${mise_bin} run work'
 [tasks.body]
 depends_post = ["image:docker stop"]
 run = '${mise_bin} run image:docker start && docker info && ${mise_bin} run work && test -e "${work}/up"'
+
+[tasks.heavy]
+lock = "heavy"
+depends_post = ["image:docker stop"]
+run = '${mise_bin} run image:docker start && docker info'
 
 [tasks.hold]
 usage = 'arg "<name>"'
@@ -94,7 +106,7 @@ starts() { grep -c '^start' "${work}/colima.log" 2>/dev/null || true; }
 stops() { grep -c '^stop' "${work}/colima.log" 2>/dev/null || true; }
 
 fresh() {
-    rm -rf "${work}/up" "${work}/colima.log" "${work}/containers" "${work}/cache" "${work}/project/failing"
+    rm -rf "${work}/up" "${work}/colima.log" "${work}/colima.locks" "${work}/containers" "${work}/cache" "${work}/project/failing"
 }
 
 # From a stopped VM to a stopped one, once each, with Rosetta on.
@@ -103,9 +115,16 @@ run work || fail "a task with no daemon running failed: $(cat "${work}/out")"
 [ ! -e "${work}/up" ] || fail "the VM a task started is still up after it"
 [ "$(starts) $(stops)" = "1 1" ] || fail "a task started the VM $(starts) times and stopped it $(stops), not once each"
 grep -q -- '--vz-rosetta' "${work}/colima.log" || fail "the VM starts without Rosetta, which browser --linux needs"
-# What colima leaves running would hold the lock, and every later start and
-# stop would wait on it for good.
+# colima runs under the lock, and what it leaves running would hold the lock,
+# so every later start and stop would wait on it for good.
+grep -qv "${lock_name}" "${work}/colima.locks" && fail "colima ran outside the lock: $(cat "${work}/colima.locks")"
 [ ! -s "${work}/leaks" ] || fail "colima runs holding the lock: $(cat "${work}/leaks")"
+
+# Run from the body of a task holding the heavy turn, it takes its lock after
+# the one it inherits.
+fresh
+run heavy || fail "a task holding the heavy turn could not start the VM from its body: $(cat "${work}/out")"
+[ "$(starts) $(stops)" = "1 1" ] || fail "a heavy task started the VM $(starts) times and stopped it $(stops), not once each"
 
 # Failed, it stops the VM all the same.
 fresh

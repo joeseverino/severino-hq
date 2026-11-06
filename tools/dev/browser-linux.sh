@@ -5,8 +5,8 @@
 #   sh tools/dev/browser-linux.sh browser:<gate>
 #   sh tools/dev/browser-linux.sh <label>... [manage.py test options]
 # Run as linux/amd64 by mise-tasks/dev/linux-browser, which mounts a volume at
-# HOME so the setup is downloaded once. A failed rule's screenshots are copied
-# to var/browser-linux/, since the container's temporary directory goes with it.
+# HOME so the setup is downloaded once. A failed rule's screenshots land in the
+# mounted checkout's var/browser-failures/, as on the Mac.
 set -eu
 
 [ "$#" -gt 0 ] || { echo "usage: tools/dev/browser-linux.sh browser:<gate> | <label>..." >&2; exit 64; }
@@ -39,16 +39,7 @@ export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0='*'
 
 mise install
 
-status=0
 case "$1" in
-    browser:*) mise run "$@" || status=$? ;;
-    *) mise run test "$@" || status=$? ;;
+    browser:*) exec mise run "$@" ;;
+    *) exec mise run test "$@" ;;
 esac
-
-for failure in "${TMPDIR:-/tmp}"/hq-browser-failure-*; do
-    [ -d "${failure}" ] || continue
-    mkdir -p var/browser-linux
-    cp -R "${failure}" var/browser-linux/
-    echo "Saved ${failure##*/} in var/browser-linux/."
-done
-exit "${status}"

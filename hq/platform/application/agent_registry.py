@@ -1,23 +1,29 @@
-"""The agents HQ knows about, learned from the tokens they present.
+"""The agents HQ knows about, learned from the tokens they present, and the
+tailnet devices they call from (``agent_devices``).
 
 A first sighting and any change to an identity's grant are audited. Observation
 never blocks a request.
 """
 
 import logging
+from collections.abc import Callable
 from datetime import timedelta
+from functools import partial
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.dispatch import Signal
 from django.utils import timezone
 
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentIdentity, AgentSignIn, AuditLog
 
+from . import agent_devices
 from .doors import door_words
 from .linked_accounts import SIGN_IN
-from .security import Principal
+from .security import AGENT_SURFACES, Principal
 from .ui import counted
+lazy from .tailnet import Device
 
 logger = logging.getLogger("severino.agents")
 
@@ -26,13 +32,52 @@ AUDIT_LABEL = "Agent identity"
 # last_seen is kept to this precision so routine traffic reads without writing.
 TOUCH_INTERVAL = timedelta(minutes=10)
 
+# Sent once a change commits that alters which tools an agent is listed, with
+# ``aimed``, which says of an open stream's principal whether the change is its
+# own. The doors that hold a stream open receive it; the application never
+# names them (import-linter's layering contract).
+TOOLS_CHANGED = Signal()
+# Sent once a person's change to an agent's brakes commits, so a stream that
+# was held back an event while refused is given it once it may act again.
+STANDING_CHANGED = Signal()
 
-def observe(principal: Principal | None) -> None:
+type Aimed = Callable[[Principal], bool]
+
+
+def tools_changed(aimed: Aimed) -> None:
+    """Say, once the change commits, that the tools listed to the callers ``aimed`` admits changed."""
+
+    # Robust: a change that committed does not fail for a notice that could not be given.
+    transaction.on_commit(partial(TOOLS_CHANGED.send, sender=Principal, aimed=aimed), robust=True)
+
+
+def persons_tools_changed(user) -> None:
+    """Say that the tools listed to every agent a person signed in changed: their role did."""
+
+    keys = frozenset(user.linked_accounts.filter(provider=SIGN_IN).values_list("login", flat=True))
+    if keys:
+        tools_changed(lambda principal: principal.person_key in keys)
+
+
+def standing_changed() -> None:
+    """Say, once it commits, that a person changed an agent's brakes."""
+
+    transaction.on_commit(partial(STANDING_CHANGED.send, sender=Principal), robust=True)
+
+
+def observe(principal: Principal | None, device: Device | None = None) -> None:
+    """Record the agent ``principal`` names, and the ``device`` its call came
+    from when it is an agent's call placed on one."""
+
     # Only token principals carry a grant; the operator and the CLI do not.
     if principal is None or not principal.granted:
         return
     try:
-        _observe(principal)
+        row, person = _observe(principal)
+        # A person's own client needs no device of its own, and a token whose
+        # person HQ cannot find has no person to approve one.
+        if device is not None and principal.interface in AGENT_SURFACES and (person or not principal.person_key):
+            agent_devices.observe(row, person, device, interface=principal.interface)
     except Exception:  # noqa: BLE001 - observation never blocks a request
         logger.warning(
             "Agent identity not recorded: %s",
@@ -41,7 +86,7 @@ def observe(principal: Principal | None) -> None:
         )
 
 
-def _observe(principal: Principal) -> None:
+def _observe(principal: Principal) -> tuple[AgentIdentity, object]:
     now = timezone.now()
     granted = sorted(principal.granted)
     signs_in = AgentSignIn.PERSON if principal.person_key else AgentSignIn.MACHINE
@@ -72,11 +117,12 @@ def _observe(principal: Principal) -> None:
                 metadata={
                     "actor": principal.actor,
                     "interface": principal.interface,
+                    **_device(principal),
                     "signs_in": signs_in,
                     "person": "" if person is None else person.get_username(),
                 },
             )
-            return
+            return row, person
 
     changed: list[str] = []
     if principal.interface not in row.interfaces:
@@ -93,6 +139,9 @@ def _observe(principal: Principal) -> None:
         removed = sorted(set(row.granted) - set(granted))
         row.granted = granted
         changed.append("granted")
+        # Whether a tool is listed is the grant's to say, so a stream this
+        # agent holds open is told to list again.
+        tools_changed(lambda listening: listening.actor == principal.actor)
         record_event(
             action=AuditLog.Action.UPDATED,
             obj=row,
@@ -101,6 +150,7 @@ def _observe(principal: Principal) -> None:
             metadata={
                 "actor": principal.actor,
                 "interface": principal.interface,
+                **_device(principal),
                 "added": added,
                 "removed": removed,
             },
@@ -108,6 +158,14 @@ def _observe(principal: Principal) -> None:
     if changed or now - row.last_seen >= TOUCH_INTERVAL:
         row.last_seen = now
         row.save(update_fields=[*changed, "last_seen"])
+    return row, person
+
+
+def _device(principal: Principal) -> dict[str, str]:
+    """The device a call came from, for the events its admission records
+    before the door binds its caller."""
+
+    return {"device": principal.device} if principal.device else {}
 
 
 def _person(person_key: str):
@@ -131,6 +189,7 @@ def _record_person(row: AgentIdentity, principal: Principal, person) -> None:
         metadata={
             "actor": principal.actor,
             "interface": principal.interface,
+            **_device(principal),
             "person": "" if person is None else person.get_username(),
             "was": "" if before is None else before.get_username(),
         },

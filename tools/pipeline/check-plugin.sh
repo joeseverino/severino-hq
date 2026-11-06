@@ -29,34 +29,41 @@ django_app=$(printf '%s\n' "$identity" | sed -n 's/^django-app=//p')
 
 # The check runs again under the host's gate verdict (tools/gate/verdict.py),
 # whose last line names each failed test and the file under the host's
-# var/gate that keeps them whole, with their tracebacks. Run as a script, it
-# imports nothing from the host.
+# var/gate that keeps them whole, with their tracebacks, under the package
+# checkout's tree. It imports only its stdlib helpers beside it, run as a
+# module from the host's root, so the host is on that one process's path and
+# on no path the check below inherits.
 if [ -z "${HQ_PLUGIN_CHECK_VERDICT:-}" ]; then
-    exec env HQ_PLUGIN_CHECK_VERDICT=1 python3 -P "$hq_root/tools/gate/verdict.py" "plugin-check:$django_app" \
-        "$hq_root/tools/pipeline/check-plugin.sh" --plugin-root "$(pwd)"
+    plugin_root=$(pwd)
+    cd "$hq_root"
+    exec env HQ_PLUGIN_CHECK_VERDICT=1 HQ_GATE_TREE="$plugin_root" python3 -m tools.gate.verdict "plugin-check:$django_app" \
+        "$hq_root/tools/pipeline/check-plugin.sh" --plugin-root "$plugin_root"
 fi
 if ! grep -q '^\[tool\.mypy\]' pyproject.toml; then
     echo "pyproject.toml declares no [tool.mypy]: every extension declares its type check there (docs/Plugins.md)." >&2
     exit 1
 fi
 
-# The host's structural rule on text a person reads holds the package's
-# source as it holds the host's: the rule's scope names src/, read from the
-# package root. The ast-grep is the host's pin, which mise installs where it is
-# missing (an extension's CI sets up only uv), or the one on the PATH where
-# mise has no pin. It runs here, since the scope is read from where it runs.
+# The host's structural rules for text a person reads and for a test's read
+# of a table cell hold the package's source as they hold the host's: each
+# rule's scope reaches src/, read from the package root. The ast-grep is the
+# host's pin, which mise installs where it is missing (an extension's CI sets
+# up only uv), or the one on the PATH where mise has no pin. It runs here,
+# since the scope is read from where it runs.
 pinned() { mise -C "$hq_root" which ast-grep 2>/dev/null; }
 ast_grep=$(pinned) || { mise -C "$hq_root" install --quiet ast-grep 2>/dev/null && ast_grep=$(pinned); } \
     || ast_grep=$(command -v ast-grep) || {
     echo "ast-grep is not installed: \`mise -C $hq_root install ast-grep\` installs the host's pin, or says why it cannot." >&2
     exit 1
 }
-"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^dot-typed-in-text$' --report-style medium src
+"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(dot-typed-in-text|cell-read-by-its-text)$' --report-style medium src
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
 host_requirements=$work/host-requirements.txt
-uv export --project "$hq_root" --locked --no-default-groups --no-emit-project \
+# The runtime requirements, and the group of what the host's source tests
+# import beyond them: the tests below run in this environment.
+uv export --project "$hq_root" --locked --no-default-groups --group source-tests --no-emit-project \
     --output-file "$host_requirements" > /dev/null
 
 uv sync --quiet --locked --group dev
@@ -64,6 +71,8 @@ python=$(uv run --no-sync python -c 'import sys; print(sys.executable)')
 uv pip install --quiet --python "$python" --require-hashes -r "$host_requirements"
 "$python" -m ruff check src
 "$python" -m ruff format --check src
+# What the package's source may import, whatever its own Ruff config selects.
+"$python" -m ruff check --no-cache --config "$hq_root/tools/pipeline/extension-imports.toml" src
 PYTHONPATH="$hq_root" "$python" -m hq_sdk.validation src
 
 export DJANGO_DEBUG=true
@@ -86,7 +95,8 @@ MYPYPATH="$hq_root" "$python" -m mypy --cache-dir "$work/mypy"
 "$python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # The template checks read every template Django loads, so they hold the
 # plugin's wording and markup as they hold the host's; the view checks read
-# every routed view's source, the plugin's included.
+# every routed view's source, the plugin's included; the spelling check reads
+# the package's project whole. A package keeps no copy of any of them.
 "$python" "$hq_root/manage.py" test "$django_app" hq.platform.application.tests.test_plugins hq.platform.application.tests.test_rendered \
     hq.platform.application.tests.test_architecture_pages.InterfaceTextTests hq.platform.core.tests.test_counts.CountPlacementTests \
     hq.platform.core.tests.test_template_chips.TemplateChipTests hq.platform.core.tests.test_table_contract.TableContractTests \
@@ -101,7 +111,8 @@ MYPYPATH="$hq_root" "$python" -m mypy --cache-dir "$work/mypy"
     hq.platform.application.tests.test_architecture_styles.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row \
     hq.platform.application.tests.test_view_writes.ViewWriteTests.test_no_view_writes_outside_the_chokepoint \
     hq.platform.application.tests.test_architecture.DeliveryAdapterArchitectureTests.test_paginated_list_views_use_the_shared_table_engine \
-    hq.platform.application.tests.test_architecture_pages.PageTrailTests
+    hq.platform.application.tests.test_architecture_pages.PageTrailTests \
+    hq.platform.application.tests.test_spelling.ExtensionSpellingTests
 
 # Production installs admitted wheels with --no-deps. Recreate that exact
 # dependency boundary in an isolated environment so an undeclared host pin

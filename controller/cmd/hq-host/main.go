@@ -22,6 +22,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"log/slog"
 	"net/http"
@@ -164,8 +165,8 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 	runner := &host.WebRunner{
 		Release:   host.ReleaseFile,
 		SecretDir: host.WebSecretDir,
-		RootUID:   0, WebUID: host.WebUID,
-		Docker: func(ctx context.Context, args ...string) *exec.Cmd { return host.Command(ctx, "docker", args...) },
+		RootUID:   0, WebUID: hostcore.WebUID,
+		Docker: func(ctx context.Context, args ...string) *exec.Cmd { return hostcore.Command(ctx, "docker", args...) },
 		Notify: func(state string) error { return host.Notify(getenv("NOTIFY_SOCKET"), state) },
 		Poll:   2 * time.Second,
 		// The renderer's own bound on a run, so a slow boot render is waited
@@ -193,7 +194,7 @@ func check(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		Lib: host.Lib, Systemd: "/etc/systemd/system", RootUID: 0,
 		Release: *release, Main: *main,
 		FreeBytes: host.DeployFreeBytes, Free: host.Free,
-		Command: host.Command, Out: stdout,
+		Command: hostcore.Command, Out: stdout,
 	}
 	return checker.Check(ctx)
 }
@@ -232,9 +233,9 @@ func machine(stdout io.Writer) *host.Machine {
 		Sbin:       "/usr/local/sbin",
 		Runtime:    runtimeDir(),
 		Sudoers:    "/etc/sudoers.d",
-		Command:    host.Command,
+		Command:    hostcore.Command,
 		Own:        func(path string) error { return os.Lchown(path, 0, 0) },
-		Owner:      func(root *os.Root, name string) error { return root.Lchown(name, host.WebUID, host.WebGID) },
+		Owner:      func(root *os.Root, name string) error { return root.Lchown(name, hostcore.WebUID, hostcore.WebGID) },
 		Verifier: func(ctx context.Context) error {
 			client := &http.Client{Timeout: 3 * time.Minute}
 			return host.InstallVerifier(ctx, client, host.CosignURL, cosign)
@@ -249,7 +250,7 @@ const cosign = "/usr/local/lib/severino-hq-verifier/cosign"
 func controller(stdout, stderr io.Writer) *host.Controller {
 	return &host.Controller{
 		Machine:       machine(stdout),
-		SecretDir:     host.SecretDir,
+		SecretDir:     hostcore.SecretDir,
 		ACME:          host.ACMEDir,
 		CertStore:     "/usr/local/share/ca-certificates",
 		Tailscaled:    "/var/run/tailscale/tailscaled.sock",
@@ -257,7 +258,7 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		Spool:         host.RenovateSpool,
 		DependencyRun: host.DependencyRunFile,
 		Connections:   requireConnections,
-		Lock:          host.SharedLock(filepath.Join(host.SecretDir, "ssh.lock"), time.Minute),
+		Lock:          host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
 		LookPath:      exec.LookPath,
 		Now:           time.Now,
 		Stdout:        stdout, Stderr: stderr,
@@ -275,7 +276,7 @@ func renovator(stdout io.Writer) *host.Renovator {
 }
 
 func requireConnections() error {
-	return install.RequireConnections(host.SecretDir, install.SystemMounts)
+	return install.RequireConnections(hostcore.SecretDir, install.SystemMounts)
 }
 
 func deployer(stdout io.Writer) *host.Deployer {
@@ -290,7 +291,7 @@ func deployer(stdout io.Writer) *host.Deployer {
 		FreeOn:    "/",
 		Free:      host.Free,
 		Rehearsal: host.Rehearsal{
-			SecretDir: host.SecretDir, ACME: host.ACMEDir,
+			SecretDir: hostcore.SecretDir, ACME: host.ACMEDir,
 			LookPath: exec.LookPath, Poll: time.Second,
 		},
 	}

@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/joeseverino/severino-hq/controller/edge"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -128,7 +129,7 @@ type cpanelDeploy struct {
 
 func (r *Registry) deployCertificate(ctx context.Context, spec TLSCertificateSpec, fullchain, privateKey []byte, plan deploymentPlan, known npmCertificateIDs) (TLSDeployment, error) {
 	deployment := TLSDeployment{}
-	bundle := certificateBundle(fullchain, privateKey)
+	bundle := edge.Bundle(fullchain, privateKey)
 	leaf, chain, err := splitChain(fullchain)
 	if err != nil {
 		return deployment, err

@@ -1,0 +1,22 @@
+id: age-worded-by-ago
+valid:
+  - 'from hq.platform.application.moments import ago'
+  - 'lazy from hq.platform.application.moments import ago'
+  - 'from hq.platform.application import moments as when'
+  - 'said = ago(stamp, now)'
+  - |
+    def agony():
+        pass
+invalid:
+  - |
+    def ago(moment, now):
+        return "just now"
+  - |
+    def _ago(moment):
+        return "just now"
+  - 'from hq.platform.application.moments import ago as since'
+  - 'lazy from hq.platform.application.moments import when, ago as since'
+  - |
+    class Card:
+        def ago(self):
+            return "just now"

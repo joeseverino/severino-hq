@@ -299,9 +299,9 @@
     {
       "owner": "example",
       "repositories": [
-        "example"
+        "example/example"
       ],
-      "outcome": "example",
+      "outcome": "ok",
       "exit_code": 1,
       "started_at": "example",
       "finished_at": "example"
@@ -459,8 +459,8 @@
         }
       ],
       "alerts": {
-        "example": {
-          "example": 1
+        "dependabot": {
+          "high": 1
         }
       },
       "dependabot_alerts": [
@@ -537,7 +537,7 @@
         ],
         "allowed_actions": "example",
         "pinning_required": true,
-        "token": "example",
+        "token": "read",
         "token_approves_reviews": true,
         "vulnerability_alerts": true,
         "security": {
@@ -607,8 +607,8 @@
   "host.render_status": [
     {
       "renderer": "example",
-      "state": "example",
-      "reason": "example",
+      "state": "read",
+      "reason": "missing",
       "status": {
         "schema_version": 1,
         "last_attempt": {
@@ -655,23 +655,23 @@
   ],
   "host.unit": [
     {
-      "activates": "example",
+      "activates": "example.service",
       "active": "example",
       "condition": "example",
-      "condition_at": "example",
-      "ended_at": "example",
+      "condition_at": "2030-01-01T00:00:00Z",
+      "ended_at": "2030-01-01T00:00:00Z",
       "file_state": "example",
-      "last_trigger_at": "example",
+      "last_trigger_at": "2030-01-01T00:00:00Z",
       "load": "example",
       "main_code": 1,
       "main_status": 1,
-      "next_elapse_at": "example",
-      "read_at": "example",
+      "next_elapse_at": "2030-01-01T00:00:00Z",
+      "read_at": "2030-01-01T00:00:00Z",
       "result": "example",
-      "started_at": "example",
+      "started_at": "2030-01-01T00:00:00Z",
       "sub": "example",
       "title": "example",
-      "unit": "example"
+      "unit": "example.service"
     }
   ],
   "npm.access_list": [
@@ -979,6 +979,7 @@
   "tailscale.device": [
     {
       "name": "example",
+      "node_id": "example",
       "public_key": "example",
       "dns_name": "example",
       "online": true,

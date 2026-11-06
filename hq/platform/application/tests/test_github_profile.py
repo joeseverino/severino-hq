@@ -105,6 +105,12 @@ class PlanTests(TestCase):
         self.assertFalse(github_profile.plan()["due"])
         self.assertTrue(github_profile.plan(timezone.now() + github_profile.RETRY_AFTER)["due"])
 
+    def test_a_first_read_that_failed_is_retried_on_its_own_clock(self):
+        hold(None, observed_at=None, reachable=False, error="GitHub API returned HTTP 502.")
+
+        self.assertFalse(github_profile.plan()["due"])
+        self.assertTrue(github_profile.plan(timezone.now() + github_profile.RETRY_AFTER)["due"])
+
     def test_asking_makes_it_due_whatever_its_age(self):
         hold()
 

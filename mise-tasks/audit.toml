@@ -1,19 +1,22 @@
 # Read-only measurements (`mise run audit:<name>`), safe to hand to a tool or
-# an agent that may only read: each writes nothing tracked (audit:memory
-# measures on a throwaway database and keeps its run in the gitignored
-# var/perf/), and takes values through `usage` alone, never passed-through
-# arguments, so no flag can turn a read into a write. One whose body is more than a line is a file under
-# mise-tasks/audit/. test_audit_tasks.py holds every audit: task to that.
+# an agent that may only read. Each extends the audit template (mise.toml), so
+# mise's OS sandbox refuses every write but to temporary and cache paths,
+# whatever words the task is handed; audit:memory also keeps its run in the
+# gitignored var/perf/. audit:image and audit:mcp write as they measure and run
+# outside it, each read by what it runs. One whose body is more than a line is
+# a file under mise-tasks/audit/. test_audit_tasks.py holds every audit: task to that.
 
 ["audit:imports"]
+extends = "audit"
 description = "The files that import the one given, string imports included, read-only"
 hide = true
 usage = 'arg "<path>" help="A Python file in the repository"'
-run = '''uv run ruff analyze graph --direction dependents --detect-string-imports . | jq --arg path "${usage_path}" '.[$path]' '''
+run = '''graph="$(uv run ruff analyze graph --direction dependents --detect-string-imports .)" && printf '%s' "${graph}" | jq --arg path "${usage_path}" '.[$path]' '''
 
 # Each run read by tools/pipeline/ci_timings.py, the module refusing any word that is not a
 # run id, so the unquoted list can reach gh as nothing but ids.
 ["audit:ci-timings"]
+extends = "audit"
 description = "Where each CI run's time went: each job's and step's seconds, how long after its last step each job was marked done, and the critical path, read-only"
 hide = true
 usage = 'arg "<runs>" var=#true help="Run ids, as gh run list prints them (41175916328 41175858296)"'
@@ -30,7 +33,10 @@ depends_post = ["image:docker stop"]
 usage = 'arg "[image]" default="severino-hq:ci-local" help="The image, as docker names it; image:build tags the host image severino-hq:ci-local"'
 run = 'mise run image:docker start && uv run python -m tools.audit_image "${usage_image}"'
 
+# golangci-lint keeps its own cache in the sandbox's temporary directory.
 ["audit:go"]
+extends = "audit"
+env = { GOLANGCI_LINT_CACHE = "{{ get_env(name='TMPDIR', default='/tmp') }}/golangci-lint" }
 description = "golangci-lint's findings in the Go controller counted per linter, read-only"
 hide = true
 dir = "controller"

@@ -173,9 +173,12 @@ type TailnetReach struct {
 }
 
 // TailscaleDeviceRecord is one machine on the tailnet. KeyExpiryDisabled is
-// present only when the API described the device.
+// present only when the API described the device. NodeID is Tailscale's
+// stable id for the device (the API's nodeId, the daemon's StableID), which
+// outlives a re-authentication that rotates PublicKey.
 type TailscaleDeviceRecord struct {
 	Name              string         `json:"name"`
+	NodeID            string         `json:"node_id"`
 	PublicKey         string         `json:"public_key"`
 	DNSName           string         `json:"dns_name"`
 	Online            bool           `json:"online"`
@@ -468,6 +471,7 @@ func tailnetRecord(node tailnetNode) (TailscaleDeviceRecord, bool) {
 	}
 	return TailscaleDeviceRecord{
 		Name:           name,
+		NodeID:         node.ID,
 		PublicKey:      node.PublicKey,
 		DNSName:        strings.TrimRight(node.DNSName, "."),
 		Online:         node.Online,
@@ -506,6 +510,7 @@ func apiDeviceRecord(device tsapi.Device) (TailscaleDeviceRecord, bool) {
 	}
 	return TailscaleDeviceRecord{
 		Name:       name,
+		NodeID:     device.NodeID,
 		PublicKey:  device.NodeKey,
 		DNSName:    strings.TrimRight(device.Name, "."),
 		Online:     device.ConnectedToControl,

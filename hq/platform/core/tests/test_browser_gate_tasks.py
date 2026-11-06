@@ -1,15 +1,16 @@
 """Every real-browser test is run by a browser gate: a class no task names never
 runs. The gates' `--fallback-face` still finds the face it withholds."""
 
-import ast
 import os
 import tomllib
 from collections import Counter
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.facts import grouped, scan
 from hq.platform.core.tests.browser.serving import in_the_face
 from hq.platform.core.tests.browser_modules import browser_modules
 from tests.mise_tasks import body, mise_tasks
@@ -18,33 +19,54 @@ ROOT = Path(__file__).resolve().parents[4]
 BASE = "BrowserGate"
 
 
+# A class, with its name captured, so a match inside it says which class it is in.
+CLASS: dict[str, Any] = {"kind": "class_definition", "has": {"field": "name", "pattern": "$CLASS"}}
+CLASS_FACTS: dict[str, dict[str, Any]] = {
+    "class": {"kind": "identifier", "inside": {"kind": "class_definition", "field": "name"}},
+    # A base named plainly, as the gate's own classes are.
+    "base": {"kind": "identifier", "inside": {"kind": "argument_list", "inside": {**CLASS, "field": "superclasses"}}},
+    # A test method of the class itself, decorated or not.
+    "test": {
+        "kind": "identifier",
+        "regex": "^test_",
+        "inside": {
+            "kind": "function_definition",
+            "field": "name",
+            "any": [
+                {"inside": {"kind": "block", "inside": CLASS}},
+                {"inside": {"kind": "decorated_definition", "inside": {"kind": "block", "inside": CLASS}}},
+            ],
+        },
+    },
+}
+
+
 def gate_classes() -> dict[str, str]:
     """Each class built on the browser gate that holds tests, its own or inherited, as ``module.Class``, by module.
 
     A class that holds only rules for others to run runs nothing when named.
     """
 
-    defined: dict[str, tuple[str, ast.ClassDef]] = {}
-    for module, path in browser_modules().items():
-        tree = ast.parse(path.read_text())
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                defined[node.name] = (module, node)
+    modules = {path: module for module, path in browser_modules().items()}
+    found = grouped(scan(CLASS_FACTS, *(path.relative_to(ROOT) for path in modules)))
+    defined = {match.text: modules[match.path] for match in found["class"]}
+    named: dict[str, list[str]] = {}
+    for match in found.get("base", []):
+        named.setdefault(match.captured["CLASS"], []).append(match.text)
+    own = {match.captured["CLASS"] for match in found.get("test", [])}
 
-    def bases(node: ast.ClassDef) -> list[str]:
-        return [base.id for base in node.bases if isinstance(base, ast.Name) and base.id in defined]
+    def bases(name: str) -> list[str]:
+        return [base for base in named.get(name, []) if base in defined]
 
     def on_the_gate(name: str) -> bool:
-        return name == BASE or any(on_the_gate(base) for base in bases(defined[name][1]))
+        return name == BASE or any(on_the_gate(base) for base in bases(name))
 
     def holds_tests(name: str) -> bool:
-        node = defined[name][1]
-        own = any(isinstance(item, ast.FunctionDef) and item.name.startswith("test_") for item in node.body)
-        return own or any(holds_tests(base) for base in bases(node))
+        return name in own or any(holds_tests(base) for base in bases(name))
 
     return {
         f"{module}.{name}": module
-        for name, (module, _node) in defined.items()
+        for name, module in defined.items()
         if name != BASE and on_the_gate(name) and holds_tests(name)
     }
 

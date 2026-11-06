@@ -43,3 +43,18 @@ class TheApiAgreesTests(TestCase):
         self.assertEqual(entry["operations"], tool_entry["operations"])
         self.assertEqual(unknown.status_code, 404)
         self.assertEqual(unknown.json()["error"]["code"], "unknown_resource")
+
+    def test_a_name_no_resource_has_is_one_refusal_on_both_doors(self):
+        names = (OUTSIDE, "project", "cloudflare.dns_record", "adguard.client")
+        with _serving():
+            token = f"Bearer {_token(scope='read')}"
+            api = [
+                self.client.get(f"/api/v2/resources/?name={name}", HTTP_AUTHORIZATION=token).json()["error"]
+                for name in names
+            ]
+        mcp = calls(*(("describe_resources", {"name": name}) for name in names))
+
+        for name, through_api, through_mcp in zip(names, api, mcp, strict=True):
+            with self.subTest(name=name):
+                self.assertEqual(through_api["code"], "unknown_resource")
+                self.assertEqual(through_mcp.structured_content["error"], through_api)

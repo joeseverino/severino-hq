@@ -7,6 +7,7 @@ from the declared domains and records and the last sweep, with no Zone model,
 since a stored copy could disagree with the declarations.
 """
 
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from functools import cached_property
@@ -23,7 +24,7 @@ from hq.domains.control_plane.provider_adapters.cloudflare import (
     ZONE_KIND,
 )
 from hq.platform.application.routes import reverse
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import PROVIDERS, read_record, record_spec
 
 from .adoption import AdoptCommand, unmanaged
 from .command_fields import Describe
@@ -37,6 +38,8 @@ lazy from . import adoption, plugins
 lazy from .facts import snapshots_of
 lazy from .projection import read_once
 lazy from .resource_context import shared_names, value_summary
+
+logger = logging.getLogger("severino.zones")
 
 RECORD_KIND = DNS_RECORD_KIND
 
@@ -320,17 +323,23 @@ class Zone:
     def insights(self) -> tuple[ZoneInsight, ...]:
         """What HQ can say about this domain, asked of each contributor.
 
-        A contributor that fails is skipped rather than taking the page with
-        it. This is the screen an operator opens to find out what is wrong, and
-        refusing to render it because one card could not be computed is the
-        least useful possible moment to fail.
+        A contributor that fails is logged and skipped rather than taking the
+        page with it. This is the screen an operator opens to find out what is
+        wrong, and refusing to render it because one card could not be computed
+        is the least useful possible moment to fail.
         """
 
         found = []
         for reference in ZONE_INSIGHTS:
             try:
                 insight = plugins.import_reference(reference)(self)
-            except Exception:  # noqa: BLE001 - one card must not lose the page
+            except Exception:  # one card must not lose the page
+                logger.exception(
+                    "The zone insight %s failed for %s.",
+                    reference,
+                    self.zone,
+                    extra={"event": "zones.insight.failed"},
+                )
                 continue
             if isinstance(insight, tuple):
                 found.extend(insight)
@@ -432,10 +441,11 @@ def _sweep_entries(zone_snapshot: ProviderInventory | None) -> dict[str, dict[st
 
 def _records_by_zone(pending: list[Any]) -> dict[str, list[ZoneRecord]]:
     """Every record of a domain, declared or waiting to be adopted, by its
-    domain: the declared ones first."""
+    domain: the declared ones first, switched off or not, since a switched-off
+    one still holds its record."""
 
     by_zone: dict[str, list[ZoneRecord]] = {}
-    for resource in ManagedResource.objects.filter(kind=RECORD_KIND, enabled=True):
+    for resource in ManagedResource.objects.filter(kind=RECORD_KIND):
         if zone := _zone_of(resource.spec):
             by_zone.setdefault(zone, []).append(
                 _record_of(resource.spec, resource_key=resource.key, health=resource_health(resource))
@@ -472,10 +482,10 @@ def _swept_zones(names: set[str]) -> dict[str, list[Any]]:
     zones = PROVIDERS[ZONE_KIND]
     for snapshot in snapshots_of(ZONE_KIND):
         for record in snapshot.records:
-            try:
-                found = tuple(normalized_hostname(name) for name in zones.identity(zones.from_record(record)))
-            except KeyError, TypeError, ValueError:
+            identity = read_record(ZONE_KIND, record, lambda spec: tuple(zones.identity(spec)))
+            if identity is None:
                 continue
+            found = tuple(normalized_hostname(name) for name in identity)
             names.update(found)
             if snapshot.reachable:
                 for name in found:
@@ -486,14 +496,12 @@ def _swept_zones(names: set[str]) -> dict[str, list[Any]]:
 def _swept_record_zones() -> set[str]:
     """The zone of every swept record."""
 
-    records = PROVIDERS[RECORD_KIND]
     found = set()
     for snapshot in snapshots_of(RECORD_KIND):
         for record in snapshot.records:
-            try:
-                found.add(normalized_hostname(records.from_record(record).get("zone")))
-            except KeyError, TypeError, ValueError:
-                continue
+            spec = record_spec(RECORD_KIND, record)
+            if spec is not None:
+                found.add(normalized_hostname(spec.get("zone")))
     return found
 
 
@@ -542,7 +550,13 @@ def adopt_discovered_records(*, principal) -> dict[str, Any]:
             continue
         try:
             adopted.extend(adopt_zone_records(zone.zone, principal=principal)["adopted"])
-        except RecordNotFound, PolicyError, ValidationError, ValueError:
+        except (RecordNotFound, PolicyError, ValidationError, ValueError) as error:
+            logger.warning(
+                "HQ could not take on the records of %s: %s",
+                zone.zone,
+                error,
+                extra={"event": "adoption.zone.refused"},
+            )
             # Recording what a provider holds must not depend on being allowed
             # to declare it. A deployment with public DNS switched off, or a
             # record whose live shape HQ's model cannot express, leaves the

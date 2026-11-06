@@ -1,17 +1,11 @@
 """The one walk of the URL configuration."""
 
-import ast
-from pathlib import Path
-
 from django.http import HttpResponse
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 from django.urls import include, path, re_path
 from django.views import View
 
 from ..routes import routed
-
-ROOT = Path(__file__).resolve().parents[4]
-WALKER = ROOT / "hq/platform/application/routes.py"
 
 
 def page(request):
@@ -56,34 +50,3 @@ class RoutedTests(SimpleTestCase):
         machine = next(route for route in routed(PATTERNS) if route.name == "control:machine")
 
         self.assertEqual([mount.namespace for mount in machine.mounts], ["control"])
-
-
-def _walks(tree: ast.AST) -> list[int]:
-    """Lines reading a resolver's ``url_patterns`` other than the root's: a
-    walk into a mount."""
-
-    return [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute)
-        and node.attr == "url_patterns"
-        and not (isinstance(node.value, ast.Call) and getattr(node.value.func, "id", "") == "get_resolver")
-    ]
-
-
-@tag("source", "tree")
-class OneWalkTests(SimpleTestCase):
-    def test_only_routed_walks_into_a_mount(self):
-        """A second walk drifts from the first: one skips a namespace, one
-        drops a regex mount, and a page list stops matching the routes."""
-
-        found = []
-        for package in ("hq", "hq_sdk"):
-            for source in sorted((ROOT / package).rglob("*.py")):
-                if source == WALKER:
-                    continue
-                lines = _walks(ast.parse(source.read_text(), str(source)))
-                found.extend(f"{source.relative_to(ROOT)}:{line}" for line in lines)
-
-        self.assertTrue(_walks(ast.parse(WALKER.read_text())), "routed no longer walks: the rule checks nothing")
-        self.assertEqual(found, [])

@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
 lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.desired_state import advance_dependents, desired_fingerprint
@@ -27,8 +28,8 @@ from hq.platform.core.audit import audit_operation
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
 from .adoption import OBSERVES_ONLY, observes_only
-from .approvals import consent_gap
 from .command_fields import Choices, Describe
+from .default_hold import consent_gap
 from .integration_specs import Kept, keeps
 from .projection import keyset_page, read_once
 from .record_errors import PolicyError
@@ -462,6 +463,8 @@ def save_managed_resource(
             resource.generation += 1
         resource.full_clean()
         resource.save()
+        if not created and not resource.enabled:
+            _call_off_waiting(resource)
         # A target says how a place takes a certificate. Editing one changes
         # what every certificate installed there resolves to, so their desired
         # state is recomputed here rather than waiting for each to be saved.
@@ -475,6 +478,28 @@ def save_managed_resource(
         "resource": serialize_resource(resource),
         "applying": applying,
     }
+
+
+def _call_off_waiting(resource: ManagedResource) -> None:
+    """Cancel the work queued for a record switched off, all but its removal.
+
+    Switching off pauses HQ's changes to the record. Every queue path checks
+    the switch when it queues; this holds the work already waiting, row by
+    row so each cancel is audited as the switch-off's. A removal is the one
+    thing still asked of a switched-off record (``request_removal``).
+    """
+
+    now = timezone.now()
+    waiting = resource.operations.select_for_update().filter(state=OperationRequest.State.QUEUED)
+    for operation in waiting.exclude(action=OperationRequest.Action.DELETE):
+        operation.state = OperationRequest.State.CANCELLED
+        operation.completed_at = now
+        operation.result = {
+            "ok": False,
+            "message": "The record was switched off in HQ before this ran.",
+            "reason": "SwitchedOff",
+        }
+        operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
 
 
 def _apply_saved(resource: ManagedResource, *, principal: Principal) -> OperationItem | None:

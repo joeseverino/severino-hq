@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=8,
+    api_version=9,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -42,7 +42,6 @@ plugin = PluginManifest(
     navigation=(NavigationItem("Notes", "notes:list", "notes", 40, "Writing"),),
     operator_capabilities=("notes.read", "notes.write"),
     mcp_read_capabilities=("notes.read",),
-    mcp_write_capabilities=("notes.write",),
     description="Notes, each with its author and the records it mentions.",
     navigation_groups=(NavigationGroup("Writing", "What gets written down, and where it is kept."),),
 )
@@ -80,8 +79,8 @@ A manifest must pass these checks:
 - Each navigation item has a label, a route and a namespace.
 - Each navigation group has a name and a description, and is one the
   manifest's own items are in, said once.
-- No capability appears twice in one list, and each MCP capability is also an
-  operator capability.
+- No capability appears twice in one list, and each MCP read capability is also
+  an operator capability.
 
 Two checks need the running host, so they run at startup. A plugin's
 capabilities are its own: naming one of the host's fails there. The installed
@@ -118,9 +117,14 @@ domain; the SDK owns integration mechanics:
 | Synthetic siblings and style checks | `hq_sdk.testing` |
 
 Imports from `application`, `core` or another host app are unsupported: they
-couple a private plugin to public implementation details.
-`python -m hq_sdk.validation src` enforces the boundary. It also refuses two
-habits:
+couple a private plugin to public implementation details. The extension check
+holds the boundary with Ruff's `banned-api` over the package's source
+(`tools/pipeline/extension-imports.toml`), which also refuses
+`django.core.cache`: a cache the host cannot see serves a stale answer, so a
+derived read is kept with `hq_sdk.reads.derivation` ([Derived
+reads](#derived-reads)). The check refuses two habits, the first by the host's
+`cell-read-by-its-text` rule (`tools/lint/ast-grep/rules`) and the second by
+`python -m hq_sdk.validation src`:
 
 | Refused | Why | Instead |
 | --- | --- | --- |
@@ -203,6 +207,8 @@ The check:
 - refuses a dot typed between two parts of a line in its `src` (less tests
   and migrations), by the host's `dot-typed-in-text` rule
   (`tools/lint/ast-grep/rules`); a line's parts join with `hq_sdk.ui.dotted`;
+- refuses a test that reads a table cell by its closing tag, by the host's
+  `cell-read-by-its-text` rule;
 - syncs the package against its lock and lints it;
 - enforces SDK-only imports;
 - type checks it;
@@ -306,7 +312,7 @@ The policy is `policy/plugin-admission-v1.json`. Admission requires:
 | The plugin contract and package tests, and a secret scan | `plugin-checks.yml` |
 | A dependency lock that matches `pyproject.toml` | the admission action |
 | An audit of every locked dependency with no known vulnerability | the admission action |
-| An SBOM of the wheel and its locked runtime dependencies, dev groups left out | the admission action |
+| A CycloneDX SBOM of the wheel and its locked runtime dependencies, exported from its lock by uv, dev groups left out | the admission action |
 
 Each id the policy lists is produced by one step or job, named beside it in
 `AdmissionEvidenceTests`, since Cordon's evidence step marks every listed id as
@@ -490,6 +496,19 @@ what is wrong, with its count where it stands for several; the body says what
 it means. A domain whose items are also decided together on one page of its
 own names it in `PluginIntegration.attention_url`, and the Needs you page's
 heading for the domain links there.
+
+A dashboard, overview or attention provider that raises, or answers what the
+host refuses (a status outside the vocabulary, an unknown card key, two of its
+cards with one id, an overview of another type), costs only its own place: HQ
+logs the failure with its traceback and the request id, shows one card valued
+"Unreadable" for the cards, an `attention` item titled "<name> could not be
+read" for the attention items, and leaves the overview out. The item is shown
+only to a reader holding the extension's `mcp_read_capabilities`. HQ asks
+again on the next read, since nothing that holds a stand-in is stored.
+`plugin_attention_items`, `plugin_dashboard_sections` and `plugin_overviews`
+read a failing sibling the same way (`read_source` in
+`hq/platform/application/plugins.py`), and `providers_derived_again` names
+each refused answer, so the extension's own suite fails on it.
 
 Supply the help the shared card shows ([Design](Design.md), "A card says what
 is wrong and holds what fixes it"):
@@ -733,7 +752,9 @@ A page extends a frame and fills its blocks. It never extends `base.html` or
 draws its own head: the view declares the page (`hq_sdk.pages`). A head action
 that opens a dialog declares that as well,
 `PageAction("Import", url, modal=PageDialog("import", "Import records", "notes/_import_form.html"))`,
-which `page.html` draws once with the page's context.
+which `page.html` draws once with the page's context. A head action may also be
+the control `hq_sdk.outbound.ask` returns, so `get_page_actions` returns
+`tuple[PageAction | Ask, ...]`, both from `hq_sdk.pages`.
 
 Where the page sits is declared too. `page_trail` is every crumb above it, from
 the top, as (label, url) pairs, `(("Notes", reverse_lazy("notes:list")),)`. A
@@ -1079,7 +1100,11 @@ HQ counts writes to every model table in the writing transaction, an
 extension's included, so nothing is invalidated by hand and nothing is served
 older than its rows. Asking `today`, `reached`, `passed`, `since` or `whole`
 also derives the answer again when one of them would change. An extension keeps
-no process-level cache, `cache.set` or timestamp table beside this.
+no process-level cache, `cache.set` or timestamp table beside this; the
+extension check refuses `django.core.cache` in its source.
+
+A test of an answer that turns on the day holds the clock those reads ask with
+`with hq_sdk.testing.frozen(moment):`. Patching `timezone.now` misses it.
 
 ## References
 

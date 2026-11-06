@@ -7,6 +7,7 @@ nothing written here. The form only renders (``clean`` asks ``validate_spec``)
 and names no provider: a field built from its annotation is never dropped.
 """
 
+import logging
 import types
 import typing
 from typing import Any, ClassVar, override
@@ -30,6 +31,8 @@ from .references import keeping_held
 # Constraint attributes carried by annotated-types objects in a pydantic field's
 # metadata. Read by name rather than by isinstance so a constraint class this
 # does not import still contributes what it has.
+logger = logging.getLogger("severino.providers")
+
 _CONSTRAINTS = ("min_length", "max_length", "ge", "le", "pattern")
 
 
@@ -302,7 +305,7 @@ def spec_form_class(
     provider = PROVIDERS[kind]
     context = context or NameContext()
     fields = {name: _field_for(field) for name, field in provider.spec_type.model_fields.items()}
-    live = {name: options for name, options in _live_choices(provider, context).items() if name in fields}
+    live = {name: options for name, options in _live(provider, provider.choices, context).items() if name in fields}
     for name, options in live.items():
         fields[name] = _offered(fields[name], options)
     for name, effect in provider.change_effects:
@@ -313,7 +316,7 @@ def spec_form_class(
     # late resolution and same swallow as the live choices above: a form that
     # will not render because an annotation could not be looked up is the least
     # useful moment to fail.
-    for name, notes in _live_notes(provider).items():
+    for name, notes in _live(provider, provider.notes).items():
         field = fields.get(name)
         if field is not None and isinstance(field.widget, NameListWidget):
             field.widget.notes = notes
@@ -432,31 +435,23 @@ def _field_for(field: Any) -> forms.Field:
     )
 
 
-def _live_choices(provider: ProviderSpec, context: NameContext) -> dict[str, tuple[tuple[str, str], ...]]:
-    """Options a provider says come from live data, resolved late.
+def _live(provider: ProviderSpec, reference: str, *args: Any) -> dict[str, Any]:
+    """What a provider's live lookup (its ``choices`` or ``notes``) answers, resolved late.
 
     A failure here must not take the form down: the page is how an operator
     fixes things, and refusing to render it because a lookup failed is the
-    least useful moment to fail. An empty list renders as "nothing to choose
-    from yet", which is both true and actionable.
+    least useful moment to fail. An empty answer renders as "nothing to choose
+    from yet", which is both true and actionable, and the failure is logged.
     """
 
-    if not provider.choices:
+    if not reference:
         return {}
     try:
-        return import_reference(provider.choices)(context) or {}
-    except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
-        return {}
-
-
-def _live_notes(provider: ProviderSpec) -> dict[str, dict[str, str]]:
-    """``{field: {value: note}}`` for values a provider says HQ observes."""
-
-    if not provider.notes:
-        return {}
-    try:
-        return import_reference(provider.notes)() or {}
-    except Exception:  # noqa: BLE001 - a broken lookup must not hide the form
+        return import_reference(reference)(*args) or {}
+    except Exception:  # a broken lookup must not hide the form
+        logger.exception(
+            "The live lookup %s of %s failed.", reference, provider.kind, extra={"event": "providers.lookup.failed"}
+        )
         return {}
 
 

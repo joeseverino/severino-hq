@@ -6,6 +6,7 @@ Which connections may adopt, and the ``NotManaged`` row a declaration an
 operator stops managing leaves, are docs/Derived-Facts.md#adoption.
 """
 
+import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
@@ -17,7 +18,7 @@ lazy from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.names import normalized_hostname
-from hq.domains.control_plane.providers import PROVIDERS, registry_label, service_facets
+from hq.domains.control_plane.providers import PROVIDERS, record_spec, registry_label, service_facets
 
 from .command_fields import Describe, Names
 from .conditions import stamped
@@ -27,13 +28,14 @@ from .security import Principal
 lazy from .connections import connection_rows
 lazy from .infrastructure import (
     ManagedResourceCommand,
-    enabled_resources,
     save_managed_resource,
     suggest_key,
 )
 lazy from .resource_operations import ResourceSaved
 
 # The capabilities that adopt, by name, for the pages that offer them.
+logger = logging.getLogger("severino.adoption")
+
 ADOPT = "infrastructure.resource.adopt"
 ADOPT_SERVICE = "infrastructure.service.adopt"
 
@@ -208,19 +210,19 @@ class Unmanaged:
 
 
 def unmanaged() -> tuple[Unmanaged, ...]:
-    """Records a provider holds that no enabled declaration accounts for.
+    """Records a provider holds that no declaration accounts for.
 
-    Matched on hostname rather than on any provider id, because that is how the
-    reconcilers find their own records. A declaration and a live record with the
-    same hostnames are the same thing by the only definition that governs what
-    actually happens.
+    A switched-off declaration counts: it pauses HQ's changes to its record,
+    and taking the record on again would undo the switch-off. Matched on
+    hostname rather than on any provider id, because that is how the
+    reconcilers find their own records. A declaration and a live record with
+    the same hostnames are the same thing by the only definition that governs
+    what actually happens.
     """
 
     declared: dict[str, set[tuple[str, ...]]] = {}
-    for resource in enabled_resources():
-        if resource.kind not in PROVIDERS:
-            continue
-        declared.setdefault(resource.kind, set()).add(record_identity(resource.kind, resource.spec))
+    for kind, spec in ManagedResource.objects.filter(kind__in=tuple(PROVIDERS)).values_list("kind", "spec"):
+        declared.setdefault(kind, set()).add(record_identity(kind, spec))
 
     manages = manages_through()
     found: list[Unmanaged] = []
@@ -230,9 +232,8 @@ def unmanaged() -> tuple[Unmanaged, ...]:
             continue
         known = declared.get(snapshot.kind, set())
         for record in snapshot.records:
-            try:
-                spec = provider.from_record(record)
-            except KeyError, TypeError, ValueError:
+            spec = record_spec(snapshot.kind, record)
+            if spec is None:
                 continue
             identity = record_identity(snapshot.kind, spec)
             if not identity or identity in known:
@@ -496,10 +497,16 @@ def adopt_discovered(kind: str, *, principal) -> dict[str, Any]:
             continue
         try:
             result = adopt(AdoptCommand(kind=item.kind, token=item.token), principal=principal)
-        except RecordNotFound, PolicyError, ValidationError, ValueError:
-            # One record that cannot be adopted must not stop the rest. The
-            # next sweep tries again, so this closes itself rather than needing
-            # anybody to notice.
+        except (RecordNotFound, PolicyError, ValidationError, ValueError) as error:
+            # One record that cannot be adopted must not stop the rest, and the
+            # next sweep tries again. A record that never can is said each time.
+            logger.warning(
+                "HQ could not take on the %s record %s: %s",
+                item.kind,
+                ", ".join(item.identity),
+                error,
+                extra={"event": "adoption.refused", "kind": item.kind},
+            )
             continue
         adopted.append(result.get("resource", {}).get("key", ""))
     return {"adopted": [key for key in adopted if key]}

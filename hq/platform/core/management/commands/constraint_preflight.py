@@ -85,8 +85,7 @@ def checks() -> Iterator[ConstraintCheck]:
                 continue
             try:
                 model = apps.get_model(app, operation.model_name)
-            except LookupError:
-                # A model a later migration removed has no table left to count.
+            except LookupError:  # noqa: S112 - a model a later migration removed has no table to count
                 continue
             yield _check(app, name, position, operation, model, editor)
 

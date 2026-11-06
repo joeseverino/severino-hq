@@ -1,0 +1,35 @@
+id: spec-read-in-one-place
+valid:
+  - 'names = read_spec(kind, spec, lambda spec: tuple(provider.hostnames(spec)))'
+  - |
+    try:
+        origin = provider.origin(spec)
+    except KeyError:
+        origin = ""
+  - |
+    try:
+        origin = provider.origin(spec)
+    except TypeError, ValueError:
+        origin = ""
+  - |
+    def _readings(provider, resource):
+        try:
+            return provider.readout(resource.spec, {})
+        except KeyError, TypeError, ValueError:
+            return ()
+invalid:
+  - |
+    try:
+        names = tuple(provider.hostnames(spec))
+    except KeyError, TypeError, ValueError:
+        names = ()
+  - |
+    try:
+        origin = provider.origin(spec)
+    except (KeyError, TypeError, ValueError):
+        origin = ""
+  - |
+    try:
+        origin = provider.origin(spec)
+    except (ValueError, KeyError, TypeError) as error:
+        origin = ""

@@ -143,7 +143,10 @@ def _first(_request):
 
 
 def _second(_request):
-    """The page the second URLconf routes ``example`` to."""
+    """The page the second URLconf routes ``example`` to, open to anybody."""
+
+
+_second.login_required = False
 
 
 class FirstURLconf:
@@ -180,12 +183,12 @@ class ChangedURLconfTests(TestCase):
     """A route is answered by the URLconf in force, never one a lookup kept from before."""
 
     def test_a_replaced_urlconf_is_answered_with_its_own_view(self):
-        from hq.platform.application.pages import route_view
+        from hq.platform.application.pages import Offering
 
         with override_settings(ROOT_URLCONF=FirstURLconf):
-            self.assertIs(route_view("example"), _first)
+            self.assertFalse(Offering(None).route("example"))
         with override_settings(ROOT_URLCONF=SecondURLconf):
-            self.assertIs(route_view("example"), _second)
+            self.assertTrue(Offering(None).route("example"))
 
 
 class OnePrincipalPerRequestTests(TestCase):

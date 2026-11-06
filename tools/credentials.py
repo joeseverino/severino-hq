@@ -127,11 +127,13 @@ class OnePassword:
 
 @dataclass(frozen=True, slots=True)
 class Call:
-    """One API request. The bearer token goes in a header, never the URL."""
+    """One API request. The token goes in a header, never the URL: ``Authorization``
+    as a bearer token, or as the whole value of the ``header`` an API names."""
 
     method: str
     url: str
     token: str = field(default="", repr=False)
+    header: str = "Authorization"
     json: Mapping[str, Any] | None = None
     form: Mapping[str, str] | None = field(default=None, repr=False)
 
@@ -148,7 +150,8 @@ def https(call: Call) -> Any:
 
     if not call.url.startswith("https://"):
         raise UsageError("The API base must be an https:// address.")
-    headers = {"Authorization": f"Bearer {call.token}"} if call.token else {}
+    bearer = call.header == "Authorization"
+    headers = {call.header: f"Bearer {call.token}" if bearer else call.token} if call.token else {}
     try:
         answer = httpx2.request(call.method, call.url, headers=headers, json=call.json, data=call.form, timeout=30)
     except UNREACHABLE as error:

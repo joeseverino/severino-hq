@@ -18,7 +18,7 @@ from hq.platform.application.connections import (
 )
 from hq.platform.application.contracts import effect_glossary
 from hq.platform.application.dashboard import OperatingSnapshot, operating_snapshot
-from hq.platform.application.findings import Findings, FindingsQuery, findings as application_findings
+from hq.platform.application.findings import FindingsQuery
 from hq.platform.application.held_answer import HeldCall
 from hq.platform.application.input_errors import unknown_field_errors
 from hq.platform.application.integration_specs import FIELD_MASK, PAGE_FIELD
@@ -43,6 +43,7 @@ from hq.platform.application.resources import (
 from hq.platform.application.security import Capability
 from hq.platform.application.topology import TopologyQuery, topology as application_topology
 from hq.platform.application.topology_answer import TopologyAnswer
+from hq.platform.mcp.finding_actions import AgentFindings, agent_findings
 from hq.platform.mcp.identity import current_principal
 from hq.platform.mcp.shapes import tool
 
@@ -114,8 +115,9 @@ def describe_resources(name: str | None = None) -> ResourceCatalog:
     """Describe every readable HQ resource, its supported operations, and whether you are permitted each.
 
     Each list names the `filters` it narrows by. Pass a kind as `name` for
-    that one resource with its list's whole `query_schema`: each filter's
-    type, the values it takes, and the most `limit` may ask for.
+    that one resource with its list's `query_schema`, each filter's type and
+    the values it takes, and its `paging`: the most `limit` may ask for, and
+    `cursor` where the list pages.
     """
 
     return describe_application_resources(principal=current_principal(), name=name or "")
@@ -129,20 +131,21 @@ def describe_connections() -> ConnectionCatalog:
 
 
 @tool("Open findings", requires=holding(Capability.READ), arguments=FindingsQuery)
-def get_findings(**narrowing: Any) -> Findings:
+def get_findings(**narrowing: Any) -> AgentFindings:
     """What HQ currently claims is wrong, with evidence and suggested remedies.
 
     Pick it for the open problems themselves; `system_health` says only whether
     HQ answers, and the `status-brief` prompt puts both before a person.
 
-    Each remedy names an existing capability and target; run one with
-    `execute_capability`. A remedy absent means this principal cannot run it.
+    Every action a finding carries (a remedy, an offer, an investigation, a
+    workflow step's call) is a tool call: send its `arguments` to its `tool`.
+    A remedy absent means this principal cannot run it.
     `severity` is a floor (`attention` also returns `serious`) and
     `limit` caps how many come back, most severe first; `summary` still
     counts them all and says whether any were held back.
     """
 
-    return application_findings(principal=current_principal(), **narrowing)
+    return agent_findings(principal=current_principal(), **narrowing)
 
 
 @tool("Infrastructure topology", requires=holding(Capability.READ), arguments=TopologyQuery)

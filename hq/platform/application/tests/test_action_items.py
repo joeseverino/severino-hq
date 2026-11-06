@@ -415,7 +415,7 @@ class AsideCapabilityTests(TestCase):
                     ).exists()
                 )
 
-    def test_a_token_is_refused_whatever_it_was_granted(self):
+    def test_a_principal_with_no_person_is_refused_whatever_it_was_granted(self):
         granted = frozenset({Capability.SET_ASIDE_ACTION_ITEMS})
         rows = {ITEM["key"]: ITEM["revision"]}
         for principal in (

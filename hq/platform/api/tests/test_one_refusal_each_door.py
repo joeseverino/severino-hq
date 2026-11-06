@@ -9,7 +9,7 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase, override_settings
 
 from hq.platform.application.capabilities import adapter_refusal
-from hq.platform.application.security import Capability, Principal
+from hq.platform.application.security import Capability, Principal, agent_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.management.commands.hq_call import answered
 from hq.platform.mcp.identity import set_principal
@@ -55,7 +55,6 @@ def _query_text(value):
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class OneRefusalEachDoorTests(TestCase):
     client_class = ContractClient
@@ -145,6 +144,8 @@ class OneRefusalEachDoorTests(TestCase):
     def test_a_caller_without_the_grant_is_refused_alike_whatever_it_carried(self):
         """No door tells a reader the shape of target a change it may not run would have taken."""
 
+        # The reader a token granting only `read` becomes, on every door.
+        reader = agent_principal(AGENT.actor, "mcp", frozenset({"read"}))
         for name, carried in CALLS:
             arguments = {"name": name, "payload": {}, **carried}
             with self.subTest(name=name, carried=carried):
@@ -156,13 +157,13 @@ class OneRefusalEachDoorTests(TestCase):
                         HTTP_AUTHORIZATION=f"Bearer {_token(scope='read')}",
                         HTTP_IDEMPOTENCY_KEY="example-envelope",
                     )
-                over_mcp = self._mcp("execute_capability", arguments)
+                over_mcp = self._mcp("execute_capability", arguments, reader)
                 with host_only():
-                    extension = sdk_execute(name, {}, principal=AGENT, **carried)
+                    extension = sdk_execute(name, {}, principal=reader, **carried)
 
                 self.assertEqual(api.status_code, 403, api.content)
-                self.assertEqual(api.json()["error"]["code"], "forbidden")
+                self.assertEqual(api.json()["error"]["code"], "insufficient_scope")
                 for door, answer in (("mcp", over_mcp), ("hq_sdk", extension)):
                     with self.subTest(door=door):
                         self.assertFalse(answer["ok"])
-                        self.assertEqual(answer["error"]["code"], "forbidden")
+                        self.assertEqual(answer["error"]["code"], "insufficient_scope")

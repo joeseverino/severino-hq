@@ -136,7 +136,15 @@ class Classifier:
     def go(self, path):
         source = self.source(path)
         if path not in self.cache:
-            self.cache[path] = json.loads(subprocess.check_output([str(self.inspector), str(source)], text=True))
+            try:
+                inspected = subprocess.run(
+                    [str(self.inspector), str(source)], capture_output=True, text=True, check=True
+                )
+            except subprocess.CalledProcessError as failed:
+                # Why it failed travels with the error, never past it to the run's stderr.
+                failed.add_note(failed.stderr.strip())
+                raise
+            self.cache[path] = json.loads(inspected.stdout)
         return self.cache[path]
 
     @cached_property

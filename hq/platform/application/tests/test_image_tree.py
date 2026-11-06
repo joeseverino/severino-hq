@@ -1,6 +1,7 @@
 """image:verify:tree holds the composed suite's tree to the image's /app, whatever form a dockerignore line or the COPY takes."""
 
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -10,7 +11,8 @@ from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
 CHECK = "mise-tasks/image/verify/tree"
-LIBRARIES = ("export-tree.sh", "image-tree.sh")
+# A `. ./tools/lib/<name>` line, the way a task or a library sources another.
+SOURCED = re.compile(r"^[ \t]*\. \./tools/lib/(\S+)", re.MULTILINE)
 
 # A checkout's files, and what the image built from it holds in /app with
 # this repository's Dockerfile and Dockerfile.dockerignore: docs/ is not
@@ -23,11 +25,22 @@ SHIPPED = (
     "deploy/unit.sh",
     "deploy/bin/hq-host",
     "deploy/bin/hq-secrets",
+    "deploy/bin/hq-edge",
     "hq/__pycache__/app.cpython-315.pyc",
 )
 
 # The image's /app, printed by a docker that answers every call with it.
 FAKE_DOCKER = '#!/bin/sh\ncat "${FAKE_APP_LISTING:?}"\n'
+
+
+def copy_libraries(root: Path, checkout: Path, path: str) -> None:
+    """Copy into ``checkout`` the libraries ``path`` sources, and theirs, read from its own lines."""
+
+    for library in SOURCED.findall((root / path).read_text()):
+        if not (checkout / "tools/lib" / library).exists():
+            (checkout / "tools/lib").mkdir(parents=True, exist_ok=True)
+            shutil.copy(root / "tools/lib" / library, checkout / "tools/lib")
+            copy_libraries(root, checkout, f"tools/lib/{library}")
 
 
 @tag("source")
@@ -42,9 +55,7 @@ class ImageTreeTests(SimpleTestCase):
                 (checkout / name).write_text(name)
             (checkout / "Dockerfile").write_text(dockerfile or (ROOT / "Dockerfile").read_text())
             shutil.copy(ROOT / "Dockerfile.dockerignore", checkout)
-            (checkout / "tools/lib").mkdir(parents=True)
-            for library in LIBRARIES:
-                shutil.copy(ROOT / "tools/lib" / library, checkout / "tools/lib")
+            copy_libraries(ROOT, checkout, CHECK)
             subprocess.run(["git", "init", "--quiet", str(checkout)], check=True)
             bin_dir = Path(folder) / "bin"
             bin_dir.mkdir()

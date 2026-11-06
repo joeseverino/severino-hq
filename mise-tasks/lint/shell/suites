@@ -2,8 +2,12 @@
 #MISE description="Each shell suite named, under every shell its first line calls for: what lint:shell and mise run test run a suite through"
 #MISE hide=true
 #MISE quiet=true
+#MISE env={GIT_TEMPLATE_DIR=""}
 #USAGE arg "<suite>..." var=#true help="The suites, tests/shell/test-*.sh, here or in another tree"
 set -eu
+
+# A repository a suite makes or clones gets none of git's template (its
+# sample hooks, which nothing runs): GIT_TEMPLATE_DIR empty, as above.
 
 # A /bin/sh suite runs under each shell /bin/sh is somewhere: the Mac's, and
 # dash, Linux's (CI's and the hosts'), wherever it is installed. The suite

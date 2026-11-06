@@ -141,14 +141,16 @@ or HQ's reason it can offer neither. A finding rule declares two fields:
 
 | Field | Carried as | When |
 |---|---|---|
-| `operator_action` | `steps`, each an `OperatorStep`: a label, a command HQ never runs, notes; the API returns `operator_steps` beside the remedies | the operator has a command to run |
+| `operator_action` | `steps`, each an `OperatorStep`: a label, a command HQ never runs, notes; the API and MCP's `get_findings` both return `operator_steps` beside the remedies, which MCP writes as tool calls | the operator has a command to run |
 | `no_help_reason` | the reason | there is no remedy and no command |
 
 A queue `Insight` keeps the SDK's shape. A remedy is one of its `actions`; a
 command or reason is a `run` or `cannot` step of its `workflow`
 (`hq/platform/application/item_help.py`).
-`hq/platform/application/tests/test_item_help.py` fails on a host provider that
-builds an item without help, read through the `item_help` gauge defined there.
+The ast-grep rule `attention-item-carries-help` (lint:ast-grep) fails on host
+source that builds an item without help, and
+`hq/platform/application/tests/test_item_help.py` reads the composed queue
+through the `item_help` gauge defined there.
 
 A rule is declared beside the detector that decides it: each module that raises
 findings (`perimeter_findings`, `controller_findings`, `docker_estate`,
@@ -734,7 +736,7 @@ The security design is in [Security](Security.md). Inside the core:
 - a typed `Principal` carries explicit capabilities into the service, which
   authorizes;
 - `capability_policy.decide` answers allow, hold or deny before a capability
-  runs;
+  runs, from the agent's own rule or else the default hold;
 - services revalidate every input and own their transactional writes;
 - restricted documentation is removed from AI-facing results;
 - every success leaves an attributed audit event, and every refusal a `Denied`

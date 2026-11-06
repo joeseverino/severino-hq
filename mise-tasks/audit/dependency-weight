@@ -1,0 +1,22 @@
+#!/bin/sh
+#MISE description="What each dependency weighs: each locked Python distribution's installed size, the runtime set apart from the dev groups, and each package's and module's bytes in every Go binary the image ships, as go-size-analyzer reads them, sorted, with the totals; read-only"
+#MISE hide=true
+#MISE extends="audit"
+
+# The Python half is tools/audit_weight.py. Each Go binary is built as the
+# Dockerfile builds it, stripped, and go-size-analyzer (gsa) attributes its
+# bytes to the packages and modules they belong to, line tables included,
+# with the sections nothing owns beside them.
+set -eu
+
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+
+uv run --locked python -m tools.audit_weight
+
+for command in hq-controller hq-secrets hq-edge hq-host; do
+    GOOS=linux CGO_ENABLED=0 go -C controller build -trimpath -ldflags='-s -w -buildid=' -o "${work}/${command}" "./cmd/${command}"
+    printf '\n'
+    # gsa logs each step on stderr, shown only when it fails.
+    gsa "${work}/${command}" 2>"${work}/said" || { cat "${work}/said" >&2; exit 1; }
+done

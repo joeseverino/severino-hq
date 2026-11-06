@@ -44,6 +44,14 @@ class HttpsTests(SimpleTestCase):
         self.assertEqual(request.headers["Authorization"], f"Bearer {TOKEN}")
         self.assertNotIn(TOKEN, str(request.url))
 
+    def test_a_key_an_api_takes_in_a_header_of_its_own_is_that_headers_whole_value(self):
+        transport, _ = sent(httpx2.Response(200, json={}), Call("GET", f"{API}/apis", token=TOKEN, header="X-API-Key"))
+
+        (request,) = transport.requests
+        self.assertEqual(request.headers["X-API-Key"], TOKEN)
+        self.assertNotIn("Authorization", request.headers)
+        self.assertNotIn(TOKEN, str(request.url))
+
     def test_a_redirect_is_the_answer_and_no_second_request_follows(self):
         moved = httpx2.Response(302, headers={"Location": "https://elsewhere.example.test/"}, json={"moved": True})
 

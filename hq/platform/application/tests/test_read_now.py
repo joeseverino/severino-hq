@@ -209,7 +209,14 @@ class VerificationTests(TestCase):
     def verify(self, finding, subject=None, principal=None):
         from ..findings import _verification
 
-        return _verification(finding, principal or cli_principal(), subject)
+        action, _read = _verification(finding, principal or cli_principal(), subject)
+        return action
+
+    def read(self, finding, principal=None):
+        from ..findings import _verification
+
+        _action, read = _verification(finding, principal or cli_principal(), None)
+        return read
 
     def finding(self, **fields):
         from ..finding_model import Finding
@@ -230,6 +237,8 @@ class VerificationTests(TestCase):
         self.assertEqual(action.method, "POST")
         self.assertIn("kind=tailscale.device", action.url)
         self.assertIn("next=%2Finfrastructure%2Ffindings%2F%3Frule%3Dexample-rule", action.url)
+        # The read the link asks for, carried beside it for a door that sends it as a payload.
+        self.assertEqual(self.read(self.finding(scope="tailscale.device")).kind, "tailscale.device")
 
     def test_a_finding_no_reading_involves_is_checked_again(self):
         action = self.verify(self.finding())
@@ -241,5 +250,6 @@ class VerificationTests(TestCase):
         reader = Principal("reader", "test", frozenset({Capability.READ}))
 
         action = self.verify(self.finding(scope="tailscale.device"), principal=reader)
+        self.assertIsNone(self.read(self.finding(scope="tailscale.device"), principal=reader))
 
         self.assertEqual(action.label, "Check again")

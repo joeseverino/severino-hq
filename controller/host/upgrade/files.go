@@ -92,5 +92,9 @@ func copyFileOwned(source, target string, owner fs.FileInfo) (err error) {
 		}
 	}
 	modified := unix.NsecToTimeval(info.ModTime().UnixNano())
-	return unix.Futimes(int(out.Fd()), []unix.Timeval{modified, modified})
+	if err := unix.Futimes(int(out.Fd()), []unix.Timeval{modified, modified}); err != nil {
+		return err
+	}
+	// A copy renamed over the override must be whole on disk before the rename.
+	return out.Sync()
 }

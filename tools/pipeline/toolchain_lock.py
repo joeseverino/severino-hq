@@ -21,6 +21,9 @@ ROOT = Path(__file__).resolve().parents[2]
 IMAGES = ("Dockerfile", "composition/Dockerfile")
 # The OS and interpreter the app runs on: a base, not a build tool.
 BASE_IMAGE = "python:"
+# The reserved name for an empty base, which pulls nothing: a stage of it only
+# holds what it copies from the stages beside it.
+EMPTY_BASE = "scratch"
 # The installer of every other build tool. Renovate moves its tag and digest
 # and min_version together.
 MISE_IMAGE = "ghcr.io/jdx/mise"
@@ -74,7 +77,7 @@ def foreign_images(images: dict[str, str], mise: str) -> list[str]:
     found = []
     for name, text in images.items():
         stages = STAGE.findall(text)
-        own = {alias for _, alias in stages if alias}
+        own = {alias for _, alias in stages if alias} | {EMPTY_BASE}
         refs = [ref for ref, _ in stages] + COPY_FROM.findall(text)
         problems = [
             foreign_image(ref, mise) for ref in refs if ref not in own and not ref.startswith(("$", BASE_IMAGE))

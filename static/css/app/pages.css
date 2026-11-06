@@ -328,7 +328,6 @@
 /* Each fact that links is a line a target tall (`--target-min`), since they wrap onto lines of their own on a phone. */
 .agent-state-facts a { color: var(--muted); line-height: var(--target-min); }
 .agent-state-facts a:hover { color: var(--ink); }
-.policy-dormant-note { margin-left: auto; color: var(--muted-2); }
 .agent-state-facts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 /* An agent's latest events, under its row: one line each, newest first. */
 .agent-events { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
@@ -340,7 +339,6 @@
 .mcp-endpoint { display: grid; gap: var(--stack-gap); }
 .policy { display: grid; gap: var(--stack-gap); }
 .policy-table .policy-select { width: 100%; max-width: 11rem; }
-.policy-off { display: block; color: var(--muted-2); font-size: var(--text-3xs); font-weight: 500; letter-spacing: 0; text-transform: none; }
 .policy-table thead th:first-child { color: var(--ink-2); font-size: var(--text-xs); }
 .policy-table tbody th { font-weight: 500; color: var(--ink); }
 .policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-2); }
@@ -352,7 +350,6 @@
 .policy-select.rule-allow { color: var(--ok); border-color: currentColor; }
 .policy-select.rule-approve { color: var(--warn); border-color: currentColor; }
 .policy-select.rule-deny { color: var(--danger); border-color: currentColor; }
-.policy-select.is-dormant { color: var(--muted-2); }
 /* A save button pinned to the bottom of a long form. It shows once the form
    has changed, and holds its room until then, so showing moves nothing:
    app.js marks the form clean on load and the first edit clears the mark.

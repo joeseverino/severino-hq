@@ -7,7 +7,6 @@ from django.urls import reverse
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.command_center import command_center
 from hq.platform.application.command_targets import starting_page
-from hq.platform.application.core_capabilities import CORE_CAPABILITY_SPECS
 from hq.platform.application.integration_specs import ON_ITS_PAGE
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.markup import select, within
@@ -49,7 +48,7 @@ class CommandStartTests(TestCase):
         self.assertTrue(approve.destination_label)
 
     def test_search_does_not_offer_a_command_only_its_own_page_sends(self):
-        held_by_their_pages = {spec.name for spec in CORE_CAPABILITY_SPECS if spec.reached_from == ON_ITS_PAGE}
+        held_by_their_pages = {spec.name for spec in capability_registry().values() if spec.reached_from == ON_ITS_PAGE}
 
         self.assertTrue(held_by_their_pages)
         for name in held_by_their_pages:

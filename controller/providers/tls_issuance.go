@@ -1,17 +1,12 @@
 package providers
 
 import (
-	"archive/tar"
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/hex"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,6 +15,8 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/api"
+	"github.com/joeseverino/severino-hq/controller/edge"
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -35,121 +32,26 @@ func splitChain(fullchain []byte) ([]byte, []byte, error) {
 	return out, bytes.TrimLeft(chain, " \t\n\r\x0b\x0c"), nil
 }
 
-// certificateBundle is the tar a Caddy consumer's deploy command receives.
-func certificateBundle(fullchain, privateKey []byte) []byte {
-	var buffer bytes.Buffer
-	archive := tar.NewWriter(&buffer)
-	for _, file := range []struct {
-		name  string
-		value []byte
-	}{{"fullchain.pem", fullchain}, {"privkey.pem", privateKey}} {
-		_ = archive.WriteHeader(&tar.Header{Name: file.name, Mode: 0o600, Size: int64(len(file.value)), Typeflag: tar.TypeReg, ModTime: time.Unix(0, 0), Format: tar.FormatUSTAR})
-		_, _ = archive.Write(file.value)
-	}
-	_ = archive.Close()
-	return buffer.Bytes()
-}
-
 // readBundle reads a snapshot bundle: exactly the two files, nothing else.
 func readBundle(payload []byte) ([]byte, []byte, error) {
-	reader := tar.NewReader(bytes.NewReader(payload))
-	names := map[string]bool{}
-	files := map[string][]byte{}
-	regular := map[string]bool{}
-	for {
-		header, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, nil, &ProviderError{Message: "certificate snapshot was invalid"}
-		}
-		names[header.Name] = true
-		regular[header.Name] = header.Typeflag == tar.TypeReg
-		if header.Typeflag == tar.TypeReg {
-			data, err := io.ReadAll(reader)
-			if err != nil {
-				return nil, nil, &ProviderError{Message: "certificate snapshot was invalid"}
-			}
-			files[header.Name] = data
-		}
+	fullchain, privateKey, err := edge.ReadBundle(payload)
+	if err != nil {
+		return nil, nil, &ProviderError{Message: err.Error()}
 	}
-	if len(names) == 0 {
-		return nil, nil, &ProviderError{Message: "certificate snapshot was invalid"}
-	}
-	if len(names) != 2 || !names["fullchain.pem"] || !names["privkey.pem"] {
-		return nil, nil, &ProviderError{Message: "certificate snapshot contained unexpected files"}
-	}
-	if !regular["fullchain.pem"] || !regular["privkey.pem"] {
-		return nil, nil, &ProviderError{Message: "certificate snapshot was incomplete"}
-	}
-	return files["fullchain.pem"], files["privkey.pem"], nil
-}
-
-// firstCertificate is the first certificate block in data.
-func firstCertificate(data []byte) (*x509.Certificate, error) {
-	for {
-		block, rest := pem.Decode(data)
-		if block == nil {
-			return nil, errors.New("no certificate")
-		}
-		if block.Type == "CERTIFICATE" || block.Type == "X509 CERTIFICATE" {
-			return x509.ParseCertificate(block.Bytes)
-		}
-		data = rest
-	}
-}
-
-// firstPrivateKey is the first private key block in data.
-func firstPrivateKey(data []byte) (crypto.Signer, error) {
-	for {
-		block, rest := pem.Decode(data)
-		if block == nil {
-			return nil, errors.New("no private key")
-		}
-		switch block.Type {
-		case "PRIVATE KEY":
-			key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-			if err != nil {
-				return nil, err
-			}
-			signer, ok := key.(crypto.Signer)
-			if !ok {
-				return nil, errors.New("unsupported key")
-			}
-			return signer, nil
-		case "RSA PRIVATE KEY":
-			return x509.ParsePKCS1PrivateKey(block.Bytes)
-		case "EC PRIVATE KEY":
-			return x509.ParseECPrivateKey(block.Bytes)
-		case "ENCRYPTED PRIVATE KEY":
-			return nil, errors.New("encrypted key")
-		}
-		data = rest
-	}
+	return fullchain, privateKey, nil
 }
 
 // validateCertificate checks the chain's leaf against its key and the names it
 // must cover, and returns the leaf's SHA-256 fingerprint.
 func validateCertificate(fullchain, privateKey []byte, domains []string) (string, error) {
-	leaf, err := firstCertificate(fullchain)
-	if err != nil {
+	leaf, err := edge.Pair(fullchain, privateKey)
+	switch {
+	case errors.Is(err, edge.ErrCertificateUnreadable):
 		return "", &ProviderError{Message: "certificate unreadable", Err: err}
-	}
-	key, err := firstPrivateKey(privateKey)
-	if err != nil {
+	case errors.Is(err, edge.ErrKeyUnreadable):
 		return "", &ProviderError{Message: "private key unreadable", Err: err}
-	}
-	certificatePublic, err := x509.MarshalPKIXPublicKey(leaf.PublicKey)
-	if err != nil {
-		return "", &ProviderError{Message: "certificate unreadable", Err: err}
-	}
-	keyPublic, err := x509.MarshalPKIXPublicKey(key.Public())
-	if err != nil {
-		return "", &ProviderError{Message: "private key unreadable", Err: err}
-	}
-	if !bytes.Equal(certificatePublic, keyPublic) {
-		return "", &ProviderError{Message: "certificate and private key do not match"}
+	case err != nil:
+		return "", &ProviderError{Message: err.Error()}
 	}
 	digest := sha256.Sum256(leaf.Raw)
 	sans := nameSet(leaf.DNSNames)
@@ -258,7 +160,7 @@ func (r *Registry) resumableLineage(spec TLSCertificateSpec, deployedFingerprint
 	if fingerprint == deployedFingerprint {
 		return nil, nil, false, nil
 	}
-	leaf, err := firstCertificate(fullchain)
+	leaf, err := edge.FirstCertificate(fullchain)
 	if err != nil {
 		return nil, nil, false, &ProviderError{Message: "lineage certificate unreadable", Err: err}
 	}
@@ -347,13 +249,13 @@ func saveLineage(dir string, fullchain, privateKey []byte) error {
 			return err
 		}
 	}
-	if err := syncDir(staged); err != nil {
+	if err := atomicfile.SyncDir(staged); err != nil {
 		return err
 	}
 	if err := replaceDir(staged, dir); err != nil {
 		return err
 	}
-	return syncDir(parent)
+	return atomicfile.SyncDir(parent)
 }
 
 // replaceDir puts staged at dir. An existing dir is exchanged with staged in

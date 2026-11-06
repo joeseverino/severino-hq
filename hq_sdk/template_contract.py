@@ -405,7 +405,7 @@ def _tag_parts(compile_function: Any) -> list[str]:
 
 
 def _class_options(parameters: list[str]) -> list[str]:
-    """The options that hand the tag class names (``css``, ``note_css``), held
+    """The options that hand the tag class names (``css``), held
     to the public classes as a ``class`` attribute is."""
 
     return [name.rstrip("=") for name in parameters if re.fullmatch(r"(\w+_)?css=?", name)]

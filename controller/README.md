@@ -26,9 +26,16 @@ connections must belong to the requested provider.
 socket and exits as the job ended. A timer runs it inside the web container;
 it loads no connection and links into no provider call.
 
+`cmd/hq-edge` is the receiver on a Caddy edge the controller deploys
+certificates and routes to over SSH (`edge/`, which states what it trusts). Its
+version and operation names are the ones `providers/caddy.go` sends and names.
+
 `cmd/hq-secrets` is a separate binary: the renderer root runs on the host to
 read the vault through 1Password Connect and install what the consumers read
-(`docs/Secrets.md`). It links no provider code. Connections reach the
+(`docs/Secrets.md`). It links no provider code. It and `hq-edge` take what
+they share with `hq-host` from `internal/hostcore`, which imports only the
+standard library, and `cmd/hq-secrets/deps_test.go` lists every module each
+may link. Connections reach the
 controller in one document whose types both sides share (`connections/`),
 mounted read-only and named by `HQ_CONTROLLER_CONNECTIONS`; none is an
 environment variable of the container. Those types are generated from

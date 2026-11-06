@@ -5,7 +5,7 @@ from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -37,7 +37,14 @@ from ..domains import Domain, domain_navigation, host_domains
 from ..history import CONTAINERS, DEPLOYS, Moment
 from ..moments import when_day
 from ..plugins import NavigationItem, PluginIntegration
-from ..security import AuthorizationError, Capability, Principal, cli_principal, mcp_principal, web_principal
+from ..security import (
+    AuthorizationError,
+    Capability,
+    Principal,
+    agent_principal,
+    cli_principal,
+    web_principal,
+)
 from .markup import all_elements, hrefs, select, text, texts, with_class
 
 TODAY = date(2026, 10, 14)
@@ -312,15 +319,14 @@ class WriteTests(TestCase):
         )
         self.assertFalse(Entry.objects.exists())
 
-    def test_an_agent_has_the_calendar_only_on_its_own_switch(self):
-        with override_settings(SEVERINO_AGENT_ENABLE_CALENDAR=False, SEVERINO_AGENT_ENABLE_WRITES=True):
-            self.assertFalse(mcp_principal().permits(Capability.READ_CALENDAR))
-            self.assertFalse(mcp_principal().permits(Capability.WRITE_CALENDAR))
-        with override_settings(SEVERINO_AGENT_ENABLE_CALENDAR=True, SEVERINO_AGENT_ENABLE_WRITES=False):
-            agent = mcp_principal()
-            self.assertTrue(agent.permits(Capability.WRITE_CALENDAR))
-            self.assertFalse(agent.permits("write_expenses"))
-            self.assertFalse(agent.permits(Capability.DELETE_CALENDAR))
+    def test_an_agent_has_the_calendar_only_where_its_grant_names_it(self):
+        writer = agent_principal("example-agent", "mcp", frozenset({"read", "write_expenses"}))
+        self.assertFalse(writer.permits(Capability.READ_CALENDAR))
+        self.assertFalse(writer.permits(Capability.WRITE_CALENDAR))
+        agent = agent_principal("example-agent", "mcp", frozenset({"read", "read_calendar", "write_calendar"}))
+        self.assertTrue(agent.permits(Capability.WRITE_CALENDAR))
+        self.assertFalse(agent.permits("write_expenses"))
+        self.assertFalse(agent.permits(Capability.DELETE_CALENDAR))
 
     def test_choices_are_per_person_and_name_a_real_source(self):
         user = get_user_model().objects.create_user("calendar-chooser")
@@ -340,7 +346,7 @@ class WriteTests(TestCase):
         )
         self.assertEqual(invalid["error"]["code"], "invalid_input")
 
-    def test_a_credential_keeps_no_calendar_choices(self):
+    def test_a_principal_with_no_person_keeps_no_calendar_choices(self):
         refused = execute_capability(
             CHOOSE_SOURCE, {"source": "history.deploys", "shown": True}, principal=cli_principal()
         )

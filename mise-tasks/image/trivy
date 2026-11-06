@@ -1,13 +1,22 @@
 #!/bin/sh
-#MISE description="Trivy over an image, as Compose scans the composed one: fixable HIGH and CRITICAL fail"
+#MISE description="Trivy over an image, as Compose scans the composed one: its CycloneDX SBOM is written, and a fixable HIGH or CRITICAL vulnerability in that SBOM, or a HIGH or CRITICAL secret in the image, fails"
 #MISE lock="heavy"
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends_post=["image:docker stop"]
 #USAGE arg "[image]" help="The image to scan; without one, the host image is built and scanned"
+#USAGE flag "--sbom <file>" default="var/trivy/sbom.cdx.json" help="Where the image's CycloneDX SBOM goes, with the scans' reports beside it"
 
-# The Trivy mise.toml pins, which Compose scans with too, with its flags.
+# The Trivy mise.toml pins, which Compose scans with too. The SBOM is read
+# from the image first, and the vulnerability gate scans that file, so the
+# list Compose attests is the list that was scanned. Secrets are a pass of
+# their own, since `trivy sbom` has no secret scanner, and Trivy records a
+# Python distribution's file hashes only in an SBOM analysis with the secret
+# scanner off. TRIVY_CACHE_DIR, when set, is where the vulnerability
+# database is kept.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 # The VM boots once the turn is this task's, so it never waits idle for one.
 mise run image:docker start
 
@@ -16,4 +25,32 @@ if [ -z "${image}" ]; then
     image="severino-hq:trivy"
     mise run image:build --tag "${image}"
 fi
-trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 --format table "${image}"
+sbom="${usage_sbom:?}"
+dir="$(dirname "${sbom}")"
+vulnerabilities="${dir}/trivy-vulnerabilities.json"
+secrets="${dir}/trivy-secrets.json"
+mkdir -p "${dir}"
+rm -f "${sbom}" "${vulnerabilities}" "${secrets}"
+
+trivy image --quiet --format cyclonedx --output "${sbom}" "${image}"
+# Each report goes to a file rather than the table, which lists every
+# package, extensions included, and wraps a long name past a log's mask.
+failed=0
+trivy sbom --quiet --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 \
+    --format json --output "${vulnerabilities}" "${sbom}" || failed=1
+trivy image --quiet --scanners secret --severity HIGH,CRITICAL --exit-code 1 \
+    --format json --output "${secrets}" "${image}" || failed=1
+if [ "${failed}" -ne 0 ]; then
+    # Each finding by its ID and where it is, never a secret's matched text.
+    for report in "${vulnerabilities}" "${secrets}"; do
+        [ ! -f "${report}" ] || jq -r '
+            .Results[]? | .Target as $target
+            | (.Vulnerabilities[]?
+                | "::error title=\(.Severity) \(.VulnerabilityID)::\(.Severity) \(.VulnerabilityID) in \(.PkgName) \(.InstalledVersion), fixed in \(.FixedVersion)"),
+              (.Secrets[]?
+                | "::error title=\(.Severity) secret \(.RuleID)::\(.Severity) secret \(.RuleID) in \($target) line \(.StartLine)")' \
+            "${report}" | sort -u
+    done
+    exit 1
+fi
+echo "image:trivy: no finding in ${image}; its SBOM is ${sbom}"

@@ -29,6 +29,9 @@ import re
 from collections import defaultdict
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
+
+from .apart import apart
 
 ROOT = "HostRefusal"
 MARKER = "Sentence"
@@ -506,3 +509,36 @@ class Checker:
 
 def check(sources: Mapping[str, ast.Module]) -> Checker:
     return Checker(sources)
+
+
+@dataclass(frozen=True)
+class Checked:
+    """What the checker found in a checkout: its problems, what it read, and every kind of refusal it knows."""
+
+    problems: list[str]
+    refusals_built: int
+    carried: int
+    refusals: set[str]
+
+
+def checked(root: Path) -> Checked:
+    """The checker run over every module under ``root``'s hq/ outside tests, in a process of its own."""
+
+    found = apart(_checked, root)
+    return Checked(found["problems"], found["refusals_built"], found["carried"], set(found["refusals"]))
+
+
+def _checked(root: str) -> dict[str, object]:
+    base = Path(root)
+    sources = {
+        str(path.relative_to(base)): ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for path in (base / "hq").rglob("*.py")
+        if "tests" not in path.parts
+    }
+    done = check(sources)
+    return {
+        "problems": done.problems,
+        "refusals_built": done.refusals_built,
+        "carried": done.carried,
+        "refusals": sorted(done.index.refusals),
+    }

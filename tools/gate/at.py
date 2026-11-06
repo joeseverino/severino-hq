@@ -10,15 +10,17 @@ tools/gate/turn.py finds it narrow; a run at a ref builds a worktree, so it alwa
 import fnmatch
 import json
 import os
+import re
 import shlex
 import signal
+import subprocess
 import sys
-import tempfile
 from collections.abc import Callable, Collection
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Self
 
+from hq.config.sandbox import DATABASE, isolate
 from hq.platform.application.ui import counted
 from hq.platform.core.tests.task import (
     RefError,
@@ -31,7 +33,8 @@ from hq.platform.core.tests.task import (
     usage,
     worktree,
 )
-from tools.gate.turn import in_turn, inside, narrow
+from tests.mise_tasks import mise_tasks
+from tools.gate.turn import in_turn, inside
 from tools.gate.verdict import REPORTS, FailedTest, Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,6 +94,10 @@ SHELL_SUITES = "tests/shell"
 SHELL_SUITE = "test-*.sh"
 SHELL_TASK = "lint:shell:suites"
 MISE = ["mise"]
+# Ends a run with the line on what its process tree spent; a run inside a measured one adds none.
+MEASURER = str(ROOT / "tools" / "lib" / "measured")
+# Set by the run that found itself narrow, for the run it execs under the measurer, which pops it.
+FOUND_NARROW = "HQ_FOUND_NARROW"
 
 
 class KeepRefused(Exception):
@@ -191,8 +198,8 @@ def layout(
     new: Collection[str] = (),
 ) -> Layout:
     """Every changed test file laid over the ref but those ``keep`` names, which stay as the ref has them,
-    refusing a keep that names no changed test file or one the ref lacks; ``new`` is the changed files the
-    ref has no copy of."""
+    refusing a keep that names no changed test file, one the ref lacks, or the only test modules this tree
+    has; ``new`` is the changed files the ref has no copy of."""
 
     changed = {*present, *deleted}
     support = sorted(path for path in changed if not is_module(path, labels))
@@ -201,6 +208,12 @@ def layout(
             raise KeepRefused(f"{path} is no test file this tree changed from the ref, so there is nothing to keep")
         if path in new:
             raise KeepRefused(f"{path} is new in this tree, so there is nothing at the ref to keep")
+    left = [path for path in changed if is_module(path, labels) and path not in keep]
+    if not left and (held := sorted({path for path in keep if is_module(path, labels)})):
+        raise KeepRefused(
+            f"{', '.join(held)} holds this tree's tests, so keeping it lays out none from this tree and "
+            f"this run proves nothing: the proof is the same command without --keep {' --keep '.join(held)}"
+        )
     return Layout(
         present=[path for path in present if path not in keep],
         deleted=[path for path in deleted if path not in keep],
@@ -322,7 +335,7 @@ def unbuilt_packages(events: Path) -> list[str]:
     for line in events.read_text(errors="replace").splitlines():
         try:
             event = json.loads(line)
-        except ValueError:
+        except ValueError:  # noqa: S112 - a line go test wrote that is no JSON is no event
             continue
         if isinstance(event, dict) and event.get("Action") == "fail" and event.get("FailedBuild"):
             found.append(str(event["FailedBuild"]))
@@ -336,11 +349,14 @@ def run_at(ref: str, keep: list[str], args: list[str], suite: Suite | None = Non
     labels = [arg for arg in args if not arg.startswith("-")]
     present, deleted = changed_tests(commit, ROOT, suite.is_test)
     laid = layout(present, deleted, keep, labels, suite.is_module, suite.module, new_at(commit, present))
-    with worktree(commit, ROOT, lint_tools=True) as tree, tempfile.TemporaryDirectory(prefix="test-at-") as scratch:
+    # A run folder for everything the ref's runs write, its worktree among them, as a test run has,
+    # since a ref older than the gate's sandbox writes its database and scratch to TMPDIR.
+    isolate(os.environ.get(DATABASE, ""))
+    with worktree(commit, ROOT, lint_tools=True) as tree:
         overlay(tree, laid.present, laid.deleted, ROOT)
         # The ref's own environment: uv refuses this one's, and says so, once it is outside it.
         os.environ.pop("VIRTUAL_ENV", None)
-        events = Path(scratch, "events.json")
+        events = tree.parent / "events.json"
         if suite.events:
             os.environ[suite.events] = str(events)
         step = run_suite(gate.name, suite, args, labels, tree)
@@ -485,15 +501,27 @@ def stop(signum: int, _frame: object) -> None:
 
 
 def take_the_turn(typed: Typed) -> None:
-    """Run again inside the heavy turn, unless this run is in it or narrow.
-    The run in the turn inherits mise's parse through the environment."""
+    """Run again inside the heavy turn, unless this run is in it or narrow; a narrow run runs again
+    under the measurer, so every run ends with its line. The run again inherits mise's parse through
+    the environment."""
 
-    if inside():
+    # The narrow run re-run below was found narrow already; the marker is popped so no child inherits it.
+    if os.environ.pop(FOUND_NARROW, None) or inside():
         return
-    if typed.at is not None or typed.go or not narrow(typed.args):
+    # Whether it is narrow is asked in a process of its own, as tools/lib/heavy-turn.sh asks: the
+    # settings it loads start a run, which the exec below would leave with nothing to remove it.
+    heavy = [sys.executable, "-m", "tools.gate.turn", *typed.args]
+    if typed.at is not None or typed.go or subprocess.call(heavy, cwd=ROOT):
         # A run at a ref builds a worktree and may run the suite there twice.
         command = [*in_turn("2h"), sys.executable, "-m", "tools.gate.at"]
         os.execvp(command[0], command)
+    # Measured already (a gate's run of tests): the line is the outer one's.
+    if os.environ.get("HQ_MEASURED"):
+        return
+    os.environ[FOUND_NARROW] = "1"
+    command = [MEASURER, sys.executable, "-m", "tools.gate.at"]
+    os.chdir(ROOT)
+    os.execv(command[0], command)
 
 
 def run_here(argv: list[str], *, go: bool = False, shell: bool = False) -> int:
@@ -513,8 +541,50 @@ def run_here(argv: list[str], *, go: bool = False, shell: bool = False) -> int:
     return step.code
 
 
+def names_code(label: str) -> bool:
+    """Whether a label names something of this tree: a path, or a module or package a dotted label starts with."""
+
+    parts = [part for part in re.split(r"[/.]", label.removesuffix(".py")) if part]
+    return Path(ROOT, label).exists() or any(
+        Path(ROOT, *parts[:end]).with_suffix(".py").is_file() or Path(ROOT, *parts[:end]).is_dir()
+        for end in range(1, len(parts) + 1)
+    )
+
+
+def tasks_named(args: list[str]) -> list[str]:
+    """Each label that names a mise task and nothing of this tree: a gate typed where a test goes.
+    A word after an option is that option's value (``--tag browser``), never a label."""
+
+    words = [
+        arg
+        for at_word, arg in enumerate(args)
+        if not arg.startswith("-")
+        and not (at_word and args[at_word - 1].startswith("-") and "=" not in args[at_word - 1])
+        and not names_code(arg)
+    ]
+    return [word for word in words if word in mise_tasks()] if words else []
+
+
+def refuse_tasks(typed: Typed) -> bool:
+    """Refuse, before any run, a label that names a task: the test task takes tests, and a gate runs by its name."""
+
+    if typed.go or not (tasks := tasks_named(typed.args)):
+        return False
+    where, on = ("mise run test", "") if typed.at is None else (f"test --at {typed.at}", f" on {typed.at}'s code")
+    runs = " and ".join(f"`mise run {task}`" for task in tasks)
+    print(
+        f"{where}: {', '.join(tasks)} names a task, not a test. It runs tests by dotted label (hq.x.tests.test_y)"
+        f" or shell suites by path (tests/shell/test-x.sh){on}, so name the tests that hold the gate's check;"
+        f" the gate itself runs here as {runs}",
+        file=sys.stderr,
+    )
+    return True
+
+
 def main(typed: Typed) -> int:
     signal.signal(signal.SIGTERM, stop)
+    if refuse_tasks(typed):
+        return 2
     try:
         shell = shell_run(typed)
     except ValueError as error:
@@ -537,5 +607,8 @@ def main(typed: Typed) -> int:
 
 if __name__ == "__main__":
     typed = Typed.from_usage(usage())
+    # Refused before the turn, so a mistyped label waits for nothing.
+    if refuse_tasks(typed):
+        sys.exit(2)
     take_the_turn(typed)
     sys.exit(main(typed))

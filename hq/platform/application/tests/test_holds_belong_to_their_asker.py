@@ -9,7 +9,7 @@ own held requests, wherever they are listed to it; a person reads every one.
 from unittest.mock import patch
 from urllib.parse import urlsplit
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
@@ -40,7 +40,6 @@ def ask_update(principal: Principal) -> dict:
     )
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class HoldsBelongToTheirAskerTests(TestCase):
     def setUp(self):
         from hq.platform.application.adoption_testing import managing_everything

@@ -1,0 +1,9 @@
+id: swept-record-read-in-one-place
+valid:
+  - 'spec = record_spec(kind, record)'
+  - 'names = read_record(kind, record, lambda spec: tuple(provider.hostnames(spec)))'
+  - 'if provider.from_record is None: pass'
+invalid:
+  - 'spec = provider.from_record(record)'
+  - 'spec = PROVIDERS[kind].from_record(dict(record))'
+  - 'found = zones.identity(zones.from_record(record))'

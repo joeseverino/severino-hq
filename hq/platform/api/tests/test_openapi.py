@@ -72,6 +72,17 @@ def _operations(value: dict) -> list[tuple[str, str, dict]]:
     return [(path, method, operation) for path, item in value["paths"].items() for method, operation in item.items()]
 
 
+def _list_parameters(listed):
+    """A list's parameters as one schema: its filters and the paging described beside them."""
+
+    parts = (listed["query_schema"], listed.get("paging", {}))
+    return {
+        "$defs": {key: value for part in parts for key, value in part.get("$defs", {}).items()},
+        "properties": {field: value for part in parts for field, value in whole_fields(part).items()},
+        "required": [field for part in parts for field in part.get("required", [])],
+    }
+
+
 class DocumentTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
@@ -123,8 +134,7 @@ class DocumentTests(SimpleTestCase):
             name = operation.get("x-hq-resource")
             if not name or "x-hq-identifier" in operation:
                 continue
-            query = resources[name]["operations"]["list"]["query_schema"]
-            expected = openapi._Components().hoist({**query, "properties": whole_fields(query)})
+            expected = openapi._Components().hoist(_list_parameters(resources[name]["operations"]["list"]))
             written = [_named(self.document, parameter) for parameter in operation["parameters"]]
             parameters = {parameter["name"]: parameter for parameter in written if parameter["name"] != "fields"}
             self.assertEqual(set(parameters), set(expected.get("properties", {})))
@@ -280,7 +290,7 @@ class DocumentTests(SimpleTestCase):
         self.assertEqual(tags.of_capability("project.create"), "hq.projects")
         self.assertEqual(tags.of_capability("infrastructure.zone.adopt"), "hq.zones")
         # Held only in the browser, so never in the document: no domain's to place.
-        self.assertIsNone(tags.of_capability("pin.toggle"))
+        self.assertIsNone(tags.of_capability("approval.approve"))
         declaring = next(domain for domain in all_domains() if domain.integration.capabilities)
         declared = next(iter(declaring.integration.capabilities())).name
         self.assertEqual(tags.of_capability(declared), declaring.id)

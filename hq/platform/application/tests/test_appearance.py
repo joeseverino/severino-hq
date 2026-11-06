@@ -72,7 +72,7 @@ class ThemeServiceTests(TestCase):
         (event,) = AuditLog.objects.filter(object_type="Appearance")
         self.assertEqual((event.message, event.metadata["operation"]), ("Theme set to Dark", SET_THEME))
 
-    def test_no_credential_can_choose_for_a_person(self):
+    def test_a_principal_with_no_person_cannot_choose_for_one(self):
         granted = frozenset(Capability)
         for principal in (
             Principal("example-agent", "mcp", granted, granted=granted),

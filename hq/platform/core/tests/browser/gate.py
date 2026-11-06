@@ -21,7 +21,7 @@ from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.speculation import rules_document
-from hq.platform.core.test_runner import stall_watch
+from hq.platform.core.test_runner import browser_failures, stall_watch
 from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
     FILL_STEPS,
@@ -488,15 +488,17 @@ class BrowserGate(SimpleTestCase):
 
     def shoot(self, name):
         """The page as it stands, saved as ``name``.png in this test's own
-        hq-browser-failure-* folder in the temporary directory, every one of
-        which CI keeps when a gate fails, and beside it as ``name``.zip the
-        trace of what the test did since its last failure, which
-        `playwright show-trace` opens. The trace is kept first, so a shot
-        that cannot be taken still leaves it. A page past what a shot holds
-        is shot to there, and the line says so (``shoot_page``)."""
+        folder of ``browser_failures()``, which CI keeps when a gate fails,
+        and beside it as ``name``.zip the trace of what the test did since
+        its last failure, which `playwright show-trace` opens. The trace is
+        kept first, so a shot that cannot be taken still leaves it. A page
+        past what a shot holds is shot to there, and the line says so
+        (``shoot_page``)."""
 
         if self.failures is None:
-            self.failures = Path(tempfile.mkdtemp(prefix=f"hq-browser-failure-{self._testMethodName}-"))
+            folder = browser_failures()
+            folder.mkdir(parents=True, exist_ok=True)
+            self.failures = Path(tempfile.mkdtemp(prefix=f"{self._testMethodName}-", dir=folder))
         path = self.failures / f"{name}.png"
         trace = path.with_suffix(".zip")
         tracing = self.page.context.tracing

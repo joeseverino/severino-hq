@@ -193,15 +193,15 @@ class ReadCapabilityTests(TestCase):
 
                 self.assertEqual(result["error"], {"code": "invalid_input", "message": said})
 
-    def test_the_machine_account_cannot_reach_a_third_party_by_default(self):
-        """READ is granted to MCP unconditionally; this must not ride on it."""
+    def test_an_agent_reaches_a_third_party_only_where_its_grant_says(self):
+        """A read does not carry the lookup with it."""
 
-        from ..security import mcp_principal
+        from ..security import agent_principal
 
-        with override_settings(SEVERINO_AGENT_ENABLE_LOOKUP=False):
-            self.assertFalse(mcp_principal().permits(Capability.LOOK_UP_PUBLIC_RECORDS))
-        with override_settings(SEVERINO_AGENT_ENABLE_LOOKUP=True):
-            self.assertTrue(mcp_principal().permits(Capability.LOOK_UP_PUBLIC_RECORDS))
+        reader = agent_principal("example-agent", "mcp", frozenset({"read"}))
+        granted = agent_principal("example-agent", "mcp", frozenset({"read", "look_up_public_records"}))
+        self.assertFalse(reader.permits(Capability.LOOK_UP_PUBLIC_RECORDS))
+        self.assertTrue(granted.permits(Capability.LOOK_UP_PUBLIC_RECORDS))
 
 
 class AddressCacheTests(TestCase):

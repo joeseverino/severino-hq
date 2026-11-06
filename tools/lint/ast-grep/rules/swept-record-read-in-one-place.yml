@@ -1,0 +1,26 @@
+# A swept record becomes a spec through read_record (or record_spec) in
+# hq/domains/control_plane/providers.py, which logs a record its provider
+# cannot read. A from_record called anywhere else is caught there and dropped
+# from the page without a word, so the controller's reading and the
+# provider's model can disagree with nobody told. attribution.py reads a
+# provider's own sample record to check the declaration, where a failure is
+# meant to raise.
+id: swept-record-read-in-one-place
+language: python
+severity: error
+message: A swept record is read into a spec outside read_record, which says when its provider cannot read it.
+note: >-
+  Call record_spec(kind, record) from hq.domains.control_plane.providers, or
+  read_record(kind, record, read) for what read makes of the spec.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  - "hq/domains/control_plane/providers.py"
+  - "hq/domains/control_plane/attribution.py"
+rule:
+  pattern: $PROVIDER.from_record($$$)

@@ -1,0 +1,47 @@
+#!/bin/sh
+#MISE description="The Go controller's functions no main reaches as deadcode finds them on Linux (a test-support package's, one whose name starts or ends in test, that nothing reaches at all), generated files left out, each file:line name, sorted and then counted; reach for it before deleting controller code or to find what only tests keep alive; read-only"
+#MISE hide=true
+#MISE extends="audit"
+#MISE dir="controller"
+
+# deadcode builds the call graph from every main package by Rapid Type
+# Analysis and reports each function it does not reach, leaving out generated
+# files and marker methods. The build is Linux's, where the controller runs,
+# so a function only another platform's file calls is counted as dead there.
+#   - A test-support package (hosttest, connecttest, testclient) is for tests,
+#     so a test's call keeps it alive: its functions come from a second run
+#     with -test, which roots the analysis in the test binaries too.
+#   - A String, GoString, Format, LogValue or MarshalText method is what fmt,
+#     slog and encoding call through an interface on a value they are handed,
+#     and a type holding a secret declares one so no format prints the
+#     secret; RTA counts it only when reachable code formats one, so it is
+#     never listed.
+#   - deadcode is a tool of go.mod's. `go tool -n` builds it for this machine
+#     and prints its path, which runs with GOOS set for the analysis alone;
+#     `GOOS=linux go tool deadcode` would build a Linux binary instead.
+set -eu
+
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+
+deadcode="$(go tool -n deadcode)"
+GOOS=linux "${deadcode}" -json ./... >"${work}/mains.json"
+GOOS=linux "${deadcode}" -test -json ./... >"${work}/tests.json"
+
+support='/(test[^/]*|[^/]*test)$'
+formatting='\.(String|GoString|Format|LogValue|MarshalText)$'
+# The $ names are jq's variables, and deadcode answers null when it finds none.
+# shellcheck disable=SC2016
+lines='(. // [])[] | .Path as $path | .Funcs[] | select(.Generated | not) | {path: $path, name: .Name, at: "\(.Position.File):\(.Position.Line)"}'
+jq -r --arg support "${support}" --arg formatting "${formatting}" \
+    "${lines} | select((.path | test(\$support) | not) and (.name | test(\$formatting) | not)) | \"\(.at) \(.name)\"" \
+    "${work}/mains.json" >"${work}/found"
+jq -r --arg support "${support}" \
+    "${lines} | select(.path | test(\$support)) | \"\(.at) \(.name)\"" \
+    "${work}/tests.json" >>"${work}/found"
+
+# One line per function, sorted by file and line, so two runs are compared by
+# a diff. The closing line holds the total.
+sort -t: -k1,1 -k2,2n "${work}/found" >"${work}/listed"
+cat "${work}/listed"
+printf '%s functions no main reaches\n' "$(wc -l <"${work}/listed" | tr -d ' ')"

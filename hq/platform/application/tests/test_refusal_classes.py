@@ -2,10 +2,11 @@
 
 Every read path raises ``RecordNotFound`` from record_errors.py, and the
 resource layer answers it without a spec having to list it, so no module
-needs, or may declare, a not-found or conflict class of its own.
+needs, or may declare, a not-found or conflict class of its own
+(``refusal-classes-in-one-place`` in tools/lint/ast-grep).
 """
 
-import ast
+import importlib
 from pathlib import Path
 
 from django.test import SimpleTestCase, TestCase, tag
@@ -17,46 +18,42 @@ from ..security import cli_principal
 # Distinctive enough that finding it in a message can only mean it was echoed.
 SENT = "sent-by-the-caller-7f3a"
 
-ROOT = Path(__file__).resolve().parents[4]
-SUFFIXES = ("NotFound", "NotFoundError", "Conflict", "ConflictError")
-# Named for what they are, and none of them means an HQ record.
+RULES = Path(__file__).resolve().parents[4] / "tools/lint/ast-grep/rules"
+# The not-found and conflict classes the rule lets be by name, each in the
+# module that declares it; none of them means an HQ record.
 NOT_RECORDS = {
     # A registry outside HQ answered and holds nothing: an upstream reading.
-    "hq/domains/control_plane/dns_lookup.py": {"LookupNotFound"},
+    "LookupNotFound": "hq.domains.control_plane.dns_lookup",
     # A job of that kind is already running: exported to extensions by hq_sdk.jobs.
-    "hq/domains/jobs/runner.py": {"JobConflict"},
+    "JobConflict": "hq.domains.jobs.runner",
     # An Idempotency-Key reused for another request: the machine API's protocol.
-    "hq/platform/application/idempotency.py": {"IdempotencyConflict"},
+    "IdempotencyConflict": "hq.platform.application.idempotency",
 }
 
 
-def _declared(path: Path):
-    for node in ast.walk(ast.parse(path.read_text(), filename=str(path))):
-        if isinstance(node, ast.ClassDef) and node.name.endswith(SUFFIXES):
-            yield node
+@tag("source")
+class RefusalClassExemptionTests(SimpleTestCase):
+    def test_each_exemption_is_a_class_its_module_declares(self):
+        """refusal-classes-in-one-place lets these be by name, and
+        refusal-class-exemptions-stay-home keeps each name to these modules;
+        one nothing declares any more is a name left open."""
 
+        import yaml  # The image's suite collects this module without PyYAML.
 
-@tag("source", "tree")
-class OneRefusalClassTests(SimpleTestCase):
-    def test_no_module_declares_its_own_not_found_or_conflict(self):
-        """A module raises record_errors' two classes; a class of its own is one an adapter would miss."""
-
-        shared = ROOT / "hq/platform/application/record_errors.py"
-        found = 0
-        for package in ("hq", "hq_sdk"):
-            for path in (ROOT / package).rglob("*.py"):
-                if "tests" in path.parts or path == shared:
-                    continue
-                allowed = NOT_RECORDS.get(path.relative_to(ROOT).as_posix(), set())
-                for node in _declared(path):
-                    found += 1
-                    self.assertIn(
-                        node.name,
-                        allowed,
-                        f"{path.relative_to(ROOT)}:{node.lineno} declares {node.name}; raise RecordNotFound or "
-                        "RecordConflict (hq/platform/application/record_errors.py) instead",
-                    )
-        self.assertEqual(found, sum(map(len, NOT_RECORDS.values())), "an exemption names a class that is gone")
+        for rule in ("refusal-classes-in-one-place", "refusal-class-exemptions-stay-home"):
+            with self.subTest(rule):
+                read = yaml.safe_load((RULES / f"{rule}.yml").read_text(encoding="utf-8"))
+                names = read["rule"]["has"].get("not", read["rule"]["has"])["regex"]
+                self.assertEqual(names, f"^({'|'.join(NOT_RECORDS)})$")
+        homes = yaml.safe_load((RULES / "refusal-class-exemptions-stay-home.yml").read_text(encoding="utf-8"))
+        self.assertLessEqual(
+            {f"{module.replace('.', '/')}.py" for module in NOT_RECORDS.values()}, set(homes["ignores"])
+        )
+        for name, module in NOT_RECORDS.items():
+            with self.subTest(name):
+                declared = getattr(importlib.import_module(module), name)
+                self.assertTrue(issubclass(declared, Exception), name)
+                self.assertEqual(declared.__module__, module)
 
 
 class MissingRecordReadTests(TestCase):

@@ -4,7 +4,7 @@ import re
 
 from django.contrib.auth import get_user_model
 from django.db import connection
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
@@ -179,10 +179,9 @@ class RecentActivityTests(TestCase):
         self.assertEqual(sorted(item["message"] for item in event["items"]), ["Changed example-a", "Changed example-b"])
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class HeldChangeGroupTests(TestCase):
     def test_a_held_change_is_grouped_as_waiting_for_approval(self):
-        CapabilityRule.objects.create(scope="surface", subject="mcp", capability="documentation.sync", rule="approve")
+        CapabilityRule.objects.create(subject="example-agent", capability="documentation.sync", rule="approve")
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
         held = execute_capability(
             "documentation.sync", keyed({"manifest": [{"doc_id": "rb-example", "title": "Example"}]}), principal=agent

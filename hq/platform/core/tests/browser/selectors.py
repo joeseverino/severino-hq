@@ -4,6 +4,10 @@
 # test_browser_selectors to markup a template or tag library writes: CSS
 # selectors only (no `xpath=`), and never an attribute only a script sets.
 SELECTORS = {
+    # A device on the Agents page waiting for the reader's approval.
+    "device_prompt": "[data-prompt]",
+    # An agent's open update streams in its own row's cell, and their state.
+    "agent_streams": "tr[data-agent] > td [data-streams]",
     # The fragment primitive: a placeholder's failure line, the disclosure
     # holding one, and the calendar it pages in place.
     "fragment_failure": "main > [data-fragment-load] > .notice",
@@ -19,9 +23,11 @@ SELECTORS = {
     "decision_dismiss": "[data-triage] button",
     "decision_title": ".attention-title",
     "decision_steps": ".resolution-workflow",
+    # What an item means: never cut.
     "decision_detail": ".attention-detail",
-    # What a card's own buttons decide (an approval's change): never cut.
-    "decision_whole": ".attention-detail[data-whole]",
+    # What an item says, and where its buttons are: the words run to the buttons.
+    "decision_words": "[data-attention-item] :is(.attention-head, .attention-detail)",
+    "decision_buttons": ":is(.attention-end, .queue-act)",
     # Running text, and what an opened row shows beneath it: code in it is
     # never cut, since only a cell's own identifier is.
     "running_text": ":is(p, li, .row-detail)",

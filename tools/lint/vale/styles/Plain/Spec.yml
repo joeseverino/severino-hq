@@ -1,5 +1,5 @@
 extends: existence
-message: "'%s' is HQ's own word; say 'settings'"
+message: "'%s' is HQ's own word; say 'config'"
 level: error
 ignorecase: true
 nonword: true

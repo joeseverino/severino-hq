@@ -6,7 +6,7 @@ from dataclasses import replace
 from typing import Annotated, Any, Literal, NamedTuple, TypedDict
 
 from django.db import transaction
-from pydantic import ConfigDict, TypeAdapter, with_config
+from pydantic import ConfigDict, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation
 lazy from hq.platform.core.doorbell import ask_soon
@@ -26,11 +26,6 @@ from .idempotency import (
     request_fingerprint,
     validate_key,
 )
-from .input_errors import (
-    InputRefusal,
-    pydantic_refusal,
-    unknown_field_errors,
-)
 from .integration_specs import (
     IDEMPOTENCY_FIELD,
     SENT_KEYWORD,
@@ -38,6 +33,7 @@ from .integration_specs import (
     TARGET_KINDS,
     CapabilitySpec,
     capability_schema,
+    command_adapter,
     declares_idempotency_key,
     kept_by,
     takes_sent_fields,
@@ -52,24 +48,11 @@ from .security import (
     Capability,
     PolicyDenied,
     Principal,
-    could_hold,
+    could_ever_hold,
     require_all,
 )
 from .ui import ended
-
-
-class _UnknownFields(Exception):
-    """The payload carries fields the command does not have.
-
-    Its own type rather than a ValueError, which the generic handler would turn
-    into "could not be executed": leaving a caller who misspelled a field no
-    way to learn which one. It carries Pydantic's ``extra_forbidden`` entries,
-    so it is answered exactly as a StrictCommand's own refusal is.
-    """
-
-    def __init__(self, fields: list[str]):
-        super().__init__()
-        self.errors = unknown_field_errors(fields)
+lazy from . import agent_registry
 
 
 def capability_title(name: str) -> str:
@@ -202,7 +185,7 @@ def describe_capabilities(*, principal: Principal, name: str = "", resource: str
             "permitted": principal.permits(*spec.required_capabilities),
         }
         for spec in _narrowed(name.strip(), resource.strip())
-        if could_hold(principal.interface, spec.required_capabilities)
+        if could_ever_hold(principal, spec.required_capabilities)
     ]
     return {"schema_version": CAPABILITIES_SCHEMA_VERSION, "capabilities": described}
 
@@ -283,8 +266,6 @@ def run_capability(
             expected_updated_at=expected_updated_at,
             sent_key=idempotency_key,
         )
-    except _UnknownFields as exc:
-        return Ran(_invalid(pydantic_refusal(name, exc.errors)))
     except InvalidIdempotencyKey as exc:
         return Ran(refuse("invalid_idempotency_key", exc.reason))
     except Exception as exc:  # noqa: BLE001 - every other failure is answered in the one refusal shape
@@ -330,7 +311,6 @@ def _authorized_run(
                 {"field": "payload.idempotency_key"},
             )
         )
-    _refuse_unknown_fields(spec, payload)
     command = validate_command(spec, payload, target)
     # A held request has acted on nothing, so it is answered afresh each
     # time: the same key runs the command once a person has agreed.
@@ -474,7 +454,7 @@ def validate_command(spec: CapabilitySpec, payload: dict[str, Any], target: str 
     if kept is not None:
         (current,) = _target_keyword(spec, target).values()
         payload = {**kept.read(current), **payload}
-    return TypeAdapter(spec.command_type).validate_python(payload)
+    return command_adapter(spec.command_type).validate_python(payload)
 
 
 def _consent(
@@ -539,6 +519,11 @@ def _run(
         # Robust: a write that committed does not fail for a hint that could
         # not be given.
         transaction.on_commit(ask_soon, robust=True)
+    if Capability.GOVERN_AGENTS in spec.required_capabilities:
+        # Every brake a person sets on an agent is such a capability, so a
+        # stream held back an event while its agent was refused hears of it
+        # here, once the change commits, however many brakes there are.
+        agent_registry.standing_changed()
     return dict(result)
 
 
@@ -559,25 +544,3 @@ def execute_approved(
     """
 
     return _run(spec, command, principal=principal, target=target, expected_updated_at=None, sent=sent)
-
-
-def _refuse_unknown_fields(spec: CapabilitySpec, payload: dict[str, Any]) -> None:
-    """A field the command does not have is an error, not a no-op.
-
-    A misspelled or retired field would otherwise return success for work the
-    caller did not ask for.
-    """
-
-    # CapabilitySpec accepts host dataclasses and plugin StrictCommand models.
-    # Their JSON Schema is already the shared adapter contract, so it is also
-    # the single source of field names.
-    known = set(capability_schema(spec).get("properties", {}))
-    unknown = sorted(set(payload) - known)
-    if unknown:
-        raise _UnknownFields(unknown)
-
-
-def _invalid(refusal: InputRefusal) -> dict[str, Any]:
-    """Every validation refusal: which field and why, never the value sent."""
-
-    return refuse("invalid_input", refusal.message, refusal.details)

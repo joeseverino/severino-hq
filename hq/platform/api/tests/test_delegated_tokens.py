@@ -1,18 +1,18 @@
-"""A token an agent's client got through a person's sign-in is that agent's, never the person's.
+"""A token an agent's client got through a person's sign-in is that agent's, acting for that person.
 
 Pocket ID names the registered client in ``client_id`` on every token, and on
 a grant a person allowed (authorization code, device flow) it names that
 person in ``sub``. The scope is the client's own user-delegated grant, never
 the person's permissions. So such a token is an agent: its client is the
-actor, its grant is capped and paused as every agent's is, and nothing it
-does is a person's.
+actor, its grant is capped and paused as every agent's is, and what it keeps
+(settings, pins, set-asides) is its person's, though it never stands as them.
 """
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
-from hq.platform.application.security import DevicePrincipal, is_interactive, person_of
+from hq.platform.application.security import DEVICE_INTERFACE, is_interactive, person_of
 
 from .tokens import ISSUER, RESOURCE, _serving, _token
 
@@ -26,7 +26,6 @@ AGENT_CLIENT = "example-agent"
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=False,
 )
 class DelegatedTokenTests(TestCase):
     def setUp(self):
@@ -46,18 +45,16 @@ class DelegatedTokenTests(TestCase):
             with self.subTest(interface=interface):
                 principal = self._admitted("read write_projects", interface)
 
-                self.assertNotIsInstance(principal, DevicePrincipal)
                 self.assertEqual((principal.actor, principal.interface), (AGENT_CLIENT, interface))
                 self.assertEqual(principal.granted, frozenset({"read", "write_projects"}))
-                # Capped by the agent ceiling, which withholds writes here.
-                self.assertTrue(principal.permits("read"))
-                self.assertFalse(principal.permits("write_projects"))
+                # Its grant, within the role of the person who signed it in.
+                self.assertTrue(principal.permits("read", "write_projects"))
 
-    def test_it_is_nobodys_and_stands_for_no_person(self):
+    def test_it_acts_for_its_person_without_standing_as_them(self):
         principal = self._admitted("read decide_approvals govern_agents", "api")
 
         self.assertFalse(is_interactive(principal))
-        self.assertIsNone(person_of(principal))
+        self.assertEqual(person_of(principal), self.person)
         # What only a person may do stays out of its reach, whatever it was granted.
         self.assertFalse(principal.permits("decide_approvals"))
         self.assertFalse(principal.permits("govern_agents"))
@@ -82,9 +79,8 @@ class DelegatedTokenTests(TestCase):
             with self.subTest(interface=interface):
                 principal = self._admitted("read own_device", interface)
 
-                self.assertNotIsInstance(principal, DevicePrincipal)
                 self.assertEqual(principal.interface, interface)
-                self.assertIsNone(person_of(principal))
+                self.assertFalse(is_interactive(principal))
                 self.assertFalse(principal.permits("own_device"))
 
     def test_a_client_the_person_registered_is_their_device(self):
@@ -92,7 +88,7 @@ class DelegatedTokenTests(TestCase):
 
         principal = self._admitted("read own_device", "mcp")
 
-        self.assertIsInstance(principal, DevicePrincipal)
+        self.assertEqual(principal.interface, DEVICE_INTERFACE)
         self.assertEqual(person_of(principal), self.person)
 
     def test_a_registration_made_by_another_person_grants_nothing(self):
@@ -102,10 +98,11 @@ class DelegatedTokenTests(TestCase):
 
         principal = self._admitted("read own_device", "mcp")
 
-        self.assertNotIsInstance(principal, DevicePrincipal)
-        self.assertIsNone(person_of(principal))
+        self.assertEqual(principal.interface, "mcp")
+        # It acts for whoever signed it in, never for whoever registered it.
+        self.assertEqual(person_of(principal), self.person)
 
     def test_a_registration_grants_nothing_without_the_providers_grant(self):
         self._registered(self.person)
 
-        self.assertNotIsInstance(self._admitted("read", "mcp"), DevicePrincipal)
+        self.assertEqual(self._admitted("read", "mcp").interface, "mcp")

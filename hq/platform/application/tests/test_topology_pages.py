@@ -9,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.topology_views import TopologyView
 from hq.platform.application.derivation_testing import uncached
 
@@ -508,6 +508,7 @@ class TopologyLensTests(TestCase):
         )
         ManagedResource.objects.filter(pk=fresh.pk).update(last_observed_at=now)
         ManagedResource.objects.filter(pk=skipped.pk).update(last_observed_at=now - timedelta(days=4))
+        ProviderInventory.objects.create(kind="adguard.rewrite", observed_at=now)
         selected = {n.id for n in self.narrowed("stale-observations").nodes}
         self.assertIn("resource:skipped-record", selected)
         self.assertNotIn("resource:swept-record", selected)

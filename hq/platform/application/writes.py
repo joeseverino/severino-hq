@@ -12,7 +12,7 @@ everything a replay stands on: the service's result, which ``reload`` is
 handed either way, or the record's identity, a label, the sentence it said.
 """
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any, override
 
 from django.apps import apps
@@ -320,7 +320,7 @@ class CommandFormMixin(PostedOnce):
     ``success_url_name`` and ``success_message``.
     """
 
-    service = None
+    service: Callable[..., Any] | None = None
     command: type[Any] | None = None
     success_url_name = ""
     success_message = ""
@@ -339,6 +339,8 @@ class CommandFormMixin(PostedOnce):
         return self.success_message
 
     def run(self, command: Any) -> Any:
+        if self.service is None:
+            raise ImproperlyConfigured(f"{type(self).__name__} declares no service.")
         return self.service(command, principal=web_principal(self.request.user))
 
     def form_valid(self, form: BaseForm) -> HttpResponse:

@@ -30,7 +30,7 @@ def rebuild_bodies(apps, schema_editor):
         meta = definition.model._meta
         try:
             model = apps.get_model(meta.app_label, meta.model_name)
-        except LookupError:
+        except LookupError:  # noqa: S112 - a scope whose model is not in this state reindexes on its own saves
             continue
         # One query for the scope's rows rather than one per record: a lookup
         # inside the loop is the shape this repository measures for.

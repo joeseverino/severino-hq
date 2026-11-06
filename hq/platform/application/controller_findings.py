@@ -1,6 +1,7 @@
 """Findings about the controller's own work: kinds it stopped sweeping, records it skipped or never saw, and changes it keeps applying without effect."""
 
 import re
+from dataclasses import replace
 from datetime import date
 
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -71,10 +72,10 @@ def _read_again(variant: str = "") -> FindingRemedy:
 
 
 def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
-    """Observed materially later than everything else of its own kind.
+    """Last seen materially earlier than its kind's last read.
 
-    A sweep confirms everything it matches in one pass and writes one timestamp,
-    so siblings land together. One left behind was not slow, it was skipped,
+    A sweep confirms everything it matches in one pass, so a read and the
+    records it found land together. One left behind was not slow, it was skipped,
     and being skipped is invisible in every other surface, because the thing
     keeps whatever it last said about itself.
     """
@@ -95,12 +96,13 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="skipped-by-a-sweep",
                 subject=node.id,
-                title=f"{name} was not found the last time HQ looked",
+                title=f"{name} was missing from HQ's last read",
                 severity="serious",
+                # The point first: a narrow card shows only the first line.
                 explanation=(
-                    f"{_the_others(others, lower_first(node.subtitle))} read {ago(newest)}. This one was "
-                    f"last seen {duration(behind)} earlier, so it has probably been "
-                    "removed or renamed."
+                    "It has probably been removed or renamed. "
+                    f"{_the_others(others, lower_first(node.subtitle))} read {ago(newest)}, and this one was "
+                    f"last seen {duration(behind)} earlier."
                 ),
                 evidence=(
                     _when("Last seen", node.observed_at),
@@ -115,9 +117,9 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
 def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
     """The two answers the explanation gives, as the actions that carry them out.
 
-    A container missing from a sweep is either one that runs now and then, or
-    one that is gone. Reconciling answers neither: it asks the provider to look
-    again at something that is, correctly, not running.
+    A record missing from a sweep is gone: HQ can create it again from its
+    config, or stop holding it. A container is either one that runs now and
+    then, or one that is gone, and HQ cannot create a container.
     """
 
     remove = FindingRemedy(capability="infrastructure.resource.remove", target=node.label)
@@ -130,7 +132,8 @@ def _skipped_remedies(node: TopologyNode) -> tuple[FindingRemedy, ...]:
             ),
             remove,
         )
-    return (*reconcile_remedy(node), remove)
+    recreate = tuple(replace(remedy, intent="Create it again") for remedy in reconcile_remedy(node))
+    return (*recreate, remove)
 
 
 def _kind_never_swept(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -433,9 +436,9 @@ def _never_observed(estate: FindingEstate) -> tuple[Finding, ...]:
         and not node.observed_at
         and is_observable(node.kind_key)
         and node.id in estate.governed
-        # A sibling has been observed, so the sweep can see this kind and
-        # missed this one. Without that, the gap is the kind's, and saying it
-        # per record buries the one claim worth reading.
+        # The kind has been read, so the sweep can see it and missed this
+        # one. Without that, the gap is the kind's, and saying it per record
+        # buries the one claim worth reading.
         and node.kind_key in estate.latest_by_kind
     )
 
@@ -457,7 +460,7 @@ def _weakly_verified(estate: FindingEstate) -> tuple[Finding, ...]:
             severity="attention",
             explanation=(
                 f"HQ set these and the last reading did not include them: {ended(_settings(node))} "
-                "Apply HQ's settings to set them and read them back. If this stays after applying, "
+                "Apply HQ's config to set them and read them back. If this stays after applying, "
                 "HQ cannot read them from the service."
             ),
             evidence=(
@@ -654,7 +657,7 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "skipped-by-a-sweep",
-        "Not found the last time HQ looked",
+        "Missing from HQ's last read",
         "serious",
         _skipped_by_a_sweep,
         operator_action=("If it is gone, remove it from HQ. If it only runs sometimes, mark it so."),
@@ -681,10 +684,10 @@ RULES: tuple[FindingRule, ...] = (
     ),
     FindingRule(
         "reconciled-but-still-wrong",
-        "Differs from HQ's settings",
+        "Differs from HQ's config",
         "serious",
         _reconciled_but_still_wrong,
-        operator_action=("Change the settings in HQ to something the service accepts, then apply again."),
+        operator_action=("Change HQ's config to something the service accepts, then apply again."),
         no_help_reason="HQ cannot tell which setting was refused.",
     ),
     FindingRule(
@@ -692,7 +695,7 @@ RULES: tuple[FindingRule, ...] = (
         "Settings HQ could not check",
         "attention",
         _weakly_verified,
-        operator_action="Apply HQ's settings, so HQ sets them and reads them back.",
+        operator_action="Apply HQ's config, so HQ sets them and reads them back.",
         no_help_reason="HQ cannot read this setting from the service.",
     ),
     FindingRule(

@@ -176,6 +176,13 @@ class AuditLog(models.Model):
         output_field=models.CharField(max_length=32),
         db_persist=True,
     )
+    # The tailnet device an agent's call came from, by Tailscale's stable id
+    # (``AgentDevice.node_id``); blank where HQ could not place the call.
+    device = models.GeneratedField(
+        expression=Coalesce(KeyTextTransform("device", "metadata"), models.Value("", output_field=models.TextField())),
+        output_field=models.CharField(max_length=64),
+        db_persist=True,
+    )
     # Defaults to now, and a seed or test may pass the moment it records.
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
@@ -187,6 +194,7 @@ class AuditLog(models.Model):
             models.Index(fields=("action",)),
             models.Index(fields=("connection", "-created_at")),
             models.Index(fields=("actor", "-created_at")),
+            models.Index(fields=("device", "-created_at")),
         ]
 
     @override
@@ -353,6 +361,75 @@ class AgentIdentity(models.Model):
     @override
     def __str__(self) -> str:
         return self.client_id
+
+
+class AgentDevice(models.Model):
+    """A tailnet device one agent's client has called HQ from, for one person.
+
+    Tailscale's word, "device": HQ's "machine" is a host it manages. Keyed by
+    Tailscale's stable id, never a name or node key, which a rename or a
+    re-authentication changes. A call from it does nothing until it is
+    approved (``agent_devices.refusal``): the person approves their own
+    client's device, and that approval is what links their HQ person to the
+    device's tailnet owner.
+    """
+
+    identity = models.ForeignKey(AgentIdentity, on_delete=models.CASCADE, related_name="devices")
+    # The person whose sign-in the calls came through; none for a machine's
+    # own token. Deleting them deletes their approvals with them rather than
+    # leaving one standing as a machine's.
+    person = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="+"
+    )
+    node_id = models.CharField(max_length=64)
+    # As the tailnet named it at the latest call, for a person to recognize.
+    name = models.CharField(max_length=200, blank=True)
+    os = models.CharField(max_length=64, blank=True)
+    # The tailnet login that owns the device, or blank for a tagged one.
+    owner = models.CharField(max_length=200, blank=True)
+    first_seen = models.DateTimeField(default=timezone.now, editable=False)
+    last_seen = models.DateTimeField(default=timezone.now)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    blocked_at = models.DateTimeField(null=True, blank=True)
+    blocked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+
+    class Meta:
+        ordering = ("identity", "name", "node_id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("identity", "person", "node_id"),
+                condition=models.Q(person__isnull=False),
+                name="unique_agent_device_per_person",
+            ),
+            # A unique constraint treats every null person as distinct, so a
+            # machine's own devices are held unique on their own.
+            models.UniqueConstraint(
+                fields=("identity", "node_id"),
+                condition=models.Q(person__isnull=True),
+                name="unique_agent_device_per_machine",
+            ),
+            Rule(
+                condition=models.Q(approved_by__isnull=True) | models.Q(approved_at__isnull=False),
+                name="agent_device_approval_is_dated",
+                violation_error_message="An approval someone gave says when they gave it.",
+                field="approved_at",
+            ),
+            Rule(
+                condition=models.Q(blocked_by__isnull=True) | models.Q(blocked_at__isnull=False),
+                name="agent_device_block_is_dated",
+                violation_error_message="A block someone set says when they set it.",
+                field="blocked_at",
+            ),
+        ]
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.identity} from {self.name or self.node_id}"
 
 
 class OwnDevice(models.Model):

@@ -28,7 +28,7 @@ description = "Generated API cases through the real WSGI middleware"
 hide = true
 # One module in one process: a narrow run, outside the heavy turn (tools/gate/turn.py).
 extends = "django"
-run = "uv run python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
+run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties --noinput --parallel 1"
 
 # Go does not vary with Python, so `mise run test` runs it once, outside the
 # interpreter loop. gotestsum renders go test's JSON events as text, and writes

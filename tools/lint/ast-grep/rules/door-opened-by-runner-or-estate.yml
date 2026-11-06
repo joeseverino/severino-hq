@@ -1,0 +1,28 @@
+# door_of_its_own (hq/platform/core/attribution.py) binds an operation as the
+# outermost, whatever is bound around it. Only the job runner, whose job's
+# rows are its requester's wherever it runs, and the example estate's doors,
+# each bound as its real one binds it, open one; anything else would write
+# rows outside the operation that reached it.
+id: door-opened-by-runner-or-estate
+language: python
+severity: error
+message: A door of its own is opened outside the job runner and the example estate's doors.
+note: Run the work as a job (hq.domains.jobs.runner), which opens its door.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "hq/domains/jobs/runner.py"
+  - "hq/platform/core/example_estate/doors.py"
+rule:
+  kind: call
+  has:
+    field: function
+    any:
+      - kind: identifier
+        regex: ^door_of_its_own$
+      - kind: attribute
+        has:
+          field: attribute
+          regex: ^door_of_its_own$

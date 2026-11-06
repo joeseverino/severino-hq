@@ -1,0 +1,10 @@
+id: instant-parsed-by-moment
+valid:
+  - 'when = moment(stamp)'
+  - 'when = date.fromisoformat(day)'
+  - 'when = datetime.datetime.fromisoformat(stamp)'
+  - 'parse = parser.fromisoformat'
+invalid:
+  - 'when = datetime.fromisoformat(stamp)'
+  - 'when = datetime.fromisoformat(stamp.replace("Z", "+00:00"))'
+  - 'parse = datetime.fromisoformat'

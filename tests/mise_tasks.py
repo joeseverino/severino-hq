@@ -5,7 +5,6 @@ import json
 import re
 import subprocess
 import tomllib
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -78,26 +77,19 @@ def run_files() -> frozenset[str]:
     return frozenset(path.relative_to(ROOT).as_posix() for task in mise_tasks().values() for path in runs(task))
 
 
-def _locks_of(name: str) -> list[str]:
+@functools.cache
+def locks(name: str) -> list[str]:
+    """The locks the task takes, as mise resolves them, templates applied.
+
+    Only `mise tasks info` reports a lock (its task list leaves it out), one task a
+    call, so each task is asked once, when a caller first needs it."""
+
     info = subprocess.run(
         ["mise", "tasks", "info", name, "--json"], cwd=ROOT, check=True, capture_output=True, text=True
     ).stdout
     # Absent, false or true (the task's own name in its repository), or a list of names.
     lock = json.loads(info).get("lock")
     return lock if isinstance(lock, list) else []
-
-
-@functools.cache
-def _all_locks() -> dict[str, list[str]]:
-    # Only `mise tasks info` reports a lock, one task a call, so the calls run side by side.
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        return dict(zip(mise_tasks(), pool.map(_locks_of, mise_tasks()), strict=True))
-
-
-def locks(name: str) -> list[str]:
-    """The locks the task takes, as mise resolves them, templates applied; its task list leaves them out."""
-
-    return _all_locks()[name]
 
 
 # The machine's heavy turn, the lock tools/gate/turn.py names; hq's tests read

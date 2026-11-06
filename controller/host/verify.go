@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -21,7 +22,7 @@ import (
 // runner's sudo rules against the ones HQ renders. It changes
 // nothing. An empty answer is a host that is what its release says.
 func (m *Machine) Verify(ctx context.Context) ([]string, error) {
-	out, err := m.Command(ctx, "docker", "inspect", "--format", "{{.Image}}", Container).Output()
+	out, err := m.Command(ctx, "docker", "inspect", "--format", "{{.Image}}", hostcore.Container).Output()
 	if err != nil {
 		return nil, errors.New("could not read the image HQ runs")
 	}

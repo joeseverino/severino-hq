@@ -1,0 +1,22 @@
+# The three not-found and conflict classes refusal-classes-in-one-place lets
+# be by name are each declared in one module, the one its comment there
+# names; the same name declared anywhere else is a module's own refusal
+# class under a name the rule trusts.
+id: refusal-class-exemptions-stay-home
+language: python
+severity: error
+message: A class takes the name of a not-found or conflict class another module declares.
+note: Raise RecordNotFound or RecordConflict from hq/platform/application/record_errors.py instead.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "hq/domains/control_plane/dns_lookup.py"
+  - "hq/domains/jobs/runner.py"
+  - "hq/platform/application/idempotency.py"
+rule:
+  kind: class_definition
+  has:
+    field: name
+    regex: ^(LookupNotFound|JobConflict|IdempotencyConflict)$

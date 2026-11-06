@@ -8,7 +8,7 @@ nothing here names an extension (``test_domains`` holds it).
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import cache
+from functools import cache, partial
 from typing import Any, NamedTuple
 
 from django.core.exceptions import ImproperlyConfigured
@@ -26,7 +26,9 @@ from .plugins import (
     gather_cards,
     installed_integrations,
     ordered_attention,
+    source_cards,
 )
+from .routes import reverse
 lazy from .security import Capability, Principal, could_hold
 
 # Order bands. Below HOST_ORDER_FLOOR is reserved for extension-supplied
@@ -138,6 +140,10 @@ class Domain:
     # What each nav group an extension's manifest adds is for; the host's own
     # say theirs in ``NAVIGATION_GROUPS``.
     groups: tuple[NavigationGroup, ...] = ()
+    # What a reader of this domain holds: an extension's manifest's reads
+    # (``mcp_read_capabilities``). Empty for a host section, whose items each
+    # carry their own gate.
+    read_capabilities: tuple[str, ...] = ()
 
     @property
     def bar_order(self) -> int:
@@ -788,6 +794,7 @@ def extension_domains() -> tuple[Domain, ...]:
             integration=integration,
             description=plugin.description,
             groups=plugin.navigation_groups,
+            read_capabilities=plugin.mcp_read_capabilities,
         )
         for plugin, integration in installed_integrations()
     )
@@ -881,7 +888,9 @@ def domain_attention_items() -> tuple[dict[str, Any], ...]:
     # Each extension's provider is a derivation of its own (``plugins``), so
     # this gathers stored answers and orders them.
     extensions = gather_attention(
-        (domain.id, domain.label, domain.integration.attention) for domain in all_domains() if domain.origin != "host"
+        (domain.id, domain.label, domain.integration.attention, domain.read_capabilities)
+        for domain in all_domains()
+        if domain.origin != "host"
     )
     # One order for both: an extension's entries are merged in by the same key.
     return ordered_attention((*host_attention(), *extensions))
@@ -902,7 +911,9 @@ def host_attention() -> tuple[dict[str, Any], ...]:
     """What the host's own sections report, derived once per change of the estate."""
 
     return gather_attention(
-        (domain.id, domain.label, domain.integration.attention) for domain in all_domains() if domain.origin == "host"
+        (domain.id, domain.label, domain.integration.attention, domain.read_capabilities)
+        for domain in all_domains()
+        if domain.origin == "host"
     )
 
 
@@ -933,7 +944,9 @@ def domain_dashboard_sections(principal: Principal) -> tuple[dict[str, Any], ...
     for domain in sorted(all_domains(), key=lambda domain: domain.bar_order):
         if domain.integration.dashboard is None:
             continue
-        cards = tuple(provided(domain.integration.dashboard, principal))
+        dashboard = domain.integration.dashboard
+        home = reverse(domain.navigation[0].route) if domain.navigation else ""
+        cards = source_cards(domain.id, domain.label, home, partial(provided, dashboard, principal))
         if cards:
             sections.append({"id": domain.id, "label": domain.label, "cards": cards})
     # One validation still catches collisions across contributors.

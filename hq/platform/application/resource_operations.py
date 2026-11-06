@@ -18,10 +18,10 @@ from hq.domains.control_plane.providers import PROVIDERS, controller_action_poli
 from hq.platform.core.audit import audit_operation
 
 from .adoption import OBSERVES_ONLY, keep_out_declaration, observes_only
-from .approvals import consent_gap
 from .asks import WAITING
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
+from .default_hold import consent_gap
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
@@ -360,6 +360,7 @@ def _queue_operation(
         idempotency_key=command.idempotency_key,
         requested_actor=principal.actor,
         requested_interface=principal.interface,
+        requested_device=principal.device,
         reason=command.reason,
         # Who asked stays who asked. Where a person had to agree before this
         # could be queued, that is recorded beside the request rather than in
@@ -734,7 +735,7 @@ def request_reach_allow(
         target = device_at(str(item.get("endpoint", "")), known)
         try:
             port = int(str(item.get("port", "")) or 0)
-        except ValueError:
+        except ValueError:  # noqa: S112 - a consumer with no port number has no port to open
             continue
         if target is None or not port:
             continue

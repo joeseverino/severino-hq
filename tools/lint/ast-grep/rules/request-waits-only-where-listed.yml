@@ -1,0 +1,28 @@
+# A request answers from what HQ holds: it never reaches a network, starts a
+# process or sleeps, and the interpreter refuses it (core.outbound). An
+# exception, entered with outbound.allowed(name), is a place a request may
+# wait, declared with its reason in outbound.ALLOWED and entered only where
+# RequestNeverWaitsTests.ENTERED lists, which holds what each of those
+# modules enters. So no other module of code HQ runs calls allowed.
+id: request-waits-only-where-listed
+language: python
+severity: error
+message: A request waits through an exception entered where none is listed.
+note: >-
+  Answer from what HQ holds, or run the work as a job. A new exception is a
+  decision: its reason in hq/platform/core/outbound.py's ALLOWED and its module
+  in test_architecture's ENTERED.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "hq/platform/core/oidc.py"
+  - "hq/platform/application/lookup.py"
+rule:
+  kind: call
+  has:
+    field: function
+    kind: identifier
+    regex: ^allowed$

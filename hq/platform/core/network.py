@@ -6,6 +6,7 @@ which the application cannot see. So it states the rule itself: private ranges,
 the VPN's and the healthcheck's loopback are served, and anywhere else refused.
 """
 
+import logging
 from functools import cache
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 
@@ -14,6 +15,8 @@ from django.http import HttpResponseForbidden
 lazy from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from .write_bounds import NOTHING, writes
+
+logger = logging.getLogger("severino.network")
 
 
 @cache
@@ -25,7 +28,12 @@ def _networks(cidrs: tuple[str, ...]) -> tuple:
         except ValueError:
             # A typo in configuration must not widen the gate. Dropping the
             # entry makes the rule stricter than intended, which is the safe
-            # direction to be wrong in.
+            # direction to be wrong in, and saying so names the typo.
+            logger.warning(
+                "A configured network %r is no network, so it is left out.",
+                cidr,
+                extra={"event": "network.entry.unreadable"},
+            )
             continue
     return tuple(parsed)
 

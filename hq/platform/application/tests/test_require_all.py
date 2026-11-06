@@ -1,10 +1,6 @@
-import ast
-from pathlib import Path
-
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from ..security import AuthorizationError, Capability, Principal, require_all
-from .source import parsed
 
 READER = Principal("reader", "test", frozenset({Capability.READ}))
 
@@ -17,30 +13,3 @@ class RequireAllTests(SimpleTestCase):
     def test_one_capability_missing_is_refused(self):
         with self.assertRaises(AuthorizationError):
             require_all(READER, (Capability.READ, Capability.MANAGE_INFRASTRUCTURE))
-
-
-@tag("source")
-class RequireAllSourceTests(SimpleTestCase):
-    """No registry writes the loop again."""
-
-    def test_no_registry_writes_the_loop_again(self):
-        """Resources, capabilities, search and imports each looped over
-        ``principal.require``; one rule written four times is four places to
-        get it subtly different."""
-
-        root = Path(__file__).parent.resolve().parent
-        found = []
-        for path in sorted(root.glob("*.py")):
-            if path.name.startswith("test") or path.name == "security.py":
-                continue
-            found.extend(
-                f"{path.name}:{node.lineno}"
-                for node in ast.walk(parsed(path))
-                if isinstance(node, ast.For)
-                and any(
-                    isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute) and call.func.attr == "require"
-                    for statement in node.body
-                    for call in ast.walk(statement)
-                )
-            )
-        self.assertEqual(found, [])

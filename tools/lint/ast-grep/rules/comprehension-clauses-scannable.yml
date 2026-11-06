@@ -1,0 +1,36 @@
+# CodeQL's Python extractor parses a file its older parser cannot read, which
+# is any file with a lazy import, through tsg-python, and tsg-python loses a
+# comprehension's for or if clause when a comment line sits right before it.
+# The clause is then missing from the analysis: a name used only there is
+# reported unused, and a check it makes is invisible to the security
+# queries. A comment on a comprehension goes above its first for, or at the
+# end of a clause's line. The comment is a child of the comprehension, right
+# before a later clause; the regex says it has a line of its own, which the
+# tree does not.
+id: comprehension-clauses-scannable
+language: python
+severity: error
+message: A comment line sits right before a comprehension's later clause, which code scanning then loses.
+note: Move the comment above the comprehension's first `for`, or to the end of a clause's line.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+  - "demo/**"
+  - "tests/**"
+rule:
+  any:
+    - kind: list_comprehension
+    - kind: set_comprehension
+    - kind: dictionary_comprehension
+    - kind: generator_expression
+  regex: \bfor\b[\s\S]*\n[ \t]*#[^\n]*\n[ \t]*(async[ \t]+)?(for|if)\b
+  has:
+    kind: comment
+    follows:
+      kind: for_in_clause
+      stopBy: end
+    precedes:
+      any:
+        - kind: for_in_clause
+        - kind: if_clause

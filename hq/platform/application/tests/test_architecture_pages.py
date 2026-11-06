@@ -1,10 +1,8 @@
-"""What every page and template says the one shared way: titles, cells, counts, wording, buttons, trails and reads."""
+"""What every page and template says the one shared way: titles, counts, wording, buttons, trails and reads."""
 
-import ast
 import re
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
@@ -15,10 +13,10 @@ from hq.platform.application.routes import routed
 from hq.platform.application.security import operator_capabilities
 from hq.platform.core.middleware import LoginRequiredMiddleware
 from hq.platform.core.test_runner import no_default_role
-from hq_sdk import validation
-from hq_sdk.validation import _cell_markup_pins
 
-from .source import parsed, source_files, template_files
+from .apart import apart
+from .facts import scan
+from .source import template_files
 from .test_view_writes import routed_modules, shown
 
 
@@ -106,57 +104,6 @@ class PageTitleTests(SimpleTestCase):
         )
 
 
-@tag("source", "tree")
-class CellMarkupTests(SimpleTestCase):
-    """A test reads a table cell by its text: the host may wrap what a cell says.
-
-    One rule for the host and its extensions: ``hq_sdk.validation`` refuses it
-    in an extension's tree, and this holds the host's own tests to it.
-    """
-
-    def test_no_test_pins_a_cell_closing_tag(self):
-        root = Path(__file__).resolve().parents[4]
-        offenders = [
-            f"{path.relative_to(root)}:{line}"
-            for path in source_files(root, "*.py")
-            for line in _cell_markup_pins(parsed(path))
-        ]
-        self.assertEqual(offenders, [], "read the cell's text, not the tag that closes it")
-
-    def test_a_pin_is_found_however_the_text_is_written(self):
-        pinned = {
-            "a literal": 'self.assertContains(response, "<td>Served</td>")',
-            "a header": 'self.assertNotContains(response, "<th>Name</th>\\n")',
-            "a keyword": 'self.assertContains(response, text="<td>Served</td>")',
-            "an f-string": 'self.assertIn(f"<td>{name}</td>", html)',
-            "a concatenation": 'self.assertNotIn("<td>" + name + "</td>", html)',
-        }
-        free = {
-            "a cell's text": 'self.assertIn("Served", cells)',
-            "an opening tag": 'self.assertContains(response, "<td>")',
-            "a computed end": 'self.assertIn(f"<td>{tail}", html)',
-            "the haystack": 'self.assertIn("Served", "<td>Served</td>")',
-            "another assertion": 'self.assertEqual(cell, "<td>Served</td>")',
-        }
-        for name, line in pinned.items():
-            with self.subTest(pinned=name):
-                self.assertEqual(_cell_markup_pins(ast.parse(line)), [1])
-        for name, line in free.items():
-            with self.subTest(free=name):
-                self.assertEqual(_cell_markup_pins(ast.parse(line)), [])
-
-    def test_the_plugin_check_refuses_a_pin_and_says_what_to_read(self):
-        with TemporaryDirectory() as source:
-            tests = Path(source) / "example_plugin" / "tests"
-            tests.mkdir(parents=True)
-            (tests / "test_pages.py").write_text('def test(self, r):\n    self.assertContains(r, "<td>A</td>")\n')
-            with patch("sys.argv", ["validation", source]), patch("builtins.print") as printed:
-                self.assertEqual(validation.main(), 1)
-        said = "\n".join(str(call.args[0]) for call in printed.call_args_list)
-        self.assertIn("example_plugin/tests/test_pages.py:2", said)
-        self.assertIn("read the cell's text", said)
-
-
 class CountedTests(SimpleTestCase):
     """One way to say how many, so a noun and its verb agree."""
 
@@ -184,8 +131,8 @@ class CountedTests(SimpleTestCase):
 class InterfaceTextTests(SimpleTestCase):
     """What HQ and its extensions show people, read from source in one pass.
 
-    A gate reads it, here. A running HQ never does: a system check runs before
-    every management command, at every container start.
+    A gate reads it, here, its walk run apart. A running HQ never does: a
+    system check runs before every management command, at every container start.
     """
 
     @classmethod
@@ -193,7 +140,7 @@ class InterfaceTextTests(SimpleTestCase):
         from hq.platform.core import interface_text
 
         super().setUpClass()
-        cls.reading = interface_text.read()
+        cls.reading = interface_text.read(run=apart)
 
     def _places(self, found):
         return [f"{path}:{line}" + (f": {why[0]}" if why else "") for path, line, *why in found]
@@ -264,42 +211,23 @@ class PostButtonTests(SimpleTestCase):
         self.assertIn("&lt;b&gt;", html)
 
 
-def _restated_trails(tree: ast.AST) -> list[int]:
-    """Lines of a ``get_page_trail`` whose one statement returns a tuple of crumbs, starred parts and all."""
-
-    found = []
-    for node in ast.walk(tree):
-        if not (isinstance(node, ast.FunctionDef) and node.name == "get_page_trail"):
-            continue
-        body = [
-            statement
-            for statement in node.body
-            if not (isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant))
-        ]
-        if len(body) != 1 or not isinstance(body[0], ast.Return):
-            continue
-        if isinstance(body[0].value, ast.Tuple):
-            found.append(node.lineno)
-    return found
-
-
 @tag("source", "tree")
 class PageTrailTests(SimpleTestCase):
     """A view says its trail with ``page_trail`` and ``trail_label``, not a ``get_page_trail`` that restates them.
 
-    ``page_trail`` holds every crumb above the record, so a page several
-    levels down declares them too, the pages above it spread in
-    (``(*ABOVE, crumb)``). An override stays for a trail the mixin cannot say:
-    one built from the request or from several statements.
+    The rule and its cases are ``page-trail-declared`` in tools/lint/ast-grep,
+    which lint:ast-grep runs over the host; this runs it over every routed
+    module, an installed extension's and the example plugin's included.
     """
 
     def test_no_view_overrides_get_page_trail_to_say_what_the_mixin_says(self):
+        import yaml  # The image's suite collects this module without PyYAML.
+
         root = Path(__file__).resolve().parents[4]
-        self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    return (A,)")), [1])
-        self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    return (*ABOVE, (L, U))")), [1])
-        self.assertEqual(_restated_trails(ast.parse("def get_page_trail(self):\n    x = 1\n    return (x,)")), [])
+        rule = yaml.safe_load((root / "tools/lint/ast-grep/rules/page-trail-declared.yml").read_text(encoding="utf-8"))
         restated = [
-            f"{shown(root, path)}:{line}" for path in routed_modules(root) for line in _restated_trails(parsed(path))
+            f"{shown(root, found.path)}:{found.line}"
+            for found in scan({rule["id"]: rule["rule"]}, *routed_modules(root))
         ]
         self.assertEqual(restated, [], "declare page_trail (and trail_label) on the view")
 

@@ -1,0 +1,25 @@
+# Who an operation's rows name is whoever started it. A rebinding anywhere
+# else writes an operation's rows as someone who did not start it; the
+# approvals service runs an approved change as its requester and lapses an
+# expired one as HQ. So only it passes rebinds, but as False or as the
+# rebinds a signature of its own received and hands on.
+id: rebinding-only-by-approvals
+language: python
+severity: error
+message: A call rebinds an operation's actor outside the approvals service.
+note: Run the change under the binding it started in; only hq/platform/application/approvals.py rebinds.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/application/approvals.py"
+rule:
+  kind: keyword_argument
+  has:
+    field: name
+    regex: ^rebinds$
+  not:
+    has:
+      field: value
+      regex: ^(False|rebinds)$

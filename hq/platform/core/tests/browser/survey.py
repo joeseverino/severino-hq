@@ -11,6 +11,7 @@ from hq.platform.core.tests.browser.probes.boxes import (
     HEAD_CONTROLS,
     INTO_A_NEIGHBOR,
     OVERLAPS,
+    SHORT_OF_ITS_BUTTONS,
     SIDEWAYS,
     SMALL_TARGETS,
 )
@@ -160,7 +161,8 @@ _GEOMETRY = {
     "cell labels": _SPILLED_CELLS,
     "small targets": _SMALL_TARGETS_READ,
     "past the clamp": PAST_THE_CLAMP,
-    "cut decisions": (CUT_DECISIONS, [SELECTORS["decision_whole"], "*", SELECTORS["unseen"]]),
+    "cut decisions": (CUT_DECISIONS, [SELECTORS["decision_detail"], "*", SELECTORS["unseen"]]),
+    "short of its buttons": (SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]),
     "cut code in text": (CUT_DECISIONS, [SELECTORS["running_text"], SELECTORS["code"], SELECTORS["unseen"]]),
     "cut with room": (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]),
     "cut and closed": (CUT_AND_CLOSED, SELECTORS["unseen"]),

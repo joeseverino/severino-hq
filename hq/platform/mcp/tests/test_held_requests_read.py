@@ -5,7 +5,7 @@ what that agent asked for, while a person's device reads every one."""
 import json
 
 from asgiref.sync import async_to_sync
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from mcp import Client
 
 from hq.platform.application.capabilities import execute_capability
@@ -41,7 +41,6 @@ def _askers(principal) -> dict[str, set[str]]:
     }
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class HeldRequestsReadTests(TestCase):
     def setUp(self):
         from hq.platform.application.adoption_testing import managing_everything

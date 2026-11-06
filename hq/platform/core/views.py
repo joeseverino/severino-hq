@@ -16,6 +16,7 @@ from django.views.generic import TemplateView, View
 from hq.domains.contacts import inbox
 from hq.platform.application import agent_activity, capability_policy, fragments
 from hq.platform.application.agent_access import SET_AGENT_ACCESS, SET_AGENT_BLOCK
+from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
 from hq.platform.application.command_center import command_center
@@ -25,7 +26,7 @@ from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
-from hq.platform.application.security import Capability, safe_next, web_principal
+from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
 from hq.platform.application.ui import counted
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
@@ -173,6 +174,24 @@ class AgentBlockView(View):
         return redirect(safe_next(request, fallback=reverse("agent_policy")))
 
 
+class AgentDeviceView(View):
+    """Approve or block one device an agent called from. The form sends a state, never a toggle."""
+
+    # Each control's field, and the command that sets it.
+    SETS: ClassVar[dict[str, str]] = {"approved": APPROVE_AGENT_DEVICE, "blocked": BLOCK_AGENT_DEVICE}
+
+    def post(self, request):
+        device = request.POST.get("device", "")
+        asked = [(field, request.POST[field]) for field in self.SETS if field in request.POST]
+        if len(asked) != 1 or asked[0][1] not in {"0", "1"} or not device:
+            return HttpResponseBadRequest("one of approved or blocked, 0 or 1, for a device")
+        ((field, requested),) = asked
+        result = execute_posted(request, self.SETS[field], {field: requested == "1"}, target=device)
+        if not result["ok"]:
+            return refusal_response(result)
+        return redirect(safe_next(request, fallback=reverse("agent_policy")))
+
+
 class OwnDeviceView(View):
     """Register or remove one of the signed-in person's own devices. The form sends a state."""
 
@@ -245,8 +264,12 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["every_read"] = part == self.EVERY_PART or "all" in self.request.GET
         if part == self.EVERY_PART:
             return context
-        context["standings"] = agent_activity.standings()
+        context["standings"] = agent_activity.standings(self.request.user)
+        context["prompts"] = agent_activity.prompts(context["standings"])
+        context["device_groups"] = [standing for standing in context["standings"] if standing.devices]
         context["recent_days"] = agent_activity.RECENT.days
+        context["offered"] = len(agent_grantable())
+        context["client_setup"] = agent_activity.CLIENT_SETUP
         context["devices"] = devices_of(self.request.user)
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
@@ -263,25 +286,6 @@ class AgentPolicyView(PageMixin, TemplateView):
         # that are not, and the rest fold under their own heading.
         policy["changed_groups"], policy["default_groups"] = capability_policy.split_by_default(policy["groups"])
         policy["default_count"] = sum(len(group.rows) for group in policy["default_groups"])
-        # A column whose every settable rule is dormant is off as a whole, and
-        # says so once in its header rather than graying each cell unexplained.
-        # A row's cells are in column order, so a cell's column is its position.
-        settable = [
-            (index, cell)
-            for group in policy["groups"]
-            for row in group.rows
-            for index, cell in enumerate(row.cells)
-            if not cell.unavailable
-        ]
-        policy["any_dormant"] = any(cell.dormant for _index, cell in settable)
-        policy["column_heads"] = [
-            {
-                "column": column,
-                "dormant": any(index == position for index, _cell in settable)
-                and all(cell.dormant for index, cell in settable if index == position),
-            }
-            for position, column in enumerate(policy["columns"])
-        ]
         return policy
 
     def post(self, request):

@@ -656,7 +656,7 @@ def named_page(route: str, resource: Any, field: str) -> str:
     if value:
         try:
             return reverse(route, args=[value])
-        except NoReverseMatch:
+        except NoReverseMatch:  # noqa: S110 - a value no route takes falls back to the detail page
             pass
     return reverse("control_plane:detail", kwargs={"key": resource.key})
 

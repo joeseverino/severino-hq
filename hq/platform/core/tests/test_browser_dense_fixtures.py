@@ -659,25 +659,26 @@ def _held():
     """An agent's docs import waiting for a person: a list of records and a
     flag, the payload a held request most often carries."""
 
-    CapabilityRule.objects.create(scope="surface", subject="mcp", capability="documentation.sync", rule="approve")
+    CapabilityRule.objects.create(
+        subject="an-example-agent-with-a-long-name", capability="documentation.sync", rule="approve"
+    )
     agent = Principal(
         "an-example-agent-with-a-long-name", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION})
     )
-    with override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True):
-        answer = execute_capability(
-            "documentation.sync",
-            keyed(
-                {
-                    "manifest": [
-                        {"doc_id": f"rb-an-example-runbook-with-a-long-name-{index}", "title": "An example runbook"}
-                        for index in range(12)
-                    ],
-                    "prune_orphans": True,
-                    "confirm_prune": True,
-                }
-            ),
-            principal=agent,
-        )
+    answer = execute_capability(
+        "documentation.sync",
+        keyed(
+            {
+                "manifest": [
+                    {"doc_id": f"rb-an-example-runbook-with-a-long-name-{index}", "title": "An example runbook"}
+                    for index in range(12)
+                ],
+                "prune_orphans": True,
+                "confirm_prune": True,
+            }
+        ),
+        principal=agent,
+    )
     if not is_held(answer):
         raise AssertionError(f"the agent's docs import was answered {answer}, not held for a person")
 

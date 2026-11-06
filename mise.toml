@@ -32,7 +32,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.11.0"
+min_version = "2026.11.2"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -54,6 +54,15 @@ _.file = "tools/pipeline/toolchain.env"
 # The npm tools setup:lint-tools installs run by name.
 _.path = "tools/lint/node_modules/.bin"
 SEVERINO_LOG_LEVEL = "CRITICAL"
+# The source-file ceiling, read by FileSizeTests and by the brief check that
+# warns a file near it at launch. Globs are space-separated, from the repo root
+# (Python's PurePath.full_match); HELD names the files the ceiling covers, and
+# one of those is exempt when one of EXEMPT matches and none of COUNTED does (a
+# test module is held like the code it tests).
+SEVERINO_FILE_LINE_LIMIT = "1000"
+SEVERINO_FILE_LINE_HELD = "**/*.py **/*.go **/*.js **/*.css"
+SEVERINO_FILE_LINE_EXEMPT = "**/*_test.go **/*.gen.go **/*.min.js **/migrations/** **/node_modules/** **/vendor/** **/tests/**"
+SEVERINO_FILE_LINE_COUNTED = "**/tests/**/test*.py"
 # `uv run`, `uv sync` and `uv export` refuse a uv.lock that pyproject.toml has
 # moved past, as `--locked` does. So do `uv lock` and `uv add`: change the lock
 # outside mise, or with UV_LOCKED=0.
@@ -82,7 +91,7 @@ zizmor = "1.31.1"
 vale = "3.24.0"
 # Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
 # counts Ruff has no rule for (audit:ast).
-ast-grep = "0.51.0"
+ast-grep = "0.51.1"
 yq = "4.54.1"
 jq = "1.8.2"
 uv = "0.13.6"
@@ -94,12 +103,15 @@ scorecard = { version = "5.6.0", lazy = true }
 age = { version = "1.3.2", lazy = true }
 # The image scan, here (image:trivy) and in Compose. Lazy, as age is.
 trivy = { version = "0.76.1", lazy = true }
+# The secret scan over a repository's commits (scan:secrets), which the
+# extensions' plugin checks run from this lock. Lazy, as age is.
+gitleaks = { version = "8.30.1", lazy = true }
 # Each image layer's bytes and the bytes a later layer leaves wasted (audit:image).
 # Lazy, as age is.
 dive = { version = "0.13.1", lazy = true }
-# Tags a proven image on main: `crane tag` PUTs the manifest's own bytes, so
-# the tag names the signed digest. Lazy, as age is.
-crane = { version = "0.22.1", lazy = true }
+# Times one command against another, by hand or in a scratch script, the same
+# release in every worktree. Lazy, as age is.
+hyperfine = { version = "2.0.0", lazy = true }
 # Signs and verifies the composition, here, in CI, in an extension's admission
 # and on the host, whose verifier is generated from this lock's linux-x64 entry
 # (controller/host/verifier.gen.go). Lazy, as age is.
@@ -111,6 +123,14 @@ osv-scanner = { version = "2.7.0", lazy = true }
 # Reads the names templates, strings and other languages' files hand to Python,
 # which vulture cannot see (audit:dead). Lazy, as age is.
 ripgrep = { version = "15.2.0", lazy = true }
+
+# Each Go binary's bytes by package and module, read from its own symbol and
+# line tables (audit:dependency-weight). Not in mise's registry, so named by its
+# aqua package. Lazy, as age is.
+[tools."aqua:Zxilly/go-size-analyzer"]
+version = "1.14.1"
+lazy = true
+lazy_bins = ["gsa"]
 
 # The code graph the structural bar indexes with. Linux takes the portable
 # (static) build so the runner needs no matching libc. Lazy: only
@@ -141,40 +161,59 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 
 # ------------------------------------------------------------- templates
 # A gate never opens the developer's database: each Django gate extends one of
-# these, which make it a new empty file for every task run, so a checkout's own
-# data cannot change what a gate reports and gates run side by side never share
-# one (two processes making one new file WAL at once: one is refused as
-# "database is locked"). It is named as a test run's scratch is, for the mise
-# that ran it, so the next test run sweeps it (hq/config/sandbox.py). A gate
-# sees no extension set it did not ask for. A task extends one template and a
-# template extends none, so django-browser restates django's env
-# (test_browser_gate_tasks holds it to it): an env file could hold it once, but mise reads one as written, never rendered, and the
-# database path is an exec. The composed suite extends django and sets what
-# it changes in its own header.
+# these, which name none and ask for a sandbox, so each process the gate runs
+# makes a run folder of its own with an empty database in it, removed as the
+# process ends (hq/config/sandbox.py). A checkout's own data cannot change what
+# a gate reports, and gates run side by side never share a database (two
+# processes making one new file WAL at once: one is refused as "database is
+# locked"). A gate sees no extension set it did not ask for. A task extends one
+# template and a template extends none, so django-browser restates django's env
+# (test_browser_gate_tasks holds it to it). The composed suite extends django
+# and sets what it changes in its own header.
 
 [task_templates.django]
-env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ------------------------------------------------------------------ heavy
 # A task that loads the machine takes the heavy turn: mise's task lock
 # `heavy`, one name every checkout and worktree on the machine shares, so two
 # such tasks never share its memory (docs/Development.md, Heavy gates take
 # turns). Its timeout starts once it holds the lock and stops a hung holder:
-# well above the slowest gate (the suite, a browser gate).
+# well above the slowest gate (the suite, a browser gate). Its shell is mise's
+# own default run under tools/lib/measured, so the run ends with the line on
+# what it spent.
 [task_templates.heavy]
 lock = "heavy"
 timeout = "30m"
+shell = "tools/lib/measured sh -o errexit -c"
 
 # A browser gate: django's env inside a heavy turn, WebKit and the lint tools
 # (axe-core, which the survey runs) installed first, and the test classes its
 # task names in `vars.classes`, which mise renders from the extending task's own vars.
 [task_templates.django-browser]
-env = { SEVERINO_DATABASE_PATH = "{{ exec(command='mktemp \"${TMPDIR:-/tmp}/severino-test-gate-' ~ mise_pid ~ '-XXXXXX\"') }}", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 lock = "heavy"
 timeout = "30m"
+shell = "tools/lib/measured sh -o errexit -c"
 depends = [{ task = "setup:browser", args = ["webkit"] }, "setup:lint-tools"]
 usage = 'flag "--fallback-face" help="Draw every page in the system face, as a reader sees it before Inter loads"'
 run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser python manage.py test {{ vars.classes }} --noinput --parallel auto"
+
+# A read-only measurement (mise-tasks/audit.toml): mise runs it in its OS
+# sandbox (Seatbelt, Landlock), so whatever words it is handed, it writes only
+# to /tmp, /dev, the temporary directory and Go's build cache. On macOS the
+# temporary directory is the user's, which mktemp uses whatever TMPDIR says.
+# uv works from a throwaway cache there and never writes .venv, so one out of
+# sync fails the task rather than syncing. django's env is restated so an
+# audit that boots Django takes this template alone.
+[task_templates.audit]
+deny_write = true
+allow_write = [
+  "{% if os() == 'macos' %}{{ exec(command='getconf DARWIN_USER_TEMP_DIR') }}{% else %}{{ get_env(name='TMPDIR', default='') }}{% endif %}",
+  "{% if os() == 'macos' %}{{ env.HOME }}/Library/Caches{% else %}{{ xdg_cache_home }}{% endif %}/go-build",
+]
+depends = ["setup:sandbox"]
+env = { UV_NO_CACHE = "1", SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ---------------------------------------------------------------- servers
 # The development servers. Each profile is a task whose env says where it
@@ -286,6 +325,7 @@ description = "While editing: the tests the change reaches, and the quick gates 
 # Its test run alone takes the heavy turn (tools/gate/fast.py), so the quick
 # gates of one worktree never wait on another's suite.
 extends = "django"
+env = { SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 # The lint tools the quick gates and the stylesheet tests run.
 depends = ["setup:lint-tools"]
 usage = '''
@@ -298,11 +338,14 @@ run = "uv run python -m tools.gate.fast"
 [tasks.lint]
 description = "After editing, or when fast is not enough: CI's lint job, every lint:* gate: lint, types, structure, dependencies, security, derived files"
 # No turn of its own: the gates whose memory needs one take it.
+env = { SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 run = "uv run python -m tools.gate.verdict lint mise run -c 'lint:*'"
 
 [tasks.scan]
 description = "To reproduce an alert CI's scan job raised: CodeQL's security-and-quality queries find no alert, and in CI none is open on GitHub for the analyzed ref; slow"
-depends = ["scan:*"]
+# CI's scan job, by name: scan:secrets is the extensions' secret scan
+# (plugin-checks.yml), which this repository's own history is not held to.
+depends = ["scan:codeql", "scan:alerts"]
 
 # Whether this checkout can compose its extensions: `mise doctor project` names
 # each gap with its fix. A check that needs the set depends on it, so without

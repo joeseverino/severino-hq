@@ -41,7 +41,7 @@ AUDIT_LABEL = "Pin"
 @dataclass(frozen=True, slots=True)
 class PinCommand:
     kind: Annotated[str, Describe("What type of thing to pin.")]
-    key: Annotated[str, Describe("Which one.")]
+    key: Annotated[str, Describe("The one to pin or unpin.")]
 
 
 @dataclass(frozen=True, slots=True)

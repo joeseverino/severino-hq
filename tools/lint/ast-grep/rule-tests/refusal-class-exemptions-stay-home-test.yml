@@ -1,0 +1,16 @@
+id: refusal-class-exemptions-stay-home
+valid:
+  - 'from hq.domains.jobs.runner import JobConflict'
+  - |
+    class ExampleConflictReport:
+        pass
+invalid:
+  - |
+    class JobConflict(RuntimeError):
+        pass
+  - |
+    class LookupNotFound(Exception):
+        pass
+  - |
+    class IdempotencyConflict(Exception):
+        pass

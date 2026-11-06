@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -170,14 +171,14 @@ func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	f.before(t, "systemctl stop", "docker create --pull never "+imageID)
 	// The new tree and its web unit are in place before HQ restarts, so HQ
 	// comes up as the release being deployed defines it.
-	f.before(t, "docker create --pull never "+imageID, "systemctl restart "+WebUnit)
+	f.before(t, "docker create --pull never "+imageID, "systemctl restart "+hostcore.WebUnit)
 	if _, err := os.Stat(filepath.Join(f.machine.Lib, "hq", "config", "synced-release")); err != nil {
 		t.Error("the tree is not the image's")
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Systemd, WebUnit)); err != nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Systemd, hostcore.WebUnit)); err != nil {
 		t.Error("the release's web unit was not installed")
 	}
-	f.before(t, "systemctl restart "+WebUnit, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install")
+	f.before(t, "systemctl restart "+hostcore.WebUnit, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install")
 	f.before(t, filepath.Join(f.machine.Lib, "deploy", "bin", "hq-host")+" install", "systemctl start severino-hq-controller.path")
 	// The release just installed is verified before the deploy ends.
 	f.before(t, "systemctl start severino-hq-controller.path", "systemctl start "+DriftUnit)
@@ -261,7 +262,7 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	if err := os.WriteFile(previousUnit, []byte("previous\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	f.failOnce("systemctl restart " + WebUnit)
+	f.failOnce("systemctl restart " + hostcore.WebUnit)
 	d, _ := newDeployer(f)
 
 	err := d.Release(context.Background(), next)
@@ -282,7 +283,7 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.machine.Lib, "hq", "config", "synced-release")); err == nil {
 		t.Error("the unhealthy release's tree was left in place")
 	}
-	if _, err := os.Stat(filepath.Join(f.machine.Systemd, WebUnit)); err == nil {
+	if _, err := os.Stat(filepath.Join(f.machine.Systemd, hostcore.WebUnit)); err == nil {
 		t.Error("the unhealthy release's web unit was left installed")
 	}
 	if data, _ := os.ReadFile(previousUnit); string(data) != "previous\n" {
@@ -291,7 +292,7 @@ func TestAnUnhealthyReleaseIsRolledBack(t *testing.T) {
 	if !f.called("systemctl start severino-hq-secrets.timer") {
 		t.Error("the held timer was not started again")
 	}
-	if !f.called("journalctl --unit " + WebUnit) {
+	if !f.called("journalctl --unit " + hostcore.WebUnit) {
 		t.Error("no diagnostics were kept")
 	}
 }
@@ -317,7 +318,7 @@ func TestAFailedInstallRollsTheTreeAndImageBack(t *testing.T) {
 	}
 	restarts := 0
 	for _, call := range f.calls() {
-		if call == "systemctl restart "+WebUnit {
+		if call == "systemctl restart "+hostcore.WebUnit {
 			restarts++
 		}
 	}
@@ -340,7 +341,7 @@ func TestARollbackThatFailsEndsWithProductionUnknown(t *testing.T) {
 	if err := f.machine.Record(running); err != nil {
 		t.Fatal(err)
 	}
-	f.fail = []string{"systemctl restart " + WebUnit}
+	f.fail = []string{"systemctl restart " + hostcore.WebUnit}
 	d, _ := newDeployer(f)
 
 	err := d.Release(context.Background(), next)
@@ -434,7 +435,7 @@ func TestAReleaseThatMigratedAndFailedPutsTheDatabaseBack(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	f.failOnce("systemctl restart " + WebUnit)
+	f.failOnce("systemctl restart " + hostcore.WebUnit)
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err == nil {
@@ -451,8 +452,8 @@ func TestAReleaseThatMigratedAndFailedPutsTheDatabaseBack(t *testing.T) {
 	}
 	// Stopped before the database moved, started again only after.
 	calls := strings.Join(f.calls(), "\n")
-	stop := strings.LastIndex(calls, "systemctl stop "+WebUnit)
-	restart := strings.LastIndex(calls, "systemctl restart "+WebUnit)
+	stop := strings.LastIndex(calls, "systemctl stop "+hostcore.WebUnit)
+	restart := strings.LastIndex(calls, "systemctl restart "+hostcore.WebUnit)
 	if stop < 0 || restart < stop {
 		t.Errorf("HQ was not stopped while its database was restored:\n%s", calls)
 	}
@@ -471,7 +472,7 @@ func TestAReleaseThatFailedWithoutMigratingLeavesTheDatabase(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(f.data(), SchemaSnapshot), []byte("stale"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	f.failOnce("systemctl restart " + WebUnit)
+	f.failOnce("systemctl restart " + hostcore.WebUnit)
 	d, _ := newDeployer(f)
 
 	if err := d.Release(context.Background(), next); err == nil {
@@ -481,7 +482,7 @@ func TestAReleaseThatFailedWithoutMigratingLeavesTheDatabase(t *testing.T) {
 	if data, _ := os.ReadFile(database); string(data) != "current" {
 		t.Errorf("the database became %q", data)
 	}
-	if f.called("systemctl stop " + WebUnit) {
+	if f.called("systemctl stop " + hostcore.WebUnit) {
 		t.Error("HQ was stopped with no database to restore")
 	}
 }

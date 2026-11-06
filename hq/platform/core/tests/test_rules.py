@@ -30,7 +30,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.jobs.models import Job
 from hq.platform.core import revisions
 from hq.platform.core.management.commands import constraint_preflight
-from hq.platform.core.models import AgentAccess, AgentIdentity
+from hq.platform.core.models import AgentAccess, AgentDevice, AgentIdentity
 from hq.platform.core.rules import Rule, one_of
 
 DAY = date(2026, 10, 1)
@@ -88,6 +88,7 @@ class RuleTests(TestCase):
         row = RumDaily.objects.create(site=site, date=DAY, dimension="path", value="/")
         runbook = DocumentationRecord.objects.create(doc_id="example-doc", title="A runbook")
         agent = AgentIdentity.objects.create(client_id="example-agent")
+        device = AgentDevice.objects.create(identity=agent, node_id="nEXAMPLECNTRL")
         operator = get_user_model().objects.create_user("example-operator", password="x" * 20)
 
         def changed(instance, **values):
@@ -118,6 +119,8 @@ class RuleTests(TestCase):
             "agent_access_is_one_row": lambda: AgentAccess.objects.create(pk=2),
             "agent_identity_block_is_dated": changed(agent, blocked_by=operator),
             "agent_identity_signs_in_a_known_way": changed(agent, signs_in="example"),
+            "agent_device_approval_is_dated": changed(device, approved_by=operator),
+            "agent_device_block_is_dated": changed(device, blocked_by=operator),
             "person_role_is_a_known_role": changed(operator.person_role, role="example"),
             "dashboard_configuration_is_one_row": lambda: DashboardConfiguration.objects.create(pk=2),
             "analytics_vitalsdaily_sample_interval": lambda: site.vitals.create(date=DAY, sample_interval=0),

@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, attempted_at
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
@@ -142,7 +142,7 @@ def _due(kinds: tuple[str, ...], now: datetime) -> list[str]:
     # that is down or refusing stores nothing new, and judged by its last good
     # reading it would be due again the moment it was asked, without end.
     attempted = {
-        kind: max(observed_at, updated_at)
+        kind: attempted_at(observed_at, updated_at)
         for kind, observed_at, updated_at in ProviderInventory.objects.filter(kind__in=kinds).values_list(
             "kind", "observed_at", "updated_at"
         )

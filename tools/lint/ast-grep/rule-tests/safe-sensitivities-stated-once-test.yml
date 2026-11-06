@@ -1,0 +1,12 @@
+id: safe-sensitivities-stated-once
+valid:
+  - 'from hq.platform.application.sensitivity import SAFE_SENSITIVITIES'
+  - 'from hq.platform.application.sensitivity import SAFE_SENSITIVITIES as MODEL_SET'
+  - 'shown = records.filter(sensitivity__in=SAFE_SENSITIVITIES)'
+  - 'SAFE_LEVELS = SAFE_SENSITIVITIES'
+invalid:
+  - 'SAFE_SENSITIVITIES = ("public", "internal")'
+  - 'SAFE_SENSITIVITIES: tuple[str, ...] = ("public",)'
+  - |
+    class Surface:
+        SAFE_SENSITIVITIES = frozenset({"public"})

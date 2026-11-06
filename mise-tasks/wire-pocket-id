@@ -1,0 +1,16 @@
+#!/bin/sh
+#MISE description="Write Pocket ID's permission list for HQ's API from HQ's catalog, and grant a client every one (docs/API.md)"
+#MISE hide=true
+#MISE extends="django"
+#USAGE flag "--pocket-id <url>" help="The Pocket ID to write to, https://<host>"
+#USAGE flag "--resource <uri>" env="SEVERINO_API_RESOURCE" help="HQ's API in Pocket ID, by its resource (SEVERINO_API_RESOURCE)"
+#USAGE flag "--grant <client>" help="Also give this client every permission but own_device, delegated by a signed-in person"
+set -eu
+
+# The list is the catalog of the extension set mise.local.toml names, as
+# production composes it, so the replacing write keeps every extension's
+# permissions. The admin key comes from the environment, never a flag:
+# POCKET_ID_API_KEY, through op run. Without it the task prints the list and
+# changes nothing.
+export SEVERINO_HQ_PLUGINS="${HQ_LOCAL_PLUGINS:-}" PYTHONPATH="${HQ_LOCAL_PYTHONPATH:-}" SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=0
+exec uv run --quiet python -m tools.pocket_id

@@ -3,7 +3,7 @@ so the log reads as events: one operation, with the items it changed."""
 
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest
@@ -105,7 +105,6 @@ class BindingTests(TestCase):
         self.assertEqual(own.operation_id, "example-own")
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class ApprovalLifeTests(TestCase):
     """A request, its decision, the change it applies and its lapse are one operation."""
 

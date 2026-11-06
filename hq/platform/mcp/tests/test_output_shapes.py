@@ -112,6 +112,19 @@ def _held(schema, value, path, held):
                 _held(shape.get("items"), item, f"{path}[]", held)
 
 
+def _unheld(listed, answers):
+    """Where each field a listed tool's success shape names sits, when no
+    successful answer among ``answers`` holds it."""
+
+    successes = {tool.name: tool.output_schema["anyOf"][0] for tool in listed}
+    named = dict(field for name, schema in successes.items() for field in _named(schema, name))
+    held: set[tuple[str, str]] = set()
+    for name, _arguments, result in answers:
+        if not result.is_error:
+            _held(successes[name], result.structured_content, name, held)
+    return sorted(where for field, where in named.items() if field not in held)
+
+
 class OutputShapeTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -119,9 +132,7 @@ class OutputShapeTests(TestCase):
         with throwaway_media(), seeds.built("showcase"):
             pass
         Project.objects.create(name="Read only", slug="read-only")
-        CapabilityRule.objects.create(
-            scope=CapabilityRule.Scope.AGENT, subject=HELD.actor, capability="project.create", rule="approve"
-        )
+        CapabilityRule.objects.create(subject=HELD.actor, capability="project.create", rule="approve")
 
     def _checked(self, principal, calls):
         """Each call's result, checked against its tool's listed outputSchema by the SDK's client."""
@@ -176,15 +187,8 @@ class OutputShapeTests(TestCase):
         ]
         _, traced = self._checked(READER, [("get_topology", {"focus": nodes[0]})])
         answered += traced
-        successes = {tool.name: tool.output_schema["anyOf"][0] for tool in listed}
-        named = dict(field for name, schema in successes.items() for field in _named(schema, name))
-        held: set[tuple[str, str]] = set()
-        for name, _arguments, result in [*answered, *written]:
-            if not result.is_error:
-                _held(successes[name], result.structured_content, name, held)
         self.maxDiff = None
-        missing = sorted(where for field, where in named.items() if field not in held)
-        self.assertEqual(missing, [], "a field a shape names that no answer holds")
+        self.assertEqual(_unheld(listed, [*answered, *written]), [], "a field a shape names that no answer holds")
         # Each success is of the type its handler declares: a key the type
         # requires is one the answer holds, as Pydantic reads the type.
         declared = {name: TypeAdapter(answer_type(tool.handler)) for name, tool in mcp.tools.items()}

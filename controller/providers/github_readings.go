@@ -63,32 +63,32 @@ var (
 // GitHubRepositoryRecord is one repository as the app's read-only token sees it.
 // A nil part is one refused; HQ's record says which.
 type GitHubRepositoryRecord struct {
-	ConnectionRef     string                    `json:"connection_ref"`
-	Repository        string                    `json:"repository"`
-	Private           bool                      `json:"private"`
-	Archived          bool                      `json:"archived"`
-	URL               string                    `json:"url"`
-	DefaultBranch     string                    `json:"default_branch"`
-	PushedAt          string                    `json:"pushed_at"`
-	Head              GitHubHead                `json:"head"`
-	Checks            GitHubChecks              `json:"checks"`
-	PullRequests      []GitHubPull              `json:"pull_requests"`
-	PullRequestChecks []string                  `json:"pull_request_checks"`
-	Runs              []GitHubRun               `json:"runs"`
-	Waiting           []GitHubWaitingRun        `json:"waiting"`
-	Release           *GitHubRelease            `json:"release"`
-	Deployments       []GitHubDeployment        `json:"deployments"`
-	Alerts            map[string]map[string]int `json:"alerts"`
-	DependabotAlerts  []GitHubDependabotAlert   `json:"dependabot_alerts"`
-	Artifacts         []GitHubArtifact          `json:"artifacts"`
-	Rules             *GitHubRules              `json:"rules"`
-	Environments      []GitHubEnvironment       `json:"environments"`
-	Runners           []GitHubRunner            `json:"runners"`
-	Images            []GitHubImage             `json:"images"`
-	Access            *GitHubAccess             `json:"access"`
-	Variables         []string                  `json:"variables"`
-	Pins              []GitHubPin               `json:"pins"`
-	CalledWorkflows   []string                  `json:"called_workflows"`
+	ConnectionRef     string                                     `json:"connection_ref"`
+	Repository        string                                     `json:"repository"`
+	Private           bool                                       `json:"private"`
+	Archived          bool                                       `json:"archived"`
+	URL               string                                     `json:"url"`
+	DefaultBranch     string                                     `json:"default_branch"`
+	PushedAt          string                                     `json:"pushed_at"`
+	Head              GitHubHead                                 `json:"head"`
+	Checks            GitHubChecks                               `json:"checks"`
+	PullRequests      []GitHubPull                               `json:"pull_requests"`
+	PullRequestChecks []string                                   `json:"pull_request_checks"`
+	Runs              []GitHubRun                                `json:"runs"`
+	Waiting           []GitHubWaitingRun                         `json:"waiting"`
+	Release           *GitHubRelease                             `json:"release"`
+	Deployments       []GitHubDeployment                         `json:"deployments"`
+	Alerts            map[runtime.ReadingPartName]map[string]int `json:"alerts"`
+	DependabotAlerts  []GitHubDependabotAlert                    `json:"dependabot_alerts"`
+	Artifacts         []GitHubArtifact                           `json:"artifacts"`
+	Rules             *GitHubRules                               `json:"rules"`
+	Environments      []GitHubEnvironment                        `json:"environments"`
+	Runners           []GitHubRunner                             `json:"runners"`
+	Images            []GitHubImage                              `json:"images"`
+	Access            *GitHubAccess                              `json:"access"`
+	Variables         []string                                   `json:"variables"`
+	Pins              []GitHubPin                                `json:"pins"`
+	CalledWorkflows   []string                                   `json:"called_workflows"`
 	// Fingerprint is what GitHub's change query answered before the read,
 	// hashed, and ReadAt when the read was made: what HQ's plan sends back.
 	Fingerprint string `json:"fingerprint"`

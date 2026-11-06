@@ -1,0 +1,90 @@
+# A control that posts to or opens a command (its URL built by command_url,
+# or the jobs:ask route outbound work is asked through) says that command's
+# declared words. A label the call site writes out itself, a literal or an
+# f-string, drifts from the declaration the command's other surfaces read.
+# The label is label=, or the constructor's positional one: first for Ask
+# and PageAction, second for ActionLink and TopologyAction.
+id: command-control-says-declared-words
+language: python
+severity: error
+message: A control that reaches a command writes its own label.
+note: Read the label from the declaration, with capability_words or the work's ask().
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/*_tests.py"
+utils:
+  written:
+    any:
+      - kind: string
+      - kind: concatenated_string
+  positional:
+    not:
+      any:
+        - kind: keyword_argument
+        - kind: comment
+  written-label:
+    kind: keyword_argument
+    all:
+      - has:
+          field: name
+          regex: ^label$
+      - has:
+          field: value
+          matches: written
+rule:
+  kind: call
+  all:
+    - any:
+        - all:
+            - has:
+                field: function
+                regex: (^|\.)(Ask|PageAction)$
+            - has:
+                field: arguments
+                any:
+                  - has:
+                      matches: written-label
+                  - has:
+                      nthChild:
+                        position: 1
+                        ofRule:
+                          matches: positional
+                      matches: written
+        - all:
+            - has:
+                field: function
+                regex: (^|\.)(ActionLink|TopologyAction)$
+            - has:
+                field: arguments
+                any:
+                  - has:
+                      matches: written-label
+                  - has:
+                      nthChild:
+                        position: 2
+                        ofRule:
+                          matches: positional
+                      matches: written
+    - has:
+        stopBy: end
+        kind: call
+        any:
+          - has:
+              field: function
+              regex: (^|\.)command_url$
+          - all:
+              - has:
+                  field: function
+                  regex: (^|\.)reverse$
+              - has:
+                  field: arguments
+                  has:
+                    nthChild:
+                      position: 1
+                      ofRule:
+                        matches: positional
+                    regex: ^["']jobs:ask["']$

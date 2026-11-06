@@ -12,12 +12,13 @@ trap 'rm -rf "${work}"' EXIT
 # A checkout with what the task reads: the image admits manage.py, not notes/,
 # and admits built/ only for a stage that is not /app's.
 fixture="${work}/checkout"
-mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/tools/lib" "${fixture}/tools/gate" "${fixture}/notes" "${fixture}/built" "${fixture}/deploy" "${work}/bin" "${work}/tmp"
+mkdir -p "${fixture}/$(dirname "${task}")" "${fixture}/tools/gate" "${fixture}/notes" "${fixture}/built" "${fixture}/deploy" "${work}/bin" "${work}/tmp"
 cp "${repo}/${task}" "${fixture}/${task}"
-cp "${repo}/tools/lib/heavy-turn.sh" "${fixture}/tools/lib/"
-cp "${repo}/tools/lib/export-tree.sh" "${repo}/tools/lib/image-tree.sh" "${repo}/tools/lib/source-url.sh" "${repo}/tools/lib/extension-set.sh" "${fixture}/tools/lib/"
+# shellcheck source=tests/shell/task-libraries.sh
+. "${repo}/tests/shell/task-libraries.sh"
+copy_libraries "${repo}" "${fixture}" "${task}"
 cp "${repo}/tools/__init__.py" "${fixture}/tools/"
-cp "${repo}/tools/gate/__init__.py" "${repo}/tools/gate/verdict.py" "${fixture}/tools/gate/"
+cp "${repo}/tools/gate/__init__.py" "${repo}/tools/gate/tree.py" "${repo}/tools/gate/verdict.py" "${fixture}/tools/gate/"
 printf '*\n!built/\n!deploy/\n!manage.py\n' >"${fixture}/Dockerfile.dockerignore"
 printf 'FROM scratch\nCOPY --exclude=built . /app\n' >"${fixture}/Dockerfile"
 : >"${fixture}/manage.py"
@@ -55,7 +56,7 @@ STUB
 chmod +x "${work}/bin/uv"
 
 # Another run's copy, which this one must leave alone.
-other="${work}/tmp/severino-test-tree-1-other"
+other="${work}/tmp/hq-run-other"
 mkdir "${other}"
 
 run() { # run <uv behavior> [NAME=value...]; prints the task's exit status
@@ -80,7 +81,7 @@ for case in 0:0 3:1 term:143; do
     got="$(run "${behavior}")"
     [ "${got}" = "${want}" ] || fail "uv ${behavior}: the task exited ${got}, not ${want}"
     seen="$(cat "${work}/seen")"
-    case "${seen}" in "${work}/tmp/severino-test-tree-"*) ;; *) fail "the suite ran in ${seen}, not a copy" ;; esac
+    case "${seen}" in "${work}/tmp/hq-run-"*) ;; *) fail "the suite ran in ${seen}, not a copy" ;; esac
     [ ! -e "${seen}" ] || fail "uv ${behavior}: the copy ${seen} was left behind"
     [ -d "${other}" ] || fail "uv ${behavior}: another run's copy was removed"
 done

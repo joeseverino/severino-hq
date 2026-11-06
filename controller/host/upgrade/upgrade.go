@@ -55,6 +55,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"os"
 	"os/exec"
@@ -65,8 +66,6 @@ import (
 	"strings"
 	"syscall"
 	"time"
-
-	"github.com/joeseverino/severino-hq/controller/host"
 )
 
 // Fixed for anyone reaching this through sudo, which passes none of the
@@ -80,8 +79,6 @@ const (
 	// Settle is how long a container must keep running, without a restart,
 	// to count.
 	Settle = 10 * time.Second
-	// sudoPath is the PATH a sudo caller's run gets, whatever sudo passed.
-	sudoPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
 
 // Exit codes.
@@ -165,13 +162,14 @@ func FromEnvironment(getenv func(string) string, euid int, stdout, stderr io.Wri
 		StacksRoot: StacksRoot, StateRoot: StateRoot, Poll: Poll, Settle: Settle,
 		EUID: euid, Now: time.Now, Sleep: sleep, Out: stdout, Err: stderr,
 	}
-	env := []string{"LC_ALL=C"}
+	var env []string
 	if caller := getenv("SUDO_UID"); caller != "" {
 		if caller != "0" {
 			u.Caller = caller
 		}
-		env = append(env, "PATH="+sudoPath, "HOME=/root")
+		env = hostcore.RootEnvironment()
 	} else {
+		env = []string{"LC_ALL=C"}
 		for _, name := range []string{"PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG"} {
 			if value := getenv(name); value != "" {
 				env = append(env, name+"="+value)
@@ -192,10 +190,7 @@ func FromEnvironment(getenv func(string) string, euid int, stdout, stderr io.Wri
 		}
 	}
 	u.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		command := exec.CommandContext(ctx, name, args...)
-		command.WaitDelay = host.ProcessWaitDelay
-		command.Env = env
-		return command
+		return hostcore.Process(ctx, env, name, args...)
 	}
 	return u, nil
 }

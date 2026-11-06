@@ -1,6 +1,7 @@
 """The style bundle as the contract extensions render against."""
 
 import re
+import subprocess
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
@@ -16,6 +17,155 @@ def _is_address(text: str, found: re.Match[str]) -> bool:
     if any(int(part) > 255 for part in found.group().split(".")):
         return False
     return text[max(0, found.start() - 8) : found.start()] != "section-"
+
+
+# Documentation, private, multicast and reserved ranges are examples or
+# classes, not places. Anything outside them is somewhere a packet can
+# actually go.
+#
+# 192.168.0.0/16 is the exception: a host from it is somebody's actual
+# machine rather than an example. Only the range's base address passes,
+# since that appears solely as half of a CIDR. Fixtures wanting a
+# private address use 10.0.0.0/8, which every classifier here treats
+# identically.
+_RESERVED = re.compile(
+    r"^(?:127\.|10\.|192\.168\.0\.0$|169\.254\.|0\.|255\.|22[4-9]\.|2[3-5][0-9]\.|"
+    r"172\.(?:1[6-9]|2[0-9]|3[01])\.|"
+    r"100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|"
+    r"203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|192\.0\.0\.|"
+    r"1\.1\.1\.1|8\.8\.8\.8)"
+)
+_ADDRESS = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
+# Long enough to be key material rather than a fixture. A real
+# ed25519 public key is 68 base64 characters; tests legitimately use
+# short stand-ins, and failing on those would teach people to weaken
+# the check rather than fix a leak.
+_HOST_KEY = re.compile(r"ssh-(?:ed25519|rsa) AAAA[A-Za-z0-9+/]{32,}")
+# A hostname under the deployment's own private zone. Not secret
+# (nothing outside the network resolves it) but it names one
+# installation's topology, and a public repository holds the shape
+# rather than the deployment. `example` and `invalid` are reserved for
+# writing about hostnames, which is what a fixture is doing.
+_PRIVATE_HOST = re.compile(
+    r"\b[a-z0-9-]+\.(?!example\b|invalid\b|test\b|localhost\b)"
+    r"(?:homelab|lan|internal|local)\b(?!\.(?:example\.)?toml\b)"
+)
+# Lockfiles and pinned action SHAs are hashes, not hosts. Vendored
+# bundles/specs carry upstream examples, pinned by their UPSTREAM.
+_SKIP = (
+    "package-lock.json",
+    "uv.lock",
+    ".github/",
+    "controller/api/vendor/",
+    "static/vendor/",
+)
+
+
+def _pushable_files(root: Path) -> list[str]:
+    """Every file a push would carry: tracked, and new but not ignored, so a
+    file is checked by the commit that first adds it rather than the one after."""
+
+    return subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split("\0")
+
+
+def _deployment_terms(root: Path) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The addresses the deployment publishes on purpose, and the terms no file may name.
+
+    Names a checkout's own deployment goes by, one per line, kept in
+    .git/info where nothing is tracked or pushed. A line starting with `!` is
+    an address the deployment publishes on purpose (a public demo), which a
+    file may name although a term covers it. Absent, only the generic
+    patterns apply.
+    """
+
+    terms_file = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--git-path", "info/deployment-terms"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    )
+    if not terms_file.is_absolute():
+        terms_file = root / terms_file
+    try:
+        lines = [
+            line.strip().lower()
+            for line in terms_file.read_text(encoding="utf-8").splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+    except OSError:
+        lines = []
+    published = tuple(line[1:] for line in lines if line.startswith("!"))
+    return published, tuple(line for line in lines if not line.startswith("!"))
+
+
+def _endpoints_in(text: str, published: tuple[str, ...], terms: tuple[str, ...]) -> list[str]:
+    """Each reachable endpoint ``text`` names: an address, a host key, a private host or a deployment term."""
+
+    found = [
+        match.group()
+        for match in _ADDRESS.finditer(text)
+        if _is_address(text, match) and not _RESERVED.match(match.group())
+    ]
+    if _HOST_KEY.search(text):
+        found.append("ssh host key")
+    found.extend(sorted(set(_PRIVATE_HOST.findall(text))))
+    lowered = text.lower()
+    for address_published in published:
+        lowered = lowered.replace(address_published, "")
+    found.extend(f"deployment term #{index + 1}" for index, term in enumerate(terms) if term in lowered)
+    return found
+
+
+_TABLE_PARTS = frozenset({"table", "thead", "tbody", "tfoot", "tr", "td", "th"})
+_BOXES = frozenset({"block", "flex", "grid", "inline-flex", "inline-grid"})
+
+
+def _table_part_classes() -> set[str]:
+    """Every class the templates put on a table part."""
+
+    cell_classes: set[str] = set()
+    for _name, template in template_files():
+        for attrs in re.findall(
+            r"<(?:table|thead|tbody|tfoot|tr|td|th)\b([^>]*)>",
+            template.read_text(encoding="utf-8"),
+        ):
+            found = re.search(r'class="([^"{}]*)"', attrs)
+            if found:
+                cell_classes.update(found.group(1).split())
+    return cell_classes
+
+
+def _styles_a_table_part(selector: str, display: str, cell_classes: set[str]) -> bool:
+    """Whether one selector of a rule declaring ``display`` styles a table part itself."""
+
+    # The subject is the rightmost compound selector: what the rule
+    # actually styles, rather than what it is scoped by.
+    subject = selector.rsplit(maxsplit=1)[-1].rsplit(">", maxsplit=1)[-1].strip()
+    # A part's pseudo-element is a box inside the part, not the part:
+    # giving it a display leaves the cell in table layout.
+    if "::" in subject:
+        return False
+    # An element qualifier settles it either way: `span.x` cannot
+    # match a table part however `.x` is used elsewhere, and `td.x`
+    # always does. Only an unqualified class has to be judged by
+    # where the templates put it.
+    qualifier = re.match(r"^([A-Za-z][\w-]*)", subject)
+    if qualifier:
+        return qualifier.group(1) in _TABLE_PARTS
+    # `block` is common on spans that share a class with a cell
+    # (`.muted`), so it is judged only where a table part is named.
+    if display == "block":
+        return False
+    return bool(set(re.findall(r"\.([A-Za-z0-9_-]+)", subject)) & cell_classes)
 
 
 @tag("source", "tree")
@@ -75,51 +225,20 @@ class StyleContractTests(SimpleTestCase):
         `.table-scroll`; it does not stack into cards.
         """
 
-        parts = {"table", "thead", "tbody", "tfoot", "tr", "td", "th"}
-        cell_classes: set[str] = set()
-        for _name, template in template_files():
-            for attrs in re.findall(
-                r"<(?:table|thead|tbody|tfoot|tr|td|th)\b([^>]*)>",
-                template.read_text(encoding="utf-8"),
-            ):
-                found = re.search(r'class="([^"{}]*)"', attrs)
-                if found:
-                    cell_classes.update(found.group(1).split())
-
-        boxes = {"block", "flex", "grid", "inline-flex", "inline-grid"}
+        cell_classes = _table_part_classes()
         offences = []
         # Comments first: one sitting above a rule is otherwise read as part of
         # that rule's selector.
         source = re.sub(r"/\*.*?\*/", " ", self._stylesheet(), flags=re.DOTALL)
         for selector, block in re.findall(r"([^{}]+)\{([^{}]*)\}", source):
             declared = re.search(r"(?<![\w-])display\s*:\s*([a-z-]+)", block)
-            if not declared or declared.group(1) not in boxes:
+            if not declared or declared.group(1) not in _BOXES:
                 continue
-            for part in selector.split(","):
-                # The subject is the rightmost compound selector: what the rule
-                # actually styles, rather than what it is scoped by.
-                trimmed = part.strip()
-                if not trimmed:
-                    continue
-                subject = trimmed.split()[-1].split(">")[-1].strip()
-                # A part's pseudo-element is a box inside the part, not the part:
-                # giving it a display leaves the cell in table layout.
-                if "::" in subject:
-                    continue
-                # An element qualifier settles it either way: `span.x` cannot
-                # match a table part however `.x` is used elsewhere, and `td.x`
-                # always does. Only an unqualified class has to be judged by
-                # where the templates put it.
-                qualifier = re.match(r"^([A-Za-z][\w-]*)", subject)
-                if qualifier and qualifier.group(1) not in parts:
-                    continue
-                names = set(re.findall(r"\.([A-Za-z0-9_-]+)", subject))
-                # `block` is common on spans that share a class with a cell
-                # (`.muted`), so it is judged only where a table part is named.
-                if declared.group(1) == "block" and not qualifier:
-                    continue
-                if qualifier or names & cell_classes:
-                    offences.append(f"{trimmed} sets display: {declared.group(1)}")
+            offences.extend(
+                f"{part.strip()} sets display: {declared.group(1)}"
+                for part in selector.split(",")
+                if part.strip() and _styles_a_table_part(part.strip(), declared.group(1), cell_classes)
+            )
 
         self.assertEqual(sorted(set(offences)), [])
 
@@ -259,111 +378,17 @@ class StyleContractTests(SimpleTestCase):
         and is correctly ignored.
         """
 
-        import subprocess
-
         root = Path(__file__).resolve().parents[4]
-        tracked = subprocess.run(
-            # Tracked *and* new-but-not-ignored, so a file is checked by
-            # the commit that first adds it rather than the one after.
-            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.split("\0")
-
-        # Documentation, private, multicast and reserved ranges are examples or
-        # classes, not places. Anything outside them is somewhere a packet can
-        # actually go.
-        #
-        # 192.168.0.0/16 is the exception: a host from it is somebody's actual
-        # machine rather than an example. Only the range's base address passes,
-        # since that appears solely as half of a CIDR. Fixtures wanting a
-        # private address use 10.0.0.0/8, which every classifier here treats
-        # identically.
-        reserved = re.compile(
-            r"^(?:127\.|10\.|192\.168\.0\.0$|169\.254\.|0\.|255\.|22[4-9]\.|2[3-5][0-9]\.|"
-            r"172\.(?:1[6-9]|2[0-9]|3[01])\.|"
-            r"100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.|"
-            r"203\.0\.113\.|198\.51\.100\.|192\.0\.2\.|192\.0\.0\.|"
-            r"1\.1\.1\.1|8\.8\.8\.8)"
-        )
-        address = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
-        # Long enough to be key material rather than a fixture. A real
-        # ed25519 public key is 68 base64 characters; tests legitimately use
-        # short stand-ins, and failing on those would teach people to weaken
-        # the check rather than fix a leak.
-        host_key = re.compile(r"ssh-(?:ed25519|rsa) AAAA[A-Za-z0-9+/]{32,}")
-        # A hostname under the deployment's own private zone. Not secret
-        # (nothing outside the network resolves it) but it names one
-        # installation's topology, and a public repository holds the shape
-        # rather than the deployment. `example` and `invalid` are reserved for
-        # writing about hostnames, which is what a fixture is doing.
-        private_host = re.compile(
-            r"\b[a-z0-9-]+\.(?!example\b|invalid\b|test\b|localhost\b)"
-            r"(?:homelab|lan|internal|local)\b(?!\.(?:example\.)?toml\b)"
-        )
-        # Names a checkout's own deployment goes by, one per line, kept in
-        # .git/info where nothing is tracked or pushed. A line starting with
-        # `!` is an address the deployment publishes on purpose (a public
-        # demo), which a file may name although a term covers it. Absent, only
-        # the generic patterns above apply.
-        terms_file = Path(
-            subprocess.run(
-                ["git", "rev-parse", "--git-path", "info/deployment-terms"],
-                cwd=root,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-        )
-        if not terms_file.is_absolute():
-            terms_file = root / terms_file
-        try:
-            lines = [
-                line.strip().lower()
-                for line in terms_file.read_text(encoding="utf-8").splitlines()
-                if line.strip() and not line.startswith("#")
-            ]
-        except OSError:
-            lines = []
-        published = tuple(line[1:] for line in lines if line.startswith("!"))
-        terms = tuple(line for line in lines if not line.startswith("!"))
-        # Lockfiles and pinned action SHAs are hashes, not hosts. Vendored
-        # bundles/specs carry upstream examples, pinned by their UPSTREAM.
-        skip = (
-            "package-lock.json",
-            "uv.lock",
-            ".github/",
-            "controller/api/vendor/",
-            "static/vendor/",
-        )
-
+        published, terms = _deployment_terms(root)
         findings = []
-        for name in tracked:
-            if not name or name.startswith(skip) or name.endswith(skip):
+        for name in _pushable_files(root):
+            if not name or any(part in name for part in _SKIP):
                 continue
-            if any(part in name for part in skip):
-                continue
-            path = root / name
             try:
-                text = path.read_text(encoding="utf-8")
+                text = (root / name).read_text(encoding="utf-8")
             except OSError, UnicodeDecodeError:
                 continue
-            findings.extend(
-                f"{name}: {found.group()}"
-                for found in address.finditer(text)
-                if _is_address(text, found) and not reserved.match(found.group())
-            )
-            if host_key.search(text):
-                findings.append(f"{name}: ssh host key")
-            findings.extend(f"{name}: {candidate}" for candidate in sorted(set(private_host.findall(text))))
-            lowered = text.lower()
-            for address_published in published:
-                lowered = lowered.replace(address_published, "")
-            for index, term in enumerate(terms):
-                if term in lowered:
-                    findings.append(f"{name}: deployment term #{index + 1}")
+            findings.extend(f"{name}: {finding}" for finding in _endpoints_in(text, published, terms))
 
         self.assertEqual(
             findings,
@@ -391,7 +416,6 @@ class StyleContractTests(SimpleTestCase):
         hand-maintained list of directories to skip. Tracked files are exactly
         the ones that can be pushed.
         """
-        import subprocess
 
         root = Path(__file__).resolve().parents[4]
         allowed = ("docs/diagrams/", "docs/images/", "static/img/")

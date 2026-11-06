@@ -22,6 +22,7 @@ from django.test import SimpleTestCase, tag
 from django.utils.html import format_html
 
 from hq.platform.application.entity_links import EntityLink
+from hq.platform.application.tests.facts import scan
 from hq.platform.application.tests.markup import elements, select
 from hq.platform.application.tests.source import template_files
 from hq.platform.core.templatetags.value_tags import breakable, entity, readable, when
@@ -378,16 +379,22 @@ def read(source: str, plain_blocks=frozenset(), included=None) -> Reading:
         elif token.token_type == TokenType.TEXT:
             markup.read(token.contents)
         elif token.token_type == TokenType.VAR:
-            in_text = markup.in_text and not plain_blocks.intersection(blocks)
-            if in_text and holds_a_literal(token.contents):
-                reading.literals.append(token)
-            elif in_text and holds_markup(token.contents, fields):
-                reading.markup.append(token)
-            elif in_text and not holds(token.contents, fields):
-                reading.unheld.append(token)
-            elif not in_text and WRITES_MARKUP.intersection(filters(token.contents)):
-                reading.misplaced.append(token)
+            _file_printed(reading, token, fields, in_text=markup.in_text and not plain_blocks.intersection(blocks))
     return reading
+
+
+def _file_printed(reading: Reading, token, fields, *, in_text: bool) -> None:
+    """Files a printed variable in ``reading`` under what is wrong with it, printed where text belongs or not."""
+
+    if not in_text:
+        if WRITES_MARKUP.intersection(filters(token.contents)):
+            reading.misplaced.append(token)
+    elif holds_a_literal(token.contents):
+        reading.literals.append(token)
+    elif holds_markup(token.contents, fields):
+        reading.markup.append(token)
+    elif not holds(token.contents, fields):
+        reading.unheld.append(token)
 
 
 def unheld(source: str, path: str = "", plain_blocks=frozenset(), included=None) -> list[Site]:
@@ -882,11 +889,16 @@ def unheld_builders(source: str, path: str = "") -> list[Site]:
     return _Builders(source, path).unheld()
 
 
+# A call of format_html, by its name or as an attribute.
+BUILDER = {"kind": "call", "has": {"field": "function", "regex": r"(^|\.)format_html$"}}
+
+
 def builder_paths() -> list[Path]:
+    """Each module of hq and hq_sdk, less their tests, that calls format_html: the only ones ``_Builders`` reads."""
+
     root = Path(settings.BASE_DIR)
-    return sorted(
-        path for package in ("hq", "hq_sdk") for path in (root / package).rglob("*.py") if "tests" not in path.parts
-    )
+    found = scan({"builder": BUILDER}, root / "hq", root / "hq_sdk")
+    return sorted({match.path for match in found if "tests" not in match.path.parts})
 
 
 class UnheldBuilderTests(SimpleTestCase):

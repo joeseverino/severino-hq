@@ -1,0 +1,13 @@
+id: amount-written-by-money
+valid:
+  - 'said = f"Total {money(amount)}"'
+  - 'said = f"{count} $ signs"'
+  - 'said = "Total $" + money(amount)'
+  - 'pattern = f"^{name}$"'
+  - 'said = f"$ {amount}"'
+  - 'said = "Total $" "due"'
+invalid:
+  - 'said = f"Total ${amount}"'
+  - 'said = f"${amount:,.2f}"'
+  - "said = f'Paid ${row.amount} on {row.day}'"
+  - 'said = "Total $" f"{amount:,.2f}"'

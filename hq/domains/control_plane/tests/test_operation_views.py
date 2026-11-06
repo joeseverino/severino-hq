@@ -10,7 +10,7 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.approvals import DESTRUCTIVE_EFFECT, ApproveCommand, approve, asked, preview
 from hq.platform.application.capabilities import capability_registry, execute_capability
-from hq.platform.application.capability_policy import Rule, Scope
+from hq.platform.application.capability_policy import Rule
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal, web_principal
 from hq.platform.application.tests.writers import form_keyed, keyed
@@ -137,17 +137,13 @@ class AgentStopTests(TestCase):
         operation = OperationRequest.objects.get(action=OperationRequest.Action.STOP)
         self.assertEqual(operation.requested_actor, "example-agent")
 
-    def test_an_allow_for_the_agent_or_its_surface_lets_the_stop_run(self):
-        for scope, subject in ((Scope.AGENT, "example-agent"), (Scope.SURFACE, "api")):
-            with self.subTest(scope=scope):
-                OperationRequest.objects.all().delete()
-                CapabilityRule.objects.all().delete()
-                CapabilityRule.objects.create(scope=scope, subject=subject, capability=STOP, rule=Rule.ALLOW)
+    def test_on_for_the_agent_lets_its_stop_run(self):
+        CapabilityRule.objects.create(subject="example-agent", capability=STOP, rule=Rule.ALLOW)
 
-                result = self.stop(agent(interface="api"))
+        result = self.stop(agent(interface="api"))
 
-                self.assertTrue(result.get("ok"), result)
-                self.assertTrue(OperationRequest.objects.filter(action=OperationRequest.Action.STOP).exists())
+        self.assertTrue(result.get("ok"), result)
+        self.assertTrue(OperationRequest.objects.filter(action=OperationRequest.Action.STOP).exists())
         self.assertFalse(ApprovalRequest.objects.exists())
 
     def test_a_person_in_the_browser_is_never_held(self):

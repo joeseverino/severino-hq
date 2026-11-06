@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 	"github.com/joeseverino/severino-hq/controller/internal/sealing"
 )
 
@@ -68,23 +69,13 @@ func (m *Machine) newSeed() (sealing.Key, error) {
 	if err != nil {
 		return sealing.Key{}, err
 	}
-	file, err := os.CreateTemp(m.Seal, ".seed.")
-	if err != nil {
-		return sealing.Key{}, err
-	}
-	defer os.Remove(file.Name())
-	_, err = file.Write(seed)
+	file, err := atomicfile.Create(filepath.Join(m.Seal, key.ID+".seed"), 0o400)
 	if err == nil {
-		err = file.Chmod(0o400)
+		defer file.Discard()
+		_, err = file.Write(seed)
 	}
 	if err == nil {
-		err = file.Sync()
-	}
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Link(file.Name(), filepath.Join(m.Seal, key.ID+".seed"))
+		err = file.Link()
 	}
 	if err != nil {
 		return sealing.Key{}, fmt.Errorf("the sealing key could not be written: %w", err)
@@ -105,5 +96,5 @@ func (m *Machine) publishSealKey(key sealing.Key) error {
 	if err := os.MkdirAll(filepath.Dir(m.SealPublic), 0o755); err != nil {
 		return err
 	}
-	return writeAtomic(m.SealPublic, want, 0o644)
+	return atomicfile.WriteFile(m.SealPublic, want, 0o644)
 }

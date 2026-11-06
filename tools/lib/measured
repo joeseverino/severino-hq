@@ -1,0 +1,167 @@
+#!/bin/sh
+# Runs a heavy command and ends with one line on what its whole process tree
+# spent, so each heavy run is its own before-and-after measurement:
+#   tools/lib/measured <command...>
+# The turn task, the heavy templates' shell and tools/lib/heavy-turn.sh run
+# each heavy run through it; a run inside a measured one is the outer line's,
+# so it runs as itself.
+#
+# The line gives the wall time, the CPU time (user and system) of every
+# descendant the command waited for, which other worktrees' load leaves alone
+# where it moves the wall time, the peak memory the tree held at once with
+# each role's own peak beside it, and the load average at the end.
+#
+# No standard tool keeps a tree's peak: time -l and VmHWM are one process's
+# high-water mark, a hosted runner's cgroup counts the runner from boot, and
+# mise reports a task's wall time alone. So this process samples the tree
+# while it waits: footprint(1)'s phys_footprint on macOS, what Activity
+# Monitor shows and memory pressure reacts to, and the proportional set size
+# with its swapped share on Linux, so pages the workers share count once. A
+# sample comes every two seconds, or twenty times as long as the last one's
+# CPU took, so sampling holds at most a twentieth of a core; a spike between
+# two samples, or a process that lives less than one, is missed. Its own CPU,
+# and that of the ps and footprint it runs, is kept out of the tree's and
+# stated beside it.
+#
+# A role is read from each process's command line and its parent's role: the
+# test run is a Python process whose script is manage.py test (a wrapper that
+# names it among its arguments, as a verdict does, is the gate's), its workers
+# are the multiprocessing processes under it (a spawn or forkserver worker on macOS or
+# Linux, a forked copy of the test run on a platform that forks), children are
+# anything under those (a walk run apart, hq/platform/application/tests/apart.py),
+# and the gate is the rest: the task's shell, uv, mise, a verdict.
+#
+# The line is a report: it has no limit, and the command's exit status is
+# this one's whatever the measuring did. A measurement it cannot take is
+# named in the line in its place.
+set -eu
+
+[ "$#" -gt 0 ] || { echo "usage: tools/lib/measured <command...>" >&2; exit 64; }
+[ -z "${HQ_MEASURED:-}" ] || exec "$@"
+HQ_MEASURED=1
+export HQ_MEASURED
+command -v perl >/dev/null 2>&1 || { echo "heavy: not measured: no perl" >&2; exec "$@"; }
+
+exec perl -e '
+    use strict;
+    use warnings;
+    use POSIX ":sys_wait_h";
+    use Time::HiRes ();
+
+    my $began = Time::HiRes::time;
+    my $pid = fork // do { warn "heavy: not measured: fork: $!\n"; exec { $ARGV[0] } @ARGV; exit 127 };
+    if (!$pid) { exec { $ARGV[0] } @ARGV; warn "heavy: $ARGV[0]: $!\n"; POSIX::_exit(127) }
+    # A stop reaches the command too, by its group or from here; the line
+    # still comes once it ends.
+    $SIG{$_} = sub { kill $_[0], $pid } for qw(HUP INT TERM);
+    # A child that ends cuts a pause short, so the line comes as the command ends.
+    $SIG{CHLD} = sub { };
+
+    # A process that ends between ps and footprint is no news, so the samples
+    # say nothing and the line goes to the stderr the command has.
+    my $report = \*STDERR;
+    if (open my $saved, ">&", \*STDERR) { $report = $saved; open STDERR, ">", "/dev/null" }
+
+    my $linux = -r "/proc/self/smaps_rollup";
+    my $footprint = -x "/usr/bin/footprint";
+    # The role of a process, from its command line and the role and command line of its parent.
+    sub role {
+        my ($up, $above, $command) = @_;
+        # macOS names a framework build Python.
+        return $command =~ m{^(?:\S*/)?python[\d.]*(?:\s+-\S+)*\s+(?:\S*/)?manage\.py test\b}i ? "test run" : "gate" if $up eq "gate";
+        return "workers" if $up ne "children"
+            && ($command =~ /\bmultiprocessing\.(?:spawn|forkserver)\b/ || ($up eq "test run" && $command eq $above));
+        return "children";
+    }
+    # The bytes each role of the tree holds now, and the most one process of it holds.
+    sub held {
+        my (%children, %command, %role, %bytes, %sum, %most);
+        open my $ps, "-|", "ps", "-A", "-o", "pid=,ppid=,command=" or return ();
+        while (<$ps>) {
+            my ($each, $parent, $command) = /^\s*(\d+)\s+(\d+)\s+(.*)$/ or next;
+            push @{ $children{$parent} }, $each;
+            $command{$each} = $command;
+        }
+        close $ps;
+        return () unless %command;
+        return ({}, {}) unless defined $command{$pid};
+        my @todo = ($pid);
+        $role{$pid} = role("gate", "", $command{$pid});
+        while (defined(my $each = shift @todo)) {
+            for (@{ $children{$each} || [] }) {
+                $role{$_} = role($role{$each}, $command{$each}, $command{$_});
+                push @todo, $_;
+            }
+        }
+        if ($linux) {
+            for my $each (keys %role) {
+                open my $rollup, "<", "/proc/$each/smaps_rollup" or next;
+                while (<$rollup>) { $bytes{$each} += $1 * 1024 if /^(?:Swap)?Pss:\s+(\d+) kB/ }
+            }
+        } elsif ($footprint) {
+            open my $fp, "-|", "/usr/bin/footprint", "--noCategories", "-f", "bytes", map { ("-p", $_) } keys %role
+                or return ();
+            while (<$fp>) { $bytes{$1} = $2 if /\[(\d+)\]:.*?Footprint: (\d+) B/ }
+            close $fp;
+        }
+        for (grep { $role{$_} } keys %bytes) {
+            $sum{ $role{$_} } += $bytes{$_};
+            $sum{""} += $bytes{$_};
+            $most{ $role{$_} } = $bytes{$_} if $bytes{$_} > ($most{ $role{$_} } // 0);
+        }
+        return (\%sum, \%most);
+    }
+
+    my (%peak, %most, $failed);
+    # What the samples spent: the ps and footprint they ran, apart from the
+    # command, whose tree is reaped outside a sample.
+    my $sampled = 0;
+    my $pause = 0.5;
+    until (waitpid($pid, WNOHANG) == $pid) {
+        Time::HiRes::sleep($pause);
+        last if waitpid($pid, WNOHANG) == $pid;
+        my @before = times;
+        my ($sum, $one) = eval { held() };
+        $failed = 1 unless $sum;
+        my @after = times;
+        $sampled += $after[$_] - $before[$_] for 2, 3;
+        for (keys %{ $sum || {} }) { $peak{$_} = $sum->{$_} if $sum->{$_} > ($peak{$_} // 0) }
+        for (keys %{ $one || {} }) { $most{$_} = $one->{$_} if $one->{$_} > ($most{$_} // 0) }
+        my $spent = 0;
+        $spent += $after[$_] - $before[$_] for 0 .. 3;
+        $pause = 20 * $spent > 2 ? 20 * $spent : 2;
+    }
+    my $status = $?;
+    my ($user, $system, $cuser, $csystem) = times;
+    my $cpu = $cuser + $csystem - $sampled;
+    my $wall = Time::HiRes::time - $began;
+
+    sub span {
+        my $s = shift;
+        return sprintf "%dh%02dm", $s / 3600, $s % 3600 / 60 if $s >= 3600;
+        return sprintf "%dm%02ds", $s / 60, $s % 60 if $s >= 60;
+        return sprintf "%.1fs", $s;
+    }
+    sub size {
+        my $mib = shift() / 1048576;
+        return $mib >= 1024 ? sprintf "%.2f GB", $mib / 1024 : sprintf "%d MB", $mib;
+    }
+    my $memory = ", peak memory unread: "
+        . (!$linux && !$footprint ? "neither footprint(1) nor /proc" : $failed ? "a sample failed" : "it ended before the first sample");
+    if ($peak{""}) {
+        # A worker or child is also given the most one process of its role held.
+        my @roles = map {
+            my $one = /^(?:workers|children)$/ ? sprintf " (one at most %s)", size($most{$_}) : "";
+            "$_ " . size($peak{$_}) . $one
+        } grep { $peak{$_} } ("gate", "test run", "workers", "children");
+        $memory = sprintf ", peak memory %s: %s", size($peak{""}), join ", ", @roles;
+    }
+    # uptime(1) ends on the 1, 5 and 15 minute averages, which Linux separates by commas.
+    my $load = `uptime` // "";
+    $load =~ s/.*load averages*: *//s;
+    $load =~ s/,\s*/ /g;
+    chomp $load;
+    printf $report "heavy: %s wall, %s CPU, load average %s%s; sampling took %s CPU\n",
+        span($wall), span($cpu), $load, $memory, span($user + $system + $sampled);
+    exit($status & 127 ? 128 + ($status & 127) : $status >> 8);
+' -- "$@"

@@ -34,7 +34,6 @@ def _failing(name: str, raised: Exception):
     OIDC_ISSUER=ISSUER,
     SEVERINO_API_RESOURCE=RESOURCE,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class RefusalContractTests(TestCase):
     client_class = ContractClient
@@ -84,7 +83,7 @@ class RefusalContractTests(TestCase):
         response = self.run_capability("project.create", "example.write")
 
         self.assertEqual(response.status_code, 403, response.content)
-        self.assertEqual(response.json()["error"]["code"], "forbidden")
+        self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
         row = _denials().get()
         self.assertEqual((row.metadata["interface"], row.metadata["actor"]), ("api", ACTOR))
         self.assertEqual(row.metadata["capability"], "project.create")
@@ -97,7 +96,7 @@ class RefusalContractTests(TestCase):
                 response = self.read(path, scope)
 
                 self.assertEqual(response.status_code, 403, response.content)
-                self.assertEqual(response.json()["error"]["code"], "forbidden")
+                self.assertEqual(response.json()["error"]["code"], "insufficient_scope")
                 row = _denials(before).get()
                 self.assertEqual((row.metadata["interface"], row.metadata["actor"]), ("api", ACTOR))
 

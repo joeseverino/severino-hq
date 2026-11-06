@@ -1,0 +1,29 @@
+# The test runner binds each test's own thread as the test (interface
+# "test"), so a row a door wrote is told from the test's. A product path that
+# bound itself as a test would pass every door's test while writing rows
+# nobody can attribute, so outside tests only the runner names the test
+# interface: interface="test", or a TEST_INTERFACE constant. The rule reads
+# the constant's name wherever it stands, an import or an attribute too.
+id: test-interface-bound-only-in-tests
+language: python
+severity: error
+message: Product code names the test interface, which only the test runner binds.
+note: Bind the door's own interface (hq.platform.application.security's constants).
+files:
+  - "hq/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/core/test_runner.py"
+rule:
+  any:
+    - kind: identifier
+      regex: ^TEST_INTERFACE$
+    - kind: keyword_argument
+      all:
+        - has:
+            field: name
+            regex: ^interface$
+        - has:
+            field: value
+            kind: string
+            regex: ^["']test["']$

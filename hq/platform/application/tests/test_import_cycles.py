@@ -6,76 +6,42 @@ was imported first. Imports that wait (a `lazy` import, one inside a function,
 one under `TYPE_CHECKING`) cannot close such a loop, so they are left out.
 """
 
-import ast
-from collections.abc import Iterator
+import tempfile
 from graphlib import CycleError, TopologicalSorter
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+from .facts import ROOT, Import, imports, module_name, package_of
+
 PACKAGES = ("hq", "hq_sdk")
+# What keeps an import from running as its module does.
+WAITING = {"lazy", "called", "typed"}
 
 
-def _modules() -> dict[str, Path]:
-    found = {}
-    for package in PACKAGES:
-        for path in (REPO_ROOT / package).rglob("*.py"):
-            parts = path.relative_to(REPO_ROOT).with_suffix("").parts
-            found[".".join(parts[:-1] if parts[-1] == "__init__" else parts)] = path
-    return found
+def executed(found: list[Import]) -> list[Import]:
+    """The imports a module runs as it executes: never a function's, a lazy one or a type checker's."""
+
+    return [each for each in found if not each.waits & WAITING]
 
 
-def _waits(node: ast.If) -> bool:
-    return "TYPE_CHECKING" in ast.unparse(node.test)
-
-
-def _executed_imports(body: list[ast.stmt]) -> Iterator[ast.Import | ast.ImportFrom]:
-    """The imports a module runs as it executes: its own statements and those
-    of the blocks and class bodies it runs on the way, never a function's."""
-
-    for node in body:
-        if isinstance(node, ast.Import | ast.ImportFrom):
-            if not node.is_lazy:
-                yield node
-            continue
-        if isinstance(node, ast.If) and _waits(node):
-            yield from _executed_imports(node.orelse)
-            continue
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            continue
-        for field in ("body", "orelse", "finalbody", "handlers"):
-            yield from _executed_imports(getattr(node, field, []))
-
-
-def _named(module: str, path: Path, node: ast.Import | ast.ImportFrom) -> list[str]:
-    if isinstance(node, ast.Import):
-        return [alias.name for alias in node.names]
-    base = node.module or ""
-    if node.level:
-        package = module.split(".") if path.name == "__init__.py" else module.split(".")[:-1]
-        anchor = package[: len(package) - node.level + 1]
-        base = ".".join([*anchor, base] if base else anchor)
-    return [base, *(f"{base}.{alias.name}" for alias in node.names)]
-
-
-def import_graph() -> dict[str, set[str]]:
+def import_graph(root: Path = ROOT, packages: tuple[str, ...] = PACKAGES) -> dict[str, set[str]]:
     """Each module, and the modules of this repository it imports as it runs.
 
     A module's own packages are already being imported when it runs, so an
     edge to one of them closes nothing."""
 
-    modules = _modules()
-    graph: dict[str, set[str]] = {}
-    for module, path in modules.items():
-        edges = graph.setdefault(module, set())
-        for node in _executed_imports(ast.parse(path.read_text(encoding="utf-8")).body):
-            for name in _named(module, path, node):
-                parts = name.split(".")
-                for depth in range(1, len(parts) + 1):
-                    target = ".".join(parts[:depth])
-                    if target in modules and target != module and not module.startswith(f"{target}."):
-                        edges.add(target)
+    root = root.resolve()
+    modules = {module_name(path, root) for package in packages for path in (root / package).glob("**/*.py")}
+    graph: dict[str, set[str]] = {module: set() for module in modules}
+    for each in executed(imports(*(root / package for package in packages))):
+        module = module_name(each.path, root)
+        for name in each.modules(package_of(each.path, root)):
+            parts = name.split(".")
+            for depth in range(1, len(parts) + 1):
+                target = ".".join(parts[:depth])
+                if target in modules and target != module and not module.startswith(f"{target}."):
+                    graph[module].add(target)
     return graph
 
 
@@ -97,15 +63,26 @@ class ImportCycleTests(SimpleTestCase):
         eager = {"example.a": {"example.b"}, "example.b": {"example.a"}}
         self.assertTrue(cycle_in(eager))
 
-        tree = ast.parse("lazy from example.b import g\nfrom example.c import h\n")
-        self.assertEqual([node.module for node in _executed_imports(tree.body)], ["example.c"])
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "example").mkdir()
+            (root / "example" / "__init__.py").write_text("")
+            (root / "example" / "a.py").write_text("lazy from example.b import g\nfrom example.c import h\n")
+            (root / "example" / "b.py").write_text("from example.a import f\n")
+            (root / "example" / "c.py").write_text("from . import a\n")
+
+            self.assertEqual(set(cycle_in(import_graph(root, ("example",)))), {"example.a", "example.c"})
 
     def test_an_import_that_waits_is_not_run_with_the_module(self):
         source = (
-            "if TYPE_CHECKING:\n    import example.typed\n"
+            "if TYPE_CHECKING:\n    import example.typed\nelse:\n    import example.otherwise\n"
             "def f():\n    import example.called\n"
             "try:\n    import example.tried\nexcept ImportError:\n    import example.fallback\n"
             "class C:\n    import example.in_class\n"
         )
-        imported = [node.names[0].name for node in _executed_imports(ast.parse(source).body)]
-        self.assertEqual(imported, ["example.tried", "example.fallback", "example.in_class"])
+        with tempfile.NamedTemporaryFile("w", suffix=".py") as module:
+            module.write(source)
+            module.flush()
+            names = [each.names[0][0] for each in executed(imports(module.name))]
+
+        self.assertEqual(names, ["example.otherwise", "example.tried", "example.fallback", "example.in_class"])

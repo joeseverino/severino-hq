@@ -1,0 +1,12 @@
+id: test-interface-bound-only-in-tests
+valid:
+  - 'operation_context(interface=WEB_INTERFACE, actor="example-actor")'
+  - 'operation_context(interface="web", actor="test")'
+  - 'record(kind="test")'
+invalid:
+  - 'operation_context(interface="test", actor="example-actor")'
+  - "operation_context(interface='test')"
+  - 'operation_context(interface=TEST_INTERFACE)'
+  - 'TEST_INTERFACE = "test"'
+  - 'from hq.platform.core.test_runner import TEST_INTERFACE'
+  - 'bound = runner.TEST_INTERFACE'

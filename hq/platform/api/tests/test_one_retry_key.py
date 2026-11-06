@@ -20,7 +20,6 @@ PROJECT = {"name": "Once", "slug": "once", "status": "active"}
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class OneKeyTests(TestCase):
     def post(self, payload, key=None):

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"filippo.io/age"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // BackupDir is where archives are written unless the unit says otherwise.
@@ -128,17 +130,14 @@ func (m *Machine) backup(ctx context.Context, settings BackupSettings, database 
 
 	name := archivePrefix + now.UTC().Format("20060102T150405Z") + archiveSuffix
 	target := filepath.Join(settings.Dir, name)
-	file, err := os.CreateTemp(settings.Dir, "."+name+".")
+	file, err := atomicfile.Create(target, 0o600)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(file.Name())
+	defer file.Discard()
 	err = m.writeArchive(file, settings.Recipients, snapshot, dirs)
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
 	if err == nil {
-		err = os.Rename(file.Name(), target)
+		err = file.Replace()
 	}
 	if err != nil {
 		return err

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"io/fs"
 	"os"
@@ -120,7 +121,7 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 		role = "glance"
 	}
 	args := []string{
-		"run", "--rm", "--network", "host", "--user", fmt.Sprintf("%d:%d", WebUID, WebGID), "--cap-drop", "ALL",
+		"run", "--rm", "--network", "host", "--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID), "--cap-drop", "ALL",
 		"--no-healthcheck",
 		// A nonce the pass is handed too, so it can tell which container it
 		// finds is itself: a fixed label any container could set.
@@ -329,7 +330,7 @@ var repository = regexp.MustCompile(`^https://github\.com/([A-Za-z0-9_.-]+/[A-Za
 // image is what HQ runs, and the repository its OCI source label names,
 // blank when it names none: delivery then has nothing to follow.
 func (c *Controller) image(ctx context.Context) (string, string, error) {
-	out, err := c.Command(ctx, "docker", "inspect", "--format", "{{.Config.Image}}", Container).Output()
+	out, err := c.Command(ctx, "docker", "inspect", "--format", "{{.Config.Image}}", hostcore.Container).Output()
 	if err != nil {
 		return "", "", errors.New("could not resolve the image HQ runs")
 	}

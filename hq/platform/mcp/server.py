@@ -1,12 +1,13 @@
 """Severino HQ's MCP server, on the SDK's low-level server: the declared tools,
-the prompts and resources a person reaches through an agent's client, and the
-tasks extension over held changes.
+the prompts and resources a person reaches through an agent's client, the
+tasks extension over held changes, and listen streams (``listen.py``).
 
 HQ owns each tool's schema (the API document carries the same) and its validation, so
 the server is given them rather than deriving its own from signatures: the
 SDK lists, dispatches and frames, and nothing here reaches into its internals.
 """
 
+import asyncio
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
@@ -19,17 +20,20 @@ from mcp.server.caching import CacheableMethod
 from mcp.server.lowlevel import Server
 from mcp.server.mcpserver.server import require_client_extension
 from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from mcp.server.subscriptions import SUBSCRIPTION_ID_META_KEY, ListenHandler
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.shared.exceptions import MCPError
 from pydantic import TypeAdapter
 from starlette.applications import Starlette
 
 from hq.platform.application import agent_admission, approvals
+from hq.platform.application.agent_limits import Limited, Slot
 from hq.platform.application.capabilities import adapter_refusal
 from hq.platform.application.refusal_status import LATER_CODES, Refusal, refusal_of
 from hq.platform.application.security import Principal
+from hq.platform.core.outside_requests import connections_of_its_own
 
-from . import prompts, resources, tasks
+from . import listen, prompts, resources, tasks
 from .binding import Tool, bind_tools
 from .contract import ResourceContract, served_resources
 from .identity import authenticated, caller_address, current_principal
@@ -87,17 +91,18 @@ INSTRUCTIONS = "\n\n".join(
 
 
 # How long a client may keep a list, privately, since only a caller that
-# signed in reaches one. The prompts and fixed views change only with a
-# release. The tools are the ones the caller's grant runs, which change with a
-# release or a grant, and a client re-lists within the ten minutes: HQ is
-# stateless, so it has no session to push tools/list_changed down. The
-# resource templates are the caller's grants and records, so they are asked
-# for afresh.
-STATIC_FOR = 10 * 60 * 1000
+# signed in reaches one. The tools, prompts and fixed views are each listed by
+# the caller's grant, so each list changes with a release or a grant. A client
+# holding a listen stream is told when its tools change; one without keeps a
+# list across a grant change for up to ten minutes: what a new grant opens is
+# listed once it lists again, and what a revoked grant opened stays listed
+# until then while every call to it is refused. The resource templates are
+# also the caller's records, so they are asked for afresh.
+LISTED_FOR = 10 * 60 * 1000
 CACHE_HINTS: dict[CacheableMethod, CacheHint] = {
-    "tools/list": CacheHint(ttl_ms=STATIC_FOR, scope="private"),
-    "prompts/list": CacheHint(ttl_ms=STATIC_FOR, scope="private"),
-    "resources/list": CacheHint(ttl_ms=STATIC_FOR, scope="private"),
+    "tools/list": CacheHint(ttl_ms=LISTED_FOR, scope="private"),
+    "prompts/list": CacheHint(ttl_ms=LISTED_FOR, scope="private"),
+    "resources/list": CacheHint(ttl_ms=LISTED_FOR, scope="private"),
     "resources/templates/list": CacheHint(ttl_ms=0, scope="private"),
 }
 
@@ -144,10 +149,13 @@ def _protocol_error(status: int) -> int:
 
 
 def _as_protocol_error(refused: Refusal) -> MCPError:
-    """A refusal as a protocol error, HQ's own code and any wait riding in its data."""
+    """A refusal as a protocol error, HQ's own code, any wait and the permission it names riding in its data."""
 
+    scope = {"details": {"scope": refused.scope}} if refused.scope else {}
     return MCPError(
-        _protocol_error(refused.status), refused.message, data={"code": refused.code, **(_wait(refused) or {})}
+        _protocol_error(refused.status),
+        refused.message,
+        data={"code": refused.code, **scope, **(_wait(refused) or {})},
     )
 
 
@@ -158,12 +166,14 @@ def _refused_now() -> Refusal | None:
     return None if refusal is None else refusal.refusal
 
 
-async def _read[T](name: str, read: Callable[[Principal], T], *, braked: bool = True) -> T:
+async def _read[T](name: str, read: Callable[[Principal], T], *, braked: bool = True, pooled: bool = False) -> T:
     """``read`` as this request's caller, under the brake a tool call is under
     unless it is a list, which a paused agent still reads as it lists tools.
 
     Outside a tool call there is no result to carry a refusal, so it is the
-    protocol error ``_as_protocol_error`` names, in HQ's own words.
+    protocol error ``_as_protocol_error`` names, in HQ's own words. ``pooled``
+    runs it on a pooled thread with connections of its own, for a request
+    that holds no thread (a listen stream).
     """
 
     def run() -> T:
@@ -177,7 +187,23 @@ async def _read[T](name: str, read: Callable[[Principal], T], *, braked: bool = 
             raise _as_protocol_error(refusal_of(error, name=name, principal=authenticated())) from None
         raise _as_protocol_error(refused)
 
-    return await sync_to_async(run)()
+    if not pooled:
+        return await sync_to_async(run)()
+
+    def on_a_pooled_thread() -> T:
+        with connections_of_its_own():
+            return run()
+
+    return await sync_to_async(on_a_pooled_thread, thread_sensitive=False)()
+
+
+def _stream_slot(principal: Principal) -> Slot:
+    """One of ``principal``'s listen streams, or the protocol error that says it has them all open."""
+
+    held = agent_admission.stream_opened(principal, source=caller_address())
+    if isinstance(held, Limited):
+        raise _as_protocol_error(held.refusal)
+    return held
 
 
 @lru_cache(maxsize=1)
@@ -214,7 +240,9 @@ class ToolServer:
             on_list_resource_templates=self._list_templates,
             on_read_resource=self._read_resource,
             on_completion=self._complete,
+            on_subscriptions_listen=self._listen,
         )
+        self._listener = ListenHandler(listen.STREAMS)
         # Registered by method, as the SDK registers a tools/call an extension
         # wraps: a task is a result outside what on_call_tool is typed to return.
         self.server.add_request_handler("tools/call", types.CallToolRequestParams, self._call)
@@ -283,13 +311,13 @@ class ToolServer:
         return _answer(result)
 
     async def _list_prompts(self, _context: Any, _params: Any) -> types.ListPromptsResult:
-        return prompts.listed()
+        return await _read("prompts/list", prompts.listed, braked=False)
 
     async def _get_prompt(self, _context: Any, params: types.GetPromptRequestParams) -> types.GetPromptResult:
         return await _read(f"prompt {params.name}", lambda principal: prompts.message(params.name, principal))
 
     async def _list_resources(self, _context: Any, _params: Any) -> types.ListResourcesResult:
-        return resources.listed()
+        return await _read("resources/list", resources.listed, braked=False)
 
     async def _list_templates(self, _context: Any, _params: Any) -> types.ListResourceTemplatesResult:
         return await _read("resources/templates/list", resources.templates, braked=False)
@@ -312,6 +340,27 @@ class ToolServer:
             lambda principal: resources.completed(ref.uri, argument.name, argument.value, principal),
         )
         return types.CompleteResult(completion=completion)
+
+    async def _listen(
+        self, context: Any, params: types.SubscriptionsListenRequestParams
+    ) -> types.SubscriptionsListenResult:
+        """One listen stream, opened under the brake a tool call is under and
+        within its agent's streams, carrying only what HQ publishes, until its
+        token expires."""
+
+        slot = await _read("subscriptions/listen", _stream_slot, pooled=True)
+        # The tools list_changed is all HQ publishes, so the ack says only it.
+        honored = types.SubscriptionFilter(tools_list_changed=params.notifications.tools_list_changed)
+        deadline = asyncio.timeout_at(listen.ends_at())
+        with slot:
+            try:
+                async with deadline:
+                    return await self._listener(context, params.model_copy(update={"notifications": honored}))
+            except TimeoutError:
+                if not deadline.expired():
+                    raise
+        # Ended at its token's expiry: the closing frame of a stream ended on purpose.
+        return types.SubscriptionsListenResult(_meta={SUBSCRIPTION_ID_META_KEY: context.request_id})
 
     async def _get_task(self, context: Any, params: types.GetTaskRequestParams) -> dict[str, Any]:
         require_client_extension(context, tasks.IDENTIFIER)

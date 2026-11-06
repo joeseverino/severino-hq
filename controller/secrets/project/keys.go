@@ -29,9 +29,9 @@ var digits = regexp.MustCompile(`^\d+$`)
 func keyField(item connectapi.FullItem, id, label string) (string, bool) {
 	found, value := 0, ""
 	for _, field := range fields(item) {
-		if field.Id == id || text(field.Label) == label {
+		if field.Id == id || Text(field.Label) == label {
 			found++
-			value = text(field.Value)
+			value = Text(field.Value)
 		}
 	}
 	return value, found == 1 && value != ""

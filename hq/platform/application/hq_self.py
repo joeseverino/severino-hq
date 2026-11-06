@@ -159,7 +159,7 @@ def host_addresses() -> frozenset[str]:
             with socket.socket(family, socket.SOCK_DGRAM) as probe:
                 probe.connect((destination, 9))
                 found.add(str(probe.getsockname()[0]).split("%", 1)[0])
-        except OSError:
+        except OSError:  # noqa: S112 - a host with no route in a family has no address in it
             continue
     return frozenset(found)
 

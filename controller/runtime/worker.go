@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,10 +25,7 @@ type Worker struct {
 }
 
 func (w *Worker) logger() *slog.Logger {
-	if w.Log != nil {
-		return w.Log
-	}
-	return slog.Default()
+	return cmp.Or(w.Log, slog.Default())
 }
 
 func (w *Worker) emit(value any) error {

@@ -4,7 +4,7 @@ from urllib.parse import urlparse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import names_a_host, normalized_hostname
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, read_spec
 from hq.domains.projects.models import Project
 
 from .entity_links import entity_link
@@ -87,11 +87,14 @@ def _published_names(resource: ManagedResource) -> list[tuple[str, str]]:
     provider = PROVIDERS.get(resource.kind)
     if provider is None or not provider.public_effect or provider.hostnames is None:
         return []
-    try:
-        names = tuple(provider.hostnames(resource.spec))
-        origin = provider.origin(resource.spec) if provider.origin else ""
-    except KeyError, TypeError, ValueError:
+    read = read_spec(
+        resource.kind,
+        resource.spec,
+        lambda spec: (tuple(provider.hostnames(spec)), provider.origin(spec) if provider.origin else ""),
+    )
+    if read is None:
         return []
+    names, origin = read
     target = normalized_hostname(origin)
     hostnames = (normalized_hostname(name) for name in names)
     # A wildcard is a rule about names, not a name anything answers at.

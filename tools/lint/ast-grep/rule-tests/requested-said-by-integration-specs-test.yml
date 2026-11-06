@@ -1,0 +1,12 @@
+id: requested-said-by-integration-specs
+valid:
+  - 'messages.success(request, requested(words, subject))'
+  - 'messages.success(self.request, "Receipt uploaded.")'
+  - 'JsonResponse({"ok": True}, message=capability_registry()[name].requested())'
+  - 'answer(message="Saved.")'
+  - 'log.info(request, "Refresh requested.")'
+invalid:
+  - 'messages.success(request, "Refresh requested.")'
+  - 'messages.info(self.request, f"{words} requested for {subject}.")'
+  - 'answered(ok=True, message="Read requested.")'
+  - 'messages.success(request, "Refresh " "requested.")'

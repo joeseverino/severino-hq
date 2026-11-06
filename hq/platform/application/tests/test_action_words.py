@@ -11,7 +11,9 @@ the declaration does not have.
 import ast
 import inspect
 import re
+from functools import cache
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from django.test import SimpleTestCase, tag
 
@@ -21,30 +23,64 @@ from ..action_links import capability_action_link, command_action, read_now_link
 from ..capabilities import capability_registry
 from ..item_help import remedy_link
 from ..outbound_work import ask, declared_work
-from .source import parsed, source_files, template_files
+from .facts import ROOT, grouped, scan
+from .source import template_files
 
-ROOT = Path(__file__).resolve().parents[4]
-# The one module allowed to put a capability on a link: it reads the words.
-LINK_BUILDER = "hq/platform/application/action_links.py"
 # Constructors of a control a person presses, and where their label sits.
 LABEL_POSITION = {"Ask": 0, "PageAction": 0, "ActionLink": 1, "TopologyAction": 1}
 # What builds a control for a command or a piece of outbound work.
 COMMAND_BUILDERS = {
     builder.__name__: builder for builder in (ask, command_action, capability_action_link, read_now_link, remedy_link)
 }
+# Calls that name a command and one of its declared variants.
+VARIANT_CALLS = ("capability_words", "command_action", "capability_action_link", "FindingRemedy")
 # Text a template writes that is a declared word for something no command does.
 TEMPLATE_EXEMPT = {
     ("core/_dashboard_glance.html", "Refresh"): "fetches the glance panels again; no command runs",
     ("dashboard.html", "Edit"): "opens the chooser of the dashboard's links, whose save is a preference",
 }
+# What a control says (a constructor's label or intent, a confirmation's
+# button) and the calls that name a variant, found by ast-grep: each match is
+# read as the one expression it is.
+RULES = {
+    "says": {
+        "any": [
+            {"kind": "call", "has": {"field": "function", "regex": rf"(^|\.)({'|'.join(LABEL_POSITION)})$"}},
+            {
+                "kind": "call",
+                "has": {
+                    "field": "arguments",
+                    "has": {"kind": "keyword_argument", "has": {"field": "name", "regex": "^intent$"}},
+                },
+            },
+            {"kind": "dictionary", "has": {"kind": "pair", "has": {"field": "key", "regex": "^[\"']cancel_url[\"']$"}}},
+        ]
+    },
+    "names-a-variant": {
+        "kind": "call",
+        "has": {"field": "function", "regex": rf"(^|\.)({'|'.join(VARIANT_CALLS)})$"},
+    },
+}
 
 
-def _modules():
-    for path in source_files(ROOT / "hq", "*.py"):
-        relative = path.relative_to(ROOT).as_posix()
-        if "tests" in path.parts or path.name.startswith("test") or path.name.endswith("_tests.py"):
-            continue
-        yield relative, parsed(path)
+def _expression(text: str) -> ast.expr:
+    statement = ast.parse(text).body[0]
+    assert isinstance(statement, ast.Expr)
+    return statement.value
+
+
+@cache
+def _found() -> dict[str, list[tuple[str, ast.expr]]]:
+    """Each match in the host's own modules, by rule, as where it is and the expression."""
+
+    def tested(path: Path) -> bool:
+        return "tests" in path.parts or path.name.startswith("test") or path.name.endswith("_tests.py")
+
+    host = [match for match in scan(RULES, "hq") if not tested(match.path)]
+    return {
+        rule: [(f"{match.path.relative_to(ROOT)}:{match.line}", _expression(match.text)) for match in matches]
+        for rule, matches in grouped(host).items()
+    }
 
 
 def _called(node: ast.Call) -> str:
@@ -92,35 +128,16 @@ def _restated(label: ast.expr, words: set[str]) -> list[str]:
     ]
 
 
-def _written(node: ast.expr | None) -> bool:
-    """Text the call site spells out itself, rather than reads from somewhere."""
+def _variant(node: ast.Call, registry) -> tuple[str, str] | None:
+    """The command and the variant of its words a call names, when it names both."""
 
-    return isinstance(node, ast.JoinedStr) or (isinstance(node, ast.Constant) and isinstance(node.value, str))
-
-
-def _reaches_a_command(node: ast.Call) -> bool:
-    """Whether the control posts to or opens a command: its URL is built by
-    ``command_url`` or is the route outbound work is asked through."""
-
-    for inner in ast.walk(node):
-        if not isinstance(inner, ast.Call) or inner is node:
-            continue
-        if _called(inner) == "command_url":
-            return True
-        if _called(inner) == "reverse" and inner.args and getattr(inner.args[0], "value", None) == "jobs:ask":
-            return True
-    return False
-
-
-def _toast(node: ast.Call) -> list[ast.expr]:
-    """What a call says to the person who pressed: a ``messages`` call's text,
-    or the ``message`` an answer to an ask carries."""
-
-    said = [keyword.value for keyword in node.keywords if keyword.arg == "message"]
-    func = node.func
-    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name) and func.value.id == "messages":
-        said += node.args[1:2]
-    return said
+    literals = [arg.value for arg in node.args if isinstance(arg, ast.Constant)]
+    name = next((value for value in literals if value in registry), None)
+    variant = next(
+        (getattr(keyword.value, "value", None) for keyword in node.keywords if keyword.arg == "variant"),
+        literals[1] if _called(node) == "capability_words" and len(literals) > 1 else None,
+    )
+    return (name, variant) if name and isinstance(variant, str) and variant else None
 
 
 def _declared_words() -> set[str]:
@@ -141,54 +158,32 @@ def pressed_words(text: str, words: set[str]) -> list[str]:
     return pattern.findall(text)
 
 
-@tag("source", "tree")
-class CallSiteWordsTests(SimpleTestCase):
-    """No button, link or toast for a command brings text of its own."""
-
-    def test_only_the_link_builder_puts_a_capability_on_a_link(self):
-        found = [
-            f"{relative}:{node.lineno}"
-            for relative, tree in _modules()
-            if relative != LINK_BUILDER
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and _called(node) in ("ActionLink", "TopologyAction")
-            and any(keyword.arg == "capability" for keyword in node.keywords)
-        ]
-        self.assertEqual(found, [], "build it with action_links.command_action, which reads the command's words")
-
+class CommandBuilderTests(SimpleTestCase):
     def test_no_builder_of_a_commands_control_takes_words(self):
         """The builders read the declaration, so none of them has a ``label``
-        for a caller to override it with."""
+        for a caller to override it with (the rule
+        command-builders-take-no-label holds their callers)."""
 
-        found = [
-            f"{relative}:{node.lineno}"
-            for relative, tree in _modules()
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            and _called(node) in COMMAND_BUILDERS
-            and any(keyword.arg == "label" for keyword in node.keywords)
-        ]
-        self.assertEqual(found, [])
         for builder in COMMAND_BUILDERS.values():
             with self.subTest(builder.__name__):
                 self.assertNotIn("label", inspect.signature(builder).parameters)
 
-    def test_a_control_that_reaches_a_command_says_the_commands_words(self):
-        found = [
-            f"{relative}:{node.lineno}"
-            for relative, tree in _modules()
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call) and _written(_label(node)) and _reaches_a_command(node)
-        ]
-        self.assertEqual(found, [], "read the label from the declaration: capability_words, or the work's ask()")
+
+@tag("source", "tree")
+class CallSiteWordsTests(SimpleTestCase):
+    """No button, link or toast for a command brings text of its own.
+
+    The checks with one fixed answer are ast-grep rules (lint:ast-grep):
+    capability-linked-by-action-links, command-builders-take-no-label,
+    command-control-says-declared-words and
+    requested-said-by-integration-specs.
+    """
 
     def test_no_control_restates_a_declared_word(self):
         words = _declared_words()
         found = [
-            f"{relative}:{node.lineno}: {said!r}"
-            for relative, tree in _modules()
-            for node in ast.walk(tree)
+            f"{where}: {said!r}"
+            for where, node in _found().get("says", [])
             for label in _labels(node)
             for said in _restated(label, words)
         ]
@@ -196,33 +191,27 @@ class CallSiteWordsTests(SimpleTestCase):
 
     def test_a_restated_word_is_found_in_each_way_a_control_is_written(self):
         words = {"Remove", "Stop tracking in HQ"}
-        tree = ast.parse(
-            'PageAction("Remove", url)\n'
-            'ActionLink("x", "Stop tracking in HQ" if forget else words, url)\n'
-            'confirm = {"url": url, "label": "Stop tracking in HQ" if forget else "Remove", "cancel_url": back}\n'
-            'row = {"label": "Remove", "value": 1}\n'
-            'PageAction(capability_words("infrastructure.resource.remove"), url)\n'
+        with TemporaryDirectory() as directory:
+            planted = Path(directory) / "planted.py"
+            planted.write_text(
+                'PageAction("Remove", url)\n'
+                'ActionLink("x", "Stop tracking in HQ" if forget else words, url)\n'
+                'confirm = {"url": url, "label": "Stop tracking in HQ" if forget else "Remove", "cancel_url": back}\n'
+                'row = {"label": "Remove", "value": 1}\n'
+                'PageAction(capability_words("infrastructure.resource.remove"), url)\n'
+                'FindingRemedy("example.fix", subject, intent="Remove")\n',
+                encoding="utf-8",
+            )
+            found = sorted(
+                (match.line, said)
+                for match in scan(RULES, planted)
+                if match.rule == "says"
+                for label in _labels(_expression(match.text))
+                for said in _restated(label, words)
+            )
+        self.assertEqual(
+            found, [(1, "Remove"), (2, "Stop tracking in HQ"), (3, "Remove"), (3, "Stop tracking in HQ"), (6, "Remove")]
         )
-        found = sorted(
-            (node.lineno, said)
-            for node in ast.walk(tree)
-            for label in _labels(node)
-            for said in _restated(label, words)
-        )
-        self.assertEqual(found, [(1, "Remove"), (2, "Stop tracking in HQ"), (3, "Remove"), (3, "Stop tracking in HQ")])
-
-    def test_a_toast_says_requested_in_the_one_form(self):
-        """``integration_specs.requested`` is the sentence every press answers with."""
-
-        found = [
-            f"{relative}:{node.lineno}"
-            for relative, tree in _modules()
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Call)
-            for text in _toast(node)
-            if _written(text) and "requested" in ast.unparse(text)
-        ]
-        self.assertEqual(found, [])
 
     def test_no_template_writes_a_declared_word_as_a_control(self):
         words = _declared_words()
@@ -259,8 +248,6 @@ class CallSiteWordsTests(SimpleTestCase):
 class DeclaredWordsTests(SimpleTestCase):
     """Every action has the words a surface asks it for."""
 
-    VARIANT_CALLS = frozenset({"capability_words", "command_action", "capability_action_link", "FindingRemedy"})
-
     def test_every_command_hq_declares_is_named_for_a_person(self):
         unnamed = [
             name
@@ -275,18 +262,10 @@ class DeclaredWordsTests(SimpleTestCase):
 
         registry = capability_registry()
         asked = set()
-        for relative, tree in _modules():
-            for node in ast.walk(tree):
-                if not isinstance(node, ast.Call) or _called(node) not in self.VARIANT_CALLS:
-                    continue
-                literals = [arg.value for arg in node.args if isinstance(arg, ast.Constant)]
-                name = next((value for value in literals if value in registry), None)
-                variant = next(
-                    (getattr(keyword.value, "value", None) for keyword in node.keywords if keyword.arg == "variant"),
-                    literals[1] if _called(node) == "capability_words" and len(literals) > 1 else None,
-                )
-                if name and isinstance(variant, str) and variant:
-                    asked.add((relative, name, variant))
+        for where, node in _found().get("names-a-variant", []):
+            assert isinstance(node, ast.Call)
+            if (named := _variant(node, registry)) is not None:
+                asked.add((where.rpartition(":")[0], *named))
         tag_use = re.compile(r'\{%\s*words\s+"([^"]+)"(?:\s+"([^"]+)")?\s*%\}')
         for template, path in template_files():
             for name, variant in tag_use.findall(path.read_text(encoding="utf-8")):

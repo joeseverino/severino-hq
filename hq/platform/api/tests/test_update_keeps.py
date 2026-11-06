@@ -20,7 +20,6 @@ KEPT = "A field left out keeps its value."
     OIDC_ISSUER=ISSUER,
     SEVERINO_API_RESOURCE=RESOURCE,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class AnUpdateOverTheAPIKeepsTests(TestCase):
     # Every response is also held to the OpenAPI document.

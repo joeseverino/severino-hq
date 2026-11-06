@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/edge"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -26,19 +27,19 @@ type sshHost struct {
 type sshFleet map[string]*sshHost
 
 func (f sshFleet) remote(_ context.Context, ref, operation string, stdin []byte) ([]byte, []byte, int, error) {
-	edge := f[ref]
-	if edge == nil {
+	target := f[ref]
+	if target == nil {
 		return nil, []byte("no route to host"), 255, nil
 	}
-	edge.asked = append(edge.asked, operation)
-	if edge.sent == nil {
-		edge.sent = map[string][]byte{}
+	target.asked = append(target.asked, operation)
+	if target.sent == nil {
+		target.sent = map[string][]byte{}
 	}
-	edge.sent[operation] = stdin
-	if code := edge.exits[operation]; code != 0 {
+	target.sent[operation] = stdin
+	if code := target.exits[operation]; code != 0 {
 		return nil, []byte("refused"), code, nil
 	}
-	answer, ok := edge.answers[operation]
+	answer, ok := target.answers[operation]
 	if !ok {
 		return nil, []byte("unknown operation"), 2, nil
 	}
@@ -236,7 +237,7 @@ func TestCaddyRouteCertificates(t *testing.T) {
 		{"a target with neither says it must be redeployed", &sshHost{answers: map[string]string{"routes": caddyLoading(1, "app.example.com")}, exits: map[string]int{"certificates": 127, "certificate": 127}},
 			"app.example.com", "", caddyNoCertificateOperation, false},
 		{"one of two reported names the other unread", &sshHost{answers: map[string]string{"routes": caddyLoading(2, "app.example.com", "other.example.org"), "certificate": exact}, exits: map[string]int{"certificates": 127}},
-			"other.example.org", "", "the edge loads 2 certificates from files and its target reports 1; redeploy it at version 4 or later", false},
+			"other.example.org", "", "the edge loads 2 certificates from files and its target reports 1; redeploy it at version " + edge.Version + " or later", false},
 		{"a certificate that does not parse is said so", &sshHost{answers: map[string]string{"routes": caddyLoading(1, "app.example.com"), "certificates": "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n"}},
 			"app.example.com", "", "its certificate did not parse", false},
 	} {
@@ -310,28 +311,28 @@ func TestRenderCaddyRoutes(t *testing.T) {
 }
 
 func TestCaddyReconcile(t *testing.T) {
-	edge := &sshHost{answers: map[string]string{"routes:write": ""}}
-	r := caddyRegistry(map[string]string{"edge": "caddy"}, sshFleet{"edge": edge})
+	target := &sshHost{answers: map[string]string{"routes:write": ""}}
+	r := caddyRegistry(map[string]string{"edge": "caddy"}, sshFleet{"edge": target})
 	spec := Object{"connection_ref": "edge", "domain": "a.example.com", "upstream": "app:80", "certificate_directory": "",
 		"routes": []any{Object{"domain": "a.example.com", "upstream": "app:80"}}}
 
 	plan, err := r.runAction(t.Context(), runtime.ResourceKindCaddyRoute, "reconcile", spec, nil, false)
-	if err != nil || plan.Changed || plan.Status.(CaddyRouteStatus).Routes != 1 || len(edge.asked) != 0 {
-		t.Fatalf("a plan writes nothing: %v %+v %v", err, plan, edge.asked)
+	if err != nil || plan.Changed || plan.Status.(CaddyRouteStatus).Routes != 1 || len(target.asked) != 0 {
+		t.Fatalf("a plan writes nothing: %v %+v %v", err, plan, target.asked)
 	}
 	applied, err := r.runAction(t.Context(), runtime.ResourceKindCaddyRoute, "reconcile", spec, nil, true)
 	if err != nil || !applied.Changed || applied.Conditions[0].Reason != "Written" {
 		t.Fatalf("%v %+v", err, applied)
 	}
-	if want := caddyFileHeader + "\na.example.com {\n\treverse_proxy app:80\n}\n"; string(edge.sent["routes:write"]) != want {
-		t.Fatalf("wrote %q", edge.sent["routes:write"])
+	if want := caddyFileHeader + "\na.example.com {\n\treverse_proxy app:80\n}\n"; string(target.sent["routes:write"]) != want {
+		t.Fatalf("wrote %q", target.sent["routes:write"])
 	}
 
 	bad := Object{"connection_ref": "edge", "routes": []any{Object{"domain": "a.example.com", "upstream": "app:80 {"}}}
 	if _, err := r.runAction(t.Context(), runtime.ResourceKindCaddyRoute, "reconcile", bad, nil, false); err == nil {
 		t.Fatal("a plan renders, and so refuses, what the file writer refuses")
 	}
-	edge.exits = map[string]int{"routes:write": 1}
+	target.exits = map[string]int{"routes:write": 1}
 	if _, err := r.runAction(t.Context(), runtime.ResourceKindCaddyRoute, "reconcile", spec, nil, true); err == nil {
 		t.Fatal("a write the edge refused reported as written")
 	}

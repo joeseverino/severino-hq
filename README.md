@@ -82,8 +82,8 @@ runs every gate CI runs, at the same pinned versions; `mise tasks info check`
 names them.
 
 - The host/extension boundary is tested in both directions:
-  `python -m hq_sdk.validation` rejects an extension importing anything but
-  `hq_sdk`, and `hq/platform/application/tests/test_plugins.py` fails when a
+  the extension check's Ruff `banned-api` rejects an extension importing
+  anything of the host's but `hq_sdk`, and `hq/platform/application/tests/test_plugins.py` fails when a
   host file names an installed extension.
 - Architecture rules (no view writes a model, MCP reads no model, one table
   engine, function complexity) are tests in

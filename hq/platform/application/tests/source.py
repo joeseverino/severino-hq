@@ -1,26 +1,8 @@
-"""This checkout's source files, the templates Django loads, and their parsed
-form cached per test process.
+"""This checkout's source files and the templates Django loads."""
 
-Keyed on modification time, so a file edited mid-run is parsed again.
-"""
-
-import ast
-from functools import cache
 from pathlib import Path
 
-from django.template.autoreload import get_template_directories
-
-
-def parsed(path: Path) -> ast.Module:
-    """The module ``path`` holds, as an AST its callers read and never change."""
-
-    return _parsed(Path(path).resolve(), Path(path).stat().st_mtime_ns)
-
-
-@cache
-def _parsed(path: Path, _modified: int) -> ast.Module:
-    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-
+lazy from django.template.autoreload import get_template_directories
 
 # Installed or generated trees inside a checkout. With hidden directories
 # (.git, a virtualenv under any name) they are not this project's source.

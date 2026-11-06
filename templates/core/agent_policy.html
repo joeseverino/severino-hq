@@ -18,13 +18,42 @@
     <span>{{ rule_count|counted:"rule changed from the default,rules changed from the default" }}</span>
     {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count|breakable }}</strong> waiting for your approval</a>{% endif %}
     <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count|breakable }}</strong> refused in the last day</a>
-    {% if any_dormant %}<span class="policy-dormant-note">A grayed-out rule does nothing until HQ's settings let agents do that action.</span>{% endif %}
   </div>
 {% endcard %}
 
 {% comment %}
+Each device an agent called from that waits for the reader's approval: theirs,
+or a machine agent's, which anyone who governs agents approves. Pressed here
+or on the device's row below, the same form.
+{% endcomment %}
+{% if prompts %}
+  {% card css="device-prompts" heading="device-prompts" %}
+    {% section_head id="device-prompts" %}Waiting for you <span class="count">{{ prompts|length|breakable }}</span>{% endsection_head %}
+    {% table_region "Devices waiting for you" %}
+      <table class="data-table">
+        <thead>
+          <tr>
+            {% table_heading "Asks" gutter=True %}
+            {% table_heading "Approve or block" "control" hidden=True %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for prompt in prompts %}
+            <tr data-prompt="{{ prompt.device.anchor }}">
+              <th scope="row" class="row-gutter cell-data"><a href="#{{ prompt.device.anchor }}">{{ prompt.text|breakable }}</a>{% row_toggle %}</th>
+              <td class="row-actions">{% include "core/_agent_device_actions.html" with device=prompt.device %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endtable_region %}
+  {% endcard %}
+{% endif %}
+
+{% comment %}
 Each agent HQ has seen, a row each: what it is, what of its grant HQ lets it
-use, what it did over the window, and its own block beside the pause above.
+use, what it did over the window and the update streams it holds open now
+(none says nothing), and its own block beside the pause above.
 {% endcomment %}
 <h2 id="agents">Agents <span class="count">{{ standings|length|breakable }}</span> <span class="heading-aside">What each did and was refused over the last {{ recent_days|counted:"day" }}</span></h2>
 {% if standings %}
@@ -49,13 +78,14 @@ use, what it did over the window, and its own block beside the pause above.
                 {% if identity.person %}<li data-person>For {{ identity.person.get_username|breakable:"," }} {% if standing.role %}{{ standing.role_label|lower|breakable }}{% else %}no role{% endif %}</li>{% endif %}
                 {% if identity.signs_in %}<li>Signs in {{ identity.get_signs_in_display|lower|breakable }}</li>{% endif %}
                 {% if identity.interfaces %}<li>Over {{ identity.interfaces|interface_label|breakable }}</li>{% endif %}
+                {% if standing.devices %}<li><a href="#devices-{{ identity.client_id|slugify }}">From {{ standing.devices|length|counted:"device" }}</a></li>{% endif %}
               </ul>
               <div class="row-below agent-more">
                 {% if identity.blocked_at %}<p>Every call it makes is refused until you allow it again. Blocked {{ identity.blocked_at|when:"ago" }}{% if identity.blocked_by %} by {{ identity.blocked_by.get_username|breakable }}{% endif %}</p>{% endif %}
                 {% if identity.person %}{% if standing.acts_for_nobody %}<p data-role="none">Signed in by {{ identity.person.get_username|breakable:"," }} who holds no role in HQ, so every call it makes is refused.</p>{% else %}<p data-role="{{ standing.role }}">Acts for {{ identity.person.get_username|breakable:"," }} and does only what their role allows: {{ standing.role_label|lower|breakable:"," }} confirmed {{ standing.role_confirmed|when:"ago" }}.</p>{% endif %}{% endif %}
                 {% if standing.in_force %}<p>In force: {% for name in standing.in_force %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
-                {% if standing.held_back %}<p>Granted, but off in HQ's settings: {% for name in standing.held_back %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
+                {% if standing.missing %}<p data-missing>Not carried by its last sign-in, though HQ offers {% if standing.missing|length == 1 %}it{% else %}them{% endif %}: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again: a sign-in that asks for every permission HQ offers is refused until then. {% entity client_setup|outside label="Setting up a client" %}</p>{% endif %}
                 {% if activity.latest %}
                   <ul class="agent-events prose" data-label="Latest">
                     {% for event in activity.latest %}
@@ -65,11 +95,12 @@ use, what it did over the window, and its own block beside the pause above.
                 {% endif %}
               </div>
             </th>
-            <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.held_back %}<br><span class="muted">{{ standing.held_back|length|breakable }} off in HQ's settings</span>{% endif %}{% if standing.beyond_role %}<br><span class="muted">{{ standing.beyond_role|length|breakable }} beyond its person's role</span>{% endif %}</td>
+            <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.beyond_role %}<br><span class="muted">{{ standing.beyond_role|length|breakable }} beyond its person's role</span>{% endif %}{% if standing.missing %}<br><span class="figure tone-attention">{{ standing.missing|length|breakable }} not carried by its sign-in</span>{% endif %}</td>
             <td>{{ identity.last_seen|when:"ago" }}</td>
             <td data-sort="{{ activity.changes }}">
               {{ activity.changes|counted:"change" }}
               {% if activity.refused %}<br><span class="figure tone-attention">{{ activity.refused|breakable }} refused</span>{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
+              {% with streams=standing.streams %}{% if streams.full %}<br><span class="figure tone-attention" data-streams="full">{{ streams.open|breakable }} of {{ streams.cap|breakable }} update streams open</span> <span class="muted">so its next is refused <code>too_many_calls</code></span>{% elif streams.open %}<br><span class="muted" data-streams="open">{{ streams.open|breakable }} of {{ streams.cap|breakable }} update streams open</span>{% endif %}{% endwith %}
             </td>
             <td class="row-actions">
               {% if identity.blocked_at %}
@@ -85,6 +116,76 @@ use, what it did over the window, and its own block beside the pause above.
   {% endtable_region %}
 {% else %}
   <p class="muted">No agent has connected yet.</p>
+{% endif %}
+
+{% comment %}
+The one copy of the steps for adding an agent. docs/API.md links here, and
+this links to it only for how a provider's permission list is written.
+{% endcomment %}
+<details class="section-fold" id="adding-an-agent"{% if not standings %} open{% endif %}>
+  <summary><h2>Adding an agent</h2></summary>
+  <ol class="resolution-workflow">
+    <li><strong>A public client</strong><p>Register one client per agent in your sign-in service, signing in with the authorization code and PKCE, and no client secret. Its client id is the agent's name here and in the audit log.</p></li>
+    <li><strong>Who signs it in</strong><p>Set its allowed user groups: the sign-in service refuses anyone else before HQ sees a token. An agent acts for the person who signed it in, within their role.</p></li>
+    <li><strong>Every permission</strong><p>Give the client all {{ offered|counted:"permission" }} HQ offers an agent, delegated by a signed-in person. A sign-in asks for every one, and a sign-in service that has not granted one refuses it. Narrow what each agent does with the rules below, which take effect at once. {% entity client_setup|outside label="Setting up a client" %}</p></li>
+    <li><strong>Short-lived tokens</strong><p>Set its access token life to about an hour: a permission taken away there ends at the agent's next refresh.</p></li>
+    <li><strong>One sign-in</strong><p>Sign it in once in a browser. It appears under Agents above, and its first call from each tailnet device waits for that device's approval here.</p></li>
+    <li><strong>Unattended</strong><p>An agent that runs unattended signs in as itself with its sign-in service's federated client assertion, a token its platform signs, so it keeps no stored secret. Grant it, as its own, only the permissions its work needs.</p></li>
+  </ol>
+</details>
+
+{% comment %}
+The tailnet devices each agent called from, a group per agent that has any: the devices it
+has a record of, then any tailnet address it was refused from that HQ's last
+reading of the tailnet did not hold. A call from a device runs once it is
+approved, and a block stops that device alone.
+{% endcomment %}
+{% if device_groups %}
+  <h2 id="agent-devices">Devices agents call from <span class="heading-aside">Calls over the last {{ recent_days|counted:"day" }}</span></h2>
+  {% table_region "Devices agents call from" %}
+    <table class="data-table">
+      <thead>
+        <tr>
+          {% table_heading "Device" "identifier" gutter=True %}
+          {% table_heading "Approval" "status" %}
+          {% table_heading "First seen" "status" drop=2 %}
+          {% table_heading "Last seen" "status" drop=3 %}
+          {% table_heading "Calls" drop=1 %}
+          {% table_heading "Approve or block" "control" hidden=True %}
+        </tr>
+      </thead>
+      {% for standing in device_groups %}{% with identity=standing.identity %}
+        <tbody id="devices-{{ identity.client_id|slugify }}" data-agent-devices="{{ identity.client_id }}">
+          {% row_group identity.client_id standing.devices|length %}
+          {% for device in standing.devices %}
+            <tr id="{{ device.anchor }}" data-device-standing="{{ device.standing }}">
+              <th scope="row" class="row-gutter">
+                {{ device.name|breakable }}{% row_toggle %}
+                <ul class="dot-list muted">
+                  {% if device.os %}<li>{{ device.os|breakable }}</li>{% endif %}
+                  {% if device.owner %}<li data-owner>Owned by {{ device.owner|breakable }}</li>{% elif device.record %}<li>Tagged</li>{% endif %}
+                </ul>
+                <div class="row-below">
+                  {% with record=device.record %}
+                    {% if not record %}<p>HQ's last reading of the tailnet holds no device at this address, so there is nothing to approve yet. Once HQ reads the tailnet, the next call from it asks for approval here.</p>
+                    {% elif record.person %}<p>Calls for {{ record.person.get_username|breakable:"," }} who approves it.</p>
+                    {% else %}<p>Calls as itself, for nobody, so anyone who governs agents approves it.</p>{% endif %}
+                    {% if record.approved_at %}<p>Approved {{ record.approved_at|when:"ago" }}{% if record.approved_by %} by {{ record.approved_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
+                    {% if record.blocked_at %}<p>Every call from it is refused until it is allowed again. Blocked {{ record.blocked_at|when:"ago" }}{% if record.blocked_by %} by {{ record.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
+                  {% endwith %}
+                </div>
+              </th>
+              <td><span class="pill {{ device.tone }}">{{ device.label|breakable }}</span>{% if device.waits_for %}<br><span class="muted">For {{ device.waits_for|breakable }}</span>{% endif %}</td>
+              <td>{{ device.first_seen|when:"ago" }}</td>
+              <td>{{ device.last_seen|when:"ago" }}</td>
+              <td data-sort="{{ device.calls }}">{{ device.calls|counted:"call" }}{% if device.refused %}<br><span class="figure tone-attention">{{ device.refused|breakable }} refused</span>{% endif %}</td>
+              <td class="row-actions">{% include "core/_agent_device_actions.html" with device=device %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      {% endwith %}{% endfor %}
+    </table>
+  {% endtable_region %}
 {% endif %}
 
 {% comment %}

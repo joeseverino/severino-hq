@@ -14,6 +14,7 @@ from typing import Any
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderInventory
+from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.github import FULL_READ_EVERY, REPOSITORY_KIND
 
 lazy from .timestamps import moment
@@ -40,9 +41,14 @@ def due(repository: str, read_at: datetime | None, now: datetime, every: timedel
 
 def plan(now: datetime | None = None) -> dict[str, Any]:
     """Each repository HQ holds a record of, with its fingerprint and whether
-    its full read is due."""
+    its full read is due.
+
+    A held record the reading's schema refuses was stored under an older
+    contract, so it is due at once: carried, it would stand as current.
+    """
 
     now = now or timezone.now()
+    reading = OBSERVATIONS[REPOSITORY_KIND]
     snapshot = ProviderInventory.objects.filter(kind=REPOSITORY_KIND).values_list("records", flat=True).first()
     held = []
     for record in snapshot or ():
@@ -54,7 +60,7 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
             {
                 "repository": name,
                 "fingerprint": str(record.get("fingerprint", "") or ""),
-                "due": due(name, read_at, now),
+                "due": due(name, read_at, now) or bool(reading.clean([record])[1]),
             }
         )
     return {"held": held}

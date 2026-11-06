@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // Rehearsal is where a release rehearses itself before anything live is
@@ -114,18 +117,16 @@ func (d *Deployer) rehearse(ctx context.Context, image string) error {
 	if err := os.MkdirAll(d.LogDir, 0o700); err != nil {
 		return err
 	}
-	log, err := os.CreateTemp(d.LogDir, ".rehearsal.")
+	log, err := atomicfile.Create(filepath.Join(d.LogDir, "rehearsal.log"), 0o600)
 	if err != nil {
 		return err
 	}
+	defer log.Discard()
 	fmt.Fprintln(d.Out, "Rehearsing the release on a copy of production's data.")
 	r := &rehearsing{Deployer: d, image: image, data: data.Name, log: log,
 		scratch: filepath.Join(d.Runtime, rehearsalName)}
 	said := r.run(ctx)
-	log.Close()
-	if err := os.Rename(log.Name(), filepath.Join(d.LogDir, "rehearsal.log")); err != nil {
-		os.Remove(log.Name())
-	}
+	_ = log.Replace()
 	fmt.Fprintln(d.Out, "Rehearsal: "+said.String())
 	if !said.passed() {
 		fmt.Fprintln(d.Out, "The rehearsal failed; inspect the private host log. Nothing live was touched.")
@@ -195,7 +196,7 @@ func (r *rehearsing) run(ctx context.Context) (said verdict) {
 // read-only and as HQ's account, so a shared-memory file SQLite makes beside
 // the live database is one HQ owns.
 func (r *rehearsing) copyDatabase(ctx context.Context) bool {
-	user := fmt.Sprintf("%d:%d", WebUID, WebGID)
+	user := fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID)
 	for _, dir := range []string{r.scratch, filepath.Join(r.scratch, "bell"), filepath.Join(r.scratch, "plan", "ssh"), filepath.Join(r.scratch, "plan", "acme")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			fmt.Fprintln(r.log, err)
@@ -223,21 +224,21 @@ func (r *rehearsing) copyDatabase(ctx context.Context) bool {
 // startWeb starts the image's web process on the copy with no network, as
 // the web unit runs it otherwise, and waits for it to answer ready.
 func (r *rehearsing) startWeb(ctx context.Context) bool {
-	appEnv := "/run/secrets/" + AppEnvName
+	appEnv := "/run/secrets/" + hostcore.AppEnvName
 	if _, err := r.exec(ctx, "docker", "run", "-d", "--pull", "never", "--name", rehearsalName,
 		"--network", "none", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true",
 		"--read-only", "--tmpfs", "/tmp:rw,noexec,nosuid,size=256m",
-		"--tmpfs", fmt.Sprintf("/media:uid=%d,gid=%d", WebUID, WebGID),
-		"--tmpfs", fmt.Sprintf("/exports:uid=%d,gid=%d", WebUID, WebGID),
+		"--tmpfs", fmt.Sprintf("/media:uid=%d,gid=%d", hostcore.WebUID, hostcore.WebGID),
+		"--tmpfs", fmt.Sprintf("/exports:uid=%d,gid=%d", hostcore.WebUID, hostcore.WebGID),
 		"--pids-limit", "512", "--memory", "1g",
 		"--env", "TMPDIR=/data/tmp",
-		"--env", "SEVERINO_CONTROLLER_DOORBELL="+RunDir+"/controller-doorbell",
+		"--env", "SEVERINO_CONTROLLER_DOORBELL="+hostcore.RunDir+"/controller-doorbell",
 		"--env", "SEVERINO_BRIDGE_SOCKET="+BridgeSocket,
 		"--env", "SEVERINO_APP_ENV_PATH="+appEnv,
 		"--mount", "type=volume,source="+rehearsalData+",target=/data",
 		"--mount", "type=volume,source="+rehearsalBridge+",target="+filepath.Dir(BridgeSocket),
-		"--mount", "type=bind,source="+filepath.Join(r.scratch, "bell")+",target="+RunDir,
-		"--mount", readOnly(filepath.Join(r.Rehearsal.SecretDir, "web", AppEnvName), appEnv),
+		"--mount", "type=bind,source="+filepath.Join(r.scratch, "bell")+",target="+hostcore.RunDir,
+		"--mount", readOnly(filepath.Join(r.Rehearsal.SecretDir, "web", hostcore.AppEnvName), appEnv),
 		r.image); err != nil {
 		return false
 	}
@@ -272,14 +273,14 @@ func (r *rehearsing) plan(ctx context.Context) string {
 			copies = append(copies, []string{"cp", "-R", dir[0] + "/.", filepath.Join(plan, dir[1]) + "/"})
 		}
 	}
-	copies = append(copies, []string{"chown", "-R", fmt.Sprintf("%d:%d", WebUID, WebGID), plan})
+	copies = append(copies, []string{"chown", "-R", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID), plan})
 	for _, step := range copies {
 		if _, err := r.exec(ctx, step[0], step[1:]...); err != nil {
 			return "uncopied"
 		}
 	}
 	args := []string{"run", "--rm", "--pull", "never", "--network", "host",
-		"--user", fmt.Sprintf("%d:%d", WebUID, WebGID), "--cap-drop", "ALL",
+		"--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID), "--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges:true",
 		"--tmpfs", "/tmp:size=64m,noexec,nosuid,nodev", "--entrypoint", "/usr/local/bin/hq-controller",
 		"--mount", readOnly(filepath.Join(plan, "connections.json"), controllerConnections),
@@ -314,8 +315,8 @@ func (r *rehearsing) plan(ctx context.Context) string {
 
 // liveMarks is when the live web unit and its container last started.
 func (r *rehearsing) liveMarks(ctx context.Context) string {
-	unit, _ := r.exec(ctx, "systemctl", "show", WebUnit, "-p", "ActiveEnterTimestamp", "--value")
-	container, _ := r.exec(ctx, "docker", "inspect", "--format", "{{.State.StartedAt}}", Container)
+	unit, _ := r.exec(ctx, "systemctl", "show", hostcore.WebUnit, "-p", "ActiveEnterTimestamp", "--value")
+	container, _ := r.exec(ctx, "docker", "inspect", "--format", "{{.State.StartedAt}}", hostcore.Container)
 	return strings.TrimSpace(unit) + " " + strings.TrimSpace(container)
 }
 

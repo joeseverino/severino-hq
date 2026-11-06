@@ -3,7 +3,6 @@
   "private": true,
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "@mdn/browser-compat-data": "8.1.7",
     "@redocly/cli": "2.72.1",
     "axe-core": "4.14.0",
     "eslint": "10.14.0",

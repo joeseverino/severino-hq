@@ -13,7 +13,7 @@ from typing import Any
 
 from hq.domains.control_plane.models import REFERENCE_COLUMNS
 from hq.domains.control_plane.names import normalized_hostname
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, read_record
 
 from .connection_lifecycle import UNREPORTED_NODE
 from .entity_links import node_name
@@ -61,11 +61,8 @@ def _read_parents(kind: str) -> frozenset[str] | None:
             continue
         reachable = True
         for record in snapshot.records:
-            try:
-                found = provider.identity(provider.from_record(record))
-            except AttributeError, KeyError, TypeError, ValueError:
-                continue
-            names.update(normalized_hostname(name) for name in found)
+            found = read_record(kind, record, lambda spec: tuple(provider.identity(spec)))
+            names.update(normalized_hostname(name) for name in found or ())
     return frozenset(names) if reachable else None
 
 
@@ -132,7 +129,7 @@ def _no_connection(node: TopologyNode, ref: str, reported: tuple[str, ...]) -> F
         severity="attention",
         explanation=(
             f"It names the connection {ended(ref)} No controller has one called that, so "
-            f"nothing reads {name} and nothing applies HQ's settings to it."
+            f"nothing reads {name} and nothing applies HQ's config to it."
         ),
         evidence=(
             ("Connection it names", ref),

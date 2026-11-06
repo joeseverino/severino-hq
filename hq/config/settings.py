@@ -25,7 +25,7 @@ from hq.config.devtools import (
     without_trusted_types,
 )
 
-from .sandbox import database_path as test_database_path
+from . import sandbox
 
 # The plugin registry is loaded by name: settings is imported by everything, and
 # a static import here would put it inside the application's own import cycle.
@@ -460,7 +460,13 @@ CACHES = {
 
 # ----- Database ----------------------------------------------------------------
 
+RUNNING_TESTS = sys.argv[1:2] == ["test"]
 _DATABASE_PATH = env_str("SEVERINO_DATABASE_PATH").strip()
+if RUNNING_TESTS or env_str(sandbox.RUN) or (not _DATABASE_PATH and env_bool("SEVERINO_SANDBOX")):
+    # Before the test database is named, so it and everything a test, a gate or
+    # a process they start makes in the temporary directory are in the run's
+    # own, with a database there when none is named (config/sandbox.py).
+    _DATABASE_PATH = sandbox.isolate(_DATABASE_PATH)
 if not _DATABASE_PATH:
     raise ImproperlyConfigured(f"SEVERINO_DATABASE_PATH is not set; the image sets it. {_STARTED_WRONG}")
 
@@ -493,20 +499,16 @@ DATABASES = {
             # cannot produce. A file gives the suite the same journal mode,
             # lock and timeout as the running host, for a couple of seconds.
             #
-            # In the temporary directory rather than beside the real database:
+            # In the run's temporary directory rather than beside the real database:
             # `data/` is a mounted volume in production and does not exist in
             # the composed image, where the suite runs as its own admission
             # gate. Only being a file matters, not where the file is.
             #
-            # Named for the process, because two suites on one machine would
-            # otherwise share the file: two worktrees' gates, or `mise run
-            # fast` beside `mise run check`. A shared file makes them fail each
-            # other with a locked table: a failure that says nothing about the
-            # change and costs a while to attribute. Django's parallel workers
-            # suffix this name per worker, so they stay distinct within a run
-            # too, and the next run deletes a killed run's files by the name
-            # (config/sandbox.py).
-            "NAME": env_str("SEVERINO_TEST_DATABASE_PATH", test_database_path()),
+            # Each run has a directory of its own, so two suites on one machine
+            # (two worktrees' gates, or `mise run fast` beside `mise run
+            # check`) never share the file and fail each other with a locked
+            # table. Django's parallel workers suffix this name per worker.
+            "NAME": env_str("SEVERINO_TEST_DATABASE_PATH", sandbox.database_path()),
         },
     }
 }
@@ -518,7 +520,6 @@ TEST_RUNNER = "hq.platform.core.test_runner.SeverinoTestRunner"
 # Under test, a warning from this codebase and any leaked resource fail the run.
 # Here rather than in the runner because settings are what every parallel
 # worker imports on start. See config/warning_policy.py.
-RUNNING_TESTS = sys.argv[1:2] == ["test"]
 # Whether a list read raises on a relation or deferred field it did not fetch
 # (see ``application.projection.guarded``). On where a developer sees it.
 SEVERINO_STRICT_FETCH = DEBUG or RUNNING_TESTS
@@ -530,16 +531,18 @@ if RUNNING_TESTS:
 
     _enforce_warning_policy(BASE_DIR)
 
-    from hq.config.sandbox import isolate as _isolate_test_run
-
-    _isolate_test_run()
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # ----- Auth --------------------------------------------------------------------
 
 PASSWORD_HASHERS = ["hq.platform.core.hashers.Argon2PasswordHasher"]
+if RUNNING_TESTS:
+    # Django's own advice for a suite: a fast hasher first, since Argon2 is slow
+    # and memory-hard by design and each test worker keeps what it took. Argon2
+    # stays after it, so an argon2 hash a test stores still verifies;
+    # test_password_hashing holds production's list.
+    PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher", *PASSWORD_HASHERS]
 
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -703,6 +706,11 @@ SEVERINO_MCP_ALLOWED_ORIGINS = env_list("SEVERINO_MCP_ALLOWED_ORIGINS")
 # is answered "later" and nothing it asked runs.
 SEVERINO_AGENT_CALLS_AT_ONCE = 4
 SEVERINO_AGENT_CALLS_AT_ONCE_OVERALL = 8
+# One agent's open listen streams (subscriptions/listen) at once. Claude Code
+# holds one for each connection, and every session on a machine signs in as
+# the same client, so this is the sessions one machine runs at once, with
+# room; it keeps one agent from taking every stream the server holds.
+SEVERINO_AGENT_STREAMS_AT_ONCE = 16
 # Under test one example agent makes every test's calls in seconds; the tests
 # of the rate set their own.
 SEVERINO_AGENT_CALLS_PER_MINUTE = 10**9 if RUNNING_TESTS else 120
@@ -715,17 +723,6 @@ SEVERINO_AGENT_CALL_TIMEOUT_SECONDS = 60
 # before it is trusted acting. Even on, it only ever queues: the controller
 # still pulls and claims, so no provider credential nears the web process.
 SEVERINO_FINDINGS_AUTO_REMEDY = env_bool("SEVERINO_FINDINGS_AUTO_REMEDY")
-# What an agent may do beyond reading, on /mcp/ and the machine API alike, one
-# switch each, all off unless a deployment turns one on. Why each stands apart
-# is beside its grant in application.security.agent_ceiling.
-SEVERINO_AGENT_ENABLE_WRITES = env_bool("SEVERINO_AGENT_ENABLE_WRITES")
-SEVERINO_AGENT_ENABLE_DOC_SYNC = env_bool("SEVERINO_AGENT_ENABLE_DOC_SYNC")
-SEVERINO_AGENT_ENABLE_INFRASTRUCTURE = env_bool("SEVERINO_AGENT_ENABLE_INFRASTRUCTURE")
-SEVERINO_AGENT_ENABLE_PRUNE = env_bool("SEVERINO_AGENT_ENABLE_PRUNE")
-SEVERINO_AGENT_ENABLE_DELETES = env_bool("SEVERINO_AGENT_ENABLE_DELETES")
-SEVERINO_AGENT_ENABLE_CERT_RENEWAL = env_bool("SEVERINO_AGENT_ENABLE_CERT_RENEWAL")
-SEVERINO_AGENT_ENABLE_LOOKUP = env_bool("SEVERINO_AGENT_ENABLE_LOOKUP")
-SEVERINO_AGENT_ENABLE_CALENDAR = env_bool("SEVERINO_AGENT_ENABLE_CALENDAR")
 # How long a change held for a person's approval stands before it lapses. A day:
 # the person it waits for sleeps, and a request still clickable a month later is
 # a change nobody is looking at any more being applied on an old decision.

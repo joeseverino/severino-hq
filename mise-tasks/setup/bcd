@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="Install the browser-compat-data tools/lint/bcd pins, which audit:bcd reads"
+#MISE hide=true
+#MISE sources=["tools/lint/bcd/package-lock.json"]
+#MISE outputs=["tools/lint/bcd/node_modules/.package-lock.json"]
+set -eu
+
+npm --prefix tools/lint/bcd ci

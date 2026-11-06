@@ -135,7 +135,7 @@ class PinCapabilityTests(TestCase):
                     ).exists()
                 )
 
-    def test_a_token_is_refused_whatever_it_was_granted(self):
+    def test_a_principal_with_no_person_is_refused_whatever_it_was_granted(self):
         from hq.platform.application.capabilities import execute_capability
         from hq.platform.application.pins import PIN, SERVICE
         from hq.platform.application.security import Capability, Principal, cli_principal, internal_principal

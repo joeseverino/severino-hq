@@ -5,6 +5,7 @@ every module that adds edges gives them the same stable id and phrase.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha256
 from typing import Annotated
 
@@ -278,6 +279,10 @@ class Topology:
     # Checks of HQ's standard read and found failing, as ``(id, evidence,
     # read_capabilities)``, here so the posture finding rule costs no query.
     unmet_standard: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
+    # Each kind's last successful read, as ``(kind, moment)``. A record's own
+    # ``observed_at`` also moves when HQ applies or adopts it, so "when was this
+    # kind last read" is answered from here, carried so a rule costs no query.
+    kinds_read: tuple[tuple[str, datetime], ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

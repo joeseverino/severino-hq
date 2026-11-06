@@ -1,13 +1,11 @@
 """A page prints only text and numbers, whatever HQ or extension template prints the value."""
 
-import ast
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum, IntEnum, StrEnum
 from pathlib import Path, PurePosixPath
 
-import django
 from django import forms, template
 from django.apps import apps
 from django.conf import settings
@@ -21,9 +19,11 @@ from django.utils.translation import gettext_lazy
 
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.printable import Unprintable
+from hq.platform.application.tests.apart import apart
 from hq.platform.application.ui import MISSING
 from hq.platform.core import print_gate
 from hq.platform.core.templatetags.value_tags import breakable, or_empty, readable, readout
+from hq.platform.core.tests.django_printers import django_printers
 
 
 class Plain(Enum):
@@ -224,34 +224,10 @@ class ScopeTests(SimpleTestCase):
         self.assertIn("example-receipt.pdf", rendered)
 
 
-def _printers(path: Path, names: set[str]) -> set[str]:
-    """The top-level classes and functions in ``path`` that call one of ``names``."""
-
-    return {
-        statement.name
-        for statement in ast.parse(path.read_text()).body
-        if isinstance(statement, (ast.ClassDef, ast.FunctionDef))
-        and any(
-            isinstance(call, ast.Call) and isinstance(call.func, ast.Name) and call.func.id in names
-            for call in ast.walk(statement)
-        )
-    }
-
-
 class DjangoPrintersTests(SimpleTestCase):
     def test_the_gate_covers_every_node_the_installed_django_prints_through(self):
         """A Django upgrade that prints through ``render_value_in_context``
         somewhere new fails here until ``PRINTING`` names it."""
 
-        installed = Path(django.__file__).parent
-        found = {
-            f"{'.'.join(path.relative_to(installed.parent).with_suffix('').parts)}.{name}"
-            for path in (*installed.glob("template/**/*.py"), *installed.glob("templatetags/*.py"))
-            for name in _printers(path, {"render_value_in_context"})
-        }
-        found |= {
-            f"django.template.library.{name}"
-            for name in _printers(installed / "template" / "library.py", {"conditional_escape"})
-        }
-
+        found = set(apart(django_printers))
         self.assertEqual(found, {f"{node.__module__}.{node.__qualname__}" for node in print_gate.PRINTING})

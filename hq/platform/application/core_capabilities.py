@@ -24,6 +24,16 @@ from .agent_access import (
     set_agent_blocked,
     set_agents_paused,
 )
+from .agent_devices import (
+    APPROVE_AGENT_DEVICE,
+    BLOCK_AGENT_DEVICE,
+    AgentDeviceApprovalCommand,
+    AgentDeviceBlockCommand,
+    device_approved,
+    device_blocked,
+    set_device_approved,
+    set_device_blocked,
+)
 from .appearance import SET_THEME, ThemeCommand, set_theme
 from .approvals import APPROVE, DESTRUCTIVE_EFFECT, REJECT, ApproveCommand, RejectCommand, approve, reject
 from .cadence import ControllerSweepCommand, request_controller_sweep
@@ -297,7 +307,7 @@ CORE_CAPABILITY_SPECS = (
         target_label="Record",
         target_help="The record to apply.",
         label=OperationRequest.Action.RECONCILE.label,
-        wants="apply HQ's settings to {target}",
+        wants="apply HQ's config to {target}",
     ),
     CapabilitySpec(
         SIGN_OUT,
@@ -311,68 +321,6 @@ CORE_CAPABILITY_SPECS = (
             "End every live session of theirs, leaving the account and any local password alone.",
         ),
         label="Sign a person out",
-    ),
-    # A person's own arrangement of HQ, held only by that person in the browser
-    # (security.HELD_ONLY_AT): none of it reaches a spec or the controller.
-    CapabilitySpec(
-        pins.PIN,
-        "Pin something so it sorts first for you, or unpin it.",
-        "remote_write",
-        Capability.PIN_FAVORITES,
-        pins.PinCommand,
-        pins.pin,
-        execution_notes=("Pin it last among your pins of its type, or unpin it.",),
-        label="Pin or unpin an item",
-        verb="Pin",
-        reached_from=ON_ITS_PAGE,
-    ),
-    CapabilitySpec(
-        pins.MOVE,
-        "Move one of your pins past its neighbor.",
-        "remote_write",
-        Capability.PIN_FAVORITES,
-        pins.MoveCommand,
-        pins.move_pin,
-        execution_notes=("Swap it with the pin above or below, leaving the rest in place.",),
-        label="Move a pin",
-        reached_from=ON_ITS_PAGE,
-    ),
-    CapabilitySpec(
-        pins.CHOOSE,
-        "Choose exactly which things of one type you pin.",
-        "remote_write",
-        Capability.PIN_FAVORITES,
-        pins.ChooseCommand,
-        pins.choose,
-        execution_notes=("Unpin what is not chosen and pin what is new, keeping the order of the rest.",),
-        label="Choose pins",
-        reached_from="dashboard",
-    ),
-    CapabilitySpec(
-        action_items.SET_ASIDE,
-        "Set action items aside for you until they get worse or change.",
-        "remote_write",
-        Capability.SET_ASIDE_ACTION_ITEMS,
-        action_items.SetAsideCommand,
-        action_items.set_items_aside,
-        execution_notes=(
-            "Set each named row aside as it was drawn.",
-            "Set each named item aside as the queue holds it now.",
-        ),
-        label="Set action items aside",
-        verb="Set aside",
-        reached_from="action_items",
-    ),
-    CapabilitySpec(
-        action_items.RESTORE,
-        "Bring set-aside action items back into your queue.",
-        "remote_write",
-        Capability.SET_ASIDE_ACTION_ITEMS,
-        action_items.RestoreCommand,
-        action_items.restore,
-        label="Bring action items back",
-        verb="Bring back",
-        reached_from="action_items",
     ),
     CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.DELETE],
@@ -571,8 +519,8 @@ CORE_CAPABILITY_SPECS = (
         execution_notes=_RECEIPT_FILE_NOTES,
         label="Replace a receipt's file",
     ),
-    # A person's own arrangement of their pages, held only in the browser
-    # (security.HELD_ONLY_AT).
+    # The dashboard everyone's pages share, arranged by whoever holds
+    # set_preferences: an operator's, since a viewer holds only reads.
     CapabilitySpec(
         DASHBOARD_MACHINE,
         "Show a machine's telemetry on the dashboard, or take it off.",
@@ -620,29 +568,6 @@ CORE_CAPABILITY_SPECS = (
         label="Reject a held change",
         reached_from="action_items",
     ),
-    CapabilitySpec(
-        DASHBOARD_SETTINGS,
-        "Set where the dashboard reads the weather for, and what its panels are called.",
-        "remote_write",
-        Capability.SET_PREFERENCES,
-        DashboardSettingsCommand,
-        save_dashboard_settings,
-        execution_notes=(
-            "Refuse a weather location that is not a latitude and longitude in range.",
-            "Name an unnamed panel by its default.",
-        ),
-        label="Save dashboard settings",
-    ),
-    CapabilitySpec(
-        SET_THEME,
-        "Draw the signed-in person's pages in the system's theme, light or dark.",
-        "remote_write",
-        Capability.SET_PREFERENCES,
-        ThemeCommand,
-        set_theme,
-        execution_notes=("Set the theme rather than cycle it, so asking twice changes nothing.",),
-        label="Choose a theme",
-    ),
     # Who may act as an agent, decided by a person (security.HELD_ONLY_AT), so
     # no credential widens or frees itself.
     CapabilitySpec(
@@ -677,6 +602,45 @@ CORE_CAPABILITY_SPECS = (
         state=blocked,
     ),
     CapabilitySpec(
+        APPROVE_AGENT_DEVICE,
+        "Approve a tailnet device an agent called from, so its calls from there run, or withdraw the approval.",
+        "remote_write",
+        Capability.GOVERN_AGENTS,
+        AgentDeviceApprovalCommand,
+        set_device_approved,
+        "key",
+        target_label="Device",
+        target_help="The record of a device an agent has called HQ from.",
+        execution_notes=(
+            "Refuse a device no agent has called from.",
+            "Approve a device an agent called from for a person only as that person.",
+            "Set the state rather than toggle it, so asking twice changes nothing.",
+        ),
+        label="Approve an agent's device",
+        variants=(("on", "Approve device"), ("off", "Withdraw approval")),
+        reached_from="agent_policy",
+        state=device_approved,
+    ),
+    CapabilitySpec(
+        BLOCK_AGENT_DEVICE,
+        "Block one tailnet device an agent calls from, on MCP and the machine API, or let it back in.",
+        "remote_write",
+        Capability.GOVERN_AGENTS,
+        AgentDeviceBlockCommand,
+        set_device_blocked,
+        "key",
+        target_label="Device",
+        target_help="The record of a device an agent has called HQ from.",
+        execution_notes=(
+            "Refuse a device no agent has called from.",
+            "Set the state rather than toggle it, so asking twice changes nothing.",
+        ),
+        label="Block or allow an agent's device",
+        variants=(("on", "Block device"), ("off", "Allow device")),
+        reached_from="agent_policy",
+        state=device_blocked,
+    ),
+    CapabilitySpec(
         SET_OWN_DEVICE,
         "Register a client as one of your own devices, so its token stands as you, or remove it.",
         "remote_write",
@@ -697,14 +661,15 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         SET_POLICY,
-        "Set whether an agent's call runs, waits for a person, or is refused, by surface or by agent.",
+        "Set, for one agent and one action, whether its call runs, waits for a person, or is refused.",
         "remote_write",
         Capability.GOVERN_AGENTS,
         PolicyCommand,
         apply_changes,
         execution_notes=(
             "Change only the rules that differ from what holds, each recorded on its own.",
-            "Refuse a rule no agent could hold, approval on a read, and a rule for an agent its grant does not allow.",
+            "Narrow only what Pocket ID granted: refuse a rule for an action the agent's grant does not carry.",
+            "Refuse a rule for an action only a person in the browser can take, and approval on a read.",
         ),
         label="Set the agent policy",
     ),
@@ -718,6 +683,92 @@ CORE_CAPABILITY_SPECS = (
 
 def dashboard() -> tuple[CapabilitySpec, ...]:
     return (
+        # A person's own arrangement of HQ, kept by that person or an agent
+        # they signed in (security.NEEDS_A_PERSON), and the dashboard's shared
+        # settings: none of it reaches a spec or the controller.
+        CapabilitySpec(
+            pins.PIN,
+            "Pin something so it sorts first for you, or unpin it.",
+            "remote_write",
+            Capability.PIN_FAVORITES,
+            pins.PinCommand,
+            pins.pin,
+            execution_notes=("Pin it last among your pins of its type, or unpin it.",),
+            label="Pin or unpin an item",
+            verb="Pin",
+            reached_from=ON_ITS_PAGE,
+        ),
+        CapabilitySpec(
+            pins.MOVE,
+            "Move one of your pins past its neighbor.",
+            "remote_write",
+            Capability.PIN_FAVORITES,
+            pins.MoveCommand,
+            pins.move_pin,
+            execution_notes=("Swap it with the pin above or below, leaving the rest in place.",),
+            label="Move a pin",
+            reached_from=ON_ITS_PAGE,
+        ),
+        CapabilitySpec(
+            pins.CHOOSE,
+            "Choose exactly which things of one type you pin.",
+            "remote_write",
+            Capability.PIN_FAVORITES,
+            pins.ChooseCommand,
+            pins.choose,
+            execution_notes=("Unpin what is not chosen and pin what is new, keeping the order of the rest.",),
+            label="Choose pins",
+            reached_from="dashboard",
+        ),
+        CapabilitySpec(
+            action_items.SET_ASIDE,
+            "Set action items aside for you until they get worse or change.",
+            "remote_write",
+            Capability.SET_ASIDE_ACTION_ITEMS,
+            action_items.SetAsideCommand,
+            action_items.set_items_aside,
+            execution_notes=(
+                "Set each named row aside as it was drawn.",
+                "Set each named item aside as the queue holds it now.",
+            ),
+            label="Set action items aside",
+            verb="Set aside",
+            reached_from="action_items",
+        ),
+        CapabilitySpec(
+            action_items.RESTORE,
+            "Bring set-aside action items back into your queue.",
+            "remote_write",
+            Capability.SET_ASIDE_ACTION_ITEMS,
+            action_items.RestoreCommand,
+            action_items.restore,
+            label="Bring action items back",
+            verb="Bring back",
+            reached_from="action_items",
+        ),
+        CapabilitySpec(
+            DASHBOARD_SETTINGS,
+            "Set where the dashboard reads the weather for, and what its panels are called.",
+            "remote_write",
+            Capability.SET_PREFERENCES,
+            DashboardSettingsCommand,
+            save_dashboard_settings,
+            execution_notes=(
+                "Refuse a weather location that is not a latitude and longitude in range.",
+                "Name an unnamed panel by its default.",
+            ),
+            label="Save dashboard settings",
+        ),
+        CapabilitySpec(
+            SET_THEME,
+            "Draw the signed-in person's pages in the system's theme, light or dark.",
+            "remote_write",
+            Capability.SET_PREFERENCES,
+            ThemeCommand,
+            set_theme,
+            execution_notes=("Set the theme rather than cycle it, so asking twice changes nothing.",),
+            label="Choose a theme",
+        ),
         CapabilitySpec(
             DASHBOARD_REFRESH,
             "Ask for a fresh reading of every dashboard panel a controller can read.",

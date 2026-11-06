@@ -399,7 +399,7 @@ def _keys(target: Target, identities: Iterable[str]) -> list[Any]:
     for identity in identities:
         try:
             found.append(field.to_python(identity))
-        except ValidationError:
+        except ValidationError:  # noqa: S112 - an identity that cannot be this key names no row
             continue
     return found
 

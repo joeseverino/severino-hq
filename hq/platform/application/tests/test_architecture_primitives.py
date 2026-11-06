@@ -1,12 +1,11 @@
 """Questions asked in many places, each answered by one primitive or one definition."""
 
-import ast
 import re
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from .source import parsed, source_files, template_files
+from .source import template_files
 
 
 @tag("source", "tree")
@@ -119,53 +118,6 @@ class OnePrimitiveTests(SimpleTestCase):
         ]
         self.assertEqual(found, [])
 
-    def test_python_writes_amounts_through_money(self):
-        """``application.money.money`` is the one place a dollar sign meets a
-        number: no other f-string puts one in front of a value."""
-
-        def builds_an_amount(path: Path) -> bool:
-            for node in ast.walk(parsed(path)):
-                if not isinstance(node, ast.JoinedStr):
-                    continue
-                for before, after in zip(node.values, node.values[1:], strict=False):
-                    if (
-                        isinstance(before, ast.Constant)
-                        and str(before.value).endswith("$")
-                        and isinstance(after, ast.FormattedValue)
-                    ):
-                        return True
-            return False
-
-        sources = [
-            path
-            for package in ("hq", "hq_sdk")
-            for path in sorted((self.ROOT / package).rglob("*.py"))
-            if "tests" not in path.parts
-        ]
-        self.assertTrue(sources)
-        found = [
-            path.relative_to(self.ROOT).as_posix()
-            for path in sources
-            if path.relative_to(self.ROOT).as_posix() != "hq/platform/application/money.py" and builds_an_amount(path)
-        ]
-        self.assertEqual(found, [])
-
-    def test_python_says_byte_counts_through_human_bytes(self):
-        called = re.compile(r"import[^\n]*filesizeformat|filesizeformat\(")
-        sources = [
-            path
-            for package in ("hq", "hq_sdk")
-            for path in sorted((self.ROOT / package).rglob("*.py"))
-            if "tests" not in path.parts
-        ]
-        self.assertTrue(sources)
-        found = [
-            path.relative_to(self.ROOT).as_posix()
-            for path in sources
-            if called.search(path.read_text(encoding="utf-8"))
-        ]
-        self.assertEqual(found, [])
-
     def test_templates_name_entities_through_the_entity_tag(self):
 
         # A button to a page (Cancel, Edit) is an action, not a mention.
@@ -190,35 +142,6 @@ class OnePrimitiveTests(SimpleTestCase):
             and page.search(text)
         ]
         self.assertEqual(found, [])
-
-
-@tag("source", "tree")
-class OneDefinitionTests(SimpleTestCase):
-    """A module-level name is assigned once.
-
-    Python keeps the later of two assignments without a word, so a second
-    constant of the same name quietly replaces the first everywhere it is read,
-    a probe string included. Ruff's F811 covers functions and imports only.
-    """
-
-    def test_no_module_level_name_is_assigned_twice(self):
-        root = Path(__file__).resolve().parents[4]
-        twice = {}
-        for path in source_files(root, "*.py"):
-            counts: dict[str, int] = {}
-            for node in parsed(path).body:
-                targets = (
-                    node.targets
-                    if isinstance(node, ast.Assign)
-                    else [node.target]
-                    if isinstance(node, ast.AnnAssign)
-                    else []
-                )
-                for target in targets:
-                    if isinstance(target, ast.Name):
-                        counts[target.id] = counts.get(target.id, 0) + 1
-            twice |= {f"{path.relative_to(root)}: {name}": n for name, n in counts.items() if n > 1}
-        self.assertEqual(twice, {}, "give each its own name")
 
 
 class RouteOwnerTests(SimpleTestCase):

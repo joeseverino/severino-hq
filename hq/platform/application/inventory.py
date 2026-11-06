@@ -22,7 +22,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, registry_label
+from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS, read_spec, record_spec, registry_label
 from hq.domains.control_plane.reading_parts import clean_refused_parts, refused_parts
 from hq.platform.application.labels import field_label
 from hq.platform.core.audit import CONNECTION_AUDIT_TYPE, record_event
@@ -137,7 +137,9 @@ def _record_report(kind: str, report: dict[str, Any], controller_id: str, observ
         # first as the second deletes what HQ knew about a host that never
         # changed, and every surface downstream says the containers are gone.
         defaults={**state, **(seen if reached else {})},
-        create_defaults={**state, **seen},
+        # A failed first read stores neither records nor a moment:
+        # observed_at is only ever a read that answered.
+        create_defaults={**state, **(seen if reached else {})},
     )
     if before is not None:
         _record_change(row, before, records, controller_id)
@@ -197,7 +199,7 @@ def _record_change(row: ProviderInventory, before: list[Any], after: list[Any], 
     def canonical(records: list[Any]) -> set[str]:
         found = set()
         for record in records or ():
-            spec = _spec_from_record(row.kind, record)
+            spec = record_spec(row.kind, record)
             if spec is not None:
                 found.add(json.dumps(spec, sort_keys=True, default=str))
         return found
@@ -268,7 +270,7 @@ def confirm_observed(payload: dict[str, Any]) -> int:
 
 
 # What a record found exactly as HQ set it says of itself.
-MATCHES = "Matches HQ's settings."
+MATCHES = "Matches HQ's config."
 
 
 def _live_specs(kind: str, records: list[Any]) -> dict[tuple[str, ...], dict[str, Any]]:
@@ -276,7 +278,7 @@ def _live_specs(kind: str, records: list[Any]) -> dict[tuple[str, ...], dict[str
 
     live = {}
     for record in records:
-        spec = _spec_from_record(kind, record)
+        spec = record_spec(kind, record)
         if spec is not None:
             live[record_identity(kind, spec)] = spec
     return live
@@ -332,11 +334,12 @@ def retire_departed(payload: dict[str, Any]) -> list[str]:
     report = payload.get(CONTAINER_KIND)
     if report is None or not report["ok"] or report.get("refused_parts") or not report["records"]:
         return []
-    records = report["records"]
-    from_record = PROVIDERS[CONTAINER_KIND].from_record
-    if from_record is None:
+    specs = [record_spec(CONTAINER_KIND, record) for record in report["records"]]
+    if None in specs:
+        # A listing with a record HQ cannot read is not known to be complete,
+        # and only a complete one may say a container is gone.
         return []
-    listed = {record_identity(CONTAINER_KIND, from_record(record)) for record in records}
+    listed = {record_identity(CONTAINER_KIND, spec) for spec in specs if spec is not None}
     hosts = {identity[0] for identity in listed}
     retired = []
     for resource in ManagedResource.objects.filter(kind=CONTAINER_KIND):
@@ -357,20 +360,34 @@ def live_spec(kind: str, spec: dict[str, Any]) -> dict[str, Any] | None:
 
     identity = record_identity(kind, spec)
     for _snapshot, record in inventory_records(kind):
-        found = _spec_from_record(kind, record)
+        found = record_spec(kind, record)
         if found is not None and record_identity(kind, found) == identity:
             return found
     return None
 
 
-def _spec_from_record(kind: str, record: dict[str, Any]) -> dict[str, Any] | None:
-    provider = PROVIDERS[kind]
-    if provider.from_record is None:
-        return None
-    try:
-        return provider.from_record(record)
-    except KeyError, TypeError, ValueError:
-        return None
+def strike_removed(kind: str, spec: dict[str, Any]) -> None:
+    """Take a record HQ has removed at its provider off the kind's stored list.
+
+    The list was read before the removal, and a kind on its own clock keeps it
+    until its next read. Every reader of a stored list (adoption, the live but
+    not managed lists, accepting what was found) would otherwise take the
+    record for live, and the next sweep would adopt it back. The moment it was
+    read stays as it was: the rest of the list is no newer.
+    """
+
+    identity = record_identity(kind, spec)
+    snapshot = ProviderInventory.objects.select_for_update().filter(kind=kind).first()
+    if not identity or snapshot is None:
+        return
+    kept = [record for record in snapshot.records if not _is_record(kind, record, identity)]
+    if len(kept) != len(snapshot.records):
+        ProviderInventory.objects.filter(kind=kind).update(records=kept)
+
+
+def _is_record(kind: str, record: Any, identity: tuple[str, ...]) -> bool:
+    found = record_spec(kind, record) if isinstance(record, dict) else None
+    return found is not None and record_identity(kind, found) == identity
 
 
 def _differences(kind: str, declared: dict[str, Any], found: dict[str, Any]) -> tuple[tuple[str, str, str], ...]:
@@ -674,10 +691,10 @@ def service_hostnames(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
     provider = PROVIDERS[kind]
     if provider.hostnames is None:
         return ()
-    try:
-        return tuple(sorted(normalized_hostname(name) for name in provider.hostnames(spec)))
-    except KeyError, TypeError, ValueError:
-        return ()
+    names = read_spec(
+        kind, spec, lambda declared: tuple(sorted(normalized_hostname(name) for name in provider.hostnames(declared)))
+    )
+    return names or ()
 
 
 def record_identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
@@ -692,10 +709,7 @@ def record_identity(kind: str, spec: dict[str, Any]) -> tuple[str, ...]:
 
     provider = PROVIDERS[kind]
     if provider.identity is not None:
-        try:
-            return tuple(provider.identity(spec))
-        except KeyError, TypeError, ValueError:
-            return ()
+        return read_spec(kind, spec, lambda declared: tuple(provider.identity(declared))) or ()
     return service_hostnames(kind, spec)
 
 

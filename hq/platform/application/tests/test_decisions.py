@@ -132,13 +132,14 @@ class DecisionTests(SimpleTestCase):
             (below,) = with_class(html, "row-below")
             self.assertIn("example", below.words)
 
-    def test_an_opened_row_reads_its_meaning_in_full_and_keeps_its_buttons_together(self):
+    def test_a_row_reads_its_meaning_in_full_and_keeps_its_buttons_together(self):
         links = tuple(ActionLink(f"open-{n}", f"Open page {n}", "read", f"/example/{n}/") for n in range(3))
         html = card(self.item(actions=links))
 
-        # The meaning in full opens beneath the title, across the line.
-        (below,) = with_class(html, "row-below")
-        self.assertIn("What it means for the reader.", below.words)
+        # The meaning is the row's own, under its title; nothing beneath repeats it.
+        (meaning,) = with_class(html, "attention-detail")
+        self.assertIn("What it means for the reader.", meaning.words)
+        self.assertEqual(with_class(html, "row-below"), [])
         # Every button, the first two and those that wait, is in one cell.
         cells = {
             id(next(ancestor for ancestor in reversed(link.ancestors) if ancestor.tag == "td"))

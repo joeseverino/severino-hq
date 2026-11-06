@@ -54,7 +54,6 @@ def _data(document, response):
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
     # A held answer links its review page at the declared host.
     SEVERINO_SITE_HOST="hq.example.com",
 )
@@ -64,9 +63,7 @@ class HeldAnswerTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         for subject in ("example-automation", AGENT.actor):
-            CapabilityRule.objects.create(
-                scope=CapabilityRule.Scope.AGENT, subject=subject, capability="project.create", rule="approve"
-            )
+            CapabilityRule.objects.create(subject=subject, capability="project.create", rule="approve")
 
     def _post(self, key, project=PROJECT):
         with _serving():

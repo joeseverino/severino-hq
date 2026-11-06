@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -189,7 +190,7 @@ func TestAReleaseMakesTheKeyBeforeHQRestarts(t *testing.T) {
 	d, _ := newDeployer(f)
 	program, restarts, keyed := f.machine.Command, 0, 0
 	f.machine.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		if name == "systemctl" && slices.Equal(args, []string{"restart", WebUnit}) {
+		if name == "systemctl" && slices.Equal(args, []string{"restart", hostcore.WebUnit}) {
 			restarts++
 			seeds, _ := filepath.Glob(filepath.Join(f.machine.Seal, "*.seed"))
 			if _, err := os.Stat(f.machine.SealPublic); err == nil && len(seeds) == 1 {

@@ -6,7 +6,7 @@ from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.mcp import services
@@ -66,7 +66,6 @@ class PolicyRefusalTextTests(TestCase):
 
         self.assertRefused(json.loads(output.getvalue()))
 
-    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
     def test_an_agent_is_answered_with_the_reason(self):
         self.enterContext(set_principal(mcp_principal()))
 

@@ -5,14 +5,13 @@ which one a type hint, an import or a docstring means, and a search for either
 finds both. Each concept gets a name that says what it is.
 """
 
-import ast
 import tempfile
 from collections import defaultdict
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from .source import parsed, source_files
+from .facts import TOP, scan
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 ROOTS = ("hq/platform/application", "hq/platform/core", "hq/domains")
@@ -21,34 +20,30 @@ ROOTS = ("hq/platform/application", "hq/platform/core", "hq/domains")
 # ``Command`` and every migration a ``Migration``, so the name is the framework's.
 FRAMEWORK_NAMES = {"commands": "Command", "migrations": "Migration"}
 
-
-def _defined(path: Path) -> list[str]:
-    exempt = {FRAMEWORK_NAMES[part] for part in path.parts if part in FRAMEWORK_NAMES}
-    return [
-        node.name
-        for node in parsed(path).body
-        if isinstance(node, ast.ClassDef) and not node.name.startswith("_") and node.name not in exempt
-    ]
+# The name of a public class a module defines at its top level, decorated or not.
+PUBLIC_CLASS = {
+    "kind": "identifier",
+    "regex": "^[^_]",
+    "inside": {"field": "name", "kind": "class_definition", **TOP},
+}
 
 
 def collisions(root: Path, packages: tuple[str, ...]) -> dict[str, list[str]]:
     """Each public class name defined in more than one module, with where."""
 
+    root = root.resolve()
     found: dict[str, list[str]] = defaultdict(list)
-    for package in packages:
-        for path in source_files(root / package, "*.py"):
-            if "tests" in path.relative_to(root).parts:
-                continue
-            for name in _defined(path):
-                found[name].append(str(path.relative_to(root)))
-    return {name: where for name, where in found.items() if len(where) > 1}
+    for named in scan({"class": PUBLIC_CLASS}, *(root / package for package in packages)):
+        parts = named.path.relative_to(root).parts
+        if "tests" in parts or named.text in {FRAMEWORK_NAMES.get(part) for part in parts}:
+            continue
+        found[named.text].append("/".join(parts))
+    return {name: sorted(where) for name, where in found.items() if len(where) > 1}
 
 
 @tag("source", "tree")
 class ClassNameTests(SimpleTestCase):
     def test_a_public_class_name_is_defined_once(self):
-        for package in ROOTS:
-            self.assertTrue(source_files(REPO_ROOT / package, "*.py"), package)
         found = collisions(REPO_ROOT, ROOTS)
         self.assertFalse(found, "\n".join(f"{name}: {', '.join(where)}" for name, where in sorted(found.items())))
 
@@ -57,7 +52,8 @@ class ClassNameTests(SimpleTestCase):
             root = Path(directory)
             for relative, source in {
                 "example/a.py": "class Thing: ...\nclass _Private: ...\n",
-                "example/b.py": "class Thing: ...\nclass _Private: ...\n",
+                "example/b.py": "@dataclass\nclass Thing: ...\nclass _Private: ...\n",
+                "example/c.py": "def f():\n    class Thing: ...\nif DEBUG:\n    class Thing: ...\n",
                 "example/management/commands/one.py": "class Command: ...\n",
                 "example/management/commands/two.py": "class Command: ...\n",
                 "example/tests/test_one.py": "class Thing: ...\n",

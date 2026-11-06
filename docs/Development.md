@@ -66,7 +66,11 @@ since `changed_tests` lists files with git.
 ### Audits
 
 The `audit:` tasks measure without writing anything tracked, so a read-only
-auditor may run any of them.
+auditor may run any of them. mise runs each in its OS sandbox (the `audit`
+template), where a write outside the temporary and Go build cache paths
+fails; `audit:memory` also writes `var/perf`. `audit:image` and `audit:mcp`
+write as they measure, so they run outside it. A `.venv` out of sync with
+`uv.lock` fails an audit, since uv cannot sync it there: run `uv sync`.
 
 | Task | What it answers | Example |
 | --- | --- | --- |
@@ -77,7 +81,10 @@ auditor may run any of them.
 | `audit:imports <path>` | the files that import one, string imports included | `mise run audit:imports hq/platform/core/static.py` |
 | `audit:churn <since>` | each tracked source file's commits since a date, most first, generated and vendored files left out (`.gitattributes`); reach for it before a refactor or split | `mise run audit:churn 2026-10-01` |
 | `audit:go [linters]` | golangci-lint's findings, counted per linter | `mise run audit:go nilerr,gocritic` |
-| `audit:memory` | each module's own share of Python memory at boot and after a pass over the navigation, extensions composed | `mise run audit:memory --host-alone` |
+| `audit:go-dead` | the controller's functions no main reaches on Linux, as deadcode finds them (a test-support package's that nothing reaches at all) | `mise run audit:go-dead` |
+| `audit:memory` | each module's own share of Python memory at boot and after a pass over the navigation, extensions composed; `--after` adds the paths boot never takes, each with its import times (`python -X importtime`); it ends by naming the `var/perf` JSON that holds every row its tables leave out | `mise run audit:memory --host-alone --after oidc,mcp-call,outbound` |
+| `audit:advisories` | `lint:audit`'s own report, run as a read: uv audit's advisories and adverse statuses per package, and osv-scanner's table of each advisory over every tracked lockfile (`tools/pipeline/audit.sh`); needs the network | `mise run audit:advisories` |
+| `audit:dependency-weight` | each locked Python distribution's installed size (its RECORD, through `importlib.metadata`), runtime apart from the dev groups, and each package's and module's bytes in every shipped Go binary (go-size-analyzer) | `mise run audit:dependency-weight` |
 | `audit:image [image]` | a built image's layers (size, instruction, the parts of HQ each holds), what a container sees by part, site-packages' largest, and dive's wasted bytes | `mise run audit:image severino-hq:ci-local` |
 | `audit:ci-timings <run>...` | where CI runs' time went, each job's end lag included | `mise run audit:ci-timings 41175916328` |
 | `audit:docs-readability` | each doc's Flesch-Kincaid grade, prose words, and longest paragraph and sentence, longest paragraph first (`tools/lint/vale/audit.ini`) | `mise run audit:docs-readability` |
@@ -161,9 +168,23 @@ every process it starts). A
 gate's first line names that file, since the head of a long output is the
 part a reader shown only an excerpt of it always sees.
 
+The file opens on `tree <hash>`, the tree a commit of the checkout's files
+would hold (staged or not, tracked or not, as both the repository's and the
+user's ignore rules leave them), taken as the gate starts and again as it
+ends; the verdict line follows it. A pass is then attested by the file alone:
+it holds for a commit whose `git rev-parse <commit>^{tree}` that line names,
+which is how an agent's hand-back states its gates. A checkout that changed
+during the run judged no one tree, and the line is `tree -`. `HQ_GATE_TREE`
+names another checkout, as an extension's check names its package's.
+
 The suite runs one worker per core (per performance core on Apple silicon);
 `DJANGO_TEST_PROCESSES` overrides it. `mise run fast --parallel 1` rules
 parallelism out when a failure looks order- or isolation-dependent.
+
+A worker imports lazily, as the process that starts the run does. The suite
+stores passwords with Django's fast hasher ahead of HQ's Argon2
+(`hq/config/settings.py`), and `test_password_hashing` holds production's
+list.
 
 ### What `fast` runs
 
@@ -199,15 +220,43 @@ Beside the tests it runs each quick gate whose paths the change touches, as
 `TASKS` in `tools/gate/fast.py` lists them. The shell gate runs when a path
 the change touched is one `tools/gate/shell-sources.sh` names (a deleted one
 as the base had it). A change to the dependencies, tool pins or task
-definitions runs them all.
+definitions runs them all. A lint gate that reaches the network, or whose
+check fast makes another way, is named instead in `UNSELECTED` beside
+`TASKS`, with why it is left out; `test_fast.py` fails on a `lint:*` task in
+neither.
 
-The quick gates run while the tests do. Their output is held and printed whole
-after the tests', under `quick gates, beside the tests`. One that takes the
-heavy turn of its own (the shell gate, for its suites) runs after the tests
-instead, so it never waits on the turn they hold.
+A test module that a `test:*` task runs by its label in a dependency group's
+environment (`uv run --group fuzz`), which the tests' environment lacks, is
+never a label. When the selection above would reach it, its task runs as a
+quick gate instead, read from the task's own `run`.
+
+The quick gates run while the tests do. Their output is held and printed
+after the tests', under `quick gates, beside the tests`, in mise's summary
+output: a gate that passed is its `passed in` line, and one that failed prints
+whole. One that takes the heavy turn of its own (the shell gate, for its
+suites) runs after the tests instead, so it never waits on the turn they hold,
+and prints as it runs, its wait for the turn included.
+
+A test run prints its failures, each with what the test printed, and nothing
+of a passing test or of its own progress: the runner sets Django's `--buffer`
+and verbosity 0 by default. `mise run test <label> --no-buffer -v 1` prints
+it all.
+A debugger prompts as usual in a serial run (`--parallel 1`), from
+`breakpoint()` or `--pdb`: the runner points `breakpoint()` at the process's
+own output, past the buffer.
 
 Each Django gate opens a database of its own, and its tests run with `DEBUG`
 on, the one pass that does.
+
+A pass on a checkout that held still through the run records the tree its
+verdict file opens on, as an empty file named by that hash under
+`$(git rev-parse --git-common-dir)/severino/fast-passes/`, which every
+worktree shares and which a re-signed commit keeps. It records one only when
+the run proves the tree: its base's tree has a record, so what the change left
+unselected had passed, or the run selected every test and quick gate. A base
+far enough back selects them all (`mise run fast $(git rev-list
+--max-parents=0 HEAD)`), the way to record a first tree. The agent hooks hold
+a brief's base to a recorded pass.
 
 ### What `check` runs
 
@@ -236,6 +285,30 @@ A test tagged `source` runs once, on the checkout, in `lint:source`
 (`mise run lint:source <label>...` runs only the tagged tests those labels
 name). A whole-suite run leaves the tag out; a run that asks for a tag no test
 carries fails.
+
+A source test that reads the whole tree leaves the parsing out of the test
+worker, which would hold every tree it parsed for the rest of the run, and the
+`tree-parsed-apart` rule refuses an `ast.parse` in a loop over a tree walk
+outside the modules run through `apart`:
+
+- A check that is one match is a rule in `tools/lint/ast-grep/rules`, with its
+  cases in `rule-tests/`. A test that holds paths the rule's `files:` leave
+  out, an installed extension's, scans the same rule over them
+  (`PageTrailTests`).
+- A check that judges facts across files reads them through `scan(rules,
+  *paths)` in `hq/platform/application/tests/facts.py`, one ast-grep run that
+  streams back only the nodes its rules match. It serves only a test tagged
+  `source`, since the image ships no ast-grep. Those fact rules sit inline
+  beside the Python that judges them, and a planted case runs through the same
+  scan, since `ast-grep test` skips a rule of `severity: off` and still
+  reports ok.
+- A walk that stays Python runs through `apart(walk, *args)`
+  (`hq/platform/application/tests/apart.py`), in a process that exits; the
+  walk takes and answers JSON. `interface_text.read(run=apart)` is one, since
+  the image runs it and ships no ast-grep.
+
+Each is a walk to `tree.is_walk`, an ast-grep command line included, so the
+test carries the `tree` tag (`test_tree_tag.py`).
 
 The wording rules are Vale's, in `tools/lint/vale`: `.vale.ini` there says
 which files each style reads, `styles` holds the rules, and `lint:prose` runs
@@ -343,8 +416,9 @@ so another checkout's stop leaves the VM up under it.
 The turn is mise's task lock `heavy`, a name every checkout and worktree on
 the machine shares. A TOML task takes it by extending the `heavy` template in
 `mise.toml` (`django-browser`), a file task with `#MISE lock="heavy"` in its
-header; either declares a `timeout`, which mise starts once the task holds the
-lock, so heavy tasks asked together (`mise run browser:layout-1 :::
+header and the line `. ./tools/lib/heavy-turn.sh` before its work; either
+declares a `timeout`, which mise starts once the task holds the lock, so
+heavy tasks asked together (`mise run browser:layout-1 :::
 browser:layout-2`) queue on the turn and each runs in full, and a hung holder
 is stopped. A heavy task started inside a turn runs at once, since mise hands
 the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
@@ -361,6 +435,14 @@ it is given (`test`, `fast`'s tests, `lint:source`, the composed suite,
 under the gate's own bound, `HQ_TURN_BOUND`: `mise run --timeout` would count
 the wait too.
 
+A task that waits for the turn without holding the lock (each of those, and
+an aggregate whose script runs `mise run` on one that waits) declares
+`SEVERINO_WAITS_FOR_HEAVY_TURN="1"` in its env, the one place
+`mise tasks ls --json` shows it without running anything; mise lists no edge
+for a `mise run` inside a script. The agent hooks read it beside the lock, and
+`TurnMarkTests` (`tools/gate/tests/test_turn_mark.py`) derives the set from
+every task's scripts and holds the marks to it.
+
 A waiting task names the holder, its checkout, how long it has held the turn
 and its pid, again every 30 seconds:
 
@@ -369,6 +451,34 @@ and its pid, again every 30 seconds:
 ```
 
 `mise run --lock-timeout 5m` gives up after that long, naming the holder.
+
+Every heavy run ends with one line on what its command's process tree spent
+(`tools/lib/measured`), so each run is its own before-and-after measurement:
+
+```text
+heavy: 2m41s wall, 14m05s CPU, load average 6.10 5.80 4.20, peak memory 3.21 GB: gate 60 MB, test run 450 MB, workers 2.40 GB (one at most 380 MB), children 300 MB (one at most 210 MB); sampling took 0.4s CPU
+```
+
+The CPU is user plus system time over every descendant the command waited
+for. Another worktree's load moves the wall time and leaves the CPU alone, so
+"no slower" is judged on the CPU. The peak is the most the tree held at once,
+sampled every two seconds: phys_footprint (`footprint -p`) on macOS, the
+proportional set size with its swapped share on Linux. Beside it is each
+role's own peak, read from command lines: the gate (the task's shell, uv,
+mise), the test run (the Python whose script is `manage.py test`, never a
+wrapper that names it), its workers, and children under them such as a walk
+run apart. A worker's and a child's line also gives the most
+one process of its role held. The sampling's own CPU is stated last and kept
+out of the tree's. The template's `shell`, the line every heavy file task
+sources, and the `turn` task each run their command under it, and
+`HeavyTaskTests` holds every task that takes the lock to one of the three. A
+heavy run inside a measured one adds no line of its own, and a narrow `mise
+run test` runs again under it, so measuring one label is that one command.
+
+The line is a report, never a check: load and the mix of tests move both
+memory and time, so nothing fails on them, and the command's exit status is
+the run's whatever the measuring did. A measurement it cannot take (no
+`footprint`, a sample that failed) is named in the line in its place.
 
 ### What the gates need
 
@@ -420,8 +530,9 @@ every browser gate. Taste (evenness, placement, row height) is written in
 
 A failed subtest saves a screenshot of its page as it failed, named for its
 page, width and rule (`example-two-402-overflow.png`). It goes in a
-`hq-browser-failure-<test>-*` folder in the OS temporary directory; a test
-that fails outside its subtests saves `page.png` there.
+`<test>-*` folder of `var/browser-failures/<task>/`, which the next browser run
+of that task replaces; a test that fails outside its subtests saves `page.png`
+there.
 
 Beside each screenshot is a Playwright trace of the same name (`.zip`): what
 the test did since its last failure, each step with the page as it stood.
@@ -490,7 +601,8 @@ CI runs the layout gate in two legs side by side (`browser:layout-1`,
 `browser --linux` draws in Chromium unless `--engine` names another. It runs
 on this checkout inside the Playwright image `ci.yml` gives the browser job, as
 linux/amd64 with the job's options, set up as the toolchain action sets a
-runner up. It copies a failed rule's screenshots to `var/browser-linux/`.
+runner up. A failed rule's screenshots land in `var/browser-failures/`, as on
+the Mac.
 
 The VM it starts runs x64 through Rosetta, and emulated, the browser draws
 slower than on a runner. So a rule that reads a page against its frames fails
@@ -726,7 +838,7 @@ hq/
     search_index/         shared search persistence
   domains/                domain apps, models, declarations and migrations
 hq_sdk/                   the supported Python surface for extensions
-controller/               Go: the controller, hq-host and hq-secrets
+controller/               Go: the controller, hq-host, hq-secrets and hq-edge
 templates/  static/       shared and domain templates, authored assets
 deploy/                   systemd units, tmpfiles rule, remote targets, host.json shape
 composition/              the composed image
@@ -746,14 +858,18 @@ namespaces and capability names are independent of package paths:
 
 Django never guesses a database or a signing key: with DEBUG or without, it
 refuses to start without `SEVERINO_DATABASE_PATH` and `DJANGO_SECRET_KEY`.
-Every mise task that runs Django sets both (each gate a new empty database,
-the scratch tasks this checkout's `var/dev/scratch/`), and the image names its
-own. So `manage.py` runs as `mise run manage -- <command>` or
+Every mise task that runs Django sets the key and names the database: the
+scratch tasks this checkout's `var/dev/scratch/`, and each gate
+`SEVERINO_SANDBOX` in place of a path, so each process it runs makes a run
+folder of its own, as a test run does (`hq/config/sandbox.py`), with a new
+empty database there, and removes it as it ends. The image names its own.
+So `manage.py` runs as `mise run manage -- <command>` or
 `mise run manage --scratch -- <command>`.
 
 Media, exports and static files default to `var/media`, `var/exports` and
-`var/static`; `SEVERINO_MEDIA_ROOT`, `SEVERINO_EXPORTS_ROOT` and
-`DJANGO_STATIC_ROOT` override them.
+`var/static`, a test run's and a gate's media and exports to its run folder;
+`SEVERINO_MEDIA_ROOT`, `SEVERINO_EXPORTS_ROOT` and `DJANGO_STATIC_ROOT`
+override them.
 
 To move a database, stop the application, back it up with its WAL contents,
 and check the copy before pointing HQ at it.

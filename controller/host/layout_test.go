@@ -3,6 +3,7 @@ package host
 import (
 	"bufio"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"path/filepath"
 	"slices"
@@ -50,8 +51,8 @@ func TestTheUnitsKeepTheBoundsABootNests(t *testing.T) {
 		exact     bool
 	}{
 		{"the secrets unit's start timeout is one render", unitSetting(t, SecretsUnit, "TimeoutStartSec"), RenderBound, true},
-		{"the web unit waits out a render and HQ's start", unitSetting(t, WebUnit, "TimeoutStartSec"), RenderBound + HealthStartPeriod, false},
-		{"the web unit lets HQ's own stop finish", unitSetting(t, WebUnit, "TimeoutStopSec"), time.Duration(stop) * time.Second, false},
+		{"the web unit waits out a render and HQ's start", unitSetting(t, hostcore.WebUnit, "TimeoutStartSec"), RenderBound + HealthStartPeriod, false},
+		{"the web unit lets HQ's own stop finish", unitSetting(t, hostcore.WebUnit, "TimeoutStopSec"), time.Duration(stop) * time.Second, false},
 	} {
 		if check.exact && check.got != check.want || !check.exact && check.got <= check.want {
 			t.Errorf("%s: unit says %s, the bound is %s", check.what, check.got, check.want)
@@ -88,7 +89,7 @@ func TestTheImageMakesEveryVolumesDirectory(t *testing.T) {
 func TestARefreshDuringAGlanceStartsTheNext(t *testing.T) {
 	systemd := filepath.Join("..", "..", "deploy", "systemd")
 	path := filepath.Join(systemd, "severino-hq-glance.path")
-	doorbell := RunDir + "/glance-doorbell"
+	doorbell := hostcore.RunDir + "/glance-doorbell"
 	if got := unitValue(t, path, "PathExists"); got != doorbell {
 		t.Errorf("the glance path waits on %q, not %s", got, doorbell)
 	}
@@ -154,7 +155,7 @@ func TestTheUnitSocketIsWhereTheLayoutSays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := fmt.Sprintf("d %s 0700 %d %d -", UnitSocketDir, WebUID, WebGID)
+	want := fmt.Sprintf("d %s 0700 %d %d -", UnitSocketDir, hostcore.WebUID, hostcore.WebGID)
 	if !slices.Contains(strings.Split(string(rules), "\n"), want) {
 		t.Errorf("no tmpfiles rule %q makes the socket's directory the controller's alone", want)
 	}

@@ -1,8 +1,6 @@
 """The contact inbox: pages read the controller's stored reading, and a change
 is queued for the controller. Nothing here reaches D1 or holds a credential."""
 
-import ast
-from pathlib import Path
 from unittest.mock import patch
 
 from django.conf import settings
@@ -24,7 +22,7 @@ from hq.platform.application.contact_submissions import (
 )
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
-from hq.platform.application.tests.source import parsed
+from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
 from hq.platform.application.tests.writers import form_keyed, keyed
 from hq.platform.core.models import AuditLog
 
@@ -325,21 +323,20 @@ class NoCredentialTests(TestCase):
         self.assertIsNone(contacts.integration.connections)
 
 
-@tag("source")
+@tag("source", "tree")
 class NoCredentialSourceTests(SimpleTestCase):
     """The contacts code, read for a token setting."""
 
     def test_the_contacts_code_reads_no_token_setting(self):
-        root = Path(settings.BASE_DIR)
+        contacts = ROOT / "hq" / "domains" / "contacts"
         sources = [
-            *sorted((root / "hq" / "domains" / "contacts").glob("*.py")),
-            root / "hq" / "platform" / "application" / "contact_submissions.py",
+            *sorted(path.relative_to(ROOT) for path in contacts.glob("*.py")),
+            "hq/platform/application/contact_submissions.py",
         ]
         self.assertGreater(len(sources), 3)
-        for path in sources:
-            for node in ast.walk(parsed(path)):
-                if isinstance(node, ast.Constant) and isinstance(node.value, str):
-                    self.assertNotRegex(node.value, r"(?i)_(TOKEN|SECRET|PASSWORD|API_KEY)$", path.name)
+        for literal in scan({"string": STRING}, *sources):
+            for text in strings(literal):
+                self.assertNotRegex(text, r"(?i)_(TOKEN|SECRET|PASSWORD|API_KEY)$", literal.path.name)
 
 
 NOTE = "example private note"

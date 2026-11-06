@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -103,7 +103,6 @@ def an_operator(username: str = "operator") -> Principal:
     return web_principal(user)
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class HeldRequestTests(TestCase):
     """A credential may ask. Asking is all it may do."""
 
@@ -321,7 +320,6 @@ class HeldRequestTests(TestCase):
         )
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class OperatorRequestTests(TestCase):
     """A person at the web surface is the signal the gate is waiting for."""
 
@@ -365,7 +363,6 @@ class OperatorRequestTests(TestCase):
         self.assertEqual(result["status"], "awaiting_approval")
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class DecisionTests(TestCase):
     """What a decision does, and what no decision can do."""
 
@@ -538,7 +535,6 @@ class DecisionTests(TestCase):
         self.assertEqual(held.state, ApprovalRequest.State.EXPIRED)
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class ControllerTests(TestCase):
     """The controller is not the thing this gate is about.
 
@@ -694,7 +690,6 @@ class PreviewTests(TestCase):
         self.assertEqual([(row.before, row.after) for row in shown.rows], [("192.0.2.10", "192.0.2.20")])
         self.assertEqual(shown.lines, ())
 
-    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
     def test_applying_a_declaration_is_compared_against_what_is_live(self):
         """For a reconcile the question is what happens to the world.
 
@@ -721,7 +716,6 @@ class PreviewTests(TestCase):
         self.assertEqual(said[GRANT_SOURCES], ("group:live", "group:example"))
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class SurfaceTests(TestCase):
     """A held request that nobody can see is a held request nobody answers."""
 
@@ -768,7 +762,7 @@ class SurfaceTests(TestCase):
     def test_a_held_record_change_shows_what_would_be_written(self):
         from hq.domains.control_plane.models import CapabilityRule
 
-        CapabilityRule.objects.create(scope="surface", subject="mcp", capability="project.create", rule="approve")
+        CapabilityRule.objects.create(subject="example-agent", capability="project.create", rule="approve")
         writer = Principal("example-agent", "mcp", frozenset({Capability.READ, "write_projects"}))
         held = execute_capability("project.create", keyed({"name": "Held project"}), principal=writer)
 
