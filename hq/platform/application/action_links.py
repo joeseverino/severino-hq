@@ -8,7 +8,7 @@ a projection never advertises authority its principal does not hold.
 """
 
 from collections.abc import Iterable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Protocol
 from urllib.parse import urlencode
 
@@ -220,29 +220,47 @@ def topology_url(
     return f"{topology}?{urlencode(params)}#{fragment}"
 
 
+@dataclass(frozen=True, slots=True)
+class Investigation:
+    """One way to look around a node: the trace a page opens and a topology read is narrowed by."""
+
+    name: str
+    label: str
+    reason: str
+    direction: str = ""
+    depth: int | None = None
+
+
+# Declared once, so the link a page follows and the read an agent calls are one trace.
+INVESTIGATIONS = {
+    investigation.name: investigation
+    for investigation in (
+        Investigation("topology", "See it in the topology", "What this is connected to."),
+        Investigation(
+            "impact",
+            "See what depends on it",
+            "Everything that stops working if this does.",
+            direction="outbound",
+            depth=3,
+        ),
+    )
+}
+
+
 def topology_investigation_links(node_id: str) -> tuple[ActionLink, ...]:
     """The canonical read-only ways to understand an affected topology node."""
 
-    focus_url = topology_url(node_id)
-    impact_url = topology_url(node_id, direction="outbound", depth=3)
-    if not focus_url or not impact_url:
-        return ()
-    return (
+    links = tuple(
         ActionLink(
-            "topology",
-            "See it in the topology",
+            investigation.name,
+            investigation.label,
             "read",
-            focus_url,
-            reason="What this is connected to.",
-        ),
-        ActionLink(
-            "impact",
-            "See what depends on it",
-            "read",
-            impact_url,
-            reason="Everything that stops working if this does.",
-        ),
+            topology_url(node_id, direction=investigation.direction, depth=investigation.depth),
+            reason=investigation.reason,
+        )
+        for investigation in INVESTIGATIONS.values()
     )
+    return links if all(link.url for link in links) else ()
 
 
 def action_with_return(action: ActionLink, route_name: str) -> ActionLink:

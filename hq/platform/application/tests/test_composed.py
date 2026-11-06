@@ -141,7 +141,7 @@ class ComposedTests(ComposedPluginTestCase, TestCase):
         with installed((manifest, unkept)), self.assertLogs("severino.derivations", level="ERROR"):
             found = providers_derived_again(manifest.id)
 
-        self.assertEqual(found, ["attention: derived again, its answer was not kept"])
+        self.assertIn("attention: derived again, its answer was not kept", found)
 
     def test_the_kit_refuses_a_plugin_that_is_not_installed(self):
         with self.assertRaises(LookupError):

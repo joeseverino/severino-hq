@@ -1,6 +1,7 @@
 """How the code is laid out: delivery adapters, file sizes, requests that never wait, where tests and dependencies live."""
 
 import ast
+import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -106,35 +107,49 @@ class DeliveryAdapterArchitectureTests(SimpleTestCase):
 
 @tag("source", "tree")
 class FileSizeTests(SimpleTestCase):
-    """No source file is longer than ``LIMIT`` lines.
+    """No source file is longer than the ceiling mise.toml declares.
 
     A file grows freely below it; one past it is split by responsibility, a
-    test module by the behavior it holds. Every language HQ writes is held to
-    it, and a Python test module like the code it tests. Migrations, generated
+    test module by the behavior it holds. Every file ``SEVERINO_FILE_LINE_HELD``
+    globs is held to it, and a Python test module like the code it tests. Migrations, generated
     code and vendored copies are not counted, nor a helper module under tests/.
+    The ceiling and the exemptions are mise.toml's ``SEVERINO_FILE_LINE_*``, which
+    the launch-time brief check reads too; with none declared the test fails.
     """
 
-    LIMIT = 1000
     ROOT = Path(__file__).resolve().parents[4]
-    # The fewest files each language's walk can find in a checkout or the image.
-    FLOOR = {"*.py": 100, "*.go": 50, "*.js": 4, "*.css": 4}
-    NOT_WRITTEN_HERE = ("_test.go", ".gen.go", ".min.js")
+    # The fewest files each declared glob's walk can find in a checkout or the image.
+    FLOOR = {"**/*.py": 100, "**/*.go": 50, "**/*.js": 4, "**/*.css": 4}
+
+    @staticmethod
+    def _declared(name: str) -> str:
+        value = os.environ.get(name)
+        if not value:
+            raise AssertionError(f"{name} is not declared: run through mise, whose [env] holds the ceiling")
+        return value
 
     def _counted(self, path: Path) -> bool:
-        parts = path.relative_to(self.ROOT).parts
-        if path.name.endswith(self.NOT_WRITTEN_HERE) or {"migrations", "node_modules", "vendor"} & set(parts):
-            return False
-        return "tests" not in parts[:-1] or (path.name.startswith("test") and path.suffix == ".py")
+        relative = path.relative_to(self.ROOT)
+        counted = self._declared("SEVERINO_FILE_LINE_COUNTED").split()
+        exempt = self._declared("SEVERINO_FILE_LINE_EXEMPT").split()
+        if any(relative.full_match(glob) for glob in counted):
+            return True
+        return not any(relative.full_match(glob) for glob in exempt)
 
     def test_no_source_file_exceeds_the_ceiling(self):
+        limit = int(self._declared("SEVERINO_FILE_LINE_LIMIT"))
+        held = self._declared("SEVERINO_FILE_LINE_HELD").split()
+        self.assertEqual(sorted(held), sorted(self.FLOOR), "every held glob needs a floor, and every floor a held glob")
         sizes = {}
-        for pattern, floor in self.FLOOR.items():
-            found = [path for path in source_files(self.ROOT, pattern) if self._counted(path)]
+        for pattern in held:
+            floor = self.FLOOR[pattern]
+            # rglob already walks every directory, so the glob's leading **/ is dropped.
+            found = [path for path in source_files(self.ROOT, pattern.removeprefix("**/")) if self._counted(path)]
             self.assertGreater(len(found), floor, f"the {pattern} walk found almost nothing; its root is wrong")
             sizes |= {
                 str(path.relative_to(self.ROOT)): len(path.read_text(encoding="utf-8").splitlines()) for path in found
             }
-        over = {path: lines for path, lines in sizes.items() if lines > self.LIMIT}
+        over = {path: lines for path, lines in sizes.items() if lines > limit}
         self.assertEqual(over, {}, "split these by responsibility, a test module by the behavior it holds")
 
 
@@ -145,7 +160,8 @@ class RequestNeverWaitsTests(SimpleTestCase):
 
     ROOT = Path(__file__).resolve().parents[4]
     # Where each declared exception is entered. An entry here is a place a
-    # request may wait: adding one is a decision, with its reason in ``ALLOWED``.
+    # request may wait: adding one is a decision, with its reason in ``ALLOWED``
+    # and its module in request-waits-only-where-listed's ignores.
     ENTERED = {
         "oidc": {"hq/platform/core/oidc.py"},
         "lookup": {"hq/platform/application/lookup.py"},
@@ -187,15 +203,22 @@ class RequestNeverWaitsTests(SimpleTestCase):
         ):
             RequestContextMiddleware(view)(RequestFactory().get("/example/"))
 
-    @tag("source", "tree")
+    @tag("source")
     def test_an_exception_is_declared_with_its_reason_and_entered_only_where_listed(self):
+        """request-waits-only-where-listed (tools/lint/ast-grep) refuses
+        allowed() in every other module; each listed one enters its own."""
+
+        import yaml
+
         from hq.platform.core.outbound import ALLOWED
 
+        listed = set().union(*self.ENTERED.values())
+        rule = self.ROOT / "tools/lint/ast-grep/rules/request-waits-only-where-listed.yml"
+        ignored = yaml.safe_load(rule.read_text(encoding="utf-8"))["ignores"]
+        self.assertEqual({glob for glob in ignored if "*" not in glob}, listed)
         entered: dict[str, set[str]] = {}
-        for relative, source in self.sources():
-            if "allowed(" not in source:
-                continue
-            for node in ast.walk(ast.parse(source)):
+        for relative in listed:
+            for node in ast.walk(ast.parse((self.ROOT / relative).read_text(encoding="utf-8"))):
                 if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "allowed"):
                     continue
                 argument = node.args[0] if node.args else None

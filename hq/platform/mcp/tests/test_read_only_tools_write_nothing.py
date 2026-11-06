@@ -14,15 +14,15 @@ from django.test.utils import CaptureQueriesContext
 from mcp import types
 
 from hq.domains.projects.models import Project
-from hq.platform.application.security import Capability, Principal
+from hq.platform.application.security import Principal, operator_capabilities
 
 from ..contract import served_resources
 from ..identity import set_principal
 from ..server import mcp
 
 WRITES = ("insert", "update", "delete", "replace")
-# An agent holding every capability, so each kind is read rather than refused.
-READER = Principal("example-reader", "mcp", frozenset(Capability))
+# An agent holding every grant, an extension's too, so each kind is read rather than refused.
+READER = Principal("example-reader", "mcp", operator_capabilities())
 # What a tool with a required argument is called with; one missing here is refused, and so never answers.
 ARGUMENTS = {"export_year_summary": {"year": 2026}}
 
@@ -60,7 +60,10 @@ class ReadOnlyToolsWriteNothingTests(TestCase):
                 params = types.CallToolRequestParams(name=name, arguments=arguments)
                 with CaptureQueriesContext(connection) as queries:
                     answer = async_to_sync(mcp._call)(None, params)
-                if answer.is_error and answer.structured_content["error"]["code"] != "not_found":
+                code = answer.structured_content["error"]["code"] if answer.is_error else None
+                # READER holds every grant, an extension's too, so no kind passes by refusing it.
+                self.assertNotIn(code, {"forbidden", "insufficient_scope"}, answer.structured_content)
+                if code not in (None, "not_found"):
                     # A refused call ran nothing of the tool; its denial row is the refusal's record.
                     continue
                 answered.add(name)

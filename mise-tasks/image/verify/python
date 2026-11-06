@@ -6,6 +6,8 @@
 #MISE depends=["image:build"]
 #MISE depends_post=["image:docker stop"]
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 docker run --rm --entrypoint python "${IMAGE:-severino-hq:ci-local}" -c \
     "import importlib.util, shutil, sys; sys.exit(0 if '%d.%d' % sys.version_info[:2] == sys.argv[1] and importlib.util.find_spec('pip') is None and shutil.which('pip') is None and shutil.which('uv') is None else 1)" \
     "${PYTHON_VERSIONS%% *}"

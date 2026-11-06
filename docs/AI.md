@@ -151,13 +151,14 @@ refusal under its name, beside the change it asked for next:
 
 ### Holds, approvals and the pause switch
 
-The **Agents** page (`/agents/`) sets, per capability and per surface or
-agent, whether a call runs, waits for a person, or is refused. From
-[Security](Security.md#what-hq-enforces):
+The **Agents** page (`/agents/`) lists each agent HQ has seen, with its
+person, their role, what of its grant is in force and what is beyond that
+role. Beside each action, a column per agent sets it on, ask me first, or
+off, over the default. From [Security](Security.md#what-hq-enforces):
 
-> Rules only narrow the identity provider's grant. An explicit rule beats the
-> default, and between a surface and an agent rule the stricter wins. With no
-> rules, gated infrastructure changes are held, and anything destructive an
+> The identity provider's grant is the ceiling, changed rarely and only with a
+> new sign-in; a rule narrows it at once, and no rule can reach past it. With
+> no rules, gated infrastructure changes are held, and anything destructive an
 > agent asks for is held too.
 
 > approval requires a person, in the browser or on their own device, and
@@ -170,7 +171,7 @@ agent, whether a call runs, waits for a person, or is refused. From
 > on every request to the machine API (`/api/v2/`) and on every tool call on
 > `/api/mcp/`, and fails closed.
 
-![The Agents page: agents allowed, a button to block all agents, example-agent with its surfaces and grant, and the two rules changed from the default: record changes ask first, and allowing a Tailscale connection is blocked](images/ai/agents.png)
+![The Agents page: agents allowed, a button to block all agents, example-assistant needing approval to act from a laptop, each agent with its person, its permissions and one its last sign-in did not grant, example-agent holding 1 of 16 update streams open and example-assistant all 16, each agent's devices approved, needing approval, unknown with a Refresh to read the tailnet, or blocked, and example-agent's three rules: stopping a container on, record changes ask first, and allowing a Tailscale connection off](images/ai/agents.png)
 
 A held call waits in the audit log's approvals queue (`/audit/?awaiting=1`)
 and on the "Needs you" list, where a person approves or rejects it. In the
@@ -194,19 +195,21 @@ Tests that hold these promises:
 | Promise | Test |
 | --- | --- |
 | An agent's delete waits, and happens only once approved | `test_an_agents_delete_waits_and_happens_only_once_approved` in `hq/platform/application/tests/test_capability_policy.py` |
-| An agent rule cannot loosen its surface's rule | `test_an_agent_rule_cannot_loosen_its_surface`, same file |
+| A rule binds its own agent alone, over every surface it calls through | `test_a_rule_tightens_for_that_agent_alone`, `test_a_rule_holds_on_every_surface_the_agent_calls_through`, same file |
+| No rule reaches past the identity provider's grant | `test_a_rule_cannot_reach_past_its_pocket_id_grant`, same file |
 | No credential governed by policy may change the policy | `test_nothing_governed_by_policy_may_set_it`, same file |
 | No token can approve its own request, even one holding every capability | `test_a_token_cannot_approve_its_own_request`, `test_a_token_holding_every_capability_still_cannot_approve` in `test_approvals.py` |
 | The pause switch fails closed, and no credential can change it | `test_an_unreadable_switch_refuses_agents`, `test_no_credential_can_change_it` in `test_agent_access.py` |
 | Pausing agents refuses an agent on every surface through one helper, and never pauses a person | `test_the_helper_pausing_refuses_an_agent_on_every_surface`, `test_no_surface_reads_the_switch_around_the_helper`, `test_a_person_is_never_paused` in `hq/platform/application/tests/test_one_pause.py` |
 | Pausing agents or blocking one holds what it already asked for: its held request can be declined but not approved, and its queued work is not claimed, until the brake lifts | `test_a_held_request_cannot_be_approved_until_the_brake_lifts`, `test_a_held_request_stays_declinable`, `test_queued_work_is_not_claimed_until_the_brake_lifts` in `hq/platform/application/tests/test_brakes_hold_asked_work.py` |
 | A held request is its asker's: a second agent asking the same change gets its own, approved as itself, the change applies once, and an agent reads only its own held requests while a person reads every one | `test_two_callers_asking_the_same_change_each_hold_their_own`, `test_approving_the_second_callers_request_runs_as_that_caller`, `test_the_same_change_approved_for_both_callers_applies_once`, `test_the_action_queue_carries_only_the_callers_own_held_requests` in `hq/platform/application/tests/test_holds_belong_to_their_asker.py` |
-| A write the agent switches withhold is refused on MCP and the machine API alike | `test_a_write_the_deployment_withholds_is_refused_on_both_surfaces` in `hq/platform/api/tests/test_agent_ceiling.py` |
+| An agent a person signed in keeps that person's own theme, calendar choices, pins and set-asides, a held one replaying as that person once approved, and a machine's own token is refused them and never offered them | `test_it_keeps_its_persons_own_settings_pins_and_set_asides`, `test_a_held_pin_once_approved_lands_as_its_person`, `test_a_machines_token_is_refused_them_and_never_offered_them` in `hq/platform/application/tests/test_person_bound_agent.py` |
+| A write the token does not grant is refused on MCP and the machine API alike, and one it grants runs on both with nothing set in HQ | `test_a_write_the_token_does_not_grant_is_refused_on_both_surfaces`, `test_a_granted_write_runs_on_both_surfaces_with_no_setting` in `hq/platform/api/tests/test_agent_grant.py` |
 
 ### How much an agent may ask
 
-Each agent is held to a call rate and to a number of calls at once, on both
-doors, so one busy or broken agent cannot slow the others or the operator's
+Each agent is held to a call rate, a number of calls at once on both doors,
+and a number of listen streams open on MCP, so one busy or broken agent cannot slow the others or the operator's
 brakes. The numbers are settings, read by `hq/platform/application/agent_limits.py`:
 
 | Limit | Setting | Default | Past it |
@@ -215,6 +218,7 @@ brakes. The numbers are settings, read by `hq/platform/application/agent_limits.
 | One agent's calls at once | `SEVERINO_AGENT_CALLS_AT_ONCE` | 4 | `too_many_calls` |
 | Every agent's calls at once together | `SEVERINO_AGENT_CALLS_AT_ONCE_OVERALL` | 8 | `too_many_calls` |
 | How long an MCP tool call is waited for | `SEVERINO_AGENT_CALL_TIMEOUT_SECONDS` | 60 | `call_timed_out` |
+| One agent's MCP listen streams open at once | `SEVERINO_AGENT_STREAMS_AT_ONCE` | 16 | `too_many_calls` |
 
 Each door says how long to wait in the refusal's `error.retry_after`, in
 whole seconds. The machine API answers a limit with `429` and repeats it as
@@ -236,9 +240,15 @@ Django's handler gives each web request, so one slow call never queues
 another agent's. The door enters `thread_of_its_own`
 (`hq/platform/core/outside_requests.py`), the one way HQ's work outside
 Django's request cycle gets that thread and its connections checked before
-and closed after; `lint:ast-grep` holds that nothing else does it. The counts are kept in the serving process's memory, which
-is right only while the image serves from one process; an agent not calling
-holds nothing there.
+and closed after; `lint:ast-grep` holds that nothing else does it. A listen
+stream gives its request's thread and connections back once admitted, so an
+open stream holds neither; its brakes each borrow a thread for the moment
+they are asked. The counts are kept in the serving process's memory, and the
+listen bus (`hq/platform/mcp/listen.py`) reaches every stream from there,
+which is right only while the image serves from one process; an agent not
+calling holds nothing there. The Agents page reads each agent's open streams
+from those counts beside its calls and refusals, and says when it holds all
+of them, since its next is refused `too_many_calls`.
 
 | Promise | Test |
 | --- | --- |
@@ -248,6 +258,9 @@ holds nothing there.
 | A flood of refusals is one row a window, with its count | `hq/platform/application/tests/test_limited_denials.py` |
 | Two writes at once with one retry key act once | `test_two_writes_at_once_with_one_key_act_once` in `hq/platform/mcp/tests/test_retry_key_race.py` |
 | The image serves from one process | `hq/platform/application/tests/test_one_serving_process.py` |
+| An open listen stream holds no thread | `test_an_open_stream_holds_no_thread` in `hq/platform/mcp/tests/test_listen.py` |
+| A stream held back while its agent is paused hears once the brake lifts | `hq/platform/mcp/tests/test_listen_resume.py` |
+| The Agents page counts each agent's open streams against its cap, and says nothing for one holding none | `StreamTests` and `test_a_row_says_its_open_streams_and_warns_only_at_the_cap` in `hq/platform/application/tests/test_agent_activity.py` |
 
 ### What an agent can and cannot do
 
@@ -256,8 +269,10 @@ It can do what its token was granted and no more. From [API](API.md):
 > A token's principal holds exactly the permissions the token was granted,
 > never widened.
 
-On `/api/mcp/` and the machine API alike, the grant is capped again by the
-`SEVERINO_AGENT_ENABLE_*` settings, which gate writes, never reads
+On `/api/mcp/` and the machine API alike, a grant on a token a person signed
+in is held within that person's role, and what it keeps of a person's (their
+theme, calendar choices, pins and set-asides) is that person's; a machine's own
+token keeps none
 ([Security](Security.md#what-hq-enforces),
 [API](API.md#what-each-surface-exposes)).
 

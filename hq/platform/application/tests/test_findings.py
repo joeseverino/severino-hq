@@ -6,15 +6,17 @@ from django.test import TestCase
 from django.utils import timezone
 from pydantic import ValidationError
 
-from hq.domains.control_plane.models import ManagedResource, ProviderConnection
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 
 from ..action_links import ActionLink
+from ..cadence import ControllerSweepCommand
 from ..findings import FINDINGS_SCHEMA_VERSION, derive_findings, finding_rules, findings, rule_for
 from ..security import Capability, Principal
 from ..topology import derive_topology
 from ..topology_model import Topology, TopologyEdge, TopologyNode
 from .finding_principals import MANAGE
 from .host_only import host_only
+from .inventory_records import kind_read
 from .sentinel import SentinelMixin, plant_credentials
 
 READ = Principal("reader", "test", frozenset({Capability.READ}))
@@ -26,9 +28,11 @@ def observed(resource: ManagedResource, when, *, reason="Observed", revision=1, 
     A real sweep writes the whole rebuilt spec into ``status``; a reconcile
     writes a thinner summary. Defaulting to the full spec keeps the fixture
     honest, because "observed but confirming nothing" is a genuine finding and
-    should not be the accidental default of every test.
+    should not be the accidental default of every test. The kind counts as read
+    at the newest moment any of its records was.
     """
 
+    kind_read(resource.kind, when)
     ManagedResource.objects.filter(pk=resource.pk).update(
         last_observed_at=when,
         generation=revision,
@@ -88,7 +92,7 @@ class FindingsTests(SentinelMixin, TestCase):
         evidence = dict(found[0].evidence)
         self.assertEqual(set(evidence), {"Last seen", "Others read"})
 
-    def test_the_skipped_record_is_offered_a_reconcile(self):
+    def test_the_skipped_record_is_offered_to_be_created_again(self):
         skipped = self.rewrite("skipped-record")
         observed(self.rewrite("swept"), self.now)
         observed(skipped, self.now - timedelta(hours=6))
@@ -98,12 +102,17 @@ class FindingsTests(SentinelMixin, TestCase):
 
         self.assertEqual(remedy.capability, "infrastructure.resource.reconcile")
         self.assertEqual(remedy.target, "skipped-record")
+        # A reconcile of a record missing live creates it, so the press says so.
+        self.assertEqual(remedy.label, "Create it again")
+        # A narrow card clips the explanation to its first line: it leads with
+        # what probably happened.
+        self.assertTrue(found.explanation.startswith("It has probably been removed or renamed."))
         # Effect is copied from the capability registry, never restated here.
         self.assertTrue(remedy.effect)
 
     def test_a_skipped_container_is_offered_on_demand_or_removal_not_reconcile(self):
-        """A stopped container answers neither "look again" nor anything else a
-        reconcile can do; the two real answers are the two remedies."""
+        """HQ cannot create a container again, so a reconcile answers nothing
+        here; the two real answers are the two remedies."""
 
         def container(key):
             return ManagedResource.objects.create(
@@ -155,6 +164,18 @@ class FindingsTests(SentinelMixin, TestCase):
 
         self.assertEqual([f.scope for f in found], ["adguard.rewrite"])
         self.assertEqual(found[0].subject, "")
+
+    def test_a_kind_only_ever_failing_to_read_has_never_been_read(self):
+        """The row a failed first read writes holds no moment."""
+
+        self.rewrite("never-reached")
+        ProviderInventory.objects.create(
+            kind="adguard.rewrite", reachable=False, records=[], error="unreachable", observed_at=None
+        )
+
+        (found,) = [f for f in self.raised() if f.rule == "kind-never-swept"]
+
+        self.assertEqual(dict(found.evidence)["Last read"], "never")
 
     def test_a_sweep_wide_outage_is_said_once_about_the_kind(self):
         """Not once per record. A queue that triples is a queue nobody reads."""
@@ -245,6 +266,10 @@ class FindingsTests(SentinelMixin, TestCase):
             ["act", "verify"],
         )
         self.assertEqual(general[0].workflow.outcome.kind, "claim_absent")
+        # The read its check asks for is carried beside the link that asks it, which names no kind of subject.
+        (verify,) = general[0].workflow.steps[1].actions
+        self.assertEqual(verify.capability, "infrastructure.controller.refresh")
+        self.assertEqual(general[0].read_now, ControllerSweepCommand(every_connection=True))
         self.assertEqual([item.scope for item in raw], ["example.a", "example.b"])
         # "HQ dev" is not a name a shell takes, so no command is built on it.
         self.assertEqual([step.command for step in general[0].steps], [""])
@@ -304,6 +329,7 @@ class FindingsTests(SentinelMixin, TestCase):
 
     def test_a_declaration_that_keeps_disagreeing_points_at_itself(self):
         resource = self.rewrite("wont-converge")
+        ProviderInventory.objects.create(kind=resource.kind, observed_at=self.now)
         # `resource_health` reads only conditions whose status is true, so a
         # failure is an active `Degraded`, not a falsified `Ready`.
         ManagedResource.objects.filter(pk=resource.pk).update(

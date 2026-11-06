@@ -1,0 +1,74 @@
+id: stale-write-token-read
+valid:
+  - |
+    def update(record, *, expected_updated_at=None):
+        refuse_if_stale(record, expected_updated_at)
+  - |
+    def update(record, expected_updated_at: str | None = None):
+        if expected_updated_at and record.updated_at != expected_updated_at:
+            raise Conflict()
+  - |
+    def update(record, *, expected_updated_at):
+        def check():
+            return record.updated_at == expected_updated_at
+        return check()
+  - 'handler = lambda payload, expected_updated_at=None: stale(payload, expected_updated_at)'
+  - |
+    def update(record, **expected_updated_at):
+        return record
+  - |
+    def update(record, *expected_updated_at):
+        return record
+  - |
+    def update(record, other):
+        return save(record, expected_updated_at=other)
+  # A read on the right of a store is a read.
+  - |
+    def update(record, *, expected_updated_at=None):
+        stamp = expected_updated_at
+        return stamp
+  - |
+    def update(record, *, expected_updated_at=None):
+        record.stamp += expected_updated_at
+  - |
+    def update(record, *, expected_updated_at=None):
+        for stamp in expected_updated_at:
+            check(stamp)
+  - |
+    def update(record, *, expected_updated_at=None):
+        return [stamp for stamp in expected_updated_at]
+invalid:
+  - |
+    def update(record, *, expected_updated_at=None):
+        return save(record)
+  - |
+    async def update(record, expected_updated_at: str | None = None):
+        return await save(record)
+  - 'handler = lambda payload, expected_updated_at=None: save(payload)'
+  - |
+    def update(record, expected_updated_at):
+        return record
+  # A keyword's name, an attribute and a store are not reads.
+  - |
+    def update(record, *, expected_updated_at=None):
+        return save(record, expected_updated_at=record.updated_at)
+  - |
+    def update(record, *, expected_updated_at=None):
+        return record.expected_updated_at
+  - |
+    def update(record, *, expected_updated_at=None):
+        expected_updated_at = record.updated_at
+        return record
+  - |
+    def update(record, *, expected_updated_at=None):
+        first, expected_updated_at = record.stamps
+        return first
+  - |
+    def update(record, *, expected_updated_at=None):
+        for expected_updated_at in record.stamps:
+            pass
+  - |
+    def update(record, *, expected_updated_at=None):
+        def inner(expected_updated_at):
+            pass
+        return inner

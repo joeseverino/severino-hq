@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"io/fs"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 )
 
@@ -180,7 +182,7 @@ func readUntrusted(root *os.Root, name string, limit int64) ([]byte, error) {
 	if !info.Mode().IsRegular() {
 		return nil, errors.New("not a regular file")
 	}
-	if _, links, ok := Ownership(info); !ok || links != 1 {
+	if _, links, ok := hostcore.Ownership(info); !ok || links != 1 {
 		return nil, errors.New("a file with another name")
 	}
 	if info.Size() > limit {
@@ -266,7 +268,7 @@ func spool(dir string, handoff Handoff) error {
 	if err := ownDirectory(dir); err != nil {
 		return err
 	}
-	return writeAtomic(filepath.Join(dir, SpoolName), data, 0o600)
+	return atomicfile.WriteFile(filepath.Join(dir, SpoolName), data, 0o600)
 }
 
 // ownDirectory makes dir a real directory only its owner can enter.

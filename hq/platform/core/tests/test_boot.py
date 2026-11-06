@@ -1,5 +1,5 @@
 """A boot that is about to change the schema keeps the database first, where the host says,
-and a migrated boot asks for delivery to be read without depending on it."""
+and a migrated boot asks for what a new image reads without depending on it."""
 
 import sqlite3
 import tempfile
@@ -21,7 +21,7 @@ class BootTests(TransactionTestCase):
         self.dir = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.kept = self.dir / "severino.sqlite3.before-migrate"
         self.migrate = self.enterContext(patch.object(boot, "call_command"))
-        self.read = self.enterContext(patch.object(boot, "request_delivery_read", return_value=True))
+        self.read = self.enterContext(patch.object(boot, "request_boot_reads", return_value=("github.delivery",)))
 
     def boot(self, *, pending: bool, named: str | None = None):
         environ = {"SEVERINO_SCHEMA_SNAPSHOT": str(self.kept) if named is None else named}
@@ -69,8 +69,8 @@ class BootTests(TransactionTestCase):
         self.migrate.assert_not_called()
         self.read.assert_not_called()
 
-    def test_a_migrated_boot_asks_for_delivery_to_be_read(self):
-        self.read.side_effect = lambda: self.migrate.assert_called_once() or True
+    def test_a_migrated_boot_asks_for_what_a_new_image_reads(self):
+        self.read.side_effect = lambda: self.migrate.assert_called_once() or ("github.delivery",)
 
         self.boot(pending=False)
 

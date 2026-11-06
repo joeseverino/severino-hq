@@ -16,6 +16,8 @@
 
 # The harness is tools/perf/report.py; each run is kept as var/perf/<run>.json.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 # An image measured runs in Docker, and a base's image:build is its own ref's.
 [ "${usage_image:-}" != true ] || mise run image:docker start

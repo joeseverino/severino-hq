@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // Config is everything about one host that the repository does not hold:
@@ -111,7 +113,7 @@ User=%s
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return err
 		}
-		if err := writeAtomic(path, []byte(body), 0o644); err != nil {
+		if err := atomicfile.WriteFile(path, []byte(body), 0o644); err != nil {
 			return err
 		}
 	}
@@ -135,23 +137,16 @@ User=%s
 func (m *Machine) sudoRule(ctx context.Context, user string) error {
 	rule := fmt.Sprintf("# Rendered by hq-host bootstrap: the runner deploys, and may do nothing else as root.\n%s ALL=(root) NOPASSWD: %s deploy *\n",
 		user, HostProgram)
-	staged, err := os.CreateTemp(m.Sudoers, ".severino-hq-deploy.")
+	staged, err := atomicfile.Create(filepath.Join(m.Sudoers, "severino-hq-deploy"), 0o440)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(staged.Name())
-	_, err = staged.WriteString(rule)
-	if err == nil {
-		err = staged.Chmod(0o440)
-	}
-	if closeErr := staged.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
+	defer staged.Discard()
+	if _, err := staged.WriteString(rule); err != nil {
 		return err
 	}
-	if err := m.run(ctx, "visudo", "-c", "-q", "-f", staged.Name()); err != nil {
+	if err := m.run(ctx, "visudo", "-c", "-q", "-f", staged.Temporary()); err != nil {
 		return fmt.Errorf("visudo refused the deploy rule: %w", err)
 	}
-	return os.Rename(staged.Name(), filepath.Join(m.Sudoers, "severino-hq-deploy"))
+	return staged.Replace()
 }

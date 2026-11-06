@@ -13,10 +13,12 @@ import io
 import json
 import multiprocessing
 import os
+import pickle
+import re
+import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import threading
 import traceback
 import unittest
@@ -27,7 +29,9 @@ from pathlib import Path
 
 # Bound here, so a test that patches time.monotonic moves its own clock and never the stall watch's.
 from time import monotonic
-from typing import override
+from typing import TYPE_CHECKING, override
+lazy import inspect
+lazy import pdb
 
 from django.conf import settings
 from django.db import connections
@@ -45,12 +49,16 @@ lazy from django.core.management.base import BaseCommand
 lazy from django.db.backends.sqlite3.creation import DatabaseCreation
 lazy from django.test import TransactionTestCase
 
-from hq.config.sandbox import sweep_abandoned
+from hq.config.imports import lazily
+from hq.config.sandbox import shared_tempdir
 from hq.platform.core.live_objects import live
 lazy from hq.platform.application import agent_limits, plugins, roles
 lazy from hq.platform.application.plugins import clear_plugin_composition_cache
 lazy from hq.platform.core import append_only
 lazy from hq.platform.core.attribution import bind_this_thread, bound, command_operation, from_the_shell
+
+if TYPE_CHECKING:
+    from hq.platform.application.agent_limits import Limits
 
 
 def performance_cores() -> int | None:
@@ -103,7 +111,7 @@ def default_people_to_operator() -> None:
 
 # The interface of what a test writes outside every door. Named only here and in
 # tests, so no product code can take a test's binding for a door's
-# (``test_door_binding.py``).
+# (tools/lint/ast-grep/rules/test-interface-bound-only-in-tests.yml).
 TEST_INTERFACE = "test"
 
 
@@ -169,16 +177,81 @@ def commands_from_the_shell() -> None:
     BaseCommand.execute = _execute
 
 
+# Outside the checkout. Hypothesis caches constants it finds in every module it
+# can import, installed extensions included, and a cache in the tree is text
+# the host must never carry. Outside the run's own temporary directory too, so
+# a failure it found replays in the next run.
+HYPOTHESIS_HOME = shared_tempdir() / "severino-hq-hypothesis"
+
+
+def hypothesis_profiles() -> None:
+    """In this process, every property runs under one profile: ``dev`` here,
+    Hypothesis's own ``ci`` where it detects CI, ``HYPOTHESIS_PROFILE`` over both.
+
+    ``ci`` keeps what Hypothesis's built-in one sets (derandomized, no database,
+    the failing blob printed) and runs more of each. ``dev`` stays light enough
+    for ``fast`` and replays a failure it found from its database.
+    """
+
+    try:
+        from hypothesis import settings as hypothesis  # noqa: PLC0415 - a tools-group dependency the image lacks
+        from hypothesis.configuration import set_hypothesis_home_dir  # noqa: PLC0415 - as above
+        from hypothesis.database import DirectoryBasedExampleDatabase  # noqa: PLC0415 - as above
+    except ImportError:
+        return
+    set_hypothesis_home_dir(HYPOTHESIS_HOME)
+    hypothesis.register_profile(
+        "dev",
+        max_examples=25,
+        stateful_step_count=20,
+        deadline=None,
+        database=DirectoryBasedExampleDatabase(HYPOTHESIS_HOME / "examples"),
+    )
+    hypothesis.register_profile("ci", hypothesis.get_profile("ci"), max_examples=200, stateful_step_count=50)
+    ci = hypothesis.get_current_profile_name() == "ci"
+    hypothesis.load_profile(os.environ.get("HYPOTHESIS_PROFILE") or ("ci" if ci else "dev"))
+
+
 class _CompositionIsolation:
     """Make process caches, and the agent limits every request shares, obey the
-    same per-test isolation as the database."""
+    same per-test isolation as the database.
+
+    The limits are isolated as ``setUpTestData`` rows are: each class sets up
+    on a new set, and each of its tests gets a copy of what that setup left, so
+    a stream an estate opens in ``setUpClass`` reaches every test of the class
+    and nothing one test takes reaches the next.
+    """
+
+    _class: type | None = None
+    _class_limits: Limits | None = None
 
     def startTest(self, test):
         clear_plugin_composition_cache()
-        # A new set rather than an emptied one: a call a test left running gives
-        # its slot back to the set it took it from.
-        agent_limits.LIMITS = agent_limits.Limits()
+        if type(test) is not self._class:
+            # The first of its class: what the set holds is what its setup left.
+            self._class, self._class_limits = type(test), agent_limits.LIMITS
+        agent_limits.LIMITS = _copied(self._class_limits)
         return super().startTest(test)
+
+    def stopTest(self, test):
+        # The next class sets up on a new set. A new set rather than an
+        # emptied one: a call a test left running gives its slot back to the
+        # set it took it from.
+        agent_limits.LIMITS = agent_limits.Limits()
+        return super().stopTest(test)
+
+
+def _copied(limits: agent_limits.Limits) -> agent_limits.Limits:
+    """A set holding what ``limits`` holds, each count its own and behind a lock of its own."""
+
+    copied = agent_limits.Limits.__new__(agent_limits.Limits)
+    with limits._lock:  # noqa: SLF001 - the copy is the set's whole state, which it offers no way to read
+        held = vars(limits)
+        copied.__dict__.update(
+            {name: dict(value) if isinstance(value, dict) else value for name, value in held.items()}
+        )
+    copied._lock = threading.Lock()  # noqa: SLF001 - a lock of its own, not the original's
+    return copied
 
 
 # A gate names a folder here, and the run writes each test that failed into
@@ -219,7 +292,9 @@ class FailureRecord:
         vars(self).setdefault("failed", {}).setdefault(test.id(), FailedTest(test.id(), "unexpected success", ""))
 
     def _record(self, test, err, printed) -> None:
-        exception = "".join(traceback.format_exception_only(err[0], err[1])).partition("\n")[0]
+        # A worker's exception sent as text reads as the exception it stands in for.
+        said = str(err[1]) if isinstance(err[1], SentException) else traceback.format_exception_only(err[0], err[1])
+        exception = "".join(said).partition("\n")[0]
         # unittest has just added the traceback it prints, as this test's last entry.
         vars(self).setdefault("failed", {}).setdefault(test.id(), FailedTest(test.id(), exception, printed[-1][1]))
 
@@ -247,6 +322,17 @@ class _ClassTimes:
         vars(self).setdefault("class_times", {})[unittest.util.strclass(type(test))] = seconds
 
 
+def breakpoint_on_the_terminal() -> None:
+    """``breakpoint()`` in a test: pdb on the process's own stdout, since
+    --buffer holds the test's ``sys.stdout``, where the prompt would wait
+    unseen."""
+
+    debugger = pdb.Pdb(stdout=sys.__stdout__)
+    # Without pyrepl (no terminal), pdb reads through input(), which prompts on sys.stdout.
+    debugger.use_rawinput = False
+    debugger.set_trace(inspect.currentframe().f_back)
+
+
 def block_on_output() -> None:
     """Make writes to stdout and stderr wait for room again.
 
@@ -258,7 +344,7 @@ def block_on_output() -> None:
     for stream in (sys.stdout, sys.stderr):
         try:
             os.set_blocking(stream.fileno(), True)
-        except OSError, ValueError, io.UnsupportedOperation:
+        except OSError, ValueError, io.UnsupportedOperation:  # noqa: S112 - a stream with no descriptor has no blocking mode to set
             continue
 
 
@@ -426,7 +512,8 @@ class StallWatch:
         """Write what has stalled, the evidence for it, and every thread's stack."""
 
         block_on_output()
-        stream = self.stream or sys.stderr
+        # The process's own stderr: the test's may be --buffer's, printed only once it fails.
+        stream = self.stream or sys.__stderr__
         stream.write(f"\n=== stalled {self.seconds:g}s: {label} (pid {os.getpid()}) ===\n")
         for evidence in list(self.evidence):
             evidence(stream)
@@ -454,7 +541,7 @@ class StallWatch:
     def end(self, label: str) -> None:
         """Exit the process: what stalled did not stop when interrupted."""
 
-        stream = self.stream or sys.stderr
+        stream = self.stream or sys.__stderr__
         stream.write(f"=== {label} did not stop {self.grace:g}s after it was interrupted: the process exits ===\n")
         stream.flush()
         if self.workers is not None:
@@ -523,9 +610,49 @@ class SentSubtest:
         return self.description
 
 
+class SentException(Exception):
+    """An exception a parallel worker could not pickle, as its text, so the
+    parent reports the failure. Django's worker otherwise raises, and the
+    whole run ends on multiprocessing's MaybeEncodingError."""
+
+
+class SentFailure(SentException, AssertionError):
+    """A failed assertion a worker could not pickle, still counted a failure."""
+
+
+def sendable(test: unittest.TestCase, err):
+    """``err`` as a worker can send it: itself when it pickles, else its
+    text in a SentException with its traceback (tblib pickles that), or
+    without one if even that does not pickle."""
+
+    if err is None or _pickles(err):
+        return err
+    kind, value, trace = err
+    text = "".join(traceback.format_exception_only(kind, value)).rstrip("\n")
+    sent = SentFailure if issubclass(kind, test.failureException) else SentException
+    return (sent, sent(text), trace if _pickles(trace) else None)
+
+
+def _pickles(value) -> bool:
+    try:
+        pickle.loads(pickle.dumps(value))
+    except Exception:  # noqa: BLE001 - whatever pickling raises, the value cannot cross to the parent.
+        return False
+    return True
+
+
 class CompositionRemoteResult(_StallMarks, _CompositionIsolation, RemoteTestResult):
+    def addError(self, test, err):
+        super().addError(test, sendable(test, err))
+
+    def addFailure(self, test, err):
+        super().addFailure(test, sendable(test, err))
+
+    def addExpectedFailure(self, test, err):
+        super().addExpectedFailure(test, sendable(test, err))
+
     def addSubTest(self, test, subtest, err):
-        super().addSubTest(test, subtest if err is None else SentSubtest.of(subtest), err)
+        super().addSubTest(test, subtest if err is None else SentSubtest.of(subtest), sendable(test, err))
 
     def addClassTime(self, _test, seconds):
         # A worker's result keeps nothing: the parent replays this event
@@ -592,31 +719,28 @@ class CompositionRemoteRunner(RemoteTestRunner):
 def _use_the_file_clone(creation, worker_id):
     """Point a worker at the database file that was cloned for it.
 
-    Under ``spawn`` (macOS's default) Django copies each clone into a
-    shared-cache in-memory database, which locks whole tables instead of using
-    WAL and so deadlocks a test against work it started on another thread. The
-    file keeps a serial run's journal mode, as Django does under ``fork``.
+    Under ``spawn`` (macOS's default) and ``forkserver`` (Linux's) Django
+    copies each clone into a shared-cache in-memory database, which locks whole
+    tables instead of using WAL and so deadlocks a test against work it started
+    on another thread. The file keeps a serial run's journal mode, as Django
+    does under ``fork``; under those two methods Django names a file clone even
+    for an in-memory test database.
     """
 
-    settings_dict = creation.get_test_db_clone_settings(worker_id)
-    if creation.is_in_memory_db(settings_dict["NAME"]):
-        # Nothing was cloned to disk; leave Django's handling alone. It returns
-        # nothing, and so does this: one exit value on both paths rather than a
-        # value on one and a fall-through on the other.
-        creation.__class__.setup_worker_connection(creation, worker_id)
-        return
-    creation.connection.settings_dict.update(settings_dict)
+    creation.connection.settings_dict.update(creation.get_test_db_clone_settings(worker_id))
     creation.connection.close()
 
 
 def _init_worker_on_file_databases(counter, *args, **kwargs):
-    """Django's worker startup, with SQLite kept on disk.
+    """Django's worker startup, with SQLite kept on disk and imports lazy.
 
-    The patch is applied here rather than at import because it must take effect
-    inside the worker process, which under ``spawn`` is a fresh interpreter
-    that imported this module afresh.
+    Both take effect here rather than at import because a worker under
+    ``spawn`` or ``forkserver`` starts from a fresh interpreter, which never
+    ran ``manage.py``'s ``main()``. Lazy before ``django.setup()``, so a worker
+    holds what its tests reach, as the process that started the run does.
     """
 
+    lazily()
     DatabaseCreation.setup_worker_connection = _use_the_file_clone
     stall_watch.workers = counter
     started = _init_worker(counter, *args, **kwargs)
@@ -624,6 +748,7 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
     flush_through_the_audit_guard()
     commands_from_the_shell()
     bind_test_arrangement()
+    hypothesis_profiles()
     return started
 
 
@@ -693,6 +818,15 @@ def drives_a_browser(test: unittest.TestCase) -> bool:
     )
 
 
+def browser_failures() -> Path:
+    """Where a browser run keeps the shots of what failed: in the checkout,
+    since they outlive the run, in a folder of the task that ran it, so each
+    leg of ``mise run browser`` keeps its own."""
+
+    task = os.environ.get("MISE_TASK_NAME") or "test"
+    return Path(settings.BASE_DIR, "var", "browser-failures", re.sub(r"[^\w.-]", "-", task))
+
+
 def require_tests_from(suite: unittest.TestSuite, modules: list[str]) -> None:
     """Refuse a run in which an installed plugin contributed no test."""
 
@@ -736,6 +870,13 @@ class SeverinoTestRunner(DiscoverRunner):
             action="store_true",
             help="Run every installed plugin's tests and none of the host's.",
         )
+        # A run's output is its failures: Django's --buffer drops what a passing
+        # test prints and prints a failing one's with it, and verbosity 0 its
+        # progress (the dots, the test databases); -v 1 shows that again.
+        parser.set_defaults(buffer=True, verbosity=0)
+        parser.add_argument(
+            "--no-buffer", dest="buffer", action="store_false", help="Print what passing tests print too."
+        )
 
     def setup_test_environment(self, **kwargs):
         # Environment first, so spawned workers load the same settings.
@@ -744,10 +885,12 @@ class SeverinoTestRunner(DiscoverRunner):
         settings.CSRF_TRUSTED_ORIGINS = []
         settings.SEVERINO_SITE_HOST = ""
         super().setup_test_environment(**kwargs)
+        sys.breakpointhook = breakpoint_on_the_terminal
         default_people_to_operator()
         flush_through_the_audit_guard()
         commands_from_the_shell()
         bind_test_arrangement()
+        hypothesis_profiles()
 
     def build_suite(self, test_labels=None, **kwargs):
         # A run with no labels is the whole suite: the host's and every
@@ -762,6 +905,10 @@ class SeverinoTestRunner(DiscoverRunner):
                 raise RuntimeError("--installed-plugins: no plugin is installed.")
             suite = super().build_suite([*modules] if self.installed_plugins else [".", *modules], **kwargs)
             require_tests_from(suite, modules)
+        if any(drives_a_browser(test) for test in tests_in(suite)):
+            # Here, in the process that starts the run and before any worker
+            # shoots: the last run's shots of this task give way to this one's.
+            shutil.rmtree(browser_failures(), ignore_errors=True)
         if self.tags and next(tests_in(suite), None) is None:
             # A gate that selects by tag and finds nothing has checked nothing.
             untagged = f" Their tests run with `mise run test {' '.join(test_labels)}`." if test_labels else ""
@@ -786,9 +933,6 @@ class SeverinoTestRunner(DiscoverRunner):
         return result
 
     def setup_databases(self, **kwargs):
-        # Here, in the process that starts the run and before it makes files
-        # of its own: a killed run never reached its teardown.
-        sweep_abandoned(Path(tempfile.gettempdir()), os.getpid())
         # Build the database first and clone it second, rather than letting one
         # call do both, because the checkpoint has to happen between the two.
         requested = self.parallel

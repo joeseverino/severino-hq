@@ -11,6 +11,8 @@ from mcp import Client
 from mcp.shared.exceptions import MCPError
 from mcp.shared.uri_template import UriTemplate
 
+from hq.platform.application.finding_model import Finding, FindingRemedy
+from hq.platform.application.findings import RULES
 from hq.platform.application.security import Capability, Principal
 
 from ..identity import set_principal
@@ -49,6 +51,30 @@ class PromptTests(TestCase):
                 # The ask, then HQ's own answer as JSON on the line after it.
                 _ask, _, said = message.content.text.partition("\n")
                 self.assertIsInstance(json.loads(said), dict)
+
+    def test_the_status_brief_carries_each_problems_actions_as_tool_calls(self):
+        raised = Finding(
+            rule=RULES[0].name,
+            subject="example-subject",
+            title="Example",
+            severity="serious",
+            explanation="Example.",
+            remedies=(FindingRemedy("infrastructure.resource.reconcile", "example-subject"),),
+        )
+
+        async def steps(client):
+            return await client.get_prompt("status-brief")
+
+        with mock.patch("hq.platform.application.findings.estate_findings", return_value=(raised,)):
+            result = _session(READER, steps)
+
+        _ask, _, said = result.messages[0].content.text.partition("\n")
+        (problem,) = json.loads(said)["problems"]["findings"]
+        # The same calls get_findings answers, so a brief's remedy is run as it reads.
+        self.assertEqual(
+            [(remedy["tool"], remedy["arguments"]["name"]) for remedy in problem["remedies"]],
+            [("execute_capability", "infrastructure.resource.reconcile")],
+        )
 
     def test_a_caller_that_may_not_read_is_refused_in_hq_words(self):
         async def steps(client):

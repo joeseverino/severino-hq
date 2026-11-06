@@ -29,8 +29,16 @@ A web operator holds every capability HQ has. A token holds less:
 
 | Token | Principal | Holds |
 |---|---|---|
-| Any client's | an agent, here as on `/api/mcp/` | the permissions the token was granted, never widened, and only those the deployment's `SEVERINO_AGENT_ENABLE_*` switches let an agent hold ([Security](Security.md#agents)) |
+| Any client's | an agent, here as on `/api/mcp/` | the permissions the token was granted, never widened, within the role of the person who signed it in, if one did ([Security](Security.md#agents)) |
 | A client an administrator gave the `own_device` permission | a person's own device | its granted permissions uncapped, those held for a person in the browser included; the Agents pause does not stop it |
+
+An agent's call from a tailnet device does nothing until the person it acts
+for approves that device for its client on the Agents page: until then it is
+a 403 `device_awaiting_approval`, and from a device a person blocked a 403
+`device_blocked`, while the client's other devices run. A call HQ cannot
+place on a device (from loopback or the LAN, or a deployment with no tailnet
+reading) keeps the client's own rules, and a person's own device needs no
+approval ([Security](Security.md#agents)).
 
 The catalogs' `permitted` flags (capabilities, resources and connections,
 here and on `/api/mcp/` alike) say what the caller may use after that cap, by
@@ -38,7 +46,9 @@ the same rule its use is refused by.
 
 A capability held only by a person (an upload, an approval) is out of any
 token's reach, whatever its grant. So neither the catalog nor the OpenAPI
-document lists it for one.
+document lists it for one. A person's own settings, pins and set-asides are a
+token's only where a person signed it in, so the catalog lists them to that
+token and never to a machine's own.
 
 ## Configuration
 
@@ -60,12 +70,29 @@ In Pocket ID, **Administration → APIs**:
    becomes the `aud` claim and **cannot be changed later**. MCP is served at
    `/api/mcp/`, under the same path, so its resource metadata names this one
    audience too.
-2. Add a **Permission** for each capability the client needs, named *exactly*
-   as HQ names it: `example.write`, `write_receipts`, `write_expenses`.
+2. Write the API's permissions from HQ's catalog, on your own machine, with a
+   Pocket ID admin's API key (**Administration → API Keys**):
+
+   ```sh
+   POCKET_ID_API_KEY='op://Example Vault/pocket-id/credential' \
+     op run -- mise run wire-pocket-id --pocket-id https://id.example.com \
+     --resource https://hq.example.com/api --grant example-client
+   ```
+
+   The task derives the list from the extension set `mise.local.toml` names,
+   as production composes it: every capability a token could carry, and
+   `own_device`. It replaces the API's whole list with it and names any
+   permission it removed. `--grant` gives that client every permission but
+   `own_device`, delegated by a signed-in person, and keeps the rest of its
+   grant. Without the key it prints the list and changes nothing. Run it again
+   at the deploy of any release that adds a capability: Pocket ID refuses a
+   sign-in that asks for a permission it does not list.
 
 The permission keys are HQ's capability names on purpose. A mapping table
 between the two systems would be a third home for the authorization model and
-the first thing to go stale when a plugin adds a capability.
+the first thing to go stale when a plugin adds a capability, which is why the
+list is written from the catalog and never typed. HQ keeps no admin key: one
+at Pocket ID v2.19.2 carries no scopes, so it could do anything.
 
 Then in **Administration → OIDC Clients**, add a client per automation, with
 the client credentials grant enabled. One client per automation, not one shared
@@ -79,10 +106,17 @@ the `own_device` permission. Give that permission to no other client, and
 never select it for the API's metadata-document clients: HQ refuses it on a
 client-credentials token and on a client named by a URL.
 
-On a client a person signs in through (their own device, or an agent with a
-user-delegated grant), set **Allowed User Groups** on the **Access** tab to the
-groups that may sign in. Pocket ID refuses anyone else before HQ ever sees a
-token, and a client made in the admin UI admits nobody until a group is chosen.
+On a person's own device's client, set **Allowed User Groups** on the
+**Access** tab to the groups that may sign in. Pocket ID refuses anyone else
+before HQ ever sees a token, and a client made in the admin UI admits nobody
+until a group is chosen.
+
+The steps for an agent's client, one a person signs in or one that runs
+unattended, are on HQ's Agents page, under **Setup**
+(`/agents/#setup`). Its permissions step links back here for the
+task above. The page also names, on each agent's row, a permission HQ offers
+that its last sign-in did not carry, so one a release adds is granted before
+a sign-in asks for it.
 
 ## What policy can do to a call
 
@@ -297,8 +331,8 @@ Every derived read is a `ResourceSpec` in `hq/platform/application/resources.py`
 One registration serves the API (`/api/v2/resources/<name>/`), MCP
 (`list_resource`, `get_resource`), the CLI (`manage.py hq_call` over those
 tools) and the SDK (`hq_sdk.resources.list_resource` / `get_resource`). Each
-handler calls the function its page calls. All need `read`, which every MCP
-principal holds; the `SEVERINO_AGENT_ENABLE_*` switches gate writes, not reads.
+handler calls the function its page calls. All need `read`, which a token
+grants like any other permission.
 
 The reference (`/api/docs/`) lists every resource under the domain that
 declares it, with what it holds and the query it takes. Topology and findings
@@ -439,6 +473,24 @@ whose actions are canonical `ActionLink` contracts, plus a `claim_absent`
 outcome keyed to the finding's stable claim ID. The workflow is guidance, not a
 second executor; every mutation still names and enters a registered capability.
 
+MCP's `get_findings` answers the same findings in a shape of its own
+(`hq/platform/mcp/finding_actions.py`, `schema_version` 3), since an agent
+cannot follow a web path: every action is a tool call, `{label, tool,
+arguments}`, built from what the finding holds and never read out of a URL.
+
+| Action | Call |
+|---|---|
+| a remedy, or a workflow step's command | `execute_capability` with `name`, `target` (null where the capability takes none) and `payload`; a remedy adds its `effect` |
+| an offer of its subject's own page | `get_resource` of `relationships`, the subject's node id as `identifier` |
+| an investigation | `get_topology` with the subject as `focus`, and the trace `action_links.INVESTIGATIONS` declares |
+| a workflow's check | the read it asks for, through `execute_capability` with its `payload`, then `get_findings` with the finding's `rule` |
+
+A `payload` holds what HQ already knows; the agent adds an `idempotency_key`
+for an effect other than `read`, and any field the capability's schema
+requires. An action none of these derives is left out, as is a page elsewhere
+(a connection's settings, outside documentation). `operator_steps` are the
+same on both doors. The `status-brief` prompt carries the problems in this shape.
+
 The `analytics` resource reports `coverage` for the requested completed-day
 window. Coverage is recorded even when a healthy site had zero traffic, so
 `missing_days` means HQ has not read that site-day, not that no visit occurred.
@@ -456,7 +508,7 @@ version replaces the old one rather than running beside it.
 
 ### Errors
 
-Always `{"ok": false, "error": {"code", "message", "details", "retry_after"}}`, the last two only where they apply: `retry_after` is the whole seconds until asking again can succeed, on a refusal whose code waits (`rate_limited`, `too_many_calls`), and the `Retry-After` header repeats it. The document declares both only at that status. A refusal the caller gets past by a call or a field it did not make says which in `details`. `details.next` is the call that finds what was missing: an MCP tool and its `arguments`, which the API serves as the route of that name. That is `describe_capabilities` for an unknown capability, or `list_resource` for a record no identifier matched, beside `details.identifier`, the field its kind is addressed by. `details.field` is the argument to send (`payload.idempotency_key`, `target`). Branch on the
+Always `{"ok": false, "error": {"code", "message", "details", "retry_after"}}`, the last two only where they apply: `retry_after` is the whole seconds until asking again can succeed, on a refusal whose code waits (`rate_limited`, `too_many_calls`), and the `Retry-After` header repeats it. The document declares both only at that status. A refusal the caller gets past by a call or a field it did not make says which in `details`. `details.next` is the call that finds what was missing: an MCP tool and its `arguments`, which the API serves as the route of that name. That is `describe_capabilities` for an unknown capability, or `list_resource` for a record no identifier matched, beside `details.identifier`, the field its kind is addressed by. `details.closest` is the call that reads each of up to three nearest the value asked for: for that record, the `get_resource` of each record near its identifier on the first page of its kind's list read as the caller, so it never names one the caller could not list; for a resource name HQ does not serve (`unknown_resource`, the same refusal on both doors), the `describe_resources` of each resource named near it. A type of managed record sent as a resource's name (`cloudflare.dns_record`) is answered with `details.next` the `infrastructure` list narrowed by that `kind`, and a type of reading (`adguard.client`) its read from `readings`. `details.field` is the argument to send (`payload.idempotency_key`, `target`). `details.scope` is the permission an `insufficient_scope` refusal needed: the token lacks it and its person holds it, so granting it to the client in the identity provider and signing in again gets the call through, and the 403's `WWW-Authenticate` repeats it as `scope` (RFC 6750 section 3.1). A permission the person's role lacks, or one no token can hold, stays `forbidden`. Branch on the
 status; the code says which cause. A code has one status wherever it is
 answered. `CODES` in `hq/platform/application/refusal_status.py` declares
 each code once, with what it means, its status, the doors that can answer it
@@ -478,6 +530,9 @@ An `invalid_input` message names every offending field and why, in one
 sentence: `project.create: name is required.`, or
 `example.decide: verdict must be one of applies, does_not_apply.` It gives field
 paths, expected types and declared choices, never a value the request carried.
+A field a command does not have is refused at any depth, as `extra_forbidden`
+at its path (`rules[0].scope is not a known field`), and its `input_schema` is
+closed at the same levels; only a part its type declares open takes any key.
 `details` holds the structured list the sentence was built from, under the same
 rule: `type`, `loc` and `msg` for a schema error, field names and error codes
 for a domain one, and no submitted value in either. A resource's read
@@ -628,11 +683,14 @@ itself. The filters are read from each kind's query model (`list_filters` in
 as it declares itself.
 With no `name`, `describe_resources` lists every kind with the `filters` its
 list narrows by, without `limit` and `cursor`, which page it; with one, as `/api/v2/resources/?name=` does, that kind with
-its list's whole `query_schema`. A filter that takes only some values (a
+its list's `query_schema`, the filters alone, and beside it `paging`, the
+schema of the `limit` and `cursor` the list takes: `list_resource`'s own
+arguments, which it refuses inside `filters`, and the machine API's query
+parameters beside the filters. A filter that takes only some values (a
 status, a dimension, a resource kind, an action item's source) declares them
 as a `Literal` read from where they are declared, a model's choices or a
-registry. The schema then lists them as its enum. `limit` declares the most a
-page may ask for (`MAX_PAGE_SIZE`, unless its kind declares another).
+registry. The schema then lists them as its enum. `paging`'s `limit` declares
+the most a page may ask for (`MAX_PAGE_SIZE`, unless its kind declares another).
 A value outside them is a refusal naming the field, through either door.
 `get_topology` and `get_findings` take their read's query model
 (`TopologyQuery`, `FindingsQuery`) as their argument model, the one
@@ -678,7 +736,8 @@ spec has every structured result meet the schema, with no exception for
 alone would be broken by every refusal. The success is the handler's return
 annotation, the TypedDict the application returns
 (`hq/platform/mcp/services.py`), and the API document's `data` for the same
-read is that type too, so the two doors describe one answer. `ok` is the
+read is that type too, so the two doors describe one answer, but for
+`get_findings`, whose shape is MCP's own (`finding_actions.AgentFindings`). `ok` is the
 door's own: the API wraps each answer in `Ok`, and a tool's answer is the
 type alone, its refusal saying `ok: false` beside `error`. A capability's
 result is its runner's answer, so `execute_capability` alone carries `ok:
@@ -691,7 +750,7 @@ client validates each answer by it as it comes and a field the answer gains
 must not break the client; only a type declared with `extra="forbid"` is
 closed (`get_findings`'), so a field its serializer adds fails the
 output-shape tests until it is declared. A part the application writes from a
-dataclass (`json_schemas.Written`, a topology node or a finding's offers) is
+dataclass (`json_schemas.Written`, a topology node or a finding's operator steps) is
 typed whole in the API document and left an object in the tool's shape. The
 SDK's client checks a success against the schema and never a refusal, so
 `test_output_shapes.py` calls every tool both ways on the showcase's data,
@@ -718,17 +777,30 @@ disagree. The catalogs (`describe_capabilities`, `describe_resources`,
 of every entry. `list_resource` and `get_resource` are listed to a caller who
 may read some kind each serves, and `execute_capability` to one who may run
 some capability: a change is held for a person only after its caller's grant
-is checked, so a caller without one has nothing to ask for. The Agents page
-lists as an operator's own device, the widest caller, so it shows every tool.
+is checked, so a caller without one has nothing to ask for. prompts/list and
+resources/list follow the same rule: each prompt and fixed view declares its
+access beside it (`requires` in `hq/platform/mcp/prompts.py` and
+`hq/platform/mcp/resources.py`), is listed only to a caller it admits, and
+`prompts/get` and `resources/read` refuse by it. The Agents page lists as an
+operator's own device, the widest caller, so it shows every tool.
 
 Each list says how long it stays fresh, through the SDK's cache hints
-(`CACHE_HINTS` in `hq/platform/mcp/server.py`). The lists prompts/list and
-resources/list change only with a release, and tools/list with a release or
-the caller's grant, so a client may keep them for ten minutes, privately,
-since only a caller that signed in reaches them. HQ serves stateless HTTP, so
-it has no session to send `notifications/tools/list_changed` down, and
-declares `listChanged` false: a client sees a changed grant's tools when it
-lists again. The list resources/templates/list is the caller's grants and
+(`CACHE_HINTS` in `hq/platform/mcp/server.py`). tools/list, prompts/list and
+resources/list change with a release or the caller's grant, so a client may
+keep them for ten minutes, privately, since only a caller that signed in
+reaches them. A client that holds a `subscriptions/listen` stream hears
+sooner: HQ sends it `notifications/tools/list_changed` when its tools change,
+through a grant change at its admission or its person's role change. The ack
+honors only `toolsListChanged`, since prompts and resources change only with
+a release. A stream opens under the brakes a tool call is under, is held back
+its events while its agent is paused, blocked or on an unapproved device and
+given them once the brake lifts, ends when its token expires, and counts
+against its agent's open streams
+([How much an agent may ask](AI.md#how-much-an-agent-may-ask)). A client
+without a stream keeps its list for up to those ten minutes, so what a new
+grant opens appears when it lists again, and what a revoked grant opened
+stays listed until then while every use of it is refused. The list
+resources/templates/list is the caller's grants and
 records, so it is stale at once.
 
 ### MCP prompts and resources
@@ -772,8 +844,8 @@ Security properties:
 - Each read is the application's own (`list_resource`, `get_resource`,
   `findings`, `approvals.pending`), as the caller and under its
   authorization; nothing is read at a ceiling of its own. A caller without
-  `read` is refused every prompt and fixed view, and a kind it may not read is
-  neither listed as a template nor read.
+  `read` is neither listed nor answered a prompt or fixed view, and a kind it
+  may not read is neither listed as a template nor read.
 - The brake on agents applies to `prompts/get` and `resources/read` as it does
   to a tool call. Outside a tool call no result carries a refusal, so it is a
   protocol error: `-32602` for invalid input or a record not found, `-32603`

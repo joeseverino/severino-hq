@@ -1,0 +1,12 @@
+id: page-errors-heard-through-uncaught
+valid:
+  - 'uncaught = Uncaught(page, lambda: path)'
+  - 'page.on("console", heard.append)'
+  - 'page.on(event="pageerror", f=heard.append)'
+invalid:
+  - 'page.on("pageerror", heard.append)'
+  - "page.once('pageerror', heard.append)"
+  - |
+    with page.expect_event("pageerror") as thrown:
+        page.goto(url)
+  - 'page.wait_for_event("pageerror", timeout=1000)'

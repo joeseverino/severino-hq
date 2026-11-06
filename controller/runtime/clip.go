@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"strings"
+
 	"github.com/joeseverino/severino-hq/controller/api"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 )
@@ -31,6 +33,22 @@ func Clip(s string, n int) string {
 		return string(runes[:n])
 	}
 	return s
+}
+
+// LastLine is the last line of a child's output that is not blank, trimmed
+// and clipped to SaidLimit with an ellipsis when cut; empty when every line
+// is blank.
+func LastLine(output string) string {
+	last := ""
+	for line := range strings.SplitSeq(output, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			last = line
+		}
+	}
+	if clipped := Clip(last, SaidLimit); clipped == last {
+		return last
+	}
+	return Clip(last, SaidLimit-1) + "…"
 }
 
 // ReportText is failure text as a report carries it.

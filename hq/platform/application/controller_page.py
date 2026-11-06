@@ -13,7 +13,7 @@ from typing import Any
 
 from django.utils import timezone
 
-from hq.domains.control_plane.models import OperationRequest, ProviderInventory
+from hq.domains.control_plane.models import OperationRequest, ProviderInventory, attempted_at
 
 from .cadence import (
     ControllerStanding,
@@ -34,7 +34,8 @@ class KindReading:
     kind: str
     label: str
     attempted_at: datetime
-    observed_at: datetime
+    # None when no read has answered.
+    observed_at: datetime | None
     records: int
     # "read", "not connected", or why the last attempt stored nothing new.
     result: str
@@ -98,7 +99,7 @@ def _reading(row: ProviderInventory) -> KindReading:
     return KindReading(
         kind=row.kind,
         label=kind_label(row.kind),
-        attempted_at=max(row.observed_at, row.updated_at),
+        attempted_at=attempted_at(row.observed_at, row.updated_at),
         observed_at=row.observed_at,
         records=len(row.records) if isinstance(row.records, list) else 0,
         result=result,

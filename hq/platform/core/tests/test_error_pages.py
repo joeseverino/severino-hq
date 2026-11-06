@@ -62,7 +62,7 @@ class RefusalTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, "That form is out of date", status_code=403)
         self.assertContains(response, "Nothing was saved.", status_code=403)
-        self.assertNotContains(response, "CSRF", status_code=403)
+        self.assertNotIn("CSRF", text(response))
 
 
 class NotFoundTests(TestCase):

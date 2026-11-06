@@ -18,7 +18,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory, ReadRequest
 from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.providers import registry_label
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
 
 from .. import cadence, visit_refresh
@@ -175,6 +175,17 @@ class VisitRefreshTests(TestCase):
     def test_a_failing_reading_is_tried_again_once_its_cadence_has_passed(self):
         store(FAST, age=OLD, attempted=VISIT_EVERY + timedelta(seconds=5))
 
+        with page(FAST):
+            self.assertEqual(self.ask()["requested"], [FAST])
+
+    def test_a_kind_no_read_has_answered_is_judged_by_its_last_attempt(self):
+        row = ProviderInventory.objects.create(kind=FAST, records=[], reachable=False, observed_at=None)
+        tried = ProviderInventory.objects.filter(pk=row.pk)
+
+        tried.update(updated_at=timezone.now() - timedelta(seconds=10))
+        with page(FAST):
+            self.assertEqual(self.ask()["requested"], [])
+        tried.update(updated_at=timezone.now() - VISIT_EVERY - timedelta(seconds=5))
         with page(FAST):
             self.assertEqual(self.ask()["requested"], [FAST])
 

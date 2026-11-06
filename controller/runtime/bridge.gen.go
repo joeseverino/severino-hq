@@ -1499,7 +1499,7 @@ type GitHubRepositoryHeld struct {
 // GitHubRepositoryRecord One github.repository record: GitHub repository.
 type GitHubRepositoryRecord struct {
 	Access            GitHubRepositoryRepositoryAccess `json:"access,omitempty"`
-	Alerts            map[string]interface{}           `json:"alerts,omitempty"`
+	Alerts            map[string]map[string]int        `json:"alerts,omitempty"`
 	Archived          bool                             `json:"archived,omitempty"`
 	Artifacts         []map[string]interface{}         `json:"artifacts,omitempty"`
 	CalledWorkflows   []string                         `json:"called_workflows,omitempty"`

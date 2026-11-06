@@ -17,7 +17,7 @@ from pydantic import TypeAdapter
 
 from hq.domains.control_plane.models import CapabilityRule
 from hq.domains.projects.models import Project
-from hq.platform.application.security import Capability, Principal
+from hq.platform.application.security import Principal, operator_capabilities
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
@@ -26,8 +26,8 @@ from ..identity import set_principal
 from ..server import mcp
 from ..shapes import answer_type
 
-# An agent holding every capability, so each kind is read rather than refused.
-READER = Principal("example-reader", "mcp", frozenset(Capability))
+# An agent holding every grant, an extension's too, so each kind is read rather than refused.
+READER = Principal("example-reader", "mcp", operator_capabilities())
 WRITER = Principal("example-writer", "mcp", frozenset({"write_projects", "read"}))
 # An agent whose changes wait for a person, so a held answer is read too.
 HELD = Principal("example-held", "mcp", frozenset({"write_projects", "read"}))
@@ -53,6 +53,16 @@ def _successes(lenses):
         else:
             yield from ((name, arguments) for arguments in ARGUMENTS.get(name, ({},)))
     yield from (("get_topology", {"lens": lens}) for lens in lenses)
+
+
+def _refused_a_grant(answers):
+    """Each call refused for a grant its principal lacks, so a kind that passed by refusal is named."""
+
+    return [
+        (name, arguments)
+        for name, arguments, result in answers
+        if result.is_error and result.structured_content["error"]["code"] in {"forbidden", "insufficient_scope"}
+    ]
 
 
 def _refusals():
@@ -112,6 +122,19 @@ def _held(schema, value, path, held):
                 _held(shape.get("items"), item, f"{path}[]", held)
 
 
+def _unheld(listed, answers):
+    """Where each field a listed tool's success shape names sits, when no
+    successful answer among ``answers`` holds it."""
+
+    successes = {tool.name: tool.output_schema["anyOf"][0] for tool in listed}
+    named = dict(field for name, schema in successes.items() for field in _named(schema, name))
+    held: set[tuple[str, str]] = set()
+    for name, _arguments, result in answers:
+        if not result.is_error:
+            _held(successes[name], result.structured_content, name, held)
+    return sorted(where for field, where in named.items() if field not in held)
+
+
 class OutputShapeTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -119,9 +142,7 @@ class OutputShapeTests(TestCase):
         with throwaway_media(), seeds.built("showcase"):
             pass
         Project.objects.create(name="Read only", slug="read-only")
-        CapabilityRule.objects.create(
-            scope=CapabilityRule.Scope.AGENT, subject=HELD.actor, capability="project.create", rule="approve"
-        )
+        CapabilityRule.objects.create(subject=HELD.actor, capability="project.create", rule="approve")
 
     def _checked(self, principal, calls):
         """Each call's result, checked against its tool's listed outputSchema by the SDK's client."""
@@ -154,6 +175,7 @@ class OutputShapeTests(TestCase):
         reads = [(name, arguments) for name, arguments in _successes(lenses) if name != "execute_capability"]
 
         _, answered = self._checked(READER, [*reads, *_refusals()])
+        self.assertEqual(_refused_a_grant(answered[: len(reads)]), [], "READER holds every grant, an extension's too")
         _, written = self._checked(WRITER, writes)
         _, held = self._checked(HELD, [("execute_capability", {"name": "project.create", "payload": HELD_PROJECT})])
         self.assertEqual(held[0][2].structured_content.get("status"), "awaiting_approval")
@@ -176,15 +198,8 @@ class OutputShapeTests(TestCase):
         ]
         _, traced = self._checked(READER, [("get_topology", {"focus": nodes[0]})])
         answered += traced
-        successes = {tool.name: tool.output_schema["anyOf"][0] for tool in listed}
-        named = dict(field for name, schema in successes.items() for field in _named(schema, name))
-        held: set[tuple[str, str]] = set()
-        for name, _arguments, result in [*answered, *written]:
-            if not result.is_error:
-                _held(successes[name], result.structured_content, name, held)
         self.maxDiff = None
-        missing = sorted(where for field, where in named.items() if field not in held)
-        self.assertEqual(missing, [], "a field a shape names that no answer holds")
+        self.assertEqual(_unheld(listed, [*answered, *written]), [], "a field a shape names that no answer holds")
         # Each success is of the type its handler declares: a key the type
         # requires is one the answer holds, as Pydantic reads the type.
         declared = {name: TypeAdapter(answer_type(tool.handler)) for name, tool in mcp.tools.items()}

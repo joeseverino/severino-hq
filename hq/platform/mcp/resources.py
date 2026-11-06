@@ -17,8 +17,9 @@ from mcp.shared.exceptions import MCPError
 from mcp.shared.uri_template import UriTemplate
 
 from hq.platform.application import approvals, resources as registry
+from hq.platform.application.access import Access, holding
 from hq.platform.application.resources import ResourceCollection, ResourceSpec
-from hq.platform.application.security import Principal
+from hq.platform.application.security import Capability, Principal
 
 SCHEME = "hq"
 MIME = "application/json"
@@ -26,6 +27,9 @@ MIME = "application/json"
 # A fixed view's address. Every address is the SDK's RFC 6570 template, so the
 # client's expansion and HQ's match encode and decode a value the same way.
 VIEW = UriTemplate.parse(f"{SCHEME}://{{view}}")
+
+# Who reads the action queue, the held requests and HQ itself: each read requires it.
+READS = holding(Capability.READ)
 
 
 @cache
@@ -51,6 +55,9 @@ class View:
     title: str
     description: str
     read: Callable[[Principal], Mapping[str, Any]]
+    # Who may read it: a read is refused by it, and resources/list lists the
+    # view only to a caller it admits, as tools/list lists a tool.
+    requires: Access
 
     @property
     def uri(self) -> str:
@@ -81,12 +88,15 @@ def serialize_held(held: Any) -> dict[str, Any]:
 VIEWS = {
     view.name: view
     for view in (
-        View("action_items", "Needs you", "HQ's action queue: what needs doing, from every domain.", action_queue),
+        View(
+            "action_items", "Needs you", "HQ's action queue: what needs doing, from every domain.", action_queue, READS
+        ),
         View(
             "approvals",
             "Held requests",
             "The changes you asked for that wait for a person; a person reads every one.",
             held_requests,
+            READS,
         ),
         View(
             "hq",
@@ -96,16 +106,20 @@ VIEWS = {
                 "system_health says whether it answers; the status-brief prompt is a brief of both."
             ),
             hq_itself,
+            READS,
         ),
     )
 }
 
 
-def listed() -> types.ListResourcesResult:
+def listed(principal: Principal) -> types.ListResourcesResult:
+    """The fixed views ``principal`` may read, each by the rule its read is refused by."""
+
     return types.ListResourcesResult(
         resources=[
             types.Resource(uri=view.uri, name=view.name, title=view.title, description=view.description, mime_type=MIME)
             for view in VIEWS.values()
+            if view.requires.admits(principal)
         ]
     )
 
@@ -180,4 +194,5 @@ def read(uri: str, principal: Principal) -> Mapping[str, Any]:
     view = VIEWS.get(str((VIEW.match(uri) or {}).get("view", "")))
     if view is None:
         raise _nothing_at(uri)
+    view.requires.check(principal)
     return view.read(principal)

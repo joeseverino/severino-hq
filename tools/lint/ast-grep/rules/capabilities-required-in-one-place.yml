@@ -1,0 +1,22 @@
+# Resources, capabilities, search and imports each looped over
+# principal.require; one rule written four times is four places to get it
+# subtly different. security.require_all is the loop, and a registry in
+# hq/platform/application calls it. The scope is that directory's own
+# modules, none below it.
+id: capabilities-required-in-one-place
+language: python
+severity: error
+message: A registry loops over principal.require itself.
+note: Call require_all(principal, capabilities) from hq.platform.application.security.
+files:
+  - "hq/platform/application/*.py"
+ignores:
+  - "hq/platform/application/*/**"
+  - "hq/platform/application/test*.py"
+  - "hq/platform/application/security.py"
+rule:
+  kind: for_statement
+  has:
+    field: body
+    stopBy: end
+    pattern: $PRINCIPAL.require($$$)

@@ -86,7 +86,7 @@ TOOLS = {
 
 
 class ServiceTests(SentinelMixin, TestCase):
-    """The tools themselves, called as an authenticated agent at the ceiling.
+    """The tools themselves, called as an authenticated agent holding every grant.
 
     Bound explicitly: a tool reached with no caller is refused, and these tests
     are about the tools rather than the door.
@@ -305,34 +305,28 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertLess(narrowed["summary"]["nodes"], whole["summary"]["nodes"])
 
     def test_an_unknown_payload_field_is_named_to_the_agent(self):
-        from django.test import override_settings
-
         from hq.platform.application.security import mcp_principal
 
         from ..identity import set_principal
 
-        with override_settings(SEVERINO_AGENT_ENABLE_DOC_SYNC=True):
-            self.enterContext(set_principal(mcp_principal()))
-            result = services.execute_capability(
-                "hq.sync", {"manifest": [], "manifets": [], "idempotency_key": "example-key"}
-            )
+        self.enterContext(set_principal(mcp_principal()))
+        result = services.execute_capability(
+            "hq.sync", {"manifest": [], "manifets": [], "idempotency_key": "example-key"}
+        )
 
         self.assertFalse(result["ok"])
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertIn("manifets", result["error"]["message"])
 
     def test_an_invalid_payload_is_named_to_the_agent(self):
-        from django.test import override_settings
-
         from hq.platform.application.security import mcp_principal
 
         from ..identity import set_principal
 
-        with override_settings(SEVERINO_AGENT_ENABLE_DOC_SYNC=True):
-            self.enterContext(set_principal(mcp_principal()))
-            result = services.execute_capability(
-                "hq.sync", {"manifest": "hunter2-not-for-logs", "idempotency_key": "example-key"}
-            )
+        self.enterContext(set_principal(mcp_principal()))
+        result = services.execute_capability(
+            "hq.sync", {"manifest": "hunter2-not-for-logs", "idempotency_key": "example-key"}
+        )
 
         self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertEqual(result["error"]["message"], "hq.sync: manifest must be a valid list.")
@@ -388,8 +382,11 @@ class ServiceTests(SentinelMixin, TestCase):
         self.assertLessEqual(len(found["findings"]), 1)
         self.assertIn("truncated", found["summary"])
 
-    def test_connection_state_is_filtered_by_the_mcp_principal(self):
+    def test_connection_state_is_filtered_by_the_agents_grant(self):
         from hq.platform.application.connections import ConnectionInstance, ConnectionSpec
+        from hq.platform.application.security import agent_principal
+
+        from ..identity import set_principal
 
         instance = ConnectionInstance("example-infra", "Example infrastructure", "example", "good", "healthy")
         spec = ConnectionSpec(
@@ -399,7 +396,8 @@ class ServiceTests(SentinelMixin, TestCase):
             Capability.MANAGE_INFRASTRUCTURE,
             lambda: (instance,),
         )
-        with offering(spec, alone=True):
+        reader = agent_principal("example-agent", "mcp", frozenset({"read"}))
+        with offering(spec, alone=True), set_principal(reader):
             listed = services.list_resource("connections")
 
         self.assertNotIn("example.infrastructure", [item["family"] for item in listed["items"]])

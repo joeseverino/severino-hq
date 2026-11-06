@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // unitSuffixes are the unit types systemd reads from a unit directory.
@@ -115,28 +117,5 @@ func InstallUnit(dir, systemd, name string) error {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	return writeAtomic(target, data, 0o644)
-}
-
-// writeAtomic replaces target with data: written beside it, then renamed.
-func writeAtomic(target string, data []byte, mode os.FileMode) error {
-	file, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".")
-	if err != nil {
-		return err
-	}
-	temporary := file.Name()
-	_, err = file.Write(data)
-	if err == nil {
-		err = file.Chmod(mode)
-	}
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = os.Rename(temporary, target)
-	}
-	if err != nil {
-		os.Remove(temporary)
-	}
-	return err
+	return atomicfile.WriteFile(target, data, 0o644)
 }

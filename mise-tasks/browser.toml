@@ -45,7 +45,7 @@ vars.classes = """\
 ["browser:layout-chromium-1"]
 description = "browser:layout-1 in Chromium: a CI leg, which mise run browser leaves out"
 hide = true
-env = { HQ_BROWSER_ENGINE = "chromium" }
+env = { HQ_BROWSER_ENGINE = "chromium", SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 run = [
   { task = "setup:browser", args = [
     "chromium",
@@ -57,7 +57,7 @@ run = [
 ["browser:layout-chromium-2"]
 description = "browser:layout-2 in Chromium: a CI leg, which mise run browser leaves out"
 hide = true
-env = { HQ_BROWSER_ENGINE = "chromium" }
+env = { HQ_BROWSER_ENGINE = "chromium", SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 run = [
   { task = "setup:browser", args = [
     "chromium",
@@ -73,7 +73,9 @@ extends = "django-browser"
 vars.classes = """\
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
   hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
+  hq.platform.core.tests.browser.estate.ExampleEstateTableFitTests \
   hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
   hq.platform.core.tests.browser.fragments.FragmentBrowserTests \
   hq.platform.core.tests.browser.current_state.CurrentStateBrowserTests \
-  hq.platform.core.tests.browser.command_forms.CommandFormBrowserTests"""
+  hq.platform.core.tests.browser.command_forms.CommandFormBrowserTests \
+  hq.platform.core.tests.browser.agent_devices.AgentDeviceBrowserTests"""

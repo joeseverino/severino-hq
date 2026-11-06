@@ -1,0 +1,14 @@
+#!/bin/sh
+#MISE description="The advisories against each package of every lockfile git tracks, and each adverse status, as lint:audit's uv audit and osv-scanner report them; read-only, and it needs the network"
+#MISE hide=true
+#MISE extends="audit"
+
+# lint:audit's own run, as a read, so an auditor that may run only audit:
+# tasks reads the report the gate does: uv audit lists each package's
+# advisories and adverse status, and osv-scanner's table each advisory with
+# its package, fix and lockfile, setting apart a Go advisory the controller
+# never calls and naming each one osv-scanner.toml ignores, with why. A
+# finding exits 1, as it fails the gate.
+set -eu
+
+exec tools/pipeline/audit.sh

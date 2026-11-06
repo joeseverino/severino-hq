@@ -9,11 +9,12 @@ from typing import Any
 
 from asgiref.sync import sync_to_async
 from django.conf import settings
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from hq.platform.application import agent_admission
 from hq.platform.application.access import ANYONE
 from hq.platform.application.refusal_status import refuse
+from hq.platform.application.resources import name_refusal
 from hq.platform.application.security import Principal
 
 from .contract import served_resources
@@ -62,7 +63,16 @@ class Tool:
         """The handler's answer, once the arguments pass its model, whose
         refusal never quotes the input, or the refusal for one that ran too long."""
 
-        bound = self.arguments.model_validate(dict(arguments))
+        try:
+            bound = self.arguments.model_validate(dict(arguments))
+        except ValidationError as exc:
+            # A resource tool's ``name`` is a choice in its schema, so a name it
+            # cannot read fails here, before the read: it is refused as the
+            # machine API refuses it, with the read that does answer.
+            named = any(tuple(error["loc"]) == ("name",) for error in exc.errors())
+            if named and (refused := name_refusal(self.name, arguments.get("name"))) is not None:
+                raise refused from None
+            raise
         seconds = settings.SEVERINO_AGENT_CALL_TIMEOUT_SECONDS
         deadline = asyncio.timeout(seconds)
         try:

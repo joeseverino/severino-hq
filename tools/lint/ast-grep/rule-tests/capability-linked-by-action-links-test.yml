@@ -1,0 +1,10 @@
+id: capability-linked-by-action-links
+valid:
+  - 'command_action("example.run", target, variant="all")'
+  - 'ActionLink("subject", "Open", "read", url)'
+  - 'TopologyAction("open", "Open", url, kind="read")'
+  - 'ActionLink("x", label, "read", url, method="POST")'
+invalid:
+  - 'ActionLink("run", "Run", "remote_write", url, capability="example.run")'
+  - 'TopologyAction("remove", words, url, capability=name)'
+  - 'workflow_contracts.ActionLink("run", words, "remote_write", url, capability=spec.name)'

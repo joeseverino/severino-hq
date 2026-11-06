@@ -304,6 +304,34 @@ NARROW_FRAMES = (
 )
 
 
+# A queue item's words (``texts``) fill the column they sit in, and that column
+# runs to the item's buttons (``ends``) wherever the two share a line, so no
+# empty band stands between what an item says and what can be pressed. The
+# column may stand off its buttons by its row's gap and no more.
+SHORT_OF_ITS_BUTTONS = (
+    "([texts, ends]) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const edge = (el) => { const s = getComputedStyle(el); return box(el).right - parseFloat(s.paddingRight) - parseFloat(s.borderRightWidth); };
+  for (const el of document.querySelectorAll('main ' + texts)) {
+    if (!el.checkVisibility()) continue;
+    const column = el.parentElement;
+    const short = edge(column) - box(el).right;
+    if (short > 2) found.push(`${describe(el)} stops ${Math.round(short)}px short of the edge of ${describe(column)}`);
+    const end = [...column.parentElement.children].find((sibling) => sibling.matches(ends));
+    if (!end || !end.checkVisibility()) continue;
+    const [at, by] = [box(column), box(end)];
+    if (by.left < at.right - 1 || by.top >= at.bottom || by.bottom <= at.top) continue;
+    const gap = parseFloat(getComputedStyle(column.parentElement).columnGap) || 0;
+    const band = by.left - at.right;
+    if (band > gap + 2) found.push(`${describe(column)} stops ${Math.round(band - gap)}px short of its buttons`);
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
 # A section's heading that follows other content in its box stands at least as
 # far from what is above it as from what it heads, so it reads as the start of
 # what comes next rather than a caption of what came before.

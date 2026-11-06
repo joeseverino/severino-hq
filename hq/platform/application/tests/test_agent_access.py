@@ -7,7 +7,8 @@ from django.db import DatabaseError
 from django.test import TestCase
 from django.urls import reverse
 
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AgentAccess, AuditLog
 
 from ..agent_access import SET_AGENT_ACCESS, AgentAccessCommand, agents_paused, set_agents_paused

@@ -1,16 +1,11 @@
 """HQ words an age one way, from one function."""
 
-import ast
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from ..moments import ago
 
-HQ = Path(__file__).resolve().parents[3]
-# The owner, and the template library whose registered filter is itself named ``ago``.
-OWNERS = {"moments.py", "value_tags.py"}
 NOW = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 
 
@@ -33,20 +28,3 @@ class AgePhrasingTests(SimpleTestCase):
         for missing in ("", "not a time"):
             self.assertEqual(ago(missing, NOW), "never")
         self.assertEqual(ago(NOW + timedelta(minutes=5), NOW), "just now")
-
-
-@tag("source", "tree")
-class OneAgeFunctionTests(SimpleTestCase):
-    def test_no_module_but_its_owners_define_ago_or_imports_it_under_another_name(self):
-        found = []
-        for path in sorted(HQ.rglob("*.py")):
-            if "tests" in path.relative_to(HQ).parts or path.name in OWNERS:
-                continue
-            for node in ast.walk(ast.parse(path.read_text(), str(path))):
-                if isinstance(node, ast.FunctionDef) and node.name in {"ago", "_ago"}:
-                    found.append(f"{path.name}: defines {node.name}")
-                if isinstance(node, ast.ImportFrom):
-                    found += [
-                        f"{path.name}: {a.name} as {a.asname}" for a in node.names if a.name == "ago" and a.asname
-                    ]
-        self.assertEqual(found, [])

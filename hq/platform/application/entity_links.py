@@ -16,7 +16,7 @@ lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
-from hq.domains.control_plane.providers import PROVIDERS, registry_label
+from hq.domains.control_plane.providers import PROVIDERS, read_spec, registry_label
 from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
@@ -126,15 +126,21 @@ def record_name(kind: str, spec: Mapping[str, Any], key: str = "", *, leads: boo
     provider = PROVIDERS.get(kind)
     if provider is None:
         return key
-    try:
+
+    def named(spec: dict[str, Any]) -> str:
         if provider.name is not None:
-            return str(provider.name(dict(spec)) or key)
-        names = provider.hostnames(dict(spec)) if provider.hostnames and not provider.covers else ()
+            return str(provider.name(spec) or key)
+        names = provider.hostnames(spec) if provider.hostnames and not provider.covers else ()
         if names:
-            leads_to = provider.origin(dict(spec)) if provider.origin and leads else ""
+            leads_to = provider.origin(spec) if provider.origin and leads else ""
             return f"{names[0]}{LEADS_TO}{leads_to}" if leads_to else str(names[0])
-    except KeyError, TypeError, ValueError:
+        return ""
+
+    found = read_spec(kind, spec, named)
+    if found is None:
         return key
+    if found:
+        return found
     return key if provider.covers else str(spec.get("name") or key)
 
 
@@ -183,7 +189,14 @@ def web_url(value: Any) -> str:
     """
 
     text = str(value or "").strip()
-    parts = urlsplit(text)
+    # A browser drops control characters Python's parser keeps, so the two
+    # would disagree about what the link names.
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in text):
+        return ""
+    try:
+        parts = urlsplit(text)
+    except ValueError:  # a bracketed host that is no IPv6 address
+        return ""
     return text if parts.scheme in ("http", "https") and parts.hostname else ""
 
 

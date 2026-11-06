@@ -33,7 +33,9 @@ commit it runs.
 Each image CI or Compose signs also carries a signed CycloneDX SBOM, Trivy's
 list of its Debian packages, Python distributions (the composition's include
 the extensions) and Go binaries' modules. The SBOM is attested by the same
-workflow identity and stored beside the image. To read the host image's:
+workflow identity and stored beside the image. The composition's is the file
+its vulnerability gate scanned (`mise run image:trivy`), so the list attested
+is the list checked. To read the host image's:
 
 ```sh
 cosign verify-attestation --type cyclonedx \
@@ -405,14 +407,6 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_MCP_ALLOWED_HOSTS` | installer | the host name the proxy serves HQ at, which MCP clients connect to; empty disables MCP |
 | `SEVERINO_MCP_ALLOWED_NETWORKS` | installer | the networks MCP answers; Tailscale's ranges by default |
 | `SEVERINO_MCP_ALLOWED_ORIGINS` | installer | browser origins MCP accepts; none by default |
-| `SEVERINO_AGENT_ENABLE_WRITES` | installer | `1` lets an agent make ordinary writes, on MCP and the machine API |
-| `SEVERINO_AGENT_ENABLE_DOC_SYNC` | installer | `1` lets an agent mirror the documentation index, without other writes |
-| `SEVERINO_AGENT_ENABLE_INFRASTRUCTURE` | installer | `1` lets an agent declare infrastructure |
-| `SEVERINO_AGENT_ENABLE_PRUNE` | installer | `1` lets an agent remove documentation index entries the vault no longer has |
-| `SEVERINO_AGENT_ENABLE_DELETES` | installer | `1`, beside `SEVERINO_AGENT_ENABLE_WRITES`, lets an agent delete records, and calendar events when the calendar switch is on too |
-| `SEVERINO_AGENT_ENABLE_CERT_RENEWAL` | installer | `1` lets an agent ask for a certificate to be renewed |
-| `SEVERINO_AGENT_ENABLE_LOOKUP` | installer | `1` lets an agent run the public-registry lookups, which leave the tailnet and tell a third party what was asked |
-| `SEVERINO_AGENT_ENABLE_CALENDAR` | installer | `1` lets an agent read the calendar and add to it, and grants nothing else |
 | `SEVERINO_FINDINGS_AUTO_REMEDY` | installer | `1` lets HQ queue a repair for a finding with nobody asking; the controller still claims and runs it |
 | `SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS` | installer | `1` lets public DNS declarations reconcile |
 | `SEVERINO_DASHBOARD_LINKS` | installer | extra dashboard links, as a JSON list of `{"label", "sub", "href"}` |
@@ -443,11 +437,15 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_DEBUG_TOOLBAR_IPS` | development | who sees the toolbar; loopback by default |
 | `SEVERINO_CONTROLLER_HEARTBEAT` | development | where HQ records that the controller reached it; beside the database when unset |
 | `SEVERINO_ACTIVITY_MARKER` | development | where HQ marks itself in use; beside the database when unset |
-| `SEVERINO_TEST_DATABASE_PATH` | development | the suite's database file; one per run in the temporary directory by default |
+| `SEVERINO_TEST_RUN` | development | a test run's own temporary directory, which it names to every process it starts as `TMPDIR` and removes when it ends; set by the process that starts the run, and a process started with it joins that run |
+| `SEVERINO_SANDBOX` | development | `1` with no `SEVERINO_DATABASE_PATH`: a process makes a run folder of its own as a test run does, with a new empty database in it, named to every process it starts and removed when it ends; set by mise.toml's gate templates |
+| `SEVERINO_TEST_DATABASE_PATH` | development | the suite's database file; in the run's own temporary directory by default |
+| `MISE_TASK_NAME` | development | the task a browser run keeps its failure shots under, in `var/browser-failures/`; `test` when unset; set by mise |
 | `SEVERINO_TEST_MARKERS` | development | the directory a test run keeps the controller's markers in |
 | `SEVERINO_TEST_BUILDS` | development | the directory a test run builds programs into |
 | `SEVERINO_TEST_LEAK_LEDGER` | development | the file parallel test workers record leaked resources in |
 | `HQ_TEST_STALL_SECONDS` | development | seconds a test process may go without progress before it prints what it is running, every stack and the browser's log, and fails that test; 300 when unset, `0` turns it off |
+| `HYPOTHESIS_PROFILE` | development | the Hypothesis profile every property runs under: `dev` by default, `ci` where Hypothesis detects CI |
 | `HQ_TEST_REPORTS` | development | the folder a gate names for a test run to write each failed test into, with its exception and traceback; set by `tools/gate/verdict.py` |
 | `HQ_API_RECORD_EXAMPLES` | development | `1`, with `--parallel 1`, writes the API responses a run receives to `openapi-examples.json`; `mise run fix:api-examples` sets it |
 | `HQ_API_RECORD_EXAMPLES_TO` | development | Where a recording writes instead of `openapi-examples.json`; `lint:drift-api-examples` sets it |
@@ -475,13 +473,33 @@ anything more reads as "Other sources allowed". The checklist is in
 
 ## Remote targets
 
-The receivers the controller deploys certificates to are in
-[`deploy/targets/`](../deploy/targets/). Install the edge controller and
-dispatcher root-owned, force the edge key to the dispatcher, and allow that
-account to sudo only the controller. Install the cPanel controller as the
-cPanel account and force its key to that script. Each rejects every operation
-outside its allowlist. These are installed by an administrator; a deploy
-cannot rewrite its own remote authorization.
+The controller deploys certificates and routes to two kinds of receiver. Each
+rejects every operation outside its allowlist. An administrator installs them;
+a deploy cannot rewrite its own remote authorization.
+
+- A Caddy edge runs `hq-edge` ([`controller/edge`](../controller/edge), which
+  states what it trusts), installed root-owned as
+  `/usr/local/sbin/severino-hq-edge-controller`. The edge key is forced to
+  [`deploy/targets/severino-hq-edge-dispatch`](../deploy/targets/severino-hq-edge-dispatch),
+  also root-owned, and that account may sudo only the receiver. `version`
+  prints the version the controller's messages name (`edge.Version`).
+- A cPanel account runs
+  [`deploy/targets/severino-hq-cpanel-controller`](../deploy/targets/severino-hq-cpanel-controller),
+  installed as that account, with its key forced to the script.
+
+`hq-edge` ships in the composed image at `/app/deploy/bin/hq-edge`. To install
+or update it, run this on the edge as an account that may use Docker and sudo,
+with `image` set to the digest-pinned composition HQ runs (the one in
+`/var/lib/severino-hq/release` on HQ's host). It needs cosign and read access
+to the image, verifies the compose workflow's signature, and stops if the
+image is built for another platform than the edge's:
+
+```sh
+image=ghcr.io/joeseverino/severino-hq/composition@sha256:DIGEST && cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/joeseverino/severino-hq/\.github/workflows/compose\.yml@refs/heads/main$' "$image" >/dev/null && docker pull -q "$image" >/dev/null && built="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")" && here="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')" && { [ "$built" = "$here" ] || { echo "hq-edge in this release is built for $built; this edge runs $here" >&2; false; }; } && container="$(docker create --pull never "$image")" && docker cp "$container:/app/deploy/bin/hq-edge" ./hq-edge && docker rm "$container" >/dev/null && sudo install -o root -g root -m 0755 ./hq-edge /usr/local/sbin/severino-hq-edge-controller && rm ./hq-edge && sudo /usr/local/sbin/severino-hq-edge-controller version
+```
+
+It prints the receiver's version last. The dispatcher and the sudo rule name
+the same path, so neither changes.
 
 ## Container upgrades
 

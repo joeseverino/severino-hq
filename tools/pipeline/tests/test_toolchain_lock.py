@@ -21,6 +21,13 @@ class ImageTests(SimpleTestCase):
         text = BASE + "FROM tools AS build\nCOPY --from=tools /opt/bin/uv /usr/local/bin/uv\nFROM ${HQ_IMAGE}\n"
         self.assertEqual(self.foreign(text), [])
 
+    def test_a_stage_of_the_empty_base_passes(self):
+        text = (
+            BASE
+            + "FROM scratch AS programs\nCOPY --from=tools /opt/bin/uv /\nFROM tools\nCOPY --from=programs /uv /usr/local/bin/uv\n"
+        )
+        self.assertEqual(self.foreign(text), [])
+
     def test_mise_from_its_image_at_min_version_by_digest_passes(self):
         text = BASE + f"COPY --from=ghcr.io/jdx/mise:{MISE}@{DIGEST} /usr/local/bin/mise /usr/local/bin/mise\n"
         self.assertEqual(self.foreign(text), [])

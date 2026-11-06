@@ -221,7 +221,8 @@ def _proxy_hop(found: Connection) -> Hop | None:
 
 def _whose(found: Connection) -> str:
     device = found.caller_device
-    if found.identity.corroborated and not found.untrusted_forwarding:
+    # An agent's approved device is linked to its person, never the reader's own.
+    if found.identity.corroborated and not found.identity.agent and not found.untrusted_forwarding:
         owner = "yours"
     else:
         owner = f"owned by {device.user}" if device.user else "no reported owner"
@@ -699,11 +700,11 @@ class RequestPath:
         return dotted(text, f"{len(self.findings)} disagree") if self.findings else text
 
 
-def request_path(request) -> RequestPath:
-    """How ``request`` reached HQ, read once per projection."""
+def request_path(request, principal=None) -> RequestPath:
+    """How ``request`` reached HQ, read once per projection, for ``principal`` when a token made it."""
 
     edge, firewall = observed_request_controls(request.get_host())
-    found = connection(request, edge=edge, firewall=firewall)
+    found = connection(request, edge=edge, firewall=firewall, principal=principal)
     path = hq_path(request, found=found) or joined(None, request, found)
     return RequestPath(
         connection=found,
@@ -743,6 +744,7 @@ def serialize_request_path(found: RequestPath) -> dict[str, Any]:
             "measured_by": connection.measurement_label,
             "tailnet_observed_at": iso(connection.tailnet_observed_at),
             "identity_agrees": connection.identity.corroborated,
+            "device_standing": connection.identity.device_standing,
         },
         "addresses": [_address_row(row) for row in found.addresses],
         "hq_addresses": [_address_row(row) for row in found.hq_addresses],

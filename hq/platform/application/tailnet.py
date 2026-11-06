@@ -41,6 +41,9 @@ class Device:
     """One machine as the policy names it: an owner, some tags, some ports."""
 
     name: str
+    # Tailscale's stable id for the device, which outlives the re-authentication
+    # that rotates ``public_key``: what an agent's call is attributed to.
+    node_id: str = ""
     user: str = ""
     tags: tuple[str, ...] = ()
     reach: dict[int, tuple[str, ...]] = field(default_factory=dict)
@@ -148,6 +151,7 @@ def devices() -> dict[str, Device]:
                 continue
             found[name] = Device(
                 name=name,
+                node_id=str(record.get("node_id", "")),
                 user=str(record.get("user", "")),
                 tags=tuple(str(tag) for tag in record.get("tags") or ()),
                 reach={

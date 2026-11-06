@@ -436,8 +436,9 @@ def get_path(hostname: str) -> dict[str, Any]:
         return serialize_path(path_to(wanted))
 
 
-def list_request_path() -> dict[str, Any]:
-    """How the calling request reached HQ, as the connection page shows it."""
+def list_request_path(*, principal: Principal | None = None) -> dict[str, Any]:
+    """How the calling request reached HQ, as the connection page shows it,
+    an agent's judged by the approval of the device it called from."""
 
     request = request_context.current()
     if request is None:
@@ -447,7 +448,7 @@ def list_request_path() -> dict[str, Any]:
         }
 
     with projection_scope(seed=serving(request)):
-        return serialize_request_path(request_path(request))
+        return serialize_request_path(request_path(request, principal))
 
 
 # ----- Readings ---------------------------------------------------------------

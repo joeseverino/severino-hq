@@ -12,8 +12,9 @@
 # (tools/lib/heavy-turn.sh, tools/gate/turn.py). Its output is the command's,
 # unprefixed, under the task that asked for it. Its timeout, which starts once
 # it holds the lock, is the asking gate's own bound, HQ_TURN_BOUND: mise run's
-# --timeout would count the wait.
+# --timeout would count the wait. The command runs under tools/lib/measured,
+# which ends it with the line on what its process tree spent.
 set -eu
 # mise hands the words over shell-quoted, one word each.
 eval "set -- ${usage_command:?}"
-exec "$@"
+exec ./tools/lib/measured "$@"

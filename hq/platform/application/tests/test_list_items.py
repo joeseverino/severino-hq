@@ -15,6 +15,7 @@ from ..expenses import ExpenseCommand, save_expense
 from ..read_models import list_expenses, list_receipts
 from ..receipts import ReceiptMetadataCommand, update_receipt
 from ..security import Principal
+from .facts import ROOT, TOP, scan
 
 APPLICATION = Path(__file__).resolve().parents[1]
 
@@ -65,10 +66,13 @@ class ListItemIsTheSavedRecordTests(TestCase):
 
 
 def _functions(prefix: str):
-    for path in sorted(APPLICATION.glob("*.py")):
-        for node in ast.parse(path.read_text()).body:
-            if isinstance(node, ast.FunctionDef) and node.name.startswith(prefix):
-                yield path, node
+    """Each module-level function of the application's own modules whose name starts with ``prefix``."""
+
+    rule = {"kind": "function_definition", "has": {"field": "name", "regex": f"^{prefix}"}, **TOP}
+    for found in scan({"function": rule}, *sorted(path.relative_to(ROOT) for path in APPLICATION.glob("*.py"))):
+        (node,) = ast.parse(found.text).body
+        if isinstance(node, ast.FunctionDef):
+            yield found.path, node
 
 
 def _serializers() -> dict[str, str]:
@@ -82,7 +86,7 @@ def _serializers() -> dict[str, str]:
     return found
 
 
-@tag("source")
+@tag("source", "tree")
 class ListItemsComeFromTheSerializerTests(SimpleTestCase):
     def test_a_list_of_a_serialized_record_names_its_serializer(self):
         """A list that builds its own item drifts from the record a save or a

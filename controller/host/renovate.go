@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // Where the Renovate container finds what it is given, and the layout of the
@@ -253,5 +255,5 @@ func (r *Renovator) record(outcome DependencyRun) error {
 	if err := ownDirectory(filepath.Dir(r.Outcome)); err != nil {
 		return err
 	}
-	return writeAtomic(r.Outcome, data, 0o600)
+	return atomicfile.WriteFile(r.Outcome, data, 0o600)
 }

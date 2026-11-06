@@ -104,16 +104,10 @@ class CommandViewTests(TestCase):
 
         self.assertEqual([button.words for button in submits(response)], ["Create a project"])
         self.assertNotIn("project.create", text(response))
-        for built in (
-            "manage_projects",
-            "Handler",
-            "JSON Schema",
-            "Strict input",
-            "Run command",
-            "Preview",
-            "additionalProperties",
-        ):
+        for built in ("manage_projects", "JSON Schema", "Strict input", "Run command", "additionalProperties"):
             self.assertNotContains(response, built)
+        for built in ("Handler", "Preview"):
+            self.assertNotIn(built, text(response))
 
     def test_a_lede_says_what_the_title_does_not(self):
         restated = self.client.get("/commands/project.create/")

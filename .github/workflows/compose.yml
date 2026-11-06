@@ -155,7 +155,9 @@ jobs:
 
       - name: Install the pinned age
         if: failure()
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
           version: ${{ steps.pins.outputs.mise }}
           install_args: age
@@ -242,11 +244,9 @@ jobs:
 
       - name: Authenticate to GHCR
         # Once, for every registry read and the push at the end.
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
 
       - name: Resolve the host image
         id: host
@@ -266,7 +266,9 @@ jobs:
       # and the published composition is signed and attested with it at the end.
       # The release mise.lock records, which the host verifies with too.
       - name: Install the pinned cosign
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
           version: ${{ steps.pins.outputs.mise }}
           install_args: cosign
@@ -529,12 +531,13 @@ jobs:
           IMAGE: ${{ steps.candidate.outputs.image }}
         run: tools/pipeline/image-health.sh "$IMAGE"
 
-      # The scan caches its database by the day under this key, and saves it
-      # wherever it caches. Only main's composition caches; a pull request's
-      # restores main's newest and saves nothing.
+      # The scan's vulnerability database, kept by the day under this key.
+      # Only main's composition saves it; a pull request's restores main's
+      # newest and saves nothing.
       - name: Restore the vulnerability database
+        id: trivy-db
         if: >-
-          steps.fingerprint.outputs.build == 'true' && github.ref != 'refs/heads/main'
+          steps.fingerprint.outputs.build == 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/.cache/trivy
@@ -544,36 +547,35 @@ jobs:
       - name: Install the pinned Trivy
         if: >-
           steps.fingerprint.outputs.build == 'true'
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
           version: ${{ steps.pins.outputs.mise }}
           install_args: trivy
           cache: false
       - name: Scan composed image
         # Skipped only by an admission's dispatch that found nothing to do.
-        # JSON to a file rather than the table: the table lists every package,
-        # extensions included, and wraps a long name past its mask.
+        # One analysis is the gate and the SBOM attested below; a finding is
+        # named by its ID, never by the package table (mise-tasks/image/trivy).
         id: scan
         if: >-
           steps.fingerprint.outputs.build == 'true'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          skip-setup-trivy: true
-          cache: ${{ github.ref == 'refs/heads/main' }}
-          cache-dir: ${{ github.workspace }}/.cache/trivy
-          image-ref: ${{ steps.candidate.outputs.image }}
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          format: json
-          output: trivy-composed.json
-          exit-code: "1"
+        env:
+          IMAGE: ${{ steps.candidate.outputs.image }}
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+          # Trivy is the one tool this task runs, installed above.
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
+        run: mise run image:trivy "$IMAGE" --sbom sbom.cdx.json
 
-      - name: Name what the scan found
-        if: failure() && steps.scan.outcome == 'failure'
-        run: |
-          jq -r '.Results[]?.Vulnerabilities[]?
-            | "::error title=\(.Severity) \(.VulnerabilityID)::\(.Severity) \(.VulnerabilityID) in \(.PkgName) \(.InstalledVersion), fixed in \(.FixedVersion)"' \
-            trivy-composed.json | sort -u
+      - name: Save the vulnerability database
+        if: >-
+          steps.fingerprint.outputs.build == 'true' && github.ref_name == github.event.repository.default_branch &&
+          steps.trivy-db.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/.cache/trivy
+          key: ${{ steps.trivy-db.outputs.cache-primary-key }}
 
       # A pull request has already had the only thing it was here for: the
       # image was built and its suite was run inside it. Publishing is what
@@ -610,21 +612,19 @@ jobs:
         env:
           IMAGE: ${{ steps.publish.outputs.image }}
         run: cosign sign --yes "$IMAGE"
-      # What the composition holds, as Trivy reads it (Debian packages, Python
-      # distributions, extensions included, each Go binary's modules), in
-      # CycloneDX, signed by the same workflow identity as the image and stored
-      # beside it in the registry. Trivy writes the list to a file, never the
-      # log, and needs no vulnerability database for it.
+      # What the composition holds, as the scan above read it (Debian
+      # packages, Python distributions, extensions included, each Go binary's
+      # modules), in CycloneDX, signed by the same workflow identity as the
+      # image and stored beside it in the registry: the list attested is the
+      # list scanned. Its subject is the published digest; the list itself
+      # names the image by the local tag it was scanned under.
       - name: Attest the SBOM
         if: >-
           env.IS_RELEASE == 'true' &&
           (steps.fingerprint.outputs.build == 'true')
         env:
           IMAGE: ${{ steps.publish.outputs.image }}
-        run: |
-          set -euo pipefail
-          trivy image --quiet --format cyclonedx --output sbom.cdx.json "$IMAGE"
-          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMAGE"
+        run: cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMAGE"
 
       # Deploy is started by the composition it deploys, and by nothing else
       # but a person: it is handed the commit, and a link back to this run.
@@ -641,7 +641,9 @@ jobs:
 
       - name: Install the pinned age
         if: failure()
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
           version: ${{ steps.pins.outputs.mise }}
           install_args: age

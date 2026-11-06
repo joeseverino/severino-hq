@@ -8,6 +8,7 @@ function takes a Zone and returns one insight or None, registered by name in
 """
 
 import re
+from functools import partial
 
 from hq.domains.control_plane.credential_reads import REGISTRAR_READ
 from hq.domains.control_plane.names import in_zone, normalized_hostname
@@ -18,7 +19,7 @@ from hq.domains.control_plane.provider_adapters.tls import (
     UPLOADED_CERTIFICATE_KIND,
 )
 from hq.domains.control_plane.provider_spec import expiry_phrase
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, read_spec
 from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 
@@ -192,6 +193,10 @@ def certificates(zone) -> ZoneInsight | None:
     )
 
 
+def _hostnames(provider, spec) -> tuple[str, ...]:
+    return tuple(provider.hostnames(spec))
+
+
 def _covering(zone) -> list:
     """``(resource, names)`` for each managed certificate naming a name in the zone."""
 
@@ -204,10 +209,8 @@ def _covering(zone) -> list:
         provider = PROVIDERS.get(resource.kind)
         if provider is None or provider.hostnames is None:
             continue
-        spec = resolved_spec(resource, targets)
-        try:
-            names = tuple(provider.hostnames(spec))
-        except KeyError, TypeError, ValueError:
+        names = read_spec(resource.kind, resolved_spec(resource, targets), partial(_hostnames, provider))
+        if names is None:
             continue
         if any(in_zone(name, zone.zone) for name in names):
             covering.append((resource, names))

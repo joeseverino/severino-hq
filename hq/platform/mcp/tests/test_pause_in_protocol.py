@@ -120,7 +120,7 @@ class PauseInProtocolTests(TestCase):
             self._session(steps)
 
         recorded.assert_called_once_with(
-            interface="mcp", reason="agents_paused", actor="example-agent", source="100.64.0.10"
+            interface="mcp", reason="agents_paused", actor="example-agent", source="100.64.0.10", device=""
         )
 
     def test_no_session_is_kept_to_lose_at_a_restart(self):

@@ -20,6 +20,14 @@ WIDTHS = (PHONE_SCREEN[0], 820, WIDE)
 # The narrowest phone a page must still fit.
 NARROWEST = 320
 
+# The widest window the gates read, past every viewport query and past where
+# a table region stops growing on most pages.
+WIDEST = 1680
+
+# The widest window a sweep reads, far past where any page stops changing
+# shape: past the last viewport query a region only grows.
+LARGEST = 3840
+
 # The sparse estate is read across the stylesheet's media queries as well: at
 # the narrowest phone, a tablet's short side, and the widest window the
 # `max-width: 1280px` rules hold, which WIDE is past.
@@ -72,6 +80,28 @@ def first_viewports(css, region):
 # The laptop windows where a table region has only just become 1000px wide,
 # where a wide table has the least room, are read besides WIDTHS.
 _, WIDE_TABLES = wide_tables(stylesheet(), 1000)
+
+
+def viewport_queries(css):
+    """Each viewport width query the stylesheet asks, as `matchMedia` takes it."""
+
+    css = re.sub(r"/\*.*?\*/", " ", css, flags=re.DOTALL)
+    return sorted({query.strip() for query in re.findall(r"@media([^{]*\bwidth\b[^{]*)\{", css)})
+
+
+def query_edges(queries):
+    """The first width at which each of the viewport ``queries`` starts or
+    stops holding, from the narrowest phone to the widest sweep: between two
+    of them every query holds as it did."""
+
+    edges = set()
+    for query in queries:
+        bounds = re.findall(r"\((min|max)-width:\s*(\d+)px\)", query)
+        if not bounds:
+            raise AssertionError(f"The stylesheet asks a viewport query the sweep cannot read the edge of: {query}")
+        edges |= {int(width) + (bound == "max") for bound, width in bounds}
+    return sorted(edge for edge in edges if NARROWEST < edge <= LARGEST)
+
 
 # The stylesheet's phone breakpoint: `@media (max-width: 640px)`.
 PHONE = 640

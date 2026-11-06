@@ -405,7 +405,7 @@ func (r *Runner) render(ctx context.Context, tree *install.Tree, status *secrets
 	out, err := project.Project(project.Input{
 		Registry: registry, EnvItem: config.EnvItem, Items: items,
 		HoldsConnections: holdsConnections(tree, config.Layout.RootUID),
-		Vault:            project.Vault{Configured: config.Vault, ID: *vault.Id, Name: text(vault.Name)},
+		Vault:            project.Vault{Configured: config.Vault, ID: *vault.Id, Name: project.Text(vault.Name)},
 	})
 	if err != nil {
 		return Result{}, err
@@ -623,11 +623,4 @@ func (r *Runner) restart(ctx context.Context) error {
 		}
 	}
 	return ErrUnhealthy
-}
-
-func text(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }

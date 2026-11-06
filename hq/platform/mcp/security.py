@@ -17,8 +17,10 @@ HQ's own here, and why:
   last of a repeated field and accept NaN and Infinity, and take no hook.
 """
 
+import asyncio
 import ipaddress
 import logging
+import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable
 from functools import cached_property
@@ -28,6 +30,8 @@ from urllib.parse import urlsplit, urlunsplit
 from starlette.datastructures import Headers
 from starlette.responses import JSONResponse, Response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+lazy import jwt
+lazy from django.conf import settings
 lazy from mcp import types
 lazy from mcp.server.auth.handlers.metadata import ProtectedResourceMetadataHandler
 lazy from mcp.server.auth.middleware.bearer_auth import BearerAuthBackend, RequireAuthMiddleware
@@ -44,15 +48,10 @@ from hq.platform.core import strict_json
 from hq.platform.core.network import strict_host
 from hq.platform.core.outside_requests import thread_of_its_own
 from hq.platform.mcp.identity import set_principal
-lazy from hq.platform.application.agent_admission import Throttled, Unadmitted, carrying
-lazy from hq.platform.application.security import (
-    MCP_INTERFACE,
-    Capability,
-    Principal,
-    could_hold,
-    operator_capabilities,
-)
+lazy from hq.platform.application.agent_admission import Throttled, Unadmitted, carrying, challenge
+lazy from hq.platform.application.security import MCP_INTERFACE, Principal, agent_grantable
 lazy from hq.platform.core.audit import audit_operation
+lazy from hq.platform.mcp import listen
 
 logger = logging.getLogger("severino.mcp")
 
@@ -62,6 +61,11 @@ WELL_KNOWN = "/.well-known/oauth-protected-resource"
 
 # A bearer and the peer that sent it, to the principal it names or why none.
 Admit = Callable[[str, str], Awaitable[Any]]
+
+# The routing header the 2026-07-28 transport holds equal to the body's method
+# before any handler runs, so the door knows a listen before reading the body.
+METHOD_HEADER = "mcp-method"
+LISTEN = "subscriptions/listen"
 
 
 class TailnetGate:
@@ -133,19 +137,33 @@ class MCPBoundary:
             return
         # This mount is beside Django, so its synchronous work (the
         # admission, the brake, the tool) gets a thread of this request's own
-        # here, and one agent's slow call never queues another's.
+        # here, and one agent's slow call never queues another's. A listen
+        # stream waits on events for as long as its token lasts, so it gives
+        # its thread and connections back once admitted, and its own brakes
+        # each take a pooled thread for the moment they are asked (listen.py).
+        if Headers(scope=scope).get(METHOD_HEADER) == LISTEN:
+            async with thread_of_its_own():
+                presented = await self._presented(scope)
+            await self._serve(scope, receive, send, presented, listens=True)
+            return
         async with thread_of_its_own():
-            await self._serve(scope, receive, send)
+            await self._serve(scope, receive, send, await self._presented(scope))
 
-    async def _serve(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def _presented(self, scope: Scope) -> _Presented:
         presented = _Presented(self._admitted, (scope.get("client") or ("",))[0])
-        authenticated = await BearerAuthBackend(presented).authenticate(HTTPConnection(scope))
+        presented.authenticated = await BearerAuthBackend(presented).authenticate(HTTPConnection(scope))
         if presented.outcome is None:
             # No bearer reached the verifier; the admission still records it.
             await presented.verify_token("")
+        return presented
+
+    async def _serve(
+        self, scope: Scope, receive: Receive, send: Send, presented: _Presented, *, listens: bool = False
+    ) -> None:
+        authenticated = presented.authenticated
         outcome = presented.outcome
         if authenticated is None and isinstance(outcome, Unadmitted) and outcome.verified:
-            await _insufficient_scope(scope, receive, send, metadata_url(self.resource), outcome.reason)
+            await _insufficient_scope(scope, receive, send, metadata_url(self.resource), outcome)
             return
 
         scope["auth"], scope["user"] = authenticated or (AuthCredentials(), UnauthenticatedUser())
@@ -165,10 +183,21 @@ class MCPBoundary:
                 set_principal(caller),
                 request_context.bind(arrived),
                 audit_operation(operation=MCP_INTERFACE, principal=caller),
+                listen.ending_at(self._stream_ends(presented.token) if listens else None),
             ):
                 await self._strict(scope, receive, send)
 
         await RequireAuthMiddleware(bound, [], self._metadata)(scope, receive, send)
+
+    def _stream_ends(self, bearer: str) -> float:
+        """When a listen stream this bearer opens ends, on the loop's clock: when
+        its admission would refuse the token. One that cannot be read ends at once."""
+
+        try:
+            remaining = token_expiry(bearer) - time.time()
+        except Exception:  # noqa: BLE001 - a stream whose end is unknown is not kept open
+            remaining = 0
+        return asyncio.get_running_loop().time() + remaining
 
     @cached_property
     def _strict(self) -> ASGIApp:
@@ -245,9 +274,12 @@ class _Presented:
         self._admitted = admitted
         self.source = source
         self.outcome: Any = None
+        self.token = ""
+        self.authenticated: tuple[AuthCredentials, Any] | None = None
 
     async def verify_token(self, token: str) -> AccessToken | None:
         self.outcome = await self._admitted(token, self.source)
+        self.token = token
         # A throttled agent's token is good: the rate is answered in the protocol.
         principal = self.outcome.principal if isinstance(self.outcome, Throttled) else self.outcome
         if not isinstance(principal, Principal):
@@ -299,12 +331,21 @@ class ResourceMetadata:
         await self._answer(scope, receive, send)
 
 
+def token_expiry(bearer: str) -> float:
+    """When the admission would refuse ``bearer``: its ``exp``, with the clock skew the admission allows.
+
+    Read only from a bearer the admission verified, so its signature is not checked again.
+    """
+
+    claims = jwt.decode(bearer, options={"verify_signature": False})
+    return float(claims["exp"]) + settings.SEVERINO_API_LEEWAY_SECONDS
+
+
 def token_scopes() -> list[str]:
     """The permission keys an agent's token could carry: every capability HQ
     and its extensions declare, less those held only by a person."""
 
-    names = (item.value if isinstance(item, Capability) else item for item in operator_capabilities())
-    return sorted(name for name in names if could_hold(MCP_INTERFACE, (name,)))
+    return sorted(agent_grantable())
 
 
 def metadata_url(resource: str) -> str:
@@ -315,30 +356,21 @@ def metadata_url(resource: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, f"{WELL_KNOWN}{path}", "", ""))
 
 
-async def _insufficient_scope(scope: Scope, receive: Receive, send: Send, location: str, reason: str) -> None:
+async def _insufficient_scope(scope: Scope, receive: Receive, send: Send, location: str, refused: Unadmitted) -> None:
     """A verified token with no grant HQ can use: the spec's step-up challenge, naming the least scope."""
 
-    challenge = ", ".join(
-        f'{name}="{_quoted(value)}"'
-        for name, value in (
-            ("error", "insufficient_scope"),
-            ("scope", Capability.READ.value),
-            ("resource_metadata", location),
-            ("error_description", reason),
-        )
+    header = challenge(
+        ("error", "insufficient_scope"),
+        ("scope", refused.scope),
+        ("resource_metadata", location),
+        ("error_description", refused.reason),
     )
     response = JSONResponse(
-        {"error": "insufficient_scope", "error_description": reason},
+        {"error": "insufficient_scope", "error_description": refused.reason},
         status_code=403,
-        headers={"WWW-Authenticate": f"Bearer {challenge}", "Cache-Control": "private, no-store"},
+        headers={"WWW-Authenticate": header, "Cache-Control": "private, no-store"},
     )
     await response(scope, receive, send)
-
-
-def _quoted(value: str) -> str:
-    """``value`` as the inside of an HTTP quoted-string (RFC 9110 section 5.6.4)."""
-
-    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 async def _deny(scope: Scope, receive: Receive, send: Send, status: int, error: str) -> None:

@@ -1,0 +1,21 @@
+id: repository-key-built-in-one-place
+valid:
+  - 'key = repository_key(project.repository_url)'
+  - 'name = "/".join(parts)'
+  - 'signer = "/".join((owner, name))'
+  - 'path = "/".join(parts).strip()'
+  - 'label = ", ".join(names).lower()'
+  - 'found = keys.get(repository_key(url))'
+  - 'found = keys.get(name, "/".join(parts))'
+  - 'named = {"/".join(parts) for parts in pairs}'
+  - 'named = {key: "/".join(parts) for key, parts in pairs}'
+invalid:
+  # projects.repository_key's own line, which the rule exists to hold alone.
+  - |
+    def repository_key(repository: str) -> str:
+        parts = github_repository(repository)
+        return "/".join(parts).lower() if parts else ""
+  - "key = '/'.join((owner, name)).lower()"
+  - 'found = keys.get("/".join(parts))'
+  - 'found = keys.get("/".join(parts), None)'
+  - 'keyed = {"/".join(parts): project for parts, project in pairs}'

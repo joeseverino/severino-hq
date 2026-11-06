@@ -112,15 +112,15 @@ type GitHubDeployKey struct {
 // alerts is open alerts by severity, and each open Dependabot alert. A kind
 // the repository cannot answer is that part refused, never zero, and its
 // alerts nil.
-func (g *githubRepository) alerts(ctx context.Context) (map[string]map[string]int, []GitHubDependabotAlert) {
+func (g *githubRepository) alerts(ctx context.Context) (map[runtime.ReadingPartName]map[string]int, []GitHubDependabotAlert) {
 	var dependabot []GitHubDependabotAlert
-	found := map[string]map[string]int{}
+	found := map[runtime.ReadingPartName]map[string]int{}
 	count := func(name runtime.ReadingPartName, severities []string) {
 		counts := map[string]int{}
 		for _, severity := range severities {
 			counts[strings.ToLower(orDefault(severity, "unknown"))]++
 		}
-		found[string(name)] = counts
+		found[name] = counts
 	}
 	if alerts, ok := part(ctx, g, runtime.PartCodeScanning, func() ([]githubapi.CodeScanningAlertItems, error) {
 		return repoGet[[]githubapi.CodeScanningAlertItems](ctx, g, "/code-scanning/alerts?state=open&per_page="+strconv.Itoa(githubListPage))

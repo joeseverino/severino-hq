@@ -1,10 +1,11 @@
 """Each piece of evidence an extension's admission claims, held to the step that produces it."""
 
 import json
+import re
 
 from django.test import SimpleTestCase, tag
 
-from .test_pipeline import ROOT, load
+from .test_pipeline import ADMIT, ROOT, every_step, load, script
 
 
 @tag("source")
@@ -45,3 +46,14 @@ class AdmissionEvidenceTests(SimpleTestCase):
                 self.assertIn(job, checks, "plugin-checks.yml has no job of this name")
                 if step_id is not None:
                     self.assertIn(step_id, [step.get("id") for step in checks[job]["steps"]])
+
+    def test_the_sbom_an_admission_writes_is_the_one_it_signs_and_retains(self):
+        steps = every_step(ADMIT)
+        (written,) = [
+            re.search(r"--output-file (\S+)", script(step)) for step in steps if step.get("id") == "wheel-sbom"
+        ]
+        assert written is not None, "the SBOM step names no output file"
+        sbom = written.group(1)
+        self.assertIn(f"--sbom {sbom}", "\n".join(script(step) for step in steps))
+        (retained,) = [step for step in steps if step.get("uses", "").startswith("actions/upload-artifact@")]
+        self.assertIn(sbom, retained["with"]["path"].split())

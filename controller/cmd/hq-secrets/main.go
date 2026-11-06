@@ -8,6 +8,7 @@ package main
 import (
 	"context"
 	"flag"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"log/slog"
 	"os"
@@ -17,7 +18,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/internal/mask"
 	"github.com/joeseverino/severino-hq/controller/secrets"
@@ -77,8 +77,8 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 		}
 		return fallback
 	}
-	runtime := value("SEVERINO_CONTROLLER_SECRET_DIR", host.SecretDir)
-	container := value("HQ_CONTAINER", host.Container)
+	runtime := value("SEVERINO_CONTROLLER_SECRET_DIR", hostcore.SecretDir)
+	container := value("HQ_CONTAINER", hostcore.Container)
 	if !containerName.MatchString(container) {
 		return secrets.Config{}, "", configError("HQ_CONTAINER is not a container name.")
 	}
@@ -92,7 +92,7 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 			SecretDir:  value("SEVERINO_HQ_SECRET_DIR", "/opt/apps/severino-hq/secrets"),
 			RuntimeDir: runtime,
 			WebDir:     value("SEVERINO_HQ_WEB_SECRET_DIR", runtime+"/web"),
-			RootUID:    0, RootGID: 0, WebUID: host.WebUID, WebGID: host.WebGID,
+			RootUID:    0, RootGID: 0, WebUID: hostcore.WebUID, WebGID: hostcore.WebGID,
 		},
 		RegistryPath:   *registry,
 		ConnectTimeout: *timeout,
@@ -118,7 +118,7 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 		return fail(configError("hq-secrets must run as root."))
 	}
 	runner := &secrets.Runner{
-		Config: config, Mounts: install.SystemMounts, PortFloor: portFloor, Web: secrets.UnitWeb{Unit: host.WebUnit, Container: container},
+		Config: config, Mounts: install.SystemMounts, PortFloor: portFloor, Web: secrets.UnitWeb{Unit: hostcore.WebUnit, Container: container},
 		Log: log, Now: time.Now, Sleep: clock.Sleep,
 	}
 	if _, err := runner.Run(ctx); err != nil {

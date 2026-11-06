@@ -1,5 +1,6 @@
 """The brakes on agents, on /mcp/ and on the machine API: the switch that pauses
-every agent, and a person's block on one client."""
+every agent, a person's block on one client, and the approval and block of
+each tailnet device an agent calls from (``agent_devices``)."""
 
 import logging
 from dataclasses import dataclass
@@ -13,6 +14,8 @@ from hq.platform.application.security import AGENT_SURFACES, DEVICE_INTERFACE, P
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentAccess, AgentIdentity, AuditLog
 
+from . import agent_devices
+from .agent_devices import DeviceStanding
 from .agent_registry import AUDIT_LABEL as IDENTITY_LABEL
 from .command_fields import Describe
 from .record_errors import RecordNotFound
@@ -52,6 +55,7 @@ def held_askers() -> Q:
     """
 
     held = Q(requested_interface__in=TOKEN_INTERFACES, requested_actor__in=_blocked_clients().values("client_id"))
+    held |= agent_devices.blocked_askers()
     if paused := paused_interfaces():
         held |= Q(requested_interface__in=paused)
     return held
@@ -73,19 +77,39 @@ class AgentRefusal:
 
 AGENTS_PAUSED = AgentRefusal("agents_paused", "Agents are paused by the operator.")
 AGENT_BLOCKED = AgentRefusal("agent_blocked", "This client is blocked by the operator.")
+DEVICE_AWAITING_APPROVAL = AgentRefusal(
+    "device_awaiting_approval",
+    "This client has not been approved on this device. The person it acts for approves the device "
+    "on HQ's Agents page, and the next call from it runs.",
+)
+DEVICE_BLOCKED = AgentRefusal(
+    "device_blocked",
+    "This client is blocked on this device by the operator. It is allowed again on HQ's Agents page.",
+)
+_DEVICE_REFUSALS = {
+    DeviceStanding.AWAITING: DEVICE_AWAITING_APPROVAL,
+    DeviceStanding.BLOCKED: DEVICE_BLOCKED,
+}
 
 
-def refusal(principal: Principal) -> AgentRefusal | None:
+def refusal(principal: Principal, *, source: str = "") -> AgentRefusal | None:
     """The refusal that applies to this caller now, or None when it may act.
 
     The one question both doors ask of the principal they authenticated,
     never of the surface they serve, so a person's own device runs while every
     agent beside it is refused. Every brake on a caller answers here, so a new
-    one changes neither door.
+    one changes neither door. ``source`` is the caller's address, which places
+    a call its admission could not (``agent_devices.standing``).
     """
 
     if principal.interface in TOKEN_INTERFACES and blocked(principal.actor):
         return AGENT_BLOCKED
+    standing = agent_devices.standing(principal, source=source)
+    if standing is DeviceStanding.UNSEEN:
+        return AgentRefusal(DEVICE_AWAITING_APPROVAL.code, agent_devices.unseen_reason())
+    if (device := _DEVICE_REFUSALS.get(standing)) is not None:
+        row = agent_devices.where(principal)
+        return AgentRefusal(device.code, f"{device.reason} Its row there: {row}") if row else device
     if principal.interface in paused_interfaces():
         return AGENTS_PAUSED
     return None

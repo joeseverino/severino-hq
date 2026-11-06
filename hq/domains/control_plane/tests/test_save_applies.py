@@ -2,12 +2,12 @@
 
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
-from hq.platform.application.security import cli_principal, mcp_principal
+from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
 
 from ..models import ManagedResource, OperationRequest
 
@@ -90,11 +90,12 @@ class SavingADeclarationAppliesItTests(TestCase):
 
         self.assertFalse(OperationRequest.objects.exists())
 
-    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=False)
     def test_a_caller_without_infrastructure_authority_changes_and_queues_nothing(self):
-        result = self._update(principal=mcp_principal(), forward_port=8080)
+        result = self._update(
+            principal=agent_principal("example-agent", MCP_INTERFACE, frozenset({"read"})), forward_port=8080
+        )
 
         self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "forbidden")
+        self.assertEqual(result["error"]["code"], "insufficient_scope")
         self.assertEqual(ManagedResource.objects.get(key="example-proxy").spec["forward_port"], 8000)
         self.assertFalse(OperationRequest.objects.exists())

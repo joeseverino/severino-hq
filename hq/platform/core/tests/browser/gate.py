@@ -21,7 +21,8 @@ from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.speculation import rules_document
-from hq.platform.core.test_runner import stall_watch
+from hq.platform.core.stylesheets import stylesheet
+from hq.platform.core.test_runner import browser_failures, stall_watch
 from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
     FILL_STEPS,
@@ -35,17 +36,19 @@ from hq.platform.core.tests.browser.probes.settle import (
     FONTS_READY,
     PAINTED,
     PUT_BACK,
+    SETTLE,
     STAND_IN,
     STILL,
     hushed,
 )
+from hq.platform.core.tests.browser.probes.tables import TABLE_LAYOUT
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.shots import shoot_page
 from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
-from hq.platform.core.tests.browser.widths import viewport
+from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, query_edges, viewport, viewport_queries
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
@@ -488,15 +491,17 @@ class BrowserGate(SimpleTestCase):
 
     def shoot(self, name):
         """The page as it stands, saved as ``name``.png in this test's own
-        hq-browser-failure-* folder in the temporary directory, every one of
-        which CI keeps when a gate fails, and beside it as ``name``.zip the
-        trace of what the test did since its last failure, which
-        `playwright show-trace` opens. The trace is kept first, so a shot
-        that cannot be taken still leaves it. A page past what a shot holds
-        is shot to there, and the line says so (``shoot_page``)."""
+        folder of ``browser_failures()``, which CI keeps when a gate fails,
+        and beside it as ``name``.zip the trace of what the test did since
+        its last failure, which `playwright show-trace` opens. The trace is
+        kept first, so a shot that cannot be taken still leaves it. A page
+        past what a shot holds is shot to there, and the line says so
+        (``shoot_page``)."""
 
         if self.failures is None:
-            self.failures = Path(tempfile.mkdtemp(prefix=f"hq-browser-failure-{self._testMethodName}-"))
+            folder = browser_failures()
+            folder.mkdir(parents=True, exist_ok=True)
+            self.failures = Path(tempfile.mkdtemp(prefix=f"{self._testMethodName}-", dir=folder))
         path = self.failures / f"{name}.png"
         trace = path.with_suffix(".zip")
         tracing = self.page.context.tracing
@@ -538,6 +543,54 @@ class BrowserGate(SimpleTestCase):
         every one the gates hold on a page as a reader has it."""
 
         return self.checked(geometry_probes(path, width))
+
+    def tables_that_do_not_fit_at_any_width(self):
+        """Each table on the loaded page wider than its region at some window
+        width from the narrowest phone up, with the first width it was found
+        at; the page is left at the width it was loaded at.
+
+        A table's room changes only where the layout around it changes shape
+        (`TABLE_LAYOUT`): at an edge of the stylesheet's viewport queries, and
+        between two edges wherever a box around it wraps or adds a track, which
+        moves one way as the window grows. So the sweep reads each span between
+        edges at its two ends, and halves a span whose ends differ down to the
+        first width of each new shape. Within a shape a region grows with the
+        window and a table at its narrowest asks no more than it did, so a
+        table that fits at the first width of a shape fits at every width of
+        it."""
+
+        loaded = self.page.viewport_size
+        queries = viewport_queries(stylesheet())
+        arg = [SELECTORS["table_scroll"], queries]
+        found: dict[str, str] = {}
+        shapes: dict[int, str] = {}
+
+        def read(width):
+            self.page.set_viewport_size(viewport(width))
+            shape, sizes, misfits = self.page.evaluate(TABLE_LAYOUT, arg)
+            for misfit in misfits:
+                table, _, by = misfit.rpartition(" +")
+                found.setdefault(table, f"+{by} at {width}px")
+            shapes[width] = shape
+            return sizes
+
+        def between(low, high):
+            if high - low > 1 and shapes[low] != shapes[high]:
+                middle = (low + high) // 2
+                read(middle)
+                between(low, middle)
+                between(middle, high)
+
+        # A page with no table region has nothing to sweep.
+        if read(NARROWEST):
+            edges = query_edges(queries)
+            for low, high in zip([NARROWEST, *edges], [edge - 1 for edge in edges] + [LARGEST], strict=True):
+                for width in {low, high} - shapes.keys():
+                    read(width)
+                between(low, high)
+        self.page.set_viewport_size(loaded)
+        self.page.evaluate(SETTLE)
+        return found
 
     def scheme(self):
         """The palette the system asks the page for."""

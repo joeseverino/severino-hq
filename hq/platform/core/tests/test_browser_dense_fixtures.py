@@ -45,10 +45,11 @@ from hq.platform.application.approvals import entry_event, is_held
 from hq.platform.application.asks import READ_WAITING
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.services import CONTAINER_KIND
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core import seeds
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.browser.gate import answered
@@ -659,25 +660,26 @@ def _held():
     """An agent's docs import waiting for a person: a list of records and a
     flag, the payload a held request most often carries."""
 
-    CapabilityRule.objects.create(scope="surface", subject="mcp", capability="documentation.sync", rule="approve")
+    CapabilityRule.objects.create(
+        subject="an-example-agent-with-a-long-name", capability="documentation.sync", rule="approve"
+    )
     agent = Principal(
         "an-example-agent-with-a-long-name", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION})
     )
-    with override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True):
-        answer = execute_capability(
-            "documentation.sync",
-            keyed(
-                {
-                    "manifest": [
-                        {"doc_id": f"rb-an-example-runbook-with-a-long-name-{index}", "title": "An example runbook"}
-                        for index in range(12)
-                    ],
-                    "prune_orphans": True,
-                    "confirm_prune": True,
-                }
-            ),
-            principal=agent,
-        )
+    answer = execute_capability(
+        "documentation.sync",
+        keyed(
+            {
+                "manifest": [
+                    {"doc_id": f"rb-an-example-runbook-with-a-long-name-{index}", "title": "An example runbook"}
+                    for index in range(12)
+                ],
+                "prune_orphans": True,
+                "confirm_prune": True,
+            }
+        ),
+        principal=agent,
+    )
     if not is_held(answer):
         raise AssertionError(f"the agent's docs import was answered {answer}, not held for a person")
 

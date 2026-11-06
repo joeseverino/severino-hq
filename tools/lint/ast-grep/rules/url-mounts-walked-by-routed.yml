@@ -1,0 +1,27 @@
+# routes.routed is the one walk of the URL configuration. A second walk into
+# a mount drifts from it: one skips a namespace, one drops a regex mount, and
+# a page list stops matching the routes. So nothing else reads a resolver's
+# url_patterns, apart from the root's (get_resolver().url_patterns).
+id: url-mounts-walked-by-routed
+language: python
+severity: error
+message: A module walks into a URL mount itself.
+note: List the routes with hq.platform.application.routes.routed.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "hq/platform/application/routes.py"
+rule:
+  kind: attribute
+  has:
+    field: attribute
+    regex: ^url_patterns$
+  not:
+    has:
+      field: object
+      kind: call
+      has:
+        field: function
+        kind: identifier
+        regex: ^get_resolver$

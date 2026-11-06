@@ -28,7 +28,6 @@ PROJECT = {"name": "Once", "slug": "once", "status": "active"}
     SEVERINO_API_RESOURCE=RESOURCE,
     SEVERINO_API_LEEWAY_SECONDS=30,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
 )
 class RetryKeyRaceTests(TransactionTestCase):
     def test_two_writes_at_once_by_two_doors_with_one_key_act_once(self):

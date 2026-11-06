@@ -16,7 +16,7 @@ from hq.domains.control_plane.names import certificate_covers, in_zone, normaliz
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationSpec
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, read_record
 from hq.domains.control_plane.reading_parts import PartRefusal, refused_parts
 lazy from hq.domains.control_plane.models import ProviderInventory
 
@@ -163,7 +163,6 @@ class Unread:
 
     spec: ObservationSpec
     error: str
-    observed_at: datetime | None
 
     @property
     def detail(self) -> str:
@@ -339,7 +338,7 @@ def readings() -> Readings:
         for spec in OBSERVATIONS.values():
             for snapshot in _inventory(spec.kind):
                 if not snapshot.reachable:
-                    unread.append(Unread(spec, snapshot.error, snapshot.observed_at))
+                    unread.append(Unread(spec, snapshot.error))
                     continue
                 # Stored records are already schema-filtered at ingest.
                 entries.extend(
@@ -379,16 +378,15 @@ def fronted_names(kind: str) -> frozenset[str]:
     if provider is None or provider.fronts is None or provider.from_record is None:
         return frozenset()
 
+    def fronted(spec: dict[str, Any]) -> tuple[str, ...]:
+        if not provider.fronts(spec) or not provider.hostnames:
+            return ()
+        return tuple(provider.hostnames(spec))
+
     def build() -> frozenset[str]:
         found: set[str] = set()
         for _snapshot, record in inventory_records(kind):
-            try:
-                spec = provider.from_record(record)
-                if not provider.fronts(spec):
-                    continue
-                names = provider.hostnames(spec) if provider.hostnames else ()
-            except KeyError, TypeError, ValueError:
-                continue
+            names = read_record(kind, record, fronted) or ()
             found.update(name for name in (normalized_hostname(str(n)) for n in names) if name)
         return frozenset(found)
 
@@ -502,11 +500,8 @@ def inventory_about(kind: str, subject: Subject) -> tuple[tuple[Any, Mapping[str
         return ()
     found = []
     for snapshot, record in inventory_records(kind):
-        try:
-            keys = _record_keys(provider, record, by_identity=True)
-        except KeyError, TypeError, ValueError:
-            continue
-        if _keys_about(subject, *keys):
+        keys = read_record(kind, record, lambda spec: _spec_keys(provider, spec, by_identity=True))
+        if keys is not None and _keys_about(subject, *keys):
             found.append((snapshot, record))
     return tuple(found)
 
@@ -585,14 +580,13 @@ def _frozen(record: Mapping[str, Any]) -> Mapping[str, Any]:
     return frozendict(dict(record))
 
 
-def _record_keys(provider, record, *, by_identity: bool = False) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    """The hostnames, answers and origin a provider reads out of one record.
+def _spec_keys(provider, spec, *, by_identity: bool = False) -> tuple[tuple[str, ...], tuple[str, ...], str]:
+    """The hostnames, answers and origin a provider reads out of one record's spec.
 
     With ``by_identity``, a record naming no hostname is named by its identity
     when that is one name.
     """
 
-    spec = provider.from_record(record)
     names = tuple(provider.hostnames(spec)) if provider.hostnames else ()
     if by_identity and not names and provider.identity is not None:
         identity = tuple(provider.identity(spec))

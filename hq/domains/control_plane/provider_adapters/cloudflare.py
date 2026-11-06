@@ -372,9 +372,8 @@ def normalized_record_content(record_type: str, content: str) -> str:
     """
 
     value = str(content).strip()
-    # A TXT value comes back quoted whether or not it was sent that way.
-    if record_type == "TXT" and not (value.startswith('"') and value.endswith('"')):
-        value = f'"{value}"'
+    if record_type == "TXT":
+        value = _txt_strings(value)
     # A hostname is case-insensitive and comes back lowercased.
     if record_type in {"CNAME", "MX"}:
         value = normalized_hostname(value)
@@ -385,6 +384,37 @@ def normalized_record_content(record_type: str, content: str) -> str:
             flags, tag, target = parts
             value = f'{flags} {tag} "{target}"'
     return value
+
+
+# The most bytes one TXT character-string holds (RFC 1035); Cloudflare splits a
+# longer one into strings of this many.
+_TXT_STRING_BYTES = 255
+
+
+def _txt_strings(value: str) -> str:
+    """A TXT value as the quoted strings Cloudflare stores it as.
+
+    A value comes back quoted whether or not it was sent that way, and one
+    string over 255 bytes comes back split, never inside a character. A value
+    already written as several strings is kept as written.
+    """
+
+    if value.startswith('"') and value.endswith('"'):
+        inner = value[1:-1]
+        if len(value) < 2 or '"' in inner:
+            return value
+        value = inner
+    encoded = value.encode()
+    strings = []
+    while True:
+        cut = min(len(encoded), _TXT_STRING_BYTES)
+        # A continuation byte (10xxxxxx) is inside a character: cut before it.
+        while cut < len(encoded) and encoded[cut] & 0xC0 == 0x80:
+            cut -= 1
+        strings.append(encoded[:cut].decode())
+        encoded = encoded[cut:]
+        if not encoded:
+            return " ".join(f'"{string}"' for string in strings)
 
 
 def _dns_record_key_hint(spec: dict[str, Any]) -> str:

@@ -10,6 +10,7 @@ mutation that could drift from the thing it claims to represent.
 import re
 from collections import Counter
 from dataclasses import asdict, dataclass, replace
+from datetime import datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import Field, StringConstraints, create_model
@@ -66,6 +67,7 @@ from .topology_model import (
     newest_stamp,
 )
 lazy from .adoption import manages_through
+lazy from .facts import stored_snapshots
 lazy from .hq_self import serving
 lazy from .posture import estate_posture
 lazy from .topology_estate import add_estate
@@ -571,7 +573,17 @@ def _derive(principal: Principal) -> Topology:
         (standing.check.id, standing.reading.evidence, standing.reading.read_capabilities)
         for standing in estate_posture(groups).unmet
     )
-    return Topology(ordered_nodes, ordered_edges, unmet)
+    return Topology(ordered_nodes, ordered_edges, unmet, _kinds_read())
+
+
+def _kinds_read() -> tuple[tuple[str, datetime], ...]:
+    """When each kind was last read with an answer, from its stored snapshots."""
+
+    return tuple(
+        (kind, max(read))
+        for kind, rows in sorted(stored_snapshots().items())
+        if (read := [row.observed_at for row in rows if row.observed_at is not None])
+    )
 
 
 def _resource_nodes(resources, principal: Principal) -> dict[str, TopologyNode]:

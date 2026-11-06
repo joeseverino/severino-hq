@@ -121,7 +121,11 @@ def plan(now: datetime | None = None) -> dict[str, Any]:
         return {"accounts": list(wanted), "due": True}
     now = now or timezone.now()
     held = {login.lower() for login in profiles()}
-    behind = now - snapshot.observed_at >= PROFILE_EVERY or any(login.lower() not in held for login in wanted)
+    behind = (
+        snapshot.observed_at is None
+        or now - snapshot.observed_at >= PROFILE_EVERY
+        or any(login.lower() not in held for login in wanted)
+    )
     return {"accounts": list(wanted), "due": behind and now - snapshot.updated_at >= RETRY_AFTER}
 
 

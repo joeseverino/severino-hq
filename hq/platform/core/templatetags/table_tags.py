@@ -627,8 +627,6 @@ def table_heading(
     title: str = "",
     gutter: bool = False,  # room for the row toggles beneath it
     select_all: bool = False,  # the tick-box that selects every row
-    note: str = "",  # a word beside the label that qualifies the whole column, set in note_css
-    note_css: str = "",
 ) -> dict[str, Any]:
     """One column heading.
 
@@ -655,8 +653,6 @@ def table_heading(
         "hidden": hidden,
         "title": title,
         "select_all": select_all,
-        "note": note,
-        "note_css": note_css,
     }
 
 

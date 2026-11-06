@@ -331,8 +331,11 @@ def _tell(declared: Derivation, until: datetime | None) -> None:
         parent.hold_until(until)
 
 
-def _answer(declared: Derivation, variant: str, args: tuple, kwargs: dict) -> tuple[Any, datetime | None]:
-    """The answer and the moment it stops standing."""
+def _answer(
+    declared: Derivation, variant: str, args: tuple, kwargs: dict
+) -> tuple[Any, datetime | None, datetime | None]:
+    """The answer, the moment it stops standing, and that moment again when
+    the answer is kept to be served (None when it is not)."""
 
     key = None if _UNCACHED.get() else _key(declared, variant)
     value, until, found = _stored(key)
@@ -349,7 +352,8 @@ def _answer(declared: Derivation, variant: str, args: tuple, kwargs: dict) -> tu
     if found and key is not None:
         # What this projection was answered from, for ``standing``.
         read_once("derivation.answered", dict)[key] = until
-    return value, until
+        return value, until, until
+    return value, until, None
 
 
 # The answers being derived right now, by key, each with the event its
@@ -586,17 +590,10 @@ def _asked(
 ) -> tuple[Any, datetime | None]:
     """Answer, and remember how a request asked."""
 
-    value, until = _answer(declared, variant, args, kwargs)
+    value, until, kept_until = _answer(declared, variant, args, kwargs)
     if declared.ahead and _FRAME.get() is None and not (_UNCACHED.get() or _AHEAD.get()):
-        _remember(declared, variant, answer, args, kwargs, _answered_until(declared, variant))
+        _remember(declared, variant, answer, args, kwargs, kept_until)
     return value, until
-
-
-def _answered_until(declared: Derivation, variant: str) -> datetime | None:
-    """The moment the answer this projection was just given stops standing."""
-
-    key = _key(declared, variant)
-    return read_once("derivation.answered", dict).get(key) if key else None
 
 
 def _remember(

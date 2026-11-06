@@ -43,6 +43,22 @@ class PlanTests(TestCase):
     def test_the_plan_is_empty_before_the_first_read(self):
         self.assertEqual(plan(), {"held": []})
 
+    def test_a_held_record_the_schema_now_refuses_is_read_in_full(self):
+        # Stored under an older contract, as a record the bridge struck to text.
+        ProviderInventory.objects.create(
+            kind=REPOSITORY_KIND,
+            records=[
+                {**read("example/alpha"), "alerts": {"leaked_credentials": {"leaked": "[redacted]"}}},
+                {**read("example/beta"), "alerts": {"leaked_credentials": {"leaked": 1}}},
+            ],
+            reachable=True,
+            observed_at=READ_AT,
+        )
+
+        held = {entry["repository"]: entry["due"] for entry in plan(READ_AT + timedelta(seconds=1))["held"]}
+
+        self.assertEqual(held, {"example/alpha": True, "example/beta": False})
+
 
 class FullReadClockTests(SimpleTestCase):
     def test_a_repository_never_read_is_due(self):

@@ -7,7 +7,6 @@ written from the two. These hold the join, the files, and the names the
 controller's constants take.
 """
 
-import ast
 import json
 import subprocess
 import sys
@@ -28,7 +27,7 @@ from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import caddy
 from hq.domains.control_plane.provider_spec import ConnectionShape, Setting
 from hq.domains.control_plane.providers import OBSERVATION_KINDS, PROVIDERS
-from hq.platform.application.tests.source import parsed
+from hq.platform.application.tests.facts import TOP, grouped, scan
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 PACKAGE = Path(bridge_contract.__file__).parent
@@ -79,46 +78,62 @@ class JoinTests(SimpleTestCase):
             bridge_registry.schemas()
 
 
+WRITTEN = ("hq-controller.openapi.json", "hq-connections.openapi.json", "controller-connections.json")
+PATHS = ("CONTRACT_PATH", "CONNECTIONS_PATH", "SHAPES_PATH")
+# The first statement of a module, a class or a function, comments aside.
+DOCSTRING = {
+    "kind": "expression_statement",
+    "nthChild": {"position": 1, "ofRule": {"not": {"kind": "comment"}}},
+    "any": [
+        TOP,
+        {
+            "inside": {
+                "kind": "block",
+                "inside": {"any": [{"kind": "class_definition"}, {"kind": "function_definition"}]},
+            }
+        },
+    ],
+}
+RULES = {
+    # A string that names a written file, outside a docstring.
+    "named": {
+        "kind": "string_content",
+        "regex": "|".join(name.replace(".", r"\.") for name in WRITTEN),
+        "not": {"inside": {"kind": "string", "inside": DOCSTRING}},
+    },
+    # A path's name read as a value: neither assigned nor an attribute's or a keyword's.
+    "read": {
+        "kind": "identifier",
+        "regex": f"^({'|'.join(PATHS)})$",
+        "not": {
+            "any": [
+                {"inside": {"kind": "assignment", "field": "left"}},
+                {"inside": {"kind": "attribute", "field": "attribute"}},
+                {"inside": {"kind": "keyword_argument", "field": "name"}},
+            ]
+        },
+    },
+    "emitted": {"kind": "function_definition", "has": {"field": "name", "regex": "^emitted$"}, **TOP},
+}
+
+
 @tag("source", "tree")
 class WrittenFileTests(SimpleTestCase):
     def test_python_reads_no_fact_back_from_a_file_it_writes(self):
         """Only ``bridge_contract`` names the written files, and only to write them."""
 
-        written = (
-            "hq-controller.openapi.json",
-            "hq-connections.openapi.json",
-            "controller-connections.json",
+        found = grouped(
+            each
+            for each in scan(RULES, PACKAGE.parents[1])
+            if "tests" not in each.path.parts and not each.path.name.startswith("test")
         )
-        naming = []
-        for path in sorted(PACKAGE.parents[1].rglob("*.py")):
-            if "tests" in path.parts or path.name.startswith("test"):
-                continue
-            tree = parsed(path)
-            docstrings = {
-                ast.get_docstring(node, clean=False)
-                for node in ast.walk(tree)
-                if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef))
-            }
-            if any(
-                name in node.value
-                for node in ast.walk(tree)
-                if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value not in docstrings
-                for name in written
-            ):
-                naming.append(path.name)
-        self.assertEqual(naming, ["bridge_contract.py"])
+        self.assertEqual(sorted({each.path.name for each in found["named"]}), ["bridge_contract.py"])
 
-        tree = parsed(PACKAGE / "bridge_contract.py")
-        paths = {"CONTRACT_PATH", "CONNECTIONS_PATH", "SHAPES_PATH"}
-        emitted = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "emitted")
-        inside = [node.id for node in ast.walk(emitted) if isinstance(node, ast.Name)]
-        read = [
-            node.id
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) and node.id in paths
-        ]
-        self.assertEqual(sorted(read), sorted(paths))
-        self.assertLessEqual(paths, set(inside))
+        home = PACKAGE / "bridge_contract.py"
+        read = [each for each in found["read"] if each.path == home]
+        (emitted,) = (each for each in found["emitted"] if each.path == home)
+        self.assertEqual(sorted(each.text for each in read), sorted(PATHS))
+        self.assertLessEqual(set(PATHS), {each.text for each in read if emitted.start <= each.start < emitted.end})
 
 
 class RegistrySchemaTests(SimpleTestCase):

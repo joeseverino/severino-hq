@@ -6,14 +6,15 @@ browser gate and the layout audit use and fails when no template renders it,
 without starting a browser.
 """
 
-import ast
 import re
 from functools import cache
 from pathlib import Path
+from typing import Any
 
 from django.conf import settings
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.facts import ROOT as FACTS_ROOT, STRING, TOP, grouped, scan, strings
 from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser_modules import browser_modules
@@ -33,6 +34,26 @@ PLAYWRIGHT_QUERIES = {"locator", "query_selector", "query_selector_all", "wait_f
 # A literal handed to a DOM query, and a class handed to classList.
 _QUERY = re.compile(r"\b(?:querySelector|querySelectorAll|closest|matches)\(\s*(['\"`])(.*?)\1", re.DOTALL)
 _CLASS_LIST = re.compile(r"classList\.(?:contains|add|remove|toggle)\(\s*(['\"`])([\w-]+)\1")
+# The gate's one registry of selectors, a statement of selectors.py itself.
+REGISTRY: dict[str, Any] = {"kind": "assignment", "has": {"field": "left", "regex": "^SELECTORS$"}, **TOP}
+# Each literal of the gate outside the registry.
+GATE_STRING = {"all": [STRING, {"not": {"inside": {**REGISTRY, "stopBy": "end"}}}]}
+# A literal handed to a Playwright query as its first argument.
+QUERIED = {
+    **STRING,
+    "nthChild": 1,
+    "inside": {
+        "kind": "argument_list",
+        "inside": {
+            "kind": "call",
+            "has": {
+                "field": "function",
+                "kind": "attribute",
+                "has": {"field": "attribute", "regex": f"^({'|'.join(sorted(PLAYWRIGHT_QUERIES))})$"},
+            },
+        },
+    },
+}
 
 
 def tokens(selector: str) -> set[tuple[str, str]]:
@@ -146,40 +167,24 @@ class BrowserGateSelectorTests(SimpleTestCase):
 
         # The example estate's gate is outside this rule: it presses the
         # estate's controls through literal selectors of its own.
-        trees = [
-            ast.parse(path.read_text(encoding="utf-8"))
+        paths = [
+            path.relative_to(FACTS_ROOT)
             for module, path in browser_modules().items()
             if module != "hq.platform.core.tests.browser.estate"
         ]
-        registry = next(
-            node.value
-            for tree in trees
-            for node in tree.body
-            if isinstance(node, ast.Assign) and any(getattr(t, "id", "") == "SELECTORS" for t in node.targets)
-        )
-        allowed = {id(node) for node in ast.walk(registry)}
-        queried = {
-            id(call.args[0])
-            for tree in trees
-            for call in ast.walk(tree)
-            if isinstance(call, ast.Call)
-            and isinstance(call.func, ast.Attribute)
-            and call.func.attr in PLAYWRIGHT_QUERIES
-            and call.args
-        }
+        found = grouped(scan({"registry": REGISTRY, "string": GATE_STRING, "queried": QUERIED}, *paths))
+        self.assertEqual(len(found.get("registry", [])), 1, "no one SELECTORS registry to hold literals against")
+        queried = {(match.path, match.start) for match in found.get("queried", [])}
         offences = []
-        for node in (node for tree in trees for node in ast.walk(tree)):
-            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
-                continue
-            if id(node) in allowed:
-                continue
-            if id(node) in queried:
-                offences.append(node.value)
-            offences.extend(
-                selector
-                for selector in audit_selectors(node.value)
-                if any(kind != "attribute" for kind, _ in tokens(selector))
-            )
+        for match in found.get("string", []):
+            if (match.path, match.start) in queried and isinstance(match.value(), str):
+                offences.append(match.value())
+            for text in strings(match):
+                offences.extend(
+                    selector
+                    for selector in audit_selectors(text)
+                    if any(kind != "attribute" for kind, _ in tokens(selector))
+                )
         self.assertEqual(
             offences,
             [],

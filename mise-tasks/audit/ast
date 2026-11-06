@@ -1,23 +1,17 @@
 #!/bin/sh
 #MISE description="Python docstrings over 8 lines (file:start-end) and getattr of a literal name with a default (file:line), each listed sorted and then counted, read-only"
 #MISE hide=true
+#MISE extends="audit"
 #USAGE arg "[globs]" var=#true help="Which files, the repository without: a glob (hq/**) for only the files it matches, or !glob (!**/tests/**) to leave them out"
 
-# ast-grep matches the rules in tools/audit/ast-grep.yml; each word is held to
-# a glob's characters, so none can become a flag of ast-grep's (--update-all
-# rewrites files). The words are mise's shell-quoted parse of the arguments.
+# ast-grep matches the rules in tools/audit/ast-grep.yml, each word a glob it
+# takes. The words are mise's shell-quoted parse of the arguments.
 set -euf
 
 globs=""
 eval "set -- ${usage_globs:-}"
 for word; do
-    case "${word}" in
-    "" | -* | *[!A-Za-z0-9_./*!-]* | ?*!*)
-        printf 'audit:ast: %s is not a glob of letters, digits and _ . / * - !\n' "${word}" >&2
-        exit 2
-        ;;
-    *) globs="${globs} --globs ${word}" ;;
-    esac
+    globs="${globs} --globs ${word}"
 done
 
 # A file between the two, since a failed scan must not read as no findings.

@@ -15,7 +15,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -23,6 +22,7 @@ from pathlib import Path
 
 from hq.platform.application.ui import counted
 from hq.platform.core.tests.task import Usage, usage
+from tools.gate.tree import working_tree
 from tools.structural.classify import similar_pairs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -147,27 +147,9 @@ def inputs_key() -> str:
     digest = hashlib.sha256()
     for command in ([TOOL, "--version"], ["go", "version"], ["git", "ls-files", "-z"]):
         digest.update(subprocess.run(command, cwd=ROOT, check=True, capture_output=True).stdout)
-    digest.update(working_tree())
+    # Only the repository's ignore rules apply: the graph never reads the user's global ones.
+    digest.update(working_tree(ROOT, user_ignores=False, leaving=[str(BASELINE.relative_to(ROOT))]).encode())
     return digest.hexdigest()
-
-
-def working_tree() -> bytes:
-    """The tree git would write from the checkout's files as they stand,
-    staged or not, tracked or not, built in a copy of the index so the
-    checkout's own is untouched. Only the repository's ignore rules apply: the
-    graph never reads the user's global ones."""
-
-    def git(*args: str, env: dict[str, str] | None = None) -> bytes:
-        return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, env=env).stdout
-
-    with tempfile.TemporaryDirectory() as scratch:
-        index = Path(scratch) / "index"
-        # A copy of the index already holds each unchanged file's hash, so git reads only what changed.
-        shutil.copyfile(ROOT / git("rev-parse", "--git-path", "index").decode().strip(), index)
-        env = os.environ | {"GIT_INDEX_FILE": str(index)}
-        git("-c", "core.excludesFile=/dev/null", "add", "--all", env=env)
-        git("rm", "--cached", "--quiet", "--ignore-unmatch", "--", str(BASELINE.relative_to(ROOT)), env=env)
-        return git("write-tree", env=env)
 
 
 def cached(key: str) -> dict[str, str | None] | None:

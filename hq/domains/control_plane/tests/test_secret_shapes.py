@@ -3,7 +3,6 @@ and a strike leaves a payload the contract still takes."""
 
 import json
 import string
-import tempfile
 from pathlib import Path
 from typing import Any
 from unittest import skipUnless
@@ -15,14 +14,11 @@ from hq.domains.control_plane.bridge_contract import contract
 from hq.domains.control_plane.secret_shapes import struck
 
 try:
-    from hypothesis import given, settings as examples, strategies as st
-    from hypothesis.configuration import set_hypothesis_home_dir
+    from hypothesis import given, strategies as st
 except ImportError:  # pragma: no cover - the image does not carry it
     HYPOTHESIS = False
 else:
     HYPOTHESIS = True
-    # Outside the checkout, as test_properties.py says.
-    set_hypothesis_home_dir(str(Path(tempfile.gettempdir()) / "severino-hq-hypothesis"))
 
 ROOT = Path(settings.BASE_DIR)
 _REFERENCE = "#/components/schemas/"
@@ -125,7 +121,6 @@ if HYPOTHESIS:
 class StrikeKeepsTheShapeTests(SimpleTestCase):
     if HYPOTHESIS:
 
-        @examples(max_examples=300, deadline=None)
         @given(VALUE)
         def test_a_strike_replaces_only_a_string(self, value):
             # A reader of a record finds the counts, flags and structure it was

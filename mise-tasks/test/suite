@@ -13,6 +13,8 @@
 # Coverage follows the workers, and its report combines their data and judges
 # it against the floor (pyproject.toml).
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 
 log="$(mktemp)"
 trap 'rm -f "$log"' EXIT

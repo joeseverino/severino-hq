@@ -29,6 +29,8 @@ import (
 	"golang.org/x/crypto/acme"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/edge"
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 	"github.com/joeseverino/severino-hq/controller/internal/clock"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -231,45 +233,6 @@ func ecJWK(jwk jsonWebKey) (crypto.Signer, error) {
 	return key, nil
 }
 
-// writeFileAtomic replaces path with data readable by mode, so a reader sees
-// the old file or the new one, never part of either.
-func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
-	file, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*")
-	if err != nil {
-		return err
-	}
-	staged := file.Name()
-	defer os.Remove(staged)
-	if err := file.Chmod(mode); err != nil {
-		file.Close()
-		return err
-	}
-	if _, err := file.Write(data); err != nil {
-		file.Close()
-		return err
-	}
-	if err := file.Sync(); err != nil {
-		file.Close()
-		return err
-	}
-	if err := file.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(staged, path); err != nil {
-		return err
-	}
-	return syncDir(filepath.Dir(path))
-}
-
-func syncDir(dir string) error {
-	handle, err := os.Open(dir)
-	if err != nil {
-		return err
-	}
-	defer handle.Close()
-	return handle.Sync()
-}
-
 func privateKeyPEM(key crypto.Signer) ([]byte, error) {
 	der, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
@@ -284,7 +247,7 @@ func privateKeyPEM(key crypto.Signer) ([]byte, error) {
 func accountKey(acmeDir, directory string) (crypto.Signer, error) {
 	path := accountKeyPath(acmeDir, directory)
 	if data, err := os.ReadFile(path); err == nil {
-		key, err := firstPrivateKey(data)
+		key, err := edge.FirstPrivateKey(data)
 		if err != nil {
 			return nil, &ProviderError{Message: "the ACME account key is unreadable", Err: err}
 		}
@@ -308,7 +271,7 @@ func accountKey(acmeDir, directory string) (crypto.Signer, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, &ProviderError{Message: "the ACME account key could not be saved", Err: err}
 	}
-	if err := writeFileAtomic(path, encoded, 0o600); err != nil {
+	if err := atomicfile.WriteFile(path, encoded, 0o600); err != nil {
 		return nil, &ProviderError{Message: "the ACME account key could not be saved", Err: err}
 	}
 	return key, nil

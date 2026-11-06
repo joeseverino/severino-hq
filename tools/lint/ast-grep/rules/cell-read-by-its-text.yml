@@ -1,0 +1,95 @@
+# A cell's text is what a page promises; the markup around it is the host's,
+# which may wrap what a cell says (a link, a mark, a toggle) without changing
+# a word. So no test looks for text that ends on a cell's closing tag, </td>
+# or </th>: the text assertContains or assertNotContains looks for (its
+# second argument or text=), or assertIn or assertNotIn (its first or
+# member=). The text's end is a literal's, an f-string's last part, the right
+# side of a +, or the last of an implicit concatenation. One rule for the
+# host and its extensions: the plugin check (tools/pipeline/check-plugin.sh)
+# runs it over an extension's src/, so it has no scope of its own.
+id: cell-read-by-its-text
+language: python
+severity: error
+message: A test looks for a table cell's closing tag, which breaks when the host wraps what the cell says.
+note: Read the cell's text instead (its td or th parsed, whitespace collapsed).
+utils:
+  ends-on-a-cell-close:
+    any:
+      - kind: string
+        regex: </t[dh]>(\s|\\[nrtfv])*("|'|"""|''')$
+      - kind: concatenated_string
+        has:
+          kind: string
+          nthChild:
+            position: 1
+            reverse: true
+          matches: ends-on-a-cell-close
+      - kind: binary_operator
+        all:
+          - has:
+              field: operator
+              regex: ^\+$
+          - has:
+              field: right
+              matches: ends-on-a-cell-close
+      - kind: parenthesized_expression
+        has:
+          matches: ends-on-a-cell-close
+  positional:
+    not:
+      any:
+        - kind: keyword_argument
+        - kind: comment
+rule:
+  kind: call
+  any:
+    - all:
+        - has:
+            field: function
+            kind: attribute
+            has:
+              field: attribute
+              regex: ^assert(Not)?Contains$
+        - has:
+            field: arguments
+            any:
+              - has:
+                  nthChild:
+                    position: 2
+                    ofRule:
+                      matches: positional
+                  matches: ends-on-a-cell-close
+              - has:
+                  kind: keyword_argument
+                  all:
+                    - has:
+                        field: name
+                        regex: ^text$
+                    - has:
+                        field: value
+                        matches: ends-on-a-cell-close
+    - all:
+        - has:
+            field: function
+            kind: attribute
+            has:
+              field: attribute
+              regex: ^assert(Not)?In$
+        - has:
+            field: arguments
+            any:
+              - has:
+                  nthChild:
+                    position: 1
+                    ofRule:
+                      matches: positional
+                  matches: ends-on-a-cell-close
+              - has:
+                  kind: keyword_argument
+                  all:
+                    - has:
+                        field: name
+                        regex: ^member$
+                    - has:
+                        field: value
+                        matches: ends-on-a-cell-close

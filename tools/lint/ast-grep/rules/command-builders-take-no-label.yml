@@ -1,0 +1,30 @@
+# The builders of a command's control (outbound_work.ask,
+# action_links.command_action, capability_action_link, read_now_link,
+# item_help.remedy_link) read the command's words from its declaration, so
+# none takes a label for a caller to override them with.
+# test_action_words holds that none declares one.
+id: command-builders-take-no-label
+language: python
+severity: error
+message: A call hands words of its own to a builder that reads them from the command.
+note: Name a declared variant (variant=) instead; a new wording is declared on the command.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/*_tests.py"
+rule:
+  kind: call
+  all:
+    - has:
+        field: function
+        regex: (^|\.)(ask|command_action|capability_action_link|read_now_link|remedy_link)$
+    - has:
+        field: arguments
+        has:
+          kind: keyword_argument
+          has:
+            field: name
+            regex: ^label$

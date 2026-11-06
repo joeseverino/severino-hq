@@ -377,6 +377,82 @@ class ReadParityTests(TestCase):
         self.assertContains(response, "Last handshake")
 
 
+LAPTOP_ID = "nLAPTOP20CNTRL"
+
+
+@override_settings(ALLOWED_HOSTS=[HQ, "testserver"], SEVERINO_TRUSTED_PROXIES=["172.18.0.0/16"])
+class TokenIdentityTests(TestCase):
+    """A token call has no session, so its identity step reads the approval of
+    the device it came from, never the session comparison that cannot agree."""
+
+    def setUp(self):
+        an_estate()
+        reading = ProviderInventory.objects.get(kind="tailscale.device")
+        reading.records = [
+            {**record, "node_id": LAPTOP_ID} if record["name"] == "a-laptop" else record for record in reading.records
+        ]
+        reading.save()
+        self.operator = get_user_model().objects.create_user("example-operator")
+
+    def device(self, **state):
+        from hq.platform.core.models import AgentDevice, AgentIdentity
+
+        identity = AgentIdentity.objects.create(client_id="example-agent", interfaces=["mcp"])
+        return AgentDevice.objects.create(identity=identity, node_id=LAPTOP_ID, name="a-laptop", **state)
+
+    def served(self):
+        from .. import request_context
+        from ..resources import list_resource
+        from ..security import Capability, Principal
+
+        agent = Principal("example-agent", "mcp", frozenset({Capability.READ}), device=LAPTOP_ID)
+        request = a_request(**NPM_HEADERS)
+        del request.user
+        with request_context.bind(request):
+            served = list_resource("request.path", {}, principal=agent)
+        (layer,) = [
+            layer for hop in served["items"] for layer in hop.get("layers", ()) if layer["id"] == "identity-agreement"
+        ]
+        return served["connection"], layer
+
+    def test_a_device_a_person_approved_agrees_and_names_who_approved_it(self):
+        self.device(approved_at=timezone.now(), approved_by=self.operator)
+
+        said, layer = self.served()
+
+        self.assertTrue(said["identity_agrees"])
+        self.assertEqual(layer["state"], "holds")
+        self.assertIn("example-operator", layer["detail"])
+
+    def test_a_device_awaiting_approval_does_not_agree(self):
+        self.device()
+
+        said, layer = self.served()
+
+        self.assertFalse(said["identity_agrees"])
+        self.assertEqual(layer["state"], "does-not")
+
+    def test_a_blocked_device_does_not_agree_though_it_was_approved(self):
+        now = timezone.now()
+        self.device(approved_at=now, approved_by=self.operator, blocked_at=now, blocked_by=self.operator)
+
+        said, layer = self.served()
+
+        self.assertFalse(said["identity_agrees"])
+        self.assertEqual(layer["state"], "does-not")
+
+    def test_every_standing_a_device_can_be_in_is_explained(self):
+        from ..agent_devices import DeviceStanding
+        from ..request_identity import Identity
+        from ..request_layers import _identity_agreement_layer
+
+        for standing in DeviceStanding:
+            with self.subTest(standing=standing):
+                layer = _identity_agreement_layer(Identity(agent="example-agent", device_standing=standing.value))
+                self.assertIn("example-agent", layer.detail)
+                self.assertEqual(layer.holds, standing is DeviceStanding.APPROVED)
+
+
 class ContainerHopTests(TestCase):
     """HQ can say which container answered: Docker sets a container's
     hostname to its short ID, and the sweep reads that ID."""

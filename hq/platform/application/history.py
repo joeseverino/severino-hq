@@ -262,19 +262,26 @@ class HistoryLine:
     def title(self) -> str:
         """What the event was: its own row's name, else its operation's words, else what it changed."""
 
+        name, after = self.named
+        return f"{name}{after}"
+
+    @property
+    def named(self) -> tuple[str, str]:
+        """``title`` as what it names and the words after that name, so a page
+        draws the name as one (a key cut at its cell's edge) and the words as text."""
+
         if self.burst:
             noun, happened = self.burst[0].like
-            return f"{counted(self.total, noun)} {happened}"
+            return f"{counted(self.total, noun)} {happened}", ""
         head = self.head
         if head is not None:
-            return head.object_repr or head.type_label
+            return head.object_repr or head.type_label, ""
         newest = self.events[0]
         named = operation_title(str((newest.metadata or {}).get("operation") or ""), newest.interface)
         if named:
-            return named
+            return named, ""
         # Nothing declared its words, so the event is named by what it changed.
-        name = newest.object_repr or newest.type_label
-        return f"{name} and {counted(self.total - 1, 'more', 'more')}"
+        return newest.object_repr or newest.type_label, f" and {counted(self.total - 1, 'more', 'more')}"
 
     @property
     def type_label(self) -> str:

@@ -13,6 +13,7 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import claim_next_operation, schedule_automatic_operations
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import PolicyError
 from hq.platform.application.resource_operations import (
     OperationCommand,
@@ -20,8 +21,7 @@ from hq.platform.application.resource_operations import (
     request_reconcile,
     request_removal,
 )
-from hq.platform.application.security import cli_principal, mcp_principal
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
 
 from ..models import ManagedResource, OperationRequest
 from ..providers import PROVIDERS
@@ -225,16 +225,15 @@ class OperationPolicyTests(TestCase):
             )
         self.assertEqual(OperationRequest.objects.count(), 1)
 
-    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=False)
-    def test_mcp_infrastructure_is_fail_closed(self):
+    def test_an_agent_not_granted_infrastructure_is_refused_a_renewal(self):
         result = execute_capability(
             "certificate.renew",
             {"idempotency_key": "mcp-denied"},
-            principal=mcp_principal(),
+            principal=agent_principal("example-agent", MCP_INTERFACE, frozenset({"read"})),
             target=self.resource.key,
         )
         self.assertFalse(result["ok"])
-        self.assertEqual(result["error"]["code"], "forbidden")
+        self.assertEqual(result["error"]["code"], "insufficient_scope")
 
     @patch(
         "hq.platform.application.resource_operations.controller_action_policy",

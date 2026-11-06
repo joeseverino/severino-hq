@@ -195,6 +195,23 @@ class TestAtRefTests(GateTestCase):
         self.assertFalse(self.seen.exists())
         self.assert_nothing_left()
 
+    def test_a_keep_that_leaves_no_test_module_of_this_tree_is_refused_as_proving_nothing(self):
+        # Only test_app.py is a test module this tree changed.
+        Path(self.root, "tests/test_new.py").unlink()
+        self.write("tests/test_gone.py", "gone\n")
+        only = "tests/test_app.py"
+        self.write(only, "edited\n")
+        with patch("sys.stderr", io.StringIO()) as err:
+            code, _ = self.run_main(str(self.seen), "0", at_ref=self.old, keep=(only,))
+
+        self.assertEqual(code, 2)
+        said = err.getvalue()
+        self.assertIn(only, said)
+        self.assertIn("proves nothing", said)
+        self.assertIn(f"without --keep {only}", said)
+        self.assertFalse(self.seen.exists())
+        self.assert_nothing_left()
+
     def test_a_keep_that_names_no_changed_support_is_refused(self):
         for keep in ("app.py", "hq/core/tests/browser/missing.py"):
             with self.subTest(keep=keep), patch("sys.stderr", io.StringIO()) as err:
@@ -405,6 +422,22 @@ class TestAtRefTests(GateTestCase):
         with patch("sys.stderr", io.StringIO()):
             self.assertEqual(self.run_main("label", at_ref="")[0], 2)
 
+    def test_a_gate_named_as_a_label_is_refused_before_any_run_naming_how_a_gate_runs(self):
+        with patch("sys.stderr", io.StringIO()) as err:
+            code, out = self.run_main("tests.test_app", "lint:drift-api-examples", at_ref=self.old)
+
+        self.assertEqual(code, 2)
+        self.assertIn("`mise run lint:drift-api-examples`", err.getvalue())
+        self.assertNotIn("does not import", err.getvalue() + out)
+        self.assert_nothing_left()
+
+    def test_a_label_of_this_tree_or_an_options_value_is_never_read_as_a_gate(self):
+        self.write("lint/__init__.py", "")
+        # `lint` and `browser` are tasks too: one names a package here, the other is --tag's value.
+        self.assertEqual(
+            at.tasks_named(["lint", "tests/test_app.py", "--tag", "browser", "--parallel=1", "fast"]), ["fast"]
+        )
+
 
 @tag("source")
 class TestTypedTests(GateTestCase):
@@ -420,3 +453,51 @@ class TestTypedTests(GateTestCase):
     def test_without_at_there_is_no_ref(self):
         self.assertIsNone(at.Typed.from_usage(Usage.from_environment({"usage_arguments": "a.b"})).at)
         self.assertEqual(at.Typed.from_usage(Usage.from_environment({"usage_at": ""})).at, "")
+
+
+class MeasuredNarrowRunTests(GateTestCase):
+    """A narrow run ends with the measurer's line, as a heavy run does in the turn."""
+
+    def take(self, environ: dict[str, str], *, narrow: bool = True) -> tuple[list[list[str]], bool]:
+        """The commands the run execs, and whether it asked if it is narrow."""
+
+        execs: list[list[str]] = []
+        with (
+            patch.dict(os.environ, environ, clear=False),
+            patch.object(at, "subprocess") as sub,
+            patch.object(at.os, "execv", side_effect=lambda _p, command: execs.append(command)),
+            patch.object(at.os, "execvp", side_effect=lambda _p, command: execs.append(command)),
+            patch.object(at.os, "chdir"),
+        ):
+            sub.call.return_value = 0 if narrow else 1
+            at.take_the_turn(at.Typed(args=["example.tests"]))
+            self.marker = os.environ.get(at.FOUND_NARROW)
+        return execs, sub.call.called
+
+    def test_a_narrow_run_runs_again_under_the_measurer(self):
+        environ = {"MISE_TASK_LOCKS": "", "HQ_MEASURED": ""}
+        (command,), asked = self.take(environ)
+        self.assertTrue(asked)
+        self.assertEqual(command, [at.MEASURER, sys.executable, "-m", "tools.gate.at"])
+        self.assertTrue(os.access(at.MEASURER, os.X_OK))
+
+    def test_a_run_in_the_turn_does_not_run_again_or_ask_again(self):
+        self.assertEqual(self.take({"MISE_TASK_LOCKS": "heavy", "HQ_MEASURED": ""}), ([], False))
+
+    def test_a_measured_narrow_run_asks_but_does_not_run_again(self):
+        self.assertEqual(self.take({"MISE_TASK_LOCKS": "", "HQ_MEASURED": "1"}), ([], True))
+
+    def test_a_heavy_run_that_inherits_a_measured_parent_still_takes_the_turn(self):
+        (command, *_), asked = self.take({"MISE_TASK_LOCKS": "", "HQ_MEASURED": "1"}, narrow=False)
+        self.assertTrue(asked)
+        self.assertIn("tools.gate.at", command)
+        self.assertNotEqual(command[0], at.MEASURER)
+
+    def test_the_run_again_skips_the_second_question_and_leaves_no_marker_to_children(self):
+        environ = {"MISE_TASK_LOCKS": "", "HQ_MEASURED": "1", at.FOUND_NARROW: "1"}
+        self.assertEqual(self.take(environ), ([], False))
+        self.assertIsNone(self.marker)
+
+    def test_a_narrow_run_leaves_the_marker_for_the_run_it_execs(self):
+        self.take({"MISE_TASK_LOCKS": "", "HQ_MEASURED": ""})
+        self.assertEqual(self.marker, "1")

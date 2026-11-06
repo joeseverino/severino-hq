@@ -10,6 +10,7 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 from fontTools.ttLib import TTFont
 
+from hq.platform.application.tests.facts import scan
 from tools.fonts.subset import ROOT, SERVED, stylesheet_features
 
 # Unicode's Default_Ignorable_Code_Point (DerivedCoreProperties.txt, Unicode
@@ -52,12 +53,21 @@ def drawn(character: str) -> bool:
     return not any(low <= code <= high for low, high in DEFAULT_IGNORABLE)
 
 
-def _python_strings(path: Path) -> str:
-    # String literals only: a comment is never printed.
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    return "".join(
-        node.value for node in ast.walk(tree) if isinstance(node, ast.Constant) and isinstance(node.value, str)
-    )
+# A string literal that can print past ASCII: a character written in it, or
+# an escape that may spell one. A comment is never printed.
+_PAST_ASCII = {"kind": "string", "regex": r"[^\x00-\x7f]|\\[uUNx0-7]"}
+
+
+def _python_strings(*paths: Path) -> dict[Path, str]:
+    """Each module's text its string literals can print past ASCII, each literal parsed on its own."""
+
+    strings: dict[Path, str] = {}
+    for found in scan({"past-ascii": _PAST_ASCII}, *paths):
+        literal = ast.parse(found.text, mode="eval")
+        strings[found.path] = strings.get(found.path, "") + "".join(
+            node.value for node in ast.walk(literal) if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        )
+    return strings
 
 
 def _script_text(path: Path) -> str:
@@ -82,10 +92,10 @@ def _shipped(root: Path):
     for path in sorted((root / "templates").rglob("*")):
         if path.is_file():
             yield path, html.unescape(path.read_text(encoding="utf-8"))
-    for package in ("hq", "hq_sdk"):
-        for path in sorted((root / package).rglob("*.py")):
-            if "tests" not in path.relative_to(root).parts:
-                yield path, _python_strings(path)
+    strings = _python_strings(root / "hq", root / "hq_sdk")
+    for path in sorted(strings):
+        if "tests" not in path.relative_to(root).parts:
+            yield path, strings[path]
     for path in sorted((root / "static/js").glob("*.js")):
         yield path, _script_text(path)
     for path in sorted((root / "static/css").rglob("*.css")):
@@ -97,6 +107,8 @@ def undrawn(root: Path, font: Path) -> dict[str, Path]:
     """Each character HQ prints that the font has no glyph for, with the first file that prints it."""
 
     cmap = TTFont(font).getBestCmap()
+    # Resolved, as the scan names each module it reads.
+    root = root.resolve()
     missing: dict[str, Path] = {}
     for path, text in _shipped(root):
         for character in set(text):
@@ -170,7 +182,7 @@ class ServedFontTests(SimpleTestCase):
         }
         readers = {
             ".html": lambda path: html.unescape(path.read_text()),
-            ".py": _python_strings,
+            ".py": lambda path: "".join(_python_strings(path).values()),
             ".js": _script_text,
             ".css": _stylesheet_content,
         }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -708,7 +709,7 @@ func TestThroughSudoTheMachineIsFixed(t *testing.T) {
 		t.Errorf("moved through sudo: %+v", u)
 	}
 	command := u.Command(context.Background(), "docker")
-	if !slices.Equal(command.Env, []string{"LC_ALL=C", "PATH=" + sudoPath, "HOME=/root"}) {
+	if !slices.Equal(command.Env, []string{"LC_ALL=C", "PATH=" + hostcore.RootPath, "HOME=/root"}) {
 		t.Errorf("docker's environment through sudo: %v", command.Env)
 	}
 	d.expect(Refused, "refused", d.upgradeAs(u))

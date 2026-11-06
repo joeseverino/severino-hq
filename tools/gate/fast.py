@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import functools
+import glob
 import json
 import os
 import re
@@ -16,13 +17,14 @@ import subprocess
 import sys
 import tempfile
 import threading
+import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import BinaryIO
 
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
-from tests.mise_tasks import mise_tasks, run_files, takes_the_turn
+from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs, takes_the_turn
 from tools.gate.turn import in_turn
 from tools.gate.verdict import Gate, Step, run
 from tools.structural.classify import TEST
@@ -52,6 +54,25 @@ TASKS: dict[str, tuple[str, ...]] = {
     "lint:imports": ("hq/*.py",),
     "lint:prose": (*PYTHON, "*.html", "*.md", "*.js", "*.css", "*.go", "*.sh", "tools/lint/vale/*"),
     "lint:mise-tasks": ("mise-tasks/*",),
+    "lint:mise-format": ("mise.toml", "mise-tasks/*.toml", "mise-tasks/lint/mise-format", "tools/lib/mise-files.sh"),
+    # jactionlint, then zizmor over .github, each with its config there.
+    "lint:workflows": (".github/workflows/*", ".github/actions/*", ".github/actionlint.yaml", ".github/zizmor.yml"),
+    # mise.toml's Go pin reads controller/go.mod.
+    "lint:toolchain": (
+        "mise.toml",
+        "mise.lock",
+        "controller/go.mod",
+        "Dockerfile",
+        "composition/Dockerfile",
+        "tools/pipeline/toolchain_lock.py",
+    ),
+    "lint:lockfile": ("pyproject.toml", "uv.lock"),
+    "lint:deploycheck": PYTHON,
+    "lint:openapi": (
+        "hq/platform/api/hq-api.openapi.json",
+        "controller/api/*.openapi.json",
+        "tools/lint/package*.json",
+    ),
     "test:migrations": ("hq/*.py",),
     "lint:drift-sdk-contract": (*PYTHON, "hq_sdk/*", "docs/Plugins.md"),
     "lint:drift-api-document": (*PYTHON, "hq/platform/api/hq-api.openapi.json"),
@@ -69,10 +90,37 @@ SHELL_SOURCES = ROOT / "tools" / "gate" / "shell-sources.sh"
 # shell the lister cannot name (tests/shell/test-shell-contracts.sh reads every
 # one), so a change to them selects the gate too.
 SHELL_READS = (".github/workflows/*", ".github/actions/*")
+# Each lint gate a change never selects, and why: it reaches the network, so
+# it is left to `mise run check`, or fast runs its check another way. A lint
+# task in none of TASKS, SHELL and this is one fast would skip unseen, which
+# test_fast.py fails on.
+UNSELECTED: dict[str, str] = {
+    "lint:audit": "queries the advisory services (uv audit, osv-scanner); left to `mise run check`",
+    "lint:codeql-bundle": "fetches the pinned CodeQL action's defaults from GitHub; left to `mise run check`",
+    "lint:scorecard": "its Vulnerabilities check queries OSV over an export of the tree; left to `mise run check`",
+    "lint:patch": "fast's own patch integrity step runs `git diff --check` over the change",
+    "lint:source": "fast runs the source-tagged tests among its labels, since a labeled run leaves no tag out",
+    "lint:shell:suites": "runs within lint:shell, which fast selects as SHELL",
+    "lint:shell:suite": "runs within lint:shell, which fast selects as SHELL",
+}
+
+
+def _globs(patterns: list[str]) -> re.Pattern[str]:
+    """One pattern matching a path any of ``patterns`` does, each a glob over
+    the path from the root, ``**`` crossing directories."""
+
+    alternatives = [f"(?:{glob.translate(pattern, recursive=True, include_hidden=True)})" for pattern in patterns]
+    return re.compile(f"^(?:{'|'.join(alternatives) or '(?!)'})")
+
+
 # Paths a gate never reads, so a change to them alone leaves it out: the
-# structural bar drops test code before it pairs anything, and complexipy.toml
-# leaves it out.
-UNREAD = {"lint:structural": TEST, "lint:complexity": TEST}
+# structural bar drops test code before it pairs anything, and complexipy
+# leaves out what complexipy.toml's exclude names, read from there so the two
+# never disagree.
+UNREAD = {
+    "lint:structural": TEST,
+    "lint:complexity": _globs(tomllib.loads((ROOT / "complexipy.toml").read_text(encoding="utf-8"))["exclude"]),
+}
 # What every gate reads: the dependencies, the tool pins and the task
 # definitions. A change to one runs them all.
 EVERY_TASK = (
@@ -98,6 +146,11 @@ TREE = tuple(f"{package}/*.py" for package in SUITE)
 # The module every test that reads the tasks goes through; a change to a task
 # definition, or to a file a task runs, reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
+# A test task that runs its labels in a dependency group's environment, which
+# the default one fast tests in lacks: a module it names is selected as that
+# task, never as a label.
+GROUP_TASK = "test:"
+GROUP_RUN = re.compile(r"\buv run\b[^\n]*--group\b[^\n]*\bmanage\.py test\b((?:\s+[\w.]+)+)")
 # How many importers away from a changed module a test is still selected: one
 # that imports it, or imports a module that does. Further out the walk reaches
 # most of the tree through the shared layers, and the module in between has
@@ -184,16 +237,19 @@ def list_shell(root: Path, paths: list[str]) -> list[str]:
     return listed.stdout.splitlines()
 
 
-def tasks_command(tasks: tuple[str, ...], parallel: str) -> list[str]:
+def tasks_command(tasks: tuple[str, ...], parallel: str, *, summary: bool = False) -> list[str]:
     """One run of every task, side by side unless parallelism is ruled out.
 
-    `-c` names every task that failed, and the configured keep-order output
-    prints each one whole under its own name.
+    `-c` names every task that failed. The configured keep-order output prints
+    each one whole under its own name; ``summary`` prints a task that passed as
+    one line and one that failed whole. It holds every task of the run until it
+    ends, a heavy one's wait for the turn too, so it is for the light gates.
     """
 
     jobs = ["--jobs", "1"] if parallel == "1" else []
+    output = ["--output", "summary"] if summary else []
     separated = [word for task in tasks for word in (":::", task)][1:]
-    return ["mise", "run", "-c", *jobs, *separated]
+    return ["mise", "run", "-c", *jobs, *output, *separated]
 
 
 def merge_base(base: str | None) -> str:
@@ -233,7 +289,7 @@ def is_test(path: Path) -> bool:
     return (
         path.suffix == ".py"
         and path.name != "__init__.py"
-        and (path.name.startswith("test") or "fuzz" in path.parts)
+        and path.name.startswith("test")
         and all((ROOT / parent / "__init__.py").exists() for parent in path.parents if parent != Path())
     )
 
@@ -398,13 +454,21 @@ def path_references(path: str) -> list[re.Pattern[str]]:
 def test_labels(
     files: list[Path], reached: set[str], touched: set[str], read: list[str] | tuple[str, ...] = ()
 ) -> tuple[list[str], int]:
-    """The test modules to run: those the change reaches by import, those that
-    name an app it touched, those that name a file it changed that is not
-    Python (`read`), and the architecture tests."""
+    """The test modules to run: those ``chosen`` picks, and the architecture tests."""
 
-    by_module = {module_name(p): p for p in files if is_test(p)}
-    tests = set(by_module)
-    chosen = {t for t in tests if t in reached}
+    tests = {module_name(p): p for p in files if is_test(p)}
+    picked = chosen(tests, reached, touched, read) | {t for t in tests if any(a in t for a in ALWAYS)}
+    return sorted(picked), len(tests)
+
+
+def chosen(
+    modules: dict[str, Path], reached: set[str], touched: set[str], read: list[str] | tuple[str, ...]
+) -> set[str]:
+    """Those of ``modules`` the change reaches by import, those that name an
+    app it touched, and those that name a file it changed that is not Python
+    (`read`)."""
+
+    picked = {m for m in modules if m in reached}
     # A test that names an app exercises it: a URL namespace ("projects:list"),
     # a model label ("projects.Project") or the app label given to Django.
     words = [
@@ -415,12 +479,38 @@ def test_labels(
         for app in touched
     ]
     words += [pattern for path in read for pattern in path_references(path)]
-    for name, path in by_module.items():
-        text = (ROOT / path).read_text(encoding="utf-8")
-        if any(word.search(text) for word in words):
-            chosen.add(name)
-    chosen |= {t for t in tests if any(a in t for a in ALWAYS)}
-    return sorted(chosen), len(tests)
+    for name, path in modules.items():
+        if name not in picked and any(word.search((ROOT / path).read_text(encoding="utf-8")) for word in words):
+            picked.add(name)
+    return picked
+
+
+@functools.cache
+def group_tests() -> dict[str, str]:
+    """Each test module a test task runs in a dependency group's environment, by its label: module -> task."""
+
+    found: dict[str, str] = {}
+    for name, task in mise_tasks().items():
+        run_labels = GROUP_RUN.search(body(task)) if name.startswith(GROUP_TASK) else None
+        if not run_labels:
+            continue
+        labels = run_labels[1].split()
+        for path in runs(task):
+            module = module_name(path.relative_to(TASKS_ROOT))
+            if any(label == module or label.startswith(module + ".") for label in labels):
+                found[module] = name
+    return found
+
+
+def group_tasks(
+    files: list[Path], reached: set[str], touched: set[str], read: list[str] | tuple[str, ...] = ()
+) -> tuple[str, ...]:
+    """The test tasks whose group-run modules the change reaches as it would reach a test module."""
+
+    present = {module_name(p): p for p in files}
+    modules = {m: present[m] for m in group_tests() if m in present}
+    picked = chosen(modules, reached, touched, read)
+    return tuple(sorted({group_tests()[m] for m in picked}))
 
 
 def with_tree(labels: list[str], paths: list[str]) -> list[str]:
@@ -505,6 +595,41 @@ def extension_suites(parallel: str) -> list[Step]:
     return [step("extension suites, composed (shared UI changed)", command)]
 
 
+# Where a passed tree is recorded, under the repository's common git directory
+# so every worktree shares it: an empty file named by the tree's hash, which a
+# commit keeps when it is re-signed. The agent hooks read it to hold a brief's
+# base to a pass.
+PASSES = ("severino", "fast-passes")
+
+
+def passes(root: Path = ROOT) -> Path:
+    common = git("rev-parse", "--path-format=absolute", "--git-common-dir", root=root)[0]
+    return Path(common).joinpath(*PASSES)
+
+
+def tree_of(commit: str) -> str:
+    return git("rev-parse", f"{commit}^{{tree}}")[0]
+
+
+def record_pass(tree: str | None, base: str, *, whole: bool) -> None:
+    """Record ``tree``, the one a passing run judged (None when the checkout
+    changed in the run), and say so, when the run proves it: it selected the
+    whole suite or the base's tree passed too, so what the change left
+    unselected is what had passed. A run that selected only what changed from
+    an unpassed base proves nothing about the rest."""
+
+    if not tree:
+        return
+    folder = passes()
+    if not whole and not (folder / tree_of(base)).is_file():
+        said = "not recorded as passed: its base's tree has no pass, and the run was not the whole suite"
+    else:
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / tree).touch()
+        said = "recorded as passed"
+    print(f"[fast] tree {tree[:9]} {said}", flush=True)
+
+
 def main(asked: Usage) -> int:
     # The task's usage reads CHECK_BASE and CHECK_PARALLEL behind its own arguments.
     parallel = asked.text("parallel", "auto")
@@ -517,6 +642,7 @@ def main(asked: Usage) -> int:
     reached, touched = affected(changed, deleted, files)
     read = [path for path in [*changed, *deleted] if not path.endswith(".py")]
     labels, total = test_labels(files, reached, touched, read)
+    every_test = len(labels) == total > 0
     print(f"[fast] base {base[:9]}: {len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules")
     if total and len(labels) / total > WIDE:
         print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
@@ -528,7 +654,7 @@ def main(asked: Usage) -> int:
         print("\n".join(labels))
         return 0
 
-    tasks = selected_tasks([*changed, *deleted], base)
+    tasks = (*selected_tasks([*changed, *deleted], base), *group_tasks(files, reached, touched, read))
     after = turn_takers(tasks) if tasks else ()
     light = tuple(task for task in tasks if task not in after)
     if tasks:
@@ -537,7 +663,8 @@ def main(asked: Usage) -> int:
         print("[fast] no quick gate reads what changed")
     # The light gates run beside the tests, their output shown after the tests'.
     with tempfile.TemporaryFile() as held:
-        beside = Beside("quick gates, beside the tests", tasks_command(light, parallel), held) if light else None
+        quick = tasks_command(light, parallel, summary=True)
+        beside = Beside("quick gates, beside the tests", quick, held) if light else None
         tests = step("tests", test_command(labels, parallel))
         steps = [beside.collect(), tests] if beside else [tests]
     if after:
@@ -545,8 +672,11 @@ def main(asked: Usage) -> int:
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
+    passed = all(s.ok for s in steps)
+    if passed:
+        record_pass(gate.judged(), base, whole=every_test and set(tasks) == {*TASKS, SHELL, *group_tests().values()})
     gate.close(steps, " (full gate before push: `mise run check`)")
-    return 0 if all(s.ok for s in steps) else 1
+    return 0 if passed else 1
 
 
 if __name__ == "__main__":

@@ -18,11 +18,11 @@ from hq.platform.core.example_estate.testing import throwaway_media
 from ..projection import MAX_PAGE_SIZE
 from ..read_models import documentation_status
 from ..resources import InvalidResourceInput, list_resource, resource_registry
-from ..security import Capability, Principal
+from ..security import Principal, operator_capabilities
 
 # The query field a page past the first is asked by.
 PAGE_FIELD = "cursor"
-READER = Principal("example-reader", "test", frozenset(Capability))
+READER = Principal("example-reader", "test", operator_capabilities())
 ROWS = MAX_PAGE_SIZE + 37
 
 

@@ -1,17 +1,21 @@
-"""Which tests of a checkout carry which tags, and which of them walk a tree or run git, read from their source.
+"""Which tests of a checkout carry which tags, and which of them walk a tree or run a program the image lacks, read from their source.
 
 The guard in test_tree_tag.py holds the ``tree`` tag to the walks, and
 ``mise run fast`` runs the tests it finds tagged ``tree``. The guard in
-test_git_tag.py holds a test that runs git to the ``source`` tag.
+test_unshipped_tag.py holds a test that runs git or a tool mise pins to the
+``source`` tag. Each walk
+runs apart (apart.py), so the trees it parses leave with its process.
 """
 
 import ast
 import re
+import tomllib
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from hq.platform.application.tests.source import parsed, source_files
+from hq.platform.application.tests.apart import apart
+lazy from hq.platform.application.tests.source import source_files
 
 ROOT = Path(__file__).resolve().parents[4]
 SUITE = ("hq", "hq_sdk", "tools", "tests")
@@ -22,23 +26,39 @@ Found = tuple[str, ast.AST]
 
 
 def is_walk(node: ast.AST) -> bool:
-    """``x.rglob(...)``, ``os.walk(...)``, or ``ls-files`` in a string."""
+    """``x.rglob(...)``, ``os.walk(...)``, ``ls-files`` in a string, or a command line that runs ast-grep
+    on files, which one that reads ``--stdin`` does not."""
 
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return "ls-files" in node.value.split()
+    if isinstance(node, (ast.List, ast.Tuple)) and node.elts:
+        words = [each.value for each in node.elts if isinstance(each, ast.Constant)]
+        return words[:1] == ["ast-grep"] and "--stdin" not in words
     if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)):
         return False
     owner = node.func.value
     return node.func.attr == "rglob" or (node.func.attr == "walk" and isinstance(owner, ast.Name) and owner.id == "os")
 
 
-def is_git(node: ast.AST) -> bool:
-    """A command line that runs git: a list or tuple whose first item is ``"git"``."""
+def unshipped(root: Path) -> frozenset[str]:
+    """The programs a checkout runs that its image lacks: git, and each tool
+    mise.toml pins (by its name, an ``aqua:`` one by its repository's), since
+    the image ships Python and the base system only."""
 
-    if not (isinstance(node, (ast.List, ast.Tuple)) and node.elts):
-        return False
-    head = node.elts[0]
-    return isinstance(head, ast.Constant) and head.value == "git"
+    pinned = tomllib.loads((root / "mise.toml").read_text(encoding="utf-8")).get("tools", {})
+    return frozenset({"git", *(name.rpartition("/")[2].rpartition(":")[2] for name in pinned)})
+
+
+def runs(programs: frozenset[str]) -> Callable[[ast.AST], bool]:
+    """Whether a node is a command line that runs one of ``programs``: a list or tuple whose first item names it."""
+
+    def found(node: ast.AST) -> bool:
+        if not (isinstance(node, (ast.List, ast.Tuple)) and node.elts):
+            return False
+        head = node.elts[0]
+        return isinstance(head, ast.Constant) and head.value in programs
+
+    return found
 
 
 def tags(decorators: list[ast.expr]) -> set[str]:
@@ -60,7 +80,8 @@ class Module:
         self.defined: dict[str, ast.AST] = {}
         # A local name -> (the module it came from, the name there, or None for the module itself).
         self.imported: dict[str, tuple[str, str | None]] = {}
-        for node in parsed(path).body:
+        # Parsed once per module by Reach, in a process that exits, so no cache keeps it.
+        for node in ast.parse(path.read_text(encoding="utf-8"), filename=str(path)).body:
             self.read(node, package)
 
     def read(self, node: ast.stmt, package: str) -> None:
@@ -74,12 +95,18 @@ class Module:
                 local = alias.asname or alias.name.partition(".")[0]
                 self.imported[local] = (alias.name if alias.asname else local, None)
         elif isinstance(node, ast.ImportFrom):
-            head = node.module or ""
-            if node.level:
-                base = package.split(".")[: len(package.split(".")) - node.level + 1]
-                head = ".".join([*base, *([node.module] if node.module else [])])
+            head = _imported_from(node, package)
             for alias in node.names:
                 self.imported[alias.asname or alias.name] = (head, alias.name)
+
+
+def _imported_from(node: ast.ImportFrom, package: str) -> str:
+    """The dotted name of the module a ``from`` import in ``package`` reads, a relative one resolved."""
+
+    if not node.level:
+        return node.module or ""
+    base = package.split(".")[: len(package.split(".")) - node.level + 1]
+    return ".".join([*base, *([node.module] if node.module else [])])
 
 
 @dataclass(frozen=True)
@@ -226,9 +253,13 @@ def replaces_root(nodes: list[ast.AST]) -> bool:
 def tagged(root: Path, tag: str) -> list[str]:
     """The label of every test carrying ``tag``: its class's, when every test of the class does."""
 
-    walks = Reach(root)
+    return apart(_tagged, root, tag)
+
+
+def _tagged(root: str, tag: str) -> list[str]:
+    walks = Reach(Path(root))
     labels = []
-    for dotted in test_modules(root):
+    for dotted in test_modules(walks.root):
         by_class: dict[str, list[tuple[str, bool]]] = {}
         for cls, method, held, own in walks.methods(dotted):
             by_class.setdefault(f"{dotted}.{cls.name}", []).append((method.name, tag in held | own))
@@ -252,9 +283,14 @@ def misplaced(root: Path) -> tuple[list[str], list[str]]:
     one tag rather than one per method.
     """
 
-    walks = Reach(root)
+    untagged, idle = apart(_misplaced, root)
+    return untagged, idle
+
+
+def _misplaced(root: str) -> tuple[list[str], list[str]]:
+    walks = Reach(Path(root))
     untagged, idle = [], []
-    for dotted in test_modules(root):
+    for dotted in test_modules(walks.root):
         by_class: dict[str, list[Unit]] = {}
         for unit in walks.units(dotted):
             by_class.setdefault(unit.label.rpartition(".")[0], []).append(unit)
@@ -275,14 +311,41 @@ def shipped(root: Path) -> tuple[str, ...]:
     return tuple(package for package in SUITE if package in admitted)
 
 
-def runs_git_untagged(root: Path) -> list[str]:
-    """Every test the image ships that runs git, itself or through what it
-    reaches by name, without the ``source`` tag: no image ships git."""
+def runs_unshipped_untagged(root: Path) -> list[str]:
+    """Every test the image ships that runs a program the image lacks
+    (``unshipped``), itself or through what it reaches by name, without the
+    ``source`` tag."""
 
-    reach = Reach(root, is_git)
+    return apart(_runs_unshipped_untagged, root)
+
+
+def _runs_unshipped_untagged(root: str) -> list[str]:
+    reach = Reach(Path(root), runs(unshipped(Path(root))))
+    asks = Reach(Path(root), is_which)
     return [
         f"{dotted}.{cls.name}.{method.name}"
-        for dotted in test_modules(root, shipped(root))
+        for dotted in test_modules(reach.root, shipped(reach.root))
         for cls, method, held, own in reach.methods(dotted)
-        if "source" not in held | own and reach.reached(dotted, cls, method)
+        if "source" not in held | own
+        and reach.reached(dotted, cls, method)
+        and not skips_without_a_program(asks, dotted, cls, method)
     ]
+
+
+def is_which(node: ast.AST) -> bool:
+    """A call of ``shutil.which``, which asks whether a program is installed."""
+
+    return isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) == "which"
+
+
+def skips_without_a_program(asks: Reach, dotted: str, cls: ast.ClassDef, method: ast.FunctionDef) -> bool:
+    """Whether a test, or its class, is skipped by a ``skipIf`` or ``skipUnless``
+    whose condition asks for a program (``asks`` finds ``shutil.which``), so an
+    image without it skips the test rather than fails it."""
+
+    return any(
+        isinstance(decorator, ast.Call)
+        and getattr(decorator.func, "attr", getattr(decorator.func, "id", "")) in ("skipIf", "skipUnless")
+        and any(asks.reaches(dotted, condition, cls) for condition in decorator.args[:1])
+        for decorator in [*cls.decorator_list, *method.decorator_list]
+    )

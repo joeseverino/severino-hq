@@ -17,6 +17,8 @@
 # own holding only what composition/Dockerfile copies, so no checkout gains
 # a build/ it does not ignore.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 # shellcheck source=tools/lib/extension-set.sh
 . ./tools/lib/extension-set.sh
 compose_extensions

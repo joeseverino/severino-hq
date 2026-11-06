@@ -1,0 +1,14 @@
+id: url-mounts-walked-by-routed
+valid:
+  - 'patterns = get_resolver().url_patterns'
+  - 'routes = list(routed())'
+  - 'mock.patch.dict(mount.__dict__, {"url_patterns": patterns})'
+invalid:
+  # routes.routed's own walk, as any other module would write it.
+  - |
+    def routed(entries=None, mounts=()):
+        for entry in get_resolver().url_patterns if entries is None else entries:
+            if isinstance(entry, URLResolver):
+                yield from routed(entry.url_patterns, (*mounts, entry))
+  - 'names = [entry.name for entry in get_resolver(urlconf).namespace_dict["control"][1].url_patterns]'
+  - 'patterns = urls.get_resolver().url_patterns'

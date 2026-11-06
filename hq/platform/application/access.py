@@ -6,7 +6,7 @@ own read would, so what a door lists and what it refuses never disagree.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from .security import AuthorizationError, Capability, Principal, require_all
@@ -58,8 +58,16 @@ class Some:
         return self.offered(principal)
 
     def check(self, principal: Principal) -> None:
-        if not self.offered(principal):
-            raise AuthorizationError(f"{principal.interface} principal {principal.actor!r} {self.lacks}.")
+        if self.offered(principal):
+            return
+        # A caller a new sign-in could admit goes on to the entry it asked
+        # for, whose own check refuses it naming the one permission that entry
+        # needs, where this family-wide one could name none in particular.
+        if principal.grantable and self.offered(
+            replace(principal, capabilities=principal.capabilities | principal.grantable, grantable=frozenset())
+        ):
+            return
+        raise AuthorizationError(f"{principal.interface} principal {principal.actor!r} {self.lacks}.")
 
 
 ANYONE = Anyone()

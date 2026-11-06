@@ -2,7 +2,7 @@
 #MISE description="The suite composed with the set mise.local.toml names, as the image runs it; mise run test --composed"
 #MISE hide=true
 #MISE extends="django"
-#MISE env={DJANGO_DEBUG=false}
+#MISE env={DJANGO_DEBUG=false, SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
 #USAGE arg "[arguments]..." var=#true help="Passed on to manage.py test: test labels, --tag, --parallel"
 
 # The suite runs in a copy of only what the image's /app holds
@@ -37,9 +37,9 @@ turn_bound=30m
 . ./tools/lib/source-url.sh
 
 source_url="$(source_url)"
-# Named as a test run's scratch is, for this shell, so a copy left by a killed
-# run is swept by the next test run (hq/config/sandbox.py).
-tree="$(mktemp -d "${TMPDIR:-/tmp}/severino-test-tree-$$-XXXXXX")"
+# Named as a test run's directory is, so a copy a killed run left is swept by
+# a test run once it is older than any run (hq/config/sandbox.py).
+tree="$(mktemp -d "${TMPDIR:-/tmp}/hq-run-XXXXXX")"
 # This shell outlives the suite so the copy goes however it ends. A signal is
 # acted on once the suite has stopped (a terminal's interrupt reaches both),
 # and the exit says which signal it was.

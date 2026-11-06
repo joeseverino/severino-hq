@@ -34,6 +34,7 @@ from hq.platform.core.static import root_icon
 from hq.platform.core.views import (
     AgentAccessView,
     AgentBlockView,
+    AgentDeviceView,
     AgentPolicyView,
     AvatarView,
     ConnectionPageView,
@@ -113,6 +114,7 @@ urlpatterns = [
     path("agents/", AgentPolicyView.as_view(), name="agent_policy"),
     path("agents/block/", AgentBlockView.as_view(), name="agent_block"),
     path("agents/devices/", OwnDeviceView.as_view(), name="own_device"),
+    path("agents/agent-devices/", AgentDeviceView.as_view(), name="agent_device"),
     path("connection/", ConnectionPageView.as_view(), name="connection"),
     path("hq/", HQView.as_view(), name="hq_self"),
     path(

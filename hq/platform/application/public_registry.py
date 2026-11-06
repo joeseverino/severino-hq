@@ -460,7 +460,9 @@ def _report(
     every = READ_EVERY.get(kind, REFRESH_AFTER)
     due = [subject for subject in wanted if _due(kept.get(subject), every, now, force=force)]
     dropped = set(kept) - set(wanted)
-    current = stored is not None and (every is not None or stored.observed_at >= now - read_every(kind))
+    current = stored is not None and (
+        every is not None or (stored.observed_at is not None and stored.observed_at >= now - read_every(kind))
+    )
     if not due and not dropped and stored is not None and stored.reachable and current:
         return None
     answered = 0

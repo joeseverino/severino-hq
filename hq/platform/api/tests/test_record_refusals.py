@@ -14,15 +14,10 @@ from .tokens import ISSUER, RESOURCE, _serving, _token
 SENT = "sent-by-the-caller-7f3a"
 
 
-# A deployment that lets agents make each write below, so what is measured is
-# the record's refusal rather than the agent ceiling's.
 @override_settings(
     OIDC_ISSUER=ISSUER,
     SEVERINO_API_RESOURCE=RESOURCE,
     OIDC_RP_SIGN_ALGO="RS256",
-    SEVERINO_AGENT_ENABLE_WRITES=True,
-    SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True,
-    SEVERINO_AGENT_ENABLE_LOOKUP=True,
 )
 class RecordRefusalTransportTests(TestCase):
     # Every response is also held to the OpenAPI document.

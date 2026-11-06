@@ -49,6 +49,7 @@ def record_denial(
     source: str = "",
     detail: str = "",
     authenticated: bool = True,
+    device: str = "",
 ) -> None:
     metadata = {
         "interface": interface,
@@ -57,6 +58,7 @@ def record_denial(
         "capability": capability,
         "source": source,
         "authenticated": authenticated,
+        **_device(device),
     }
     try:
         if not authenticated and _coalesce(interface, reason, source):
@@ -79,6 +81,13 @@ def record_denial(
         )
 
 
+def _device(device: str) -> dict[str, str]:
+    """The tailnet device a refused call came from, for a door that refuses
+    before it binds the caller; the binding names it everywhere else."""
+
+    return {"device": device} if device else {}
+
+
 @dataclass(slots=True)
 class _Window:
     """One agent's refusals of one kind on one door, counted from ``opened`` for a window."""
@@ -93,7 +102,7 @@ _windows: dict[tuple[str, str, str], _Window] = {}
 _windows_lock = threading.Lock()
 
 
-def record_limited(*, interface: str, reason: str, actor: str, source: str = "") -> None:
+def record_limited(*, interface: str, reason: str, actor: str, source: str = "", device: str = "") -> None:
     """A refusal for asking too much: one row per agent, door and reason a window, with its count.
 
     The first refusal in a window writes the row and the rest only count, so
@@ -110,6 +119,7 @@ def record_limited(*, interface: str, reason: str, actor: str, source: str = "")
         "capability": "",
         "source": source,
         "authenticated": True,
+        **_device(device),
     }
     with _windows_lock:
         window = _windows.get(key)

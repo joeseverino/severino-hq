@@ -1,14 +1,16 @@
 """audit:memory charges each module what its own load holds, and asks pages as a server asks them."""
 
 import asyncio
+import importlib.util
 import sys
 import tempfile
 import tracemalloc
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase
 
-from tools.perf import memory
+from tools.perf import memory, memory_probe
 from tools.perf.memory_probe import BOOT, PASS, Ledger, walk
 
 MB = 1_000_000
@@ -124,3 +126,53 @@ class WalkTests(SimpleTestCase):
             pages, {"/a/": {"status": 200, "to": ""}, "/out/": {"status": 302, "to": "https://example.com/"}}
         )
         self.assertEqual(listened, [], "a second receive answered before the response was sent")
+
+
+class AfterTests(SimpleTestCase):
+    """A path boot never takes is loaded whole, lazy imports included, and its import times are
+    the ones python -X importtime gave after its mark."""
+
+    setUp = LedgerTests.setUp
+    module = LedgerTests.module
+
+    def test_a_path_loads_what_its_modules_left_lazy(self) -> None:
+        self.module("example_memory_deep", "HELD = 1\n")
+        self.module("example_memory_middle", "lazy import example_memory_deep\n")
+        self.module("example_memory_entry", "lazy import example_memory_middle\n")
+        __import__("example_memory_entry")
+        self.assertNotIn("example_memory_middle", sys.modules)
+        self.addCleanup(sys.set_lazy_imports_filter, sys.get_lazy_imports_filter())
+        with mock.patch.dict(memory_probe.AFTER, {"example": ("example_memory_entry",)}):
+            memory_probe.take("example")
+        self.assertIn("example_memory_deep", sys.modules)
+
+    def test_import_times_are_read_after_each_path_s_mark(self) -> None:
+        said = "\n".join(
+            [
+                "import time:       179 |       4173 | json",
+                f"{memory_probe.MARK}oidc",
+                "import time:       254 |       3802 |   json.decoder",
+                "import time:       193 |        193 |   json.encoder",
+                f"{memory_probe.MARK}outbound",
+                "import time:        10 |         10 | example_outbound",
+            ]
+        )
+        self.assertEqual(
+            memory.import_times(said),
+            {
+                "json.decoder": {"self": 254, "cumulative": 3802, "stage": "oidc"},
+                "json.encoder": {"self": 193, "cumulative": 193, "stage": "oidc"},
+                "example_outbound": {"self": 10, "cumulative": 10, "stage": "outbound"},
+            },
+        )
+
+    def test_a_path_is_counted_as_what_it_added_after_the_pass(self) -> None:
+        modules = {"example.boot": {"own": MB, "stage": BOOT}, "example.oidc": {"own": 2 * MB, "stage": "oidc"}}
+        result = {BOOT: 2 * MB, PASS: 3 * MB, "after": {"oidc": 6 * MB}, "modules": modules}
+        self.assertEqual(memory.totals(result)["oidc"], {"traced": 3 * MB, "modules": 1, "own": 2 * MB, "outside": MB})
+
+    def test_every_path_names_modules_that_exist(self) -> None:
+        for path, modules in memory_probe.AFTER.items():
+            for name in modules:
+                with self.subTest(path=path, module=name):
+                    self.assertIsNotNone(importlib.util.find_spec(name))

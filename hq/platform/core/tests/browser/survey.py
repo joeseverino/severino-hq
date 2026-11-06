@@ -11,11 +11,13 @@ from hq.platform.core.tests.browser.probes.boxes import (
     HEAD_CONTROLS,
     INTO_A_NEIGHBOR,
     OVERLAPS,
+    SHORT_OF_ITS_BUTTONS,
     SIDEWAYS,
     SMALL_TARGETS,
 )
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES, FIELD_CONTRAST, FIELD_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
+    BARE_FOLDS,
     DIALOGS_WITHOUT_OPENERS,
     HIDDEN_IN_SUMMARIES,
     LINKS_AT_REST,
@@ -160,7 +162,8 @@ _GEOMETRY = {
     "cell labels": _SPILLED_CELLS,
     "small targets": _SMALL_TARGETS_READ,
     "past the clamp": PAST_THE_CLAMP,
-    "cut decisions": (CUT_DECISIONS, [SELECTORS["decision_whole"], "*", SELECTORS["unseen"]]),
+    "cut decisions": (CUT_DECISIONS, [SELECTORS["decision_detail"], "*", SELECTORS["unseen"]]),
+    "short of its buttons": (SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]),
     "cut code in text": (CUT_DECISIONS, [SELECTORS["running_text"], SELECTORS["code"], SELECTORS["unseen"]]),
     "cut with room": (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]),
     "cut and closed": (CUT_AND_CLOSED, SELECTORS["unseen"]),
@@ -175,6 +178,7 @@ _GEOMETRY = {
     "link underlines": (PARTS_NOT_UNDERLINED, [SELECTORS["link"], SELECTORS["vendored"]]),
     "links at rest": (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
     "lists of facts": (WRAPPED_BESIDE_A_PAIR, SELECTORS["fact_list"]),
+    "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
     # Every box and every line of text, not only a card's or code's.
     "gutter": (PAST_THE_GUTTER, ["*", True]),
     # How far the page moved by itself since it began to load, scored from the

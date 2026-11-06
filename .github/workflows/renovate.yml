@@ -45,10 +45,10 @@ jobs:
           permission-statuses: write
           permission-workflows: write
           permission-vulnerability-alerts: read
-      - uses: renovatebot/github-action@2804199d260ad00c1fae0e9e842888369391c776 # v46.3.10
+      - uses: renovatebot/github-action@1c0cf989c02653fba0efe7ca5772338860ca71dc # v46.3.12
         with:
           token: ${{ steps.app.outputs.token }}
-          renovate-image: ghcr.io/renovatebot/renovate:44.186.4@sha256:2bae955368b05fa2da61d4c813b92251fde0abc59b3e488f2f2cb3672da76cc2
+          renovate-image: ghcr.io/renovatebot/renovate:44.221.1@sha256:e698014d6e64a8b8e096b624120dc4aa14b1cf0e5754fd86e3c38887de63f18a
           # The global configuration the host's runs take too: the commands
           # and executions a run may make, and its commits through the API,
           # signed by GitHub as the App.

@@ -2,6 +2,7 @@
 #MISE description="The tests tagged source, which read the repository: a task, a workflow, a doc"
 #MISE hide=true
 #MISE extends="django"
+#MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
 #MISE depends=["setup:lint-tools"]
 #USAGE arg "[labels]..." var=#true help="Test labels, dotted; only their tagged tests run. Every one by default"
 

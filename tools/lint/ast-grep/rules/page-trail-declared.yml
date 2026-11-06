@@ -1,0 +1,48 @@
+# A view says its trail with page_trail and trail_label, which PageMixin
+# reads; page_trail holds every crumb above the record, the pages above it
+# spread in ((*ABOVE, crumb)). A get_page_trail whose one statement returns a
+# tuple says only what those would. An override stays for a trail the mixin
+# cannot say: one built from the request or from several statements.
+# PageTrailTests runs this rule over every routed module, an installed
+# extension's and the example plugin's included.
+id: page-trail-declared
+language: python
+severity: error
+message: get_page_trail returns a fixed tuple of crumbs.
+note: Declare page_trail (and trail_label) on the view.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+rule:
+  kind: function_definition
+  has:
+    field: name
+    regex: ^get_page_trail$
+  all:
+    - has:
+        field: body
+        has:
+          kind: return_statement
+          has:
+            any:
+              - kind: tuple
+              - kind: expression_list
+    # Nothing in the body but that return, a docstring and comments.
+    - not:
+        has:
+          field: body
+          has:
+            not:
+              any:
+                - kind: return_statement
+                - kind: comment
+                - kind: expression_statement
+                  has:
+                    any:
+                      - kind: string
+                      - kind: concatenated_string

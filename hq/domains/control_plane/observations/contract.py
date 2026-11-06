@@ -1,12 +1,15 @@
 """The contract every reading is registered under."""
 
-from collections.abc import Callable, Iterable, Mapping
+import hashlib
+import json
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, ValidationError, WithJsonSchema
 
+lazy from hq.platform.application.json_schemas import json_schema
 lazy from hq.platform.application.timestamps import moment
 
 lazy from . import OBSERVATIONS
@@ -203,6 +206,19 @@ class ObservationSpec:
         fields = self.record.model_fields
         return {name: value for name, value in record.items() if name in fields}
 
+    def fingerprint(self, declared: Collection[str]) -> str:
+        """What a stored record of the kind may hold: its schema, and which of
+        its names the bridge's door keeps as the contract's own (``declared``).
+
+        A release that moves it changed what the records HQ holds were let
+        through as, so the boot asks for the kind to be read again.
+        """
+
+        schema = json_schema(self.record)
+        names = {*member_names(schema), *(part.name for part in self.parts)}
+        held = {"schema": schema, "declared": sorted(names & set(declared))}
+        return hashlib.sha256(json.dumps(held, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
     def clean(self, records: Iterable[Any]) -> tuple[list[dict[str, Any]], int]:
         """The records as the schema admits them, and how many it refused."""
 
@@ -214,6 +230,28 @@ class ObservationSpec:
             except ValidationError:
                 refused += 1
         return kept, refused
+
+
+def schema_nodes(node: Any) -> Iterator[dict[str, Any]]:
+    """Every object in a JSON document, at any depth, outermost first."""
+
+    if isinstance(node, dict):
+        yield node
+        for child in node.values():
+            yield from schema_nodes(child)
+    elif isinstance(node, list):
+        for child in node:
+            yield from schema_nodes(child)
+
+
+def member_names(node: Any) -> Iterator[str]:
+    """Every member name a JSON schema gives, at any depth: the names the
+    bridge's door takes as the contract's own."""
+
+    for found in schema_nodes(node):
+        members = found.get("properties")
+        if isinstance(members, dict):
+            yield from members
 
 
 def _registered(kind: str) -> ObservationSpec:

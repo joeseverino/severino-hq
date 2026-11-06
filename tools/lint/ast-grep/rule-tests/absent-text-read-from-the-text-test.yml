@@ -1,0 +1,58 @@
+id: absent-text-read-from-the-text
+valid:
+  - 'self.assertNotContains(response, "Ira", html=True)'
+  - 'self.assertNotContains(response, text="Remove", html=True)'
+  - 'self.assertNotContains(response, "Back to")'
+  - 'self.assertNotContains(response, "-$12.50")'
+  - 'self.assertNotContains(response, ''aria-label="Close"'')'
+  - 'self.assertNotContains(response, f"{name}")'
+  - 'self.assertNotContains(response, OLD)'
+  - 'self.assertNotContains(response, "Everyday")'
+  - 'self.assertNotContains(response, "data-attention-item")'
+  - 'self.assertContains(response, "IRA")'
+  - 'self.assertNotIn("Ira", text(response))'
+  - 'self.assertNotIn("Power", page_tables(response.content).headings)'
+  - 'self.assertNotIn("Ira", response.content.decode().split())'
+  - 'self.assertNotIn("Back to", response.content.decode())'
+  - 'self.assertNotIn(SECRET, response.content.decode())'
+  - |
+    for old in ("Institution", "Last refreshed"):
+        self.assertNotContains(response, old)
+  - |
+    for old in ("Remove", "Healthy"):
+        self.assertNotContains(response, old, html=True)
+  - |
+    for old in ("Remove",):
+        self.assertNotContains(response, other)
+  - |
+    for response in (first, second):
+        self.assertNotContains(response, "Last refreshed")
+  - |
+    for old in ("Remove",):
+        self.assertNotIn(old, text(response))
+invalid:
+  - 'self.assertNotContains(response, "Ira")'
+  - "self.assertNotContains(response, 'eadings')"
+  - 'self.assertNotContains(response, "tabs-on")'
+  - 'self.assertNotContains(response, "snake_1")'
+  - 'self.assertNotContains(response, text="Remove")'
+  - 'self.assertNotContains(response, "Ira", html=False)'
+  - 'self.assertNotContains(response, "Ira", 200)'
+  - 'self.assertNotContains(response, "CSRF", status_code=403)'
+  - 'self.assertNotIn("Ira", response.content)'
+  - 'self.assertNotIn(b"Ira", response.content)'
+  - 'self.assertNotIn("Ira", page.content.decode())'
+  - 'self.assertNotIn("Ira", page.content.decode("utf-8"))'
+  - |
+    def test(self, r):
+        self.assertNotContains(r, "Remove")
+  - |
+    for old in ("Institution", "Remove", "Last refreshed"):
+        self.assertNotContains(response, old)
+  - |
+    for old in ["Last refreshed", "Healthy"]:
+        with self.subTest(old):
+            self.assertNotContains(response, old, status_code=403)
+  - |
+    for gone in ("Needs output", "reverse"):
+        self.assertNotIn(gone, response.content.decode())

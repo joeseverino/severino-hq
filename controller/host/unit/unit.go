@@ -18,7 +18,7 @@
 //     .service), one space between, nothing else. No template instance, no
 //     path, no option.
 //   - A socket's peer is root or the account HQ and its controller run as
-//     (host.WebUID); the socket's directory is that account's alone, and only
+//     (hostcore.WebUID); the socket's directory is that account's alone, and only
 //     the controller's container mounts it.
 //   - At least one container on this machine, running or stopped, carries
 //     Label naming the unit, and for each of them the unit's own start
@@ -42,6 +42,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"os"
 	"os/exec"
@@ -49,7 +50,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -74,9 +74,6 @@ const (
 
 // RequestLimit bounds one request line, its newline included.
 const RequestLimit = 256
-
-// rootPath is the PATH root's run gets, whatever its caller passed.
-const rootPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 // Runner is how hq-host unit reaches docker and systemd. Every field is set
 // so a test can stand in for both.
@@ -146,20 +143,15 @@ func admit(stdin io.Reader) error {
 	if err != nil {
 		return refusal("the request did not come over a local socket")
 	}
-	if uid != 0 && uid != host.WebUID {
+	if uid != 0 && uid != hostcore.WebUID {
 		return refusal("the request came from an account that may not ask")
 	}
 	return nil
 }
 
-// rootCommand gives a program root's own environment, never a caller's: a
-// docker CLI run with a caller's $HOME or $DOCKER_CONFIG would load that
-// caller's plugins as root.
+// rootCommand gives a program root's own environment, never a caller's.
 func rootCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
-	command := exec.CommandContext(ctx, name, args...)
-	command.WaitDelay = host.ProcessWaitDelay
-	command.Env = []string{"LC_ALL=C", "PATH=" + rootPath, "HOME=/root"}
-	return command
+	return hostcore.Process(ctx, hostcore.RootEnvironment(), name, args...)
 }
 
 // Serve reads one request line and answers it.
@@ -197,7 +189,7 @@ func (r *Runner) Run(ctx context.Context, request string) Result {
 		return Result{Outcome: Refused, Reason: err.Error()}
 	}
 	if out, err := r.Command(ctx, "systemctl", verb, "--", name).CombinedOutput(); err != nil {
-		return Result{Outcome: Failed, Verb: verb, Unit: name, Reason: lastLine(string(out), err)}
+		return Result{Outcome: Failed, Verb: verb, Unit: name, Reason: failure(string(out), err)}
 	}
 	return Result{Outcome: Done, Verb: verb, Unit: name}
 }
@@ -321,9 +313,10 @@ func execArgv(value string) []string {
 	return nil
 }
 
-func lastLine(out string, err error) string {
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if line := strings.TrimSpace(lines[len(lines)-1]); line != "" {
+// failure is why systemctl failed: the last line it printed, else how it
+// exited.
+func failure(out string, err error) string {
+	if line := runtime.LastLine(out); line != "" {
 		return line
 	}
 	if exited, ok := errors.AsType[*exec.ExitError](err); ok {

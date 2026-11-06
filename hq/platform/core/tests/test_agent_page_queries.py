@@ -1,5 +1,6 @@
 """The Agents page and its every-rule part cost the same however many agents
-there are, each with its person, its block, its own rules and its events."""
+there are, each with its person, its block, its own rules, its events and the
+devices it calls from."""
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -8,11 +9,12 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import CapabilityRule
+from hq.domains.control_plane.models import CapabilityRule, ProviderInventory
 from hq.platform.application import denials, roles
-from hq.platform.application.capability_policy import Rule, Scope
+from hq.platform.application.capability_policy import Rule
 from hq.platform.application.linked_accounts import bind_sign_in
-from hq.platform.core.models import AgentIdentity
+from hq.platform.core.audit import operation_context
+from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 from hq.platform.core.test_runner import no_default_role
 
 EVERY_PART = {"HTTP_X_FRAGMENT": "every_rule"}
@@ -23,6 +25,8 @@ class AgentPageQueryBudgetTests(TestCase):
         self.owner = get_user_model().objects.create_superuser("owner", "owner@example.test", "pw")
         self.client.force_login(self.owner)
         self.agents = 0
+        # A reading that holds none of the addresses an agent is refused from as unseen.
+        ProviderInventory.objects.create(kind="tailscale.device", observed_at=timezone.now(), records=[])
 
     def add_agents(self, upto: int) -> None:
         """Agents up to ``upto``, each with everything its row and its column draw."""
@@ -35,7 +39,7 @@ class AgentPageQueryBudgetTests(TestCase):
             bind_sign_in(person, f"person-{index}")
             roles.assign(person, roles.Role.VIEWER)
             client = f"example-agent-{index}"
-            AgentIdentity.objects.create(
+            identity = AgentIdentity.objects.create(
                 client_id=client,
                 interfaces=["mcp"],
                 granted=["read"],
@@ -44,10 +48,33 @@ class AgentPageQueryBudgetTests(TestCase):
                 blocked_by=self.owner,
             )
             CapabilityRule.objects.create(
-                scope=Scope.AGENT, subject=client, capability="project.delete", rule=Rule.DENY, changed_by=self.owner
+                subject=client, capability="project.delete", rule=Rule.DENY, changed_by=self.owner
             )
             for _ in range(3):
                 denials.record_denial(interface="mcp", reason="forbidden", actor=client)
+            # A device approved by one person and blocked by another, one awaiting
+            # its person, each with its calls, and an address the reading does not hold.
+            for node, state in (
+                (
+                    "approved",
+                    {
+                        "approved_at": timezone.now(),
+                        "approved_by": person,
+                        "blocked_at": timezone.now(),
+                        "blocked_by": self.owner,
+                    },
+                ),
+                ("awaiting", {}),
+            ):
+                node_id = f"n{node}{index}CNTRL"
+                AgentDevice.objects.create(identity=identity, person=person, node_id=node_id, name=node_id, **state)
+                AuditLog.objects.create(
+                    action=AuditLog.Action.UPDATED, metadata={"actor": client, "interface": "mcp", "device": node_id}
+                )
+            with operation_context(interface="mcp", actor=client, operation="example"):
+                denials.record_denial(
+                    interface="mcp", reason="device_awaiting_approval", actor=client, source=f"100.64.1.{index}"
+                )
 
     def queries(self, **headers) -> int:
         with CaptureQueriesContext(connection) as captured:

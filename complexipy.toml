@@ -1,8 +1,10 @@
 # Cognitive complexity (SonarSource's definition) for lint:complexity: no
-# function outside tests asks a reader to hold more than twenty units of
-# branching and nesting. A function over the bound is split into named steps.
-paths = ["demo", "hq", "hq_sdk", "tools"]
-exclude = ["**/tests/**", "**/migrations/**", "**/test*.py"]
+# function asks a reader to hold more than twenty units of branching and
+# nesting. Tests are held too, since a test is read as often as the code it
+# holds; a migration is applied once and never edited. A function over the
+# bound is split into named steps.
+paths = ["demo", "hq", "hq_sdk", "tools", "tests"]
+exclude = ["**/migrations/**"]
 max-complexity-allowed = 20
 # The bound holds for every function: no snapshot of ones over it is read,
 # so a stray complexipy-snapshot.json allows nothing, and none is written.

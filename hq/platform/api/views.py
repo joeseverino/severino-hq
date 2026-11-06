@@ -78,7 +78,8 @@ from hq.platform.core.network import client_ip
 lazy from . import urls
 lazy from .openapi import document
 
-REALM = 'Bearer realm="Severino HQ"'
+REALM_NAME = "Severino HQ"
+REALM = agent_admission.challenge(("realm", REALM_NAME))
 
 
 class APIRequest(HttpRequest):
@@ -204,6 +205,11 @@ def _answer(refusal: Refusal) -> HttpResponse:
         # authenticate is the difference between a retryable failure and a
         # Shortcut that silently shows a wall of markup.
         response["WWW-Authenticate"] = REALM
+    elif refusal.scope:
+        # RFC 6750 section 3.1: the permission a new sign-in has to carry.
+        response["WWW-Authenticate"] = agent_admission.challenge(
+            ("realm", REALM_NAME), ("error", refusal.code), ("scope", refusal.scope)
+        )
     if refusal.retry_after is not None:
         response["Retry-After"] = str(refusal.retry_after)
     return response
@@ -327,7 +333,7 @@ def _admit_token(request: HttpRequest) -> APIRequest | HttpResponse:
     source = client_ip(request)
     admitted = agent_admission.admit(_bearer(request), interface=API_INTERFACE, source=source)
     if isinstance(admitted, agent_admission.Unadmitted):
-        return _fail(admitted.reason, code=admitted.code)
+        return _fail(admitted.reason, code=admitted.code, details={"scope": admitted.scope} if admitted.scope else None)
     refusal = agent_admission.refused(admitted, source=source)
     if refusal is not None:
         return _refused(refusal)

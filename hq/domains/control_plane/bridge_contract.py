@@ -26,6 +26,7 @@ from hq.platform.application.ui import ended
 
 lazy from .bridge_registry import connections_document, schemas
 lazy from .connection_shapes import renderer_registry
+lazy from .observations.contract import member_names, schema_nodes
 
 # What the bridge alone defines, written by hand.
 BASE_PATH = Path(__file__).with_name("bridge_base.json")
@@ -43,15 +44,10 @@ _REFERENCE = "#/components/schemas/"
 def _references(node: Any) -> Iterator[str]:
     """Every component a document refers to."""
 
-    if isinstance(node, dict):
-        reference = node.get("$ref")
+    for found in schema_nodes(node):
+        reference = found.get("$ref")
         if isinstance(reference, str):
             yield reference
-        for value in node.values():
-            yield from _references(value)
-    elif isinstance(node, list):
-        for value in node:
-            yield from _references(value)
 
 
 def joined(base: dict[str, Any], declared: dict[str, dict[str, Any]]) -> dict[str, Any]:
@@ -266,6 +262,23 @@ def operations() -> dict[str, Operation]:
         name = path.removeprefix("/")
         found[name] = Operation(name, parameters, _body_validator(path, operation))
     return found
+
+
+@cache
+def declared_names() -> frozenset[str]:
+    """Every name the contract gives a member or a key: its properties, its
+    query parameters, the kinds a sweep's inventory is keyed by, and the parts
+    a reading's alert counts are keyed by.
+
+    Each is the contract's own word, so the bridge's door never strikes one
+    as a member named as a secret; a member the contract leaves open still is.
+    """
+
+    schemas = contract()["components"]["schemas"]
+    keys = ("ResourceKind", "SweptKind", "ReadingPartName")
+    kinds = (kind for name in keys for kind in schemas[name]["enum"])
+    parameters = (parameter.name for operation in operations().values() for parameter in operation.parameters)
+    return frozenset((*member_names(schemas), *kinds, *parameters))
 
 
 def max_body_bytes() -> int:

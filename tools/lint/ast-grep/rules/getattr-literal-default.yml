@@ -63,6 +63,7 @@ rule:
       # A plugin hands whatever principal it holds, or none.
       - pattern: getattr(principal, "interface", $D)
       - pattern: getattr(principal, "actor", $D)
+      - pattern: getattr(principal, "device", $D)
       # A read before the model was registered left no capture; the one
       # removing a record says what going away meant, or not.
       - pattern: getattr(instance, "_audit_snapshot", $D)

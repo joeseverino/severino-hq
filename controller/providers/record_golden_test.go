@@ -69,8 +69,34 @@ var recordTypes = map[runtime.ResourceKind][]any{
 	runtime.ResourceKindTailscaleUser:                {TailscaleUserRecord{}},
 }
 
+// instant is how a record states a moment: UTC, to the second.
+const instant = "2030-01-01T00:00:00Z"
+
+// admitted is the value a member holds where HQ admits only some strings (a
+// closed set of words, a pattern) and "example" is not one, by its type and
+// field name. HQ holds every golden record to its kind's schema
+// (hq/domains/control_plane/tests/test_golden_records_admitted.py), so a
+// member missing here fails there.
+var admittedMembers = map[string]any{
+	"GitHubDependencyRunRecord.Repositories": []string{"example/example"},
+	"GitHubDependencyRunRecord.Outcome":      "ok",
+	"GitHubRepositoryRecord.Alerts":          map[runtime.ReadingPartName]map[string]int{runtime.PartDependabot: {"high": 1}},
+	"GitHubAccess.Token":                     "read",
+	"HostRenderStatusRecord.State":           "read",
+	"HostRenderStatusRecord.Reason":          "missing",
+	"HostUnitRecord.Unit":                    "example.service",
+	"HostUnitRecord.Activates":               "example.service",
+	"HostUnitRecord.StartedAt":               instant,
+	"HostUnitRecord.EndedAt":                 instant,
+	"HostUnitRecord.ConditionAt":             instant,
+	"HostUnitRecord.LastTriggerAt":           instant,
+	"HostUnitRecord.NextElapseAt":            instant,
+	"HostUnitRecord.ReadAt":                  instant,
+}
+
 // filled is a value of the type with every member it can hold set: each
-// pointer allocated, each list and map one entry long, each scalar non-zero.
+// pointer allocated, each list and map one entry long, each scalar non-zero,
+// and each member HQ holds to some strings one it admits (admittedMembers).
 func filled(t reflect.Type, depth int) reflect.Value {
 	value := reflect.New(t).Elem()
 	if depth > 8 {
@@ -112,9 +138,15 @@ func filled(t reflect.Type, depth int) reflect.Value {
 		value.SetMapIndex(filled(t.Key(), depth+1), filled(t.Elem(), depth+1))
 	case reflect.Struct:
 		for i := range t.NumField() {
-			if t.Field(i).IsExported() {
-				value.Field(i).Set(filled(t.Field(i).Type, depth+1))
+			field := t.Field(i)
+			if !field.IsExported() {
+				continue
 			}
+			if example, ok := admittedMembers[t.Name()+"."+field.Name]; ok {
+				value.Field(i).Set(reflect.ValueOf(example))
+				continue
+			}
+			value.Field(i).Set(filled(field.Type, depth+1))
 		}
 	}
 	return value

@@ -41,11 +41,14 @@ FIXTURE_TASKS = {
     # The dead reference this file's own test shows on its line.
     ("tools/tests/test_task_references.py", "of"),
     # The throwaway repository the heavy turn's suite builds: a holder, a quick
-    # heavy task, one that runs it from inside, and one that weighs its run.
+    # heavy task, one that runs it from inside, one that weighs its run, a
+    # measured run of tests, and a file task that takes the turn in its header.
     ("tests/shell/test-heavy.sh", "hold"),
     ("tests/shell/test-heavy.sh", "quick"),
     ("tests/shell/test-heavy.sh", "outer"),
     ("tests/shell/test-heavy.sh", "weighed"),
+    ("tests/shell/test-heavy.sh", "spend"),
+    ("tests/shell/test-heavy.sh", "fixed"),
     # The fixture config fast's tests run their gates from.
     ("tools/gate/tests/test_fast.py", "gate:*"),
 }
@@ -110,8 +113,8 @@ def a_task(name: str, tasks: set[str]) -> bool:
 # writer, the composition and the two verdicts.
 NOT_TASK_JOBS = {"proven", "caches", "compose", "ready", "release"}
 # A second job of a task: a pull request's image, verified from the registry
-# beside its composition.
-SECOND_JOBS = {"build-verify": "build"}
+# beside its composition, and main's build that writes the layer cache.
+SECOND_JOBS = {"build-verify": "build", "build-cache": "build"}
 
 
 # The tasks CI's gate jobs are named for, each the gates of its job.

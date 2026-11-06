@@ -1,0 +1,26 @@
+# A check that drives a browser hears what a page throws through
+# hq/platform/core/tests/browser/uncaught.py, which fails on an uncaught
+# error but WebKit's line for a failed fetch the page handled. A pageerror
+# listener of its own would answer an engine's misreport its own way, or not
+# at all. Every module is read, tests above all.
+id: page-errors-heard-through-uncaught
+language: python
+severity: error
+message: A check listens for a page's errors itself.
+note: Hear them through Uncaught(page, ...) from hq.platform.core.tests.browser.uncaught.
+ignores:
+  - "hq/platform/core/tests/browser/uncaught.py"
+rule:
+  kind: call
+  all:
+    - has:
+        field: function
+        kind: attribute
+        has:
+          field: attribute
+          regex: ^(on|once|expect_event|wait_for_event)$
+    - has:
+        field: arguments
+        has:
+          kind: string
+          regex: ^["']pageerror["']$

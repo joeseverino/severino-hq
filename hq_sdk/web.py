@@ -1,4 +1,4 @@
-"""Authorization and navigation helpers for plugin-owned Django views."""
+"""Authorization for plugin-owned Django views."""
 
 from collections.abc import Callable
 from typing import Concatenate
@@ -6,8 +6,6 @@ from typing import Concatenate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import HttpRequest, HttpResponseBase
-
-from hq.platform.application.security import safe_next
 
 View = Callable[Concatenate[HttpRequest, ...], HttpResponseBase]
 
@@ -40,4 +38,4 @@ class CapabilityRequiredMixin(LoginRequiredMixin):
     required_capability = ""
 
 
-__all__ = ["CapabilityRequiredMixin", "capability_required", "safe_next"]
+__all__ = ["CapabilityRequiredMixin", "capability_required"]

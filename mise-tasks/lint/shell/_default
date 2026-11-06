@@ -4,6 +4,8 @@
 #MISE timeout="30m"
 #MISE hide=true
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 sources="$(tools/gate/shell-sources.sh)"
 # A file that does not parse in the dialect its first line names fails shellcheck.
 # shellcheck disable=SC2086  # one path per word

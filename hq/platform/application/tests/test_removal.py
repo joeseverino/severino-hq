@@ -11,7 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 
 from ..controller import ControllerReport, claim_next_operation, report_operation
 from ..record_errors import PolicyError

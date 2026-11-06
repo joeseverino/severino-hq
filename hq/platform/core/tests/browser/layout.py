@@ -15,6 +15,7 @@ from hq.platform.core.tests.browser.probes.boxes import (
     INTO_A_NEIGHBOR,
     NARROW_FRAMES,
     OVERLAPS,
+    SHORT_OF_ITS_BUTTONS,
     SIDEWAYS,
 )
 from hq.platform.core.tests.browser.probes.palette import PAINT
@@ -139,7 +140,8 @@ class LayoutBrowserTests(BrowserGate):
             self.a_checks_evidence_follows_its_statement,
             self.nothing_a_summary_names_is_hidden,
             self.a_clamped_box_shows_only_its_lines,
-            self.what_a_button_decides_is_shown_whole,
+            self.what_an_item_means_is_never_cut,
+            self.an_items_words_run_to_its_buttons,
             self.a_change_reads_on_one_line_and_baseline,
             self.a_chip_sits_on_the_baseline_of_its_line,
             self.code_and_cards_keep_inside_the_gutter,
@@ -369,10 +371,17 @@ class LayoutBrowserTests(BrowserGate):
     def a_clamped_box_shows_only_its_lines(self, _name, found):
         self.assertEqual(found, [])
 
-    @reads((CUT_DECISIONS, [SELECTORS["decision_whole"], "*", SELECTORS["unseen"]]))
-    def what_a_button_decides_is_shown_whole(self, _name, found):
-        """An approval's change, beside the buttons that approve or reject
-        it, wraps rather than being cut, at every width."""
+    @reads((CUT_DECISIONS, [SELECTORS["decision_detail"], "*", SELECTORS["unseen"]]))
+    def what_an_item_means_is_never_cut(self, _name, found):
+        """What a queue item means, an approval's change among them, wraps
+        rather than being cut, at every width."""
+
+        self.assertEqual(found, [])
+
+    @reads((SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]))
+    def an_items_words_run_to_its_buttons(self, _name, found):
+        """A queue item's title and meaning fill the room up to its buttons:
+        no empty band between what it says and what can be pressed."""
 
         self.assertEqual(found, [])
 
@@ -391,15 +400,23 @@ class LayoutBrowserTests(BrowserGate):
     # With script: the page a person reads, sorted, selectable and with its
     # cut values marked.
 
-    def a_table_fits_its_box_at_every_width(self, name):
-        """A table never overflows its box, down to the narrowest phone: while
-        it is wider, its ranked columns leave, then it is narrow, then tight
-        (tables.js). Every table on every page, with every disclosure open.
+    def a_table_fits_its_box(self, name):
+        """A table never overflows its box at the width the page stands at:
+        while it is wider, its ranked columns leave, then it is narrow, then
+        tight (tables.js). Every table on the page, with every disclosure open.
         """
 
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)
         self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+
+    def a_table_fits_its_box_at_every_width(self, name):
+        """Every table on the page, with every disclosure open, fits its box at
+        every window width from the narrowest phone up."""
+
+        self.open_every_disclosure(name)
+        self.page.evaluate(SETTLE)
+        self.assertEqual(self.tables_that_do_not_fit_at_any_width(), {})
 
     def card_rows(self, key):
         """The cards of one dashboard grid, grouped by the row they sit on."""

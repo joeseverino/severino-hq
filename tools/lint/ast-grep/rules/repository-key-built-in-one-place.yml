@@ -1,0 +1,66 @@
+# A repository is owner/name and GitHub ignores its case. How HQ compares
+# two is projects.repository_key: a second place that builds that key from a
+# URL is a second rule, and the copies drift, one lower-casing and the next
+# not, so a project cased unlike GitHub's name quietly stops matching. A key
+# is "/".join(parts).lower(), a lookup by a "/".join, or a mapping keyed by
+# one; joining parts back into owner/name for display or a signer identity is
+# a name and is left alone. The scope is every module but tests below the
+# root and migrations, as the repository's own tests/ is code a key reaches.
+id: repository-key-built-in-one-place
+language: python
+severity: error
+message: A repository key is built outside projects.repository_key.
+note: Call repository_key(repository) from hq.platform.application.projects.
+utils:
+  slash-join:
+    kind: call
+    has:
+      field: function
+      kind: attribute
+      all:
+        - has:
+            field: object
+            kind: string
+            regex: ^["']/["']$
+        - has:
+            field: attribute
+            regex: ^join$
+ignores:
+  - "*/tests/**"
+  - "*/migrations/**"
+  - "hq/platform/application/projects.py"
+rule:
+  any:
+    # "/".join(parts).lower()
+    - kind: call
+      has:
+        field: function
+        kind: attribute
+        all:
+          - has:
+              field: object
+              matches: slash-join
+          - has:
+              field: attribute
+              regex: ^lower$
+    # keys.get("/".join(parts))
+    - kind: call
+      all:
+        - has:
+            field: function
+            kind: attribute
+            has:
+              field: attribute
+              regex: ^get$
+        - has:
+            field: arguments
+            has:
+              nthChild: 1
+              matches: slash-join
+    # {"/".join(parts): value for ...}
+    - kind: dictionary_comprehension
+      has:
+        field: body
+        has:
+          field: key
+          matches: slash-join

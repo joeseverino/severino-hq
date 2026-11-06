@@ -1,0 +1,12 @@
+id: door-opened-by-runner-or-estate
+valid:
+  - 'from hq.platform.core.audit import door_of_its_own'
+  - |
+    def door_of_its_own(operation):
+        pass
+  - 'opener = door_of_its_own'
+invalid:
+  - |
+    with door_of_its_own(operation="example.work"):
+        pass
+  - 'audit.door_of_its_own(operation="example.work")'

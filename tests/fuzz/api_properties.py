@@ -23,6 +23,7 @@ from hq.platform.application.integration_testing import override_integration_gra
 from hq.platform.application.integrations import (
     compile_integration_graph,
 )
+from hq.platform.application.security import host_capabilities
 from hq_sdk.capabilities import StrictCommand
 
 # Bodies are read as the document describes them. This in-process client does
@@ -151,9 +152,11 @@ class APIPropertyTests(TestCase):
         with (
             override_integration_graph(graph),
             patch("hq.platform.application.agent_admission.verify", return_value=claims),
-            # The injected capability belongs to no extension's agent grant, so
-            # this deployment's ceiling is the token's grant.
-            patch("hq.platform.application.security.agent_ceiling", return_value=frozenset({"read", "example.write"})),
+            # The injected capability belongs to no extension, so HQ is told it grants it.
+            patch(
+                "hq.platform.application.security.operator_capabilities",
+                return_value=host_capabilities() | {"example.write"},
+            ),
             patch("hq.platform.application.agent_access.paused_interfaces", return_value=frozenset()),
         ):
             schema = schemathesis.openapi.from_wsgi(

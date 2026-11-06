@@ -37,7 +37,7 @@ class DriftIsSaidOutLoudTests(TestCase):
                 "type": "Ready",
                 "status": True,
                 "reason": "Observed",
-                "message": "Matches HQ's settings.",
+                "message": "Matches HQ's config.",
             }
         ]
         self.resource.save(update_fields=["conditions"])

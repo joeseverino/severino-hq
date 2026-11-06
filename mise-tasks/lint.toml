@@ -98,7 +98,7 @@ flag "--pairs" help="First print every pair outside tests with the classificatio
 run = "uv run python -m tools.structural.bar"
 
 ["lint:complexity"]
-description = "complexipy holds every function outside tests to cognitive complexity 20"
+description = "complexipy holds every function but a migration to cognitive complexity 20"
 hide = true
 # The bound and the tree are complexipy.toml's, which reads and writes no
 # snapshot: every function over the bound fails.
@@ -137,13 +137,13 @@ hide = true
 extends = "django"
 run = "uv run python manage.py api_openapi --check"
 
-# A recording the examples file must equal, written beside the gate's database
-# rather than over the file.
+# A recording the examples file must equal, written to a temporary file of its
+# own rather than over the file.
 ["lint:drift-api-examples"]
 description = "The machine API's recorded examples are what its tests receive"
 hide = true
 extends = "django"
-run = 'recorded="$SEVERINO_DATABASE_PATH.examples.json"; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
+run = 'recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
 
 ["lint:drift-bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"

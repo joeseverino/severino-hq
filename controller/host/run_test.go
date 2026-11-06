@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"log/slog"
 	"os"
@@ -66,7 +67,7 @@ func newHarness(t *testing.T, scenario string) *harness {
 	if err := os.Mkdir(secrets, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(secrets, AppEnvName), []byte("A=1\n"), 0o400); err != nil {
+	if err := os.WriteFile(filepath.Join(secrets, hostcore.AppEnvName), []byte("A=1\n"), 0o400); err != nil {
 		t.Fatal(err)
 	}
 
@@ -124,10 +125,10 @@ func TestHQIsReadyOnlyWhenHealthyAndStopsCleanly(t *testing.T) {
 		t.Fatalf("a requested stop is not a failure: %v", err)
 	}
 	calls := h.calls()
-	if !strings.HasPrefix(calls, "stop --time 30 "+Container+"\nrm --force "+Container+"\n") {
+	if !strings.HasPrefix(calls, "stop --time 30 "+hostcore.Container+"\nrm --force "+hostcore.Container+"\n") {
 		t.Errorf("a stale container is not stopped and removed first:\n%s", calls)
 	}
-	if !strings.Contains(calls, "stop --time 30 "+Container) {
+	if !strings.Contains(calls, "stop --time 30 "+hostcore.Container) {
 		t.Errorf("HQ was not asked to stop:\n%s", calls)
 	}
 }
@@ -157,7 +158,7 @@ func TestAContainerThatDiesFailsTheUnit(t *testing.T) {
 
 func TestNoEnvironmentNoContainer(t *testing.T) {
 	h := newHarness(t, "healthy")
-	os.Remove(filepath.Join(h.runner.SecretDir, AppEnvName))
+	os.Remove(filepath.Join(h.runner.SecretDir, hostcore.AppEnvName))
 
 	err := h.runner.Run(context.Background())
 
@@ -171,7 +172,7 @@ func TestNoEnvironmentNoContainer(t *testing.T) {
 
 func TestTheEnvironmentIsWaitedFor(t *testing.T) {
 	h := newHarness(t, "healthy")
-	file := filepath.Join(h.runner.SecretDir, AppEnvName)
+	file := filepath.Join(h.runner.SecretDir, hostcore.AppEnvName)
 	os.Remove(file)
 	h.runner.Await = 5 * time.Second
 	go func() {
@@ -213,7 +214,7 @@ func TestNoReleaseNoContainer(t *testing.T) {
 
 func TestAStopWhileWaitingIsNotAFailure(t *testing.T) {
 	h := newHarness(t, "healthy")
-	os.Remove(filepath.Join(h.runner.SecretDir, AppEnvName))
+	os.Remove(filepath.Join(h.runner.SecretDir, hostcore.AppEnvName))
 	h.runner.Await = time.Minute
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -234,7 +235,7 @@ func TestAnUnhealthyContainerFailsTheStart(t *testing.T) {
 	if h.ready() {
 		t.Error("an unhealthy container was reported ready")
 	}
-	if !strings.Contains(h.calls(), "stop --time 30 "+Container) {
+	if !strings.Contains(h.calls(), "stop --time 30 "+hostcore.Container) {
 		t.Errorf("the unhealthy container was not stopped:\n%s", h.calls())
 	}
 }

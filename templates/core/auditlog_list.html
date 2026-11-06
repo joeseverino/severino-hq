@@ -39,7 +39,7 @@ says it.
     <td><span class="pill">{{ row.moment.source|breakable }}</span></td>
     <td class="muted cell-data">{{ row.moment.detail|breakable }}</td>
   {% else %}
-    <td class="row-gutter">{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}{% if row.head %}<a href="{% url 'core:audit_detail' row.head.pk %}"><strong>{{ row.title|readout }}</strong></a>{% else %}<strong>{{ row.title|readout }}</strong>{% endif %}{% if row.grouped %} <span class="count">{{ row.total|breakable }}</span>{% else %}{% row_toggle %}{% endif %}{% if row.type_label %}<br><span class="muted">{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ row.action_label|breakable }}</span></span>{% endif %}</td>
+    <td class="row-gutter">{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}{% if row.head %}<a href="{% url 'core:audit_detail' row.head.pk %}"><strong>{{ row.title|readout }}</strong></a>{% else %}<strong>{{ row.named.0|readout }}{{ row.named.1|breakable }}</strong>{% endif %}{% if row.grouped %} <span class="count">{{ row.total|breakable }}</span>{% else %}{% row_toggle %}{% endif %}{% if row.type_label %}<br><span class="muted">{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ row.action_label|breakable }}</span></span>{% endif %}</td>
     <td class="muted date-col">{{ row.at|when }}</td>
     <td>{{ row.actor|breakable }}</td>
     <td><span class="pill pill-{{ row.action }}">{{ row.action_label|breakable }}</span></td>

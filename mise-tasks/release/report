@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="After a Deploy job is green: the release's performance beside the previous one, production's memory and CPU, and the deploy host's health, written to var/release/<commit>.md"
-#MISE env={SEVERINO_HQ_DEPLOY_HOST={required="The deploy host's SSH name, set in mise.local.toml (docs/Development.md, The extension set)"}}
+#MISE env={SEVERINO_HQ_DEPLOY_HOST={required="The deploy host's SSH name, set in mise.local.toml (docs/Development.md, The extension set)"}, SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
 #USAGE arg "[pages]" var=#true help="The pages perf measures, as it names them; every page the navigation lists when none is given"
 #USAGE flag "--base <ref>" help="The release to compare with; by default the one production ran before this checkout's HEAD, from GitHub's production deployments"
 

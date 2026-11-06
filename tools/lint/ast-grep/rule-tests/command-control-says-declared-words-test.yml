@@ -1,0 +1,22 @@
+id: command-control-says-declared-words
+valid:
+  - 'PageAction(capability_words("example.run"), command_url("example.run", target))'
+  - 'ActionLink("run", words, "remote_write", command_url("example.run"))'
+  - 'PageAction("Edit", reverse("example:edit", args=[pk]))'
+  - 'ActionLink("open", "Open", "read", reverse("example:detail"))'
+  - 'Ask(work.words, reverse("jobs:ask"))'
+  - 'ActionLink("Run", words, "remote_write", command_url("example.run"))'
+  - 'other("Run", command_url("example.run"))'
+invalid:
+  - 'PageAction("Run now", command_url("example.run", target))'
+  - 'PageAction(f"Run {name}", url=command_url("example.run"))'
+  - 'ActionLink("run", "Run now", "remote_write", command_url("example.run"))'
+  - 'TopologyAction("run", "Run" " now", url=action_links.command_url("example.run"))'
+  - 'Ask("Refresh", reverse("jobs:ask", kwargs={"kind": kind}))'
+  - 'ActionLink(key="run", label="Refresh", kind="remote_write", url=reverse("jobs:ask"))'
+  - |
+    PageAction(
+        # what the button says
+        "Run now",
+        command_url("example.run"),
+    )

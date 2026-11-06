@@ -7,12 +7,22 @@ from django.test import SimpleTestCase
 from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import capability_registry, describe_capabilities
-from ..capability_policy import SURFACES, agents_may_hold
+from ..capability_policy import agents_may_hold
 from ..integration_specs import CapabilitySpec
 from ..plugin_testing import installed, sibling
-from ..security import HELD_ONLY_AT, AuthorizationError, Capability, Principal, could_hold, operator_capabilities
+from ..security import (
+    AGENT_SURFACES,
+    HELD_ONLY_AT,
+    AuthorizationError,
+    Capability,
+    Principal,
+    could_hold,
+    operator_capabilities,
+)
 
 PERSON_ONLY = ("certificate.upload", "receipt.upload")
+# What keeps something of a person's, written out: the decision, so a change to it is a change here.
+PERSONAL = ("set_preferences", "pin_favorites", "set_aside_action_items")
 
 
 class _Nothing(StrictCommand):
@@ -39,10 +49,10 @@ def _an_extension():
     return manifest, replace(integration, capabilities=lambda: (command,))
 
 
-def _as(interface: str) -> Principal:
+def _as(interface: str, *, person_key: str = "") -> Principal:
     # Every capability granted, extensions' included, so only the interface
-    # can keep one out.
-    return Principal(f"example-{interface}", interface, operator_capabilities())
+    # and whether a person signed it in can keep one out.
+    return Principal(f"example-{interface}", interface, operator_capabilities(), person_key=person_key)
 
 
 def _listed(principal: Principal) -> set[str]:
@@ -77,12 +87,30 @@ class CatalogTests(SimpleTestCase):
             self.assertIn("example.catalog.run", capability_registry())
             self._agree_on_every_capability()
 
+    def test_a_persons_own_settings_are_listed_only_to_a_token_a_person_signed_in(self):
+        personal = [
+            spec.name for spec in capability_registry().values() if set(PERSONAL) & set(spec.required_capabilities)
+        ]
+        self.assertTrue(personal)
+        for interface in AGENT_SURFACES:
+            machine, signed_in = _as(interface), _as(interface, person_key="example-key")
+            machine_listed, signed_in_listed = _listed(machine), _listed(signed_in)
+            for name in personal:
+                with self.subTest(interface=interface, capability=name):
+                    self.assertNotIn(name, machine_listed)
+                    self.assertIn(name, signed_in_listed)
+                    needed = capability_registry()[name].required_capabilities
+                    self.assertFalse(machine.permits(*needed))
+                    self.assertTrue(signed_in.permits(*needed))
+
     def _agree_on_every_capability(self):
-        for interface in ("api", "mcp", "web", "cli"):
-            principal = _as(interface)
+        for principal in (
+            *(_as(interface) for interface in ("api", "mcp", "web", "cli")),
+            *(_as(interface, person_key="example-key") for interface in AGENT_SURFACES),
+        ):
             listed = _listed(principal)
             for spec in capability_registry().values():
-                with self.subTest(interface=interface, capability=spec.name):
+                with self.subTest(interface=principal.interface, person=principal.person_key, capability=spec.name):
                     self.assertEqual(spec.name in listed, principal.permits(*spec.required_capabilities))
 
 
@@ -99,8 +127,23 @@ class OnePredicateTests(SimpleTestCase):
                 # An interface nobody named is a credential until somebody decides otherwise.
                 self.assertFalse(could_hold("example-interface", (capability,)))
 
+    def test_an_agent_is_held_from_only_what_only_a_person_or_hq_itself_may_do(self):
+        # Written out: these are the decision, so a change to it is a change here.
+        held = (
+            "decide_approvals",
+            "govern_agents",
+            "end_sessions",
+            "upload_certificate",
+            "upload_receipt",
+        )
+        grantable = ("read_audit_log", "manage_contacts", "look_up_public_records", "manage_infrastructure", *PERSONAL)
+        for surface in AGENT_SURFACES:
+            with self.subTest(surface=surface):
+                self.assertEqual([name for name in held if could_hold(surface, (name,))], [])
+                self.assertEqual([name for name in grantable if not could_hold(surface, (name,))], [])
+
     def test_the_agent_policy_page_offers_a_rule_only_where_an_agent_catalog_lists_it(self):
-        agent_listed = set().union(*(_listed(_as(surface)) for surface in SURFACES))
+        agent_listed = set().union(*(_listed(_as(surface, person_key="example-key")) for surface in AGENT_SURFACES))
         for spec in capability_registry().values():
             with self.subTest(capability=spec.name):
                 self.assertEqual(agents_may_hold(spec), spec.name in agent_listed)

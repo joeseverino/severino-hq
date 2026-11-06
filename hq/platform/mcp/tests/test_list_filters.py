@@ -24,7 +24,7 @@ from hq.platform.application.domains import all_domains
 from hq.platform.application.json_schemas import fields
 from hq.platform.application.plugins import ATTENTION_ORDER
 from hq.platform.application.projection import MAX_PAGE_SIZE
-from hq.platform.application.security import Capability, Principal
+from hq.platform.application.security import Principal, operator_capabilities
 from hq.platform.application.tests.host_only import host_only
 
 from ..contract import served_resources
@@ -32,7 +32,7 @@ from ..identity import set_principal
 from ..server import mcp
 from .registry import KIND, example_kind, registry_patched, with_kind
 
-READER = Principal("example-reader", "mcp", frozenset(Capability))
+READER = Principal("example-reader", "mcp", operator_capabilities())
 OUTSIDE = "example-outside"
 
 
@@ -78,11 +78,25 @@ def enum_of(schema):
     return None
 
 
-def query_schema(kind):
+def listing(kind):
+    """What ``describe_resources`` given ``kind`` says its list takes."""
+
     (answer,) = calls(("describe_resources", {"name": kind}))
     assert not answer.is_error, f"describe_resources refused {kind!r}: {answer.structured_content}"
     (entry,) = answer.structured_content["resources"]
-    return entry["operations"]["list"]["query_schema"]
+    return entry["operations"]["list"]
+
+
+def query_schema(kind):
+    return listing(kind)["query_schema"]
+
+
+def described_value(schema):
+    """A value the field's own schema offers: its default, or else its first choice."""
+
+    if "default" in schema:
+        return schema["default"]
+    return (enum_of(schema) or [None])[0]
 
 
 class FiltersInTheSchemaTests(TestCase):
@@ -94,11 +108,27 @@ class FiltersInTheSchemaTests(TestCase):
 
     def test_every_listing_with_a_limit_says_the_most_it_may_ask_for(self):
         for resource in served_resources().listable:
-            properties = fields(query_schema(resource.name))
+            properties = fields(listing(resource.name).get("paging", {}))
             if "limit" in properties:
                 with self.subTest(kind=resource.name):
                     self.assertIn("maximum", properties["limit"])
-        self.assertEqual(fields(query_schema("projects"))["limit"]["maximum"], MAX_PAGE_SIZE)
+        self.assertEqual(fields(listing("projects")["paging"])["limit"]["maximum"], MAX_PAGE_SIZE)
+
+    def test_every_described_filter_is_taken_in_filters_and_paging_beside_them(self):
+        """The call each kind describes is the call list_resource takes: every
+        filter in ``filters``, and ``limit`` at its most as an argument of its own."""
+
+        for resource in served_resources().listable:
+            described = listing(resource.name)
+            sent = {field: described_value(schema) for field, schema in fields(described["query_schema"]).items()}
+            paging = fields(described.get("paging", {}))
+            arguments = {"name": resource.name, "filters": sent}
+            if "limit" in paging:
+                arguments["limit"] = paging["limit"]["maximum"]
+            (answer,) = calls(("list_resource", arguments))
+            with self.subTest(kind=resource.name):
+                self.assertEqual(set(described["filters"]), set(sent))
+                self.assertFalse(answer.is_error, answer.structured_content)
 
     def test_a_value_outside_a_filters_choices_is_refused_naming_the_field(self):
         asked = [
@@ -135,11 +165,12 @@ class DescribeResourcesNarrowsTests(TestCase):
             {entry["name"] for entry in catalog["resources"]}, {r.name for r in served_resources().described}
         )
         for entry in catalog["resources"]:
-            listing = entry["operations"]["list"]
-            if listing is not None:
+            listed = entry["operations"]["list"]
+            if listed is not None:
                 with self.subTest(kind=entry["name"]):
-                    self.assertNotIn("query_schema", listing)
-                    self.assertIsInstance(listing["filters"], list)
+                    self.assertNotIn("query_schema", listed)
+                    self.assertNotIn("paging", listed)
+                    self.assertIsInstance(listed["filters"], list)
         # The catalog names the call that answers one kind's whole schema.
         self.assertIn("describe_resources", catalog["schemas"])
         self.assertIn("name", catalog["schemas"])
@@ -149,9 +180,10 @@ class DescribeResourcesNarrowsTests(TestCase):
         (entry,) = answer.structured_content["resources"]
 
         self.assertEqual(entry["name"], "projects")
-        # Its filters are what narrows it; limit and cursor page it, beside them.
-        listing = entry["operations"]["list"]
-        self.assertEqual(set(listing["query_schema"]["properties"]), {*listing["filters"], "limit", "cursor"})
+        # Its filters are what narrows it; limit and cursor page it, described beside them.
+        listed = entry["operations"]["list"]
+        self.assertEqual(set(listed["query_schema"]["properties"]), set(listed["filters"]))
+        self.assertEqual(set(listed["paging"]["properties"]), {"limit", "cursor"})
 
     def test_a_name_is_one_of_the_kinds_composed_at_the_call(self):
         # The server is reached first with no extension installed, as an
@@ -165,8 +197,8 @@ class DescribeResourcesNarrowsTests(TestCase):
         self.assertFalse(answer.is_error, answer.structured_content)
         self.assertEqual([entry["name"] for entry in answer.structured_content["resources"]], [KIND])
 
-    def test_a_name_the_registry_lacks_is_refused(self):
+    def test_a_name_the_registry_lacks_is_refused_as_an_unknown_resource(self):
         (answer,) = calls(("describe_resources", {"name": OUTSIDE}))
 
         self.assertTrue(answer.is_error)
-        self.assertEqual(answer.structured_content["error"]["code"], "invalid_input")
+        self.assertEqual(answer.structured_content["error"]["code"], "unknown_resource")

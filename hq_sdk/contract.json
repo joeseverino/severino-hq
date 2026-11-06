@@ -1,5 +1,5 @@
 {
-  "api_version": 8,
+  "api_version": 9,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -383,7 +383,9 @@
           "capabilities",
           "approved_by=",
           "granted=",
-          "person_key="
+          "person_key=",
+          "grantable=",
+          "device="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -830,6 +832,45 @@
       }
     },
     "pages": {
+      "Ask": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "url",
+          "standing=",
+          "status_url=",
+          "refresh=",
+          "name=",
+          "value=",
+          "title=",
+          "primary=",
+          "compact=",
+          "disabled="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "css": {
+            "kind": "property"
+          },
+          "danger": {
+            "kind": "attribute",
+            "type": "bool"
+          },
+          "is_ask": {
+            "kind": "attribute",
+            "type": "bool"
+          },
+          "method": {
+            "kind": "attribute",
+            "type": "str"
+          },
+          "modal": {
+            "kind": "attribute",
+            "type": "str"
+          }
+        }
+      },
       "Crumb": {
         "kind": "value",
         "type": "TypeAliasType"
@@ -1055,7 +1096,6 @@
           "navigation=",
           "operator_capabilities=",
           "mcp_read_capabilities=",
-          "mcp_write_capabilities=",
           "description=",
           "navigation_groups="
         ],
@@ -1076,10 +1116,6 @@
         "parameters": []
       },
       "plugin_overviews": {
-        "kind": "function",
-        "parameters": []
-      },
-      "plugin_resource_specs": {
         "kind": "function",
         "parameters": []
       }
@@ -1725,6 +1761,12 @@
           "data="
         ]
       },
+      "frozen": {
+        "kind": "function",
+        "parameters": [
+          "moment="
+        ]
+      },
       "held_jobs": {
         "kind": "function",
         "parameters": []
@@ -1775,12 +1817,6 @@
         "kind": "function",
         "parameters": [
           "template_root"
-        ]
-      },
-      "unsupported_hq_imports": {
-        "kind": "function",
-        "parameters": [
-          "source_root"
         ]
       }
     },
@@ -2299,12 +2335,6 @@
           "source_root",
           "contract="
         ]
-      },
-      "unsupported_hq_imports": {
-        "kind": "function",
-        "parameters": [
-          "source_root"
-        ]
       }
     },
     "web": {
@@ -2325,15 +2355,6 @@
         "kind": "function",
         "parameters": [
           "capability"
-        ]
-      },
-      "safe_next": {
-        "kind": "function",
-        "parameters": [
-          "request",
-          "*",
-          "fallback=",
-          "scope="
         ]
       }
     },
@@ -2391,33 +2412,6 @@
         "fields": [],
         "kind": "dataclass",
         "members": {}
-      },
-      "claim_identity": {
-        "kind": "function",
-        "parameters": [
-          "namespace",
-          "rule",
-          "subject",
-          "scope="
-        ]
-      },
-      "claim_resolution_plan": {
-        "kind": "function",
-        "parameters": [
-          "*",
-          "namespace",
-          "rule",
-          "subject",
-          "scope",
-          "remedies",
-          "verification"
-        ]
-      },
-      "serialize_workflow": {
-        "kind": "function",
-        "parameters": [
-          "plan"
-        ]
       }
     },
     "writes": {
@@ -2605,7 +2599,6 @@
       }
     }
   },
-  "sdk_version": 1,
   "templates": {
     "classes": [
       "actions-col",
@@ -3053,6 +3046,7 @@
           "heading=",
           "id=",
           "label=",
+          "open=",
           "**data"
         ],
         "parts": []
@@ -3156,8 +3150,7 @@
       },
       "table_heading": {
         "classes": [
-          "css",
-          "note_css"
+          "css"
         ],
         "parameters": [
           "label",
@@ -3171,9 +3164,7 @@
           "hidden=",
           "title=",
           "gutter=",
-          "select_all=",
-          "note=",
-          "note_css="
+          "select_all="
         ],
         "parts": []
       },

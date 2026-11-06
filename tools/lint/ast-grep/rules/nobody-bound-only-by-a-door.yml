@@ -1,0 +1,33 @@
+# A binding that names nobody (actor="") starts an operation of its own, so
+# code inside another's operation that bound one would write its rows as
+# nobody's. Only a door, where a request or a process first arrives, binds
+# nobody yet: the attribution and request middleware, the example estate's
+# doors and the test runner.
+id: nobody-bound-only-by-a-door
+language: python
+severity: error
+message: A binding names nobody outside a door.
+note: Bind who acts, or open the door in hq/platform/core/attribution.py or middleware.py.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/core/attribution.py"
+  - "hq/platform/core/middleware.py"
+  - "hq/platform/core/example_estate/doors.py"
+  - "hq/platform/core/test_runner.py"
+rule:
+  kind: keyword_argument
+  inside:
+    kind: argument_list
+    inside:
+      kind: call
+  all:
+    - has:
+        field: name
+        regex: ^actor$
+    - has:
+        field: value
+        kind: string
+        regex: ^(""|'')$

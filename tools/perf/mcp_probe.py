@@ -8,7 +8,7 @@ what any served process holds is boot. The server then loads as that first reque
 streamable HTTP application, as a client's POSTs reach it, then the prompt, resource and resource
 template lists, and the structured answers of a describe_resources call with no arguments and of
 the action queue's largest page through list_resource; a list the server does not serve counts nothing. The templates are the caller's,
-so every request is asked as the agent holding the whole ceiling. Each stage's growth is counted twice:
+so every request is asked as the agent holding every grant. Each stage's growth is counted twice:
 what tracemalloc traced, charged to each module as audit:memory charges it, and the resident set,
 less tracemalloc's own, which also holds what pydantic-core and other native code allocate.
 
@@ -372,7 +372,7 @@ def main(out: str) -> None:
         probe.current = STAGES[STAGES.index(probe.current) + 1]
 
     def answer():
-        # The resource templates are the caller's: asked as the agent holding the whole ceiling.
+        # The resource templates are the caller's: asked as the agent holding every grant.
         with set_principal(mcp_principal()):
             found["result"], found["lists"] = asyncio.run(answered(found["server"].mcp, counted))
 

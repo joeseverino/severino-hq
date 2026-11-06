@@ -184,29 +184,23 @@ runs:
       # The host's own audit, run by the host's pinned uv.
       run: host/tools/pipeline/audit.sh "$PACKAGE_DIR"
 
-    # The trivy the host checkout's mise.lock records, the one its image
-    # scans run.
-    - name: Install the host's trivy
-      uses: ./host/.github/actions/host-tool
-      with:
-        host: host
-        tool: trivy
-
     - name: Generate wheel SBOM
       id: wheel-sbom
       shell: bash
-      # Read from the package's lock, which the build just held to its
-      # pyproject.toml, since trivy does not open a wheel. Its dev groups are
-      # left out, so the SBOM lists the wheel and what installs beside it. An
-      # SBOM format turns trivy's security scanning off, so no database is
-      # fetched. An SBOM that does not name the distribution read nothing.
+      # Exported by the host's uv from the package's lock, which the build
+      # just held to its pyproject.toml. Its default groups are left out, so
+      # the SBOM lists the wheel and what installs beside it. uv's CycloneDX
+      # export is a preview, opted into by name. uv puts the project itself in
+      # metadata.component, so an SBOM that does not name the distribution
+      # there was not read from this package's lock.
       env:
         DISTRIBUTION: ${{ steps.identity.outputs.distribution }}
       run: |
         set -euo pipefail
-        trivy fs --quiet --format spdx-json --output wheel.spdx.json "$PACKAGE_DIR/uv.lock"
+        uv export --project "$PACKAGE_DIR" --frozen --no-default-groups \
+          --format cyclonedx1.5 --preview-features sbom-export --output-file wheel.cdx.json
         name=$(printf '%s' "$DISTRIBUTION" | tr '[:upper:]' '[:lower:]' | tr -s '_.' '--')
-        if ! jq -e --arg name "$name" 'any(.packages[]; .name == $name)' wheel.spdx.json > /dev/null; then
+        if ! jq -e --arg name "$name" '.metadata.component.name == $name' wheel.cdx.json > /dev/null; then
           echo "::error::The SBOM of $PACKAGE_DIR/uv.lock does not name $DISTRIBUTION."
           exit 1
         fi
@@ -248,7 +242,7 @@ runs:
           --plugin-api-version "$PLUGIN_API_VERSION" \
           --policy "$POLICY_PATH" \
           --checks evidence.json \
-          --sbom wheel.spdx.json \
+          --sbom wheel.cdx.json \
           --dependency-lock "$PACKAGE_DIR/uv.lock" > admission.json
         cosign sign-blob --yes --bundle admission.sigstore.json admission.json
 
@@ -263,7 +257,7 @@ runs:
           admission.json
           admission.sigstore.json
           evidence.json
-          wheel.spdx.json
+          wheel.cdx.json
           ${{ inputs.package-dir }}/uv.lock
           dist/*.whl
         if-no-files-found: error

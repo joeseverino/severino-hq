@@ -1,0 +1,31 @@
+id: refusal-classes-in-one-place
+valid:
+  - 'raise RecordNotFound("No such machine.")'
+  - |
+    class LookupNotFound(Exception):
+        pass
+  - |
+    class JobConflict(RuntimeError):
+        pass
+  - |
+    class IdempotencyConflict(Exception):
+        pass
+  - |
+    class ConflictReport:
+        pass
+invalid:
+  - |
+    class MachineNotFound(Exception):
+        pass
+  - |
+    class ZoneNotFoundError(LookupError):
+        pass
+  - |
+    class SlugConflict(ValueError):
+        pass
+  - |
+    class WriteConflictError(Exception):
+        pass
+  - |
+    class ExampleJobConflict(Exception):
+        pass

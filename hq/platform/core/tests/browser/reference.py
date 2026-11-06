@@ -17,7 +17,7 @@ from django.test import Client
 from django.urls import reverse
 lazy from playwright.sync_api import expect
 
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.probes.axe import contrast_read
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, TEXT_SHOWN

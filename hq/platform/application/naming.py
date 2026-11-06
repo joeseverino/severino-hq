@@ -7,9 +7,11 @@ a name no credential can prove. Kept out of ``control_plane.providers``, which
 declares what it would do with each fact; this is the half that queries.
 """
 
+from functools import partial
+
 from hq.domains.control_plane.names import certificate_covers, normalized_hostname
 from hq.domains.control_plane.provider_spec import NameContext
-from hq.domains.control_plane.providers import PROVIDERS
+from hq.domains.control_plane.providers import PROVIDERS, read_spec
 
 from .infrastructure import (
     declared_machines,
@@ -74,8 +76,9 @@ def _enabled_resolved() -> tuple[tuple[object, object, object], ...]:
     """Every enabled resource with a provider, its spec resolved once.
 
     `(resource, provider, spec)`, where spec is the exception resolving raised
-    when it did, so each reader keeps its own rule for a spec that will not
-    resolve: `_origin_for` lets it surface, `_covering` passes over it.
+    when it did, so a reader raises it only for a row it reads. Resolution
+    falls back to the authored spec on what a provider hook raises, so what
+    arrives here is HQ's own failure.
     """
 
     def load():
@@ -121,6 +124,14 @@ def _load_reported_zones() -> tuple[tuple[str, ...], bool]:
     return tuple(sorted(zones)), bool(reported)
 
 
+def _names(provider, spec) -> frozenset[str]:
+    return frozenset(provider.hostnames(spec))
+
+
+def _normalized_names(provider, spec) -> set[str]:
+    return {normalized_hostname(name) for name in provider.hostnames(spec)}
+
+
 def _origin_for(hostname: str) -> str:
     """Where this name is already served, as ``host:port``.
 
@@ -129,18 +140,15 @@ def _origin_for(hostname: str) -> str:
     by declaring it: the same way it joins the service view.
     """
 
-    for _resource, provider, spec in _enabled_resolved():
+    for resource, provider, spec in _enabled_resolved():
         if provider.origin is None:
             continue
         if isinstance(spec, Exception):
             raise spec
-        try:
-            names = {normalized_hostname(name) for name in provider.hostnames(spec)}
-            if hostname not in names:
-                continue
-            origin = provider.origin(spec)
-        except KeyError, TypeError, ValueError:
+        names = read_spec(resource.kind, spec, partial(_normalized_names, provider))
+        if names is None or hostname not in names:
             continue
+        origin = read_spec(resource.kind, spec, provider.origin)
         if origin:
             return origin
     return ""
@@ -179,17 +187,12 @@ def _covering(hostname: str) -> tuple[str, ...]:
     for resource, provider, spec in _enabled_resolved():
         if not provider.covers:
             continue
-        if isinstance(spec, (KeyError, TypeError, ValueError)):
-            continue
         if isinstance(spec, Exception):
             raise spec
         # Resolved, not authored, so this reads the same names the service page
         # does: one rule for what a certificate covers, not two.
-        try:
-            names = frozenset(provider.hostnames(spec))
-        except KeyError, TypeError, ValueError:
-            continue
-        if certificate_covers(hostname, names):
+        names = read_spec(resource.kind, spec, partial(_names, provider))
+        if names is not None and certificate_covers(hostname, names):
             found.append(resource.key)
     return tuple(sorted(found))
 

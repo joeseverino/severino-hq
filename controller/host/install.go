@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // Install puts the release in Lib on the host: its units, its tmpfiles rule
@@ -72,7 +75,7 @@ func (m *Machine) Install(ctx context.Context, connections func() error) (err er
 	if err := m.private(ctx, "Controller connection preflight", "controller-preflight", filepath.Join(m.Lib, "deploy", "bin", "hq-host"), "controller"); err != nil {
 		return err
 	}
-	if err := m.private(ctx, "Content index preflight", "content-index-preflight", "docker", "exec", Container, "hq-controller", "job", "content.sync"); err != nil {
+	if err := m.private(ctx, "Content index preflight", "content-index-preflight", "docker", "exec", hostcore.Container, "hq-controller", "job", "content.sync"); err != nil {
 		return err
 	}
 
@@ -118,10 +121,10 @@ func (m *Machine) Install(ctx context.Context, connections func() error) (err er
 // that failed is not. A start that fails leaves the unit disabled and HQ's
 // name free, so the deploy that called this can put its own container back.
 func (m *Machine) takeOver(ctx context.Context) error {
-	if m.active(ctx, WebUnit) {
+	if m.active(ctx, hostcore.WebUnit) {
 		return nil
 	}
-	out, err := m.Command(ctx, "docker", "inspect", "--format", "{{.Config.Image}}", Container).Output()
+	out, err := m.Command(ctx, "docker", "inspect", "--format", "{{.Config.Image}}", hostcore.Container).Output()
 	if err == nil {
 		image, err := Pinned(strings.TrimSpace(string(out)))
 		if err != nil {
@@ -133,13 +136,13 @@ func (m *Machine) takeOver(ctx context.Context) error {
 	} else if _, statErr := os.Stat(m.ReleasePath()); statErr != nil {
 		return fmt.Errorf("no container is running and no release is recorded: %w", err)
 	}
-	if err := m.run(ctx, "systemctl", "enable", "--now", WebUnit); err != nil {
+	if err := m.run(ctx, "systemctl", "enable", "--now", hostcore.WebUnit); err != nil {
 		ctx := context.WithoutCancel(ctx)
-		_ = m.run(ctx, "systemctl", "disable", "--now", WebUnit)
-		_ = m.run(ctx, "docker", "rm", "--force", Container)
+		_ = m.run(ctx, "systemctl", "disable", "--now", hostcore.WebUnit)
+		_ = m.run(ctx, "docker", "rm", "--force", hostcore.Container)
 		return fmt.Errorf("HQ did not come up under its unit: %w", err)
 	}
-	fmt.Fprintln(m.Out, "HQ runs under "+WebUnit+".")
+	fmt.Fprintln(m.Out, "HQ runs under "+hostcore.WebUnit+".")
 	return nil
 }
 
@@ -151,7 +154,7 @@ func (m *Machine) Record(image string) error {
 	if err := os.MkdirAll(m.State, 0o755); err != nil {
 		return err
 	}
-	return writeAtomic(m.ReleasePath(), []byte(image+"\n"), 0o644)
+	return atomicfile.WriteFile(m.ReleasePath(), []byte(image+"\n"), 0o644)
 }
 
 // SnapshotUnits saves every unit file and drop-in of this repository's in
@@ -175,7 +178,7 @@ func (m *Machine) SnapshotUnits() (func() error, error) {
 		}
 		for name, data := range saved {
 			target := filepath.Join(m.Systemd, name)
-			errs = append(errs, os.MkdirAll(filepath.Dir(target), 0o755), writeAtomic(target, data, 0o644))
+			errs = append(errs, os.MkdirAll(filepath.Dir(target), 0o755), atomicfile.WriteFile(target, data, 0o644))
 		}
 		return errors.Join(errs...)
 	}, nil
@@ -225,8 +228,8 @@ func (m *Machine) installedUnits() (map[string][]byte, error) {
 // the tmpfiles rule that makes the doorbell directory at every boot.
 func (m *Machine) tidy(shipped []string) error {
 	for _, leftover := range []string{
-		filepath.Join(m.Runtime, filepath.Base(RunDir), "severino_controller_env"),
-		filepath.Join(m.Runtime, filepath.Base(SecretDir), "severino_controller_env"),
+		filepath.Join(m.Runtime, filepath.Base(hostcore.RunDir), "severino_controller_env"),
+		filepath.Join(m.Runtime, filepath.Base(hostcore.SecretDir), "severino_controller_env"),
 	} {
 		if err := os.Remove(leftover); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
@@ -258,7 +261,7 @@ func (m *Machine) tidy(shipped []string) error {
 		return err
 	}
 	target := filepath.Join(m.Tmpfiles, "severino-hq.conf")
-	if err := writeAtomic(target, rule, 0o644); err != nil {
+	if err := atomicfile.WriteFile(target, rule, 0o644); err != nil {
 		return err
 	}
 	return m.run(context.Background(), "systemd-tmpfiles", "--create", target)

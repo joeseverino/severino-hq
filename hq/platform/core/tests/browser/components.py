@@ -8,8 +8,10 @@ import zipfile
 from contextlib import redirect_stdout
 from datetime import date, timedelta
 from decimal import Decimal
+from pathlib import Path
 from unittest import mock
 
+from django.conf import settings
 from django.template.loader import render_to_string
 
 from hq.platform.application import asks
@@ -39,6 +41,7 @@ from hq.platform.core.tests.browser.probes.tables import (
     POPOVER_IN_A_CELL,
     POPOVER_VALUES,
     PRESS_FIRST_ROW_TOGGLE,
+    ROW_ACTIONS_TABLES,
     ROW_ARRIVES,
     ROW_TOGGLE_TABLES,
     ROW_TOGGLES,
@@ -815,7 +818,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     def test_a_failure_keeps_a_trace_of_the_test_beside_its_screenshot(self):
         """What a failure saves, CI keeps: the page as it stood, and the trace
-        of the steps that led there, each with the page as it stood then."""
+        of the steps that led there, each with the page as it stood then, in
+        the checkout's var/browser-failures/, which outlives the run and is
+        the folder CI uploads."""
 
         self.open(next(iter(PAGES)), WIDE)
         with redirect_stdout(io.StringIO()):
@@ -824,6 +829,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         if folder is None:
             self.fail("the shot made no folder")
         self.addCleanup(lambda: shutil.rmtree(folder))
+        self.assertTrue(folder.is_relative_to(Path(settings.BASE_DIR, "var", "browser-failures")), folder)
         self.assertEqual(sorted(p.name for p in folder.iterdir()), ["example-failure.png", "example-failure.zip"])
         with zipfile.ZipFile(folder / "example-failure.zip") as trace:
             self.assertTrue(any(name.endswith(".trace") for name in trace.namelist()), trace.namelist())
@@ -1442,6 +1448,23 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertIn("Title", shown)
                 self.assertIn("Runs", shown)
                 self.assertEqual(self.page.evaluate(BROKEN_WORDS), [])
+
+    @with_script
+    def test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls(self):
+        """On the narrowest phone a row's controls stand one above the other
+        and wrap their labels, so their table fits its card; a table nothing
+        it gives can fit scrolls in its region, and nothing on the page runs
+        past it sideways."""
+
+        self.pages = {**self.pages, "row-actions-probe": probe(ROW_ACTIONS_TABLES)}
+        self.open("row-actions-probe", NARROWEST)
+        self.page.evaluate(SETTLE)
+        misfits = self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"])
+        self.assertEqual([misfit.rpartition(" +")[0] for misfit in misfits], ["Unfittable"])
+        region = "(probe) => getComputedStyle(document.querySelector(`[data-probe=${probe}]`).parentElement).overflowX"
+        self.assertEqual(self.page.evaluate(region, "unfittable"), "auto")
+        self.assertEqual(self.page.evaluate(region, "actions"), "visible")
+        self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
 
     @with_script
     def test_an_identifier_in_a_table_is_whole_while_a_column_can_leave(self):

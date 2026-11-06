@@ -45,10 +45,7 @@ func NewController(r *Registry, declared runtime.ControllerRegistry) *Controller
 }
 
 func (c *Controller) logger() *slog.Logger {
-	if c.Log != nil {
-		return c.Log
-	}
-	return slog.Default()
+	return cmp.Or(c.Log, slog.Default())
 }
 
 // Capabilities is the declared actions this controller implements. An action it

@@ -1,4 +1,4 @@
-"""A list says how long it stays fresh: what changes only with a release is kept, what is the caller's is asked again.
+"""A list says how long it stays fresh: what changes with a release or the caller's grant is kept, what holds the caller's records is asked again.
 
 Read as a client of the current protocol reads it, so the hint is the one on the wire.
 """
@@ -14,7 +14,7 @@ from ..server import mcp
 
 
 class ListFreshnessTests(TestCase):
-    def test_the_release_bound_lists_are_kept_privately_and_the_callers_templates_are_not(self):
+    def test_the_grant_bound_lists_are_kept_privately_and_the_callers_templates_are_not(self):
         async def listed():
             async with Client(mcp.server) as client:
                 return (

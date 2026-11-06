@@ -8,7 +8,7 @@ Where every pin lives, and how to move one.
 | :--- | :--- | :--- |
 | Tools: Go, uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock). The images install Go and uv from the same lock, with mise copied from its image at `min_version`, by digest | `lint:toolchain`; CodeQL also `lint:codeql-bundle`, the bundle the pinned action runs |
 | Python packages | `pyproject.toml`, resolved with hashes in `uv.lock` | `lint:lockfile`, `lint:audit` |
-| npm tools: Redocly, the browser and stylesheet lints | `tools/lint/package.json`, exact, resolved with hashes in its `package-lock.json` | `npm ci`, which refuses a lock its `package.json` has moved past; `lint:audit` |
+| npm tools: Redocly, the browser and stylesheet lints; browser-compat-data apart, for `audit:bcd` alone | `tools/lint/package.json` and `tools/lint/bcd/package.json`, exact, each resolved with hashes in its `package-lock.json` | `npm ci`, which refuses a lock its `package.json` has moved past; `lint:audit` |
 | Go and its modules | the release `controller/go.mod`'s `toolchain` line names, which `mise.toml` reads; modules in `go.sum` | `lint:toolchain`, `controller:check`, `lint:audit`; `MiseConfigTravelsTests`, every image that copies `mise.toml` copies `go.mod` beside it |
 | The Python base image, every stage's start | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build`; `lint:toolchain` refuses any other image |
 | GitHub Actions | each workflow, by commit with its version beside it | `ActionPinTests` |
@@ -16,6 +16,13 @@ Where every pin lives, and how to move one.
 | Python matrix, coverage floor, Cordon commit | [`tools/pipeline/toolchain.env`](../tools/pipeline/toolchain.env) | `PythonVersionTests` |
 | cosign, on the host, in every workflow and in an extension's admission | `mise.toml`, checksums in `mise.lock`; the host's verifier, `controller/host/verifier.gen.go`, is generated from that lock's linux-x64 entry, and an admission installs it from the host checkout's lock | `lint:controller`, which fails a stale `verifier.gen.go`; `hq-host install` checks the download against its digest |
 | The API reference bundle | `static/vendor/scalar/standalone.js`, version and SHA-256 in `UPSTREAM` | a test |
+
+A plain `uv sync` installs the runtime dependencies and the `dev` and
+`tools` groups, the ones `[tool.uv] default-groups` names. The other groups
+install only for the tasks that name them with `uv run --group`: `browser`
+(Playwright) for the browser gates and `dev:look`, `fuzz` (Schemathesis) for
+`test:api-properties`. `test_group_imports.py` holds every module outside
+such a task to the default groups' imports.
 
 ## Updates
 

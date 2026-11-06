@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/edge"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -125,7 +126,7 @@ func base16(data []byte) string {
 }
 
 func TestBundleRoundTrip(t *testing.T) {
-	fullchain, key, err := readBundle(certificateBundle([]byte("chain"), []byte("key")))
+	fullchain, key, err := readBundle(edge.Bundle([]byte("chain"), []byte("key")))
 	if err != nil || string(fullchain) != "chain" || string(key) != "key" {
 		t.Fatalf("round trip: %q %q %v", fullchain, key, err)
 	}
@@ -199,7 +200,7 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 		oldChain, oldKey, oldDER := pki.leaf(2, tlsNow.AddDate(0, 0, 5), "a.example")
 		h.dialer.certs = map[string][]byte{"old": oldDER}
 		h.command.outcomes = map[string]fakeOutcome{
-			"ssh snapshot": {StdoutB64: base64.StdEncoding.EncodeToString(certificateBundle(oldChain, oldKey))},
+			"ssh snapshot": {StdoutB64: base64.StdEncoding.EncodeToString(edge.Bundle(oldChain, oldKey))},
 			"ssh deploy":   {},
 		}
 		spec := Object{"certificate_name": "a", "domains": []any{"a.example"}, "renewal_window_days": 30, "consumers": []any{
@@ -291,7 +292,7 @@ func TestCertificateNamesAreCheckedBeforeTheyReachAnOrderOrAPath(t *testing.T) {
 // new certificate. One matching consumer never vouches for another
 // that was unreachable or had nothing to check.
 func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
-	edge := Object{"kind": "caddy", "name": "edge", "connection_ref": "caddy", "verify_domains": []any{"a.example"}}
+	caddy := Object{"kind": "caddy", "name": "edge", "connection_ref": "caddy", "verify_domains": []any{"a.example"}}
 	cases := []struct {
 		name   string
 		second Object
@@ -313,11 +314,11 @@ func TestRenewalNotVerifiedWhileAConsumerIsUnreadOrUnchecked(t *testing.T) {
 				oldChain, oldKey, oldDER := pki.leaf(2, tlsNow.AddDate(0, 0, 5), "a.example", "b.example")
 				h.dialer.certs = map[string][]byte{"old": oldDER}
 				h.command.outcomes = map[string]fakeOutcome{
-					"ssh snapshot": {StdoutB64: base64.StdEncoding.EncodeToString(certificateBundle(oldChain, oldKey))},
+					"ssh snapshot": {StdoutB64: base64.StdEncoding.EncodeToString(edge.Bundle(oldChain, oldKey))},
 					"ssh deploy":   {},
 				}
 				h.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}, "edge.example|b.example": {Cert: "old"}}, c.served}
-				spec := Object{"certificate_name": "a", "domains": []any{"a.example", "b.example"}, "renewal_window_days": 30, "consumers": []any{edge, c.second}}
+				spec := Object{"certificate_name": "a", "domains": []any{"a.example", "b.example"}, "renewal_window_days": 30, "consumers": []any{caddy, c.second}}
 				_, err := h.r.runAction(verified(t.Context()), runtime.ResourceKindTLSCertificate, "renew", spec, nil, true)
 				if err == nil || !strings.Contains(err.Error(), "rollback succeeded") || !strings.Contains(err.Error(), c.reason) {
 					t.Fatalf("%v", err)

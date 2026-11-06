@@ -7,12 +7,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"time"
-)
 
-// ProcessWaitDelay bounds how long a killed child's pipes are waited on, so a
-// grandchild holding them open cannot outlive the deadline.
-const ProcessWaitDelay = 5 * time.Second
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
+)
 
 // Machine is where an install or a deploy acts, and how it runs a command
 // there. Every path is a field so a test can relocate the whole host.
@@ -70,16 +67,15 @@ func (m *Machine) private(ctx context.Context, label, log, name string, args ...
 	if err := os.MkdirAll(m.LogDir, 0o700); err != nil {
 		return err
 	}
-	file, err := os.CreateTemp(m.LogDir, "."+log+".")
+	file, err := atomicfile.Create(filepath.Join(m.LogDir, log+".log"), 0o600)
 	if err != nil {
 		return err
 	}
+	defer file.Discard()
 	command := m.Command(ctx, name, args...)
-	command.Stdout, command.Stderr = file, file
+	command.Stdout, command.Stderr = file.File, file.File
 	runErr := command.Run()
-	file.Close()
-	if err := os.Rename(file.Name(), filepath.Join(m.LogDir, log+".log")); err != nil {
-		os.Remove(file.Name())
+	if err := file.Replace(); err != nil {
 		return err
 	}
 	if runErr != nil {
@@ -88,20 +84,6 @@ func (m *Machine) private(ctx context.Context, label, log, name string, args ...
 	}
 	fmt.Fprintf(m.Out, "%s passed.\n", label)
 	return nil
-}
-
-// Command runs a program with fixed arguments and an environment that holds
-// nothing of this process's but where to find programs and docker.
-func Command(ctx context.Context, name string, args ...string) *exec.Cmd {
-	command := exec.CommandContext(ctx, name, args...)
-	command.WaitDelay = ProcessWaitDelay
-	command.Env = []string{}
-	for _, variable := range []string{"PATH", "HOME", "DOCKER_HOST", "DOCKER_CONFIG"} {
-		if value, ok := os.LookupEnv(variable); ok {
-			command.Env = append(command.Env, variable+"="+value)
-		}
-	}
-	return command
 }
 
 // active reports whether systemd says unit is active.

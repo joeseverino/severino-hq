@@ -1,16 +1,16 @@
 {% comment %}
 Rules as one table, a group per resource: the columns are the same for every
 resource, so they are headed once rather than once per resource. A column per
-surface and per agent, so a rule is read and changed where it sits. On a
-narrow page the surfaces go from the far end, then the default.
+agent, so a rule is read and changed where it sits. On a narrow page the
+agents go from the far end, then the default.
 {% endcomment %}
 {% table_region label %}
   <table class="data-table policy-table">
     <thead>
       <tr>
         {% table_heading "Action" local_sort=True gutter=True %}
-        {% table_heading "Default" "status" local_sort=True drop=column_heads|length|add:1 %}
-        {% for head in column_heads %}{% table_heading head.column.label "control" local_sort=True drop=forloop.revcounter title=head.column.detail note=head.dormant|yesno:"off in HQ's settings," note_css="policy-off" %}{% endfor %}
+        {% table_heading "Default" "status" local_sort=True drop=columns|length|add:1 %}
+        {% for column in columns %}{% table_heading column.label "control" local_sort=True drop=forloop.revcounter title=column.detail %}{% endfor %}
       </tr>
     </thead>
     {% for group in groups %}

@@ -37,16 +37,16 @@ or anything acting for them may do. The roles are declared once, in
 | Role | Holds |
 | --- | --- |
 | `operator` | every capability, the host's and every extension's (`operator_capabilities`) |
-| `viewer` | the reads: `read` and every extension's read capabilities, the base every agent's ceiling starts from |
+| `viewer` | the reads: `read` and every extension's read capabilities |
 
-What each subject holds, with `HELD_ONLY_AT` applied on top:
+What each subject holds, with `HELD_ONLY_AT` and `NEEDS_A_PERSON` applied on top:
 
 | Subject | Holds |
 | --- | --- |
 | A person in the browser | their role's capabilities, as resolved at their last sign-in or renewal |
-| An agent a person signed in (a token naming them in `sub`) | its grant, within the agent ceiling and that person's role |
+| An agent a person signed in (a token naming them in `sub`) | its grant, within that person's role |
 | A person's registered device | its grant, within that person's role |
-| A machine's own token (no person) | its grant, within the agent ceiling |
+| A machine's own token (no person) | its grant, less a person's own settings, pins and set-asides |
 | A person with no role, or a token naming one | nothing: a token is refused with 403 at either door |
 
 - A sign-in resolves the role from the identity provider's `groups` claim and
@@ -65,7 +65,11 @@ What each subject holds, with `HELD_ONLY_AT` applied on top:
 - The Agents page names each agent's person, their role and when it was last
   confirmed. It splits its grant into what is in force, what HQ's settings
   hold back and what lies beyond its person's role, by the same rule its token
-  is held to (`security.agent_grant`).
+  is held to (`security.agent_grant`). For an agent a person signed in, it
+  names what HQ offers within that role that the last sign-in did not carry,
+  the set a refusal calls `insufficient_scope`, read from the grant HQ
+  recorded (`AgentIdentity.granted`), so HQ needs no key to the identity
+  provider.
 
 ### What a page reads under
 
@@ -320,10 +324,26 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   (`BearerAuthBackend`, `RequireAuthMiddleware`,
   `ProtectedResourceMetadataHandler`); the 403 is HQ's, since the SDK's names
   no scope.
+- The 401 names no `scope`. A client asks first for the scope a challenge
+  names, so with none it asks for all of `scopes_supported`, which Pocket ID
+  needs: it refuses a whole sign-in that asks for one permission the client
+  was not given. The SDK's `required_scopes` would also make every name
+  listed a requirement of every request.
 - No scope is required at the door: what a token may do is decided per call
   in the capability layer. A capability missing for one tool is that call's
   MCP error result, never an HTTP 403, so a client stays connected for the
   tools it may use.
+- A call refused only because the token lacks a permission its person holds,
+  and an agent's token could carry (`agent_grantable`), is `insufficient_scope`,
+  with that permission in `error.details.scope` and a message saying to grant
+  it to the client in Pocket ID and sign in again. On MCP it stays the call's
+  tool error (a prompt's or resource's protocol error carries it in
+  `data.details.scope`); the machine API answers a 403 whose
+  `WWW-Authenticate` is `Bearer realm="Severino HQ",
+  error="insufficient_scope", scope="<permission>"` (RFC 6750 section 3.1).
+  What a new sign-in cannot fix stays as it was: the person's role lacking
+  it, a `HELD_ONLY_AT` name, and a `NEEDS_A_PERSON` name on a machine's own
+  token, are `forbidden`, and an operator's rule is `denied_by_policy`.
 - HQ verifies access tokens only. The header `typ` must be `at+jwt` or
   `application/at+jwt` (RFC 9068), so an ID token the same provider signs for
   the same audience is refused.
@@ -331,26 +351,20 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   machine API (`/api/`) alike, unless it is a person's own device. Both turn a
   verified token into a principal through one function (`token_principal` in
   `hq/platform/application/tokens.py`, then `agent_principal` in
-  `hq/platform/application/security.py`). It holds the token's grant capped by
-  the deployment's agent ceiling, the `SEVERINO_AGENT_ENABLE_*` switches
-  (`agent_ceiling`), and, on a token a person signed in, by that person's
-  role, so an agent acting for a viewer reads and does nothing else. A token
-  naming a person who holds no role is refused. The person is recorded on the
-  agent (`AgentIdentity.person`), and a change audited.
-- An agent refused a write on one surface is refused it on the other. Each
-  switch is off unless the deployment sets it, and turning one on lets an
-  agent do this much more, never more than its own grant:
-
-  | Switch | Lets an agent |
-  | --- | --- |
-  | `SEVERINO_AGENT_ENABLE_WRITES` | make ordinary writes, documentation sync included |
-  | `SEVERINO_AGENT_ENABLE_DOC_SYNC` | mirror the documentation index, and write nothing else |
-  | `SEVERINO_AGENT_ENABLE_PRUNE` | remove index entries the vault no longer has |
-  | `SEVERINO_AGENT_ENABLE_DELETES` | delete records, only beside the writes switch, and calendar events beside the calendar switch |
-  | `SEVERINO_AGENT_ENABLE_INFRASTRUCTURE` | declare infrastructure, which never includes asking a certificate authority for anything |
-  | `SEVERINO_AGENT_ENABLE_CERT_RENEWAL` | ask for a certificate to be renewed |
-  | `SEVERINO_AGENT_ENABLE_LOOKUP` | run the public-registry lookups: a read, but one that leaves the tailnet, spends a third party's rate limit and tells it what HQ was asked |
-  | `SEVERINO_AGENT_ENABLE_CALENDAR` | read the personal calendar and add to it, granting nothing else |
+  `hq/platform/application/security.py`). It holds the token's permissions
+  (`agent_grant`), and, on a token a person signed in, only those within that
+  person's role, so an agent acting for a viewer reads and does nothing else.
+  A token naming a person who holds no role is refused. The person is recorded
+  on the agent (`AgentIdentity.person`), and a change audited.
+- The identity provider's grant is the one declaration of what an agent may
+  do: each permission is ticked per client on HQ's Pocket ID API resource, and
+  HQ keeps no second list of its own. Removing one there fails that client's
+  next refresh, so it ends within the access token's lifetime; blocking the
+  agent on the Agents page ends it at once. What HQ still limits is the role,
+  the capabilities `HELD_ONLY_AT` keeps for a person or for HQ itself, the
+  person a personal setting needs (`NEEDS_A_PERSON`), the default hold and the operator's rules, approvals, the pause, a block and the
+  rate limits. An agent refused a write on one surface is refused it on the
+  other.
 
 - `SEVERINO_FINDINGS_AUTO_REMEDY` lets HQ queue a repair for a finding with
   nobody asking. It is off by default, so what acts unattended is watched
@@ -369,8 +383,8 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   person), matched to the token's subject as bound at their sign-in. A token
   carrying the permission from a client its person registered is
   `device_principal`'s, on the `device` interface. Its other permissions are
-  bounded by its person's role, uncapped by the agent ceiling, and never
-  stopped by the Agents pause. Its client is the actor, so the audit log names the device, and
+  bounded by its person's role, held only where a person may hold them
+  (`HELD_ONLY_AT`), and never stopped by the Agents pause. Its client is the actor, so the audit log names the device, and
   revoking that client in Pocket ID ends it alone. Its properties:
   - The permission is a standing, not a capability: it grants nothing on its
     own, and a device holds exactly the other permissions its token carries.
@@ -386,8 +400,8 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
     behind it (a client-credentials grant).
   - A device holds what its person's browser holds, their role, bounded by
     its token's grant. `DEVICE_INTERFACE` is one of `INTERACTIVE_INTERFACES`, so what is
-    held for a person (`HELD_ONLY_AT`: approving, pausing agents, uploads,
-    preferences, pins) is in its reach. Nothing it asks for is held for
+    held for a person (`HELD_ONLY_AT`: approving, pausing agents, uploads)
+    is in its reach. Nothing it asks for is held for
     approval, and the capability policy's agent rules do not apply to it.
   - A use case that keeps something of a person's finds them by the token's
     subject, bound at their sign-in.
@@ -401,7 +415,21 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
 - A token an agent's client got through a person's sign-in (an authorization
   code or device grant) is that agent's. Its client is the actor, and its
   grant is the client's own user-delegated grant, capped and paused as every
-  agent's is. It stands for no person (`test_delegated_tokens.py`).
+  agent's is. It acts for its person without standing as them: what it keeps
+  (`set_preferences`, `pin_favorites`, `set_aside_action_items`, the
+  `NEEDS_A_PERSON` capabilities in `security.py`) is that person's, found by
+  the token's subject as `person_of` finds a device's, and its every act names
+  its client. It is still an agent, so it is held where a hold applies and
+  never approves or governs agents (`test_delegated_tokens.py`,
+  `test_person_bound_agent.py`).
+- A machine's own token has no person, so it is refused those three whatever
+  Pocket ID granted it, and the catalog lists no command needing one to it.
+  `set_preferences` also covers the dashboard's shared settings (its weather
+  point, panel names and machine tiles): an operator's, since a viewer holds
+  only reads, so an agent its operator signed in may change them as that
+  operator may.
+- A held request keeps the person its token named (`requested_person_key`),
+  so an approved personal write replays as that person's.
 - So the provider administrator's grant alone never makes a device. From its
   claims, an agent's client given `own_device` in its delegated grant cannot
   be told from the person's phone. With no registration by that person it is
@@ -435,6 +463,56 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   for, as the pause does: its held requests can be declined but not approved,
   and its queued work is not handed to the controller until the block is
   lifted.
+- Every agent call is placed on the tailnet device it came from
+  (`agent_devices.place`), and does nothing from a device until that device
+  is approved for that client and person. Its properties:
+  - The device is the one at the caller's address in the last tailnet
+    reading, keyed by Tailscale's stable id (the API's `nodeId`, the daemon's
+    `StableID`), never by a name or the node key a re-authentication rotates.
+    The address is the caller as `ForwardedCaller` resolved it: through a
+    proxy HQ does not trust it is the peer that opened the socket, so a
+    forwarded header never moves a call off the device that sent it.
+  - `agent_access.refusal`, which both doors ask, refuses a device nobody
+    approved with `device_awaiting_approval` and a blocked one with
+    `device_blocked` (a 403 on `/api/v2/`, a tool result on `/api/mcp/`), and
+    each refusal says the device is approved or allowed on the Agents page,
+    with the address of the device's own row there. The device is recorded at
+    its first call (`AgentDevice`), so it is there to approve.
+  - The Agents page lists each agent's devices (name, os, tailnet owner, first
+    and last seen, calls over the window, standing) with their approve and
+    block controls, and a tailnet address an agent was refused from that the
+    reading does not hold yet, which has nothing to approve. A device awaiting
+    the reader's approval asks them at the top of the page ("<agent> wants to
+    act for you from <device>, owned by <tailnet login>"); a machine agent's
+    asks anyone who governs agents.
+  - The request inspector's identity step for a token call reads the approval
+    of the device it came from, since a token has no session to compare with
+    the device's tailnet owner.
+  - Only a person approves or blocks a device (`agent.device_approval.set`,
+    `agent.device_block.set`, under `govern_agents`, held only at
+    `INTERACTIVE_INTERFACES`), so no token approves its own. A device an agent
+    called from for a person is approved by that person alone: the approval
+    is what links their HQ person to the device's tailnet owner, which HQ
+    never infers. A machine agent's device is approved by whoever governs
+    agents.
+  - Where HQ cannot place a call (an address outside Tailscale's ranges, such
+    as loopback or the LAN, or a deployment with no tailnet reading), the
+    client is the finest unit and the client's rules alone apply. A tailnet
+    address the reading does not hold, or holds without a stable id, is never
+    approved: it is refused `device_awaiting_approval`, whose message says
+    when the next tailnet reading comes and names the command that reads it
+    now (`infrastructure.controller.refresh`). The refusal itself writes
+    nothing, since a GET has no effect.
+  - A person's own client (`OwnDevice`, the `device` interface) needs no
+    device approval: its registration is already the person's own act.
+  - A device block refuses that client from that device alone, at once, while
+    the client's other devices run. Like a client's block it holds what was
+    asked from there: each held request and queued operation records the
+    device that asked (`requested_device`), and `held_askers` withholds those
+    from a blocked device.
+  - The audit log names the device on every event the call records, held
+    ones replayed on approval included: `device` in the event's metadata,
+    stored as an indexed column beside `actor`.
 - All four read the pause through one helper (`paused_interfaces` in
   `hq/platform/application/agent_access.py`). It names every agent interface
   or none, so a person is never paused. Approving a held request and the
@@ -445,14 +523,23 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   `agent_access.py` answers a code and a reason, so a new brake reaches both
   doors in its own words. So a person's own device runs while the agents
   beside it are refused.
-- Capability policy at `/agents/` sets, per capability and per surface or
-  agent, whether a call is allowed, held for approval, or denied. Rules only
-  narrow the identity provider's grant. An explicit rule beats the default, and
-  between a surface and an agent rule the stricter wins.
-- With no rules, gated infrastructure changes are held, and anything
-  destructive an agent asks for (a deletion, or stopping a container) is held
-  too. A person in the browser, or on their own device, is never held. A rule
-  that allows a would-be-held call is recorded as its consent.
+- Capability policy at `/agents/` sets, per agent and capability, whether a
+  call is on, asks a person first, or is off. The identity provider's grant is
+  the ceiling, changed rarely and only with a new sign-in; a rule narrows it at
+  once, and no rule can reach past it (`set_rule` refuses one). An agent's rule
+  beats the default for that agent, over every surface it calls through.
+- With no rules, a change to a kind that stands behind access
+  (`requires_approval`: the tailnet policy, a container stack) is held from
+  anyone but a person, the host's shell included. An agent's change to a kind
+  the public internet sees (`public_effect`: a public DNS record, a domain) is
+  held, as is anything destructive an agent asks for (a deletion, or stopping
+  a container). Adopting a public record is not held, since it makes HQ's copy
+  equal what is live. `needs_approval` in `default_hold.py` is the one answer,
+  read by the hold, by the use cases' own floor (`consent_gap`), by the
+  provider contract and by the policy page's words. A person in the browser,
+  or on their own device, is never held. An agent's "on" over a call the
+  default would hold is the person's consent, recorded as such
+  (`Decision.overrides_a_hold`).
 - A held request writes and queues nothing. It is decided on its audit entry
   (`/audit/?awaiting=1`), or from its action item, against a fingerprinted
   field-by-field diff. So a record that changes meanwhile supersedes the
@@ -570,8 +657,9 @@ nothing leaked.
 - [ ] MCP callers authenticate only with an access token from the identity
       provider, one client per agent, so every call names its agent. There is no
       shared static bearer; without the provider configured, MCP is off.
-- [ ] A destructive capability called by an agent waits for an operator's
-      approval unless a rule explicitly allows it for that agent or surface.
+- [ ] A destructive capability called by an agent, or its change to public
+      DNS, waits for an operator's approval unless a rule explicitly allows
+      it for that agent or surface.
 - [ ] The app environment's source of truth is the 1Password app-environment
       item. It is rendered to the root-only noswap tmpfs at
       `/run/severino-hq-secrets/web/`, never to the runner-writable checkout,
@@ -610,8 +698,8 @@ nothing leaked.
 - [ ] `SEVERINO_API_RESOURCE` is `https://<hq-host>/api`, the Pocket ID API
       resource's identifier. Both machine doors sit under its path, so one
       audience covers them, and the metadata names what a token is asked for.
-- [ ] Each `SEVERINO_AGENT_ENABLE_*` switch ([Agents](#agents)) is enabled
-      only for the capabilities some agent or API client actually needs.
+- [ ] Each agent client on the Pocket ID API resource ([Agents](#agents)) is
+      granted only the permissions it actually needs.
 - [ ] `SEVERINO_FINDINGS_AUTO_REMEDY` is on only once the repairs it would
       queue have been watched being proposed.
 - [ ] The DNS-01 token is its own connection item, with only Zone Read and

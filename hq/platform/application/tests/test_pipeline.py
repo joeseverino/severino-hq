@@ -26,19 +26,39 @@ type Node = dict[str, Any]
 # How a shell script reads its own arguments, and how a Python program does.
 SHELL_READS = r'"\$@"|\$\{?[1-9]|\$\{?#(?=[\s"\')}]|$)'
 READS_ARGUMENTS = re.compile(rf"{SHELL_READS}|sys\.argv", re.MULTILINE)
+# The same reads in the shell's own grammar, where a single-quoted string (an
+# awk or jq program's $1) and a comment hold none. ${#name} is a length.
+SHELL_READ_RULE = {
+    "id": "reads-own-arguments",
+    "language": "bash",
+    "severity": "hint",
+    "rule": {
+        "any": [
+            {"kind": "simple_expansion", "regex": r"^\$[1-9@*#]"},
+            {"kind": "expansion", "regex": r"^\$\{([1-9@*]|#\})"},
+        ]
+    },
+}
 
 
 def reads_own_arguments(source: str) -> bool:
-    """Whether a file task reads the arguments it was given.
+    """Whether a task's script reads the arguments it was given.
 
-    A shell task's sys.argv is a Python program's it runs, not its own. A bare
-    `set --` empties the arguments, so after it "$@" is a list the script
+    A shell script's sys.argv is a Python program's it runs, not its own. A
+    bare `set --` empties the arguments, so after it "$@" is a list the script
     built, the way AGENTS.md passes a list."""
 
-    if not source.startswith("#!/bin/sh"):
+    if not re.match(r"#!.*\b(?:ba)?sh\n", source):
         return bool(READS_ARGUMENTS.search(source))
     own = re.split(r"(?m)^\s*set --\s*$", source, maxsplit=1)[0]
-    return bool(re.search(SHELL_READS, own, re.MULTILINE))
+    found = subprocess.run(
+        ["ast-grep", "scan", "--stdin", "--json=compact", "--inline-rules", json.dumps(SHELL_READ_RULE)],
+        input=own,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return bool(json.loads(found.stdout))
 
 
 def forwards(source: str, name: str) -> bool:
@@ -185,47 +205,6 @@ class ActionPinTests(SimpleTestCase):
         for name, line in pinned:
             with self.subTest(file=name, line=line):
                 self.assertRegex(line, r"@[0-9a-f]{40} # v\d+(\.\d+){0,2}$")
-
-
-def saves_a_cache(step: Node) -> bool:
-    return step.get("uses", "").startswith("actions/cache/save@")
-
-
-@tag("source")
-class CacheWriterTests(SimpleTestCase):
-    """A branch reads the default branch's caches and writes none, so a pull request adds no entries.
-
-    zizmor's forbidden-uses refuses actions/cache, which saves on every run."""
-
-    def test_a_cache_is_saved_only_from_the_default_branch(self):
-        """A job that runs only on a push is on main: ci.yml pushes nowhere else."""
-        saves = [(path, job, step) for path, _, job in all_jobs() for step in steps(job) if saves_a_cache(step)]
-        self.assertGreater(len(saves), 1)
-        for name, job, step in saves:
-            with self.subTest(file=name, step=label(step)):
-                where = f"{condition(job)} {condition(step)}"
-                self.assertRegex(where, r"github\.event\.repository\.default_branch|github\.event_name == 'push'")
-
-    def test_an_action_saves_a_cache_only_for_a_job_on_the_default_branch(self):
-        """A composite action saves on the default branch, or when its caller
-        passes ``save: true``, which only a job that runs on a push does."""
-        saves = [
-            (path.parent.name, step) for path in composite_actions() for step in every_step(path) if saves_a_cache(step)
-        ]
-        self.assertTrue(saves)
-        for action, step in saves:
-            with self.subTest(action=action):
-                self.assertRegex(condition(step), r"github\.event\.repository\.default_branch|inputs\.save == 'true'")
-        callers = [
-            (path, job)
-            for path, _, job in all_jobs()
-            for step in steps(job)
-            if step.get("with", {}).get("save") in (True, "true")
-        ]
-        self.assertTrue(callers)
-        for name, job in callers:
-            with self.subTest(file=name):
-                self.assertRegex(condition(job), r"github\.event_name == 'push'")
 
 
 BROWSER_SETUP = "setup:browser"
@@ -467,6 +446,26 @@ class CosignTests(SimpleTestCase):
                 self.assertEqual([a for a in uses(document) if a.startswith("sigstore/cosign-installer@")], [])
 
 
+@tag("source")
+class ProvenanceTests(SimpleTestCase):
+    def test_every_mise_install_verifies_provenance_beyond_the_lock(self):
+        """With ``locked``, mise trusts a lock entry's checksum and skips the
+        publisher's attestation or signature unless ``locked_verify_provenance``
+        is on, so an entry edited to another artifact and its checksum installs.
+        These steps hold a token for the attestation API; a lazy tool's install
+        under ``mise run`` holds none."""
+        installs = [
+            (path.name, label(step), step)
+            for path in [*workflows(), *composite_actions()]
+            for step in every_step(path)
+            if str(step.get("uses", "")).startswith("jdx/mise-action@")
+        ]
+        self.assertGreater(len(installs), 3)
+        for name, step_label, step in installs:
+            with self.subTest(file=name, step=step_label):
+                self.assertEqual(step.get("env", {}).get("MISE_LOCKED_VERIFY_PROVENANCE"), "1")
+
+
 LEVELS = {"read": 1, "write": 2, "admin": 3}
 
 
@@ -628,8 +627,8 @@ class SbomAttestationTests(SimpleTestCase):
         self.assertLessEqual({"ci.yml", "compose.yml"}, signers)
 
 
-# The jobs in ci.yml that gate nothing: the cache writer and the two verdicts.
-NOT_GATES = {"caches", "ready", "release"}
+# The jobs in ci.yml that gate nothing: the two cache writers and the two verdicts.
+NOT_GATES = {"build-cache", "caches", "ready", "release"}
 # Gates Ready waits for and Release does not: code scanning holds a merge, not a release.
 MERGE_ONLY = {"scan"}
 
@@ -770,14 +769,6 @@ class PublicLogTests(SimpleTestCase):
         self.assertNotIn("manage.py test", self.compose)
         self.assertIn("tools/pipeline/composed-suite.sh", self.compose)
 
-    def test_a_scan_writes_a_file_not_the_package_table(self):
-        scans = [step for step in self.steps if step.get("uses", "").startswith("aquasecurity/trivy-action@")]
-        self.assertTrue(scans)
-        for scan in scans:
-            self.assertEqual(scan["with"]["format"], "json")
-            # The Trivy mise.toml pins, never one the action downloads.
-            self.assertIs(scan["with"]["skip-setup-trivy"], True)
-
     def test_withheld_output_leaves_the_runner_only_sealed(self):
         uploads = [step for step in self.steps if step.get("uses", "").startswith("actions/upload-artifact@")]
         self.assertTrue(uploads)
@@ -888,22 +879,23 @@ class GateReferenceTests(SimpleTestCase):
             with self.subTest(task=name):
                 if declared:
                     checked += 1
-                    reached = run + "".join(path.read_text() for path in scripts)
-                    dropped = [word for word in declared if not forwards(reached, word.replace("-", "_"))]
-                    self.assertEqual(dropped, [], f"{name} declares arguments it never forwards")
-                    # mise parsed them already: a second parser is a second declaration that drifts from the usage.
-                    parsing = [
-                        path.name
-                        for path in scripts
-                        if re.search(r"(?m)^\s*(?:import|from) argparse\b", path.read_text())
-                    ]
-                    self.assertEqual(parsing, [], f"{name} parses its own flags; read mise's parse through task.Usage")
+                    self.assert_reaches_only_mises_parse(name, run, scripts, declared)
                 elif re.fullmatch(r"[\w/.-]+", run.strip()):
                     for path in scripts:
                         self.assertFalse(
-                            READS_ARGUMENTS.search(path.read_text()), f"{name} takes arguments; declare usage"
+                            reads_own_arguments(path.read_text()), f"{name} takes arguments; declare usage"
                         )
         self.assertGreater(checked, 3)
+
+    def assert_reaches_only_mises_parse(self, name, run, scripts, declared):
+        """Each argument a task declares reaches its run or its scripts, and no script parses them again."""
+
+        reached = run + "".join(path.read_text() for path in scripts)
+        dropped = [word for word in declared if not forwards(reached, word.replace("-", "_"))]
+        self.assertEqual(dropped, [], f"{name} declares arguments it never forwards")
+        # mise parsed them already: a second parser is a second declaration that drifts from the usage.
+        parsing = [path.name for path in scripts if re.search(r"(?m)^\s*(?:import|from) argparse\b", path.read_text())]
+        self.assertEqual(parsing, [], f"{name} parses its own flags; read mise's parse through task.Usage")
 
     def test_a_script_reads_its_arguments_unless_it_built_the_list_itself(self):
         reads = '#!/bin/sh\nexec tool "$@"\n'

@@ -1,0 +1,20 @@
+{% comment %}
+What a person may press for one agent's device (agent_activity.DeviceRow):
+approve it or withdraw the approval when it is theirs to give (`yours`), and
+block it or let it back in, which anyone who governs agents may. An address
+no device in HQ's last tailnet reading holds offers that reading, when the
+reader may ask for it (`read_tailnet`). Each form returns to the row.
+{% endcomment %}{% url 'agent_device' as device_url %}{% with record=device.record %}{% if record %}
+  {% if record.blocked_at %}
+    {% words "agent.device_block.set" "off" as label %}{% include "partials/_target_button.html" with url=device_url field="device" target=record.pk name="blocked" value="0" label=label css="btn compact primary" anchor=device.anchor %}
+  {% else %}
+    {% if device.yours %}
+      {% if record.approved_at %}
+        {% words "agent.device_approval.set" "off" as label %}{% include "partials/_target_button.html" with url=device_url field="device" target=record.pk name="approved" value="0" label=label css="btn compact" anchor=device.anchor %}
+      {% else %}
+        {% words "agent.device_approval.set" "on" as label %}{% include "partials/_target_button.html" with url=device_url field="device" target=record.pk name="approved" value="1" label=label css="btn compact primary" anchor=device.anchor %}
+      {% endif %}
+    {% endif %}
+    {% words "agent.device_block.set" "on" as label %}{% include "partials/_target_button.html" with url=device_url field="device" target=record.pk name="blocked" value="1" label=label css="btn compact" anchor=device.anchor %}
+  {% endif %}
+{% elif read_tailnet %}{% include "partials/_ask.html" with ask=read_tailnet|as_ask %}{% endif %}{% endwith %}

@@ -286,8 +286,10 @@ func b(xs []Input) []Output { out:=[]Output{}; for _,y:=range xs {out=append(out
 
     def test_malformed_unreadable_and_outside_source_fail_closed(self):
         self.put("bad.go", "not go")
-        with self.assertRaises(subprocess.CalledProcessError):
+        with self.assertRaises(subprocess.CalledProcessError) as failed:
             self.classifier.pair(unit("bad.go", "a"), unit("bad.go", "b"))
+        # The inspector's own message, carried by the error rather than printed.
+        self.assertIn("expected 'package'", "\n".join(failed.exception.__notes__))
         with self.assertRaises(ValueError):
             self.classifier.pair(unit("missing.py", "a"), unit("missing.py", "b"))
         with self.assertRaises(ValueError):

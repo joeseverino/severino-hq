@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -54,7 +55,7 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 	f.mu.Lock()
 	f.log = append(f.log, call)
 	f.mu.Unlock()
-	if f.boot != nil && call == "systemctl restart "+WebUnit {
+	if f.boot != nil && call == "systemctl restart "+hostcore.WebUnit {
 		f.boot()
 	}
 	answer := func(out string, code int) *exec.Cmd {

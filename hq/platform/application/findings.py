@@ -9,12 +9,12 @@ is a registered capability, absent for whoever cannot run it (``_resolved``).
 
 import inspect
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, replace
 from datetime import datetime
 from functools import cache
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, TypedDict, cast
 from urllib.parse import urlencode
 
 from django.conf import settings
@@ -139,15 +139,15 @@ def _carrying(indexed: dict[str, dict[str, set[str]]], connections: set[str]) ->
 
 def _estate(topology: Topology) -> FindingEstate:
     observed: dict[str, datetime] = {}
-    latest: dict[str, datetime] = {}
     for node in topology.nodes:
         moment = parse_stamp(node.observed_at)
         if moment is None or not node.kind_key or node.kind in JOINED_KINDS:
             continue
         observed[node.id] = moment
-        newest = latest.get(node.kind_key)
-        if newest is None or moment > newest:
-            latest[node.kind_key] = moment
+    # A kind's read, never its newest record: HQ writes a record's observation
+    # when it applies or adopts it, which says nothing of whether the kind
+    # was read.
+    latest = dict(topology.kinds_read)
     governed = frozenset(edge.target for edge in topology.edges if edge.kind == "governs")
     counts = Counter(
         node.kind_key for node in topology.nodes if node.kind == "resource" and node.managed and node.kind_key
@@ -324,7 +324,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         for remedy in resolved_remedies
         if remedy.url
     )
-    verification = _verification(finding, principal, subject)
+    verification, read_now = _verification(finding, principal, subject)
     workflow = claim_resolution_plan(
         namespace=_CLAIM_NAMESPACE,
         rule=finding.rule,
@@ -351,6 +351,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
         subject_link=ActionLink("subject", subject.label, "read", subject.url) if subject and subject.url else None,
         read_capabilities=_held_to(finding, subject, principal),
         part=finding.part,
+        read_now=read_now,
     )
 
 
@@ -359,7 +360,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
 # relationships around it, a declared kind through its records, an observed
 # kind through its readings, a check of HQ's standard through the connection
 # standing that reports it.
-_NODE_READ = "relationships"
+NODE_READ = "relationships"
 _RECORDS_READ = "infrastructure"
 _READINGS_READ = "readings"
 _POSTURE_READ = "connections"
@@ -378,7 +379,7 @@ def read_gate(finding: Finding, subject: TopologyNode | None) -> tuple[str, ...]
         return None
     gates = [finding.read_capabilities]
     if subject is not None:
-        gates += [_resource_gate(_NODE_READ), subject.read_capabilities]
+        gates += [_resource_gate(NODE_READ), subject.read_capabilities]
     for scope in scopes:
         if (resource := _scope_resource(scope)) is None:
             return None
@@ -417,32 +418,35 @@ def _no_help_reason(finding: Finding) -> str:
     return finding.no_help_reason or (found.no_help_reason if found else "")
 
 
-def _read_subject(finding: Finding, subject: TopologyNode | None) -> dict[str, Any] | None:
+def _read_subject(finding: Finding, subject: TopologyNode | None) -> cadence.ControllerSweepCommand | None:
     """What to read now so the check re-runs on fresh data; None when no reading
     is involved."""
 
     if subject is not None and subject.kind == "connection" and subject.connection_ref:
-        return {"connection_ref": subject.connection_ref}
+        return cadence.ControllerSweepCommand(connection_ref=subject.connection_ref)
     kind = finding.scope or (subject.kind_key if subject is not None else "")
     if kind in OBSERVATIONS or (kind in PROVIDERS and is_observable(kind)):
-        return {"kind": kind}
+        return cadence.ControllerSweepCommand(kind=kind)
     if finding.affected_scopes:
-        return {"every_connection": True}
+        return cadence.ControllerSweepCommand(every_connection=True)
     return None
 
 
-def _verification(finding: Finding, principal: Principal, subject: TopologyNode | None) -> ActionLink | None:
-    """Refresh and check again where a reading is involved; else check again."""
+def _verification(
+    finding: Finding, principal: Principal, subject: TopologyNode | None
+) -> tuple[ActionLink | None, cadence.ControllerSweepCommand | None]:
+    """Refresh and check again where a reading is involved; else check again.
+    With the link, the read it asks for, when it asks for one."""
 
     findings_url = route_url("control_plane:findings")
     if not findings_url:
-        return None
+        return None, None
     wanted = _read_subject(finding, subject)
-    read = read_now_link(principal, **wanted) if wanted is not None else None
+    read = read_now_link(principal, **asdict(wanted)) if wanted is not None else None
     again = f"{findings_url}?{urlencode({'rule': finding.rule})}"
     if read is not None:
         separator = "&" if "?" in read.url else "?"
-        return command_action(
+        verify = command_action(
             "verify",
             read.capability,
             f"{read.url}{separator}{urlencode({'next': again})}",
@@ -451,13 +455,15 @@ def _verification(finding: Finding, principal: Principal, subject: TopologyNode 
             intent=CHECK_AGAIN,
             reason="Reads it now, then checks again.",
         )
-    return ActionLink(
+        return verify, wanted
+    verify = ActionLink(
         "verify",
         CHECK_AGAIN,
         "read",
         again,
         reason="Runs this check against current data.",
     )
+    return verify, None
 
 
 def _finding_scopes(finding: Finding) -> tuple[str, ...]:
@@ -630,7 +636,7 @@ class SuggestedRemedy(TypedDict):
 
 
 class SerializedFinding(TypedDict):
-    """One finding as every machine door carries it."""
+    """One finding as the API answers it; MCP's `get_findings` makes its actions tool calls."""
 
     id: Annotated[
         str,
@@ -762,7 +768,35 @@ class Findings(TypedDict):
 
 
 def findings(*, principal: Principal, **narrowing: object) -> Findings:
-    """The serialized claims, for machine delivery adapters.
+    """The serialized claims, in the shape the machine API answers; MCP writes its own (``mcp.finding_actions``)."""
+
+    return cast(
+        Findings, narrowed_findings(principal=principal, **narrowing).answer(FINDINGS_SCHEMA_VERSION, serialize_finding)
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class NarrowedFindings:
+    """The findings a read returns, before a door writes them in its own shape."""
+
+    rule: str | None
+    summary: FindingsSummary
+    kept: tuple[Finding, ...]
+
+    def answer(self, version: int, write: Callable[[Finding], Any]) -> dict[str, Any]:
+        """The read as a door answers it: its shape's version, and each finding as ``write`` writes it."""
+
+        return {
+            "schema_version": version,
+            "rule": self.rule,
+            "summary": self.summary,
+            "findings": [write(finding) for finding in self.kept],
+        }
+
+
+def narrowed_findings(*, principal: Principal, **narrowing: object) -> NarrowedFindings:
+    """The findings ``narrowing`` keeps and the summary of them, for every door
+    that answers a read of the open problems.
 
     ``narrowing`` is judged by ``FindingsQuery`` once the caller may read.
     ``severity`` is a floor (``attention`` also returns ``serious``) and
@@ -779,18 +813,17 @@ def findings(*, principal: Principal, **narrowing: object) -> Findings:
     raised = estate_findings(principal=principal, rule=rule)
     counts = Counter(finding.severity for finding in raised)
     eligible = [finding for finding in raised if _rank(finding.severity) <= floor]
-    kept = eligible[:limit]
-    return {
-        "schema_version": FINDINGS_SCHEMA_VERSION,
-        "rule": rule or None,
-        "summary": {
+    kept = tuple(eligible[:limit])
+    return NarrowedFindings(
+        rule=rule or None,
+        summary={
             "findings": len(raised),
             "severities": counts,
             "returned": len(kept),
             "truncated": len(kept) < len(eligible),
         },
-        "findings": [serialize_finding(finding) for finding in kept],
-    }
+        kept=kept,
+    )
 
 
 # ----- what may be repaired without asking -------------------------------

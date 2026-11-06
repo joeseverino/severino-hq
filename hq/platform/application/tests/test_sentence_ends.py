@@ -16,22 +16,13 @@ from unittest.mock import patch
 from django.test import SimpleTestCase, tag
 
 from hq_sdk import ui as sdk_ui, validation
-from hq_sdk.validation import _SENTENCE_LEFT_OUT, _closes_by_hand, sentence_closes
+from hq_sdk.validation import _closes_by_hand, sentence_closes
 
 from ..ui import ended
-from .source import parsed, source_files
+from .apart import apart
 
 ROOT = Path(__file__).resolve().parents[4]
 COVERED = ("hq/platform/application", "hq/domains")
-
-
-def _files() -> list[Path]:
-    return [
-        path
-        for covered in COVERED
-        for path in source_files(ROOT / covered, "*.py")
-        if not _SENTENCE_LEFT_OUT & set(path.relative_to(ROOT).parts)
-    ]
 
 
 @tag("source", "tree")
@@ -39,13 +30,10 @@ class SentenceEndTests(SimpleTestCase):
     def test_a_page_sentence_closes_on_a_value_through_ended(self):
         """Write ``ended(f"... {value}")``: a value that ends in its own period keeps only that one."""
 
-        files = _files()
-        self.assertGreater(len(files), 100, "the sentence-end check read almost nothing")
-        found = [
-            f"{path.relative_to(ROOT)}:{line}: {value}"
-            for path in files
-            for line, value in _closes_by_hand(parsed(path))
-        ]
+        for covered in COVERED:
+            self.assertTrue((ROOT / covered / "__init__.py").is_file(), f"{covered} is no package to read")
+        # The rule extensions are held to, run apart, since it parses every module it reads.
+        found = [f"{covered}/{close}" for covered in COVERED for close in apart(sentence_closes, ROOT / covered)]
         self.assertEqual(found, [])
 
 

@@ -27,12 +27,14 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.core.models import AuditLog
 
-from .. import cadence
+from .. import cadence, readings
 from ..cadence import (
+    RECORD_CONTRACTS,
     ControllerSweepCommand,
     carried_connections,
     note_activity,
     recently_used,
+    request_boot_reads,
     request_controller_sweep,
     ring_doorbell,
     sweep_due,
@@ -402,34 +404,79 @@ class CarriedConnectionRecordTests(TestCase):
 
 
 class BootTests(TestCase):
-    """A new image asks for delivery to be read; nothing polls for it."""
+    """A new image asks for delivery, and for each kind whose stored records
+    were let through under another contract; nothing polls for either."""
 
     def setUp(self):
         self.settings_override, self.directory = markers()
         self.settings_override.enable()
         self.addCleanup(self.settings_override.disable)
 
+    def hold(self, *kinds):
+        for kind in kinds:
+            ProviderInventory.objects.create(kind=kind, records=[], reachable=True, observed_at=timezone.now())
+
+    def booted(self, *, moved=()):
+        """A boot after one that stored every current fingerprint but those of ``moved``."""
+
+        request_boot_reads()
+        contracts = readings.stored(RECORD_CONTRACTS)
+        assert contracts is not None
+        readings.record(RECORD_CONTRACTS, {**contracts.value, **dict.fromkeys(moved, "an older contract")})
+        ReadRequest.objects.all().delete()
+        (self.directory / "doorbell").unlink(missing_ok=True)
+
     def test_a_boot_where_delivery_is_read_asks_for_it_and_rings(self):
-        from hq.domains.control_plane.models import ReadRequest
+        self.hold("github.delivery")
+        self.booted()
 
-        from ..cadence import request_delivery_read
-
-        ProviderInventory.objects.create(kind="github.delivery", records=[], reachable=True, observed_at=timezone.now())
-
-        self.assertTrue(request_delivery_read())
+        self.assertEqual(request_boot_reads(), ("github.delivery",))
         self.assertTrue(ReadRequest.objects.filter(kind="github.delivery").exists())
         self.assertTrue((self.directory / "doorbell").exists())
         # A boot is not a person using HQ: the idle cadence stands.
         self.assertFalse(recently_used())
 
-    def test_a_boot_where_delivery_is_not_read_asks_for_nothing(self):
-        from hq.domains.control_plane.models import ReadRequest
-
-        from ..cadence import request_delivery_read
-
-        self.assertFalse(request_delivery_read())
+    def test_a_boot_where_nothing_is_held_asks_for_nothing(self):
+        self.assertEqual(request_boot_reads(), ())
         self.assertFalse(ReadRequest.objects.exists())
         self.assertFalse((self.directory / "doorbell").exists())
+
+    def test_a_kind_whose_contract_moved_is_read_and_no_other(self):
+        self.hold("github.repository", "host.firewall")
+        self.booted(moved=["github.repository"])
+
+        self.assertEqual(request_boot_reads(), ("github.repository",))
+        self.assertEqual(list(ReadRequest.objects.values_list("connection_ref", "kind")), [("", "github.repository")])
+        self.assertTrue((self.directory / "doorbell").exists())
+        self.assertFalse(recently_used())
+
+    def test_a_boot_stores_the_contracts_it_asked_on(self):
+        self.hold("github.repository")
+        self.booted(moved=["github.repository"])
+        request_boot_reads()
+        ReadRequest.objects.all().delete()
+
+        self.assertEqual(request_boot_reads(), ())
+        self.assertFalse(ReadRequest.objects.exists())
+
+    def test_a_first_boot_reads_every_kind_it_holds_once(self):
+        # Nothing says what the records it holds were let through as.
+        self.hold("github.repository", "host.firewall")
+
+        self.assertEqual(set(request_boot_reads()), {"github.repository", "host.firewall"})
+        self.assertEqual(request_boot_reads(), ())
+
+    def test_a_kind_no_sweep_reads_is_never_asked(self):
+        # HQ reads it itself: a request of the controller would go unanswered.
+        self.hold("registry.domain")
+
+        self.assertEqual(request_boot_reads(), ())
+        self.assertFalse(ReadRequest.objects.exists())
+
+    def test_a_kind_not_held_is_not_asked(self):
+        self.booted(moved=["github.repository"])
+
+        self.assertEqual(request_boot_reads(), ())
 
 
 class ControllerStandingTests(TestCase):

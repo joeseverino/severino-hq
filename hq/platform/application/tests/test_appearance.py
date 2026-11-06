@@ -8,7 +8,8 @@ from django.template import Context, Template
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.context_processors import appearance
 from hq.platform.core.models import Appearance, AuditLog
 
@@ -72,7 +73,7 @@ class ThemeServiceTests(TestCase):
         (event,) = AuditLog.objects.filter(object_type="Appearance")
         self.assertEqual((event.message, event.metadata["operation"]), ("Theme set to Dark", SET_THEME))
 
-    def test_no_credential_can_choose_for_a_person(self):
+    def test_a_principal_with_no_person_cannot_choose_for_one(self):
         granted = frozenset(Capability)
         for principal in (
             Principal("example-agent", "mcp", granted, granted=granted),

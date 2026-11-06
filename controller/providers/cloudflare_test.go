@@ -329,21 +329,39 @@ func btoi(b bool) int {
 	return 0
 }
 
-func TestNormalizedRecordContent(t *testing.T) {
-	cases := map[[2]string]string{
-		{"TXT", "v=spf1 -all"}:                   `"v=spf1 -all"`,
-		{"TXT", `"quoted"`}:                      `"quoted"`,
-		{"CNAME", " Target.Example.COM. "}:       "target.example.com",
-		{"CAA", `0   issue   "letsencrypt.org"`}: `0 issue "letsencrypt.org"`,
-		{"A", " 192.0.2.1 "}:                     "192.0.2.1",
+// cloudflareNormalization is the case file HQ's web reads too
+// (hq/domains/control_plane/tests/test_cloudflare_normalization.py), so the
+// controller and the web spell a record the same way.
+const cloudflareNormalization = "testdata/cloudflare-normalization.json"
+
+func TestNormalizationMatchesTheSharedCases(t *testing.T) {
+	data, err := os.ReadFile(cloudflareNormalization)
+	if err != nil {
+		t.Fatal(err)
 	}
-	for input, want := range cases {
-		if got := normalizedRecordContent(input[0], input[1]); got != want {
-			t.Errorf("normalizedRecordContent(%q, %q) = %q, want %q", input[0], input[1], got, want)
-		}
+	var cases []struct {
+		Case        string `json:"case"`
+		RecordType  string `json:"record_type"`
+		Name        string `json:"name"`
+		Content     string `json:"content"`
+		WantName    string `json:"want_name"`
+		WantContent string `json:"want_content"`
 	}
-	if _, _, _, ok := caaParts("0 issue letsencrypt.org"); ok {
-		t.Error("an unquoted CAA value parsed")
+	if err := json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
+	}
+	if len(cases) == 0 {
+		t.Fatal(cloudflareNormalization + " holds no cases")
+	}
+	for _, c := range cases {
+		t.Run(c.Case, func(t *testing.T) {
+			if got := hostname(c.Name); got != c.WantName {
+				t.Errorf("hostname(%q) = %q, want %q", c.Name, got, c.WantName)
+			}
+			if got := normalizedRecordContent(c.RecordType, c.Content); got != c.WantContent {
+				t.Errorf("normalizedRecordContent(%q, %q) = %q, want %q", c.RecordType, c.Content, got, c.WantContent)
+			}
+		})
 	}
 }
 

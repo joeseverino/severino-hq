@@ -25,6 +25,7 @@ from ..resource_context import record_status
 from ..security import cli_principal
 from ..sweep import record_sweep
 from .host_only import host_only
+from .inventory_records import kind_read
 from .markup import select, text, with_class
 
 REWRITE = "adguard.rewrite"
@@ -39,6 +40,7 @@ def one(items):
 
 
 def broken(key: str = "app", message: str = "The service refused the change.") -> ManagedResource:
+    kind_read(REWRITE, timezone.now())
     spec = {"domain": f"{key}.example.com", "answer": "192.0.2.10", "enabled": True}
     return ManagedResource.objects.create(
         key=key,
@@ -191,6 +193,7 @@ class DeployInProgressTests(TestCase):
     def delivery(self, stage: str, *, behind_for: timedelta = timedelta(minutes=1), **extension) -> None:
         since = (timezone.now() - behind_for).isoformat()
         message = f"example.alpha: bbbbbbb is approved, production still runs aaaaaaa. {stage}."
+        kind_read(DELIVERY, timezone.now())
         ManagedResource.objects.create(
             key="delivery",
             kind=DELIVERY,

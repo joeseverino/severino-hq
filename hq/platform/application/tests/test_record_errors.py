@@ -21,7 +21,7 @@ from .. import approvals
 from ..capabilities import execute_capability
 from ..record_errors import HostRefusal
 from ..security import OPERATOR_CAPABILITIES, Principal
-from .refusal_text import check
+from .refusal_text import check, checked
 
 # Distinctive enough that finding it in a message can only mean it was echoed.
 SENT = "sent-by-the-caller-7f3a"
@@ -114,16 +114,6 @@ class RecordRefusalTests(TestCase):
 ROOT = Path(__file__).resolve().parents[4]
 
 
-def _sources() -> dict[str, ast.Module]:
-    """Every module under hq/ outside tests, by its path in the repository."""
-
-    return {
-        str(path.relative_to(ROOT)): ast.parse(path.read_text(), filename=str(path))
-        for path in (ROOT / "hq").rglob("*.py")
-        if "tests" not in path.parts
-    }
-
-
 def _subclasses(cls: type) -> set[type]:
     found = set(cls.__subclasses__())
     return found | {deeper for sub in found for deeper in _subclasses(sub)}
@@ -136,7 +126,7 @@ class RefusalTextTests(SimpleTestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.checked = check(_sources())
+        cls.checked = checked(ROOT)
 
     def test_every_refusal_is_built_from_a_sentence(self):
         checked = self.checked
@@ -153,7 +143,7 @@ class RefusalTextTests(SimpleTestCase):
         }
 
         self.assertIn(approvals.UnreadableSubject.__name__, declared)
-        self.assertLessEqual(declared, self.checked.index.refusals)
+        self.assertLessEqual(declared, self.checked.refusals)
 
 
 # A stand-in for record_errors, and a module that refuses with every kind of

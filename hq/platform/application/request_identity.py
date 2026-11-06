@@ -1,4 +1,5 @@
-"""Who the session says the reader is, and which provider vouched for it."""
+"""Who the session says the reader is, and which provider vouched for it; for
+an agent's token, which has no session, the device it called from and who approved it."""
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,9 +8,13 @@ lazy from urllib.parse import urlsplit
 
 from django.conf import settings
 
+lazy from hq.platform.core.network import client_ip
 lazy from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, sso_only
 
 from . import tailnet
+lazy from . import agent_devices
+lazy from .agent_devices import DeviceStanding
+lazy from .security import AGENT_SURFACES, Principal
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +39,11 @@ class Identity:
     last_sign_in: datetime | None = None
     token_expires: str = ""
     provider_principal: str = ""
+    # An agent's token call: its client, where its device stands
+    # (``agent_devices.DeviceStanding``), and who approved the device.
+    agent: str = ""
+    device_standing: str = ""
+    approved_by: str = ""
 
     @property
     def session_principals(self) -> frozenset[str]:
@@ -55,9 +65,12 @@ class Identity:
         device the request came from. Neither consults the other, so agreement
         between them is independent corroboration. Different account
         namespaces require an explicit link; HQ does not infer equivalence
-        from similar-looking names.
+        from similar-looking names. A token call has no session, so the link
+        is the person's approval of the device for that agent.
         """
 
+        if self.agent:
+            return self.device_standing == DeviceStanding.APPROVED
         tailnet = self.tailnet_user.strip().casefold()
         if not tailnet or not self.session_principals:
             return False
@@ -67,6 +80,8 @@ class Identity:
 
     @property
     def agreement_basis(self) -> str:
+        if self.agent:
+            return "device approval" if self.corroborated else ""
         tailnet = self.tailnet_user.strip().casefold()
         if tailnet in self.session_principals:
             return "exact principal"
@@ -81,7 +96,8 @@ class Identity:
         tailnet = self.tailnet_user.strip().casefold()
         _, separator, namespace = tailnet.rpartition("@")
         return bool(
-            separator
+            not self.agent
+            and separator
             and not self.corroborated
             and any(
                 principal.rpartition("@")[2] == namespace for principal in self.session_principals if "@" in principal
@@ -104,7 +120,11 @@ def signed_in(request) -> Any:
     return user
 
 
-def identity_of(request, device: tailnet.Device | None) -> Identity:
+def identity_of(request, device: tailnet.Device | None, principal: Principal | None = None) -> Identity:
+    """Who is asking: the session's person, or ``principal``'s device approval for an agent's token call."""
+
+    if principal is not None and principal.interface in AGENT_SURFACES:
+        return _agent(principal, device, client_ip(request))
     user = signed_in(request)
     backends = tuple(settings.AUTHENTICATION_BACKENDS)
     session = getattr(request, "session", None)
@@ -133,6 +153,20 @@ def identity_of(request, device: tailnet.Device | None) -> Identity:
             if session is not None and "OIDC" in signed_in_by
             else ""
         ),
+    )
+
+
+def _agent(principal: Principal, device: tailnet.Device | None, source: str) -> Identity:
+    """An agent's call, as the record of the device it came from stands."""
+
+    standing = agent_devices.standing(principal, source=source)
+    record = agent_devices.record_of(principal) if standing is DeviceStanding.APPROVED else None
+    approver = record.approved_by if record is not None else None
+    return Identity(
+        tailnet_user=device.user if device else "",
+        agent=principal.actor,
+        device_standing=standing.value,
+        approved_by=approver.get_username() if approver is not None else "",
     )
 
 

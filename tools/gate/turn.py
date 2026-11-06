@@ -57,18 +57,21 @@ def narrow(argv: list[str]) -> bool:
     """Whether the run manage.py test makes of ``argv`` goes ahead without the heavy turn."""
 
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
+    serial = False
     try:
         django.setup()
         options = vars(TestCommand().create_parser("manage.py", "test").parse_args(argv))
         labels = options.pop("args")
+        serial = options["parallel"] == 1
         # A serial run is one process however many tests it loads.
-        if options["parallel"] != 1 and (not labels or any(map(names_a_tree, labels))):
+        if not serial and (not labels or any(map(names_a_tree, labels))):
             return False
         # One suite, not a parallel run's partition of it, loaded without a word: the run says what it found.
         runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": 1, "verbosity": 0}))
         return not any(map(drives_a_browser, tests_in(runner.build_suite(labels))))
     except Exception, SystemExit:  # noqa: BLE001 - manage.py says what stopped it, in the turn
-        return False
+        # A serial run that cannot load its tests fails in one process, so it holds nothing heavy.
+        return serial
 
 
 if __name__ == "__main__":

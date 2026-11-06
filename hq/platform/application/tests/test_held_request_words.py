@@ -3,7 +3,7 @@
 from typing import Any
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule
@@ -15,7 +15,7 @@ from ..capabilities import capability_registry, execute_capability
 from ..integration_specs import capability_schema
 from ..projects import DEPENDENCY_UPDATES
 from ..security import Capability, Principal
-from .markup import select, text
+from .markup import text, with_class
 from .writers import keyed
 
 # What a Python dump of a dict or a list leaves in the text.
@@ -45,10 +45,9 @@ def _sample(schema: dict[str, Any]) -> Any:
     return {"name": "example", "nested": {"value": 1}}
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class HeldRequestWordsTests(TestCase):
     def setUp(self):
-        CapabilityRule.objects.create(scope="surface", subject="mcp", capability="documentation.sync", rule="approve")
+        CapabilityRule.objects.create(subject="example-agent", capability="documentation.sync", rule="approve")
         agent = Principal("example-agent", "mcp", frozenset({Capability.READ, Capability.SYNC_DOCUMENTATION}))
         held = execute_capability(
             "documentation.sync",
@@ -91,10 +90,9 @@ class HeldRequestWordsTests(TestCase):
         self.assertNotIn("{'doc_id'", shown)
         self.assertNotIn("True", shown)
 
-    def test_its_change_is_held_whole_beside_its_buttons(self):
-        """The dashboard's card and the queue's row mark what Approve decides
-        as never cut (the browser gate's what_a_button_decides_is_shown_whole
-        holds the mark to its layout)."""
+    def test_its_change_is_shown_beside_its_buttons(self):
+        """The dashboard's card and the queue's row say what Approve decides
+        (the browser gate's what_an_item_means_is_never_cut holds it whole)."""
 
         user = get_user_model().objects.create_superuser("reviewer", "reviewer@example.test", "x" * 20)
         self.client.force_login(user)
@@ -102,8 +100,17 @@ class HeldRequestWordsTests(TestCase):
 
         for page in (reverse("dashboard"), reverse("action_items")):
             with self.subTest(page=page):
-                details = [element.words for element in select(self.client.get(page), "data-whole")]
+                details = [element.words for element in with_class(self.client.get(page), "attention-detail")]
                 self.assertIn(" ".join(item.body.split()), details)
+
+    def test_its_card_on_the_dashboard_opens_its_own_page(self):
+        user = get_user_model().objects.create_superuser("reviewer", "reviewer@example.test", "x" * 20)
+        self.client.force_login(user)
+
+        dashboard = self.client.get(reverse("dashboard"))
+
+        own = reverse("core:approval_entry", kwargs={"approval_id": self.held.id})
+        self.assertIn(own, [title.attrs["href"] for title in with_class(dashboard, "attention-title")])
 
 
 class HeldSentenceTests(TestCase):

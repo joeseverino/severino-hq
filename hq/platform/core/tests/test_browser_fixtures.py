@@ -26,6 +26,7 @@ from hq.platform.application.ui import (
     CalendarDay,
     ChartSeries,
     DomainOverview,
+    Insight,
     Kpi,
     stacked_bar_chart,
 )
@@ -502,8 +503,60 @@ def _messages():
     yield
 
 
+@contextmanager
+def _urgent_dashboard():
+    """The dashboard with a short urgent queue read in place: a held request
+    and a finding, each with a long line, beside their buttons."""
+
+    from uuid import UUID
+
+    from hq.platform.application.approvals import APPROVE, REJECT
+    from hq.platform.application.dashboard import queue_item
+    from hq.platform.application.workflow_contracts import ActionLink
+
+    held = UUID(int=1)
+    decide = (
+        ActionLink(
+            name,
+            label,
+            "remote_write",
+            reverse("control_plane:approval_decide", kwargs={"approval_id": held, "decision": decision}),
+            method="POST",
+            recommended=decision == "approve",
+        )
+        for name, label, decision in ((APPROVE, "Approve", "approve"), (REJECT, "Reject", "reject"))
+    )
+    approval = Insight(
+        "serious",
+        "Approval",
+        "example-agent wants to change the expected answer of photos.example.com from 192.0.2.10 to 198.51.100.20",
+        "1",
+        "DNS rewrite photos-example: answer from 192.0.2.10 to 198.51.100.20, and 2 more fields.",
+        key=f"approval:{held}",
+        url=reverse("core:approval_entry", kwargs={"approval_id": held}),
+        actions=tuple(decide),
+    )
+    finding = Insight(
+        "serious",
+        "Estate",
+        "wildcard-example-com expires in 4 days",
+        "1",
+        "Expires in 4 days. Renewal opens at 30 days; renew it or check why renewal did not run, since a "
+        "certificate that lapses takes every name it covers down with it.",
+        actions=(ActionLink("renew", "Renew certificate", "remote_write", "/example/renew/", method="POST"),),
+    )
+    queue = [{**queue_item("example.urgent", "Example", item), "aside": False} for item in (approval, finding)]
+    with (
+        _dashboard(populated=False),
+        mock.patch("hq.platform.application.action_items.with_aside_state", return_value=queue),
+    ):
+        yield
+
+
 PAGES = {
     "dashboard": (lambda: reverse("dashboard"), lambda: _dashboard(populated=True)),
+    # The urgent part of the queue read on the dashboard, beside its buttons.
+    "dashboard-urgent": (lambda: reverse("dashboard"), _urgent_dashboard),
     "dashboard-bare": (lambda: reverse("dashboard"), lambda: _dashboard(populated=False)),
     "service": (
         lambda: reverse("control_plane:service", kwargs={"hostname": SERVICE}),

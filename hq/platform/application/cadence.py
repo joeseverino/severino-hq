@@ -29,11 +29,14 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     ProviderInventory,
     ReadRequest,
+    attempted_at,
 )
+lazy from hq.domains.control_plane.bridge_contract import declared_names
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.provider_adapters.github import KIND as GITHUB_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions, registry_label
 
+from . import readings
 from .command_fields import Describe, Names
 from .derivations import asked_ahead, holds_until
 from .integration_specs import requested
@@ -315,7 +318,8 @@ def _oldest_sweep() -> datetime | None:
 
     rows = ProviderInventory.objects.values_list("kind", "observed_at", "updated_at")
     return min(
-        (max(observed_at, updated_at) for kind, observed_at, updated_at in rows if every_sweep(kind)), default=None
+        (attempted_at(observed_at, updated_at) for kind, observed_at, updated_at in rows if every_sweep(kind)),
+        default=None,
     )
 
 
@@ -568,36 +572,59 @@ def _ring(doorbell: Path) -> bool:
     return True
 
 
-def request_delivery_read() -> bool:
-    """Ask for a read of ``github.delivery`` as HQ boots on a new image.
+# Where the boot keeps each reading kind's ``ObservationSpec.fingerprint`` as
+# of the last release that booted.
+RECORD_CONTRACTS = "record-contracts"
 
-    A deploy is when production changes which commit of each extension it
-    runs, so delivery has something to report: each commit's check run, and a
-    comment on its merged pull request. Asked by the boot, not as a person's
-    activity, so the idle cadence is untouched.
+
+def request_boot_reads() -> tuple[str, ...]:
+    """Ask for what a new image needs read before HQ's readings are current; the kinds asked.
+
+    Delivery, wherever it is read: a deploy is when production changes which
+    commit of each extension it runs, so each commit's check run and a comment
+    on its merged pull request have something to report. And each kind HQ
+    holds readings of whose fingerprint moved since the last boot: those
+    records were let through under another contract, so serving them would
+    pass the old shape off as current. A boot with no fingerprints stored
+    knows nothing of what its records were held to, and asks every kind once.
+
+    Asked by the boot, not as a person's activity, so the idle cadence is
+    untouched. Only kinds a sweep reads and HQ holds are asked: a request
+    nothing answers would force sweeps until it expired.
     """
 
-    # Only where delivery is read at all: a request nothing answers would force
-    # sweeps until it expired.
-    if not (
-        ProviderInventory.objects.filter(kind=GITHUB_KIND).exists()
-        or ManagedResource.objects.filter(kind=GITHUB_KIND).exists()
-    ):
-        return False
-    return request_reading(GITHUB_KIND)
+    current = {kind: spec.fingerprint(declared_names()) for kind, spec in OBSERVATIONS.items()}
+    reading = readings.stored(RECORD_CONTRACTS)
+    stored = reading.value if reading is not None and isinstance(reading.value, dict) else {}
+    held = set(ProviderInventory.objects.values_list("kind", flat=True))
+    delivery = GITHUB_KIND in held or ManagedResource.objects.filter(kind=GITHUB_KIND).exists()
+    moved = sorted(kind for kind in held if kind in current and stored.get(kind) != current[kind] and swept(kind))
+    asked = ((GITHUB_KIND,) if delivery else ()) + tuple(moved)
+    if asked:
+        request_readings(asked)
+    readings.record(RECORD_CONTRACTS, current)
+    return asked
 
 
 def request_reading(kind: str) -> bool:
-    """Ask for one kind to be read on the controller's next run, and start one.
+    """Ask for one kind to be read on the controller's next run, and start one;
+    whether the doorbell rang (``request_readings``)."""
+
+    return request_readings((kind,))
+
+
+def request_readings(kinds: Iterable[str]) -> bool:
+    """Ask for each kind to be read on the controller's next run, and start one.
 
     For HQ and the host to ask on what they have just learned, not for a
     person: nobody's activity is noted, so the idle cadence is untouched and
-    the sweep this causes reads the one kind. The request is stored whether or
-    not the doorbell could be rung; the controller's timer finds it within its
-    floor. The answer is whether it was rung.
+    the sweep this causes reads only those kinds. The requests are stored
+    whether or not the doorbell could be rung; the controller's timer finds
+    them within its floor. The answer is whether it was rung.
     """
 
-    ReadRequest.objects.update_or_create(connection_ref="", kind=kind, defaults={"requested_at": timezone.now()})
+    for kind in kinds:
+        ReadRequest.objects.update_or_create(connection_ref="", kind=kind, defaults={"requested_at": timezone.now()})
     return ring_doorbell()
 
 

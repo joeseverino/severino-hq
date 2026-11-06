@@ -9,6 +9,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"io/fs"
 	"os"
@@ -18,13 +19,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/joeseverino/severino-hq/controller/host"
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // Names inside the layout. The application environment keeps the name and
 // format hq/config/settings.py loads.
 const (
-	AppEnvName      = host.AppEnvName
+	AppEnvName      = hostcore.AppEnvName
 	ConnectionsName = "controller-connections.json"
 	SSHDirName      = "ssh"
 	lockName        = "refresh.lock"
@@ -69,7 +70,7 @@ func ValidateRuntimePath(dir string) error {
 	if !strings.HasPrefix(dir, "/") {
 		return hostError("Controller secret directory must be absolute.")
 	}
-	if dir == host.RunDir || strings.HasPrefix(dir, host.RunDir+"/") ||
+	if dir == hostcore.RunDir || strings.HasPrefix(dir, hostcore.RunDir+"/") ||
 		strings.Contains(dir, "//") || strings.Contains(dir, "/../") || strings.Contains(dir, "/./") ||
 		strings.HasSuffix(dir, "/..") || strings.HasSuffix(dir, "/.") || strings.HasSuffix(dir, "/") {
 		return hostError("Unsafe controller secret directory.")
@@ -77,7 +78,7 @@ func ValidateRuntimePath(dir string) error {
 	return nil
 }
 
-var owner = host.Ownership
+var owner = hostcore.Ownership
 
 // openPrivate opens a directory that must already be a real directory, not a
 // link, owned by uid with mode 0700, and returns it as a root.
@@ -99,12 +100,10 @@ func openPrivate(dir string, uid int, what string) (*os.Root, error) {
 	held, _, ok := owner(listed)
 	if err != nil || !os.SameFile(listed, opened) || !ok || held != uid || opened.Mode().Perm() != 0o700 {
 		root.Close()
-		return nil, hostError(what, " must be owned by uid ", itoa(uid), " with mode 0700.")
+		return nil, hostError(what, " must be owned by uid ", strconv.Itoa(uid), " with mode 0700.")
 	}
 	return root, nil
 }
-
-func itoa(n int) string { return strconv.Itoa(n) }
 
 // ensurePrivate makes dir a directory only uid can enter, as `install -d -m
 // 700` did, but never through a link.
@@ -120,7 +119,7 @@ func ensurePrivate(dir string, uid, gid int, what string) error {
 	}
 	defer handle.Close()
 	if err := handle.Chown(uid, gid); err != nil {
-		return hostError(what, " could not be given to uid ", itoa(uid), ".")
+		return hostError(what, " could not be given to uid ", strconv.Itoa(uid), ".")
 	}
 	if err := handle.Chmod(0o700); err != nil {
 		return hostError(what, " could not be closed to other accounts.")
@@ -366,30 +365,22 @@ func Read(root *os.Root, name string, uid int, mode fs.FileMode) ([]byte, bool) 
 func InPlace(root *os.Root, name string, data []byte, uid, gid int, mode fs.FileMode) (bool, error) {
 	current, info, err := trusted(root, name, uid)
 	if err != nil {
-		return false, hostError("Refusing to write ", name, ": it is not a file only uid ", itoa(uid), " owns.")
+		return false, hostError("Refusing to write ", name, ": it is not a file only uid ", strconv.Itoa(uid), " owns.")
 	}
 	if current == nil {
 		// A fresh destination: written beside it, then renamed into place.
-		temporary := "." + name + "." + rand.Text()
-		file, err := root.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
-		if err != nil {
-			return false, hostError("Could not create ", name, ".")
+		file, err := atomicfile.CreateIn(root, name, mode)
+		if err == nil {
+			defer file.Discard()
+			_, err = file.Write(data)
 		}
-		_, err = file.Write(data)
 		if err == nil {
 			err = file.Chown(uid, gid)
 		}
 		if err == nil {
-			err = file.Chmod(mode)
-		}
-		if closeErr := file.Close(); err == nil {
-			err = closeErr
-		}
-		if err == nil {
-			err = root.Rename(temporary, name)
+			err = file.Replace()
 		}
 		if err != nil {
-			root.Remove(temporary)
 			return false, hostError("Could not create ", name, ".")
 		}
 		return true, nil
@@ -525,24 +516,7 @@ func (t *Tree) EnsureSSHDir() error {
 
 // WriteAtomic replaces name in the runtime directory with data in one rename.
 func (t *Tree) WriteAtomic(name string, data []byte, mode fs.FileMode) error {
-	temporary := name + ".tmp"
-	t.runtime.Remove(temporary)
-	file, err := t.runtime.OpenFile(temporary, os.O_WRONLY|os.O_CREATE|os.O_EXCL|syscall.O_NOFOLLOW, 0o600)
-	if err != nil {
-		return hostError("Could not write ", name, ".")
-	}
-	_, err = file.Write(data)
-	if err == nil {
-		err = file.Chmod(mode)
-	}
-	if closeErr := file.Close(); err == nil {
-		err = closeErr
-	}
-	if err == nil {
-		err = t.runtime.Rename(temporary, name)
-	}
-	if err != nil {
-		t.runtime.Remove(temporary)
+	if err := atomicfile.WriteFileIn(t.runtime, name, data, mode); err != nil {
 		return hostError("Could not write ", name, ".")
 	}
 	return nil

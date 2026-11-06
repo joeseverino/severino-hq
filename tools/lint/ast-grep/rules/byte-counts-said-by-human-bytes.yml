@@ -1,0 +1,32 @@
+# hq/platform/application/labels.human_bytes says a byte count as people say
+# it (512 B, 38 MB, 1.7 GB), one way on every page. Python that imports or
+# calls Django's filesizeformat says the same size a second way. A mention
+# in a comment or a string is neither.
+id: byte-counts-said-by-human-bytes
+language: python
+severity: error
+message: Python says a byte count through Django's filesizeformat.
+note: Say it with human_bytes(count) from hq.platform.application.labels.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+rule:
+  kind: identifier
+  regex: ^filesizeformat$
+  any:
+    - inside:
+        stopBy: end
+        any:
+          - kind: import_from_statement
+          - kind: import_statement
+    - inside:
+        kind: call
+        field: function
+    - inside:
+        kind: attribute
+        field: attribute
+        inside:
+          kind: call
+          field: function

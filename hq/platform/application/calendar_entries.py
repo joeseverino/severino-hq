@@ -327,7 +327,6 @@ def choose_source(command: SourceChoiceCommand, *, principal: Principal) -> Sour
     not a change to anything HQ holds.
     """
 
-    principal.require(Capability.SET_PREFERENCES)
     user = person(principal)
     if command.source not in {source.id for _group, source in calendar.calendar_sources()}:
         raise RecordNotFound("No calendar source has that name.")

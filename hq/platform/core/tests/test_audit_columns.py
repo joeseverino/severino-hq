@@ -60,3 +60,25 @@ class AuditWhatTests(_AuthedTestCase):
 
         _words, narrow = self.what("and 2 more")
         self.assertIn(AuditLog.Action.LOGIN.label, narrow)
+
+    def test_an_operation_named_by_what_it_changed_draws_that_name_as_a_key_a_cell_can_cut(self):
+        key = "oidc:" + "0123456789abcdef" * 4
+        for name in ("example-role", key):
+            AuditLog.objects.create(
+                action=AuditLog.Action.CREATED,
+                object_type="auth.user",
+                object_repr=name,
+                operation_id="example-sign-in",
+            )
+
+        page = self.client.get(reverse("core:audit_list")).content.decode()
+        (title,) = [strong for strong in elements(page, "strong") if "and 1 more" in strong.words]
+        (code,) = [element for element in elements(page, "code") if title in element.ancestors]
+        self.assertEqual(code.text.replace("\u200b", ""), key)
+        self.assertTrue(
+            any(
+                "token" in element.classes and "data-sole" in element.attrs
+                for element in elements(page, "span")
+                if code in element.ancestors
+            )
+        )

@@ -1,0 +1,11 @@
+id: rebinding-only-by-approvals
+valid:
+  - 'audit_operation(operation="example.page", principal=principal)'
+  - 'audit_operation(operation="example.page", principal=principal, rebinds=False)'
+  - |
+    def operation_context(*, interface, actor, operation, rebinds=False):
+        return _bind(interface, actor, operation, rebinds=rebinds)
+invalid:
+  - 'audit_operation(operation="example.replay", principal=cli_principal(), rebinds=True)'
+  - 'operation_context(interface="cli", actor=CLI_ACTOR, operation="example.import", rebinds=approved)'
+  - 'audit_operation(operation="example.replay", principal=principal, rebinds=request.rebinds)'

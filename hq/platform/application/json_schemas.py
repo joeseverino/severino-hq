@@ -311,3 +311,29 @@ def fields(schema: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
         said = {key: value for key, value in field.items() if key != "$ref"}
         whole[name] = {**definitions[ref.removeprefix(LOCAL)], **said} if ref.startswith(LOCAL) else field
     return whole
+
+
+def narrowed(schema: Mapping[str, Any], kept: Iterable[str]) -> dict[str, Any]:
+    """``schema`` with only the properties ``kept``, and only the definitions they refer to."""
+
+    wanted = set(kept)
+    part = {key: value for key, value in schema.items() if key not in {"properties", "required", "$defs"}}
+    part["properties"] = {name: value for name, value in schema.get("properties", {}).items() if name in wanted}
+    if required := [name for name in schema.get("required", ()) if name in wanted]:
+        part["required"] = required
+    definitions = schema.get("$defs", {})
+    referred: set[str] = set()
+    pending: list[Any] = [part["properties"]]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, Mapping):
+            ref = value.get("$ref", "")
+            if isinstance(ref, str) and ref.startswith(LOCAL) and (name := ref.removeprefix(LOCAL)) not in referred:
+                referred.add(name)
+                pending.append(definitions[name])
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+    if referred:
+        part["$defs"] = {name: value for name, value in definitions.items() if name in referred}
+    return part

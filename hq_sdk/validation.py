@@ -1,9 +1,11 @@
 """Static conformance checks for plugin source trees.
 
-Each read without importing the plugin or configuring Django: its Python
-imports only ``hq_sdk``, its templates use only the public pieces of the
-host's (``contract.json``'s ``templates`` section), and its tests read a table
-cell by its text, never by the markup the host closes it with.
+Each read without importing the plugin or configuring Django: its templates
+use only the public pieces of the host's (``contract.json``'s ``templates``
+section), and no page sentence closes on a value by hand. What its Python
+imports is Ruff's to hold (tools/pipeline/extension-imports.toml), and the
+host's ast-grep rules the plugin check names hold the rest
+(tools/pipeline/check-plugin.sh).
 """
 
 import argparse
@@ -15,132 +17,6 @@ from pathlib import Path
 from typing import Any
 
 lazy from django.template.base import Lexer, TokenType
-
-# The host's implementation packages: every top-level package of the host tree,
-# which plugins reach through hq_sdk instead. The tree is read where the SDK sits
-# beside it; `hq` is the one name that holds where it does not, so an SDK
-# installed without its host still refuses the host's namespace.
-_FLOOR = frozenset({"hq"})
-
-# hq_sdk is the supported surface; it is the one host package a plugin may name.
-_SUPPORTED_FACADE = "hq_sdk"
-
-
-def _host_packages() -> frozenset[str]:
-    """Top-level packages of the host this SDK was installed from."""
-
-    root = Path(__file__).resolve().parents[1]
-    try:
-        entries = list(root.iterdir())
-    except OSError:
-        return frozenset()
-    return frozenset(
-        entry.name
-        for entry in entries
-        if entry.is_dir() and (entry / "__init__.py").exists() and entry.name != _SUPPORTED_FACADE
-    )
-
-
-HOST_INTERNAL_PACKAGES = _FLOOR | _host_packages()
-
-
-def _imported_modules(node: ast.Import | ast.ImportFrom) -> tuple[str, ...]:
-    """The absolute module names one import statement names."""
-
-    if isinstance(node, ast.ImportFrom):
-        # A relative import names the plugin's own package, never the host's,
-        # however its module is spelled: `from .calendars import x` is the
-        # plugin's own calendars.
-        return (node.module,) if node.module and not node.level else ()
-    return tuple(alias.name for alias in node.names)
-
-
-def _file_violations(source_path: Path, root: Path) -> list[str]:
-    """Each host-internal import in one file; an unreadable file is one itself."""
-
-    relative = source_path.relative_to(root)
-    try:
-        tree = ast.parse(source_path.read_text(encoding="utf-8"))
-    except (OSError, SyntaxError) as exc:
-        return [f"{relative}:1: {exc}"]
-    return [
-        f"{relative}:{node.lineno}: {module}"
-        for node in ast.walk(tree)
-        if isinstance(node, (ast.Import, ast.ImportFrom))
-        for module in _imported_modules(node)
-        if module.partition(".")[0] in HOST_INTERNAL_PACKAGES
-    ]
-
-
-def unsupported_hq_imports(source_root: str | Path) -> list[str]:
-    """Return stable ``path:line: module`` violations for host-internal imports."""
-
-    root = Path(source_root).resolve()
-    violations: list[str] = []
-    for source_path in sorted(root.rglob("*.py")):
-        violations.extend(_file_violations(source_path, root))
-    return sorted(set(violations))
-
-
-# Test checks ---------------------------------------------------------------
-
-# A cell's text is what a page promises; the markup around it is the host's,
-# which may wrap what a cell says (a link, a mark, a toggle) without changing a
-# word. So no test looks for text that ends on a cell's closing tag.
-_CELL_CLOSE = ("</td>", "</th>")
-# Each text assertion, with the position and keyword of the text it looks for.
-_NEEDLES = {
-    "assertContains": (1, "text"),
-    "assertNotContains": (1, "text"),
-    "assertIn": (0, "member"),
-    "assertNotIn": (0, "member"),
-}
-
-
-def _literal_end(node: ast.expr) -> str:
-    """The literal text an expression ends with; empty when its end is computed."""
-
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.JoinedStr) and node.values:
-        return _literal_end(node.values[-1])
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return _literal_end(node.right)
-    return ""
-
-
-def _needle(call: ast.Call) -> ast.expr | None:
-    if not isinstance(call.func, ast.Attribute) or call.func.attr not in _NEEDLES:
-        return None
-    position, keyword = _NEEDLES[call.func.attr]
-    if len(call.args) > position:
-        return call.args[position]
-    return next((named.value for named in call.keywords if named.arg == keyword), None)
-
-
-def _cell_markup_pins(tree: ast.Module) -> list[int]:
-    """The line of each text assertion in ``tree`` that looks for a cell's closing tag."""
-
-    return [
-        node.lineno
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and (needle := _needle(node)) is not None
-        and _literal_end(needle).rstrip().endswith(_CELL_CLOSE)
-    ]
-
-
-def _pinned_cells(source_root: Path) -> list[str]:
-    root = source_root.resolve()
-    found: list[str] = []
-    for path in sorted(root.rglob("*.py")):
-        try:
-            tree = ast.parse(path.read_text(encoding="utf-8"))
-        except OSError, SyntaxError:
-            continue  # unsupported_hq_imports reports a file that does not parse
-        found.extend(f"{path.relative_to(root)}:{line}" for line in _cell_markup_pins(tree))
-    return found
-
 
 # Sentence checks ------------------------------------------------------------
 
@@ -323,8 +199,8 @@ def sentence_closes(source_root: str | Path) -> list[str]:
             continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))
-        except OSError, SyntaxError:
-            continue  # unsupported_hq_imports reports a file that does not parse
+        except OSError, SyntaxError:  # noqa: S112 - Ruff reports a file that does not parse
+            continue
         found.extend(f"{relative}:{line}: {value}" for line, value in sorted(_closes_by_hand(tree)))
     return found
 
@@ -604,8 +480,8 @@ def template_violations(source_root: str | Path, contract: dict[str, Any] | None
         checked.add(path)
         try:
             text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue  # an image or font kept beside the templates is no template
+        except UnicodeDecodeError:  # noqa: S112 - an image or font kept beside the templates is no template
+            continue
         reader = _Template(name, templates, own_templates, own_libraries)
         found.extend((path.relative_to(root).as_posix(), line, message) for line, message in reader.check(text))
     return [f"{path}:{line}: {message}" for path, line, message in sorted(found)]
@@ -624,8 +500,7 @@ def _report(heading: str, violations: list[str]) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Reject plugin imports outside hq_sdk, templates outside the public template contract,"
-            " tests that pin a table cell's closing tag, and page sentences closed on a value by hand."
+            "Reject templates outside the public template contract and page sentences closed on a value by hand."
         )
     )
     parser.add_argument("source_root", type=Path)
@@ -635,15 +510,9 @@ def main() -> int:
         print(f"{args.source_root} holds no Python package to check.")
         return 2
     refused = [
-        _report("Unsupported HQ implementation imports; use hq_sdk instead:", unsupported_hq_imports(args.source_root)),
         _report(
             "Templates outside HQ's public template contract (docs/Plugins.md, Shared UI contract):",
             template_violations(args.source_root),
-        ),
-        _report(
-            "Tests that look for a table cell's closing tag, which breaks when the host wraps what the cell says;"
-            " read the cell's text instead (its td or th parsed, whitespace collapsed):",
-            _pinned_cells(args.source_root),
         ),
         _report(
             'Page sentences closed on a value with a hand-written period; write ended(f"... {value}")'
@@ -653,7 +522,7 @@ def main() -> int:
     ]
     if any(refused):
         return 1
-    print("HQ SDK import, template, table cell and sentence boundaries passed.")
+    print("HQ SDK template and sentence boundaries passed.")
     return 0
 
 

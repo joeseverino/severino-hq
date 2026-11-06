@@ -2,7 +2,8 @@
 
 Each reads text HQ did not write: an image reference a container reports, a
 package URL an SBOM lists, a provenance source a build attests. Examples
-cover the shapes seen so far; these generate thousands of inputs each, so a
+cover the shapes seen so far; these generate inputs of their own, as many as
+the run's profile asks for (``hypothesis_profiles`` in the test runner), so a
 shape nobody thought of fails here rather than in a sweep.
 
 Hypothesis is a development tool (the tools dependency group), not part of the
@@ -12,23 +13,16 @@ interpreter in the CI matrix.
 
 import random
 import string
-import tempfile
-from pathlib import Path
 from unittest import skipUnless
 
 from django.test import SimpleTestCase
 
 try:
-    from hypothesis import given, settings, strategies as st
-    from hypothesis.configuration import set_hypothesis_home_dir
+    from hypothesis import given, strategies as st
 except ImportError:  # pragma: no cover - the image does not carry it
     HYPOTHESIS = False
 else:
     HYPOTHESIS = True
-    # Outside the checkout. Hypothesis caches constants it finds in every
-    # module it can import, installed extensions included, and a cache in the
-    # tree is text the host must never carry.
-    set_hypothesis_home_dir(str(Path(tempfile.gettempdir()) / "severino-hq-hypothesis"))
 
 from ..attestations import github_source
 from ..images import ImageRef
@@ -43,12 +37,10 @@ if HYPOTHESIS:
         lambda text: text not in {".", ".."} and not text.endswith(".git")
     )
     TAG = st.text(string.ascii_letters + string.digits + "._-", min_size=1, max_size=20)
-    FAST = settings(max_examples=300, deadline=None)
 
     # A function rather than a test method: Hypothesis's fuzz_one_input calls
     # the test with no arguments of its own, so a method's `self` is missing.
     # The fuzzing harness (tests/fuzz/parsers.py) drives this same property.
-    @FAST
     @given(st.text())
     def every_parser_answers_any_text(text):
         """Every parser takes any text and answers, or declines; none raises."""
@@ -81,7 +73,6 @@ class AnyTextProperties(SimpleTestCase):
 class ImageRefProperties(SimpleTestCase):
     if HYPOTHESIS:
 
-        @FAST
         @given(SEGMENT, st.lists(SEGMENT, min_size=1, max_size=3), TAG)
         def test_a_registry_reference_comes_apart_as_written(self, host, path, tag):
             registry = f"{host}.example"
@@ -95,7 +86,6 @@ class ImageRefProperties(SimpleTestCase):
 class PackageUrlProperties(SimpleTestCase):
     if HYPOTHESIS:
 
-        @FAST
         @given(SEGMENT, TAG, SEGMENT)
         def test_a_language_package_is_queried_without_its_qualifiers(self, name, version, arch):
             query = query_of(f"pkg:pypi/{name}@{version}?arch={arch}")
@@ -108,7 +98,6 @@ class PackageUrlProperties(SimpleTestCase):
 class ProvenanceSourceProperties(SimpleTestCase):
     if HYPOTHESIS:
 
-        @FAST
         @given(
             OWNER,
             REPOSITORY,

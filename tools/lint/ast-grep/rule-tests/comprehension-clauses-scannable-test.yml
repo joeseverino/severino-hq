@@ -1,0 +1,67 @@
+id: comprehension-clauses-scannable
+valid:
+  - |
+    found = [
+        x
+        # why
+        for x in xs
+        if x  # and why
+    ]
+  - |
+    found = [
+        x
+        for xs in xss  # why
+        for x in xs
+    ]
+  - |
+    found = {
+        key: value
+        for key, value in pairs
+        if value
+    }
+  - |
+    found = [
+        x
+        for xs in xss
+
+        # A blank line apart: the line before the clause is not the comment.
+
+        for x in xs
+    ]
+invalid:
+  - |
+    found = [
+        x
+        for xs in xss
+        # why
+        for x in xs
+    ]
+  - |
+    found = [
+        x
+        for x in xs
+        # and why
+        if x
+    ]
+  - |
+    found = {
+        key: value
+        for key, value in pairs
+        # why
+        if value
+    }
+  - |
+    found = set(
+        x
+        for x in xs
+        # why
+        if x
+    )
+  - |
+    found = {
+        x
+        for x in xs
+        # one
+        # two
+        if x
+    }

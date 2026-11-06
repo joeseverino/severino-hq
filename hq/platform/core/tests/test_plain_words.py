@@ -4,6 +4,7 @@ plain_words hands Vale because Vale cannot read it."""
 import contextlib
 import io
 import json
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -50,6 +51,28 @@ def rules(files: dict[str, str]) -> list[str]:
 
 @tag("source")
 class ValeRuleTests(SimpleTestCase):
+    def test_every_section_glob_names_a_file_type(self):
+        """A glob that names directories makes Vale read bytecode and data files."""
+
+        def expand(glob: str) -> list[str]:
+            match = re.search(r"\{([^{}]*)\}", glob)
+            if not match:
+                return [glob]
+            return [
+                form
+                for choice in match.group(1).split(",")
+                for form in expand(glob[: match.start()] + choice + glob[match.end() :])
+            ]
+
+        headers = re.findall(r"^\[(.*)\]$", (VALE / ".vale.ini").read_text(), re.MULTILINE)
+        self.assertGreater(len(headers), 1)
+        for header in headers:
+            if header == "formats":
+                continue
+            for alternative in expand(header.split(" if ")[0]):
+                last = alternative.rsplit("/", 1)[-1]
+                self.assertRegex(last, r"\.\w+$", f"[{header}]: {alternative} names no file type")
+
     def test_a_template_is_read_for_its_text_and_not_its_tags_or_comments(self):
         template = (
             "{% comment %}The sweep reconciles a kind.{% endcomment %}\n"
@@ -61,6 +84,20 @@ class ValeRuleTests(SimpleTestCase):
         )
 
         self.assertEqual(vale({"page.html": template}), [("page.html", 6, "Sweep")])
+
+    def test_a_comment_block_is_never_read_wherever_it_stands(self):
+        """After a start tag holding a template tag, and inside a link, a block
+        comment is as hidden as anywhere else, and the page around it is read."""
+
+        template = (
+            '<div class="note" {% if open %}role="status"{% endif %}>Read.</div>\n'
+            "{% comment %}A resource, after a start tag that holds a tag.{% endcomment %}\n"
+            '<p><a href="/example/">Open {% comment %}the resource{% endcomment %}</a></p>\n'
+            "{% comment %}\nA managed resource across lines.\n{% endcomment %}\n"
+            "<p>A resource on the page.</p>\n"
+        )
+
+        self.assertEqual(vale({"page.html": template}), [("page.html", 7, "Resource")])
 
     def test_every_form_of_every_word_is_found_in_a_sentence(self):
         sentences = (
@@ -190,6 +227,7 @@ RETIRED = (
     "Run dependency updates now",
     "Run the controller",
     "Run a pass now",
+    "Apply HQ's settings",
     "Apply again",
     "Restore HQ's version",
     "Request renewal",

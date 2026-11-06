@@ -312,12 +312,6 @@ def authorizes_itself(view: Callable[..., Any]) -> bool:
     return not getattr(view, "login_required", True)
 
 
-def page_opens(user: Any, view: Callable[..., Any]) -> bool:
-    """Whether the signed-in ``user`` may open the page ``view`` draws: the rule ``page_refusal`` serves by."""
-
-    return principal_opens(web_principal(user), view)
-
-
 def principal_opens(principal: Any, view: Callable[..., Any]) -> bool:
     """Whether ``principal`` may open the page ``view`` draws: the one place the page rule is written."""
 
@@ -400,16 +394,6 @@ def _routed(path: str) -> Callable[..., Any] | None:
 # whenever its URL caches are cleared, so a stale entry is never read, and route
 # names are a fixed set, so this holds a URLconf's worth.
 _ROUTE_VIEWS: WeakKeyDictionary[Any, dict[str, dict[str, Callable[..., Any] | None]]] = WeakKeyDictionary()
-
-
-def route_view(name: str) -> Callable[..., Any] | None:
-    """The view the route ``name`` answers with, or None where its address is no route of HQ's.
-
-    Kept, since the nav asks it of every section on every page, and each answer
-    is a reverse and a resolve.
-    """
-
-    return _route_in(_route_views(), name)
 
 
 def _route_views() -> dict[str, Callable[..., Any] | None]:

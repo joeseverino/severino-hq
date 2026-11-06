@@ -1,12 +1,15 @@
 """Typed provider declarations: emit once, derive every adapter contract."""
 
+import logging
 import os
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 from hq.platform.application.record_errors import Sentence
 from hq.platform.application.routes import reverse
+lazy from hq.platform.application.default_hold import needs_approval
 
 from .attribution import unattributed_kinds
 from .connection_kinds import CONNECTION_CREDENTIALS
@@ -20,6 +23,8 @@ from .provider_spec import (
     ProviderSpec,
     adapter,
 )
+
+logger = logging.getLogger("severino.providers")
 
 
 def service_facets() -> tuple[tuple[str, str], ...]:
@@ -93,6 +98,60 @@ def readout_rows(resource: Any) -> tuple[tuple[str, str, str], ...]:
         return tuple(provider.readout(resource.spec, resource.status or {}))
     except KeyError, TypeError, ValueError:
         return ()
+
+
+def read_record[T](kind: str, record: Mapping[str, Any], read: Callable[[dict[str, Any]], T]) -> T | None:
+    """What ``read`` makes of the spec a swept record reproduces, or None when
+    its provider cannot read the record.
+
+    The one place a swept record becomes a spec. A record the provider cannot
+    read is the controller's reading and the provider's model disagreeing, so
+    it is logged; leaving it out of a page hides it from everything that reads
+    the inventory.
+    """
+
+    provider = PROVIDERS.get(kind)
+    if provider is None or provider.from_record is None:
+        return None
+    try:
+        return read(provider.from_record(dict(record)))
+    except (KeyError, TypeError, ValueError) as error:
+        logger.warning(
+            "A %s record from %s is one its provider cannot read: %r",
+            kind,
+            record.get("connection_ref") or "a connection",
+            error,
+            extra={"event": "providers.record.unreadable", "kind": kind},
+        )
+        return None
+
+
+def record_spec(kind: str, record: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The spec a swept record reproduces, or None when its provider cannot read it."""
+
+    return read_record(kind, record, lambda spec: spec)
+
+
+def read_spec[T](kind: str, spec: Mapping[str, Any], read: Callable[[dict[str, Any]], T]) -> T | None:
+    """What ``read`` makes of a declared spec through its provider's hooks, or
+    None when they cannot read it.
+
+    The one place a hook's failure on a declaration is caught. validate_spec
+    holds every spec on write, so a spec its own provider cannot read is a
+    defect in one of the two, and it is logged; leaving the declaration out of
+    a page hides it from everything that reads it.
+    """
+
+    try:
+        return read(dict(spec))
+    except (KeyError, TypeError, ValueError) as error:
+        logger.warning(
+            "A %s spec is one its provider cannot read: %r",
+            kind,
+            error,
+            extra={"event": "providers.spec.unreadable", "kind": kind},
+        )
+        return None
 
 
 # Kinds a controller reports as readings rather than as resources; see
@@ -239,7 +298,7 @@ def describe_providers() -> dict[str, Any]:
                 # calls that this kind waits for a person, rather than
                 # discovering it from the answer to a change it has already
                 # asked for.
-                "requires_approval": provider.requires_approval,
+                "requires_approval": needs_approval(provider),
                 # Part of the contract, not a detail of one page: anything that
                 # offers "add a resource" has to know which kinds stand on their
                 # own and which only make sense inside something else.

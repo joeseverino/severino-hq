@@ -273,8 +273,7 @@ def token_principal(claims: dict[str, Any], interface: str) -> Principal:
     carrying ``DEVICE_SCOPE`` from a client its person registered in HQ as
     their own is ``device_principal``'s: its grant within its person's role,
     never paused. Every other is ``agent_principal``'s: its grant, never
-    widened, capped by the deployment's agent ceiling and by the role of the
-    person who signed it in, if one did. A token naming a person with no role
+    widened, within the role of the person who signed it in, if one did. A token naming a person with no role
     is refused.
     """
 

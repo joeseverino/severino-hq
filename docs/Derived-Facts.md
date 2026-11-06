@@ -56,6 +56,15 @@ Rules:
   stored (`ObservationSpec.admitted`). A provider response is never stored
   whole, and fields carrying secret material (tokens, client secrets,
   environment values, private keys) are never named.
+- **A release that changes what a record may hold reads it again.** A kind's
+  `ObservationSpec.fingerprint` hashes its schema and which of its names the
+  bridge declares. The boot (`cadence.request_boot_reads`) asks a read of each
+  kind HQ holds whose fingerprint moved since the last boot, and of every
+  held kind when none is stored, so records stored under an older contract
+  are replaced, not served as current. The fingerprint is stored as the boot
+  asks, however the request ends, since a held record its schema refuses is
+  never carried: the controller's next sweep reads it in full
+  (`github_repositories.plan`).
 - **A finding over a reading starts from its connection.** A spec's `facts`
   turns each record into `(key, value)` pairs on the node of the connection
   that read it, and a rule walks them with `connections_carrying(estate, key)`
@@ -392,7 +401,7 @@ moment it was first seen. The topology gives a drifted declaration that moment
 and what the history holds within six hours of it
 (`hq.platform.application.history.near`). The drift findings show both
 beside the key-level difference, so "Keep the live version" or "Apply HQ's
-settings" is decided next to the deploy, recreate or edit that likely caused it.
+config" is decided next to the deploy, recreate or edit that likely caused it.
 
 ## Contradictions
 

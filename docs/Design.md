@@ -7,7 +7,7 @@ and every page that uses it gets the improvement. Extensions ship no CSS for
 the same reason: they render host classes and inherit every fix.
 
 The stylesheet is the sheets `hq/platform/core/stylesheets.py` lists, each
-one responsibility under the 1,000-line ceiling, linked in that order. The
+one responsibility under the file-size ceiling (`SEVERINO_FILE_LINE_LIMIT`), linked in that order. The
 first declares the cascade layers (`tokens`, `base`, `components`) and the
 rest fill them. Inside a layer a later sheet wins a tie, so a sheet is added
 to the list where its rules belong in the cascade, and every check of the
@@ -30,6 +30,12 @@ machines and does not know how HQ is built, so a page never says the names HQ
 has for its own parts. A thing is called by its own noun ("DNS record",
 "certificate"), HQ "reads" and "applies", and what differs was "changed
 outside HQ". Comments and identifiers keep the internal vocabulary.
+
+**A title is a short noun.** A section heading, a column heading, a label and
+a button say the plainest name a stranger would understand at a glance:
+"Devices", "Apps", "Rules", "Setup", "Permissions", "Approve". Two things on
+one page never share a name. The sentence that explains it, if one is needed,
+is the lede or the help text under it, never the title itself.
 
 The Vale style `tools/lint/vale/styles/Plain` holds each word that is never
 shown with what to say instead, and each label that was retired for one name
@@ -105,15 +111,22 @@ row, standing in for the columns that left (the audit log's action under its
 name).
 
 A table still wider in a narrow box is tight (`data-tight`). Its headings,
-times, statuses and a value's parts wrap at their spaces and its cells stand
-closer, so the narrowest phone (320px) holds every table the gates draw
-(`a_table_fits_its_box_at_every_width`).
+times, statuses, a value's parts and a row's control labels wrap at their
+spaces, its row's controls stand one above another, and its cells stand
+closer. Still wider, its identifiers break where they must (`data-break`).
+A table wider than its region even then scrolls in it (`data-scrolls`), so no
+table runs past its card at any width, and the gates fail it: the narrowest
+phone (320px) and every width above it hold every table the gates draw.
+`a_table_fits_its_box_at_every_width` and the example estate's
+`ExampleEstateTableFitTests` sweep each page from 320px up, reading it at the
+first width of each shape its layout takes (`TABLE_LAYOUT`), where a table has
+the least room.
 
 The region marks each body cell that says nothing (`data-blank`) and every
 cell of a column blank in every row (`data-blank-column`), which is not drawn.
 
 Since a table fits, its region is no scroll box and its heading pins under the
-page's chrome. Only a region declared a pane, or a chart's (`chart=True`),
+page's chrome (a scroll box in either axis would pin it to the region). Only a region declared a pane, or a chart's (`chart=True`),
 scrolls, pins its heading to its own edge, and takes focus. A pane
 (`pane=True`) has a height of its own, as a chart's data or the topology
 ledger has, or is a table sized to its content. A table never stacks into
@@ -338,7 +351,7 @@ expiry a certificate's status holds), never a generic placeholder or a
 hardcoded string. Each fact appears once, where it belongs: a card does not
 repeat the strip beside it.
 
-**A title states the fact it checks.** "Tokens hold only the permissions HQ
+**A check's title states the fact it checks.** "Tokens hold only the permissions HQ
 uses", "Keys are kept in a vault": what was checked, in plain words. Not a
 sweeping claim ("every credential is limited to what HQ needs"), and not
 "knows", "ensures" or "limited".
@@ -407,7 +420,10 @@ the theme has its row. Then where the menu leads.
 
 **One disclosure.** Every `details` shows the same mark,
 turned when open. A section that folds (`section-fold`) uses its heading as the
-toggle, with its count beside it; never a separate "Show all".
+toggle, with its count beside it; never a separate "Show all". What it holds
+sits on a panel like its neighbors: a fold of one table has the table's
+region, and any other fold is the card (`{% card element="details" %}`), its
+heading inside it (the survey's "bare folds").
 
 **One filter bar.** `.filter-bar`: a search field, selects, Apply, and Clear
 when anything is set. No chip walls.
@@ -560,7 +576,8 @@ A press answers "Refresh requested." (`integration_specs.requested`).
 Asked-for work waiting its turn says `{% waiting %}`. A saved change says when
 it goes live with `{% applies_shortly %}` (`asks.APPLIES_SHORTLY`), beside the
 save button, so a field's note says only what the change does.
-*Gate:* `hq/platform/application/tests/test_action_words.py`.
+*Gate:* `hq/platform/application/tests/test_action_words.py`, and the
+lint:ast-grep rules it names.
 
 **A queue row says what is wrong and holds what fixes it.** The queue is
 named "Needs you" wherever it appears. The queue page, the findings page, a
@@ -615,10 +632,11 @@ its title and the way back. A link to a row (`/action-items/#…`) lands on it
 open.
 
 A queue of three or fewer is read on the dashboard, under the greeting, as
-short cards (`partials/_queue_glance.html`). A longer one is a count and a
-link to its page. There a card is its title, one line of what it means, its
-age and its buttons; its title opens the row on the page that shows the rest,
-steps included.
+short cards (`partials/_queue_glance.html`), under no heading of their own. A
+longer one is a count and a link to its page. There a card is its title, what
+it means, its age and its buttons, its words running to the buttons; its title
+opens the row on the page that shows the rest, steps included, or a held
+request's own page.
 
 **A reading says how old it is.** Wherever a page shows what was read, its age
 is `partials/_reading_age.html`, over the reading's `Freshness` where the page

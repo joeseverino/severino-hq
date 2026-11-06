@@ -2,18 +2,18 @@ package providers
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io/fs"
 	"log/slog"
 	"os/exec"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"sync"
 
-	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -51,10 +51,8 @@ var errOutputLimit = errors.New("output over limit")
 func execProcess(ctx context.Context, argv []string, stdin []byte, env []string) ([]byte, []byte, int, error) {
 	ctx, cancel := context.WithTimeout(ctx, runtime.CommandTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd := hostcore.Process(ctx, env, argv[0], argv[1:]...)
 	cmd.Stdin = bytes.NewReader(stdin)
-	cmd.Env = env
-	cmd.WaitDelay = host.ProcessWaitDelay
 	stdout, stderr := runtime.BoundedBuffer{Limit: CommandOutputLimit}, runtime.BoundedBuffer{Limit: CommandOutputLimit}
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -71,10 +69,7 @@ func execProcess(ctx context.Context, argv []string, stdin []byte, env []string)
 }
 
 func (c *Commands) logger() *slog.Logger {
-	if c.Log != nil {
-		return c.Log
-	}
-	return slog.Default()
+	return cmp.Or(c.Log, slog.Default())
 }
 
 // StepFailures is what this pass could not finish, in the order it failed.
@@ -110,23 +105,6 @@ func startFailure(err error) string {
 	return "could not start"
 }
 
-func lastLine(stderr string) string {
-	lines := []string{}
-	for line := range strings.SplitSeq(stderr, "\n") {
-		if line = strings.TrimSpace(line); line != "" {
-			lines = append(lines, line)
-		}
-	}
-	if len(lines) == 0 {
-		return ""
-	}
-	line := lines[len(lines)-1]
-	if clipped := runtime.Clip(line, runtime.SaidLimit); clipped == line {
-		return line
-	}
-	return runtime.Clip(line, runtime.SaidLimit-1) + "…"
-}
-
 // Run runs a local command. step names what failed; env is added for this one
 // call. A secret it holds is a learned one (runtime.Need), so the logger
 // strikes it from the stderr line a failure logs.
@@ -156,7 +134,7 @@ func (c *Commands) result(step, subject string, stdout, stderr []byte, exit int,
 		return nil, &ProviderError{Message: step + ": " + kind}
 	}
 	if exit != 0 {
-		said := lastLine(string(stderr))
+		said := runtime.LastLine(string(stderr))
 		suffix := ""
 		if said != "" {
 			suffix = ": " + said

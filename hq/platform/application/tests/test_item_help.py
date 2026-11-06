@@ -1,13 +1,12 @@
 """Every item HQ raises comes with help: a remedy HQ runs, the exact command
 to run, the page the work is done on, what to do in words, or the reason none
-of those can be offered. Never a problem alone."""
+of those can be offered. Never a problem alone. Each Insight the host source
+builds is held to it by the ast-grep rule attention-item-carries-help."""
 
-import ast
 from datetime import timedelta
 from decimal import Decimal
-from pathlib import Path
 
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from ..finding_model import Finding, FindingRemedy, FindingRule, OperatorStep
@@ -15,12 +14,6 @@ from ..findings import RULES, _no_help_reason
 from ..item_help import CANNOT, DO, REMEDY, RUN, cannot_help, commands, finding_plan, instructions
 from ..ui import Insight
 from ..workflow_contracts import ActionLink, WorkflowPlan
-from .source import parsed
-
-ROOT = Path(__file__).resolve().parents[4]
-# Owned by a change in flight elsewhere; each is listed here, by file, until
-# its items carry help, and the test below fails when one no longer needs it.
-PENDING: set[str] = set()
 
 # The kinds of help an item can carry, as ``item_help`` names them.
 COMMAND = "command"
@@ -62,36 +55,6 @@ def item_help(item: Insight) -> str:
     return planned
 
 
-def _insight_calls(path: Path) -> list[ast.Call]:
-    tree = parsed(path)
-    return [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call)
-        and (getattr(node.func, "id", None) or getattr(node.func, "attr", None)) == "Insight"
-    ]
-
-
-def _unhelped(call: ast.Call) -> bool:
-    """Neither ``workflow=`` nor ``actions=`` given, nor any ``**`` that could,
-    nor the page the work is done on (``action=`` with ``url=``)."""
-
-    names = {keyword.arg for keyword in call.keywords}
-    return not ({"workflow", "actions", None} & names or {"action", "url"} <= names)
-
-
-def host_modules() -> list[Path]:
-    """Every non-test module of every host package. ``hq_sdk`` only re-exports."""
-
-    packages = {path.parent for path in ROOT.glob("*/__init__.py")} - {ROOT / "hq_sdk"}
-    return sorted(
-        path
-        for package in packages
-        for path in package.rglob("*.py")
-        if not path.name.startswith("test") and "tests" not in path.parts and "migrations" not in path.parts
-    )
-
-
 class EveryItemComesWithHelpTests(SimpleTestCase):
     def test_every_finding_rule_says_why_hq_cannot_resolve_it(self):
         for rule in RULES:
@@ -102,30 +65,6 @@ class EveryItemComesWithHelpTests(SimpleTestCase):
     def test_a_rule_without_a_reason_is_refused(self):
         with self.assertRaisesRegex(ValueError, "why HQ cannot"):
             FindingRule("example", "Example", "attention", lambda estate: (), "Do it.", no_help_reason=" ")
-
-
-@tag("source", "tree")
-class ItemHelpSourceTests(SimpleTestCase):
-    """Every attention item the host source builds carries help."""
-
-    def test_every_attention_item_the_host_builds_carries_help(self):
-        missing = [
-            f"{path.relative_to(ROOT)}:{call.lineno}"
-            for path in host_modules()
-            if str(path.relative_to(ROOT)) not in PENDING
-            for call in _insight_calls(path)
-            if _unhelped(call)
-        ]
-
-        self.assertEqual(missing, [], "Give each one of the kinds of help in application.item_help.")
-
-    def test_a_pending_file_is_still_pending(self):
-        for name in PENDING:
-            with self.subTest(name=name):
-                self.assertTrue(
-                    any(_unhelped(call) for call in _insight_calls(ROOT / name)),
-                    f"{name} carries help now; take it out of PENDING.",
-                )
 
 
 def _finding(**fields) -> Finding:

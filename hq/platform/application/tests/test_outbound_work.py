@@ -27,9 +27,10 @@ from hq.platform.application import outbound_work, scheduled_work
 from hq.platform.application.capabilities import capability_registry, execute_capability
 from hq.platform.application.integration_specs import requested
 from hq.platform.application.outbound_work import OutboundWork, capability_for, due, validate
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.plugins import PluginIntegration, clear_plugin_composition_cache
 from hq.platform.application.security import Principal, cli_principal, internal_principal
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.outbound import serving
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow

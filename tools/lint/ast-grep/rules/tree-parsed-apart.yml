@@ -1,0 +1,78 @@
+# Python keeps the memory a parsed tree took for as long as its process lives,
+# so a test that parses every module a walk finds holds that memory in its
+# worker for the rest of the run. A source test reads a tree through
+# facts.scan, where ast-grep parses in a process of its own and sends back
+# only the nodes a rule matched, or runs its walk through apart, whose child
+# process gives the memory back when it exits. The modules run through apart
+# (each a module whose walk a test hands to apart(...)) parse in that child,
+# so they are left out.
+id: tree-parsed-apart
+language: python
+severity: error
+message: A test parses each module a tree walk finds, and its worker holds every parsed tree for the rest of the run.
+note: >-
+  Read the tree through facts.scan (hq/platform/application/tests/facts.py),
+  a rule for the nodes the check needs, or run the walk through apart
+  (hq/platform/application/tests/apart.py).
+files:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/testing.py"
+  - "**/*_testing.py"
+ignores:
+  - "hq/platform/application/tests/tree.py"
+  - "hq/platform/application/tests/writers.py"
+  - "hq/platform/application/tests/refusal_text.py"
+  - "hq/platform/core/tests/django_printers.py"
+  - "hq/platform/core/tests/setting_overrides.py"
+utils:
+  walks-a-tree:
+    kind: call
+    has:
+      field: function
+      any:
+        - kind: attribute
+          has:
+            field: attribute
+            regex: ^(r?glob|iglob|walk|iterdir)$
+          # ast.walk walks one parsed tree's nodes, not the files of one.
+          not:
+            has:
+              field: object
+              regex: ^ast$
+        - kind: identifier
+          regex: ^(source_files|template_files|browser_modules|r?glob|iglob|walk)$
+  # The loop's iterable walks a tree itself, or holds a walk it parses
+  # through rather than hands to scan or apart, which parse elsewhere.
+  over-a-walk:
+    any:
+      - matches: walks-a-tree
+      - has:
+          matches: walks-a-tree
+          stopBy: end
+          not:
+            inside:
+              stopBy: end
+              kind: call
+              has:
+                field: function
+                regex: ^((facts|apart)\.)?(scan|apart)$
+rule:
+  pattern: ast.parse($$$)
+  inside:
+    stopBy: end
+    any:
+      - kind: for_statement
+        has:
+          field: right
+          matches: over-a-walk
+      - any:
+          - kind: list_comprehension
+          - kind: set_comprehension
+          - kind: dictionary_comprehension
+          - kind: generator_expression
+        has:
+          kind: for_in_clause
+          has:
+            field: right
+            matches: over-a-walk

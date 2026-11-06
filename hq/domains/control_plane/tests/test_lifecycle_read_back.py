@@ -16,9 +16,9 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.adoption_testing import connection, managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.controller import ControllerReport, report_operation
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.resource_operations import ACTION_CAPABILITY
 from hq.platform.application.security import Capability, Principal
-from hq.platform.application.tests.writers import form_keyed
 
 DIRECTORY = Path(tempfile.mkdtemp())
 (DIRECTORY / "heartbeat").touch()

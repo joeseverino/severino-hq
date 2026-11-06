@@ -1,8 +1,8 @@
 """The standing questions asked of a topology, and the traces that follow one node's relationships."""
 
 from collections.abc import Callable
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from dataclasses import dataclass, replace
+from datetime import timedelta
 
 from .timestamps import moment
 from .topology_model import JOINED_KINDS, Topology, TopologyTrace
@@ -78,26 +78,20 @@ def _unresolved_dependencies(topology: Topology) -> frozenset[str]:
 def _stale_observations(topology: Topology) -> frozenset[str]:
     """Nodes a sweep passed over while it confirmed their siblings.
 
-    Compared against the newest observation of the same ``kind_key`` rather
-    than the clock. A kind on a slower cadence is not stale, it is slower, and
-    an absolute threshold cannot tell those apart.
+    Compared against the last read of the same ``kind_key`` rather than the
+    clock. A kind on a slower cadence is not stale, it is slower, and an
+    absolute threshold cannot tell those apart.
     """
 
-    latest: dict[str, datetime] = {}
-    seen: dict[str, datetime] = {}
+    read = dict(topology.kinds_read)
+    stale = set()
     for node in topology.nodes:
-        if not node.observed_at or not node.kind_key or node.kind in JOINED_KINDS:
+        if not node.observed_at or node.kind in JOINED_KINDS or node.kind_key not in read:
             continue
         observed = moment(node.observed_at, naive="keep")
-        if observed is None:
-            continue
-        seen[node.id] = observed
-        newest = latest.get(node.kind_key)
-        if newest is None or observed > newest:
-            latest[node.kind_key] = observed
-    return frozenset(
-        node.id for node in topology.nodes if node.id in seen and latest[node.kind_key] - seen[node.id] > _STALE_AFTER
-    )
+        if observed is not None and read[node.kind_key] - observed > _STALE_AFTER:
+            stale.add(node.id)
+    return frozenset(stale)
 
 
 def _isolated(topology: Topology) -> frozenset[str]:
@@ -169,9 +163,10 @@ def apply_lens(topology: Topology, lens: TopologyLens) -> Topology:
     """
 
     selected = lens.select(topology)
-    return Topology(
-        tuple(node for node in topology.nodes if node.id in selected),
-        tuple(edge for edge in topology.edges if edge.source in selected and edge.target in selected),
+    return replace(
+        topology,
+        nodes=tuple(node for node in topology.nodes if node.id in selected),
+        edges=tuple(edge for edge in topology.edges if edge.source in selected and edge.target in selected),
     )
 
 
@@ -197,9 +192,10 @@ def apply_trace(
     selected_depth = _trace_depth(depth)
     hops = _hops_from(focus, _neighbors(topology, selected_direction), selected_depth)
 
-    narrowed = Topology(
-        tuple(node for node in topology.nodes if node.id in hops),
-        tuple(edge for edge in topology.edges if edge.source in hops and edge.target in hops),
+    narrowed = replace(
+        topology,
+        nodes=tuple(node for node in topology.nodes if node.id in hops),
+        edges=tuple(edge for edge in topology.edges if edge.source in hops and edge.target in hops),
     )
     trace = TopologyTrace(
         focus=focus,

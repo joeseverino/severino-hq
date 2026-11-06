@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
@@ -34,6 +34,7 @@ from ..approvals import (
 from ..capabilities import execute_capability
 from ..controller import claim_next_operation, schedule_automatic_operations
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
+from ..plugin_testing import form_keyed
 from ..security import (
     AuthorizationError,
     Capability,
@@ -43,7 +44,7 @@ from ..security import (
     web_principal,
 )
 from .markup import text
-from .writers import form_keyed, keyed
+from .writers import keyed
 
 POLICY_KEY = "access-policy"
 GATED_KIND = "tailscale.policy"
@@ -103,7 +104,6 @@ def an_operator(username: str = "operator") -> Principal:
     return web_principal(user)
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class HeldRequestTests(TestCase):
     """A credential may ask. Asking is all it may do."""
 
@@ -321,7 +321,6 @@ class HeldRequestTests(TestCase):
         )
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class OperatorRequestTests(TestCase):
     """A person at the web surface is the signal the gate is waiting for."""
 
@@ -365,7 +364,6 @@ class OperatorRequestTests(TestCase):
         self.assertEqual(result["status"], "awaiting_approval")
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class DecisionTests(TestCase):
     """What a decision does, and what no decision can do."""
 
@@ -538,7 +536,6 @@ class DecisionTests(TestCase):
         self.assertEqual(held.state, ApprovalRequest.State.EXPIRED)
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class ControllerTests(TestCase):
     """The controller is not the thing this gate is about.
 
@@ -694,7 +691,6 @@ class PreviewTests(TestCase):
         self.assertEqual([(row.before, row.after) for row in shown.rows], [("192.0.2.10", "192.0.2.20")])
         self.assertEqual(shown.lines, ())
 
-    @override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
     def test_applying_a_declaration_is_compared_against_what_is_live(self):
         """For a reconcile the question is what happens to the world.
 
@@ -721,7 +717,6 @@ class PreviewTests(TestCase):
         self.assertEqual(said[GRANT_SOURCES], ("group:live", "group:example"))
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True)
 class SurfaceTests(TestCase):
     """A held request that nobody can see is a held request nobody answers."""
 
@@ -768,7 +763,7 @@ class SurfaceTests(TestCase):
     def test_a_held_record_change_shows_what_would_be_written(self):
         from hq.domains.control_plane.models import CapabilityRule
 
-        CapabilityRule.objects.create(scope="surface", subject="mcp", capability="project.create", rule="approve")
+        CapabilityRule.objects.create(subject="example-agent", capability="project.create", rule="approve")
         writer = Principal("example-agent", "mcp", frozenset({Capability.READ, "write_projects"}))
         held = execute_capability("project.create", keyed({"name": "Held project"}), principal=writer)
 
@@ -790,12 +785,12 @@ class SurfaceTests(TestCase):
         """This card sits on a permanent record. A button on something already
         settled would invite a decision that cannot be taken."""
 
-        self.assertContains(self._entry(self.held), "Approve")
+        self.assertIn("Approve", text(self._entry(self.held)))
 
         reject(RejectCommand(str(self.held.id)), principal=web_principal(self.user))
 
         settled = self._entry(self.held)
-        self.assertNotContains(settled, "Approve")
+        self.assertNotIn("Approve", text(settled))
         self.assertContains(settled, "Rejected")
 
     def test_the_resource_page_says_something_is_waiting(self):

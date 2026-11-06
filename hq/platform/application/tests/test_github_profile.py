@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.platform.application.tests.writers import form_keyed
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog, LinkedAccount
 
 from .. import github_profile
@@ -101,6 +101,12 @@ class PlanTests(TestCase):
     def test_a_read_that_just_failed_is_not_tried_on_every_sweep(self):
         old = timezone.now() - github_profile.PROFILE_EVERY
         hold(at=old, updated_at=timezone.now(), reachable=False, error="GitHub API returned HTTP 502.")
+
+        self.assertFalse(github_profile.plan()["due"])
+        self.assertTrue(github_profile.plan(timezone.now() + github_profile.RETRY_AFTER)["due"])
+
+    def test_a_first_read_that_failed_is_retried_on_its_own_clock(self):
+        hold(None, observed_at=None, reachable=False, error="GitHub API returned HTTP 502.")
 
         self.assertFalse(github_profile.plan()["due"])
         self.assertTrue(github_profile.plan(timezone.now() + github_profile.RETRY_AFTER)["due"])

@@ -26,6 +26,9 @@ OVERRIDES = (
     "DJANGO_WHITENOISE_AUTOREFRESH",
     "SEVERINO_APP_ENV_PATH",
     "SEVERINO_DATABASE_PATH",
+    "SEVERINO_SANDBOX",
+    # This run's own directory: a process inside it is part of the run.
+    "SEVERINO_TEST_RUN",
 )
 # What every process is started with; the probe opens no database.
 REQUIRED = {

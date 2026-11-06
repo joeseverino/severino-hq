@@ -6,6 +6,8 @@
 #USAGE arg "<command>..." var=#true double_dash="automatic" help="The command and its arguments, run as the image's entrypoint"
 #USAGE flag "--image <image>" help="The image to run; severino-hq:ci-local by default"
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 # The VM is started here, so the depends_post stop is this run's own and
 # another worktree's stop leaves the VM up while this command runs.
 mise run image:docker start

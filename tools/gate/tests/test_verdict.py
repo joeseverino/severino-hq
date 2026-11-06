@@ -9,6 +9,8 @@ verdict is.
 
 import io
 import json
+import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -227,8 +229,8 @@ class RerunTests(GateTestCase):
         self.assertNotIn("rerun", passed.stdout)
         latest = Path(gate_verdict.VERDICTS, "kept.txt").read_text()
         before = Path(gate_verdict.VERDICTS, "kept.prev.txt").read_text()
-        self.assertTrue(latest.startswith("[kept] passed in"), latest)
-        self.assertTrue(before.splitlines()[0].endswith("; rerun: mise run lint:ruff"), before)
+        self.assertTrue(latest.splitlines()[1].startswith("[kept] passed in"), latest)
+        self.assertTrue(before.splitlines()[1].endswith("; rerun: mise run lint:ruff"), before)
 
 
 @tag("source")
@@ -248,7 +250,7 @@ class ConcurrentCloseTests(GateTestCase):
             patch("sys.stdout", new_callable=io.StringIO),
         ):
             gate_verdict.Gate("raced").close([gate_verdict.Step("tests")])
-        self.assertTrue(kept.read_text().startswith("[raced] passed in"))
+        self.assertTrue(kept.read_text().splitlines()[1].startswith("[raced] passed in"))
         self.assertEqual([path.name for path in kept.parent.glob(".raced.*")], [])
 
 
@@ -257,7 +259,7 @@ class OpeningLineCase(GateTestCase):
         first, *_, last = out.splitlines()
         path = Path(first.rsplit(" ", 1)[-1])
         self.assertEqual(path.parent, gate_verdict.VERDICTS, first)
-        self.assertEqual(path.read_text().splitlines()[0], last)
+        self.assertEqual(path.read_text().splitlines()[1], last)
 
 
 def step_said(label: str, cmd: list[str], *args: object, **kwargs: object) -> gate_verdict.Step:
@@ -325,3 +327,73 @@ class TestAtOpeningLineTests(OpeningLineCase):
             code, out = self.run_main(str(seen), "1", at_ref=self.old)
         self.assertEqual(code, 1)
         self.assert_opens_on_where_its_verdict_is_kept(out)
+
+
+# The kept file's first line as the hand-back's reader reads it.
+TREE_LINE = re.compile(r"^tree ([0-9a-f]{40}|[0-9a-f]{64})$")
+
+
+@tag("source")
+class JudgedTreeTests(GateTestCase):
+    """The kept verdict opens on the tree the gate judged, the one a commit of the checkout's files holds, so a
+    pass is attested by comparing it with a commit's tree; a checkout that changed in the run names none."""
+
+    def setUp(self):
+        self.repo = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        home = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        # The user's own ignore rules apply as a commit's do; this fixture's user ignores *.own.
+        (home / "ignore").write_text("*.own\n")
+        (home / "gitconfig").write_text(
+            f"[user]\n\tname = Example\n\temail = dev@example.com\n[commit]\n\tgpgsign = false\n"
+            f"[core]\n\texcludesFile = {home / 'ignore'}\n"
+        )
+        self.env = os.environ | {"GIT_CONFIG_GLOBAL": str(home / "gitconfig"), "GIT_CONFIG_NOSYSTEM": "1"}
+        self.git("init", "-q")
+        (self.repo / ".gitignore").write_text("*.log\n")
+        (self.repo / "a.txt").write_text("a\n")
+        self.git("add", "--all")
+        self.git("commit", "-q", "--no-verify", "-m", "a")
+
+    def git(self, *args: str) -> str:
+        done = subprocess.run(["git", *args], cwd=self.repo, env=self.env, check=True, capture_output=True, text=True)
+        return done.stdout.strip()
+
+    def kept(self, *cmd: str) -> list[str]:
+        """The kept lines of a gate run through verdict.py on the fixture's checkout, the verdict under the tree."""
+
+        done = subprocess.run(
+            [sys.executable, "-m", "tools.gate.verdict", "judged", *cmd],
+            cwd=ROOT,
+            env=self.env | {"HQ_GATE_TREE": str(self.repo)},
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        lines = Path(gate_verdict.VERDICTS, "judged.txt").read_text().splitlines()
+        self.assertEqual(lines[1], done.stdout.splitlines()[-1])
+        return lines
+
+    def test_a_clean_checkout_names_its_commits_tree(self):
+        first = self.kept(sys.executable, "-c", "pass")[0]
+        self.assertRegex(first, TREE_LINE)
+        self.assertEqual(first, f"tree {self.git('rev-parse', 'HEAD^{tree}')}")
+
+    def test_a_dirty_checkout_names_the_tree_a_commit_of_its_files_holds_and_leaves_the_index_alone(self):
+        (self.repo / "a.txt").write_text("changed\n")
+        (self.repo / "staged.txt").write_text("staged\n")
+        self.git("add", "staged.txt")
+        (self.repo / "staged.txt").write_text("staged, then changed\n")
+        (self.repo / "untracked.txt").write_text("new\n")
+        (self.repo / "run.log").write_text("ignored by the repository\n")
+        (self.repo / "notes.own").write_text("ignored by the user\n")
+        # The tree the index holds, which the gate's own copy of it leaves as it was.
+        staged = self.git("write-tree")
+        first = self.kept(sys.executable, "-c", "raise SystemExit(1)")[0]
+        self.assertEqual(self.git("write-tree"), staged)
+        self.git("add", "--all")
+        self.git("commit", "-q", "--no-verify", "-m", "b")
+        self.assertEqual(first, f"tree {self.git('rev-parse', 'HEAD^{tree}')}")
+
+    def test_a_checkout_changed_in_the_run_names_no_tree(self):
+        written = self.repo / "written.txt"
+        self.assertEqual(self.kept(sys.executable, "-c", f"open({str(written)!r}, 'w').write('x')")[0], "tree -")

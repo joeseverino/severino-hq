@@ -16,7 +16,7 @@ from django.utils.text import Truncator
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
-from hq.domains.control_plane.providers import PROVIDERS, controller_capability_registry, readout_rows
+from hq.domains.control_plane.providers import PROVIDERS, controller_capability_registry, read_spec, readout_rows
 
 from .asks import APPLIES_SHORTLY
 from .entity_links import entity_link
@@ -45,10 +45,7 @@ def origin_machine(resource, machines=None, at=None, targets=None):
     provider = PROVIDERS.get(resource.kind)
     if provider is None or provider.origin is None:
         return None
-    try:
-        origin = provider.origin(resolved_spec(resource, targets))
-    except KeyError, TypeError, ValueError:
-        return None
+    origin = read_spec(resource.kind, resolved_spec(resource, targets), provider.origin)
     return machine_link(origin, machines, at) if origin else None
 
 
@@ -80,10 +77,7 @@ def service_links(resource) -> tuple[tuple[str, str], ...]:
     provider = PROVIDERS[resource.kind]
     if provider.hostnames is None:
         return ()
-    try:
-        names = provider.hostnames(resolved_spec(resource))
-    except KeyError, TypeError, ValueError:
-        return ()
+    names = read_spec(resource.kind, resolved_spec(resource), lambda spec: tuple(provider.hostnames(spec))) or ()
     links = ((name, entity_link("service", name).url) for name in names)
     return tuple((name, url) for name, url in links if url)
 
@@ -148,7 +142,7 @@ class RecordStatus:
 
 
 def _reconciles(kind: str) -> tuple[bool, bool]:
-    """``(applies, automatically)``: whether the controller applies HQ's settings."""
+    """``(applies, automatically)``: whether the controller applies HQ's config."""
 
     capability = controller_capability_registry().capabilities.get(kind)
     policy = capability.actions.get("reconcile") if capability else None
@@ -194,7 +188,7 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
 
 def record_status(resource, *, health: dict[str, str] | None = None, newest: datetime | None = None) -> RecordStatus:
     """``newest`` is the latest reading of any record of this type: a record
-    read long before it was not found the last time HQ looked."""
+    read long before it was missing from HQ's last read."""
 
     health = health or resource_health(resource)
     fault = _fault_status(resource, health)
@@ -225,7 +219,7 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
             "working",
             "healthy",
             health["label"],
-            "Matches HQ's settings." if applies else "",
+            "Matches HQ's config." if applies else "",
             None,
             read_at,
         )

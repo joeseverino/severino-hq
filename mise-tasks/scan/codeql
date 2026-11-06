@@ -10,6 +10,8 @@
 # rules left out, as the Action reads it. It reads an export of the files
 # git would push, so a local .venv or stray build output is not scanned.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 # shellcheck source=tools/lib/export-tree.sh
 . ./tools/lib/export-tree.sh
 

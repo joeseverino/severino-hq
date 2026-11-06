@@ -23,8 +23,9 @@ swap:
   Run dependency updates now: Update dependencies
   Run the controller: Start the controller
   Run a pass now: Start it
-  Apply again: Apply HQ's settings
-  Restore HQ's version: Apply HQ's settings
+  Apply HQ's settings: Apply HQ's config
+  Apply again: Apply HQ's config
+  Restore HQ's version: Apply HQ's config
   Request renewal: Renew certificate
   Open the deploy: Open deploy
   Sync the vault: Update docs

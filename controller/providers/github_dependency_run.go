@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/api"
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
@@ -249,23 +250,7 @@ func writeDependencyHandoff(dir string, handoff DependencyHandoff) error {
 	if err != nil {
 		return err
 	}
-	file, err := os.CreateTemp(dir, "."+DependencyHandoffName+".*")
-	if err != nil {
-		return &ProviderError{Message: "the dependency update hand-off could not be written", Err: err}
-	}
-	defer os.Remove(file.Name())
-	if err := file.Chmod(0o600); err != nil {
-		file.Close()
-		return &ProviderError{Message: "the dependency update hand-off could not be written", Err: err}
-	}
-	if _, err := file.Write(data); err != nil {
-		file.Close()
-		return &ProviderError{Message: "the dependency update hand-off could not be written", Err: err}
-	}
-	if err := file.Close(); err != nil {
-		return &ProviderError{Message: "the dependency update hand-off could not be written", Err: err}
-	}
-	if err := os.Rename(file.Name(), filepath.Join(dir, DependencyHandoffName)); err != nil {
+	if err := atomicfile.WriteFile(filepath.Join(dir, DependencyHandoffName), data, 0o600); err != nil {
 		return &ProviderError{Message: "the dependency update hand-off could not be written", Err: err}
 	}
 	return nil

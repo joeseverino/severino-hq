@@ -6,10 +6,13 @@
 #MISE depends_post=["image:docker stop"]
 #USAGE flag "--tag <tag>" default="severino-hq:ci-local" help="The name to build it as"
 #USAGE flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
+#USAGE flag "--cache <ref>" help="A registry layer cache to read, ghcr.io/OWNER/REPO/build-cache:main in CI; a missing or unreadable one warns and builds cold"
+#USAGE flag "--cache-write" help="Also write every stage's layers to --cache, as only main's Build cache job does"
 
 # IMAGE names the image under test; the pipeline passes the one it built.
-# IMAGE_BUILD_CACHE carries the pipeline's layer cache flags; a checkout has none.
 set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
 # The VM boots once the turn is this task's, so it never waits idle for one.
 mise run image:docker start
 [ -z "${IMAGE:-}" ] || exit 0
@@ -29,12 +32,23 @@ if [ -z "$security_release" ]; then
     security_release="$(date -u +%F)"
     echo "::warning title=Debian security date unknown::deb.debian.org did not answer; the upgrade layer is keyed on ${security_release} instead."
 fi
+# A cache entry maps a step to a layer on its writer's word, so only main's
+# Build cache job writes one; every build may read it. mode=max keeps the
+# intermediate stages (the Go build, the dependency install), which the final
+# image holds only the outputs of.
+set --
+if [ -n "${usage_cache:-}" ]; then
+    set -- --cache-from "type=registry,ref=${usage_cache}"
+    [ "${usage_cache_write:-}" != true ] || set -- "$@" --cache-to "type=registry,ref=${usage_cache},mode=max"
+elif [ "${usage_cache_write:-}" = true ]; then
+    echo "--cache-write needs --cache" >&2
+    exit 2
+fi
 # The source label is the standard OCI one: GHCR links the package to this
 # repository by it, and the controller reads which repository delivers it from
 # the image it runs. The tree label is what a push to main compares to promote
 # an image proven on its pull request (tools/pipeline/proven-on-pr.sh).
-# shellcheck disable=SC2086  # the cache flags are meant to split
-docker buildx build --load ${IMAGE_BUILD_CACHE:-} \
+docker buildx build --load "$@" \
     --label "org.opencontainers.image.source=$source" \
     --label "org.opencontainers.image.revision=$revision" \
     --label "dev.severino.hq.tree=$(git rev-parse 'HEAD^{tree}')" \

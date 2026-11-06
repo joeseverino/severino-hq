@@ -1,0 +1,58 @@
+# Every press answers in one sentence, integration_specs.requested ("Refresh
+# requested."). A toast that writes "requested" out itself, in a messages
+# call's text or the message= an answer to an ask carries, words the same
+# answer a second way.
+id: requested-said-by-integration-specs
+language: python
+severity: error
+message: A toast writes out that something was requested.
+note: Say it with hq.platform.application.integration_specs.requested.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/*_tests.py"
+utils:
+  says-requested:
+    any:
+      - kind: string
+      - kind: concatenated_string
+    regex: requested
+  positional:
+    not:
+      any:
+        - kind: keyword_argument
+        - kind: comment
+rule:
+  kind: call
+  any:
+    - has:
+        field: arguments
+        has:
+          kind: keyword_argument
+          all:
+            - has:
+                field: name
+                regex: ^message$
+            - has:
+                field: value
+                matches: says-requested
+    # messages.success(request, "..."): the text is the second argument.
+    - all:
+        - has:
+            field: function
+            kind: attribute
+            has:
+              field: object
+              kind: identifier
+              regex: ^messages$
+        - has:
+            field: arguments
+            has:
+              nthChild:
+                position: 2
+                ofRule:
+                  matches: positional
+              matches: says-requested

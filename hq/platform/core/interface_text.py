@@ -3,19 +3,22 @@
 Their wording is Vale's (``tools/lint/vale``, ``mise run lint:prose``). These
 are properties of the source, so a gate reads them and a running HQ never does:
 ``read`` walks each tree once, and ``InterfaceTextTests`` (the architecture
-tests) fails on anything it finds.
+tests) fails on anything it finds. The walk imports only the standard library
+and answers JSON, so a test runs it in a process of its own (``apart``), which
+gives back what its parses took when it exits.
 """
 
 import ast
 import importlib.util
 import os
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
-from django.apps import apps
-from django.conf import settings
+lazy from django.apps import apps
+lazy from django.conf import settings
 
 lazy from hq.platform.application import plugins
 lazy from hq.platform.application.ui import counted_forms
@@ -99,15 +102,7 @@ def _refusal(one: str, many: str | None) -> str | None:
     return None
 
 
-def _template_counts(path: Path, number: int, line: str, reading: TextFindings) -> None:
-    """Each ``|counted:"..."`` literal that cannot agree, which raises the moment a page renders it."""
-    for match in _COUNTED_FILTER.finditer(line):
-        reason = _refusal(*counted_phrases(match.group(2)))
-        if reason:
-            reading.unagreeable_counts.append((path, number, reason))
-
-
-def _template_forms(path: Path, number: int, line: str, depth: int, reading: TextFindings) -> int:
+def _template_forms(path: str, number: int, line: str, depth: int, found: dict[str, list]) -> int:
     """The form depth after ``line``; a form opened inside an open one is found.
 
     HTML has no nested forms: the parser drops the inner opening tag and takes
@@ -119,7 +114,7 @@ def _template_forms(path: Path, number: int, line: str, depth: int, reading: Tex
         else:
             depth += 1
             if depth > 1:
-                reading.nested_forms.append((path, number))
+                found["nested_forms"].append((path, number))
     return depth
 
 
@@ -153,17 +148,17 @@ def unclosed_template_comments(template_root: str | Path) -> list[str]:
     return found
 
 
-def _read_template(path: Path, source: str, *, worded: bool, reading: TextFindings) -> None:
-    reading.open_comments.extend((path, number) for number in open_comment_lines(source))
+def _read_template(path: str, source: str, *, worded: bool, found: dict[str, list]) -> None:
+    found["open_comments"].extend((path, number) for number in open_comment_lines(source))
     text = TEMPLATE_COMMENT.sub(lambda match: "\n" * match.group().count("\n"), source)
     depth = 0
     for number, line in enumerate(text.splitlines(), 1):
-        _template_counts(path, number, line, reading)
+        found["counted"].extend((path, number, match.group(2)) for match in _COUNTED_FILTER.finditer(line))
         if not worded:
             continue
         if _PLURALIZE.search(line):
-            reading.hand_plurals.append((path, number))
-        depth = _template_forms(path, number, line, depth, reading)
+            found["hand_plurals"].append((path, number))
+        depth = _template_forms(path, number, line, depth, found)
 
 
 def _is_suffix_guess(node: ast.AST) -> bool:
@@ -204,40 +199,62 @@ def _counted_call_phrases(node: ast.AST) -> tuple[str, str | None] | None:
     return one, _literal(many_node)
 
 
-def _read_python(path: Path, source: str, *, worded: bool, reading: TextFindings) -> None:
+def _read_python(path: str, source: str, *, worded: bool, found: dict[str, list]) -> None:
     try:
         tree = ast.parse(source)
     except SyntaxError, ValueError:
         return
     for node in ast.walk(tree):
-        phrases = _counted_call_phrases(node)
-        reason = _refusal(*phrases) if phrases else None
-        if reason:
-            reading.unagreeable_counts.append((path, node.lineno, reason))
-        if not worded:
-            continue
-        if _is_suffix_guess(node):
-            reading.hand_plurals.append((path, node.lineno))
+        if phrases := _counted_call_phrases(node):
+            found["called"].append((path, node.lineno, *phrases))
+        if worded and _is_suffix_guess(node):
+            found["hand_plurals"].append((path, node.lineno))
 
 
-def read(roots: list[Path] | None = None) -> TextFindings:
-    """One pass over HQ and its extensions: each tree walked and each file parsed once.
+def walk(roots: list[str], worded_roots: list[str]) -> dict[str, Any]:
+    """What one pass over ``roots`` finds, each file parsed once, as JSON.
+
+    Plurals and markup are read only under ``worded_roots``. A ``counted``
+    phrase is found as its words, which ``read`` judges.
+    """
+    found: dict[str, Any] = {
+        name: [] for name in ("hand_plurals", "nested_forms", "open_comments", "counted", "called")
+    }
+    files = 0
+    for root in roots:
+        for path in _files(Path(root)):
+            source = _text(path)
+            if source is None:
+                continue
+            files += 1
+            worded = any(path.is_relative_to(worded) for worded in worded_roots)
+            read_file = _read_template if path.suffix == ".html" else _read_python
+            read_file(str(path), source, worded=worded, found=found)
+    return found | {"files": files}
+
+
+def _here(run: Callable[..., Any], *args: Any) -> Any:
+    return run(*args)
+
+
+def read(roots: list[Path] | None = None, *, run: Callable[..., Any] = _here) -> TextFindings:
+    """One pass over HQ and its extensions, ``walk`` run by ``run`` (in this process unless given).
 
     Plurals and markup are read in HQ and the extensions checked out beside it,
     or in ``roots`` when given; ``counted`` phrases and open comments in every
     installed extension too, since either fails a page wherever it lives.
     """
     worded_roots = _roots() if roots is None else roots
-    reading = TextFindings()
-    for root in _outermost(worded_roots + _plugin_roots()):
-        for path in _files(root):
-            source = _text(path)
-            if source is None:
-                continue
-            reading.files += 1
-            worded = any(path.is_relative_to(worded) for worded in worded_roots)
-            if path.suffix == ".html":
-                _read_template(path, source, worded=worded, reading=reading)
-            else:
-                _read_python(path, source, worded=worded, reading=reading)
-    return reading
+    outermost = _outermost(worded_roots + _plugin_roots())
+    found = run(walk, [str(root) for root in outermost], [str(root) for root in worded_roots])
+    phrases = [(path, line, counted_phrases(words)) for path, line, words in found["counted"]]
+    phrases += [(path, line, (one, many)) for path, line, one, many in found["called"]]
+    return TextFindings(
+        files=found["files"],
+        hand_plurals=[(Path(path), line) for path, line in found["hand_plurals"]],
+        nested_forms=[(Path(path), line) for path, line in found["nested_forms"]],
+        open_comments=[(Path(path), line) for path, line in found["open_comments"]],
+        unagreeable_counts=[
+            (Path(path), line, reason) for path, line, words in phrases if (reason := _refusal(*words))
+        ],
+    )

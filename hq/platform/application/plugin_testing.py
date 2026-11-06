@@ -209,11 +209,14 @@ def sibling(
 
 
 def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None = None) -> list[str]:
-    """Each provider of ``plugin_id`` that is not answered from what is stored.
+    """Each provider of ``plugin_id`` that is not answered from what is stored,
+    or whose answer is not what its kind must be.
 
     Named when what it returned does not pickle, comes back unequal to what was
     stored, or is built anew around something that cannot be compared
-    (docs/Plugins.md#derived-reads). Call it with the extension's records in
+    (docs/Plugins.md#derived-reads), and when a page would show it as
+    unreadable: an attention item, card or overview the host refuses. Call it
+    with the extension's records in
     place; ``window`` is the days calendar sources are asked for, the year
     around today when left out.
     """
@@ -241,7 +244,7 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
     with frozen():
         with projection_scope():
             stored = {name: ask() for name, ask in questions().items()}
-        again: list[str] = []
+        again = _refused(plugin_id, stored)
         for name, ask in questions().items():
             with projection_scope(), counting() as (ran, served):
                 answer = ask()
@@ -250,6 +253,20 @@ def providers_derived_again(plugin_id: str, *, window: tuple[date, date] | None 
             elif answer != stored[name]:
                 again.append(f"{name}: the stored answer is not equal to the one derived")
     return again
+
+
+def _refused(plugin_id: str, answers: Mapping[str, Any]) -> list[str]:
+    """Each of ``plugin_id``'s answers, by provider, that the host refuses, with why."""
+
+    refused = []
+    for name, answer in answers.items():
+        check = plugins.SOURCE_CHECKS.get(name)
+        try:
+            if check is not None:
+                check(plugin_id, answer)
+        except plugins.ImproperlyConfigured as refusal:
+            refused.append(f"{name}: {refusal}")
+    return refused
 
 
 @contextmanager

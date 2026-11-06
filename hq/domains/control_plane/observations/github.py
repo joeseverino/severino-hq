@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping
 from datetime import timedelta
 from typing import Annotated, Any, Literal
 
-from pydantic import Field
+from pydantic import Field, StrictInt
 from pydantic.json_schema import SkipJsonSchema
 
 lazy from hq.platform.application.moments import when
@@ -56,6 +56,13 @@ PARTS = (
     VARIABLES,
     WORKFLOW_PINS,
 )
+
+
+# The parts a record counts open alerts of, by their part names.
+AlertPart = Literal["code_scanning", "dependabot", "leaked_credentials"]
+# One part's open alerts by severity, as the controller lowercases it. A count
+# is a number, never its text: every reader sums them.
+AlertCounts = dict[str, Annotated[StrictInt, Field(ge=0)]]
 
 
 class Collaborator(ObservationRecord):
@@ -135,7 +142,8 @@ class RepositoryRecord(ObservationRecord):
     release: dict[str, Any] | None = None
     deployments: list[dict[str, Any]] = []
     # Open alerts counted by part and severity: ``{"dependabot": {"high": 2}}``.
-    alerts: dict[str, Any] = {}
+    # A part that was refused is absent, never zero.
+    alerts: dict[AlertPart, AlertCounts] = {}
     # ``{number, package, ecosystem, manifest_path, severity,
     # first_patched_version, url}`` per open Dependabot alert;
     # ``first_patched_version`` is None where no version fixes it yet. None

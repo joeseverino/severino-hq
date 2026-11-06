@@ -251,8 +251,11 @@
       "expenseUpdateV2Forbidden": {
         "dataValue": {
           "error": {
-            "code": "forbidden",
-            "message": "api principal 'example-automation' lacks 'write_expenses'."
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "write_expenses"
+            },
+            "message": "api principal 'example-automation' lacks 'write_expenses': its token does not carry it. Grant 'write_expenses' to the client 'example-automation' in Pocket ID, then sign in again."
           },
           "ok": false
         },
@@ -539,7 +542,7 @@
               "expiry": null,
               "health": {
                 "label": "Working",
-                "message": "Matches HQ's settings.",
+                "message": "Matches HQ's config.",
                 "reason": "Observed",
                 "state": "healthy"
               },
@@ -572,7 +575,7 @@
             "resource": {
               "conditions": [
                 {
-                  "message": "Matches HQ's settings.",
+                  "message": "Matches HQ's config.",
                   "reason": "Observed",
                   "since": "2026-01-15T09:30:00+00:00",
                   "status": true,
@@ -583,7 +586,7 @@
               "generation": 1,
               "health": {
                 "label": "Working",
-                "message": "Matches HQ's settings.",
+                "message": "Matches HQ's config.",
                 "reason": "Observed",
                 "state": "healthy"
               },
@@ -897,8 +900,11 @@
       "listCalendarV2Forbidden": {
         "dataValue": {
           "error": {
-            "code": "forbidden",
-            "message": "api principal 'example-automation' lacks 'read_calendar'."
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read_calendar"
+            },
+            "message": "api principal 'example-automation' lacks 'read_calendar': its token does not carry it. Grant 'read_calendar' to the client 'example-automation' in Pocket ID, then sign in again."
           },
           "ok": false
         },
@@ -907,8 +913,11 @@
       "listConnectionsV2Forbidden": {
         "dataValue": {
           "error": {
-            "code": "forbidden",
-            "message": "api principal 'example-automation' lacks 'read'."
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
           },
           "ok": false
         },
@@ -1003,8 +1012,11 @@
       "listContactSubmissionsV2Forbidden": {
         "dataValue": {
           "error": {
-            "code": "forbidden",
-            "message": "api principal 'example-automation' lacks 'manage_contacts'."
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "manage_contacts"
+            },
+            "message": "api principal 'example-automation' lacks 'manage_contacts': its token does not carry it. Grant 'manage_contacts' to the client 'example-automation' in Pocket ID, then sign in again."
           },
           "ok": false
         },
@@ -1705,8 +1717,11 @@
       "listProjectsV2Forbidden": {
         "dataValue": {
           "error": {
-            "code": "forbidden",
-            "message": "api principal 'example-automation' lacks 'read'."
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
           },
           "ok": false
         },
@@ -1823,6 +1838,7 @@
               "channel": "loopback",
               "channel_label": "Loopback",
               "device": "No tailnet device at this address",
+              "device_standing": "unplaced",
               "forwarded": false,
               "handshake": "\u2013",
               "identity_agrees": false,
@@ -2363,7 +2379,7 @@
               "dependency_updates": false,
               "description": "",
               "last_push_at": null,
-              "name": "Capped",
+              "name": "Granted",
               "public_url": "",
               "relationships": {
                 "assets": [],
@@ -2385,7 +2401,7 @@
       "projectCreateV2Request": {
         "dataValue": {
           "payload": {
-            "name": "Capped",
+            "name": "Granted",
             "slug": "from-the-phone",
             "status": "active"
           }
@@ -2454,8 +2470,11 @@
       "projectUpdateV2Forbidden": {
         "dataValue": {
           "error": {
-            "code": "forbidden",
-            "message": "api principal 'example-automation' lacks 'write_projects'."
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "write_projects"
+            },
+            "message": "api principal 'example-automation' lacks 'write_projects': its token does not carry it. Grant 'write_projects' to the client 'example-automation' in Pocket ID, then sign in again."
           },
           "ok": false
         },
@@ -2512,8 +2531,11 @@
       "resourceListV2Forbidden": {
         "dataValue": {
           "error": {
-            "code": "forbidden",
-            "message": "api principal 'example-automation' lacks 'read_audit_log'."
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read_audit_log"
+            },
+            "message": "api principal 'example-automation' lacks 'read_audit_log': its token does not carry it. Grant 'read_audit_log' to the client 'example-automation' in Pocket ID, then sign in again."
           },
           "ok": false
         },
@@ -2573,8 +2595,8 @@
                 "web_route": "core:audit_list"
               }
             ],
-            "schema_version": 2,
-            "schemas": "Each list's whole query_schema, with its types and choices, is describe_resources with name set to its resource."
+            "schema_version": 3,
+            "schemas": "Each list's query_schema, its filters' types and choices, and its paging, the most limit may ask for, are describe_resources with name set to its resource."
           },
           "ok": true
         },
@@ -2655,8 +2677,11 @@
       "topologyV2Forbidden": {
         "dataValue": {
           "error": {
-            "code": "forbidden",
-            "message": "api principal 'example-automation' lacks 'read'."
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
           },
           "ok": false
         },
@@ -2733,6 +2758,12 @@
         "schema": {
           "minimum": 1,
           "type": "integer"
+        }
+      },
+      "InsufficientScopeWWWAuthenticate": {
+        "description": "On `insufficient_scope`: `Bearer` with `error=\"insufficient_scope\"` and `scope`, the permission `error.details.scope` names (RFC 6750 section 3.1).",
+        "schema": {
+          "type": "string"
         }
       },
       "TooManyRequestsRetryAfter": {
@@ -3152,7 +3183,12 @@
             }
           }
         },
-        "description": "Forbidden."
+        "description": "Forbidden.",
+        "headers": {
+          "WWW-Authenticate": {
+            "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+          }
+        }
       },
       "ChangeNotFound": {
         "content": {
@@ -3407,6 +3443,54 @@
         },
         "description": "Success."
       },
+      "DashboardMachineSetSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/DashboardMachineSet"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "DashboardSettingsSavedSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/DashboardSettingsSaved"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "DependencyUpdatesSetSuccess": {
         "content": {
           "application/json": {
@@ -3607,7 +3691,12 @@
             }
           }
         },
-        "description": "Forbidden."
+        "description": "Forbidden.",
+        "headers": {
+          "WWW-Authenticate": {
+            "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+          }
+        }
       },
       "HqImportedSuccess": {
         "content": {
@@ -3676,6 +3765,30 @@
           }
         },
         "description": "Bad Request."
+      },
+      "ItemsActedOnSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/ItemsActedOn"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
       },
       "MachineRecordSuccess": {
         "content": {
@@ -3895,6 +4008,54 @@
         },
         "description": "Success."
       },
+      "PinToggledSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/PinToggled"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "PinsChangedSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/PinsChanged"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "ProfileReadRequestedSuccess": {
         "content": {
           "application/json": {
@@ -3961,7 +4122,12 @@
             }
           }
         },
-        "description": "Forbidden."
+        "description": "Forbidden.",
+        "headers": {
+          "WWW-Authenticate": {
+            "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+          }
+        }
       },
       "ReceiptSavedSuccess": {
         "content": {
@@ -4243,6 +4409,30 @@
         },
         "description": "Service Unavailable."
       },
+      "SourcesChosenSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/SourcesChosen"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "TargetedChangeBadRequest": {
         "content": {
           "application/json": {
@@ -4252,6 +4442,30 @@
           }
         },
         "description": "Bad Request."
+      },
+      "ThemeSetSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/ThemeSet"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
       },
       "TooManyRequests": {
         "content": {
@@ -4606,6 +4820,39 @@
         ],
         "type": "object"
       },
+      "ActionItemRestoreRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The command: the fields its input schema names.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "keys": {
+                "description": "The set-aside items to bring back into the queue.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "keys"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
       "ActionItemRow": {
         "additionalProperties": false,
         "properties": {
@@ -4637,6 +4884,41 @@
             "type": "string"
           }
         },
+        "type": "object"
+      },
+      "ActionItemSetAsideRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The command: the fields its input schema names.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "keys": {
+                "description": "Items to set aside as the queue holds them now.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "rows": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "description": "Items as the queue drew them, each as it stood then.",
+                "type": "object"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [],
         "type": "object"
       },
       "ActionLink": {
@@ -4956,6 +5238,46 @@
         "required": [
           "ok",
           "error"
+        ],
+        "type": "object"
+      },
+      "AppearanceThemeSetRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The theme to draw this person's pages in.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "theme": {
+                "description": "The theme to draw your pages in.",
+                "enum": [
+                  "system",
+                  "light",
+                  "dark"
+                ],
+                "type": "string",
+                "x-enumDescriptions": {
+                  "dark": "Dark",
+                  "light": "Light",
+                  "system": "System"
+                }
+              }
+            },
+            "required": [
+              "theme"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
         ],
         "type": "object"
       },
@@ -5872,6 +6194,41 @@
         },
         "type": "array"
       },
+      "CalendarSourceChooseRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "One calendar source, and whether the month shows it.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "shown": {
+                "description": "Whether the month shows it.",
+                "type": "boolean"
+              },
+              "source": {
+                "description": "The calendar source.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "shown"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
       "CapabilityDescription": {
         "additionalProperties": false,
         "description": "One registry entry as every adapter describes it.",
@@ -6231,6 +6588,8 @@
                   "agents_paused",
                   "declined",
                   "denied_by_policy",
+                  "device_awaiting_approval",
+                  "device_blocked",
                   "forbidden",
                   "insufficient_scope"
                 ]
@@ -7824,6 +8183,59 @@
         "description": "The page after the one whose next.cursor this is. Send it as it came, with the filters that page was read with; absent, the first page.",
         "title": "Cursor"
       },
+      "DashboardMachineSelectRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "Whether the machine's telemetry is shown on the dashboard.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "selected": {
+                "description": "Whether the dashboard shows this machine's telemetry.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "selected"
+            ],
+            "type": "object"
+          },
+          "target": {
+            "description": "The machine whose telemetry to show: its key.",
+            "examples": [
+              "example-key"
+            ],
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "payload",
+          "target"
+        ],
+        "type": "object"
+      },
+      "DashboardMachineSet": {
+        "additionalProperties": false,
+        "description": "A machine's place on the dashboard, as the call left it.",
+        "properties": {
+          "machine": {
+            "description": "The machine's key while the dashboard shows it; empty when it does not.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "machine"
+        ],
+        "type": "object"
+      },
       "DashboardPanelsRefreshDueRequest": {
         "$ref": "#/components/schemas/DashboardPanelsRefreshRequest"
       },
@@ -7849,6 +8261,48 @@
             "$ref": "#/components/schemas/IdempotencyKey"
           }
         },
+        "type": "object"
+      },
+      "DashboardSettingsSaved": {
+        "additionalProperties": false,
+        "description": "The dashboard's settings, saved.",
+        "properties": {},
+        "type": "object"
+      },
+      "DashboardSettingsUpdateRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "Where the weather is read for, and what the glance strip calls its panels.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "infrastructure_label": {
+                "default": "",
+                "description": "What the infrastructure panel is called.",
+                "type": "string"
+              },
+              "weather_label": {
+                "default": "",
+                "description": "What the weather panel calls that place.",
+                "type": "string"
+              },
+              "weather_point": {
+                "default": "",
+                "description": "Where the weather is read for, as latitude,longitude.",
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [],
         "type": "object"
       },
       "DeclarationForgotten": {
@@ -9592,6 +10046,8 @@
                 "enum": [
                   "agent_blocked",
                   "agents_paused",
+                  "device_awaiting_approval",
+                  "device_blocked",
                   "forbidden",
                   "insufficient_scope"
                 ]
@@ -10757,6 +11213,20 @@
         ],
         "type": "object"
       },
+      "ItemsActedOn": {
+        "additionalProperties": false,
+        "description": "How many items the call set aside or brought back.",
+        "properties": {
+          "count": {
+            "description": "How many items it set aside or brought back.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count"
+        ],
+        "type": "object"
+      },
       "JoinedReadingPart": {
         "additionalProperties": false,
         "properties": {
@@ -10962,8 +11432,12 @@
             },
             "type": "array"
           },
+          "paging": {
+            "description": "The JSON Schema of `limit`, with the most it may ask for, and `cursor`, where the list takes them: `list_resource` takes each as an argument of its own beside `filters`, and the machine API as a query parameter beside them. Only in a read of this one resource; absent, the list takes neither.",
+            "type": "object"
+          },
           "query_schema": {
-            "description": "The JSON Schema of what a listing takes; only in a read of this one resource.",
+            "description": "The JSON Schema of the `filters` a listing takes, each one's type and choices; only in a read of this one resource.",
             "type": "object"
           }
         },
@@ -12527,6 +13001,158 @@
         "description": "Whether the caller holds every permission `required_capabilities` names; absent from a read that names no caller.",
         "type": "boolean"
       },
+      "PinChooseRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The command: the fields its input schema names.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "keys": {
+                "description": "Every pin of that type, in order.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "description": "What type of pins to set.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "PinKind": {
+        "description": "The type of thing whose pins changed, such as `project`.",
+        "type": "string"
+      },
+      "PinMoveRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The command: the fields its input schema names.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "key": {
+                "description": "Which pin.",
+                "type": "string"
+              },
+              "kind": {
+                "description": "What type of pin to move.",
+                "type": "string"
+              },
+              "up": {
+                "default": false,
+                "description": "Move it up; otherwise down.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "key"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "PinToggleRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The command: the fields its input schema names.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "key": {
+                "description": "The one to pin or unpin.",
+                "type": "string"
+              },
+              "kind": {
+                "description": "What type of thing to pin.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "key"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "PinToggled": {
+        "additionalProperties": false,
+        "description": "One thing pinned or unpinned for the person.",
+        "properties": {
+          "key": {
+            "description": "The thing pinned or unpinned, by its key.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PinKind"
+          },
+          "pinned": {
+            "description": "Whether it is pinned now.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "key",
+          "pinned"
+        ],
+        "type": "object"
+      },
+      "PinsChanged": {
+        "additionalProperties": false,
+        "description": "Which type of thing the call changed the person's pins of.",
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/PinKind"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
       "PolicyCounts": {
         "additionalProperties": false,
         "description": "How many grants, groups, tags and tests the policy holds.",
@@ -13692,6 +14318,8 @@
                   "agent_blocked",
                   "agents_paused",
                   "denied_by_policy",
+                  "device_awaiting_approval",
+                  "device_blocked",
                   "forbidden",
                   "insufficient_scope"
                 ]
@@ -14164,7 +14792,7 @@
         "type": "string"
       },
       "RefusalDetails": {
-        "description": "What gets past the refusal, where something does: `next`, the call that finds what was missing; `field`, the argument to send; for `invalid_input`, each field that was wrong and why, which a list or record read puts under `errors`, beside the `filters` its list takes."
+        "description": "What gets past the refusal, where something does: `next`, the call that finds what was missing; `closest`, the read of each record or list named nearest the one asked for; `field`, the argument to send; `scope`, the permission to grant the token's client; for `invalid_input`, each field that was wrong and why, which a list or record read puts under `errors`, beside the `filters` its list takes."
       },
       "RefusalMessage": {
         "description": "HQ's sentence for the refusal, naming no value the request carried.",
@@ -14486,7 +15114,7 @@
           },
           "schema_version": {
             "$ref": "#/components/schemas/SchemaVersion",
-            "const": 2
+            "const": 3
           },
           "schemas": {
             "description": "Where each list's whole query schema is; only where the answer holds every resource.",
@@ -14900,12 +15528,6 @@
         "description": "Which version of this answer's shape it is; it moves when a client must read the shape differently.",
         "type": "integer"
       },
-      "SearchLimit": {
-        "description": "How many matches to return, 1 to 100, best first.",
-        "maximum": 100,
-        "minimum": 1,
-        "type": "integer"
-      },
       "SearchOperation": {
         "additionalProperties": false,
         "description": "How a resource is searched, where it can be.",
@@ -15000,7 +15622,7 @@
       },
       "SerializedFinding": {
         "additionalProperties": false,
-        "description": "One finding as every machine door carries it.",
+        "description": "One finding as the API answers it; MCP's `get_findings` makes its actions tool calls.",
         "properties": {
           "affected_scopes": {
             "description": "Other record types or reading types it bears on.",
@@ -15430,6 +16052,23 @@
         "description": "Its address in HQ; blank derives one from the name.",
         "type": "string"
       },
+      "SourcesChosen": {
+        "additionalProperties": false,
+        "description": "Which calendar sources the person shows, as the call left them.",
+        "properties": {
+          "choices": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "description": "Whether each calendar source is shown, by its name.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "choices"
+        ],
+        "type": "object"
+      },
       "Success": {
         "additionalProperties": false,
         "properties": {
@@ -15774,6 +16413,20 @@
         "description": "Only the records whose text holds this, ignoring case; absent, every record.",
         "title": "Text filter"
       },
+      "ThemeSet": {
+        "additionalProperties": false,
+        "description": "The theme the person's pages are drawn in, as the call left it.",
+        "properties": {
+          "theme": {
+            "description": "The theme now set: `system`, `light` or `dark`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "theme"
+        ],
+        "type": "object"
+      },
       "TooManyRequestsRefusal": {
         "additionalProperties": false,
         "properties": {
@@ -15815,12 +16468,6 @@
           "error"
         ],
         "type": "object"
-      },
-      "TopLimit": {
-        "description": "How many records to return, 1 to 100, first by the list's own ranking.",
-        "maximum": 100,
-        "minimum": 1,
-        "type": "integer"
       },
       "TopologyAnswer": {
         "additionalProperties": false,
@@ -17170,7 +17817,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
@@ -17276,7 +17928,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
@@ -17294,6 +17951,219 @@
         "summary": "List capabilities",
         "tags": [
           "hq.api"
+        ]
+      }
+    },
+    "/api/v2/capabilities/action_item.restore/": {
+      "post": {
+        "description": "Bring set-aside action items back into your queue.",
+        "operationId": "actionItemRestoreV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionItemRestoreRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ItemsActedOnSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Bring action items back",
+        "tags": [
+          "hq.dashboard"
+        ],
+        "x-hq-capability": "action_item.restore",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "set_aside_action_items"
+        ]
+      }
+    },
+    "/api/v2/capabilities/action_item.set_aside/": {
+      "post": {
+        "description": "Set action items aside for you until they get worse or change.",
+        "operationId": "actionItemSetAsideV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ActionItemSetAsideRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ItemsActedOnSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Set action items aside",
+        "tags": [
+          "hq.dashboard"
+        ],
+        "x-hq-capability": "action_item.set_aside",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "set_aside_action_items"
+        ]
+      }
+    },
+    "/api/v2/capabilities/appearance.theme.set/": {
+      "post": {
+        "description": "Draw the signed-in person's pages in the system's theme, light or dark.",
+        "operationId": "appearanceThemeSetV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AppearanceThemeSetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ThemeSetSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Choose a theme",
+        "tags": [
+          "hq.dashboard"
+        ],
+        "x-hq-capability": "appearance.theme.set",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "set_preferences"
         ]
       }
     },
@@ -17825,6 +18695,77 @@
         ]
       }
     },
+    "/api/v2/capabilities/calendar.source.choose/": {
+      "post": {
+        "description": "Show or hide one calendar source on the signed-in person's month.",
+        "operationId": "calendarSourceChooseV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CalendarSourceChooseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/SourcesChosenSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Show or hide a calendar",
+        "tags": [
+          "hq.calendar"
+        ],
+        "x-hq-capability": "calendar.source.choose",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "set_preferences"
+        ]
+      }
+    },
     "/api/v2/capabilities/certificate.renew/": {
       "post": {
         "description": "Ask for a certificate to be renewed, where its renewal rules allow it.",
@@ -18251,6 +19192,77 @@
         ]
       }
     },
+    "/api/v2/capabilities/dashboard.machine.select/": {
+      "post": {
+        "description": "Show a machine's telemetry on the dashboard, or take it off.",
+        "operationId": "dashboardMachineSelectV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DashboardMachineSelectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DashboardMachineSetSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/TargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Show a machine on the dashboard",
+        "tags": [
+          "hq.infrastructure"
+        ],
+        "x-hq-capability": "dashboard.machine.select",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "set_preferences"
+        ]
+      }
+    },
     "/api/v2/capabilities/dashboard.panels.refresh/": {
       "post": {
         "description": "Ask for a fresh reading of every dashboard panel a controller can read.",
@@ -18390,6 +19402,77 @@
         "x-hq-effect": "infrastructure_change",
         "x-hq-required-capabilities": [
           "manage_infrastructure"
+        ]
+      }
+    },
+    "/api/v2/capabilities/dashboard.settings.update/": {
+      "post": {
+        "description": "Set where the dashboard reads the weather for, and what its panels are called.",
+        "operationId": "dashboardSettingsUpdateV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DashboardSettingsUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/DashboardSettingsSavedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Save dashboard settings",
+        "tags": [
+          "hq.dashboard"
+        ],
+        "x-hq-capability": "dashboard.settings.update",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "set_preferences"
         ]
       }
     },
@@ -18888,7 +19971,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/ChangeNotFound"
@@ -19509,7 +20597,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Apply HQ's settings",
+        "summary": "Apply HQ's config",
         "tags": [
           "hq.infrastructure"
         ],
@@ -20157,6 +21245,219 @@
         ]
       }
     },
+    "/api/v2/capabilities/pin.choose/": {
+      "post": {
+        "description": "Choose exactly which things of one type you pin.",
+        "operationId": "pinChooseV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinChooseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PinsChangedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Choose pins",
+        "tags": [
+          "hq.dashboard"
+        ],
+        "x-hq-capability": "pin.choose",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "pin_favorites"
+        ]
+      }
+    },
+    "/api/v2/capabilities/pin.move/": {
+      "post": {
+        "description": "Move one of your pins past its neighbor.",
+        "operationId": "pinMoveV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinMoveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PinsChangedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Move a pin",
+        "tags": [
+          "hq.dashboard"
+        ],
+        "x-hq-capability": "pin.move",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "pin_favorites"
+        ]
+      }
+    },
+    "/api/v2/capabilities/pin.toggle/": {
+      "post": {
+        "description": "Pin something so it sorts first for you, or unpin it.",
+        "operationId": "pinToggleV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PinToggleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/PinToggledSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Pin or unpin an item",
+        "tags": [
+          "hq.dashboard"
+        ],
+        "x-hq-capability": "pin.toggle",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "pin_favorites"
+        ]
+      }
+    },
     "/api/v2/capabilities/project.create/": {
       "post": {
         "description": "Add a new project.",
@@ -20288,7 +21589,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/ChangeNotFound"
@@ -20747,7 +22053,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "404": {
             "content": {
@@ -21318,6 +22629,9 @@
             "required": true,
             "schema": {
               "enum": [
+                "action_item.restore",
+                "action_item.set_aside",
+                "appearance.theme.set",
                 "asset.create",
                 "asset.delete",
                 "asset.update",
@@ -21325,14 +22639,17 @@
                 "calendar.entry.create",
                 "calendar.entry.delete",
                 "calendar.entry.update",
+                "calendar.source.choose",
                 "certificate.renew",
                 "contact.submission.delete",
                 "contact.submission.review",
                 "content.create",
                 "content.delete",
                 "content.update",
+                "dashboard.machine.select",
                 "dashboard.panels.refresh",
                 "dashboard.panels.refresh_due",
+                "dashboard.settings.update",
                 "documentation.create",
                 "documentation.delete",
                 "documentation.sync",
@@ -21357,6 +22674,9 @@
                 "infrastructure.zone.adopt",
                 "lookup.address.read",
                 "lookup.name.read",
+                "pin.choose",
+                "pin.move",
+                "pin.toggle",
                 "project.create",
                 "project.delete",
                 "project.dependency_updates.run",
@@ -21759,7 +23079,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
@@ -21886,12 +23211,6 @@
         "operationId": "listActionItemsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Only the records whose text holds this, ignoring case; absent, every record.",
             "explode": true,
             "in": "query",
@@ -21960,6 +23279,12 @@
               "default": null
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -22045,9 +23370,6 @@
         "operationId": "listAnalyticsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/TopLimit"
-          },
-          {
             "description": "The one breakdown to answer; absent, by page.",
             "explode": true,
             "in": "query",
@@ -22087,6 +23409,9 @@
               "type": "integer"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/TopLimit"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -22172,12 +23497,6 @@
         "operationId": "listAssetsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Only the records in this status; absent, every status.",
             "explode": true,
             "in": "query",
@@ -22205,6 +23524,12 @@
           },
           {
             "$ref": "#/components/parameters/TextFilter"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -22339,12 +23664,6 @@
         "operationId": "listCalendarV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/AgendaLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "The first day the span covers; absent, today.",
             "explode": true,
             "in": "query",
@@ -22379,6 +23698,12 @@
             "style": "form"
           },
           {
+            "$ref": "#/components/parameters/AgendaLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
             "$ref": "#/components/parameters/Fields"
           }
         ],
@@ -22405,7 +23730,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/ResourceReadNotFound"
@@ -22549,7 +23879,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/ResourceReadNotFound"
@@ -22655,12 +23990,6 @@
         "operationId": "listContactSubmissionsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Only the records in this status; absent, every status.",
             "explode": true,
             "in": "query",
@@ -22699,6 +24028,12 @@
             "style": "form"
           },
           {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
             "$ref": "#/components/parameters/Fields"
           }
         ],
@@ -22725,7 +24060,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/ResourceReadNotFound"
@@ -22943,12 +24283,6 @@
         "operationId": "listContentV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Only the records in this status; absent, every status.",
             "explode": true,
             "in": "query",
@@ -22974,6 +24308,12 @@
           },
           {
             "$ref": "#/components/parameters/TextFilter"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -23191,12 +24531,6 @@
         "operationId": "listDocumentationV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Only the records in this status; absent, every status.",
             "explode": true,
             "in": "query",
@@ -23223,6 +24557,12 @@
           },
           {
             "$ref": "#/components/parameters/TextFilter"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -23529,12 +24869,6 @@
         "operationId": "listExpensesV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Only the expenses dated in this year.",
             "explode": true,
             "in": "query",
@@ -23587,6 +24921,12 @@
               "default": null
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -23767,12 +25107,6 @@
         "operationId": "listInfrastructureV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Several types to keep, comma-separated, each one the single type filter offers; not sent with it.",
             "explode": true,
             "in": "query",
@@ -23829,6 +25163,12 @@
               "default": null
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -24163,12 +25503,6 @@
         "operationId": "listProjectsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Only the records in this status; absent, every status.",
             "explode": true,
             "in": "query",
@@ -24216,6 +25550,12 @@
               "default": null
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -24294,7 +25634,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "404": {
             "$ref": "#/components/responses/ResourceReadNotFound"
@@ -24436,12 +25781,6 @@
         "operationId": "listReadingsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "Only the readings from this service; absent, every service's.",
             "explode": true,
             "in": "query",
@@ -24475,6 +25814,12 @@
               "default": null
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -24635,12 +25980,6 @@
         "operationId": "listReceiptsV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/PageLimit"
-          },
-          {
-            "$ref": "#/components/parameters/Cursor"
-          },
-          {
             "description": "True for only the receipts matched to no expense and no asset.",
             "explode": true,
             "in": "query",
@@ -24651,6 +25990,12 @@
               "type": "boolean"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -24868,9 +26213,6 @@
         "operationId": "listSearchV2",
         "parameters": [
           {
-            "$ref": "#/components/parameters/SearchLimit"
-          },
-          {
             "description": "What to look for in names and records' text; blank finds nothing.",
             "explode": true,
             "in": "query",
@@ -24882,6 +26224,9 @@
               "type": "string"
             },
             "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/SearchLimit"
           },
           {
             "$ref": "#/components/parameters/Fields"
@@ -25430,7 +26775,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "404": {
             "content": {
@@ -25667,7 +27017,12 @@
                 }
               }
             },
-            "description": "Forbidden."
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
           },
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"

@@ -9,8 +9,8 @@
 # mise.toml reads Go's release from go.mod, so mise loads neither without it.
 # mise is the release min_version names, from its image by digest
 # (lint:toolchain holds the tag to min_version).
-FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.11.0@sha256:6e05da4113a812cc8ac72b21a38889d019fb0f97df6ce8075c0de98d1cf48cc4 /usr/local/bin/mise /usr/local/bin/mise
+FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS tools
+COPY --from=ghcr.io/jdx/mise:2026.11.2@sha256:39cd8aad519a3dbc860eceb64dfd8cb5efe4cdbb8ad741a6867b544b2787b79c /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
@@ -20,20 +20,19 @@ RUN mise install go uv \
     && install -D "$(mise which uv)" /opt/bin/uv
 
 
-FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS build
+FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS build
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never
 WORKDIR /build
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential libsqlite3-dev \
-    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml uv.lock ./
 # The export is complete and hashed: nothing resolves, and a file that differs
-# from the lock is refused. pycparser is left out: only cffi's binding builder
-# reads it, and the build deletes that builder below.
+# from the lock is refused. Every package installs from a wheel, since the
+# stage carries no compiler: --only-binary fails the build on a package with
+# none. pycparser is left out: only cffi's binding builder reads it, and the
+# build deletes that builder below.
 # HQ is English only (LANGUAGE_CODE, no LocaleMiddleware), so Django's other
 # locales are deleted. The locale package and `en` stay: Django reads formats
 # and LANG_INFO from them.
@@ -41,7 +40,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv export --locked --no-default-groups --no-emit-project --no-emit-package pycparser \
         --format requirements-txt --output-file /tmp/hq-runtime.txt > /dev/null \
     && uv pip install --python /usr/local/bin/python --prefix /install \
-        --require-hashes --no-deps -r /tmp/hq-runtime.txt \
+        --require-hashes --no-deps --only-binary :all: -r /tmp/hq-runtime.txt \
     && find /install/lib -type d -path '*/site-packages/django/*locale/*' -prune ! -name en -exec rm -rf {} +
 # Django's apps and database backends HQ never loads are deleted: neither uv
 # nor Django installs part of a package. A contrib app stays when
@@ -70,9 +69,10 @@ RUN cd /install/lib/python*/site-packages \
     && rm -rf cffi multipart pydantic/v1 /install/bin/cffi-gen-src
 
 
-# The controller and the root secret renderer, one static binary each: CGO off,
-# -trimpath, so the runtime image carries no Go toolchain and the binaries no
-# build paths. Their Go is mise's, the release go.mod's toolchain line names.
+# The controller, the root secret renderer and the edge receiver, one static
+# binary each: CGO off, -trimpath, so the runtime image carries no Go toolchain
+# and the binaries no build paths. Their Go is mise's, the release go.mod's
+# toolchain line names.
 FROM tools AS controller
 ENV PATH=/opt/go/bin:$PATH \
     CGO_ENABLED=0 \
@@ -87,11 +87,19 @@ COPY controller/ ./
 ARG HQ_SOURCE=""
 RUN go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-controller ./cmd/hq-controller \
     && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-secrets ./cmd/hq-secrets \
+    && go build -trimpath -ldflags='-s -w -buildid=' -o /out/hq-edge ./cmd/hq-edge \
     && go build -trimpath -ldflags="-s -w -buildid= -X github.com/joeseverino/severino-hq/controller/host.BuildSource=${HQ_SOURCE#https://github.com/}" \
         -o /out/hq-host ./cmd/hq-host
 
 
-FROM python:3.15-slim-trixie@sha256:f786b2e19cf9bb54e96bfcd4c1b40c4c56336c22e60607ffd4b080ae5b5dee83 AS runtime
+# The built programs alone. A layer cache holds this stage as one small layer,
+# so a runtime copy from it rerun by a change above it in that stage fetches
+# the programs, never the Go toolchain and modules they were built with.
+FROM scratch AS programs
+COPY --from=controller /out/ /
+
+
+FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
@@ -127,7 +135,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # Install Python deps from the build stage.
 COPY --from=build /install /usr/local
 # The controller hq-host starts in a container of this image.
-COPY --from=controller /out/hq-controller /usr/local/bin/hq-controller
+COPY --from=programs /hq-controller /usr/local/bin/hq-controller
 
 WORKDIR /app
 # The controller's source is the controller stage's input: its programs are
@@ -135,9 +143,12 @@ WORKDIR /app
 # manifests and locks are the tools and build stages' inputs in the same way.
 COPY --exclude=controller --exclude=mise.toml --exclude=mise.lock --exclude=pyproject.toml --exclude=uv.lock . /app
 # The renderer root runs on the host. It ships in the root-run tree, beside
-# the units that name it, so the manifest below covers it: the host's copy is
-# the signed image's, byte for byte, and checked daily like every script.
-COPY --from=controller /out/hq-secrets /out/hq-host /app/deploy/bin/
+# the units that name it, which hq-host copies out of the signed image: the
+# host's copy is the image's, byte for byte, and checked daily like every script.
+COPY --from=programs /hq-secrets /hq-host /app/deploy/bin/
+# The edge receiver rides in the same signed tree, from which an administrator
+# installs it on an edge by hand (docs/Deployment.md, Remote targets).
+COPY --from=programs /hq-edge /app/deploy/bin/
 
 # Mounted volumes; create empty so the container can boot before a host mount.
 # The bridge socket's directory is this account's alone: a volume first mounted

@@ -1,0 +1,29 @@
+# A record that is not there is one refusal, whichever read looked for it:
+# every read raises record_errors.RecordNotFound, and a conflict
+# RecordConflict, which the resource layer answers without a spec listing
+# them. A not-found or conflict class of a module's own is one an adapter
+# would miss. Three classes so named mean no HQ record, each where
+# test_refusal_classes declares it, and are left alone by name:
+# LookupNotFound (control_plane/dns_lookup.py), an outside registry that
+# holds nothing; JobConflict (jobs/runner.py), a job of that kind already
+# running; IdempotencyConflict (application/idempotency.py), a retry key
+# reused for another request. refusal-class-exemptions-stay-home keeps each
+# name to its module, and test_refusal_classes each module to its class.
+id: refusal-classes-in-one-place
+language: python
+severity: error
+message: A module declares its own not-found or conflict class.
+note: Raise RecordNotFound or RecordConflict from hq/platform/application/record_errors.py instead.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "hq/platform/application/record_errors.py"
+rule:
+  kind: class_definition
+  has:
+    field: name
+    regex: (NotFound|NotFoundError|Conflict|ConflictError)$
+    not:
+      regex: ^(LookupNotFound|JobConflict|IdempotencyConflict)$

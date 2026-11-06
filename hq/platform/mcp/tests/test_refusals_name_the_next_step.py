@@ -6,21 +6,22 @@ either is what these hold, so a refusal cannot point at a call that is
 refused in turn.
 """
 
-from unittest import mock
-
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import types
 from mcp.shared.exceptions import MCPError
 
+from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 from hq.platform.application.integration_specs import ResourceSpec
+from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.resources import EmptyQuery, resource_registry
-from hq.platform.application.security import Principal, mcp_principal
+from hq.platform.application.security import Principal, agent_principal, mcp_principal
 
 from ..identity import set_principal
 from ..server import mcp
-from .registry import _READ, KIND, served, with_kind
+from .registry import KIND, registry_patched, served, with_kind
 
 WRITER = Principal("example-writer", "mcp", frozenset({"write_projects", "read"}))
 PROJECT = {"name": "Named next", "slug": "named-next", "status": "active"}
@@ -86,6 +87,18 @@ class NamedFieldTests(TestCase):
         arguments[container] = arguments[container] | {key: "example-named-key"}
         self.assertTrue(_call("execute_capability", arguments)["ok"])
 
+    def test_a_permission_the_token_lacks_is_named_and_a_token_granting_it_gets_through(self):
+        arguments = {"name": "project.create", "payload": PROJECT | {"idempotency_key": "example-scoped"}}
+        with set_principal(agent_principal("example-reader", "mcp", frozenset({"read"}))):
+            refused = _call("execute_capability", arguments)
+
+        self.assertEqual(refused["error"]["code"], "insufficient_scope")
+        scope = refused["error"]["details"]["scope"]
+        # The sign-in that grants it, as the identity provider would issue it.
+        with set_principal(agent_principal("example-reader", "mcp", frozenset({"read", scope}))):
+            granted = _call("execute_capability", arguments)
+        self.assertTrue(granted["ok"], granted)
+
     def test_a_target_refusal_names_the_target_argument(self):
         refused = _call(
             "execute_capability",
@@ -145,7 +158,7 @@ class NamedServedReadTests(TestCase):
         kind = ResourceSpec(KIND, "Example", "Records.", "read", _listing, EmptyQuery, _record, "name")
         host = resource_registry()
 
-        with served(with_kind(kind)) as server, mock.patch(_READ, return_value=host):
+        with served(with_kind(kind)) as server, registry_patched(host):
             refused = self._on(server, "list_resource", {"name": KIND})
             next_call = refused["error"]["details"]["next"]
             catalog = self._on(server, next_call["tool"], next_call["arguments"])
@@ -175,3 +188,103 @@ class NamedServedReadTests(TestCase):
 
         self.assertEqual(refused["error"]["code"], "unsupported_operation")
         self.assertEqual(listed["items"], _listing()["items"])
+
+
+def _example_records(owner_of):
+    """A kind whose listing holds only the records its caller owns, and whose
+    detail finds none, so every read of one is a miss the listing answers."""
+
+    def listing(principal):
+        items = [{"name": name} for name, owner in owner_of.items() if owner == principal.actor]
+        return {"items": items, "count": len(items)}
+
+    def detail(identifier, principal):
+        if owner_of.get(identifier) != principal.actor:
+            raise RecordNotFound("No record matches the requested identifier.")
+        return {"name": identifier}
+
+    return ResourceSpec(KIND, "Example", "Records.", "read", listing, EmptyQuery, detail, "name", pass_principal=True)
+
+
+class NearestRecordTests(TestCase):
+    """A missed identifier names the reads of the nearest records the caller's own listing holds."""
+
+    def setUp(self):
+        self.enterContext(set_principal(mcp_principal()))
+
+    def _closest(self, identifier):
+        refused = _call("get_resource", {"name": "projects", "identifier": identifier})
+        self.assertEqual(refused["error"]["code"], "not_found")
+        return refused["error"]["details"].get("closest", [])
+
+    def test_a_near_miss_names_the_real_identifier_and_its_read_finds_the_record(self):
+        Project.objects.create(**PROJECT)
+        Project.objects.create(name="Elsewhere", slug="elsewhere-entirely")
+
+        for asked in ("named-nxet", "Named-Next", "named"):
+            with self.subTest(asked=asked):
+                closest = self._closest(asked)
+                self.assertEqual(closest[0]["arguments"]["identifier"], PROJECT["slug"])
+                found = _followed(closest[0])
+                self.assertEqual(found["slug"], PROJECT["slug"])
+                self.assertNotIn("elsewhere-entirely", [call["arguments"]["identifier"] for call in closest])
+
+    def test_nothing_near_names_no_candidate(self):
+        Project.objects.create(**PROJECT)
+
+        self.assertEqual(self._closest("example-absent"), [])
+
+    def test_a_candidate_is_only_ever_a_record_the_caller_lists(self):
+        caller = Principal("example-reader", "mcp", frozenset({"read"}))
+        owner_of = {"example-alpha": caller.actor, "example-alphb": "example-other"}
+        kind = _example_records(owner_of)
+
+        with served(with_kind(kind)) as server, set_principal(caller):
+            params = types.CallToolRequestParams(
+                name="get_resource", arguments={"name": KIND, "identifier": "example-alphc"}
+            )
+            refused = async_to_sync(server._call)(None, params).structured_content
+
+        self.assertEqual(refused["error"]["code"], "not_found", refused)
+        named = [call["arguments"]["identifier"] for call in refused["error"]["details"]["closest"]]
+        self.assertEqual(named, ["example-alpha"])
+
+
+class KindAsResourceNameTests(TestCase):
+    """A type of record or reading sent as a resource's name names the read of the resource that holds it."""
+
+    def setUp(self):
+        self.enterContext(set_principal(mcp_principal()))
+
+    def test_every_kind_sent_as_a_name_is_refused_with_a_read_that_answers(self):
+        for kind in (*PROVIDERS, *OBSERVATIONS):
+            for tool, arguments in (
+                ("describe_resources", {"name": kind}),
+                ("list_resource", {"name": kind}),
+                ("get_resource", {"name": kind, "identifier": "example-one"}),
+            ):
+                with self.subTest(kind=kind, tool=tool):
+                    refused = _call(tool, arguments)
+                    self.assertEqual(refused["error"]["code"], "unknown_resource")
+                    answer = _followed(refused["error"]["details"]["next"])
+                    self.assertNotEqual(answer.get("ok"), False, answer)
+
+    def test_a_record_type_names_the_infrastructure_listing_by_kind(self):
+        refused = _call("describe_resources", {"name": "cloudflare.dns_record"})
+
+        self.assertEqual(
+            refused["error"]["details"]["next"],
+            {
+                "tool": "list_resource",
+                "arguments": {"name": "infrastructure", "filters": {"kind": "cloudflare.dns_record"}},
+            },
+        )
+
+    def test_a_name_near_a_resource_names_its_description(self):
+        refused = _call("list_resource", {"name": "project"})
+
+        self.assertEqual(refused["error"]["code"], "unknown_resource")
+        described = [call["arguments"]["name"] for call in refused["error"]["details"]["closest"]]
+        self.assertIn("projects", described)
+        (entry,) = _followed(refused["error"]["details"]["closest"][described.index("projects")])["resources"]
+        self.assertEqual(entry["name"], "projects")

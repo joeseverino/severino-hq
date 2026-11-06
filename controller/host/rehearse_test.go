@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -63,7 +64,7 @@ func (f *fakeHost) rehearses(r *rehearsal) {
 			return answer(strconv.FormatBool(r.killed)+"\n", false)
 		case strings.HasPrefix(call, planCall):
 			return exec.CommandContext(ctx, "/bin/sh", "-c", `echo '{"mode":"plan"}'; exit "$1"`, "sh", strconv.Itoa(r.planExit))
-		case call == "docker inspect --format {{.State.StartedAt}} "+Container:
+		case call == "docker inspect --format {{.State.StartedAt}} "+hostcore.Container:
 			r.marks++
 			if r.liveRestarts && r.marks > 1 {
 				return answer("2026-10-18T11:00:00Z\n", false)
@@ -185,7 +186,7 @@ func TestAPassingRehearsalGoesOnToTheRelease(t *testing.T) {
 	}
 	f.before(t, planCall, "systemctl stop severino-hq-secrets.timer")
 	f.before(t, "docker volume rm --force "+rehearsedVolume, "systemctl stop severino-hq-secrets.timer")
-	f.before(t, "systemctl stop severino-hq-secrets.timer", "systemctl restart "+WebUnit)
+	f.before(t, "systemctl stop severino-hq-secrets.timer", "systemctl restart "+hostcore.WebUnit)
 	data, _ := os.ReadFile(f.machine.ReleasePath())
 	if strings.TrimSpace(string(data)) != next {
 		t.Errorf("the release is %q", data)

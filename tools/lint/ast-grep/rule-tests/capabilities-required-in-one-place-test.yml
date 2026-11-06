@@ -1,0 +1,24 @@
+id: capabilities-required-in-one-place
+valid:
+  - 'require_all(principal, spec.capabilities)'
+  - 'principal.require(Capability.READ)'
+  - |
+    for capability in capabilities:
+        held.add(capability)
+  # The loop's else is not the loop.
+  - |
+    for spec in specs:
+        pass
+    else:
+        principal.require(Capability.READ)
+invalid:
+  - |
+    for capability in spec.capabilities:
+        principal.require(capability)
+  - |
+    for capability in spec.capabilities:
+        if capability:
+            self.principal.require(capability)
+  - |
+    async for capability in capabilities():
+        principal.require(capability)

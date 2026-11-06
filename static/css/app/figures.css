@@ -116,10 +116,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* Anywhere else the box the filter puts in a name is no box, and in a link a part is text, as in the link's token (base.css). */
 .cut { display: contents; }
 :is(td, th) [data-entity] > .token > .cut > .whole { display: contents; }
-/* A hyphenated part in a cell is held to one line and cut, never broken at a hyphen ("example-" over "worker" reads as two names); a row's own name and free text (`cell-data`) wrap at their hyphens instead. */
-.data-table td .whole:not(td > strong:first-child *, td > a:first-child > strong *, .attention-title *, strong > [data-entity] *, .row-gutter > [data-entity] *, code *, .cell-data *) { white-space: nowrap; }
+/* A hyphenated part in a cell is held to one line and cut, never broken at a hyphen ("example-" over "worker" reads as two names); a row's own name, what a queue item means and free text (`cell-data`) wrap at their hyphens instead. */
+.data-table td .whole:not(td > strong:first-child *, td > a:first-child > strong *, .attention-title *, .attention-detail *, strong > [data-entity] *, .row-gutter > [data-entity] *, code *, .cell-data *) { white-space: nowrap; }
 /* There a part is text, wrapping at its hyphens with the words around it. */
-.data-table td :is(td > strong:first-child, td > a:first-child > strong, .attention-title, .cell-data) .whole { display: contents; }
+.data-table td :is(td > strong:first-child, td > a:first-child > strong, .attention-title, .attention-detail, .cell-data) .whole { display: contents; }
 /* Outside a narrow box the wrapping columns give way first; a name of plain parts holds out for its whole length up to its column's share (`--name-hold`, tables.css), and a name in a context line (`.muted`) holds out for nothing. */
 @container style(--box: whole) {
   .data-table td [data-entity]:not(strong > *, .row-gutter > *, .muted *):has(> .token[data-sole]):not(:has(> .token > .cut)) { width: max-content; max-width: var(--name-hold); }
@@ -148,7 +148,7 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .data-table :is(td.cell-data, td .cell-data, :is(td.cell-data, td .cell-data) .token) { overflow-wrap: anywhere; }
 /* Two links in one cell read as two: the span gets the flex box, since a td given flex leaves table layout. */
 .row-actions { white-space: nowrap; }
-span.row-actions { display: inline-flex; gap: var(--space-6); }
+span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
 /* Axis labels are HTML over the plot, positioned by percentage of the geometry's viewBox: text inside the SVG scales with the drawing and shrinks to illegibility in a phone-width card. */

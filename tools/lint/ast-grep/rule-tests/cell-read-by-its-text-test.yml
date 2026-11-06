@@ -1,0 +1,23 @@
+id: cell-read-by-its-text
+valid:
+  - 'self.assertIn("Served", cells)'
+  - 'self.assertContains(response, "<td>")'
+  - 'self.assertIn(f"<td>{tail}", html)'
+  - 'self.assertIn("Served", "<td>Served</td>")'
+  - 'self.assertEqual(cell, "<td>Served</td>")'
+  - 'self.assertContains(response, "<td>Served</td> and more")'
+  - 'self.assertIn("<td>" + name, html)'
+  - 'self.assertIn("</td>" "Served", html)'
+invalid:
+  - 'self.assertContains(response, "<td>Served</td>")'
+  - 'self.assertNotContains(response, "<th>Name</th>\n")'
+  - 'self.assertContains(response, text="<td>Served</td>")'
+  - 'self.assertIn(f"<td>{name}</td>", html)'
+  - 'self.assertNotIn("<td>" + name + "</td>", html)'
+  - 'self.assertIn(member="<th>Name</th>  ", container=html)'
+  - "self.assertContains(response, '<td>Served</td>', html=True)"
+  - 'self.assertIn("<td>Served" "</td>", html)'
+  - 'self.assertIn(name + ("<td>" + "</td>"), html)'
+  - |
+    def test(self, r):
+        self.assertContains(r, "<td>A</td>")

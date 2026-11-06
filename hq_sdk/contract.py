@@ -56,6 +56,8 @@ def _parameters(target: Any) -> list[str] | None:
     try:
         signature = inspect.signature(target, annotation_format=Format.STRING)
     except TypeError, ValueError:
+        # A callable Python gives no signature (a builtin's) is recorded as
+        # having none: the record still moves if one appears or goes.
         return None
     parameters = list(signature.parameters.values())
     rendered: list[str] = []
@@ -161,7 +163,6 @@ def describe() -> dict[str, Any]:
         modules[name] = {export: _shape(getattr(module, export)) for export in exports(module)}
     contract = {
         "api_version": PLUGIN_API_VERSION,
-        "sdk_version": hq_sdk.SDK_VERSION,
         "modules": modules,
         "templates": hq_sdk.template_contract.describe(),
     }
@@ -226,11 +227,9 @@ def _module_drift(module: str, before: dict[str, Any], after: dict[str, Any]) ->
 def drift(committed: dict[str, Any], current: dict[str, Any]) -> list[str]:
     """Every difference between two contracts, one line each, empty when none."""
 
-    lines = [
-        f"{key}: {committed.get(key)!r} -> {current.get(key)!r}"
-        for key in ("api_version", "sdk_version")
-        if committed.get(key) != current.get(key)
-    ]
+    lines: list[str] = []
+    if committed.get("api_version") != current.get("api_version"):
+        lines.append(f"api_version: {committed.get('api_version')!r} -> {current.get('api_version')!r}")
     before = committed.get("modules", {})
     after = current.get("modules", {})
     for module in sorted(set(before) | set(after)):

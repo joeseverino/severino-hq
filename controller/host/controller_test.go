@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"os"
 	"os/exec"
@@ -64,7 +65,7 @@ func newLaunch(t *testing.T) *launch {
 	if err := os.MkdirAll(filepath.Join(secrets, "web"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(secrets, "web", AppEnvName), []byte("DJANGO_SECRET_KEY=sentinel-application-secret\n"), 0o400); err != nil {
+	if err := os.WriteFile(filepath.Join(secrets, "web", hostcore.AppEnvName), []byte("DJANGO_SECRET_KEY=sentinel-application-secret\n"), 0o400); err != nil {
 		t.Fatal(err)
 	}
 
@@ -197,7 +198,7 @@ func TestNothingOfHQsOwnIsGivenToTheController(t *testing.T) {
 	l.run(t, Apply)
 
 	joined := strings.Join(l.args, "\n")
-	for _, absent := range []string{"target=/data", AppEnvName, "sentinel-application-secret", "doorbell", "source=" + RunDir + ",", "docker.sock"} {
+	for _, absent := range []string{"target=/data", hostcore.AppEnvName, "sentinel-application-secret", "doorbell", "source=" + hostcore.RunDir + ",", "docker.sock"} {
 		if strings.Contains(joined, absent) {
 			t.Errorf("the controller is given %q", absent)
 		}

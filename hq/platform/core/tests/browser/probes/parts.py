@@ -110,6 +110,38 @@ HIDDEN_IN_SUMMARIES = (
 }"""
 )
 
+# A folded section's words sit on a panel, as its neighbors' do, open or
+# closed: some box between them and the page paints a background. A table's
+# region is one; words in a part drawn only once the fold opens are read when
+# it has drawn.
+BARE_FOLDS = (
+    "([folds, drawnWhenOpened]) => {"
+    + DESCRIBE
+    + """
+  const page = new Set([document.documentElement, document.body]);
+  const clear = (paint) => paint === 'transparent' || /(?:,\\s*|\\/\\s*)0\\)$/.test(paint);
+  const painted = (el) => {
+    for (let at = el; at && !page.has(at); at = at.parentElement) {
+      if (!clear(getComputedStyle(at).backgroundColor)) return true;
+    }
+    return false;
+  };
+  const found = [];
+  for (const fold of document.querySelectorAll('main ' + folds)) {
+    const words = document.createTreeWalker(fold, NodeFilter.SHOW_TEXT);
+    for (let node = words.nextNode(); node; node = words.nextNode()) {
+      const el = node.parentElement;
+      if (!node.textContent.trim() || el.closest('summary') || el.closest(drawnWhenOpened)) continue;
+      if (!painted(el)) {
+        found.push(`${describe(fold)}: "${node.textContent.trim().slice(0, 40)}" sits on the page`);
+        break;
+      }
+    }
+  }
+  return found;
+}"""
+)
+
 # Every select that opens to its choices, and every filter button that opens
 # to them, wears HQ's chevron, and a select no arrow of the browser's own,
 # whichever way the engine draws it (base-select or native), so no two forms

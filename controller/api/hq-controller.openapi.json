@@ -3355,7 +3355,21 @@
             "type": "array"
           },
           "alerts": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "type": "object"
+            },
             "default": {},
+            "propertyNames": {
+              "enum": [
+                "code_scanning",
+                "dependabot",
+                "leaked_credentials"
+              ]
+            },
             "type": "object"
           },
           "dependabot_alerts": {

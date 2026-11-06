@@ -35,7 +35,7 @@ from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, FON
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.survey import geometry_probes
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDTHS, viewport
+from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, WIDE, WIDE_TABLES, WIDEST, WIDTHS, viewport
 lazy from hq.platform.application import fragments
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core import seeds
@@ -47,7 +47,7 @@ lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 # The gate's widths, a wide desktop and the laptop windows where a wide table
 # has the least room: the example estate is the homelab as a person reads it,
 # on every screen up to the widest.
-READ_AT = tuple(sorted((*WIDTHS, 1680, *WIDE_TABLES)))
+READ_AT = tuple(sorted((*WIDTHS, WIDEST, *WIDE_TABLES)))
 THEMES = ("light", "dark")
 # The API reference mounts a vendored viewer, whose markup is not HQ's to hold
 # to these rules; ReferenceBrowserTests holds it to its own.
@@ -304,6 +304,23 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     failed = {check: said for check, said in found.items() if said}
                     if failed:
                         self.fail(json.dumps(failed, indent=1))
+
+
+class ExampleEstateTableFitTests(ExampleEstateGate):
+    """Every table of the example estate fits its box at every width."""
+
+    def test_every_table_fits_its_box_at_every_width(self):
+        """From the narrowest phone up, with every disclosure open: a width the
+        layout sweep skips is where a table ran past its card unseen."""
+
+        for path in self.navigation:
+            with self.subTest(page=path):
+                self.visit(path, NARROWEST)
+                self.page.evaluate(
+                    "(disclosure) => document.querySelectorAll(disclosure).forEach((d) => { d.open = true; })",
+                    SELECTORS["disclosure"],
+                )
+                self.assertEqual(self.tables_that_do_not_fit_at_any_width(), {})
 
 
 # A list's toolbar boxes (a filter's options and its toggles), the sort its

@@ -103,6 +103,20 @@ class _At:
         return replace(self, tails=self.tails | other.tails)
 
 
+def _in_tag(character: str, tails: frozenset[str], tag: str, quote: str) -> tuple[frozenset[str], str, str]:
+    """Where one character inside the tag ``tag`` leaves the output: a quote
+    opens or closes a value, and an unquoted ``>`` closes the tag, at an edge
+    when the tag is a block's."""
+
+    if quote:
+        return tails, tag, "" if character == quote else quote
+    if character in "\"'":
+        return tails, tag, character
+    if character == ">":
+        return (frozenset({EDGE}) if tag.lstrip("/").lower() in _BLOCKS else tails), "", quote
+    return tails, tag, quote
+
+
 @functools.cache
 def _scanned(at: _At, text: str) -> _At:
     """Where ``text`` leaves the output that stood at ``at``."""
@@ -112,13 +126,7 @@ def _scanned(at: _At, text: str) -> _At:
     while position < len(text):
         character = text[position]
         if tag:
-            if quote:
-                quote = "" if character == quote else quote
-            elif character in "\"'":
-                quote = character
-            elif character == ">":
-                tails = frozenset({EDGE}) if tag.lstrip("/").lower() in _BLOCKS else tails
-                tag = ""
+            tails, tag, quote = _in_tag(character, tails, tag, quote)
         elif character == "<" and (name := _TAG_NAME.match(text, position)):
             tag = name.group(0)[1:]
             position = name.end()

@@ -73,7 +73,7 @@ def sightings(presences) -> Sightings:
         for route in presence.advertised_routes:
             try:
                 network = ip_network(route, strict=False)
-            except ValueError:
+            except ValueError:  # noqa: S112 - an advertised route that is no network routes nothing
                 continue
             if network.prefixlen and network_of(str(network.network_address)) == "network":
                 routes.append(network)

@@ -159,7 +159,7 @@ def on_link_networks(source: Path = IF_INET6) -> tuple[IPv6Network, ...]:
         address = ":".join(hexed[index : index + 4] for index in range(0, 32, 4))
         try:
             found.add(ip_network(f"{address}/{int(fields[2], 16)}", strict=False))
-        except ValueError:
+        except ValueError:  # noqa: S112 - a kernel line that is no prefix attaches no network
             continue
     return tuple(sorted(found))
 

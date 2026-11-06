@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"errors"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,14 +16,14 @@ func connected() error { return nil }
 
 func TestTheRenderGoesFirstAndHQIsEnabledLast(t *testing.T) {
 	f := newFakeHost(t)
-	f.active = []string{WebUnit}
+	f.active = []string{hostcore.WebUnit}
 
 	if err := f.machine.Install(context.Background(), connected); err != nil {
 		t.Fatalf("%v\n%s", err, f.out.String())
 	}
 
-	f.before(t, "systemctl start "+SecretsUnit, "docker exec "+Container+" hq-controller job content.sync")
-	f.before(t, "docker exec "+Container, "systemctl enable --now")
+	f.before(t, "systemctl start "+SecretsUnit, "docker exec "+hostcore.Container+" hq-controller job content.sync")
+	f.before(t, "docker exec "+hostcore.Container, "systemctl enable --now")
 	if !f.called("systemctl enable --now severino-hq-controller.path severino-hq-secrets.timer severino-hq-web.service") {
 		t.Errorf("not enabled:\n%s", strings.Join(f.calls(), "\n"))
 	}
@@ -88,20 +89,20 @@ func TestAComposeHostIsTakenOverWithItsRunningImage(t *testing.T) {
 	if err != nil || strings.TrimSpace(string(data)) != running {
 		t.Fatalf("the release is %q, %v", data, err)
 	}
-	f.before(t, "systemctl enable --now "+WebUnit, "systemctl enable --now severino-hq-controller.path")
+	f.before(t, "systemctl enable --now "+hostcore.WebUnit, "systemctl enable --now severino-hq-controller.path")
 }
 
 func TestATakeOverThatFailsLeavesTheUnitDisabled(t *testing.T) {
 	f := newFakeHost(t)
 	f.running = running
-	f.fail = []string{"systemctl enable --now " + WebUnit}
+	f.fail = []string{"systemctl enable --now " + hostcore.WebUnit}
 
 	err := f.machine.Install(context.Background(), connected)
 
 	if err == nil {
 		t.Fatal("a failed take-over installed")
 	}
-	if !f.called("systemctl disable --now " + WebUnit) {
+	if !f.called("systemctl disable --now " + hostcore.WebUnit) {
 		t.Errorf("the unit was left enabled:\n%s", strings.Join(f.calls(), "\n"))
 	}
 }
@@ -120,7 +121,7 @@ func TestAnUnpinnedRunningImageIsNotRecorded(t *testing.T) {
 
 func TestPreflightOutputStaysInThePrivateLog(t *testing.T) {
 	f := newFakeHost(t)
-	f.active = []string{WebUnit}
+	f.active = []string{hostcore.WebUnit}
 
 	if err := f.machine.Install(context.Background(), connected); err != nil {
 		t.Fatal(err)
@@ -158,21 +159,21 @@ func TestATakeOverRecordsWhatRunsOverARecordLeftBehind(t *testing.T) {
 func TestAFailedTakeOverFreesHQsName(t *testing.T) {
 	f := newFakeHost(t)
 	f.running = running
-	f.fail = []string{"systemctl enable --now " + WebUnit}
+	f.fail = []string{"systemctl enable --now " + hostcore.WebUnit}
 
 	if err := f.machine.Install(context.Background(), connected); err == nil {
 		t.Fatal("a failed take-over installed")
 	}
 
-	f.before(t, "systemctl disable --now "+WebUnit, "docker rm --force "+Container)
-	if _, err := os.Stat(filepath.Join(f.machine.Systemd, WebUnit)); err == nil {
+	f.before(t, "systemctl disable --now "+hostcore.WebUnit, "docker rm --force "+hostcore.Container)
+	if _, err := os.Stat(filepath.Join(f.machine.Systemd, hostcore.WebUnit)); err == nil {
 		t.Error("the web unit was left installed")
 	}
 }
 
 func TestWhatNoReleaseShipsIsRemoved(t *testing.T) {
 	f := newFakeHost(t)
-	f.active = []string{WebUnit}
+	f.active = []string{hostcore.WebUnit}
 	os.Remove(filepath.Join(f.machine.UnitDir(), SecretsUnit+".d", "10-root-owned-exec.conf"))
 	leftovers := []string{
 		filepath.Join(f.machine.Systemd, ControllerUnit+".d", "10-root-owned-exec.conf"),

@@ -1,4 +1,4 @@
-"""The container's boot before it serves, in one Django setup: migrate, then ask for delivery to be read.
+"""The container's boot before it serves, in one Django setup: migrate, then ask for what a new image reads.
 
 Migrating keeps the database first when the schema is about to change. The
 host names where (``SEVERINO_SCHEMA_SNAPSHOT``), and a release that fails puts
@@ -16,7 +16,7 @@ from django.core.management.base import BaseCommand
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
-from hq.platform.application.cadence import request_delivery_read
+from hq.platform.application.cadence import request_boot_reads
 
 
 def pending() -> bool:
@@ -42,7 +42,7 @@ def keep(target: Path) -> None:
 
 
 class Command(BaseCommand):
-    help = "Apply migrations, keeping the database first where the host asks, then ask for delivery to be read."
+    help = "Apply migrations, keeping the database first where the host asks, then ask for what a new image reads."
 
     @override
     def handle(self, *args: Any, **options: Any) -> None:
@@ -51,12 +51,13 @@ class Command(BaseCommand):
             keep(Path(named))
             self.stdout.write(f"Kept the database before migrating, at {named}.")
         call_command("migrate", interactive=False, verbosity=options["verbosity"])
-        # A new image is the moment production changes what it runs, so
-        # delivery is read now rather than found later. Best effort: serving
-        # never waits on the controller, and a migrated database serves.
+        # A new image is the moment production changes what it runs and what
+        # a stored reading may hold, so those are read now rather than found
+        # later. Best effort: serving never waits on the controller, and a
+        # migrated database serves.
         try:
-            asked = request_delivery_read()
+            asked = request_boot_reads()
         except Exception as error:  # noqa: BLE001 - any failure here leaves a boot that serves.
-            self.stderr.write(f"Delivery read not requested: {error!r}")
+            self.stderr.write(f"Boot reads not requested: {error!r}")
             return
-        self.stdout.write("Delivery read requested." if asked else "Delivery is not read here.")
+        self.stdout.write(f"Read requested: {', '.join(asked)}." if asked else "Nothing to read at boot.")

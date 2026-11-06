@@ -10,7 +10,6 @@ from hq.platform.application.plugins import (
     plugin_attention_items,
     plugin_dashboard_sections,
     plugin_overviews,
-    plugin_resource_specs,
 )
 
 __all__ = [
@@ -23,5 +22,4 @@ __all__ = [
     "plugin_attention_items",
     "plugin_dashboard_sections",
     "plugin_overviews",
-    "plugin_resource_specs",
 ]

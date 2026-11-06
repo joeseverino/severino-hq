@@ -138,6 +138,18 @@ class _Page(HTMLParser):
             self.text.append(data)
 
 
+def _onward(links, seen: set[str]):
+    """Each page of this site a page links to that the crawl has yet to read, by its path."""
+
+    for href in links:
+        parts = urlsplit(href)
+        if parts.scheme or parts.netloc or not parts.path.startswith("/"):
+            continue
+        if parts.query or SKIPPED.search(parts.path) or parts.path in seen:
+            continue
+        yield parts.path
+
+
 class RenderedPageTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -178,13 +190,7 @@ class RenderedPageTests(TestCase):
             # as part of that page, not as a page of its own.
             if "<main" in html:
                 yield path, page
-            for href in page.links:
-                parts = urlsplit(href)
-                if parts.scheme or parts.netloc or not parts.path.startswith("/"):
-                    continue
-                if parts.query or SKIPPED.search(parts.path) or parts.path in seen:
-                    continue
-                queue.append(parts.path)
+            queue.extend(_onward(page.links, seen))
 
     def test_every_page_keeps_the_rules(self):
         problems: list[str] = []

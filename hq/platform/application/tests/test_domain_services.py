@@ -6,7 +6,7 @@ from decimal import Decimal
 from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.assets.models import Asset
@@ -23,14 +23,14 @@ from ..capabilities import execute_capability
 from ..content import ContentCommand, save_content
 from ..documentation import sync_documentation
 from ..expenses import ExpenseCommand, save_expense
+from ..plugin_testing import form_keyed
 from ..projects import ProjectCommand, refresh_project, save_project
 from ..record_errors import RecordConflict, RecordNotFound
 from ..security import OPERATOR_CAPABILITIES, Principal, cli_principal, mcp_principal
-from .writers import form_keyed
 
 
 def as_mcp_caller(call):
-    """Run an MCP tool call as an authenticated agent at the deployment ceiling.
+    """Run an MCP tool call as an authenticated agent holding every grant.
 
     A tool reached with no caller bound is refused; these tests are about the
     shape the tool returns, so they bind the caller the door would have.
@@ -150,7 +150,6 @@ class ProjectApplicationServiceTests(TestCase):
         self.assertEqual(project.updated_at, before)
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class AdapterParityTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(username="joe", password="test-password")
@@ -197,7 +196,6 @@ class AdapterParityTests(TestCase):
         )
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class AssetApplicationServiceTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(name="Homelab", slug="homelab")
@@ -279,10 +277,6 @@ class AssetApplicationServiceTests(TestCase):
         )
 
 
-@override_settings(
-    SEVERINO_AGENT_ENABLE_WRITES=True,
-    SEVERINO_AGENT_ENABLE_PRUNE=True,
-)
 class DocumentationSyncTests(TestCase):
     manifest = [
         {
@@ -370,7 +364,6 @@ class DocumentationSyncTests(TestCase):
         )
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class ContentApplicationServiceTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(name="Site", slug="site")
@@ -432,7 +425,6 @@ class ContentApplicationServiceTests(TestCase):
             )
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_WRITES=True)
 class ExpenseApplicationServiceTests(TestCase):
     def setUp(self):
         self.project = Project.objects.create(name="Ops", slug="ops")

@@ -1,9 +1,12 @@
 // Package host is what an HQ host is made of: the accounts, paths, names and
-// units every host program agrees on, declared once.
+// units every host program agrees on, declared once. The ones hq-secrets and
+// hq-edge need too are hostcore's (controller/internal/hostcore), so those
+// root programs link none of host's dependencies.
 package host
 
 import (
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"regexp"
 	"time"
 )
@@ -37,16 +40,6 @@ func StartPeriod(value string) (time.Duration, error) {
 }
 
 const (
-	// WebUID and WebGID are the account the image runs HQ as. It owns the
-	// application environment and the doorbell directory.
-	WebUID = 10001
-	WebGID = 10001
-
-	// Container is the web container's name: the controller launcher and the
-	// scheduled jobs find HQ by it.
-	Container = "severino-hq"
-	// WebUnit runs the web container. It is the only thing that starts it.
-	WebUnit = "severino-hq-web.service"
 	// SecretsUnit renders the application environment from the vault.
 	SecretsUnit = "severino-hq-secrets.service"
 	// ControllerUnit runs one controller pass.
@@ -66,15 +59,8 @@ const (
 	// HostProgram is this program, in the tree.
 	HostProgram = Lib + "/deploy/bin/hq-host"
 
-	// SecretDir is the root-only, noswap tmpfs the renderer installs into.
-	SecretDir = "/run/severino-hq-secrets"
 	// WebSecretDir holds the application environment the web container binds.
-	WebSecretDir = SecretDir + "/web"
-	// AppEnvName is the application environment's file name, in WebSecretDir
-	// on the host and in /run/secrets in the container.
-	AppEnvName = "severino_hq_env"
-	// RunDir is the doorbell directory HQ and the controller share.
-	RunDir = "/run/severino-hq"
+	WebSecretDir = hostcore.SecretDir + "/web"
 	// StateDir holds what the host records about itself across boots.
 	StateDir = "/var/lib/severino-hq"
 	// ReleaseFile names the image the web unit runs: one digest-pinned
@@ -107,7 +93,7 @@ const (
 	// DependencyRunFile is the last dependency run's outcome, root's, which
 	// the next controller pass is given read-only.
 	DependencyRunFile   = StateDir + "/renovate/dependency-run.json"
-	dependencyRunTarget = RunDir + "/dependency-run.json"
+	dependencyRunTarget = hostcore.RunDir + "/dependency-run.json"
 )
 
 // Renderers names each secret renderer on the host and its status document

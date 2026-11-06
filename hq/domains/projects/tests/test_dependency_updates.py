@@ -15,13 +15,13 @@ from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.domains import records_of
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.projects import DEPENDENCY_UPDATES, get_project, list_projects
 from hq.platform.application.security import Capability, Principal, cli_principal
 from hq.platform.application.tests import test_github_estate as estate
 from hq.platform.application.tests.markup import Element, all_elements, hrefs, select, text, with_class, within
 from hq.platform.application.tests.test_github_estate import store
 from hq.platform.application.tests.test_github_posture import kept
-from hq.platform.application.tests.writers import form_keyed
 from hq.platform.core.models import AuditLog
 
 URL = "https://github.com/example/alpha"

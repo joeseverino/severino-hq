@@ -150,12 +150,27 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+      # The scan is this workflow's, so it comes from the commit this
+      # workflow was called at.
+      - name: Check out the host's secret scan
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: host
+      - name: Set up the host's gitleaks
+        uses: ./host/.github/actions/host-tool
+        with:
+          host: host
+          tool: gitleaks
+      - name: No secret in the commits this run brings
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # gitleaks is the one tool the task runs, installed above.
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
+        run: mise -C host run scan:secrets "$GITHUB_WORKSPACE"

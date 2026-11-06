@@ -1,5 +1,6 @@
 """Declaring a resource: the generated create-and-edit form, adoption, and uploaded certificate material."""
 
+import logging
 from typing import get_origin
 
 from django.contrib import messages
@@ -31,7 +32,16 @@ from .models import ManagedResource, OperationRequest
 from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
 from .provider_spec import NameContext
-from .providers import PROVIDERS, controller_action_policy, describe_providers, readout_rows, spec_withheld
+from .providers import (
+    PROVIDERS,
+    controller_action_policy,
+    describe_providers,
+    read_spec,
+    readout_rows,
+    spec_withheld,
+)
+
+logger = logging.getLogger("severino.providers")
 
 
 class ResourceFormView(View):
@@ -310,7 +320,10 @@ def _derived_spec(resource) -> dict:
 
     try:
         resolved = resolved_spec(resource)
-    except Exception:  # noqa: BLE001 - a form must render without the topology
+    except Exception:  # a form must render without the topology
+        logger.exception(
+            "%s could not be resolved for its form.", resource.key, extra={"event": "providers.resolve.failed"}
+        )
         return {}
     fields = PROVIDERS[resource.kind].spec_type.model_fields
     return {name: value for name, value in resolved.items() if name in fields and value not in (None, "", [], ())}
@@ -364,10 +377,8 @@ def _form_context(request, resource) -> NameContext:
     if not hostname and resource is not None:
         provider = PROVIDERS.get(resource.kind)
         if provider is not None and provider.hostnames is not None:
-            try:
-                hostname = next(iter(provider.hostnames(resource.spec)), "")
-            except KeyError, TypeError, ValueError:
-                hostname = ""
+            first = read_spec(resource.kind, resource.spec, lambda spec: next(iter(provider.hostnames(spec)), ""))
+            hostname = first or ""
     return name_context(hostname)
 
 

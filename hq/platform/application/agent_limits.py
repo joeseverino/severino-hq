@@ -1,4 +1,4 @@
-"""How much one agent may ask of HQ: calls at once, its own and everyone's, and a call rate.
+"""How much one agent may ask of HQ: calls at once, its own and everyone's, a call rate, and listen streams open at once.
 
 Both agent doors ask it of a caller they authenticated. It is held in this
 process's memory, which every request sees because HQ serves from one process
@@ -28,6 +28,9 @@ from .refusal_status import Refusal
 
 RATE_LIMITED = "rate_limited"
 TOO_MANY_CALLS = "too_many_calls"
+# A stream frees when its client lets it go or its token expires, so a client
+# past its streams is told to wait longer than for a call.
+STREAM_RETRY_AFTER = 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,11 +50,12 @@ class Limited:
 
 
 class Slot:
-    """One call at once, held for a ``with`` block and given back once, however the block ends."""
+    """One call at once, or one open stream, held for a ``with`` block and given back once, however the block ends."""
 
-    def __init__(self, limits: Limits, actor: str) -> None:
+    def __init__(self, limits: Limits, actor: str, *, stream: bool = False) -> None:
         self._limits = limits
         self.actor = actor
+        self.stream = stream
         self._held = True
 
     def __enter__(self) -> Slot:
@@ -75,6 +79,7 @@ class Limits:
         self._lock = threading.Lock()
         self._full_again: dict[str, float] = {}
         self._running: dict[str, int] = {}
+        self._listening: dict[str, int] = {}
         self._overall = 0
 
     def take(self, actor: str) -> Limited | None:
@@ -109,21 +114,47 @@ class Limits:
             self._overall += 1
         return Slot(self, actor)
 
+    def listen(self, actor: str) -> Slot | Limited:
+        """One of ``actor``'s listen streams, or the refusal when it has them all open.
+
+        A stream is not a call: it waits on events for as long as its token
+        lasts and holds no thread, so it takes none of the calls at once.
+        """
+
+        with self._lock:
+            listening = self._listening.get(actor, 0)
+            if listening >= settings.SEVERINO_AGENT_STREAMS_AT_ONCE:
+                return Limited(
+                    TOO_MANY_CALLS,
+                    f"This agent already has {listening} listen streams open. Retry when one closes.",
+                    STREAM_RETRY_AFTER,
+                )
+            self._listening[actor] = listening + 1
+        return Slot(self, actor, stream=True)
+
+    def listening(self, actor: str) -> int:
+        """How many listen streams ``actor`` has open now."""
+
+        with self._lock:
+            return self._listening.get(actor, 0)
+
     def release(self, slot: Slot) -> None:
         with self._lock:
             if not slot.given_back():
                 return
-            self._overall -= 1
-            running = self._running.pop(slot.actor) - 1
-            if running:
-                self._running[slot.actor] = running
+            counts = self._listening if slot.stream else self._running
+            if not slot.stream:
+                self._overall -= 1
+            left = counts.pop(slot.actor) - 1
+            if left:
+                counts[slot.actor] = left
 
     def held(self) -> int:
-        """How many agents this holds anything for: none once no agent is calling or recovering."""
+        """How many agents this holds anything for: none once no agent is calling, listening or recovering."""
 
         with self._lock:
             self._forget_recovered(self._clock())
-            return len(self._full_again.keys() | self._running.keys())
+            return len(self._full_again.keys() | self._running.keys() | self._listening.keys())
 
     def _forget_recovered(self, now: float) -> None:
         # A bucket full again is the same as none, so it is not kept.

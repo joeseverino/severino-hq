@@ -8,12 +8,19 @@ A module's own share is what the memory traced grew by while its body ran, the l
 taken out, so a module is never charged for a heavy one it imports. Every load, a lazy import's
 too when its name is first used, passes through importlib's ``_load_unlocked``, which the count
 wraps. Pages are asked one at a time, so one load runs at once.
+
+Each path named in ``MEMORY_AFTER`` is a stage of its own after the pass: the modules that serve
+it, which boot leaves lazy, are loaded with every lazy import made eager, so the stage holds the
+path's whole closure, the most its first call can load. With ``MEMORY_TIMED`` set nothing is
+counted: the same boot, pass and paths run untraced under ``python -X importtime``, a line on
+stderr naming each path before its loads, so the import times are tracemalloc's slowdown free.
 """
 
 import _frozen_importlib as bootstrap
 import os
 import sys
 import tracemalloc
+import types
 
 # Each loads where it is first used, once the count has started, and HQ loads it too.
 lazy import asyncio
@@ -32,6 +39,27 @@ READY = "/health/ready/"
 REDIRECTS = {301, 302, 303, 307, 308}
 # More than the longest chain of redirects within HQ a navigation entry takes.
 HOPS = 5
+# Each path boot never takes, by the modules that serve it: a sign-in through the OIDC provider,
+# an agent's MCP call, and a call HQ makes out of the process.
+AFTER = {
+    "oidc": (
+        "hq.platform.core.oidc",
+        "hq.platform.core.oidc_views",
+        "hq.platform.core.oidc_end_session",
+        "hq.platform.core.oidc_logout",
+        "mozilla_django_oidc.views",
+    ),
+    "mcp-call": ("hq.platform.mcp.server", "hq.platform.mcp.security"),
+    "outbound": (
+        "hq.platform.application.http_read",
+        "hq.platform.application.avatars",
+        "hq.platform.application.oci_registry",
+        "hq.domains.control_plane.dns_lookup",
+        "hq.domains.content.content_sync",
+    ),
+}
+# What the timed run writes on stderr before a path's loads, the path's name after it.
+MARK = "audit:memory path "
 # The one place every load passes through: importlib has no public hook around a module's body.
 _LOAD = "_load_unlocked"
 
@@ -128,10 +156,39 @@ async def walk(application, pages: list[str], cookie: str) -> dict[str, dict[str
     return {page: await landing(application, page, cookie) for page in pages}
 
 
+def _eager(*_: object) -> bool:
+    return False
+
+
+def take(path: str) -> None:
+    """Load the modules that serve ``path`` with each lazy import they reach made eager; a module
+    boot already loaded has the names it left lazy resolved."""
+
+    sys.set_lazy_imports_filter(_eager)
+    for name in AFTER[path]:
+        # The import statement's own path, which python -X importtime times; importlib's is not timed.
+        __import__(name)
+        module = sys.modules[name]
+        for attribute, value in list(vars(module).items()):
+            if isinstance(value, types.LazyImportType):
+                getattr(module, attribute)
+
+
+def timed(paths: list[str]) -> None:
+    pages = os.environ["MEMORY_PAGES"].split()
+    session = os.environ["MEMORY_SESSION"]
+    asyncio.run(walk(served.application, [READY], ""))
+    asyncio.run(walk(served.application, pages, f"{settings.SESSION_COOKIE_NAME}={session}"))
+    for path in paths:
+        print(f"{MARK}{path}", file=sys.stderr, flush=True)
+        take(path)
+
+
 def main(out: str) -> None:
     # Read before the count starts, so what reads them is not charged to HQ.
     pages = os.environ["MEMORY_PAGES"].split()
     session = os.environ["MEMORY_SESSION"]
+    paths = os.environ.get("MEMORY_AFTER", "").split()
     ledger = Ledger()
     ledger.install()
     tracemalloc.start()
@@ -139,7 +196,13 @@ def main(out: str) -> None:
     boot = tracemalloc.get_traced_memory()[0]
     ledger.current = PASS
     landed = asyncio.run(walk(served.application, pages, f"{settings.SESSION_COOKIE_NAME}={session}"))
-    after, peak = tracemalloc.get_traced_memory()
+    after = tracemalloc.get_traced_memory()[0]
+    taken = {}
+    for path in paths:
+        ledger.current = path
+        take(path)
+        taken[path] = tracemalloc.get_traced_memory()[0]
+    peak = tracemalloc.get_traced_memory()[1]
     ledger.remove()
     tracemalloc.stop()
     Path(out).write_text(
@@ -147,6 +210,7 @@ def main(out: str) -> None:
             {
                 BOOT: boot,
                 PASS: after,
+                "after": taken,
                 "peak": peak,
                 "ready": ready[READY],
                 "pages": landed,
@@ -158,4 +222,7 @@ def main(out: str) -> None:
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    if os.environ.get("MEMORY_TIMED"):
+        timed(os.environ.get("MEMORY_AFTER", "").split())
+    else:
+        main(sys.argv[1])

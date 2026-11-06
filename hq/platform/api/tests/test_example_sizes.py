@@ -39,14 +39,29 @@ def _examples(document: dict[str, Any]):
     recorded = document["components"].get("examples", {})
     for path, item in document["paths"].items():
         for method, operation in item.items():
-            parts = [(["requestBody"], operation["requestBody"])] if "requestBody" in operation else []
-            parts += [(["responses", status], answer) for status, answer in operation["responses"].items()]
-            for at, part in parts:
-                for example in part.get("content", {}).get(_JSON, {}).get("examples", {}).values():
-                    name = example["$ref"].rsplit("/", 1)[1] if "$ref" in example else f"{method} {path}"
-                    entry = recorded[name] if "$ref" in example else example
-                    pointer = ["paths", path, method, *at, "content", _JSON, "schema"]
+            for at, part in _parts(operation):
+                pointer = ["paths", path, method, *at, "content", _JSON, "schema"]
+                for name, entry in _part_examples(part, recorded, f"{method} {path}"):
                     yield name, pointer, entry.get("dataValue", entry.get("value"))
+
+
+def _parts(operation: dict[str, Any]) -> list[tuple[list[str], dict[str, Any]]]:
+    """An operation's request body, when it takes one, and each of its responses, with the path to each."""
+
+    parts = [(["requestBody"], operation["requestBody"])] if "requestBody" in operation else []
+    return parts + [(["responses", status], answer) for status, answer in operation["responses"].items()]
+
+
+def _part_examples(part: dict[str, Any], recorded: dict[str, Any], inline_name: str):
+    """Each JSON example a part carries, by name: a recorded one as the
+    document's components hold it, one written inline as ``inline_name``."""
+
+    for example in part.get("content", {}).get(_JSON, {}).get("examples", {}).values():
+        if "$ref" in example:
+            name = example["$ref"].rsplit("/", 1)[1]
+            yield name, recorded[name]
+        else:
+            yield inline_name, example
 
 
 @unittest.skipIf(RECORDING, "the recording run rewrites the examples these read")

@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // The verifier a deploy checks the composition's signature with: cosign, at
@@ -32,25 +34,18 @@ func installVerifier(ctx context.Context, client *http.Client, from, path, pinne
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	staged, err := os.CreateTemp(filepath.Dir(path), ".cosign.")
+	staged, err := atomicfile.Create(path, 0o755)
 	if err != nil {
 		return err
 	}
-	defer os.Remove(staged.Name())
-	err = download(ctx, client, from, staged)
-	if closeErr := staged.Close(); err == nil {
-		err = closeErr
-	}
-	if err != nil {
+	defer staged.Discard()
+	if err := download(ctx, client, from, staged.File); err != nil {
 		return fmt.Errorf("could not download cosign %s: %w", CosignVersion, err)
 	}
-	if digest, err := fileDigest(staged.Name()); err != nil || digest != pinned {
+	if digest, err := fileDigest(staged.Temporary()); err != nil || digest != pinned {
 		return fmt.Errorf("refusing cosign %s: its digest is not the pinned one", CosignVersion)
 	}
-	if err := os.Chmod(staged.Name(), 0o755); err != nil {
-		return err
-	}
-	return os.Rename(staged.Name(), path)
+	return staged.Replace()
 }
 
 // download writes the release to file, from its start on each attempt.

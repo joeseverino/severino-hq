@@ -27,12 +27,6 @@
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
-      "description": "Vale 3.25 no longer masks a template's {% comment %} block, so lint:prose reads comments as shown text; a later release comes in the weekly pull request, where lint:prose decides it.",
-      "matchManagers": ["mise"],
-      "matchDepNames": ["vale"],
-      "allowedVersions": "!/^3\\.25\\./"
-    },
-    {
       "description": "Stable libraries release slowly, so only two years without a release reads as abandoned.",
       "matchPackageNames": ["*"],
       "abandonmentThreshold": "2 years"

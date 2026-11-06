@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"os"
 	"os/exec"
@@ -14,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
 )
 
 // BuildSource is the repository this program was built from, owner/name,
@@ -95,7 +98,7 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 		cleanup()
 		return err
 	}
-	env := []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"}
+	env := []string{"PATH=" + hostcore.RootPath}
 	if config != "" {
 		env = append(env, "DOCKER_CONFIG="+config)
 		d.Command = withEnv(d.Command, env)
@@ -121,7 +124,6 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 	}
 	// The running image is referenced and survives, so it stays the rollback.
 	_ = d.run(ctx, "docker", "image", "prune", "--all", "--force")
-	_ = d.run(ctx, "docker", "builder", "prune", "--all", "--force")
 	if free, err := d.Free(d.FreeOn); err == nil && free < d.FreeBytes {
 		cleanup()
 		return fmt.Errorf("a deploy needs %d MiB free; %d MiB are", d.FreeBytes>>20, free>>20)
@@ -220,9 +222,9 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 		return err
 	}
 	// Returns once HQ answers its health check on the new image, or fails.
-	if err := d.run(ctx, "systemctl", "restart", WebUnit); err != nil {
+	if err := d.run(ctx, "systemctl", "restart", hostcore.WebUnit); err != nil {
 		_ = d.private(context.WithoutCancel(ctx), "Application failure diagnostics", "application-failure",
-			"journalctl", "--unit", WebUnit, "--lines", "80", "--no-pager")
+			"journalctl", "--unit", hostcore.WebUnit, "--lines", "80", "--no-pager")
 		return fmt.Errorf("the new image did not become healthy: %w", err)
 	}
 	fmt.Fprintln(d.Out, "HQ is healthy on the new image.")
@@ -261,7 +263,7 @@ func (d *Deployer) installWebUnit(ctx context.Context) error {
 		return err
 	}
 	for _, name := range shipped {
-		if name == WebUnit || strings.HasPrefix(name, WebUnit+".d/") {
+		if name == hostcore.WebUnit || strings.HasPrefix(name, hostcore.WebUnit+".d/") {
 			if err := InstallUnit(d.UnitDir(), d.Systemd, name); err != nil {
 				return err
 			}
@@ -280,7 +282,7 @@ func (d *Deployer) rollBack(previous, tree string, units func() error, kept stri
 	if err := d.restoreSchema(ctx, kept); err != nil {
 		errs = append(errs, err)
 	} else {
-		errs = append(errs, d.run(ctx, "systemctl", "restart", WebUnit))
+		errs = append(errs, d.run(ctx, "systemctl", "restart", hostcore.WebUnit))
 	}
 	d.restart(held)
 	return errors.Join(errs...)
@@ -293,7 +295,7 @@ func (d *Deployer) restoreSchema(ctx context.Context, kept string) error {
 	if _, err := os.Stat(kept); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
-	if err := d.run(ctx, "systemctl", "stop", WebUnit); err != nil {
+	if err := d.run(ctx, "systemctl", "stop", hostcore.WebUnit); err != nil {
 		return fmt.Errorf("could not stop HQ to restore its database: %w", err)
 	}
 	database := filepath.Join(filepath.Dir(kept), Database)
@@ -438,7 +440,7 @@ func copyFile(from, to string, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	return writeAtomic(to, data, mode)
+	return atomicfile.WriteFile(to, data, mode)
 }
 
 // Free is the free bytes on the filesystem holding path.

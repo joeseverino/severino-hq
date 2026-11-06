@@ -4,6 +4,7 @@ import json
 import os
 import re
 import tempfile
+from collections.abc import Iterator
 from dataclasses import MISSING, asdict, fields, replace
 from datetime import timedelta
 from pathlib import Path
@@ -72,6 +73,40 @@ SKIP_SUFFIXES = frozenset(
 # supported place to record where your extension checkouts are. Naming one there
 # is configuration, not a dependency in the host.
 SKIP_FILE_PREFIXES = (".env", "mise.local.toml")
+
+
+def _installed_extension_names() -> dict[str, str]:
+    """Each name an installed extension goes by (its id, distribution, apps' and
+    urlconf's packages), to what kind of name it is. The synthetic ``example.``
+    namespace exists to be named, so it is left out."""
+
+    forbidden: dict[str, str] = {}
+    for plugin in installed_plugins():
+        if plugin.id.startswith("example."):
+            continue
+        forbidden[plugin.id] = "plugin id"
+        forbidden[plugin.distribution] = "distribution"
+        for app in plugin.django_apps:
+            forbidden[app.partition(".")[0]] = "django app"
+        if plugin.urlconf:
+            forbidden[plugin.urlconf.partition(".")[0]] = "urlconf package"
+    return forbidden
+
+
+def _host_texts(root: Path) -> Iterator[tuple[Path, str]]:
+    """Each host source file under ``root`` that is text, with its body: what the coupling scan reads."""
+
+    for directory, subdirectories, filenames in os.walk(root):
+        subdirectories[:] = [name for name in subdirectories if name not in SKIP_DIRECTORIES]
+        for filename in filenames:
+            path = Path(directory) / filename
+            if path.suffix.lower() in SKIP_SUFFIXES or filename.startswith(SKIP_FILE_PREFIXES):
+                continue
+            try:
+                body = path.read_text(encoding="utf-8")
+            except OSError, UnicodeDecodeError:
+                continue  # binary or unreadable: it is not carrying prose
+            yield path, body
 
 
 VALID = PluginManifest(
@@ -149,17 +184,7 @@ class PluginContractTests(TestCase):
         question.
         """
 
-        forbidden: dict[str, str] = {}
-        for plugin in installed_plugins():
-            if plugin.id.startswith("example."):
-                continue  # the synthetic namespace exists to be named here
-            forbidden[plugin.id] = "plugin id"
-            forbidden[plugin.distribution] = "distribution"
-            for app in plugin.django_apps:
-                forbidden[app.partition(".")[0]] = "django app"
-            if plugin.urlconf:
-                forbidden[plugin.urlconf.partition(".")[0]] = "urlconf package"
-
+        forbidden = _installed_extension_names()
         if not forbidden:
             self.skipTest("no extensions composed; nothing for the host to know")
 
@@ -170,23 +195,12 @@ class PluginContractTests(TestCase):
 
         root = Path(__file__).resolve().parents[4]
         offences: list[str] = []
-        for directory, subdirectories, filenames in os.walk(root):
-            subdirectories[:] = [name for name in subdirectories if name not in SKIP_DIRECTORIES]
-            for filename in filenames:
-                path = Path(directory) / filename
-                if path.suffix.lower() in SKIP_SUFFIXES:
-                    continue
-                if filename.startswith(SKIP_FILE_PREFIXES):
-                    continue
-                try:
-                    body = path.read_text(encoding="utf-8")
-                except OSError, UnicodeDecodeError:
-                    continue  # binary or unreadable: it is not carrying prose
-                found = needle.search(body)
-                if found:
-                    word = found.group(0).lower()
-                    relative = path.relative_to(root)
-                    offences.append(f"{relative}: {kind_of[word]} {word!r}")
+        for path, body in _host_texts(root):
+            found = needle.search(body)
+            if found:
+                word = found.group(0).lower()
+                relative = path.relative_to(root)
+                offences.append(f"{relative}: {kind_of[word]} {word!r}")
 
         self.assertEqual(
             sorted(offences),
@@ -230,9 +244,9 @@ class PluginContractTests(TestCase):
 
     def test_a_bad_manifest_names_every_violation_at_once(self):
         with self.assertRaises(ImproperlyConfigured) as refused:
-            replace(VALID, distribution="not a distribution", api_version=999, mcp_write_capabilities=("notes.export",))
+            replace(VALID, distribution="not a distribution", api_version=999, mcp_read_capabilities=("notes.export",))
         named = {field for field, _ in refused.exception.violations}
-        self.assertEqual(named, {"distribution", "api_version", "mcp_write_capabilities"})
+        self.assertEqual(named, {"distribution", "api_version", "mcp_read_capabilities"})
         self.assertIn(repr(VALID.id), str(refused.exception))
 
     def test_a_field_no_manifest_declares_is_refused(self):

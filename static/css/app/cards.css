@@ -164,7 +164,6 @@ a.kpi:hover { background: var(--surface-2); }
   border-top: 1px solid var(--line-2);
 }
 .attention-body { flex: 1 1 18rem; min-width: 0; }
-.attention-body > * { max-width: var(--measure); }
 .attention-end { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3) var(--space-4); margin-left: auto; }
 .attention-end > .attention-actions { margin: 0; justify-content: flex-end; }
 .attention-row[data-dismissed] > .attention-end > :not([data-triage]) { display: none; }
@@ -186,7 +185,7 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-title { min-width: 0; max-width: 100%; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; overflow-wrap: anywhere; }
 /* What it means, then what to do, then the reason it cannot be done from
    here, then what can be pressed. */
-.attention-detail { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-sm); line-height: 1.65; color: var(--ink-2); overflow-wrap: anywhere; }
+.attention-detail { margin: var(--space-3) 0 0; font-size: var(--text-sm); line-height: 1.65; color: var(--ink-2); overflow-wrap: anywhere; }
 .attention-advice { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
 .attention-reason { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
 .attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
@@ -207,7 +206,7 @@ a.kpi:hover { background: var(--surface-2); }
 .attention-facts > div { display: contents; }
 .attention-facts dt { color: var(--muted); }
 .attention-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-/* The queue's table: the title leads since it is what a reader presses, the urgency is one quiet word after it only when urgent (the pill keeps its word for a screen reader and its tip), the meaning is one line until the row opens, and the buttons end the row. */
+/* The queue's table: the title leads since it is what a reader presses, the urgency is one quiet word after it only when urgent (the pill keeps its word for a screen reader and its tip), the meaning wraps under it to the buttons, and the buttons end the row. */
 .queue-table > tbody > tr > :is(.queue-mark, .queue-what) { font-size: var(--text-md); line-height: 1.5; }
 /* The gutter is the queue's at every width, so the title and everything the
    opened line holds start on one edge whatever the rows offer. */
@@ -243,12 +242,10 @@ a.kpi:hover { background: var(--surface-2); }
   /* Past the first two, a row's buttons wait in the line beneath at any
      width, with the rest of what it holds. */
   .queue-table > tbody > tr:not(.row-detail) .queue-later { display: none; }
-  /* The meaning in full is the opened line's, so the row keeps its title. */
-  .queue-table tr.is-expanded > .queue-what > .attention-detail { display: none; }
-  /* A row whose opened line would only repeat the meaning it shows whole offers nothing: its toggle shows once the meaning is cut short or the row holds something else back. */
-  .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .narrow-more, .queue-more > :not(.queue-meaning))) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
+  /* A row with nothing held back offers nothing: its toggle shows once a value in it is cut short or the row holds more beneath. */
+  .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .narrow-more, .queue-more)) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
   @container style(--box: whole) {
-    .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .queue-more > :not(.queue-meaning))) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
+    .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .queue-more)) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
   }
   @container style(--box: narrow) {
     .queue-table .queue-act:not(:has(> :not(.narrow-more, .queue-buttons), .queue-buttons > :not(.narrow-more))) { padding: 0; }
@@ -258,10 +255,9 @@ a.kpi:hover { background: var(--surface-2); }
     .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss::before { content: "\00d7" / ""; font-size: var(--text-lg); line-height: 1; }
   }
 }
-/* The opened line (table_tags._detail_row): the meaning in full, then one place for every button the row holds, each the line's width on a phone, where a button asks the line for no width (`contain: inline-size`) so a long label never widens the table. */
+/* The opened line (table_tags._detail_row): what the row holds back, then one place for every button the row holds, each the line's width on a phone, where a button asks the line for no width (`contain: inline-size`) so a long label never widens the table. */
 .queue-table .row-detail > td { padding-inline: calc(var(--row-gutter) + var(--space-6)) var(--space-6); }
 .queue-table .row-detail > td > * { margin-bottom: var(--space-8); }
-.queue-meaning { max-width: var(--measure); margin: 0; font-size: var(--text-sm); line-height: 1.6; color: var(--ink-2); overflow-wrap: anywhere; }
 .queue-more > :first-child { margin-top: 0; }
 .queue-table .row-detail .row-columns { grid-template-columns: minmax(0, 1fr); padding: 0; background: none; }
 .queue-table .row-detail .row-columns > dd { display: flex; flex-wrap: wrap; gap: var(--space-4); }

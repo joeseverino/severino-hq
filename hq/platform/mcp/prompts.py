@@ -14,10 +14,11 @@ from mcp.shared.exceptions import MCPError
 from pydantic import TypeAdapter
 
 from hq.platform.application import read_models
-from hq.platform.application.findings import findings
+from hq.platform.application.access import Access
 from hq.platform.application.security import Principal
 
-from .resources import action_queue, held_requests, hq_itself
+from .finding_actions import agent_findings
+from .resources import READS, action_queue, held_requests, hq_itself
 
 _JSON = TypeAdapter(Any)
 # The open problems a brief leads with, most severe first; the summary still counts every one.
@@ -31,10 +32,13 @@ class Prompt:
     description: str
     ask: str
     read: Callable[[Principal], Mapping[str, Any]]
+    # Who may ask for it: a get is refused by it, and prompts/list lists the
+    # prompt only to a caller it admits, as tools/list lists a tool.
+    requires: Access
 
 
 def _status(principal: Principal) -> dict[str, Any]:
-    problems = findings(principal=principal, severity="attention", limit=BRIEF_FINDINGS)
+    problems = agent_findings(principal=principal, severity="attention", limit=BRIEF_FINDINGS)
     return {
         "hq": hq_itself(principal),
         "health": read_models.system_health(principal=principal),
@@ -52,6 +56,7 @@ PROMPTS = {
             "Tell me what needs me in HQ, most urgent first: for each, what it is and the one thing to do, "
             "with HQ's page for it. HQ's action queue:",
             action_queue,
+            READS,
         ),
         Prompt(
             "status-brief",
@@ -60,6 +65,7 @@ PROMPTS = {
             "Give me a short status brief of HQ: the release it runs, its health, and the open problems "
             "that matter, most severe first, each with its remedy. What HQ reports:",
             _status,
+            READS,
         ),
         Prompt(
             "held-requests",
@@ -68,16 +74,20 @@ PROMPTS = {
             "Walk me through each change you asked for that waits for my decision in HQ: what it would change "
             "and what to weigh, with its review page. Only I decide them, in HQ. The held requests:",
             held_requests,
+            READS,
         ),
     )
 }
 
 
-def listed() -> types.ListPromptsResult:
+def listed(principal: Principal) -> types.ListPromptsResult:
+    """The prompts ``principal`` may ask for, each by the rule its get is refused by."""
+
     return types.ListPromptsResult(
         prompts=[
             types.Prompt(name=prompt.name, title=prompt.title, description=prompt.description)
             for prompt in PROMPTS.values()
+            if prompt.requires.admits(principal)
         ]
     )
 
@@ -92,6 +102,7 @@ def message(name: str, principal: Principal) -> types.GetPromptResult:
             f"HQ has no prompt named {name!r}. prompts/list names each one.",
             data={"next": {"method": "prompts/list"}},
         )
+    prompt.requires.check(principal)
     said = _JSON.dump_json(prompt.read(principal), by_alias=True, fallback=str).decode()
     return types.GetPromptResult(
         description=prompt.description,

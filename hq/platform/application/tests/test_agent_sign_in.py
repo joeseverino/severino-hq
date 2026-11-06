@@ -28,7 +28,7 @@ def _signs_in() -> str:
 class SignInTests(TestCase):
     def setUp(self):
         # The person the delegated token names has signed in to HQ.
-        person = get_user_model().objects.create_user("example-person")
+        self.person = person = get_user_model().objects.create_user("example-person")
         bind_sign_in(person, sign_in_subject(settings.OIDC_ISSUER, DELEGATED["sub"]))
 
     def test_a_client_credentials_token_signs_in_as_itself(self):
@@ -52,5 +52,8 @@ class SignInTests(TestCase):
 
         self.assertEqual(_signs_in(), "person")
 
-    def test_signing_in_through_a_person_makes_it_nobodys(self):
-        self.assertIsNone(person_of(token_principal(DELEGATED, "mcp")))
+    def test_signing_in_through_a_person_makes_it_theirs(self):
+        self.assertEqual(person_of(token_principal(DELEGATED, "mcp")), self.person)
+
+    def test_signing_in_as_itself_makes_it_nobodys(self):
+        self.assertIsNone(person_of(token_principal(MACHINE, "mcp")))

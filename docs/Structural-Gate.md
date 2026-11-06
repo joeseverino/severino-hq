@@ -1,7 +1,7 @@
 # Structural Gate
 
 The gate fails a near-duplicate pair of executable code that its baseline
-does not list. File size is `FileSizeTests`, a fixed ceiling in the suite.
+does not list. File size is `FileSizeTests`, held to the ceiling, the files it covers (`SEVERINO_FILE_LINE_HELD`) and the exemptions `mise.toml` declares (`SEVERINO_FILE_LINE_*`).
 
 The forms below, classified from the source, leave the pair check. There is no
 list of exempt pairs, symbols or paths.

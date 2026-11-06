@@ -1,16 +1,10 @@
 """One answer to which documentation an AI-facing surface may name."""
 
-import ast
-from pathlib import Path
-
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase
 
 from hq.domains.docs_index.models import DocumentationRecord
 
 from ..sensitivity import SAFE_SENSITIVITIES
-from .source import parsed
-
-ROOT = Path(__file__).resolve().parents[4]
 
 
 class SafeSensitivityTests(SimpleTestCase):
@@ -53,23 +47,3 @@ class SafeSensitivityTests(SimpleTestCase):
         ):
             with self.subTest(level=level):
                 self.assertNotIn(level, SAFE_SENSITIVITIES)
-
-
-@tag("source", "tree")
-class SafeSensitivitySourceTests(SimpleTestCase):
-    """No other module states its own safe set."""
-
-    def test_no_other_module_states_its_own(self):
-        """A second copy is how one surface ends up wider than the rest."""
-
-        offenders = []
-        for path in sorted((ROOT / "hq/platform/application").rglob("*.py")):
-            if path.name.startswith("test") or path.name == "sensitivity.py":
-                continue
-            for node in ast.walk(parsed(path)):
-                if isinstance(node, (ast.Assign, ast.AnnAssign)):
-                    targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-                    if any(isinstance(t, ast.Name) and t.id == "SAFE_SENSITIVITIES" for t in targets):
-                        offenders.append(f"{path.relative_to(ROOT)}:{node.lineno}")
-
-        self.assertEqual(offenders, [])

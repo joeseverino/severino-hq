@@ -1,0 +1,71 @@
+# HQ hands expected_updated_at (integration_specs.STALE_WRITE_KEYWORD) only
+# to a capability handler that names it, so a function that declares it and
+# never reads it asked for a stale-write check it does not make. A read is
+# the name as a value anywhere in the body, a nested function's included; a
+# keyword's name, an attribute, an assignment's target or another function's
+# parameter of the same name is not one. A *args or **kwargs of that name is
+# no declaration.
+id: stale-write-token-read
+language: python
+severity: error
+message: A function declares the stale-write token, expected_updated_at, and never reads it.
+note: Compare it with the record's updated_at, or drop the parameter so HQ does not hand it over.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+rule:
+  any:
+    - kind: function_definition
+    - kind: lambda
+  has:
+    field: parameters
+    has:
+      any:
+        - kind: identifier
+          regex: ^expected_updated_at$
+        - any:
+            - kind: default_parameter
+            - kind: typed_parameter
+            - kind: typed_default_parameter
+          has:
+            kind: identifier
+            regex: ^expected_updated_at$
+  not:
+    has:
+      field: body
+      stopBy: end
+      kind: identifier
+      regex: ^expected_updated_at$
+      not:
+        any:
+          - inside:
+              kind: keyword_argument
+              field: name
+          - inside:
+              kind: attribute
+              field: attribute
+          - inside:
+              any:
+                - kind: parameters
+                - kind: lambda_parameters
+                - kind: default_parameter
+                - kind: typed_parameter
+                - kind: typed_default_parameter
+          - inside:
+              kind: assignment
+              field: left
+              stopBy: end
+          - inside:
+              kind: augmented_assignment
+              field: left
+              stopBy: end
+          - inside:
+              kind: for_statement
+              field: left
+              stopBy: end
+          - inside:
+              kind: for_in_clause
+              field: left
+              stopBy: end

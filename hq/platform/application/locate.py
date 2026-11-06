@@ -9,6 +9,7 @@ the evidence they hand it. Names and addresses are separate namespaces
 
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -16,7 +17,7 @@ from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.core.network import split_host_port
 lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 lazy from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
-lazy from hq.domains.control_plane.providers import PROVIDERS
+lazy from hq.domains.control_plane.providers import PROVIDERS, read_record
 
 lazy from .connections import connection_rows
 lazy from .facts import snapshots_of
@@ -234,16 +235,10 @@ def container_hosts() -> dict[str, str]:
     return found
 
 
-def _observed_record(provider, record) -> tuple[tuple, tuple]:
-    """Read one provider record without letting a stale row end the sweep."""
+def _observed(provider, spec) -> tuple[tuple, tuple]:
+    """The names one provider record answers for, and what it answers with."""
 
-    try:
-        spec = provider.from_record(record)
-        return tuple(provider.hostnames(spec)), tuple(provider.answers(spec))
-    except KeyError, TypeError, ValueError:
-        # The inventory sweep reports its own health. One unreadable row is
-        # evidence about that row, not a reason to hide every healthy answer.
-        return (), ()
+    return tuple(provider.hostnames(spec)), tuple(provider.answers(spec))
 
 
 def _record_observed_answers(found: dict[str, set[str]], names: tuple, addresses: tuple) -> None:
@@ -281,8 +276,11 @@ def observed_answers(snapshots=None) -> dict[str, tuple[str, ...]]:
         if provider.answers is None or provider.hostnames is None:
             continue
         for record in snapshot.records:
-            names, addresses = _observed_record(provider, record)
-            _record_observed_answers(found, names, addresses)
+            # The inventory sweep reports its own health. One unreadable row is
+            # evidence about that row, not a reason to hide every healthy answer.
+            read = read_record(snapshot.kind, record, partial(_observed, provider))
+            if read is not None:
+                _record_observed_answers(found, *read)
     return {name: tuple(sorted(addresses)) for name, addresses in found.items()}
 
 

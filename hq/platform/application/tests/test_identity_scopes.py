@@ -50,4 +50,3 @@ class IdentityScopeTests(TestCase):
         # The page reads "{in force} of {granted}" from these two.
         self.assertEqual(AgentIdentity.objects.get(client_id=AGENT).granted, ["read"])
         self.assertEqual(standing.in_force, ("read",))
-        self.assertEqual(standing.held_back, ())

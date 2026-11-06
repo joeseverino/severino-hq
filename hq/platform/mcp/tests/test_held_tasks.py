@@ -111,7 +111,7 @@ async def _task(client, method, task_id, **fields):
     return await client.session.send_request(request, ANSWER)
 
 
-@override_settings(SEVERINO_AGENT_ENABLE_INFRASTRUCTURE=True, SEVERINO_SITE_HOST="hq.example.com")
+@override_settings(SEVERINO_SITE_HOST="hq.example.com")
 class HeldTaskTests(TestCase):
     def setUp(self):
         from hq.platform.application.adoption_testing import managing_everything
@@ -220,7 +220,7 @@ class HeldTaskTests(TestCase):
         self.assertEqual(failed["details"]["operation"]["state"], OperationRequest.State.FAILED)
 
     def test_a_change_that_queues_nothing_completes_once_a_person_approves(self):
-        CapabilityRule.objects.create(scope="surface", subject="mcp", capability="project.create", rule="approve")
+        CapabilityRule.objects.create(subject=self.agent.actor, capability="project.create", rule="approve")
 
         async def steps(client):
             return await _ask_for_a_project(client)

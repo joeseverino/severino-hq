@@ -23,7 +23,7 @@ from .answer_fields import Outcome, Pinned
 from .input_errors import django_refusal, pydantic_refusal
 from .projection import QueryRefusal
 from .record_errors import HostRefusal
-from .security import AuthorizationError, Principal
+from .security import AuthorizationError, InsufficientScope, Principal
 lazy from .approvals import RefusedHold
 lazy from .denials import record_denial
 lazy from .integration_specs import CapabilitySpec, takes_stale_write_token
@@ -126,11 +126,17 @@ CODES = {
     "too_many_calls": _code(429, Door.ADMISSION, waits=True),
     # The token is missing, malformed, expired or not HQ's.
     "invalid_token": _code(401, Door.ADMISSION),
-    # A good token that grants nothing HQ can use.
-    "insufficient_scope": _code(403, Door.ADMISSION),
+    # A good token that grants nothing HQ can use, or lacks a permission its
+    # person holds: granting it to the client and signing in again gets it
+    # through, and `details.scope` names it.
+    "insufficient_scope": _code(403, Door.ADMISSION, Door.ENDPOINT, Door.CAPABILITY),
     # The operator's brakes: no change to the request gets it through.
     "agents_paused": _code(403, Door.ADMISSION),
     "agent_blocked": _code(403, Door.ADMISSION),
+    # A tailnet device nobody approved for this agent, or one a person blocked:
+    # approving or allowing it on the Agents page gets it through.
+    "device_awaiting_approval": _code(403, Door.ADMISSION),
+    "device_blocked": _code(403, Door.ADMISSION),
     # HQ stopped waiting for a call that may still finish.
     "call_timed_out": _code(504, Door.WAIT),
     "not_configured": _code(503, Door.ENDPOINT),
@@ -163,6 +169,8 @@ def waiting(table: Mapping[str, Code] = CODES) -> frozenset[str]:
 
 REFUSAL_STATUS = statuses()
 LATER_CODES = waiting()
+# The codes a missing grant answers: the caller's own, or its token's.
+WANTS_A_GRANT = frozenset({"forbidden", "insufficient_scope"})
 
 # A change's doors: a read takes no retry key and is never held.
 _WRITE_DOORS = (Door.RETRY_KEY, Door.HOLD, Door.DECISION)
@@ -217,8 +225,10 @@ type RefusalDetails = Annotated[
     Field(
         description=(
             "What gets past the refusal, where something does: `next`, the call that finds what was "
-            "missing; `field`, the argument to send; for `invalid_input`, each field that was wrong and why, "
-            "which a list or record read puts under `errors`, beside the `filters` its list takes."
+            "missing; `closest`, the read of each record or list named nearest the one asked for; "
+            "`field`, the argument to send; `scope`, the permission to grant the token's client; for "
+            "`invalid_input`, each field that was wrong and why, which a list or record read puts under "
+            "`errors`, beside the `filters` its list takes."
         )
     ),
 ]
@@ -275,6 +285,14 @@ class Refusal:
     def status(self) -> int:
         return REFUSAL_STATUS[self.code]
 
+    @property
+    def scope(self) -> str:
+        """The permission an ``insufficient_scope`` refusal names, which a door's challenge repeats; "" for any other."""
+
+        if self.code != "insufficient_scope" or not isinstance(self.details, Mapping):
+            return ""
+        return str(self.details.get("scope", ""))
+
     def answer(self) -> dict[str, Any]:
         """The ``{"ok": false}`` envelope every adapter carries."""
 
@@ -323,7 +341,13 @@ def refusal_of(outcome: dict[str, Any] | Exception, *, name: str = "", principal
         )
     refusal = _mapped(outcome, name)
     if principal is not None and isinstance(outcome, (AuthorizationError, RefusedHold)):
-        record_denial(interface=principal.interface, actor=principal.actor, capability=name, reason=refusal.code)
+        record_denial(
+            interface=principal.interface,
+            actor=principal.actor,
+            capability=name,
+            reason=refusal.code,
+            device=principal.device,
+        )
     return refusal
 
 
@@ -341,6 +365,8 @@ def _mapped(exc: Exception, name: str) -> Refusal:
         # Host-written text naming no request value (record_errors.py), and
         # what gets past it.
         return Refusal(exc.code, exc.reason, exc.details)
+    if isinstance(exc, InsufficientScope):
+        return Refusal(exc.code, exc.reason, {"scope": exc.scope})
     if isinstance(exc, AuthorizationError):
         # What tells a caller what it has to change.
         return Refusal(exc.code, exc.reason)

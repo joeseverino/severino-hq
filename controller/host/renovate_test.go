@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -176,7 +177,7 @@ func TestTheRenovateContainerReachesNothingOfTheHosts(t *testing.T) {
 		t.Errorf("args\n%q\nwant\n%q", args, want)
 	}
 	joined := strings.Join(args, " ")
-	for _, absent := range []string{"--network bridge", "--network host", "--network=host", "docker.sock", "--privileged", "--cap-add", BridgeSocket, SecretDir, RunDir + ","} {
+	for _, absent := range []string{"--network bridge", "--network host", "--network=host", "docker.sock", "--privileged", "--cap-add", BridgeSocket, hostcore.SecretDir, hostcore.RunDir + ","} {
 		if strings.Contains(joined, absent) {
 			t.Errorf("the container is given %q", absent)
 		}

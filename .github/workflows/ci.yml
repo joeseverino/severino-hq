@@ -56,17 +56,17 @@ jobs:
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
       # The cosign mise.lock records, which the host verifies with too.
       - name: Install the pinned cosign
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
           version: ${{ steps.mise.outputs.version }}
           install_args: cosign
           cache: false
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       - name: Find the pull request that proved this tree
         id: proof
         env:
@@ -179,13 +179,13 @@ jobs:
           GATE: browser:${{ matrix.gate }}
         run: mise run "$GATE"
       # A failed rule saves the page as it stood (tests/browser/gate.py writes each
-      # into its own hq-browser-failure-* folder in the runner's temp).
+      # into the checkout's var/browser-failures/).
       - name: Failure screenshots
         if: ${{ failure() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-failures-${{ matrix.gate }}
-          path: /tmp/hq-browser-failure-*
+          path: var/browser-failures/
           if-no-files-found: ignore
 
   # The one writer of the caches the jobs above restore, on every push to main
@@ -229,6 +229,34 @@ jobs:
           path: ${{ steps.toolchain.outputs.npm-path }}
           key: ${{ steps.toolchain.outputs.npm-key }}
 
+  # The one writer of the registry layer cache Build reads, on every push to
+  # main, since a push whose tree its pull request proved promotes rather than
+  # builds. A cache entry maps a step to a layer on its writer's word, so no
+  # pull request writes one. The image built here is thrown away with the
+  # runner; Release does not wait for it, and a newer push cancels it with
+  # the rest of the run.
+  build-cache:
+    name: Build cache
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      BUILD_CACHE: ghcr.io/${{ github.repository }}/build-cache:main
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/toolchain
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Write the layer cache
+        run: mise run build --no-verify --cache "$BUILD_CACHE" --cache-write
+
   # Code scanning, on every pull request and push to main: main's analysis is
   # what a pull request's is compared with. Release does not wait for it.
   # CodeQL's own action uploads what it finds, which the ruleset and the
@@ -248,14 +276,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: python
           # The suite is named in the config, beside the rules it filters.
           config-file: ./.github/codeql/codeql-config.yml
       - name: Perform CodeQL analysis
         id: analyze
-        uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           category: "/language:python"
       - uses: ./.github/actions/toolchain
@@ -301,37 +329,40 @@ jobs:
       # Set when this tree's image was proven on its pull request: promoted,
       # not rebuilt.
       PROVEN: ${{ needs.proven.outputs.digest }}
+      # Written by Build cache alone; a missing or unreadable one builds cold.
+      BUILD_CACHE: ghcr.io/${{ github.repository }}/build-cache:main
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # Layers cached between runs: most changes touch the application, not
-      # its dependencies, so those layers are reused rather than rebuilt.
-      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-        if: env.PROVEN == ''
       - uses: ./.github/actions/toolchain
         if: env.PROVEN == ''
-      # A promotion runs crane, Trivy and cosign, so it installs those rather
-      # than the toolchain the build and its checks need. Trivy and cosign are
-      # lazy in mise.toml, so a build installs them here too.
+      # A promotion runs Trivy and cosign, so it installs those rather than
+      # the toolchain the build and its checks need. Both are lazy in
+      # mise.toml, so a build installs them here too.
       - name: Read the pinned mise
         id: mise
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
-      - name: Install the pinned crane, Trivy and cosign
-        uses: jdx/mise-action@6be3c7ed4c21d4f76b208d351d95aac273ebb76d # v5.2.4
+      - name: Install the pinned Trivy and cosign
+        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
           version: ${{ steps.mise.outputs.version }}
-          install_args: ${{ env.PROVEN != '' && 'crane trivy cosign' || 'trivy cosign' }}
+          install_args: trivy cosign
           cache: false
+      # Before the build too, which reads the layer cache: a package that may be private.
+      - name: Log in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       - name: Build the production image
         id: build
         if: env.PROVEN == ''
-        env:
-          IMAGE_BUILD_CACHE: --cache-from type=gha,scope=host-image --cache-to type=gha,scope=host-image,mode=max
         run: |
           set -euo pipefail
           image="ghcr.io/${{ github.repository }}:sha-${HEAD_SHA::12}"
-          mise run build --tag "$image" --revision "$HEAD_SHA" --no-verify
+          mise run build --tag "$image" --revision "$HEAD_SHA" --no-verify --cache "$BUILD_CACHE"
           echo "image=$image" >> "$GITHUB_OUTPUT"
       # On main only: a pull request's image is checked by Build verify,
       # alongside its composition.
@@ -341,12 +372,6 @@ jobs:
         env:
           IMAGE: ${{ steps.build.outputs.image }}
         run: mise run build
-      - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish
         id: publish
         if: env.PROVEN == ''
@@ -374,15 +399,19 @@ jobs:
       # a signature over a pointer proves nothing about what it points at now.
       - name: Promote the image its pull request proved
         # The same manifest under this commit's tag, so the tag names the
-        # digest that is signed: `crane tag` PUTs the bytes it fetched by
-        # digest. Each tag is read back and must name that digest.
+        # digest that is signed: from one source, `imagetools create
+        # --prefer-index=false` pushes the bytes it fetched by digest, an index
+        # or a single manifest alike, where the default wraps a single manifest
+        # in a new index. Each tag is read back and must name that digest.
         id: promote
         if: env.PROVEN != ''
         run: |
           set -euo pipefail
           for tag in "sha-${HEAD_SHA::12}" latest; do
-            crane tag "$PROVEN" "$tag"
-            resolved=$(crane digest "${PROVEN%@*}:$tag")
+            docker buildx imagetools create --prefer-index=false \
+              --tag "${PROVEN%@*}:$tag" "$PROVEN"
+            resolved=$(docker buildx imagetools inspect "${PROVEN%@*}:$tag" \
+              --format '{{.Manifest.Digest}}')
             if [ "$resolved" != "${PROVEN#*@}" ]; then
               echo "::error::$tag resolves to $resolved, not ${PROVEN#*@}"
               exit 1
@@ -428,11 +457,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Log in to GHCR
-        uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
       - name: Pull the image by digest
         run: docker pull --quiet "$IMAGE"
       - uses: ./.github/actions/toolchain

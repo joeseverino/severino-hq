@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from typing import Annotated, Literal, TypedDict
 
 from django.db import transaction
-from django.db.models import Q
 from django.utils import timezone
 
 from hq.domains.control_plane.models import CapabilityRule
@@ -19,38 +18,26 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentIdentity, AuditLog
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import (
-    DESTRUCTIVE_EFFECT,
-    READ_EFFECT,
-    held_by_default,
-    is_destructive,
-    may_be_held_by_default,
-)
+from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive
 from .command_fields import Describe
+from .default_hold import held_by_default, may_be_held_by_default, needs_approval
 from .labels import dotted, effect_label
 from .security import (
     AGENT_SURFACES,
-    API_INTERFACE,
-    INTERNAL_INTERFACE,
-    MCP_INTERFACE,
-    AuthorizationError,
+    NEEDS_A_PERSON,
     Principal,
     could_hold,
+    is_agent,
     is_interactive,
-    mcp_principal,
     person,
 )
 lazy from . import capabilities
 lazy from .entity_links import kind_label
 lazy from .integrations import integration_graph
 
-SURFACES = AGENT_SURFACES
 AUDIT_LABEL = "Capability policy"
 
 Rule = CapabilityRule.Rule
-Scope = CapabilityRule.Scope
-
-_RESTRICTIVENESS = {Rule.ALLOW: 0, Rule.APPROVE: 1, Rule.DENY: 2}
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,97 +51,77 @@ class Decision:
         return self.rule == Rule.ALLOW and self.default == Rule.APPROVE
 
 
-def default_rule(spec, command, target) -> str:
-    return Rule.APPROVE if held_by_default(spec, command, target) else Rule.ALLOW
+def default_rule(spec, command, target, *, principal: Principal) -> str:
+    return Rule.APPROVE if held_by_default(spec, command, target, principal=principal) else Rule.ALLOW
 
 
 def decide(spec, principal: Principal, command, target) -> Decision:
     """At most one query. ``command`` is the validated command, which is what runs."""
 
-    default = default_rule(spec, command, target)
+    default = default_rule(spec, command, target, principal=principal)
     if is_interactive(principal):
         return Decision(Rule.ALLOW, "operator", default)
-    if principal.interface not in SURFACES:
+    if not is_agent(principal.interface):
         return Decision(default, "default", default)
     if is_destructive(spec, command):
         default = Rule.APPROVE
 
-    rules = dict(
-        CapabilityRule.objects.filter(capability=spec.name)
-        .filter(Q(scope=Scope.SURFACE, subject=principal.interface) | Q(scope=Scope.AGENT, subject=principal.actor))
-        .values_list("scope", "rule")
+    # The agent's own rule beats the default outright: it is how one agent is
+    # allowed what the rest still wait for, and how one is kept off what its
+    # grant carries.
+    rule = (
+        CapabilityRule.objects.filter(capability=spec.name, subject=principal.actor)
+        .values_list("rule", flat=True)
+        .first()
     )
-    decision = (
-        Decision(rules[Scope.SURFACE], f"{principal.interface} policy", default)
-        if Scope.SURFACE in rules
-        else Decision(default, "default", default)
-    )
-    agent_rule = rules.get(Scope.AGENT)
-    if agent_rule and (
-        # An explicit rule for this agent beats the default outright (it is
-        # how one agent is allowed what the rest still wait for) and against
-        # an explicit surface rule, only the stricter of the two survives.
-        decision.source == "default" or _RESTRICTIVENESS[agent_rule] > _RESTRICTIVENESS[decision.rule]
-    ):
-        decision = Decision(agent_rule, f"{principal.actor} policy", default)
-    return decision
+    if rule is None:
+        return Decision(default, "default", default)
+    return Decision(rule, f"{principal.actor} policy", default)
 
 
-def rules() -> dict[tuple[str, str, str], str]:
-    return {(row.scope, row.subject, row.capability): row.rule for row in CapabilityRule.objects.all()}
+def rules() -> dict[tuple[str, str], str]:
+    return {(row.subject, row.capability): row.rule for row in CapabilityRule.objects.all()}
 
 
 def set_rule(
     *,
-    scope: str,
     subject: str,
     spec,
     rule: str | None,
-    principal: Principal,
     user,
 ) -> bool:
-    """Set a rule, or clear it with None. Returns whether anything changed.
+    """Set an agent's rule, or clear it with None. Returns whether anything changed.
 
-    Refuses non-operators, approval on a read, and an agent rule for a capability
-    its grant does not carry. The rule and its audit row commit together.
+    Refuses approval on a read, and an agent rule for a capability its grant
+    does not carry or its sign-in could never use. Who may set one at all is
+    ``GOVERN_AGENTS``'s, which ``Principal.require`` holds to a person. The rule
+    and its audit row commit together.
     """
 
-    if not is_interactive(principal):
-        raise AuthorizationError(
-            f"{principal.interface} principal {principal.actor!r} cannot change capability policy."
-        )
-    if scope == Scope.SURFACE and subject not in SURFACES:
-        raise ValueError(f"{subject!r} is not a surface.")
-    if scope not in Scope.values:
-        raise ValueError(f"{scope!r} is not a policy scope.")
     if rule is not None and rule not in Rule.values:
         raise ValueError(f"{rule!r} is not a rule.")
     if not agents_may_hold(spec):
         raise ValueError(f"Only a person in the browser can {spec.title.lower()}, so no agent has a rule for it.")
     if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
         raise ValueError(f"{spec.title} only reads. It can be allowed or blocked, not held for approval.")
-    if scope == Scope.AGENT and rule is not None:
-        granted = AgentIdentity.objects.filter(client_id=subject).values_list("granted", flat=True).first()
-        if granted is None:
+    if rule is not None:
+        identity = AgentIdentity.objects.filter(client_id=subject).first()
+        if identity is None:
             raise ValueError(f"No agent named {subject} has connected yet.")
-        if not _held_by_grant(spec, granted):
-            raise ValueError(f"Pocket ID does not allow {subject} to use {spec.title}.")
+        if not _held_by_grant(spec, identity.granted):
+            raise ValueError(f"The sign-in service does not allow {subject} to use {spec.title}.")
+        if not _usable_by(spec, identity):
+            raise ValueError(f"{subject} signs in as itself, and {spec.title} keeps something of a person's.")
 
     with transaction.atomic():
-        existing = (
-            CapabilityRule.objects.select_for_update()
-            .filter(scope=scope, subject=subject, capability=spec.name)
-            .first()
-        )
+        existing = CapabilityRule.objects.select_for_update().filter(subject=subject, capability=spec.name).first()
         before = existing.rule if existing else None
         if before == rule:
             return False
         if rule is None:
             existing.delete()
         elif existing is None:
-            CapabilityRule.objects.create(
-                scope=scope, subject=subject, capability=spec.name, rule=rule, changed_by=user
-            )
+            CapabilityRule.objects.create(subject=subject, capability=spec.name, rule=rule, changed_by=user)
         else:
             existing.rule = rule
             existing.changed_by = user
@@ -165,7 +132,6 @@ def set_rule(
             type_label=AUDIT_LABEL,
             message=dotted(subject, f"{spec.name}: from {_name(before)} to {_name(rule)}"),
             metadata={
-                "scope": scope,
                 "subject": subject,
                 "capability": spec.name,
                 "from": before,
@@ -180,17 +146,28 @@ def set_rule(
 def agents_may_hold(spec) -> bool:
     """Whether a token on some agent surface could ever be granted ``spec``."""
 
-    return any(could_hold(surface, spec.required_capabilities) for surface in SURFACES)
+    return any(could_hold(surface, spec.required_capabilities) for surface in AGENT_SURFACES)
 
 
 def _held_by_grant(spec, granted) -> bool:
-    """Asked through Principal.permits, the one definition of holding a capability."""
+    """Whether ``granted`` carries every capability ``spec`` requires.
 
-    return Principal("grant", INTERNAL_INTERFACE, frozenset(granted)).permits(*spec.required_capabilities)
+    Asked of a grant alone, since whether its agent has a person behind it is
+    ``_usable_by``'s question.
+    """
+
+    return all(capability in frozenset(granted) for capability in spec.required_capabilities)
 
 
-# What a rule is called on the page. The stored values keep their names.
-RULE_LABELS = {Rule.ALLOW: "Allow", Rule.APPROVE: "Ask me first", Rule.DENY: "Block"}
+def _usable_by(spec, identity: AgentIdentity) -> bool:
+    """Whether ``identity``'s sign-in could ever run ``spec``: one that keeps
+    something of a person's (``NEEDS_A_PERSON``) needs a person behind it."""
+
+    return identity.person_id is not None or NEEDS_A_PERSON.isdisjoint(spec.required_capabilities)
+
+
+# What a rule is called on the page, beside "Default". The stored values keep their names.
+RULE_LABELS = {Rule.ALLOW: "On", Rule.APPROVE: "Ask me first", Rule.DENY: "Off"}
 
 
 def _name(rule: str | None) -> str:
@@ -211,15 +188,15 @@ EFFECTS = {
 _EFFECT_ORDER = tuple(EFFECTS)
 
 
-def field_name(scope: str, subject: str, capability: str) -> str:
-    return _FIELD_SEPARATOR.join(("rule", scope, subject, capability))
+def field_name(subject: str, capability: str) -> str:
+    return _FIELD_SEPARATOR.join(("rule", subject, capability))
 
 
-def _parse_field(name: str) -> tuple[str, str, str] | None:
+def _parse_field(name: str) -> tuple[str, str] | None:
     parts = name.split(_FIELD_SEPARATOR)
-    if len(parts) != 4 or parts[0] != "rule":
+    if len(parts) != 3 or parts[0] != "rule":
         return None
-    return parts[1], parts[2], parts[3]
+    return parts[1], parts[2]
 
 
 def submitted_rules(post) -> list[dict[str, str]]:
@@ -229,30 +206,28 @@ def submitted_rules(post) -> list[dict[str, str]]:
     for name, value in post.items():
         parsed = _parse_field(name)
         if parsed is not None:
-            scope, subject, capability = parsed
-            found.append({"scope": scope, "subject": subject, "capability": capability, "rule": value})
+            subject, capability = parsed
+            found.append({"subject": subject, "capability": capability, "rule": value})
     return found
 
 
 @dataclass(frozen=True, slots=True)
 class Column:
-    scope: str
+    """One agent's column."""
+
     subject: str
     label: str
     detail: str
-    identity: AgentIdentity | None = None
+    identity: AgentIdentity
 
 
 @dataclass(frozen=True, slots=True)
 class PolicyCell:
     field: str
-    scope: str
     column: str
     rule: str | None
     options: tuple[tuple[str, str], ...]
     unavailable: str = ""
-    # Settable, but not in force until the deployment allows it over MCP.
-    dormant: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,10 +238,6 @@ class Row:
     effect_label: str
     default: str
     cells: tuple[PolicyCell, ...]
-
-    @property
-    def agents(self) -> tuple[PolicyCell, ...]:
-        return tuple(cell for cell in self.cells if cell.scope == Scope.AGENT)
 
     @property
     def overrides(self) -> tuple[PolicyCell, ...]:
@@ -294,30 +265,18 @@ def split_by_default(groups: tuple[Group, ...]) -> tuple[tuple[Group, ...], tupl
 
 
 def columns() -> tuple[Column, ...]:
-    surfaces = (
-        Column(Scope.SURFACE, MCP_INTERFACE, "All MCP agents", "MCP"),
-        Column(Scope.SURFACE, API_INTERFACE, "All API clients", "API"),
-    )
-    agents = tuple(
-        Column(
-            Scope.AGENT,
-            identity.client_id,
-            identity.client_id,
-            dotted(*identity.interfaces).upper(),
-            identity,
-        )
+    return tuple(
+        Column(identity.client_id, identity.client_id, dotted(*identity.interfaces).upper(), identity)
         for identity in AgentIdentity.objects.all()
     )
-    return surfaces + agents
 
 
-def matrix(current: dict[tuple[str, str, str], str] | None = None) -> tuple[tuple[Column, ...], tuple[Group, ...]]:
+def matrix(current: dict[tuple[str, str], str] | None = None) -> tuple[tuple[Column, ...], tuple[Group, ...]]:
     """Every capability against every column, grouped by what it acts on; ``current`` is
     ``rules()`` when the caller has read them already."""
 
     cols = columns()
-    grants = {column.subject: column.identity.granted for column in cols if column.identity is not None}
-    ceiling = mcp_principal()
+    grants = {column.subject: column.identity.granted for column in cols}
     current = rules() if current is None else current
     grouped: dict[str, list] = {}
     for spec in capabilities.capability_registry().values():
@@ -335,7 +294,7 @@ def matrix(current: dict[tuple[str, str, str], str] | None = None) -> tuple[tupl
                 spec.effect,
                 EFFECTS[spec.effect],
                 _default_label(spec),
-                tuple(_cell(spec, column, current, grants, ceiling) for column in cols),
+                tuple(_cell(spec, column, current, grants) for column in cols),
             )
             for spec in specs
         )
@@ -364,35 +323,34 @@ def _default_label(spec) -> str:
     if spec.effect == DESTRUCTIVE_EFFECT:
         return RULE_LABELS[Rule.APPROVE]
     if may_be_held_by_default(spec):
-        return f"{RULE_LABELS[Rule.APPROVE]} for {_approved_types()}"
+        return f"{RULE_LABELS[Rule.APPROVE]} for {_approved_types(spec)}"
     return RULE_LABELS[Rule.ALLOW]
 
 
-def _approved_types() -> str:
-    """The types whose changes wait for a person, by the names their pages use."""
+def _approved_types(spec) -> str:
+    """The types whose changes through ``spec`` wait for a person, by the names their pages use."""
 
-    names = sorted(kind_label(kind).lower() for kind, provider in PROVIDERS.items() if provider.requires_approval)
+    names = sorted(kind_label(kind).lower() for kind, provider in PROVIDERS.items() if needs_approval(provider, spec))
     if not names:
         return "types that need approval"
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
-def _cell(spec, column: Column, current, grants, ceiling) -> PolicyCell:
-    field = field_name(column.scope, column.subject, spec.name)
-    if column.scope == Scope.AGENT and not _held_by_grant(spec, grants[column.subject]):
-        return PolicyCell(field, column.scope, column.label, None, (), "Pocket ID does not allow this")
-    dormant = not ceiling.permits(*spec.required_capabilities)
+def _cell(spec, column: Column, current, grants) -> PolicyCell:
+    field = field_name(column.subject, spec.name)
+    if not _held_by_grant(spec, grants[column.subject]):
+        return PolicyCell(field, column.label, None, (), "Not granted")
+    if not _usable_by(spec, column.identity):
+        return PolicyCell(field, column.label, None, (), "Needs a person")
     options = [("", "Default"), (Rule.ALLOW, RULE_LABELS[Rule.ALLOW])]
     if spec.effect != READ_EFFECT:
         options.append((Rule.APPROVE, RULE_LABELS[Rule.APPROVE]))
     options.append((Rule.DENY, RULE_LABELS[Rule.DENY]))
     return PolicyCell(
         field,
-        column.scope,
         column.label,
-        current.get((column.scope, column.subject, spec.name)),
+        current.get((column.subject, spec.name)),
         tuple(options),
-        dormant=dormant,
     )
 
 
@@ -401,9 +359,8 @@ SET_POLICY = "agent.policy.set"
 
 @dataclass(frozen=True, slots=True)
 class RuleCell:
-    """One cell of the policy: the rule for one capability, on one surface or agent; empty for the default."""
+    """One cell of the policy: the rule for one capability and one agent; empty for the default."""
 
-    scope: str
     subject: str
     capability: str
     rule: str = ""
@@ -443,10 +400,10 @@ def apply_changes(command: PolicyCommand, *, principal: Principal) -> PolicyAppl
             problems.append(f"{cell.capability} is no longer something HQ can do.")
             continue
         wanted = cell.rule or None
-        if current.get((cell.scope, cell.subject, cell.capability)) == wanted:
+        if current.get((cell.subject, cell.capability)) == wanted:
             continue
         try:
-            if set_rule(scope=cell.scope, subject=cell.subject, spec=spec, rule=wanted, principal=principal, user=user):
+            if set_rule(subject=cell.subject, spec=spec, rule=wanted, user=user):
                 changed += 1
         except ValueError as exc:
             problems.append(str(exc))

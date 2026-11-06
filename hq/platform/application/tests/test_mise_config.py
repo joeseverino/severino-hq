@@ -157,11 +157,19 @@ def context_sources(image: str, passed: dict[str, set[str]]) -> set[str]:
             if keyword == "ARG" and arguments:
                 name, _, default = arguments[0].partition("=")
                 args[name] = ({default} if default else set()) | passed.get(name, set())
-            elif keyword == "COPY" and not any(word.startswith("--from=") for word in arguments):
-                for source in [word for word in arguments if not word.startswith("--")][:-1]:
-                    for path in expand(source, args):
-                        sources.add(posixpath.normpath(path).removeprefix("./"))
+            elif keyword == "COPY":
+                sources.update(_copied_from_context(arguments, args))
     return {source for source in sources if source != "." and "$" not in source}
+
+
+def _copied_from_context(arguments: list[str], args: dict[str, set[str]]) -> set[str]:
+    """Each path a COPY takes from the build context, with every ARG value it
+    can read; none for one that copies from another stage."""
+
+    if any(word.startswith("--from=") for word in arguments):
+        return set()
+    sources = [word for word in arguments if not word.startswith("--")][:-1]
+    return {posixpath.normpath(path).removeprefix("./") for source in sources for path in expand(source, args)}
 
 
 def expand(source: str, args: dict[str, set[str]]) -> set[str]:

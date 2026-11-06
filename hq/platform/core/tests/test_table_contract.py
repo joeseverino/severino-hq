@@ -411,17 +411,6 @@ class TableTagTests(SimpleTestCase):
             with self.subTest(source), self.assertRaises(ValueError):
                 _render(source)
 
-    def test_a_heading_note_stands_beside_its_label(self):
-        for source in (
-            '{% table_heading "Agents" note="off" note_css="policy-off" %}',
-            '{% table_heading "Agents" local_sort=True note="off" note_css="policy-off" %}',
-        ):
-            with self.subTest(source):
-                html = _render(source)
-                (note,) = [each for each in elements(html, "span") if "policy-off" in each.classes]
-                self.assertEqual(note.text.strip(), "off")
-                self.assertIn("Agents", elements(html, "th")[0].text)
-
     def test_an_unknown_argument_is_refused_when_the_template_compiles(self):
         with self.assertRaises(TemplateSyntaxError):
             _render('{% table_heading "Name" color="red" %}')

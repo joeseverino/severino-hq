@@ -90,6 +90,14 @@ class ControllerPageTests(TestCase):
         self.assertEqual(results["tailscale.device"], (False, "The provider refused the credential."))
         self.assertEqual({reading.records for reading in page.readings}, {2})
 
+    def test_a_kind_no_read_has_answered_was_tried_and_never_succeeded(self):
+        store("tailscale.device", age=timedelta(minutes=5), records=[], reachable=False, observed_at=None)
+
+        reading = next(reading for reading in controller_page().readings if reading.kind == "tailscale.device")
+
+        self.assertIsNone(reading.observed_at)
+        self.assertLess(reading.attempted_at, timezone.now() - timedelta(minutes=4))
+
     def test_it_says_when_the_next_sweep_is_due(self):
         store("adguard.rewrite", age=timedelta(seconds=60))
         fresh = controller_page()

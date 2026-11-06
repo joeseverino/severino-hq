@@ -1,0 +1,13 @@
+id: attention-item-carries-help
+valid:
+  - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="", workflow=plan)'
+  - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="", actions=(remedy,))'
+  - 'Insight(status="attention", title="Example", action="Fill in details", url="/assets/")'
+  - 'Insight(status="attention", title="Example", **helped)'
+  - 'ui.Insight(title="Example", workflow=cannot_help(key, reason))'
+  - 'Insightful(title="Example")'
+invalid:
+  - 'Insight(status="attention", eyebrow="Example", title="Example", value="1", body="")'
+  - 'Insight(status="attention", title="Example", action="Fill in details")'
+  - 'Insight(status="attention", title="Example", url="/assets/")'
+  - 'ui.Insight(title="Example", value=count)'

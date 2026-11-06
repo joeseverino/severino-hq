@@ -263,7 +263,7 @@ def _what(service) -> str:
                 f"{hop.source.label} {hop.name}".strip() if hop.source else hop.name for hop in service.path.observed
             )
         )
-        return f"Read through {ended(seen)} Not in HQ's settings." if seen else "Read"
+        return f"Read through {ended(seen)} Not in HQ's config." if seen else "Read"
     # Declared or not is what Health already says ("Nothing declared"), so
     # repeating it here would be the same fact twice.
     return ""

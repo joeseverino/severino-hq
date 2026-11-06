@@ -525,6 +525,11 @@ create nothing: a secret goes into 1Password and nowhere else.
 Both lists are the `requires` of every reading for that provider plus
 `hq.domains.control_plane.credential_reads`, and a test fails when they differ.
 
+`mise run wire-pocket-id` writes Pocket ID's permission list for HQ's API the
+same way, over `tools/pocket_id.py`: the operator's admin key comes from the
+environment (`POCKET_ID_API_KEY`, through `op run`) and travels only in Pocket
+ID's `X-API-Key` header. HQ stores none ([API](API.md#setting-up-a-client)).
+
 ## Why it is built this way
 
 These are the constraints behind the renderer's shape, so a later change does

@@ -1,4 +1,4 @@
-"""The agents page: a column marked off by the column, and its save through the policy capability."""
+"""The agents page's save through the policy capability."""
 
 from unittest.mock import patch
 
@@ -10,58 +10,15 @@ from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.capability_policy import (
     SET_POLICY,
-    Column,
-    Group,
-    PolicyCell,
-    Row,
     Rule,
-    Scope,
     field_name,
     submitted_rules,
 )
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, web_principal
-from hq.platform.application.tests.markup import text, with_class
-from hq.platform.application.tests.writers import form_keyed, keyed
-from hq.platform.core.models import AuditLog
-
-
-def _cell(column: Column, *, dormant: bool) -> PolicyCell:
-    return PolicyCell(
-        field=f"rule:{column.scope}:{column.subject}:example.capability",
-        scope=column.scope,
-        column=column.label,
-        rule=None,
-        options=(),
-        dormant=dormant,
-    )
-
-
-class DormantColumnTests(TestCase):
-    def test_a_label_shared_by_two_columns_marks_only_the_dormant_one(self):
-        surface = Column(Scope.SURFACE, "mcp", "Example", "MCP")
-        agent = Column(Scope.AGENT, "example-agent", "Example", "API")
-        groups = (
-            Group(
-                "Example group",
-                (
-                    Row(
-                        "example.capability",
-                        "Example capability",
-                        "write",
-                        "Write",
-                        "Allow",
-                        (_cell(surface, dormant=True), _cell(agent, dormant=False)),
-                    ),
-                ),
-            ),
-        )
-        self.client.force_login(get_user_model().objects.create_user("op", password="x" * 20))
-        with patch("hq.platform.application.capability_policy.matrix", return_value=((surface, agent), groups)):
-            # Every action: a column is headed only over the rows that are drawn.
-            response = self.client.get(reverse("agent_policy"), {"all": 1})
-
-        self.assertEqual([head["dormant"] for head in response.context["column_heads"]], [True, False])
-        self.assertEqual([off.words for off in with_class(response, "policy-off")], ["off in HQ's settings"])
+from hq.platform.application.tests.markup import text
+from hq.platform.application.tests.writers import keyed
+from hq.platform.core.models import AgentIdentity, AuditLog
 
 
 class PolicyWriteTests(TestCase):
@@ -70,7 +27,8 @@ class PolicyWriteTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("op", password="x" * 20)
         self.client.force_login(self.user)
-        self.field = field_name(Scope.SURFACE, "mcp", "project.delete")
+        AgentIdentity.objects.create(client_id="example-agent", granted=["read", "delete_projects"])
+        self.field = field_name("example-agent", "project.delete")
 
     def save(self, rule):
         return self.client.post(reverse("agent_policy"), form_keyed({self.field: rule}), follow=True)
@@ -97,7 +55,7 @@ class PolicyWriteTests(TestCase):
 
     def test_no_credential_sets_policy(self):
         granted = frozenset(Capability)
-        cell = {"scope": Scope.SURFACE, "subject": "mcp", "capability": "project.delete", "rule": Rule.ALLOW}
+        cell = {"subject": "example-agent", "capability": "project.delete", "rule": Rule.ALLOW}
         for principal in (
             Principal("example-agent", "mcp", granted, granted=granted),
             Principal("example-client", "api", granted, granted=granted),
@@ -111,17 +69,17 @@ class PolicyWriteTests(TestCase):
         self.assertEqual(self.denials(), 3)
 
     def test_rules_that_are_not_cells_are_invalid(self):
-        for rules in ("project.delete", [{"scope": Scope.SURFACE}]):
+        for rules in ("project.delete", [{"subject": "example-agent"}]):
             with self.subTest(rules=rules):
                 result = execute_capability(SET_POLICY, keyed({"rules": rules}), principal=web_principal(self.user))
 
                 self.assertEqual(result["error"]["code"], "invalid_input")
         self.assertFalse(CapabilityRule.objects.exists())
 
-    def test_the_form_names_each_cell_by_its_scope_subject_and_capability(self):
-        post = {self.field: Rule.DENY, "csrfmiddlewaretoken": "x", "rule:too:few": "allow"}
+    def test_the_form_names_each_cell_by_its_agent_and_capability(self):
+        post = {self.field: Rule.DENY, "csrfmiddlewaretoken": "x", "rule|too-few": "allow", "rule|a|b|c": "allow"}
 
         self.assertEqual(
             submitted_rules(post),
-            [{"scope": Scope.SURFACE, "subject": "mcp", "capability": "project.delete", "rule": Rule.DENY}],
+            [{"subject": "example-agent", "capability": "project.delete", "rule": Rule.DENY}],
         )

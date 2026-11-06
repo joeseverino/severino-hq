@@ -9,7 +9,7 @@ import shlex
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Annotated, Any, NotRequired, TypedDict
 
 from pydantic import ConfigDict, with_config
 
@@ -23,6 +23,9 @@ from .topology_model import Topology, TopologyNode
 from .ui import ended
 from .workflows import WorkflowPlan
 lazy from .capabilities import capability_words
+
+if TYPE_CHECKING:
+    from .cadence import ControllerSweepCommand
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +98,10 @@ class Finding:
     # a container's name on its machine. A page about one of them alone tells
     # its own problems from its neighbors' by it.
     part: str = ""
+    # The read its verify step asks the controller for, set beside that step's
+    # link, whose target alone cannot say whether it names a connection or a
+    # kind; a door that calls rather than links sends it as the payload.
+    read_now: ControllerSweepCommand | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,7 +169,9 @@ def open_the_path(node: TopologyNode) -> tuple[FindingRemedy, ...]:
 
 
 def reconcile_remedy(node: TopologyNode) -> tuple[FindingRemedy, ...]:
-    """The one capability that answers "go and look again", where the kind allows it."""
+    """The one capability that makes the live record match HQ's config, where
+    the kind allows it: it creates a record that is missing and corrects one
+    that differs."""
 
     provider = PROVIDERS.get(node.kind_key)
     policy = provider.actions.get("reconcile") if provider else None

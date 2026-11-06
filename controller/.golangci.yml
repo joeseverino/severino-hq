@@ -48,6 +48,17 @@ linters:
         - pattern: ^slog\.(New|NewTextHandler|NewJSONHandler)$
           pkg: ^log/slog$
           msg: build the logger with mask.Logger (controller/internal/mask)
+        # A file staged beside its destination and renamed over it is only
+        # whole after a power cut when the file and its directory are synced,
+        # which atomicfile does and a hand-rolled temporary file forgets.
+        - pattern: ^os\.CreateTemp$
+          msg: put a file in place whole with atomicfile.Create or atomicfile.WriteFile (controller/internal/atomicfile)
+        # A program the controller starts gets only the environment it is
+        # handed, which hostcore.Process enforces: an exec.Cmd left with a nil
+        # Env inherits every variable, credentials included.
+        - pattern: ^exec\.Command(Context)?$
+          pkg: ^os/exec$
+          msg: start a program with hostcore.Process (or hostcore.Command), which gives it only the environment it is handed
     govet:
       settings:
         # A subtest that stops its parent (t.Fatal, FailNow or Skip on the t
@@ -85,6 +96,11 @@ linters:
       - linters: [forbidigo]
         path: (^internal/mask/mask\.go$|_test\.go$)
         text: mask\.Logger
+      # hostcore.Process is the one place a program is started; a test starts
+      # its own fakes.
+      - linters: [forbidigo]
+        path: (^internal/hostcore/process\.go$|_test\.go$)
+        text: hostcore\.Process
 
 issues:
   max-issues-per-linter: 0

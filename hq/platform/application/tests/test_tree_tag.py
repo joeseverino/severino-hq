@@ -2,11 +2,14 @@
 
 No import leads from a changed module to a test that finds it by walking a
 directory, so ``mise run fast`` runs every ``tree`` test on any change to a
-module of a package the suite lives in (``tree.SUITE``). A walk is ``rglob``, ``os.walk`` or ``git
-ls-files``, in the test, its class's setup, or any function or value of this
+module of a package the suite lives in (``tree.SUITE``). A walk is ``rglob``, ``os.walk``, ``git
+ls-files`` or an ``ast-grep`` command line that does not read ``--stdin``, in the test, its class's setup, or any function or value of this
 checkout it reaches by name. A test that patches the ROOT of the code it drives,
 itself or in its class's setup, walks a fixture rather than this checkout, so it
 carries no ``tree`` tag.
+
+A walk that parses the tree runs apart (``apart.py``), in a process that
+exits, since a test worker never gives back what a parse took.
 """
 
 from collections.abc import Iterator
@@ -30,6 +33,14 @@ def every_file(root):
 
 def listed():
     return ["git", "ls-files", "-z"]
+
+
+def scanned():
+    return ["ast-grep", "scan", "--json=stream", "."]
+
+
+def piped():
+    return ["ast-grep", "scan", "--stdin", "--json=compact"]
 """
 
 
@@ -89,6 +100,24 @@ CASES = """
 
 
     @tag("source")
+    class Scans(SimpleTestCase):
+        def test_scans(self):
+            helper.scanned()
+
+
+    @tag("source")
+    class ScansWhatItIsHanded(SimpleTestCase):
+        def test_scans_its_input(self):
+            helper.piped()
+
+
+    @tag("source", "tree")
+    class ScansTagged(SimpleTestCase):
+        def test_scans(self):
+            helper.scanned()
+
+
+    @tag("source")
     class OnAFixtureByName(SimpleTestCase):
         @patch("tests.pkg.helper.ROOT", "fixture")
         def test_walks_the_fixture(self):
@@ -112,11 +141,17 @@ def fixture() -> Iterator[Path]:
 
 @tag("source", "tree")
 class TreeTagTests(SimpleTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # One walk of this checkout answers both of its tests.
+        cls.untagged, cls.idle = misplaced(ROOT)
+
     def test_a_source_test_that_walks_a_tree_carries_the_tree_tag(self):
-        self.assertEqual(misplaced(ROOT)[0], [], "add tag 'tree': `mise run fast` runs these on every module change")
+        self.assertEqual(self.untagged, [], "add tag 'tree': `mise run fast` runs these on every module change")
 
     def test_a_tree_tag_marks_a_test_that_walks(self):
-        self.assertEqual(misplaced(ROOT)[1], [], "drop tag 'tree': nothing here walks a tree")
+        self.assertEqual(self.idle, [], "drop tag 'tree': nothing here walks a tree")
 
     def test_a_walk_is_found_through_a_helper_of_another_module_and_a_fixtures_walk_is_not_one(self):
         with fixture() as root:
@@ -127,6 +162,7 @@ class TreeTagTests(SimpleTestCase):
             [
                 "tests.pkg.test_case.Direct.test_walks",
                 "tests.pkg.test_case.Methods.test_by_import",
+                "tests.pkg.test_case.Scans.test_scans",
                 "tests.pkg.test_case.Through.test_anything",
             ],
         )
@@ -143,6 +179,7 @@ class TreeTagTests(SimpleTestCase):
             [
                 "tests.pkg.test_case.Methods.test_tagged_without_a_walk",
                 "tests.pkg.test_case.OnAFixture",
+                "tests.pkg.test_case.ScansTagged",
                 "tests.pkg.test_case.Tagged",
             ],
         )

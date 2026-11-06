@@ -4,7 +4,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 
-from django.conf import settings
 from django.utils.http import url_has_allowed_host_and_scheme
 lazy from django.contrib.auth import get_user_model
 lazy from django.contrib.auth.base_user import AbstractBaseUser
@@ -20,21 +19,18 @@ lazy from .record_errors import RecordNotFound
 
 class Capability(StrEnum):
     READ = "read"
-    # The audit trail is a security log. Free-text search over it is gated
-    # separately from baseline reads so a least-privilege adapter principal
-    # (e.g. MCP) never gets it implicitly.
+    # The audit trail is a security log. Free-text search over it is granted
+    # apart from baseline reads, so a viewer and an agent granted only READ
+    # never hold it implicitly.
     READ_AUDIT_LOG = "read_audit_log"
-    # An outbound read, gated apart from baseline READ for the same reason
-    # READ_AUDIT_LOG is: `mcp_principal` holds READ unconditionally, so folding
-    # this into it would let the machine account spend a third party's rate
-    # limit and disclose what HQ is asking about, with nobody having decided
-    # that. Operators hold every capability; MCP holds this one only if a
-    # deployment says so.
+    # An outbound read, granted apart from baseline READ for the same reason:
+    # it spends a third party's rate limit and discloses what HQ is asking
+    # about, so an agent holds it only where its grant names it.
     LOOK_UP_PUBLIC_RECORDS = "look_up_public_records"
     # A record domain's write_<resource> and delete_<resource> are not listed
     # here: they derive from its ``Records`` declaration (``record_permissions``).
     # The operator's own calendar: appointments, visits, plans. Personal, so
-    # an agent reads and writes it only on its own switch.
+    # an agent reads and writes it only where its grant names it.
     READ_CALENDAR = "read_calendar"
     WRITE_CALENDAR = "write_calendar"
     MANAGE_CONTACTS = "manage_contacts"
@@ -49,14 +45,15 @@ class Capability(StrEnum):
     # Hands HQ a receipt's file. Held at the operator's own interfaces as a
     # certificate is: a file arrives through a person, never a token.
     UPLOAD_RECEIPT = "upload_receipt"
-    # A person's own decisions and settings, held only in the browser
-    # (``HELD_ONLY_AT``): no credential approves what a credential asked for,
-    # pauses or grants agents, or arranges somebody's pages.
+    # A person's own decisions, held only in the browser (``HELD_ONLY_AT``): no
+    # credential approves what a credential asked for, or pauses or grants agents.
     DECIDE_APPROVALS = "decide_approvals"
     GOVERN_AGENTS = "govern_agents"
+    # A person's own settings (their theme and calendar choices, and the
+    # dashboard's shared settings), pins and set-aside action items. Held by a
+    # principal with a person behind it (``NEEDS_A_PERSON``): a machine's token
+    # is nobody's, so it has none of them to keep.
     SET_PREFERENCES = "set_preferences"
-    # A person's own pins and set-aside action items. Held only by the person
-    # (``HELD_ONLY_AT``): a token is nobody's, so it has no favorites to keep.
     PIN_FAVORITES = "pin_favorites"
     SET_ASIDE_ACTION_ITEMS = "set_aside_action_items"
     # Ends a person's sessions when the identity provider signs them out. Held
@@ -116,8 +113,8 @@ WAITING_INTERFACES = frozenset({CLI_INTERFACE})
 INTERNAL_INTERFACE = "internal"
 
 # The interfaces an agent's token reaches HQ through. Every principal there is
-# an agent: capped by ``agent_ceiling``, stopped by the Agents pause, and what
-# it asked for is an agent's request. A token proves which client presented it
+# an agent: held to its token's grant (``agent_grant``), stopped by the
+# Agents pause, and what it asked for is an agent's request. A token proves which client presented it
 # and, for a delegated grant, which person allowed that client, but nothing in
 # it says the client is that person's own device rather than an agent they
 # authorized, so only the identity provider's device scope, on a client the
@@ -125,26 +122,46 @@ INTERNAL_INTERFACE = "internal"
 # ``DEVICE_INTERFACE``.
 AGENT_SURFACES = frozenset({MCP_INTERFACE, API_INTERFACE})
 
-# Capabilities held only at these interfaces, whatever a grant or a ceiling
-# says. An agent's token that names one is refused it in ``Principal.require``, the
-# first thing the capability runner asks, so nothing it sends is held for
-# approval, stored or logged.
+# Capabilities held only at these interfaces, whatever a grant says: the two
+# that would let an agent lift its own limits, HQ's own back-channel logout,
+# and the uploads, whose bytes this keeps out of a hold, the audit log and an
+# answer. An agent's token that names one is refused it in
+# ``Principal.require``, the first thing the capability runner asks, so
+# nothing it sends is held for approval, stored or logged.
 HELD_ONLY_AT: dict[str, frozenset[str]] = {
     Capability.UPLOAD_CERTIFICATE: OPERATOR_INTERFACES,
     Capability.UPLOAD_RECEIPT: OPERATOR_INTERFACES,
     Capability.DECIDE_APPROVALS: INTERACTIVE_INTERFACES,
     Capability.GOVERN_AGENTS: INTERACTIVE_INTERFACES,
-    Capability.SET_PREFERENCES: INTERACTIVE_INTERFACES,
-    Capability.PIN_FAVORITES: INTERACTIVE_INTERFACES,
-    Capability.SET_ASIDE_ACTION_ITEMS: INTERACTIVE_INTERFACES,
     Capability.END_SESSIONS: frozenset({INTERNAL_INTERFACE}),
 }
+
+# Capabilities that keep something of a person's, held only by a principal with
+# a person behind it (``has_a_person``) on whatever interface it calls. An agent
+# a person signed in may be granted them and acts on that person's own; a
+# machine's token, the host's shell and HQ itself are nobody's, so
+# ``Principal.require`` refuses them one whatever their grant says, and the
+# catalog lists it to them as not permitted.
+NEEDS_A_PERSON: frozenset[str] = frozenset(
+    {Capability.SET_PREFERENCES, Capability.PIN_FAVORITES, Capability.SET_ASIDE_ACTION_ITEMS}
+)
 
 
 def is_interactive(principal: Principal) -> bool:
     """Whether this act is a person's, rather than a credential's."""
 
     return principal.interface in INTERACTIVE_INTERFACES
+
+
+def has_a_person(principal: Principal) -> bool:
+    """Whether a person stands behind ``principal``: a web session's or a device's, or a token's a person signed in.
+
+    The person (``person_of``) is a web session's actor, and otherwise the
+    sign-in a token carried (``Principal.person_key``), which a device always
+    has and an agent has when a person signed it in.
+    """
+
+    return is_interactive(principal) or bool(principal.person_key)
 
 
 class AuthorizationError(PermissionError):
@@ -155,6 +172,22 @@ class AuthorizationError(PermissionError):
     def __init__(self, reason: str = "", *args: object) -> None:
         super().__init__(reason, *args)
         self.reason = reason
+
+
+class InsufficientScope(AuthorizationError):
+    """Refused because the token did not carry ``scope``, a permission its person
+    holds and the identity provider could grant: a new sign-in gets it through.
+
+    RFC 6750's ``insufficient_scope``, on both doors. A refusal a new sign-in
+    cannot fix (the person's role, ``HELD_ONLY_AT``, HQ's own rules) stays a
+    plain ``AuthorizationError`` or a ``PolicyDenied``.
+    """
+
+    code = "insufficient_scope"
+
+    def __init__(self, reason: str, scope: str) -> None:
+        super().__init__(reason)
+        self.scope = scope
 
 
 class PolicyDenied(AuthorizationError):
@@ -198,10 +231,18 @@ class Principal:
     granted: frozenset[str] = frozenset()
     # The sign-in key (``linked_accounts.sign_in_subject``) of the person a
     # token was signed in by, on a grant a person allowed; empty for a
-    # machine's own token and for principals HQ constructs itself. It names a
-    # person only for a device (``person_of``): an agent a person signed in
-    # stands for nobody.
+    # machine's own token and for principals HQ constructs itself. It names
+    # the person (``person_of``) whose own settings, pins and set-asides the
+    # token acts on, a device's or an agent's alike.
     person_key: str = ""
+    # What the token lacks that a new sign-in could add: each permission a
+    # token could carry (``agent_grantable``) that this principal's person
+    # holds and its grant left out. Empty for principals HQ constructs itself.
+    grantable: frozenset[str] = frozenset()
+    # The tailnet device a token's call came from, by Tailscale's stable id,
+    # as its admission placed it (``agent_devices.place``); empty where HQ
+    # could not place the call and for principals HQ constructs itself.
+    device: str = ""
 
     def permits(self, *capabilities: Capability | str) -> bool:
         """Whether this principal holds every capability named.
@@ -222,13 +263,37 @@ class Principal:
 
     def require(self, capability: Capability | str) -> None:
         name = capability.value if isinstance(capability, Capability) else capability
+        # Asked first, since no grant or new sign-in gives a machine a person.
+        if name in NEEDS_A_PERSON and not has_a_person(self):
+            raise AuthorizationError(
+                f"{name!r} keeps something of a person's, and a {self.interface} principal {self.actor!r} "
+                "is nobody's: a machine's token has no person behind it. Sign the agent in through a person."
+            )
         # A Capability is a StrEnum, equal to and hashed as its value, so the
         # held set answers for a name as it stands.
+        if name in self.grantable:
+            raise InsufficientScope(
+                f"{self.interface} principal {self.actor!r} lacks {name!r}: its token does not carry it. "
+                f"Grant {name!r} to the client {self.actor!r} in Pocket ID, then sign in again.",
+                name,
+            )
         if name not in self.capabilities:
             raise AuthorizationError(f"{self.interface} principal {self.actor!r} lacks {name!r}.")
         if not could_hold(self.interface, (name,)):
             where = " or ".join(sorted(HELD_ONLY_AT[name]))
             raise AuthorizationError(f"{name!r} is held only through {where}, never by a {self.interface} principal.")
+
+
+def could_ever_hold(principal: Principal, capabilities: Iterable[Capability | str]) -> bool:
+    """Whether ``principal``, granted anything, could hold every one of ``capabilities``.
+
+    ``could_hold`` for its interface, and ``NEEDS_A_PERSON`` for whether a
+    person stands behind it: what ``Principal.require`` refuses whatever the
+    grant, so a catalog that lists only what its asker could run asks it.
+    """
+
+    needed = frozenset(str(capability) for capability in capabilities)
+    return could_hold(principal.interface, needed) and (has_a_person(principal) or NEEDS_A_PERSON.isdisjoint(needed))
 
 
 def could_hold(interface: str, capabilities: Iterable[Capability | str]) -> bool:
@@ -275,26 +340,27 @@ def web_principal(user: AbstractBaseUser | AnonymousUser) -> Principal:
 
 
 def person_of(principal: Principal) -> AbstractBaseUser | None:
-    """The signed-in person an interactive principal stands for; None for a credential."""
+    """The signed-in person a principal stands for (``has_a_person``); None for one that is nobody's."""
 
-    if not is_interactive(principal):
+    if not has_a_person(principal):
         return None
     users = get_user_model()
-    if principal.interface == DEVICE_INTERFACE:
-        # A device's actor is its client, so its person is whoever signed in
-        # as the token's subject, and a device principal without one is nobody.
-        if not isinstance(principal, DevicePrincipal) or not principal.person_key:
-            return None
-        key = principal.person_key
-        return users._default_manager.filter(linked_accounts__provider=SIGN_IN, linked_accounts__login=key).first()
-    return users._default_manager.filter(**{users.USERNAME_FIELD: principal.actor}).first()
+    if principal.interface == WEB_INTERFACE:
+        return users._default_manager.filter(**{users.USERNAME_FIELD: principal.actor}).first()
+    # A token's actor is its client, so its person is whoever signed in as the
+    # token's subject.
+    key = principal.person_key
+    return users._default_manager.filter(linked_accounts__provider=SIGN_IN, linked_accounts__login=key).first()
 
 
 def person(principal: Principal) -> AbstractBaseUser:
     """The signed-in person a principal is, for a use case that keeps something of theirs."""
 
-    if not is_interactive(principal):
-        raise AuthorizationError(f"A {principal.interface} principal is nobody's, so it keeps nothing of a person's.")
+    if not has_a_person(principal):
+        raise AuthorizationError(
+            f"A {principal.interface} principal is nobody's, so it keeps nothing of a person's: "
+            "a machine's token has no person behind it."
+        )
     found = person_of(principal)
     if found is None:
         raise RecordNotFound("That person was not found.")
@@ -318,8 +384,8 @@ def is_agent(interface: str) -> bool:
 
 
 def agent_principal(actor: str, interface: str, granted: frozenset[str], *, person_key: str = "") -> Principal:
-    """An agent holding its identity provider's grant, capped by ``agent_ceiling``
-    and, for a token a person signed in, by that person's role.
+    """An agent holding its identity provider's grant, within that person's role
+    for a token a person signed in.
 
     The one way a token becomes a principal, on every surface a token reaches,
     so the cap belongs to the agent rather than to the door it called through.
@@ -327,19 +393,48 @@ def agent_principal(actor: str, interface: str, granted: frozenset[str], *, pers
 
     if not is_agent(interface):
         raise ValueError(f"{interface!r} is not an interface an agent reaches HQ through.")
-    capabilities = agent_grant(granted, _held_by_person(person_key) if person_key else None)
-    return Principal(actor, interface, capabilities, granted=granted, person_key=person_key)
+    held = _held_by_person(person_key) if person_key else None
+    capabilities = agent_grant(granted, held)
+    return Principal(
+        actor,
+        interface,
+        capabilities,
+        granted=granted,
+        person_key=person_key,
+        grantable=_within(agent_grantable(), held) - capabilities,
+    )
+
+
+def agent_grantable() -> frozenset[str]:
+    """Every permission an agent's token could carry and hold: what HQ and its
+    extensions grant, less what ``HELD_ONLY_AT`` keeps from the agent doors.
+
+    The one filter for what a token is held to (``agent_grant``), what a sign-in
+    asks for (``scopes_supported``) and what a refusal tells a person to grant.
+    """
+
+    return frozenset(
+        str(capability)
+        for capability in operator_capabilities()
+        if all(could_hold(surface, (capability,)) for surface in AGENT_SURFACES)
+    )
 
 
 def agent_grant(granted: Iterable[str], held: frozenset[Capability | str] | None = None) -> frozenset[str]:
-    """What of an agent's ``granted`` is in force: within ``agent_ceiling``, and within
-    ``held``, what its person holds, for a token a person signed in.
+    """What of an agent's ``granted`` is in force: what HQ grants that an agent's
+    interface could hold, and within ``held``, what its person holds, for a
+    token a person signed in.
 
     The one rule, for the principal a token becomes and the Agents page that shows it.
     """
 
-    capabilities = frozenset(granted) & agent_ceiling()
-    return capabilities if held is None else capabilities & {str(capability) for capability in held}
+    return _within(frozenset(granted) & agent_grantable(), held)
+
+
+def _within(names: frozenset[str], held: frozenset[Capability | str] | None) -> frozenset[str]:
+    """``names`` within what a person holds, or all of them for a token no person signed in."""
+
+    return names if held is None else names & {str(capability) for capability in held}
 
 
 def _held_by_person(person_key: str) -> frozenset[Capability | str]:
@@ -354,84 +449,36 @@ def _held_by_person(person_key: str) -> frozenset[Capability | str]:
     return held
 
 
-@dataclass(frozen=True, slots=True)
-class DevicePrincipal(Principal):
-    """A person's own device: the ``Principal`` whose ``person_key`` ``person_of``
-    reads, since the actor is the device's client and names nobody."""
-
-
 def device_principal(
     actor: str, capabilities: frozenset[str], granted: frozenset[str], *, person_key: str
-) -> DevicePrincipal:
+) -> Principal:
     """A person's own device, holding the capabilities its token carries within its person's role.
 
-    No agent ceiling applies. ``actor`` is the device's client, so the audit
-    log names the device and revoking that one client in the identity provider
-    ends it. ``capabilities`` is the token's grant without the scope that
+    ``actor`` is the device's client, so the audit log names the device and
+    revoking that one client in the identity provider ends it. ``capabilities`` is the token's grant without the scope that
     marked it a device, so the standing widens nothing; ``granted`` is the
     whole grant, for the Agents page.
     """
 
-    held = capabilities & _held_by_person(person_key)
-    return DevicePrincipal(actor, DEVICE_INTERFACE, held, granted=granted, person_key=person_key)
+    role = _held_by_person(person_key)
+    held = capabilities & role
+    return Principal(
+        actor,
+        DEVICE_INTERFACE,
+        held,
+        granted=granted,
+        person_key=person_key,
+        grantable=_within(agent_grantable(), role) - held,
+    )
 
 
 def mcp_principal() -> Principal:
-    """An agent holding the whole ceiling, for a caller exercising agent behavior.
+    """An agent holding everything a token could grant it, for a caller exercising agent behavior.
 
     It is not an identity anyone authenticates as.
     """
 
-    return Principal("mcp-service-account", MCP_INTERFACE, agent_ceiling())
-
-
-def agent_ceiling() -> frozenset[str]:
-    """The most any agent may do on this deployment, on every surface.
-
-    Built from the `SEVERINO_AGENT_ENABLE_*` switches and intersected with each
-    agent's own grant (``agent_principal``), so an agent never exceeds either.
-    """
-
-    # A viewer's reads, which every agent may do.
-    capabilities: set[Capability | str] = set(roles.viewer_capabilities())
-    # Mirroring the vault's documentation index is gated on its own, because it
-    # is the one write an operator wants routinely and in isolation. Bundled
-    # with the rest it could only be granted by also handing the service
-    # account write access to expenses, receipts, projects, assets and content
-    # so in practice it stayed off and the index silently fell behind.
-    if settings.SEVERINO_AGENT_ENABLE_DOC_SYNC:
-        capabilities.add(Capability.SYNC_DOCUMENTATION)
-    if settings.SEVERINO_AGENT_ENABLE_WRITES:
-        capabilities.update(record_permissions("write"))
-        # Broad writes still imply doc sync; the narrow flag exists to grant it
-        # *without* them, not to withhold it from them.
-        capabilities.add(Capability.SYNC_DOCUMENTATION)
-        capabilities.update(plugin_capabilities("mcp_write"))
-    # The calendar is personal, so it is neither in READ nor in the broad
-    # writes: "put this on my calendar" is its own decision, and granting it
-    # grants nothing else.
-    if settings.SEVERINO_AGENT_ENABLE_CALENDAR:
-        capabilities.update({Capability.READ_CALENDAR, Capability.WRITE_CALENDAR})
-    if settings.SEVERINO_AGENT_ENABLE_PRUNE:
-        capabilities.add(Capability.PRUNE_DOCUMENTATION)
-    if settings.SEVERINO_AGENT_ENABLE_WRITES and settings.SEVERINO_AGENT_ENABLE_DELETES:
-        capabilities.update(record_permissions("delete"))
-        if settings.SEVERINO_AGENT_ENABLE_CALENDAR:
-            capabilities.add(Capability.DELETE_CALENDAR)
-    # Topology sync needs to declare infrastructure; it never needs to ask a
-    # certificate authority for anything, so enabling `hq sync` does not grant
-    # the service account certificate renewal.
-    if settings.SEVERINO_AGENT_ENABLE_INFRASTRUCTURE:
-        capabilities.add(Capability.MANAGE_INFRASTRUCTURE)
-    if settings.SEVERINO_AGENT_ENABLE_CERT_RENEWAL:
-        capabilities.add(Capability.REQUEST_CERTIFICATE_RENEWAL)
-    # A read, but an outbound one. It leaves the tailnet, spends somebody
-    # else's rate limit, and tells a third party what HQ was asked about,
-    # none of which a baseline read does, and none of which an unattended
-    # caller should start doing because a capability was folded into READ.
-    if settings.SEVERINO_AGENT_ENABLE_LOOKUP:
-        capabilities.add(Capability.LOOK_UP_PUBLIC_RECORDS)
-    return frozenset(str(capability) for capability in capabilities)
+    return Principal("mcp-service-account", MCP_INTERFACE, agent_grant(operator_capabilities()))
 
 
 def safe_next(request: HttpRequest, *, fallback: str = "", scope: str = "") -> str:

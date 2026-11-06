@@ -58,12 +58,7 @@ def missing(eager: dict, lazy: dict) -> dict[str, list[str]]:
         if registry in ("loaded", "ours"):
             continue
         if registry == "lookups":
-            gone = [
-                f"{cls} {name}"
-                for cls, registered in names.items()
-                if cls in lazy["lookups"]
-                for name in sorted(set(registered) - set(lazy["lookups"][cls]))
-            ]
+            gone = _lookups_left_out(names, lazy["lookups"])
         else:
             gone = sorted(set(names) - set(lazy[registry]))
         if registry == "receivers":
@@ -71,6 +66,18 @@ def missing(eager: dict, lazy: dict) -> dict[str, list[str]]:
         if gone:
             found[registry] = gone
     return found
+
+
+def _lookups_left_out(eager: dict[str, list[str]], lazy: dict[str, list[str]]) -> list[str]:
+    """Each lookup the eager boot registered on a field class the lazy boot
+    also registers lookups on, and the lazy one did not, as "class name"."""
+
+    return [
+        f"{cls} {name}"
+        for cls, registered in eager.items()
+        if cls in lazy
+        for name in sorted(set(registered) - set(lazy[cls]))
+    ]
 
 
 def _held(module: str, loaded: set[str], ours: tuple[str, ...]) -> bool:

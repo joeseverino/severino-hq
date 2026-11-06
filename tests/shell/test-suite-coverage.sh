@@ -10,8 +10,11 @@ work="$(mktemp -d)"
 trap 'rm -rf "${work}"' EXIT
 
 fixture="${work}/checkout"
-mkdir -p "${fixture}/mise-tasks/test" "${fixture}/tools/lib" "${work}/bin"
+mkdir -p "${fixture}/mise-tasks/test" "${work}/bin"
 cp "${repo}/${task}" "${fixture}/${task}"
+# shellcheck source=tests/shell/task-libraries.sh
+. "${repo}/tests/shell/task-libraries.sh"
+copy_libraries "${repo}" "${fixture}" "${task}"
 
 # uv: the suite passes, and coverage's total is TEST_TOTAL. Every coverage
 # report is logged and ends as TEST_VERDICT says its configured floor did.

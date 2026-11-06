@@ -1,0 +1,11 @@
+id: nobody-bound-only-by-a-door
+valid:
+  - 'operation_context(interface="web", actor="example-person", operation="example.request")'
+  - 'operation_context(interface="web", actor=principal.actor, operation="example.request")'
+  - |
+    def operation_context(*, interface, actor="", operation):
+        pass
+  - 'record = {"actor": ""}'
+invalid:
+  - 'operation_context(interface="web", actor="", operation="example.request")'
+  - "sdk_audit.operation_context(interface='cli', actor='', operation='example.import')"

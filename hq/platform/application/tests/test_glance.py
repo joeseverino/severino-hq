@@ -19,7 +19,8 @@ from hq.domains.control_plane.models import (
     ProviderConnection,
     WeatherObservation,
 )
-from hq.platform.application.tests.writers import form_keyed, keyed
+from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
 

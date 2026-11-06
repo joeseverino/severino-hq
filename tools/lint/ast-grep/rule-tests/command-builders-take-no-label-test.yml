@@ -1,0 +1,13 @@
+id: command-builders-take-no-label
+valid:
+  - 'command_action("example.run", target, variant="all")'
+  - 'ask(work, subject)'
+  - 'remedy_link(remedy, finding)'
+  - 'PageAction(label="Edit", url=url)'
+  - 'task(label="Run")'
+invalid:
+  - 'command_action("example.run", target, label="Run it all")'
+  - 'action_links.capability_action_link("example.run", label=words)'
+  - 'read_now_link(login, label="Read now")'
+  - 'outbound_work.ask(work, subject, label="Refresh")'
+  - 'remedy_link(remedy, finding, label=f"Fix {name}")'
