@@ -8,7 +8,7 @@
 # light, and a run of tests
 # takes the turn only when tools/gate/turn.py finds it heavy. Each heavy run,
 # by a template's shell, a header's lock or the turn task, ends with one line
-# (tools/lib/measured) whose CPU holds what its waited descendants spent and
+# (tools/lib/measured) whose CPU holds what its descendants spent and
 # whose peak holds each role's processes held at once, a test worker apart from
 # its children; a heavy run inside one adds none, and a heavy file task run by
 # its path, outside mise, runs as itself.

@@ -7,9 +7,19 @@
 # so it runs as itself.
 #
 # The line gives the wall time, the CPU time (user and system) of every
-# descendant the command waited for, which other worktrees' load leaves alone
-# where it moves the wall time, the peak memory the tree held at once with
-# each role's own peak beside it, and the load average at the end.
+# descendant, which other worktrees' load leaves alone where it moves the wall
+# time, the peak memory the tree held at once with each role's own peak beside
+# it, and the load average at the end.
+#
+# A process's CPU reaches the line when it is reaped, as the kernel adds it to
+# its reaper's children's time. A descendant whose parent never waits for it
+# (Linux's forkserver, the default start method of Python's multiprocessing
+# there and so of Django's parallel test runner, which outlives the test run)
+# is reaped by its nearest subreaper. On Linux this process is one, as tini
+# and systemd are, so the tree's orphans are reaped here, and those still
+# running as the command ends are waited for a second more. macOS has no
+# subreaper, so an orphan's CPU there goes to launchd; Python spawns its
+# workers there, and the test run joins them.
 #
 # No standard tool keeps a tree's peak: time -l and VmHWM are one process's
 # high-water mark, a hosted runner's cgroup counts the runner from boot, and
@@ -63,6 +73,14 @@ exec perl -e '
     if (open my $saved, ">&", \*STDERR) { $report = $saved; open STDERR, ">", "/dev/null" }
 
     my $linux = -r "/proc/self/smaps_rollup";
+    # PR_SET_CHILD_SUBREAPER, by the prctl number of each architecture CI and the hosts run.
+    my $orphans = "";
+    if ($^O eq "linux") {
+        my %prctl = (x86_64 => 157, aarch64 => 167);
+        my $call = $prctl{ (POSIX::uname())[4] };
+        $orphans = !defined $call ? "; an orphan\x27s CPU unread: no prctl for this machine"
+            : syscall($call, 36, 1, 0, 0, 0) == 0 ? "" : "; an orphan\x27s CPU unread: prctl: $!";
+    }
     my $footprint = -x "/usr/bin/footprint";
     # The role of a process, from its command line and the role and command line of its parent.
     sub role {
@@ -117,9 +135,19 @@ exec perl -e '
     # command, whose tree is reaped outside a sample.
     my $sampled = 0;
     my $pause = 0.5;
-    until (waitpid($pid, WNOHANG) == $pid) {
+    # Reaps every child that has ended, the command and the orphans; false
+    # once none is left.
+    my ($status, $ended);
+    sub reap {
+        while ((my $done = waitpid(-1, WNOHANG)) != 0) {
+            return 0 if $done < 0;
+            ($status, $ended) = ($?, 1) if $done == $pid;
+        }
+        return 1;
+    }
+    until (!reap() || $ended) {
         Time::HiRes::sleep($pause);
-        last if waitpid($pid, WNOHANG) == $pid;
+        last if !reap() || $ended;
         my @before = times;
         my ($sum, $one) = eval { held() };
         $failed = 1 unless $sum;
@@ -131,7 +159,8 @@ exec perl -e '
         $spent += $after[$_] - $before[$_] for 0 .. 3;
         $pause = 20 * $spent > 2 ? 20 * $spent : 2;
     }
-    my $status = $?;
+    my $grace = Time::HiRes::time + 1;
+    while (reap() && (my $left = $grace - Time::HiRes::time) > 0) { Time::HiRes::sleep($left) }
     my ($user, $system, $cuser, $csystem) = times;
     my $cpu = $cuser + $csystem - $sampled;
     my $wall = Time::HiRes::time - $began;
@@ -161,7 +190,7 @@ exec perl -e '
     $load =~ s/.*load averages*: *//s;
     $load =~ s/,\s*/ /g;
     chomp $load;
-    printf $report "heavy: %s wall, %s CPU, load average %s%s; sampling took %s CPU\n",
-        span($wall), span($cpu), $load, $memory, span($user + $system + $sampled);
+    printf $report "heavy: %s wall, %s CPU, load average %s%s; sampling took %s CPU%s\n",
+        span($wall), span($cpu), $load, $memory, span($user + $system + $sampled), $orphans;
     exit($status & 127 ? 128 + ($status & 127) : $status >> 8);
 ' -- "$@"

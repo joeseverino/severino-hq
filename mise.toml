@@ -86,9 +86,7 @@ jactionlint = { version = "2.5.0", workflow = "release.yaml" }
 # The workflows' security audit (lint:workflows), offline.
 zizmor = "1.32.0"
 # The prose linter: HQ's wording rules, in tools/lint/vale/.vale.ini (lint:prose).
-# 3.25 no longer masks a template's {% comment %} block, so lint:prose reads
-# comments as shown text; renovate.json skips 3.25.x.
-vale = "3.24.0"
+vale = "3.26.0"
 # Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
 # counts Ruff has no rule for (audit:ast).
 ast-grep = "0.51.1"

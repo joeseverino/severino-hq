@@ -85,6 +85,20 @@ class ValeRuleTests(SimpleTestCase):
 
         self.assertEqual(vale({"page.html": template}), [("page.html", 6, "Sweep")])
 
+    def test_a_comment_block_is_never_read_wherever_it_stands(self):
+        """After a start tag holding a template tag, and inside a link, a block
+        comment is as hidden as anywhere else, and the page around it is read."""
+
+        template = (
+            '<div class="note" {% if open %}role="status"{% endif %}>Read.</div>\n'
+            "{% comment %}A resource, after a start tag that holds a tag.{% endcomment %}\n"
+            '<p><a href="/example/">Open {% comment %}the resource{% endcomment %}</a></p>\n'
+            "{% comment %}\nA managed resource across lines.\n{% endcomment %}\n"
+            "<p>A resource on the page.</p>\n"
+        )
+
+        self.assertEqual(vale({"page.html": template}), [("page.html", 7, "Resource")])
+
     def test_every_form_of_every_word_is_found_in_a_sentence(self):
         sentences = (
             ("Kind", "Pick a kind"),
