@@ -97,7 +97,7 @@ class ScriptedLayoutTests(LayoutBrowserTests):
             self.in_scheme("light")
         if read:
             self.hold(name, width, [self.every_layout_check_holds], script="on")
-        if name in ALL_PAGES:
+        if name in ALL_PAGES and width == NARROWEST:
             self.hold(name, width, [self.a_table_fits_its_box_at_every_width], script="on")
 
 
@@ -130,7 +130,7 @@ class LongestValueLayoutTests(LayoutBrowserTests):
         """Every list, its rows derived from its model's fields
         (test_browser_derived_fixtures), as it loads and with every row open."""
 
-        held = [self.a_table_fits_its_box_at_every_width]
+        held = [self.a_table_fits_its_box]
         for name in self.lists:
             for width in (NARROWEST, *WIDTHS, *WIDE_TABLES):
                 if not self.loaded(name, width, script="on"):

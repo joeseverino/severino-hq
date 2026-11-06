@@ -148,7 +148,7 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .data-table :is(td.cell-data, td .cell-data, :is(td.cell-data, td .cell-data) .token) { overflow-wrap: anywhere; }
 /* Two links in one cell read as two: the span gets the flex box, since a td given flex leaves table layout. */
 .row-actions { white-space: nowrap; }
-span.row-actions { display: inline-flex; gap: var(--space-6); }
+span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
 /* Axis labels are HTML over the plot, positioned by percentage of the geometry's viewBox: text inside the SVG scales with the drawing and shrinks to illegibility in a phone-width card. */

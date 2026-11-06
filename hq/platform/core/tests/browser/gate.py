@@ -21,6 +21,7 @@ from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.core.speculation import rules_document
+from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.test_runner import browser_failures, stall_watch
 from hq.platform.core.tests.browser.probes.palette import (
     FILL_PAINTERS,
@@ -35,17 +36,19 @@ from hq.platform.core.tests.browser.probes.settle import (
     FONTS_READY,
     PAINTED,
     PUT_BACK,
+    SETTLE,
     STAND_IN,
     STILL,
     hushed,
 )
+from hq.platform.core.tests.browser.probes.tables import TABLE_LAYOUT
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.shots import shoot_page
 from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
-from hq.platform.core.tests.browser.widths import viewport
+from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, SWEEP_STEP, WIDEST, viewport, viewport_queries
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
@@ -540,6 +543,50 @@ class BrowserGate(SimpleTestCase):
         every one the gates hold on a page as a reader has it."""
 
         return self.checked(geometry_probes(path, width))
+
+    def tables_that_do_not_fit_at_any_width(self):
+        """Each table on the loaded page wider than its region at some window
+        width from the narrowest phone up, with the first width it was found
+        at; the page is left at the width it was loaded at.
+
+        Between two changes of the layout's shape (`TABLE_LAYOUT`) a region
+        grows with the window and a table at its narrowest asks no more than it
+        did, so a table that fits at the first width of a shape fits at every
+        width of it. The window grows by `SWEEP_STEP` to find where the shape
+        changes, and halves each step it changed in down to the first width of
+        the new shape, where the table has the least room."""
+
+        loaded = self.page.viewport_size
+        arg = [SELECTORS["table_scroll"], viewport_queries(stylesheet())]
+        found: dict[str, str] = {}
+
+        def read(width):
+            self.page.set_viewport_size(viewport(width))
+            layout, sizes, misfits = self.page.evaluate(TABLE_LAYOUT, arg)
+            for misfit in misfits:
+                table, _, by = misfit.rpartition(" +")
+                found.setdefault(table, f"+{by} at {width}px")
+            return layout, sizes
+
+        def between(low, low_read, high, high_read):
+            if high - low > 1 and low_read[0] != high_read[0]:
+                middle = (low + high) // 2
+                middle_read = read(middle)
+                between(low, low_read, middle, middle_read)
+                between(middle, middle_read, high, high_read)
+
+        low, low_read = NARROWEST, read(NARROWEST)
+        # A page with no table region has nothing to sweep. Past the widest
+        # width the gates read, once no region grows nothing changes again.
+        for high in range(NARROWEST + SWEEP_STEP, LARGEST + 1, SWEEP_STEP) if low_read[1] else ():
+            high_read = read(high)
+            between(low, low_read, high, high_read)
+            if high >= WIDEST and high_read == low_read:
+                break
+            low, low_read = high, high_read
+        self.page.set_viewport_size(loaded)
+        self.page.evaluate(SETTLE)
+        return found
 
     def scheme(self):
         """The palette the system asks the page for."""

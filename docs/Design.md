@@ -111,15 +111,22 @@ row, standing in for the columns that left (the audit log's action under its
 name).
 
 A table still wider in a narrow box is tight (`data-tight`). Its headings,
-times, statuses and a value's parts wrap at their spaces and its cells stand
-closer, so the narrowest phone (320px) holds every table the gates draw
-(`a_table_fits_its_box_at_every_width`).
+times, statuses, a value's parts and a row's control labels wrap at their
+spaces, its row's controls stand one above another, and its cells stand
+closer. Still wider, its identifiers break where they must (`data-break`).
+A table wider than its region even then scrolls in it (`data-scrolls`), so no
+table runs past its card at any width, and the gates fail it: the narrowest
+phone (320px) and every width above it hold every table the gates draw.
+`a_table_fits_its_box_at_every_width` and the example estate's
+`ExampleEstateTableFitTests` sweep each page from 320px up, reading it at the
+first width of each shape its layout takes (`TABLE_LAYOUT`), where a table has
+the least room.
 
 The region marks each body cell that says nothing (`data-blank`) and every
 cell of a column blank in every row (`data-blank-column`), which is not drawn.
 
 Since a table fits, its region is no scroll box and its heading pins under the
-page's chrome. Only a region declared a pane, or a chart's (`chart=True`),
+page's chrome (a scroll box in either axis would pin it to the region). Only a region declared a pane, or a chart's (`chart=True`),
 scrolls, pins its heading to its own edge, and takes focus. A pane
 (`pane=True`) has a height of its own, as a chart's data or the topology
 ledger has, or is a table sized to its content. A table never stacks into

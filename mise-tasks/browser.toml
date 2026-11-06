@@ -73,6 +73,7 @@ extends = "django-browser"
 vars.classes = """\
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
   hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
+  hq.platform.core.tests.browser.estate.ExampleEstateTableFitTests \
   hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
   hq.platform.core.tests.browser.fragments.FragmentBrowserTests \
   hq.platform.core.tests.browser.current_state.CurrentStateBrowserTests \

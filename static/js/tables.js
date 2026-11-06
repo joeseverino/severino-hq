@@ -18,8 +18,11 @@
   // A table fits its box. While it is wider than its region, a ranked column
   // showing leaves (`data-drop` 1 first, the rightmost of a rank first);
   // once none is left to go the table is in a narrow box, and if it is still
-  // wider, what keeps its line whole gives way too (`data-tight`); as the
-  // region grows they come back, the last to leave first, each only if the
+  // wider, what keeps its line whole gives way too (`data-tight`), then its
+  // identifiers break where they must (`data-break`); a table wider than its
+  // region even then scrolls in it (`data-scrolls`), so no
+  // table ever runs past its card, and the gate's "tables fit" names it; as
+  // the region grows they come back, the last to leave first, each only if the
   // table still fits. A row's toggle shows what left. Only the browser
   // knows how wide a table is, so a table is measured as its rows arrive,
   // in the microtask after the parser or a script adds them, before the
@@ -35,7 +38,8 @@
     .sort((left, right) => left[0] - right[0] || right[1] - left[1])
     .map(([, place]) => place);
   // How far each table has given way: how many of its columns have left, one
-  // more once it is in a narrow box, and one more once it is tight.
+  // more once it is in a narrow box, one more once it is tight, one more once
+  // its identifiers break, and one more once it scrolls.
   const gaveWay = new WeakMap();
   const giveWay = (table, steps) => {
     const order = dropOrder(table);
@@ -53,6 +57,8 @@
     });
     table.toggleAttribute("data-narrow", steps > order.length);
     table.toggleAttribute("data-tight", steps > order.length + 1);
+    table.toggleAttribute("data-break", steps > order.length + 2);
+    table.toggleAttribute("data-scrolls", steps > order.length + 3);
     // The columns that share the region's width (tables.css, `--share`).
     const sharing = headingsOf(table).filter((heading) => !left.has(heading.cellIndex)
       && !heading.matches(".select-column, [data-blank-column]")).length;
@@ -69,7 +75,7 @@
   // narrowed has nothing to give back, so that is not tried.
   const fit = (table, mayReturn = true) => {
     const was = gaveWay.get(table);
-    const most = dropOrder(table).length + 2;
+    const most = dropOrder(table).length + 4;
     let steps = Math.min(was ?? 0, most);
     // Every row is marked for how far the table has given way before it is
     // measured: a table first fitted is told how many columns share its

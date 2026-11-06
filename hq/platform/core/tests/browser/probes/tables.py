@@ -128,6 +128,44 @@ TABLES_THAT_DO_NOT_FIT = """(scroll) => [...document.querySelectorAll('main ' + 
     + ' +' + Math.round(table.getBoundingClientRect().width - box.clientWidth))"""
 
 
+# A table region's layout at this width, as a value that changes only where the
+# layout around it changes shape as the window grows: which viewport queries
+# hold, whether the page scrolls, and around each region how many tracks each
+# grid has and how many lines each wrapping flex box makes. Each of those moves
+# one way as the window grows, so a sweep that finds it changed between two
+# widths knows a change of shape lies between them. With it, after a frame (two,
+# so WebKit's observer has fitted the tables too), each region's width and the
+# tables that do not fit.
+TABLE_LAYOUT = (
+    """async ([scroll, queries]) => {
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const lines = (el) => {
+    const shown = [...el.children].filter((child) => child.getClientRects().length);
+    return 1 + shown.filter((child, at) => at && child.offsetLeft <= shown[at - 1].offsetLeft).length;
+  };
+  const shape = (el) => {
+    const style = getComputedStyle(el);
+    if (style.display.endsWith('grid')) return `g${style.gridTemplateColumns.split(' ').length}`;
+    if (style.display.endsWith('flex') && style.flexWrap !== 'nowrap') return `f${lines(el)}`;
+    return '';
+  };
+  const around = [...document.querySelectorAll('main ' + scroll)].map((region) => {
+    let said = '';
+    for (let el = region.parentElement; el && el !== document.body; el = el.parentElement) said += shape(el);
+    return said;
+  });
+  const layout = [
+    queries.map((query) => matchMedia(query).matches ? 1 : 0).join(''),
+    window.innerWidth - document.documentElement.clientWidth,
+    ...around,
+  ].join(' ');
+  const sizes = [...document.querySelectorAll('main ' + scroll)].map((region) => region.clientWidth).join(' ');
+  return [layout, sizes, ("""
+    + TABLES_THAT_DO_NOT_FIT
+    + """)(scroll)];
+}"""
+)
+
 # A cell's identifier cut in a table whose columns still give way (no
 # `data-narrow`, tables.js): one no longer than its column's hold
 # (`--name-hold`, read off a box sized by it in the same cell) had the room to
@@ -350,6 +388,23 @@ BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
 <tr><td>Rotate the signing keys</td><td>Runbook</td><td>–</td>
 <td><span class="kpi-dots"><span class="kpi-dot is-filled" title="Succeeded"></span></span></td><td>Another sentence that wraps in its column.</td></tr>
 </tbody></table>{% endtable_region %}"""
+
+# A row's two controls with labels of two words, beside a name and a status,
+# in a card: on the narrowest phone they stand one above the other and their
+# labels wrap. Beside it a table that nothing it gives can fit, a cell asking
+# more than a phone has, which scrolls in its region rather than run past its
+# card.
+ROW_ACTIONS_TABLES = """<section class="card">
+{% table_region "Devices" %}<table class="data-table" data-probe="actions"><thead><tr>
+{% table_heading "Device" "identifier" gutter=True %}{% table_heading "Approval" "status" %}
+{% table_heading "Calls" drop=1 %}{% table_heading "Approve or block" "control" hidden=True %}</tr></thead><tbody>
+<tr><th scope="row" class="row-gutter">example-host-01{% row_toggle %}</th><td><span class="pill">Needs approval</span></td><td>2 calls</td>
+<td class="row-actions"><form><button type="button" class="btn compact primary">Withdraw approval</button></form><form><button type="button" class="btn compact">Block device</button></form></td></tr>
+</tbody></table>{% endtable_region %}
+{% table_region "Unfittable" %}<table class="data-table" data-probe="unfittable"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody>
+<tr><td><span style="display: inline-block; inline-size: 40rem">Example wider than any phone</span></td></tr>
+</tbody></table>{% endtable_region %}
+</section>"""
 
 COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""

@@ -400,15 +400,23 @@ class LayoutBrowserTests(BrowserGate):
     # With script: the page a person reads, sorted, selectable and with its
     # cut values marked.
 
-    def a_table_fits_its_box_at_every_width(self, name):
-        """A table never overflows its box, down to the narrowest phone: while
-        it is wider, its ranked columns leave, then it is narrow, then tight
-        (tables.js). Every table on every page, with every disclosure open.
+    def a_table_fits_its_box(self, name):
+        """A table never overflows its box at the width the page stands at:
+        while it is wider, its ranked columns leave, then it is narrow, then
+        tight (tables.js). Every table on the page, with every disclosure open.
         """
 
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)
         self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+
+    def a_table_fits_its_box_at_every_width(self, name):
+        """Every table on the page, with every disclosure open, fits its box at
+        every window width from the narrowest phone up."""
+
+        self.open_every_disclosure(name)
+        self.page.evaluate(SETTLE)
+        self.assertEqual(self.tables_that_do_not_fit_at_any_width(), {})
 
     def card_rows(self, key):
         """The cards of one dashboard grid, grouped by the row they sit on."""

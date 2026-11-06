@@ -20,6 +20,16 @@ WIDTHS = (PHONE_SCREEN[0], 820, WIDE)
 # The narrowest phone a page must still fit.
 NARROWEST = 320
 
+# The widest window the gates read, past every viewport query and past where
+# a table region stops growing on most pages.
+WIDEST = 1680
+
+# How far apart a sweep reads a page as it widens the window, looking for
+# where the layout changes shape, and the widest it goes on a page whose
+# regions are still growing.
+SWEEP_STEP = 32
+LARGEST = 3840
+
 # The sparse estate is read across the stylesheet's media queries as well: at
 # the narrowest phone, a tablet's short side, and the widest window the
 # `max-width: 1280px` rules hold, which WIDE is past.
@@ -72,6 +82,14 @@ def first_viewports(css, region):
 # The laptop windows where a table region has only just become 1000px wide,
 # where a wide table has the least room, are read besides WIDTHS.
 _, WIDE_TABLES = wide_tables(stylesheet(), 1000)
+
+
+def viewport_queries(css):
+    """Each viewport width query the stylesheet asks, as `matchMedia` takes it."""
+
+    css = re.sub(r"/\*.*?\*/", " ", css, flags=re.DOTALL)
+    return sorted({query.strip() for query in re.findall(r"@media([^{]*\bwidth\b[^{]*)\{", css)})
+
 
 # The stylesheet's phone breakpoint: `@media (max-width: 640px)`.
 PHONE = 640
