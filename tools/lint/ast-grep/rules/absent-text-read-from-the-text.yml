@@ -1,0 +1,137 @@
+# A page carries random tokens in its attributes: the CSRF token, a CSP
+# nonce, each form's retry key, all letters, digits, _ and -. A test that
+# asserts a short word is absent from the whole response fails whenever a
+# token happens to hold it, as finance's account page did when a retry key
+# held "Ira" beside the "IRA" the test meant to find. So no test asserts that
+# a literal of one to seven of those characters is absent from a response's
+# markup: assertNotContains with it as its text (second argument or text=),
+# unless html=True, which reads only the text between the tags, or
+# assertNotIn with it as the member and a response's .content (decoded or
+# not) as the container. A loop over literals that asserts each absent is
+# read the same way. Text with a space or any other character no token holds
+# stays a plain substring check, and so does a literal of eight or more: a
+# page carries some thousands of token characters, so one holds a given
+# eight under once in 10^10 renders. One rule for the host and its
+# extensions: the plugin check (tools/pipeline/check-plugin.sh) runs it over
+# an extension's src/, so it has no scope of its own.
+id: absent-text-read-from-the-text
+language: python
+severity: error
+message: A test asserts a short word is absent from a page's markup, where a random token (a CSRF token, a nonce, a retry key) can hold it by chance.
+note: Read what a reader sees instead (assertNotContains with html=True, or the page's parsed text), or name the markup that must not appear (an attribute with its value).
+utils:
+  token-shaped:
+    kind: string
+    regex: ^[bBrRuU]{0,2}("|')[A-Za-z0-9_-]{1,7}("|')$
+  positional:
+    not:
+      any:
+        - kind: keyword_argument
+        - kind: comment
+  page-markup:
+    regex: \.content(\.decode\([^)]*\))?$
+  # An assertNotContains over the markup, its html= aside.
+  markup-not-contains:
+    kind: call
+    all:
+      - has:
+          field: function
+          kind: attribute
+          has:
+            field: attribute
+            regex: ^assertNotContains$
+      - not:
+          has:
+            field: arguments
+            has:
+              kind: keyword_argument
+              all:
+                - has:
+                    field: name
+                    regex: ^html$
+                - has:
+                    field: value
+                    regex: ^True$
+  markup-not-in:
+    kind: call
+    all:
+      - has:
+          field: function
+          kind: attribute
+          has:
+            field: attribute
+            regex: ^assertNotIn$
+      - has:
+          field: arguments
+          has:
+            nthChild:
+              position: 2
+              ofRule:
+                matches: positional
+            matches: page-markup
+rule:
+  any:
+    - matches: markup-not-contains
+      has:
+        field: arguments
+        any:
+          - has:
+              nthChild:
+                position: 2
+                ofRule:
+                  matches: positional
+              matches: token-shaped
+          - has:
+              kind: keyword_argument
+              all:
+                - has:
+                    field: name
+                    regex: ^text$
+                - has:
+                    field: value
+                    matches: token-shaped
+    - matches: markup-not-in
+      has:
+        field: arguments
+        has:
+          nthChild:
+            position: 1
+            ofRule:
+              matches: positional
+          matches: token-shaped
+    - kind: for_statement
+      all:
+        - has:
+            field: left
+            kind: identifier
+            pattern: $WORD
+        - has:
+            field: right
+            any:
+              - kind: tuple
+              - kind: list
+            has:
+              matches: token-shaped
+        - has:
+            field: body
+            has:
+              stopBy: end
+              any:
+                - matches: markup-not-contains
+                  has:
+                    field: arguments
+                    has:
+                      nthChild:
+                        position: 2
+                        ofRule:
+                          matches: positional
+                      pattern: $WORD
+                - matches: markup-not-in
+                  has:
+                    field: arguments
+                    has:
+                      nthChild:
+                        position: 1
+                        ofRule:
+                          matches: positional
+                      pattern: $WORD

@@ -328,7 +328,7 @@ class ContentPageTests(TestCase):
         self.assertContains(everything, "New writeup or page")
         self.assertContains(everything, "No source document")
         for gone in ("Content pipeline", "New content item", "Missing documentation", "reverse"):
-            self.assertNotContains(everything, gone)
+            self.assertNotIn(gone, text(everything))
 
     def test_the_form_opened_from_a_list_is_about_that_lists_kind(self):
         from django.urls import reverse

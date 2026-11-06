@@ -192,7 +192,7 @@ class ProjectListTests(TestCase):
         for label in ("Active, nothing written yet", "No writeup", "No documents", "Status Z–A", "Category A–Z"):
             self.assertContains(response, label)
         for gone in ("Needs output", "Missing docs", "reverse"):
-            self.assertNotContains(response, gone)
+            self.assertNotIn(gone, text(response))
 
 
 class ProjectToggleTests(TestCase):

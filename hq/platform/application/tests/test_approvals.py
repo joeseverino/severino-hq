@@ -785,12 +785,12 @@ class SurfaceTests(TestCase):
         """This card sits on a permanent record. A button on something already
         settled would invite a decision that cannot be taken."""
 
-        self.assertContains(self._entry(self.held), "Approve")
+        self.assertIn("Approve", text(self._entry(self.held)))
 
         reject(RejectCommand(str(self.held.id)), principal=web_principal(self.user))
 
         settled = self._entry(self.held)
-        self.assertNotContains(settled, "Approve")
+        self.assertNotIn("Approve", text(settled))
         self.assertContains(settled, "Rejected")
 
     def test_the_resource_page_says_something_is_waiting(self):

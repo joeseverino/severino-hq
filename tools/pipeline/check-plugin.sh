@@ -45,8 +45,8 @@ if ! grep -q '^\[tool\.mypy\]' pyproject.toml; then
 fi
 
 # The host's structural rules for text a person reads and for a test's read
-# of a table cell hold the package's source as they hold the host's: each
-# rule's scope reaches src/, read from the package root. The ast-grep is the
+# of a table cell or of a word a page lacks hold the package's source as they
+# hold the host's: each rule's scope reaches src/, read from the package root. The ast-grep is the
 # host's pin, which mise installs where it is missing (an extension's CI sets
 # up only uv), or the one on the PATH where mise has no pin. It runs here,
 # since the scope is read from where it runs.
@@ -56,7 +56,7 @@ ast_grep=$(pinned) || { mise -C "$hq_root" install --quiet ast-grep 2>/dev/null 
     echo "ast-grep is not installed: \`mise -C $hq_root install ast-grep\` installs the host's pin, or says why it cannot." >&2
     exit 1
 }
-"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(dot-typed-in-text|cell-read-by-its-text)$' --report-style medium src
+"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(dot-typed-in-text|cell-read-by-its-text|absent-text-read-from-the-text)$' --report-style medium src
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM

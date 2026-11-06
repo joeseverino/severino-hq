@@ -122,13 +122,15 @@ holds the boundary with Ruff's `banned-api` over the package's source
 (`tools/pipeline/extension-imports.toml`), which also refuses
 `django.core.cache`: a cache the host cannot see serves a stale answer, so a
 derived read is kept with `hq_sdk.reads.derivation` ([Derived
-reads](#derived-reads)). The check refuses two habits, the first by the host's
-`cell-read-by-its-text` rule (`tools/lint/ast-grep/rules`) and the second by
-`python -m hq_sdk.validation src`:
+reads](#derived-reads)). The check refuses three habits, the first two by the
+host's `cell-read-by-its-text` and `absent-text-read-from-the-text` rules
+(`tools/lint/ast-grep/rules`) and the third by `python -m hq_sdk.validation
+src`:
 
 | Refused | Why | Instead |
 | --- | --- | --- |
 | A test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn` looks for text ending on `</td>` or `</th>` | the host may wrap what a cell says | read the cell's text |
+| A test whose `assertNotContains` or `assertNotIn` over a response's markup says a short word (one to seven letters, digits, `_` or `-`) is absent | a CSRF token, nonce or retry key on the page can hold it by chance | `assertNotContains(response, word, html=True)`, which reads the text between the tags |
 | A page sentence that closes on a value with a period written by hand (`f"Renews through {registrar}."`) | a value HQ did not write can end in its own period | close it through `hq_sdk.ui.ended(f"... {value}")`, which adds the full stop only when the text has none |
 
 The host's own code is held to the same rule, and an extension to the refusal
@@ -209,6 +211,9 @@ The check:
   (`tools/lint/ast-grep/rules`); a line's parts join with `hq_sdk.ui.dotted`;
 - refuses a test that reads a table cell by its closing tag, by the host's
   `cell-read-by-its-text` rule;
+- refuses a test that asserts a short word absent from a page's markup, where
+  a random token can hold it, by the host's `absent-text-read-from-the-text`
+  rule;
 - syncs the package against its lock and lints it;
 - enforces SDK-only imports;
 - type checks it;

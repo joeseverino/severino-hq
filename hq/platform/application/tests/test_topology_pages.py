@@ -21,7 +21,7 @@ from ..security import Capability
 from ..topology import derive_topology, topology as serialized_topology
 from ..topology_lenses import apply_lens, lens_for, topology_lenses
 from .host_only import host_only
-from .markup import hrefs, select, texts, within
+from .markup import hrefs, select, text, texts, within
 from .topology_principals import MANAGE, NONE, READ
 
 
@@ -217,7 +217,7 @@ class TopologyPageTests(TestCase):
         unswept = self.body("resource:example-stack")
 
         # A comparison, not two raw revision numbers.
-        self.assertNotContains(response, "evision")
+        self.assertNotIn("evision", text(response))
         # The field the reading declined to echo back.
         self.assertIn("answer", texts(response, "code"))
         # Age, not an ISO timestamp.
