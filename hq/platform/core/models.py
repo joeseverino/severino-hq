@@ -183,6 +183,22 @@ class AuditLog(models.Model):
         output_field=models.CharField(max_length=64),
         db_persist=True,
     )
+    # The key of the record the row is about (``register_audit``'s
+    # ``subject``), so one indexed read is that record's story; blank for a row
+    # about no record, and for every row written before rows named one.
+    subject = models.GeneratedField(
+        expression=Coalesce(KeyTextTransform("subject", "metadata"), models.Value("", output_field=models.TextField())),
+        output_field=models.CharField(max_length=200),
+        db_persist=True,
+    )
+    # The operation that started this row's operation (``OperationContext.cause``),
+    # so a chain of operations is followed from either end; blank for one that
+    # started itself.
+    cause = models.GeneratedField(
+        expression=Coalesce(KeyTextTransform("cause", "metadata"), models.Value("", output_field=models.TextField())),
+        output_field=models.CharField(max_length=128),
+        db_persist=True,
+    )
     # Defaults to now, and a seed or test may pass the moment it records.
     created_at = models.DateTimeField(default=timezone.now, editable=False)
 
@@ -195,6 +211,8 @@ class AuditLog(models.Model):
             models.Index(fields=("connection", "-created_at")),
             models.Index(fields=("actor", "-created_at")),
             models.Index(fields=("device", "-created_at")),
+            models.Index(fields=("subject", "created_at")),
+            models.Index(fields=("cause",)),
         ]
 
     @override

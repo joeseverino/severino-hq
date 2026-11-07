@@ -1,6 +1,7 @@
 """Lease and report protocol for the privileged homelab controller."""
 
 import hashlib
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
@@ -19,6 +20,9 @@ from hq.domains.control_plane.providers import (
     controller_capability_registry,
     enabled_controller_actions,
 )
+from hq.platform.core.attribution import bound
+from hq.platform.core.audit import audit_events, audit_operation, audited_labels
+from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 
 from . import agent_access
@@ -77,6 +81,30 @@ def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any])
     now = timezone.now()
     ManagedResource.objects.filter(kind=DELIVERY_TARGET_KIND, spec__connection_ref__in=reached).update(
         last_observed_at=now, updated_at=now
+    )
+
+
+def _as_its_own(operation: OperationRequest) -> AbstractContextManager[None]:
+    """The controller's work on one queued request, bound under the request's
+    own id and caused by the operation that queued it, so its claim and report
+    read as one operation headed by the request's own rows, and lead back to
+    the ask, as an approval's rows run under the approval's id."""
+
+    queued_by = (
+        audit_events()
+        .filter(
+            object_type=audited_labels()[OperationRequest],
+            object_id=str(operation.pk),
+            action=AuditLog.Action.CREATED,
+        )
+        .values_list("operation_id", flat=True)
+        .first()
+    )
+    outer = bound()
+    return audit_operation(
+        operation=outer.operation if outer is not None else "",
+        operation_id=str(operation.pk),
+        cause=queued_by or "",
     )
 
 
@@ -344,16 +372,17 @@ def claim_next_operation(
     operation.claimed_at = now
     operation.lease_expires_at = now + timedelta(seconds=lease_seconds)
     operation.attempt_count += 1
-    operation.save(
-        update_fields=(
-            "state",
-            "claimed_by",
-            "claimed_at",
-            "lease_expires_at",
-            "attempt_count",
-            "updated_at",
+    with _as_its_own(operation):
+        operation.save(
+            update_fields=(
+                "state",
+                "claimed_by",
+                "claimed_at",
+                "lease_expires_at",
+                "attempt_count",
+                "updated_at",
+            )
         )
-    )
     result = _pending(operation)
     result.update(contract)
     return result
@@ -380,7 +409,9 @@ def _next_resolvable(operations, now):
                 "message": str(exc),
                 "reason": "Unresolvable",
             }
-            operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
+            operation.audit_said = str(exc)
+            with _as_its_own(operation):
+                operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
     return None, {}
 
 
@@ -414,11 +445,18 @@ def report_operation(
     if operation.lease_expires_at and operation.lease_expires_at <= timezone.now():
         raise ValueError("Operation lease has expired.")
 
-    resource = operation.resource
     requested_generation = operation.input.get("generation")
     if report.observed_generation != requested_generation:
         raise ValueError("Report generation does not match the operation's requested generation.")
 
+    with _as_its_own(operation):
+        return _settle_report(operation, report)
+
+
+def _settle_report(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
+    """Record what the controller reports of ``operation`` and of its resource."""
+
+    resource = operation.resource
     operation.result = {
         "message": report.message,
         "status": report.status,
@@ -427,6 +465,8 @@ def report_operation(
     operation.completed_at = timezone.now()
     operation.lease_expires_at = None
     operation.state = OperationRequest.State.SUCCEEDED if report.success else OperationRequest.State.FAILED
+    # The finishing row says what the controller said.
+    operation.audit_said = report.message
     operation.save(
         update_fields=(
             "result",

@@ -181,7 +181,8 @@
           "redact=",
           "observation=",
           "connection=",
-          "redact_for="
+          "redact_for=",
+          "subject="
         ]
       },
       "seeded_by_hand": {

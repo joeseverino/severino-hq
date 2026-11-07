@@ -38,6 +38,9 @@ lazy from .facets import Facet
 logger = getLogger("severino.audit")
 
 _AUDITED_MODELS: dict[type, str] = {}
+# The record a registered model's rows are about, by its key, where that is
+# not the row itself: an operation or a decision on a managed resource.
+_SUBJECTS: dict[type, Callable[[Any], str]] = {}
 _connection_context: ContextVar[str] = ContextVar("hq_audit_connection", default="")
 # A seed's say in the rows it causes: when each happened and who did it.
 type Stamp = Callable[[Model | None, str, str], dict[str, Any] | None]
@@ -203,15 +206,20 @@ def _bound(doing: str) -> OperationContext:
 
 @contextmanager
 def audit_operation(
-    *, operation: str, principal: object | None = None, operation_id: str = "", rebinds: bool = False
+    *,
+    operation: str,
+    principal: object | None = None,
+    operation_id: str = "",
+    cause: str = "",
+    rebinds: bool = False,
 ) -> Iterator[None]:
     """Attribute an operation to the principal that made it: the one way a
     host service or a plugin binds a principal's interface and actor.
 
     Without a principal the operation is the bound caller's, and with nobody
     bound it is refused, so no operation is written down as nobody's.
-    ``rebinds`` is ``operation_context``'s, for the host's approvals alone:
-    the SDK's ``audit_operation`` does not take it.
+    ``cause`` and ``rebinds`` are ``operation_context``'s, ``rebinds`` for the
+    host's approvals alone: the SDK's ``audit_operation`` takes neither.
     """
 
     # A plugin hands whatever principal it holds, or none.
@@ -222,6 +230,7 @@ def audit_operation(
         operation=operation,
         operation_id=operation_id,
         device=getattr(principal, "device", None) or "",
+        cause=cause,
         rebinds=rebinds,
     ):
         yield
@@ -256,6 +265,12 @@ def audited_labels() -> dict[type, str]:
     return dict(_AUDITED_MODELS)
 
 
+def audited_subjects() -> frozenset[type]:
+    """The registered models whose rows name the record they are about (``subject``)."""
+
+    return frozenset(_SUBJECTS)
+
+
 @contextmanager
 def withdrawn(*models: type[Model]) -> Iterator[dict[type, str]]:
     """Take `models` out of audit for the block, yielding each one's label.
@@ -269,8 +284,11 @@ def withdrawn(*models: type[Model]) -> Iterator[dict[type, str]]:
     if unknown:
         raise LookupError(f"Not audited: {', '.join(unknown)}.")
     registry = dict(_AUDITED_MODELS)
+    subjects = dict(_SUBJECTS)
     receivers = {signal: list(signal.receivers) for signal in _SIGNALS}
     labels = {model: _AUDITED_MODELS.pop(model) for model in models}
+    for model in models:
+        _SUBJECTS.pop(model, None)
     for signal in _SIGNALS:
         for model in models:
             signal.disconnect(sender=model, dispatch_uid=AUDIT_DISPATCH_UID)
@@ -279,6 +297,8 @@ def withdrawn(*models: type[Model]) -> Iterator[dict[type, str]]:
     finally:
         _AUDITED_MODELS.clear()
         _AUDITED_MODELS.update(registry)
+        _SUBJECTS.clear()
+        _SUBJECTS.update(subjects)
         for signal, kept in receivers.items():
             with signal.lock:
                 signal.receivers = kept
@@ -293,6 +313,7 @@ def register_audit(
     observation: Iterable[str] = (),
     connection: Callable[[Any], str] | None = None,
     redact_for: Callable[[Any], Iterable[str]] | None = None,
+    subject: Callable[[Any], str] | None = None,
 ) -> None:
     """Register a model so create/update/delete events land in the audit log.
 
@@ -301,11 +322,15 @@ def register_audit(
     more for one instance, where it depends on the row (a declaration of a
     withheld kind). `connection` returns the connection_ref an instance's work
     goes through; `observation` names fields that only record HQ looking.
+    `subject` returns the key of the record an instance's rows are about, so
+    one query on the row's `subject` reads that record's whole story.
     """
 
     if model in _AUDITED_MODELS:
         return
     _AUDITED_MODELS[model] = type_label
+    if subject is not None:
+        _SUBJECTS[model] = subject
     secret = frozenset(redact)
     # Fields that record HQ *looking*, not the world changing. A sweep confirms
     # hundreds of declarations per pass and stamps the time on each; audited as
@@ -376,6 +401,21 @@ def _connection_of(extract: Callable[[Any], str] | None, instance) -> str:
         return str(extract(instance) or "")
     except Exception:  # attribution never blocks the event
         logger.exception("Could not name the connection of an audited %s", type(instance))
+        return ""
+
+
+def _subject_of(obj: Model | None) -> str:
+    """The key of the record a row about ``obj`` is about, or blank."""
+
+    if obj is None:
+        return ""
+    extract = _SUBJECTS.get(type(obj))
+    if extract is None:
+        return ""
+    try:
+        return str(extract(obj) or "")
+    except Exception:  # attribution never blocks the event
+        logger.exception("Could not name the subject of an audited %s", type(obj))
         return ""
 
 
@@ -467,12 +507,15 @@ def record_event(
     stamp = _stamp_context.get()
     stamps = (stamp(obj, action, object_type) if stamp is not None else None) or {}
     user = stamps.get("user", user)
+    subject = _subject_of(obj)
     # Facets first, so an explicit `metadata` key still wins.
     event_metadata = {
         "interface": context.interface,
         "actor": _actor(context, user, stamped_user="user" in stamps),
         "operation": context.operation,
         **({"device": context.device} if context.device else {}),
+        **({"subject": subject} if subject else {}),
+        **({"cause": context.cause} if context.cause else {}),
         **facet_metadata(facets),
         **(metadata or {}),
         **stamps.get("metadata", {}),

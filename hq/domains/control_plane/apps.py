@@ -30,16 +30,18 @@ class ControlPlaneConfig(AppConfig):
             observation=("last_observed_at",),
             connection=_resource_connection,
             redact_for=_withheld_fields,
+            subject=lambda resource: resource.key,
         )
         register_audit(
             OperationRequest,
             "Infrastructure operation",
             connection=lambda operation: _resource_connection(operation.resource),
+            subject=lambda operation: operation.resource.key,
         )
         # An operator's choice that a record stays unmanaged, and its reversal.
         register_audit(NotManaged, "Not managed")
         # Who asked for a held change, who agreed to it and when.
-        register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL)
+        register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL, subject=lambda held: held.resource_key)
         # Who asked for a connection to be read now, and when.
         register_audit(ReadRequest, "Read request", connection=lambda request: request.connection_ref)
 

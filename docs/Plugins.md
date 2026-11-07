@@ -167,7 +167,13 @@ as `record_event` is. Every door binds who acted where it starts, so a row nobod
 defect and fails where it runs. Once an actor is bound, a binding opened inside
 it that names another actor is refused: a job's work runs under its job's
 binding, a command under the shell's, and a step that needs a principal is
-handed the requester's. The same actor may name another interface.
+handed the requester's. The same actor may name another interface. A
+binding given an id of its own inside another operation records that
+operation as its row's `cause`, so a chain of operations is followed from
+either end. A model whose rows are about another record (an operation on a
+declaration, a decision on one) passes `register_audit(..., subject=...)`, a
+function returning that record's key, so one indexed read of the log's
+`subject` is the record's whole story.
 
 Every extension's `.github/workflows/admit-plugin.yml` is the same, because it
 names nothing about the extension:

@@ -121,8 +121,9 @@ class AuditDetailPageTests(_AuthedTestCase):
         self.assertIn("192.0.2.2", shown)
         self.assertNotIn("{'", shown)
         self.assertNotIn("['", shown)
-        # Nothing else was recorded beside the change: the Who and Operation rows say the rest.
-        self.assertEqual(set(page.context["extra"]), set())
+        # Nothing else was recorded beside the change but the record it is
+        # about: the Who and Operation rows say the rest.
+        self.assertEqual(set(page.context["extra"]), {"Subject"})
 
     def test_an_event_links_to_the_rest_of_its_operation(self):
         # The point of operation_id: one action touching several rows is one
