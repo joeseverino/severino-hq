@@ -11,6 +11,7 @@ from hq.platform.core.test_runner import drives_a_browser, tests_in
 from tests.mise_tasks import body, mise_tasks
 from tools.gate import fast as fast_gate
 from tools.gate.tests.base import GateTestCase
+from tools.gate.verdict import ESCAPE
 
 ROOT = Path(__file__).resolve().parents[3]
 SELECTORS = "hq.platform.core.tests.test_browser_selectors"
@@ -45,7 +46,9 @@ class SourceFirstTests(GateTestCase):
             text=True,
             check=True,
         )
-        order = [line for line in (planned.stdout + planned.stderr).splitlines() if " $ " in line]
+        # Read without the color mise gives its lines on a CI runner.
+        plain = ESCAPE.sub("", planned.stdout + planned.stderr)
+        order = [line for line in plain.splitlines() if " $ " in line]
         self.assertEqual(len(order), 2, order)
         self.assertTrue(order[0].startswith("[fast:source] ") and order[0].endswith(f" {SELECTORS}"), order)
         self.assertTrue(order[1].startswith(f"[{fast_gate.TESTS}] "), order)
