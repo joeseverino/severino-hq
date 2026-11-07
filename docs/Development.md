@@ -422,7 +422,7 @@ so another checkout's stop leaves the VM up under it.
 
 The turn is mise's task lock `heavy`, a name every checkout and worktree on
 the machine shares. A TOML task takes it by extending the `heavy` template in
-`mise.toml` (`django-browser`), a file task with `#MISE lock="heavy"` in its
+`mise.toml` (`django-browser`), a file task with `#MISE lock=["gate", "heavy"]` in its
 header and the line `. ./tools/lib/heavy-turn.sh` before its work; either
 declares a `timeout`, which mise starts once the task holds the lock, so
 heavy tasks asked together (`mise run browser:layout-1 :::
@@ -431,6 +431,16 @@ is stopped. A heavy task started inside a turn runs at once, since mise hands
 the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
 `HeavyTaskTests` (`tools/gate/tests/test_turn.py`) holds every task to its
 side of the line, and `tests/shell/test-heavy.sh` the turn's promises.
+
+A landing goes first. Every task that takes the turn passes the lock `gate`
+first, which mise takes in sorted order, so a task waiting there holds
+nothing. `mise run landing -- <command>` holds the gate for the command's
+lifetime: no other checkout starts a heavy run until the landing ends, and
+the landing waits behind only the run already in the turn, since it takes the
+gate with a blocking lock that the kernel hands over as the holder ends, where
+mise polls. The command's own heavy tasks inherit the gate
+(`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
+`test_landing.py` (`tools/gate/tests/`) runs that order against mise.
 
 A run of tests is narrow, and goes ahead outside the turn, when it is serial
 (`--parallel 1`) or each label names a module or something in one, and no
