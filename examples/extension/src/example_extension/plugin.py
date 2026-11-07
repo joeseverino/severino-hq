@@ -8,7 +8,9 @@ def ready() -> bool:
 
 
 def integration() -> PluginIntegration:
-    return PluginIntegration(health=ready)
+    from . import demo
+
+    return PluginIntegration(health=ready, demo_seed=demo.plant, demo_pages=demo.pages)
 
 
 plugin = PluginManifest(
@@ -18,7 +20,7 @@ plugin = PluginManifest(
     distribution="example-extension",
     source_repository="example/example-extension",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=9,
+    api_version=10,
     integration_provider="example_extension.plugin:integration",
     django_apps=("example_extension",),
     url_prefix="examples/extension/",

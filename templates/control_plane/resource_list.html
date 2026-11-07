@@ -21,25 +21,24 @@ offers every type.
 {% table_region "Records" %}
   <table class="data-table">
     <thead>
-      <tr>{% table_heading "Name" "identifier" gutter=True local_sort=records.shown|sortable %}{% table_heading "State" "status" css="key-col" local_sort=records.shown|sortable %}{% table_heading "Last read" "status" drop=1 local_sort=records.shown|sortable %}</tr>
+      <tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Last read" "status" drop=1 local_sort=True %}</tr>
     </thead>
     {% for group in records.groups %}
     <tbody>
       {% row_group group.label group.rows|length %}
       {% for resource in group.rows %}
         <tr>
-          <td class="row-gutter">
+          <td>
             <strong>{% entity "resource"|entity_of:resource.key label=resource.shown_name %}</strong>
             {% if resource.summary %}<br><span class="muted cell-data">{{ resource.summary|breakable }}</span>{% endif %}
             {% comment %}
             Whose address a proxy forwards to, when HQ knows the machine.
             {% endcomment %}
             {% if resource.origin_machine %}<br><span class="muted">on {% entity resource.origin_machine.link %}</span>{% endif %}
-            {% row_toggle %}
           </td>
           <td>
             {% with status=resource.record_status %}
-              <span class="pill control-{{ status.tone }}"{% if status.detail %} title="{{ status.detail }}"{% endif %}>{{ status.label|breakable }}</span>
+              {% status status.label tone=status.tone title=status.detail %}
               {% if status.since %}<br><span class="muted">{{ status.since|when:"ago" }}</span>{% endif %}
             {% endwith %}
           </td>
@@ -58,16 +57,16 @@ What changed, not what ran: a check that found what the one before it found
 is not a row, so an unchanged minute-by-minute result is one line.
 {% endcomment %}
 {% if changes %}
-<h2>Recent changes</h2>
+{% section "Recent changes" count=changes|length %}
 {% table_region "Recent changes" %}
   <table class="data-table">
-    <thead><tr>{% table_heading "What" "identifier" gutter=True local_sort=changes|sortable %}{% table_heading "Change" drop=3 local_sort=changes|sortable %}{% table_heading "Result" css="key-col" local_sort=changes|sortable %}{% table_heading "By" drop=2 local_sort=changes|sortable %}{% table_heading "When" "status" drop=1 local_sort=changes|sortable %}</tr></thead>
+    <thead><tr>{% table_heading "What" "identifier" gutter=True local_sort=True %}{% table_heading "Change" drop=3 local_sort=True %}{% table_heading "Result" css="key-col" local_sort=True %}{% table_heading "By" drop=2 local_sort=True %}{% table_heading "When" "status" drop=1 local_sort=True %}</tr></thead>
     <tbody>
       {% for change in changes %}
         <tr>
-          <td class="row-gutter">{% entity "resource"|entity_of:change.resource %}{% row_toggle %}</td>
+          <td>{% entity "resource"|entity_of:change.resource %}</td>
           <td>{{ change.action|breakable }}</td>
-          <td><span class="pill pill-{{ change.summary.tone }}">{{ change.summary.state_label|breakable }}</span> {{ change.summary.headline|truncatechars:120|breakable }}</td>
+          <td>{% status change.summary.state_label tone=change.summary.tone %} {{ change.summary.headline|truncatechars:120|breakable }}</td>
           <td>{{ change.by|or_empty }}</td>
           <td class="muted date-col">{{ change.at|when }}</td>
         </tr>
@@ -75,5 +74,6 @@ is not a row, so an unchanged minute-by-minute result is one line.
     </tbody>
   </table>
 {% endtable_region %}
+{% endsection %}
 {% endif %}
 {% endblock %}

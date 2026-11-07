@@ -3,7 +3,7 @@
 A list: the toolbar, the table and its empty state, drawn from the view's
 TableListMixin. The header comes from `table.columns`; a page writes only the
 cells of one row in `{% block row %}`, which renders once per row with `row`
-set; its first cell is `row-gutter` and ends with `{% row_toggle %}`, and `{% block row_attributes %}` gives its `tr` attributes (a fold's `id` and `data-folds`, a folded row's `data-folded`). `{% block summary %}` sits between the toolbar and the table.
+set; its first cell stands in the gutter and holds the row's toggle, both drawn by the region from its heading, and `{% block row_attributes %}` gives its `tr` attributes (a fold's `id` and `data-folds`, a folded row's `data-folded`). `{% block summary %}` sits between the toolbar and the table.
 The view's `table_empty` says what an empty list means ("No assets yet."), with
 `table_empty_why` beside it and `get_table_empty_remedy()` where the derived remedy
 is not the one,

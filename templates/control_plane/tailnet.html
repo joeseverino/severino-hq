@@ -27,47 +27,51 @@
     </div>
   </div>
 
-  {% if tailnet.settings %}
-    <h2>Settings</h2>
+  {% section "Settings" %}{% if tailnet.settings %}
     <dl class="kv">
       {% for setting in tailnet.settings %}
         <dt>{{ setting.label|breakable }}</dt>
-        <dd>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value|breakable }}{% endif %}{% if setting.problem_url %} <a class="pill pill-attention" href="{{ setting.problem_url }}">Problem</a>{% endif %}</dd>
+        <dd>{% if setting.addresses %}{% include "control_plane/_policy_names.html" with names=setting.addresses %}{% else %}{{ setting.value|breakable }}{% endif %}{% if setting.problem_url %} {% status "Problem" tone="attention" href=setting.problem_url %}{% endif %}</dd>
       {% endfor %}
     </dl>
-  {% endif %}
+  {% endif %}{% endsection %}
 
-  {% section_head %}Grants{% endsection_head %}
+  {% section "Grants" count=tailnet.grants|length %}
+  {% if tailnet.grants %}
   {% table_region "Grants" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "From" gutter=True local_sort=tailnet.grants|sortable %}{% table_heading "To" local_sort=tailnet.grants|sortable %}{% table_heading "Ports" "identifier" drop=1 local_sort=tailnet.grants|sortable %}</tr></thead>
+      <thead><tr>{% table_heading "From" gutter=True local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "Ports" "identifier" drop=1 local_sort=True %}</tr></thead>
       <tbody>
         {% for grant in tailnet.grants %}
           <tr>
-            <td class="row-gutter">{% include "control_plane/_policy_names.html" with names=grant.sources %}{% row_toggle %}</td>
+            <td>{% include "control_plane/_policy_names.html" with names=grant.sources %}</td>
             <td>{% include "control_plane/_policy_names.html" with names=grant.destinations %}</td>
-            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<code>{{ ip|breakable }}{% if name %}{% dot %}{{ name|breakable }}{% endif %}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
+            <td><span class="code-list">{% for ip, name in grant.rule.ports %}<span><code>{{ ip|breakable }}</code>{% if name %} {{ name|breakable }}{% endif %}</span>{% if not forloop.last %} {% endif %}{% endfor %}</span></td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   {% endtable_region %}
+  {% endif %}
+  {% empty %}No grants.
+  {% endsection %}
 
-  <h2>Groups and tags</h2>
+  {% section "Groups and tags" count=tailnet.group_rows %}
+  {% if tailnet.group_rows %}
   {% table_region "Groups and tags" room="snug" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=tailnet.group_rows|sortable %}{% table_heading "Members" "identifier" local_sort=tailnet.group_rows|sortable %}{% table_heading "Devices" drop=1 local_sort=tailnet.group_rows|sortable %}</tr></thead>
+      <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "Members" "identifier" local_sort=True %}{% table_heading "Devices" drop=1 local_sort=True %}</tr></thead>
       <tbody>
         {% for group in tailnet.policy.groups %}
           <tr>
-            <td class="row-gutter"><code>{{ group.name|breakable }}</code>{% row_toggle %}</td>
+            <td><code>{{ group.name|breakable }}</code></td>
             <td>{{ group.members|join:", "|breakable }}</td>
             <td></td>
           </tr>
         {% endfor %}
         {% for row in tailnet.tags %}
           <tr>
-            <td class="row-gutter"><code>{{ row.tag.name|breakable }}</code>{% row_toggle %}</td>
+            <td><code>{{ row.tag.name|breakable }}</code></td>
             <td><span class="muted">owned by</span> {{ row.tag.owners|join:", "|breakable }}</td>
             <td>{% for link in row.devices %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% empty %}{% if row.unworn %}<span class="muted">no device has this tag</span>{% else %}{% empty_value %}{% endif %}{% endfor %}</td>
           </tr>
@@ -75,6 +79,9 @@
       </tbody>
     </table>
   {% endtable_region %}
+  {% endif %}
+  {% empty %}No groups or tags.
+  {% endsection %}
 
   {% comment %}
   Two more ways this tailnet reaches things, neither of which is a device and
@@ -87,14 +94,14 @@
   broken when it is simply unused.
   {% endcomment %}
   {% if tailnet.policy.services %}
-    <h2>Services</h2>
+    {% section "Services" count=tailnet.policy.services|length %}
     {% table_region "Tailnet services" room="snug" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Service" "identifier" gutter=True local_sort=tailnet.policy.services|sortable %}{% table_heading "Answers at" "identifier" local_sort=tailnet.policy.services|sortable %}{% table_heading "Ports" "identifier" drop=2 local_sort=tailnet.policy.services|sortable %}{% table_heading "Note" drop=1 local_sort=tailnet.policy.services|sortable %}</tr></thead>
+        <thead><tr>{% table_heading "Service" "identifier" gutter=True local_sort=True %}{% table_heading "Answers at" "identifier" local_sort=True %}{% table_heading "Ports" "identifier" drop=2 local_sort=True %}{% table_heading "Note" drop=1 local_sort=True %}</tr></thead>
         <tbody>
           {% for service in tailnet.policy.services %}
             <tr>
-              <td class="row-gutter"><code>{{ service.name|breakable }}</code>{% row_toggle %}</td>
+              <td><code>{{ service.name|breakable }}</code></td>
               <td>{% for address in service.addresses %}<code>{{ address|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
               <td>{{ service.ports|join:" "|or_empty }}</td>
               <td class="muted">{{ service.comment|or_empty }}</td>
@@ -103,6 +110,7 @@
         </tbody>
       </table>
     {% endtable_region %}
+    {% endsection %}
   {% endif %}
 
   {% if tailnet.ssh_rules %}
@@ -112,14 +120,14 @@
     person is asked to re-authenticate before the shell opens; "accept" means
     they are not.
     {% endcomment %}
-    <h2>Shell access</h2>
+    {% section "Shell access" count=tailnet.ssh_rules|length %}
     {% table_region "Shell access" room="snug" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "From" gutter=True local_sort=tailnet.ssh_rules|sortable %}{% table_heading "To" local_sort=tailnet.ssh_rules|sortable %}{% table_heading "As" "identifier" drop=2 local_sort=tailnet.ssh_rules|sortable %}{% table_heading "Re-authenticate" "status" drop=1 local_sort=tailnet.ssh_rules|sortable %}</tr></thead>
+        <thead><tr>{% table_heading "From" gutter=True local_sort=True %}{% table_heading "To" local_sort=True %}{% table_heading "As" "identifier" drop=2 local_sort=True %}{% table_heading "Re-authenticate" "status" drop=1 local_sort=True %}</tr></thead>
         <tbody>
           {% for row in tailnet.ssh_rules %}
             <tr>
-              <td class="row-gutter">{% include "control_plane/_policy_names.html" with names=row.sources %}{% row_toggle %}</td>
+              <td>{% include "control_plane/_policy_names.html" with names=row.sources %}</td>
               <td>{% include "control_plane/_policy_names.html" with names=row.destinations %}</td>
               <td>{% for user in row.rule.users %}<code>{{ user|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</td>
               <td>{% if row.rule.action == "check" %}Yes{% elif row.rule.action == "accept" %}<strong>No</strong>{% else %}{{ row.rule.action|breakable }}{% endif %}</td>
@@ -128,17 +136,18 @@
         </tbody>
       </table>
     {% endtable_region %}
+    {% endsection %}
   {% endif %}
 
   {% if tailnet.policy.app_connectors %}
-    <h2>App connectors</h2>
+    {% section "App connectors" count=tailnet.policy.app_connectors|length %}
     {% table_region "App connectors" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=tailnet.policy.app_connectors|sortable %}{% table_heading "Routed by" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}{% table_heading "For" "identifier" local_sort=tailnet.policy.app_connectors|sortable %}</tr></thead>
+        <thead><tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "Routed by" "identifier" local_sort=True %}{% table_heading "For" "identifier" local_sort=True %}</tr></thead>
         <tbody>
           {% for connector in tailnet.policy.app_connectors %}
             <tr>
-              <td class="row-gutter"><code>{{ connector.name|breakable }}</code>{% row_toggle %}</td>
+              <td><code>{{ connector.name|breakable }}</code></td>
               <td>{% for node in connector.connectors %}<code>{{ node|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
               <td>{% for domain in connector.domains %}{% entity "service"|entity_of:domain code=True %}{% if not forloop.last %} {% endif %}{% empty %}{% empty_value %}{% endfor %}</td>
             </tr>
@@ -146,6 +155,7 @@
         </tbody>
       </table>
     {% endtable_region %}
+    {% endsection %}
   {% endif %}
 {% else %}
   {% include "partials/_empty_state.html" with message="Tailnet policy not read yet." remedy=page.remedy %}

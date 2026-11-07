@@ -39,7 +39,7 @@ class TableSort:
 COLUMN_KINDS = ("prose", "identifier", "numeric", "status", "control")
 
 # The kind a column's classes already say, so it is not declared twice.
-_KIND_OF_CLASS = {"num-col": "numeric", "date-col": "status", "actions-col": "control", "row-actions": "control"}
+_KIND_OF_CLASS = {"date-col": "status", "actions-col": "control", "row-actions": "control"}
 
 
 def column_kind(kind: str, css: str, otherwise: str = "prose") -> str:

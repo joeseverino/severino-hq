@@ -147,7 +147,7 @@ class AuditDetailPageTests(_AuthedTestCase):
 
         page = self.client.get(reverse("core:audit_detail", args=[created.pk]))
 
-        inside = within(page, "aria-label", "Other events")
+        inside = within(page, "class", "table-scroll")
         self.assertEqual(len([each for each in inside if each.tag == "table"]), 1)
         self.assertEqual(len([each for each in inside if each.attrs.get("scope") == "rowgroup"]), 2)
         (group,) = [each for each in inside if "data-folds" in each.attrs]

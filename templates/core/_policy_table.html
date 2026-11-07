@@ -18,7 +18,7 @@ agents go from the far end, then the default.
         {% row_group group.label %}
         {% for row in group.rows %}
           <tr>
-            <th scope="row" class="row-gutter">{{ row.label|breakable }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label|breakable }}</span>{% endif %}{% row_toggle %}</th>
+            <th scope="row">{{ row.label|breakable }}{% if row.effect_label %} <span class="policy-effect effect-{{ row.effect }}">{{ row.effect_label|breakable }}</span>{% endif %}</th>
             <td class="policy-default">{{ row.default|breakable }}</td>
             {% for cell in row.cells %}<td>{% include "core/_policy_setting.html" %}</td>{% endfor %}
           </tr>
