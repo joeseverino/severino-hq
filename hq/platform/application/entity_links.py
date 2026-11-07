@@ -20,6 +20,7 @@ from hq.domains.control_plane.providers import PROVIDERS, read_spec, registry_la
 from hq.platform.application.routes import reverse
 
 from .command_fields import Describe
+lazy from .connections import connection_names
 lazy from .infrastructure import enabled_resources
 lazy from .projection import read_once
 
@@ -172,6 +173,14 @@ def _record_label(key: str) -> str:
     return record_names().get(key, key) if key else key
 
 
+def _connection_label(ref: str) -> str:
+    return connection_names().get(ref, ref) if ref else ref
+
+
+# A kind whose identity is HQ's filing of it, by what a person calls it instead.
+_NAMED: Mapping[str, Callable[[str], str]] = {"resource": _record_label, "connection": _connection_label}
+
+
 def kind_label(kind: str) -> str:
     """What a kind is called in a sentence. Never the identifier itself."""
 
@@ -220,7 +229,7 @@ def entity_link(
     node = NODE_KINDS.get(kind)
     if node is not None:
         url = node.page(identity) if node.page and identity else ""
-        named = _record_label(identity) if kind == "resource" else identity
+        named = _NAMED.get(kind, str)(identity)
         return EntityLink(
             label=label or named,
             url=url,

@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal, TypedDict
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from pydantic import Field
 lazy from django.db.models import Max
 
 from hq.platform.core.audit import record_event
@@ -18,6 +19,10 @@ from hq.platform.core.models import AuditLog, Pin
 from .command_fields import Describe
 from .projection import read_once
 from .security import Principal, person
+
+# What a pin is called on a page, wherever one is set or listed.
+FAVORITE = "favorite"
+FAVORITES = "favorites"
 
 DOMAIN = "domain"
 # A service, kept at the top of the list that shows every hostname HQ knows.
@@ -40,20 +45,20 @@ AUDIT_LABEL = "Pin"
 
 @dataclass(frozen=True, slots=True)
 class PinCommand:
-    kind: Annotated[str, Describe("What type of thing to pin.")]
+    kind: Annotated[str, Field(title="Type"), Describe("What type of thing to pin.")]
     key: Annotated[str, Describe("The one to pin or unpin.")]
 
 
 @dataclass(frozen=True, slots=True)
 class MoveCommand:
-    kind: Annotated[str, Describe("What type of pin to move.")]
+    kind: Annotated[str, Field(title="Type"), Describe("What type of pin to move.")]
     key: Annotated[str, Describe("Which pin.")]
     up: Annotated[bool, Describe("Move it up; otherwise down.")] = False
 
 
 @dataclass(frozen=True, slots=True)
 class ChooseCommand:
-    kind: Annotated[str, Describe("What type of pins to set.")]
+    kind: Annotated[str, Field(title="Type"), Describe("What type of pins to set.")]
     keys: Annotated[list[str], Describe("Every pin of that type, in order.")] = field(default_factory=list)
 
 

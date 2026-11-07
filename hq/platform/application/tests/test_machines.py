@@ -23,10 +23,11 @@ from hq.domains.control_plane.models import (
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..capabilities import capability_words
+from ..entity_links import entity_link
 from ..machines import machine, machine_catalog
 from ..resource_capabilities import UPDATE_CAPABILITY
 from ..services import CONTAINER_KIND
-from .markup import all_elements, texts
+from .markup import all_elements, text
 
 
 def a_connection(ref, provider, endpoint="", reaches=(), *, reachable=True):
@@ -644,10 +645,10 @@ class ReadingThisOnTheMachineTests(TestCase):
         )
 
     def test_the_machine_you_are_reading_it_on_says_so(self):
-        self.assertContains(self.page("100.64.0.5"), "this device")
+        self.assertContains(self.page("100.64.0.5"), "This device")
 
     def test_another_machine_does_not(self):
-        self.assertNotContains(self.page("100.64.0.9"), "this device")
+        self.assertNotContains(self.page("100.64.0.9"), "This device")
 
     def test_knowing_costs_no_query(self):
         """It is arithmetic on one address, and the header is on every page."""
@@ -826,10 +827,10 @@ class OneStateTests(TestCase):
         for response in (listing, page):
             with self.subTest(page=response.request["PATH_INFO"]):
                 said = [element.words for element in all_elements(response)]
-                self.assertIn("offline", said)
+                self.assertIn("Offline", said)
                 self.assertNotIn("reachable", said)
                 self.assertNotIn("down", said)
-                self.assertIn("example-tailnet", texts(response, "code"))
+                self.assertIn(entity_link("connection", "example-tailnet").label, text(response))
 
     def test_an_online_device_reads_as_online(self):
         self.device(online=True)
@@ -849,7 +850,10 @@ class OneStateTests(TestCase):
 
         listing = self.client.get(reverse("control_plane:machines"))
 
-        self.assertIn("example-ssh not answering", " ".join(strip_tags(listing.content.decode()).split()))
+        self.assertIn(
+            f"{entity_link('connection', 'example-ssh').label} not answering",
+            " ".join(strip_tags(listing.content.decode()).split()),
+        )
 
     def test_nothing_reaching_it_says_so(self):
         containers({"name": "probe", "host": "somewhere", "state": "running"})

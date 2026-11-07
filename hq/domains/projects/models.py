@@ -76,12 +76,12 @@ class Project(TimestampedModel):
         blank=True,
         help_text="Comma-separated list of technologies.",
     )
-    repository_url = models.URLField(blank=True)
+    repository_url = models.URLField("repository URL", blank=True)
     last_push_at = models.DateTimeField(null=True, blank=True)
     # Whether HQ's dependency update run covers the repository. Set only by the
     # `project.dependency_updates.set` capability, which holds its precondition.
     dependency_updates = models.BooleanField(default=False)
-    public_url = models.URLField(blank=True)
+    public_url = models.URLField("public URL", blank=True)
     deployment_notes = models.TextField(blank=True)
     security_notes = models.TextField(blank=True)
     notes = models.TextField(blank=True)

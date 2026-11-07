@@ -159,7 +159,7 @@
               ],
               "secret_store": "1Password",
               "setup_route": null,
-              "summary": "What the controller connects to.",
+              "summary": "What HQ connects to.",
               "web_route": "control_plane:connections"
             }
           ],
@@ -268,7 +268,7 @@
                 {
                   "capability": "",
                   "effect": "read",
-                  "label": "See it in the topology",
+                  "label": "See it on the map",
                   "method": "GET",
                   "name": "topology",
                   "reason": "What this is connected to.",
@@ -1519,9 +1519,10 @@
             "jobs": [
               {
                 "last_run": "2026-01-03T09:30:00+00:00",
+                "name": "severino-hq-web.service",
                 "next_run": null,
                 "result": "Running",
-                "runs": "Severino HQ",
+                "runs": "",
                 "runs_unit": false,
                 "title": "Severino HQ",
                 "tone": "good",
@@ -1682,15 +1683,15 @@
             {
               "category": "homelab",
               "dependency_updates": false,
-              "description": "The control panel for the homelab: every machine, service, renewal and bill in one place.",
+              "description": "A git server for private work, mirrored to GitHub every night.",
               "last_push_at": null,
-              "name": "HQ",
-              "public_url": "https://hq.example.com/",
-              "repository_url": "https://github.com/example/hq",
-              "slug": "hq",
+              "name": "Self-hosted git",
+              "public_url": "https://git.example.com/",
+              "repository_url": "https://github.com/example/git-server",
+              "slug": "self-hosted-git",
               "status": "active",
               "technologies": [],
-              "updated_at": "2026-01-15T00:36:00+00:00",
+              "updated_at": "2026-01-04T00:16:00+00:00",
               "updates": {
                 "last_run": null,
                 "oldest_pull_days": null,
@@ -2051,7 +2052,7 @@
                     {
                       "capability": "",
                       "effect": "read",
-                      "label": "See it in the topology",
+                      "label": "See it on the map",
                       "method": "GET",
                       "name": "topology",
                       "reason": "What this is connected to.",
@@ -2125,6 +2126,7 @@
                   }
                 }
               ],
+              "funnel": null,
               "grants": [
                 {
                   "destinations": [
