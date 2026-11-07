@@ -1,17 +1,11 @@
 {% extends "page.html" %}
 {% block page %}
-{% include "partials/_visit_refresh.html" with subject="machine" name=machine.name %}
 {% include "control_plane/_machine_band.html" %}
 
 {% include "partials/_problems.html" with problems=problems_in.page %}
 
 {% if load_metrics %}
-  <section class="machine-telemetry" aria-labelledby="machine-telemetry-heading">
-    {% section_head id="machine-telemetry-heading" lede=machine.telemetry.summary %}Current load{% aside %}
-      {% if machine.telemetry_observed_at %}
-        <span class="muted">{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}</span>
-      {% endif %}
-    {% endsection_head %}
+  {% section "Current load" lede=machine.telemetry.summary %}
     <dl class="machine-telemetry-metrics">
       {% for metric in load_metrics %}
         <div title="{{ metric.detail }}">
@@ -21,7 +15,11 @@
         </div>
       {% endfor %}
     </dl>
-  </section>
+  {% aside %}
+    {% if machine.telemetry_observed_at %}
+      <span class="muted">{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}</span>
+    {% endif %}
+  {% endsection %}
 {% endif %}
 
 {% if machine.containers or unused_images %}
@@ -29,11 +27,10 @@
   Where they are read from, beside the heading, and what they leave behind
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
-{% card heading="machine-containers-heading" %}
-  <h2 id="machine-containers-heading">Containers{% if docker %} <span class="heading-aside">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}</span>{% endif %}</h2>
-  {% if unused_images %}<ul class="dot-list section-facts"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size|breakable }} can be freed</li></ul>{% endif %}
+{% section "Containers" %}
+  {% if unused_images %}<ul class="dot-list"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size|breakable }} can be freed</li></ul>{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
-  {% include "partials/_problems.html#lines" with rest=problems_in.containers %}
+  {% include "partials/_problems.html#rest" with rest=problems_in.containers %}
   {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Shown containers" %}{% endif %}
   {% if machine.folded %}
     {% comment %}
@@ -41,26 +38,18 @@
     not what anybody opened this page to look at. Folded rather than dropped,
     because a container HQ can act on and does not show is worse than either.
     {% endcomment %}
-    <details class="fold">
+    <details>
       <summary>{{ machine.folded|length }} hidden</summary>
       {% include "control_plane/_container_rows.html" with containers=machine.folded label="Hidden containers" %}
     </details>
   {% endif %}
-{% endcard %}
+{% aside %}{% if docker %}<span class="muted">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}</span>{% endif %}
+{% endsection %}
 {% endif %}
 
 {% if machine.presence %}
-{% card %}
-  {% section_head %}Tailnet{% aside %}
-    {% comment %}
-    The question sits beside the facts it is asked about rather than under a
-    heading of its own, because it is asked about this machine.
-    {% endcomment %}
-    {% if device_names %}
-      <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ asked.source|urlencode }}&amp;target={{ asked.target|urlencode }}" data-modal-open="whatif">Policy test</a>
-    {% endif %}
-  {% endsection_head %}
-  {% include "partials/_problems.html#lines" with rest=problems_in.tailnet %}
+{% section "Tailnet" %}
+  {% include "partials/_problems.html#rest" with rest=problems_in.tailnet %}
   <dl class="kv">
         {% comment %}
         Every address, here and nowhere else. A machine on a tailnet has a LAN
@@ -171,7 +160,15 @@
           <dd>Open to {% include "control_plane/_policy_names.html" with names=who %}</dd>
         {% endfor %}
   </dl>
-{% endcard %}
+{% aside %}
+  {% comment %}
+  The question sits beside the facts it is asked about rather than under a
+  heading of its own, because it is asked about this machine.
+  {% endcomment %}
+  {% if device_names %}
+    <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ asked.source|urlencode }}&amp;target={{ asked.target|urlencode }}" data-modal-open="whatif">Policy test</a>
+  {% endif %}
+{% endsection %}
 
   {% if machine.presence.peered %}
     {% comment %}
@@ -184,7 +181,7 @@
     a handshake, over a path that was negotiated, carrying counted bytes, is one
     it is reaching. That is what this says and why each row is here.
     {% endcomment %}
-    <h2 class="section-heading">Peered with HQ</h2>
+    {% section "Peered with HQ" %}
     <dl class="kv">
           <dt>Handshake</dt>
           <dd>
@@ -205,6 +202,7 @@
           <dt>Node key</dt>
           <dd><code class="node-key">{{ machine.presence.public_key|breakable }}</code></dd>
         </dl>
+    {% endsection %}
   {% endif %}
 
 {% endif %}

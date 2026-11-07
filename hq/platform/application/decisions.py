@@ -192,6 +192,5 @@ def decision(item: dict[str, Any]) -> dict[str, Any]:
         "advice": advice,
         "reason": parts["reason"],
         "steps": steps,
-        "steps_fold": _fold(steps),
         "workflow": {**workflow, "steps": steps} if workflow and steps else None,
     }

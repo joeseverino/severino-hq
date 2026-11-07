@@ -758,6 +758,14 @@ def _asked_change(shown) -> str:
     )
 
 
+def _fault_title(hostname: str, faults: tuple[str, ...]) -> str:
+    """What is wrong with ``hostname``, by its first fault's first sentence; the body says all of each."""
+
+    first = faults[0].split(". ", 1)[0].rstrip(".")
+    more = len(faults) - 1
+    return f"{hostname}: {first}" + (f", and {counted(more, 'more problem', 'more problems')}" if more else "")
+
+
 @dated
 def services() -> tuple[Insight, ...]:
     """One entry per hostname whose wiring is incomplete: what no single resource
@@ -772,7 +780,7 @@ def services() -> tuple[Insight, ...]:
             status="attention",
             eyebrow="Services",
             key=f"service:{service.hostname}",
-            title=f"{service.hostname} is not set up properly",
+            title=_fault_title(service.hostname, service.faults),
             value=str(len(service.faults)),
             body=" ".join(service.faults),
             action="Open service",
