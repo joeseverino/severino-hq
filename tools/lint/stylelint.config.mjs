@@ -4,6 +4,9 @@
 
 const tokens = "../../static/css/app/tokens.css";
 const cuts = "../../static/css/app/cuts.css";
+// The sheets the table primitive is drawn in (docs/Design.md, "A table fits
+// its box"); every other app sheet is a page's.
+const tablePrimitive = ["base", "cuts", "figures", "tables", "surfaces"].map((name) => `../../static/css/app/${name}.css`);
 const reference = "../../static/css/api-reference.css";
 
 // CSS Color 4's system colors. color-named knows only the named colors, and
@@ -45,6 +48,18 @@ const cutText = {
   "text-overflow": ["/./"],
   "/^(-webkit-)?line-clamp$/": ["/./"],
 };
+const cutsText = (property) => Object.keys(cutText).some((key) => new RegExp(key.slice(1, -1)).test(property));
+// One list holds every disallowed value, so its message tells a cut from the
+// rest by its property.
+const disallowedValues = (keys) => [
+  keys,
+  {
+    message: (property, value) =>
+      cutsText(property)
+        ? `"${property}: ${value}" cuts text outside cuts.css: move the whole rule to static/css/app/cuts.css, since a selector is styled in one sheet (test_a_selector_is_styled_in_one_place); a box that clips something other than text says why in a disable comment`
+        : `Disallowed value "${value}" for property "${property}"`,
+  },
+];
 
 // Text a stylesheet draws is read aloud as text unless it says otherwise, so
 // a mark drawn for the eye (a disclosure's chevron, a separator, an arrow)
@@ -63,8 +78,7 @@ const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, 
 // on the element or on what holds it: a disabled or aria-disabled control,
 // and a region aria-busy while its answer is on the way. A mark is named by
 // the compound a selector styles: a chart's shapes, lines and marks, the
-// nav's caret, the calendar's dots (a mark's, a timed line's) and a job's
-// sweep. An opacity of 0 draws nothing, so it fades nothing.
+// nav's caret and the calendar's dots (a mark's, a timed line's). An opacity of 0 draws nothing, so it fades nothing.
 
 // The rest of a compound: classes, attributes and pseudo-classes, each
 // argument whole, so a name inside `:is()` is not the compound's.
@@ -79,15 +93,83 @@ const fadedText = [
     marks: [
       `(^|[\\s>+~])(rect|path|circle|line|polyline)${compound}$`,
       `\\.(nav-caret|chart-trend|chart-mark|route-line|month-mark)(?![-\\w])${compound}$`,
-      "\\.job-bar-unknown i$",
       "\\.month-item::before$",
     ],
     animations: ["conn-pulse"],
   },
 ];
 
+// Capitals are for a kicker over a group (`.eyebrow`), never a value's name,
+// a state or a tag, which are said in sentence case (docs/Design.md). These
+// are the kickers, each a whole selector, and the only rules that may change
+// a text's case.
+const kickers = [
+  // The kicker primitive, over a heading or a group of facts.
+  ".eyebrow",
+  // The month over a timeline's entries.
+  ".timeline-month",
+  // The weekday row over a month grid's days.
+  ".month-grid th",
+  // The weekday row over the activity calendar's days.
+  ".calendar-weekday",
+  // The weekday over each day of a week plan.
+  ".week-plan-label",
+  // The date over the dashboard.
+  ".dash-date",
+  // The heading over a group of Command Center's commands.
+  ".command-center-group h3",
+  // Which end of the connection (you, HQ) over that end's facts.
+  ".conn-peer-role",
+];
+const kicker = kickers.map((selector) => selector.replaceAll(".", "\\.").replaceAll(" ", "\\s+")).join("|");
+// A selector list that is not kickers alone: one that names anything else,
+// or a kicker's descendant or variant, sets its own case.
+const notKicker = `(?!\\s*(${kicker})\\s*(,\\s*(${kicker})\\s*)*$)`;
+const caseProperties = ["text-transform", "font-variant-caps"];
+// How wide a box in a table is, its own or its tracks', is the table
+// primitive's: an open row holds every box in it to its cell (surfaces.css),
+// and a page that sizes one inside a table reopens what that closes. A
+// selector reaches inside a table through `.data-table` and a combinator, a
+// cell, or the line beneath a row.
+const inTable = "(\\.data-table(?![-\\w])[^,]*[\\s>+~]|(^|[\\s>+~(,])(td|th)(?![-\\w])|\\.row-(detail|columns)(?![-\\w]))";
+const boxWidth = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", "/^grid(-template)?(-columns)?$/"];
+// The first key a selector matches is the only one read, so a selector in a
+// table that is not a kicker is held to both.
+const pageSelectorProperties = {
+  [`/^(?=[\\s\\S]*${inTable})${notKicker}/`]: [...boxWidth, ...caseProperties],
+  [`/${inTable}/`]: boxWidth,
+  [`/^${notKicker}/`]: caseProperties,
+};
+const selectorProperties = (keys) => [
+  keys,
+  {
+    message: (selector, property) =>
+      caseProperties.includes(property)
+        ? `"${selector}" sets "${property}": capitals are for a kicker over a group, so say it in sentence case or add the kicker to \`kickers\` in stylelint.config.mjs with what it heads`
+        : `Disallowed property "${property}" for selector "${selector}"`,
+  },
+];
+
+// What the table primitive's rules tell a cell's parts apart by: the role the
+// region marks on each (`data-cell`, table_tags.mark_cells) and the parts the
+// primitive draws, never a page's class or what a cell leads with. A table a
+// page writes later then sets as every other does, with nothing added here.
+const cell = "(?:^|[\\s>+~(,])(?:td|th)(?![-\\w])|\\.row-(?:detail|columns)(?![-\\w])";
+const cellParts = [
+  "btn", "cell-line", "cell-part", "cell-whole", "cut", "data-table", "external-link", "is-expanded",
+  "kept-line", "muted", "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions",
+  "row-below", "row-columns", "row-detail", "row-gutter", "row-less", "row-more", "strut", "table-clamp",
+  "table-scroll", "token", "visually-hidden", "whole",
+];
+const cellRoles = [
+  // A cell's content by its tags, where the row's name is `[data-cell~=name]`.
+  `/(?:^|[\\s>+~(,])(?:td|th)(?![-\\w])(?:\\[[^\\]]*\\]|\\.[\\w-]+|:[\\w-]+)*(?:\\s*>\\s*|:has\\(\\s*>\\s*)(?:a(?![-\\w])[^\\s>,()]*\\s*>\\s*)?strong(?![-\\w])/`,
+  // Any class inside a cell but the primitive's parts: a role is its mark.
+  `/(?:${cell})[\\s\\S]*\\.(?!(?:${cellParts.join("|")})(?![-\\w]))[a-zA-Z][\\w-]*/`,
+];
+
 export default {
-  plugins: ["./stylelint-faded-text.mjs"],
+  plugins: ["./stylelint-faded-text.mjs", "./stylelint-ground-cover.mjs"],
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
   referenceFiles: ["../../static/css/app/*.css"],
@@ -97,6 +179,7 @@ export default {
   reportNeedlessDisables: true,
   rules: {
     "hq/faded-text": fadedText,
+    "hq/ground-cover": true,
     // CSS resolves an undefined custom property to an invalid value without
     // an error, so a typo'd token degrades to a browser default.
     "no-unknown-custom-properties": true,
@@ -108,25 +191,36 @@ export default {
     "color-no-hex": true,
     "color-named": "never",
     "function-disallowed-list": [`/^(${colorFunctions})$/i`],
-    "declaration-property-value-disallowed-list": {
+    "declaration-property-value-disallowed-list": disallowedValues({
       ...literalFontSize,
       ...spacingLiteral,
       ...systemColor,
       ...unspokenContent,
       ...cutText,
-    },
+    }),
     // A face that arrives late and is swapped in moves every line it sets, so
     // each is shown only if it is ready for the first paint. Its file is
     // preloaded beside the stylesheet so it usually is (StyleContractTests).
     "at-rule-property-required-list": { "font-face": ["font-display"] },
     "declaration-property-value-allowed-list": { "font-display": ["optional"] },
-    // What names a value (a term, a band's or a tile's label) is said in
-    // sentence case; capitals are for a kicker over a group (`.eyebrow`).
-    "rule-selector-property-disallowed-list": {
-      "/(\\bdt|\\.band-label|\\.kpi \\.label)\\s*(,|$)/": ["text-transform"],
-    },
+    "rule-selector-property-disallowed-list": selectorProperties(pageSelectorProperties),
   },
   overrides: [
+    {
+      // The table primitive sizes what a table holds.
+      files: tablePrimitive,
+      rules: {
+        "rule-selector-property-disallowed-list": selectorProperties({ [`/^${notKicker}/`]: caseProperties }),
+        "selector-disallowed-list": [
+          cellRoles,
+          {
+            splitList: true,
+            message: (selector) =>
+              `"${selector}" tells a cell's part by a page's class or its tags: key it on its role (\`[data-cell~=name|prose|data]\`, table_tags.mark_cells) or a part the table primitive draws`,
+          },
+        ],
+      },
+    },
     {
       // The tokens layer is where colors are written.
       files: [tokens],
@@ -134,7 +228,7 @@ export default {
         "color-no-hex": null,
         "color-named": null,
         "function-disallowed-list": null,
-        "declaration-property-value-disallowed-list": { ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText },
+        "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText }),
       },
     },
     {
@@ -151,13 +245,13 @@ export default {
       rules: {
         "function-disallowed-list": [`/^(${colorFunctions}|color-mix)$/i`],
         "property-disallowed-list": ["font-family"],
-        "declaration-property-value-disallowed-list": {
+        "declaration-property-value-disallowed-list": disallowedValues({
           "/(^|-)font-size$/": ["/^[\\d.]/"],
           ...spacingLiteral,
           ...systemColor,
           ...unspokenContent,
           ...cutText,
-        },
+        }),
       },
     },
   ],

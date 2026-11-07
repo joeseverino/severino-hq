@@ -5,7 +5,8 @@
 
 /* A band: each cell draws its own left and top edge and the band clips the outer rim, so a wrapped row keeps its dividers at any width with no breakpoint. */
 /* `:is`, not `:where`: a cell that is also a surface has its shadow cleared by the frame rule, and this rule has to win that. */
-:is(.kpi-grid, .insight-grid, .machine-telemetry-metrics, .service-band, .fact-band, .control-summary, .connection-control-grid, .sweep-grid) {
+/* Stats in a card stand apart by gaps and draw no edges (surfaces.css), so there is no rim to clip, and what a stat holds rings whole at its edge. */
+:is(.kpi-grid:not(.card > *), .insight-grid, .machine-telemetry-metrics, .service-band, .fact-band, .control-summary, .connection-control-grid, .sweep-grid) {
   gap: 0;
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the band clips its cells' outer rim, not their text */
   overflow: clip;
@@ -17,13 +18,6 @@
 }
 .control-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); margin: 0 0 var(--stack-gap); }
 .control-summary > *, .two-col > * { min-width: 0; }
-.machine-telemetry {
-  padding: var(--surface-inset, var(--space-8) var(--space-9));
-}
-.machine-telemetry .section-head { margin-bottom: var(--space-6); }
-.machine-telemetry .section-head h2 { margin-bottom: var(--space-1); }
-.machine-telemetry .section-head p { margin: 0; font-size: var(--text-xs); }
-.machine-telemetry .section-head > .muted { font-size: var(--text-2xs); }
 .machine-telemetry-metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -102,8 +96,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .zone-value { font-family: var(--font-mono); font-size: var(--text-xs); }
 /* A status pill is a label: wrapped it grows its row, so it stays whole until its table is tight (tables.css). */
 .data-table .pill { white-space: nowrap; }
-/* A service's hostname is one token, never broken: cut on the link itself where its row has no more room, holding out for a few characters (`--cut-floor`, tables.css) with a pixel of slack as code's chip has. */
-.data-table td .service-name strong { display: grid; grid-template-columns: minmax(0, max-content); min-width: var(--cut-floor); }
+/* A row's name set in one line with its controls (`name-line`): the controls and the name are a grid's columns, never a flex row, since WebKit keeps a flex row's min-content from before a row closes, so its column reopened narrower than the name it holds out for. */
+.name-line { display: grid; grid-auto-flow: column; justify-content: start; align-items: center; gap: var(--space-4); }
+/* There the name is one token, never broken: cut on the link itself where its row has no more room, holding out for a few characters (`--cut-floor`, tables.css) with a pixel of slack as code's chip has. */
+.data-table td .name-line > strong { display: grid; grid-template-columns: minmax(0, max-content); min-width: var(--cut-floor); }
 /* A clamped name shows two lines whatever its width, so it asks no more than its column's share (`--hold`, tables.css); a name the cell cuts asks for its whole length, and its longest word is its least so the table never counts as fitting while a word breaks. */
 .data-table td :is([data-entity], .cell-line):not(strong > *, .row-gutter > *, :has(> code), :has(> .token[data-sole] > .cut), :has(> .cut)) {
   max-width: var(--hold); min-width: min-content;
@@ -116,10 +112,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* Anywhere else the box the filter puts in a name is no box, and in a link a part is text, as in the link's token (base.css). */
 .cut { display: contents; }
 :is(td, th) [data-entity] > .token > .cut > .whole { display: contents; }
-/* A hyphenated part in a cell is held to one line and cut, never broken at a hyphen ("example-" over "worker" reads as two names); a row's own name, what a queue item means and free text (`cell-data`) wrap at their hyphens instead. */
-.data-table td .whole:not(td > strong:first-child *, td > a:first-child > strong *, .attention-title *, .attention-detail *, strong > [data-entity] *, .row-gutter > [data-entity] *, code *, .cell-data *) { white-space: nowrap; }
+/* A hyphenated part in a cell is held to one line and cut, never broken at a hyphen ("example-" over "worker" reads as two names); a row's own name, what a row means in words and free text wrap at their hyphens instead: each is a role the region marks (`data-cell`, table_tags.mark_cells). */
+.data-table td .whole:not([data-cell~=name] *, [data-cell~=prose] *, [data-cell~=data] *, strong > [data-entity] *, .row-gutter > [data-entity] *, code *) { white-space: nowrap; }
 /* There a part is text, wrapping at its hyphens with the words around it. */
-.data-table td :is(td > strong:first-child, td > a:first-child > strong, .attention-title, .attention-detail, .cell-data) .whole { display: contents; }
+.data-table td :is([data-cell~=name], [data-cell~=prose], [data-cell~=data]) .whole { display: contents; }
 /* Outside a narrow box the wrapping columns give way first; a name of plain parts holds out for its whole length up to its column's share (`--name-hold`, tables.css), and a name in a context line (`.muted`) holds out for nothing. */
 @container style(--box: whole) {
   .data-table td [data-entity]:not(strong > *, .row-gutter > *, .muted *):has(> .token[data-sole]):not(:has(> .token > .cut)) { width: max-content; max-width: var(--name-hold); }
@@ -127,11 +123,11 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
   .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :is(
     [data-entity]:not(strong > *, .row-gutter > *):has(> .token[data-sole] > .cut),
     .token[data-sole]:not([data-entity] *, .cell-line *):has(> .cut)
-  ):not(code *, td > strong:first-child *, td > a:first-child > strong *, .cell-data *, .muted *) { width: max-content; max-width: var(--name-hold); }
+  ):not(code *, [data-cell~=name] *, [data-cell~=data] *, .muted *) { width: max-content; max-width: var(--name-hold); }
 }
-/* Outside a narrow box an identifier is one line. One that breaks only at its seams holds its whole length, so its table lets a ranked column go before the name would break (tables.js); a name the cell cuts shows one line, cut. A narrow box has no column left to let go, so there it breaks at its seams again. The row's own name, free text, a preview, a context line, an identifier that wraps by design (`cell-whole`) and a phrase's word whose hyphenated parts are each cut at the cell's edge (below) wrap as they always do; `broken identifiers` in the layout survey holds the rest. */
+/* Outside a narrow box an identifier is one line. One that breaks only at its seams holds its whole length, so its table lets a ranked column go before the name would break (tables.js); a name the cell cuts shows one line, cut. A narrow box has no column left to let go, so there it breaks at its seams again. Every part a cell marks with its role (`data-cell`: the row's own name, what a row means, free text), a context line, a preview, an identifier that wraps by design (`cell-whole`) and a phrase's word whose hyphenated parts are each cut at the cell's edge (below) wrap as they always do; `broken identifiers` in the layout survey holds the rest. */
 @container style(--box: whole) {
-  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :not(.row-gutter *, td > strong:first-child *, td > a:first-child > strong *, .cell-data *, .muted *, .attention-title *, .attention-detail *, .table-clamp *, code.cell-whole *, .btn *) {
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :not(.row-gutter *, [data-cell] *, .muted *, .table-clamp *, code.cell-whole *, .btn *) {
     /* On the name's link too, since there the token is text with no box (base.css), and WebKit breaks at a seam by the box around it. */
     &:is(.token:not(:has(.whole)), [data-entity]:has(> .token[data-sole]):not(:has(.whole))) { white-space: nowrap; }
     &:is(:has(> .token[data-sole] > .cut), .token[data-sole]:has(> .cut)) { --cut-lines: 1; }
@@ -139,19 +135,17 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 }
 /* A cell that leads with the row's name keeps room to show it, rather than standing several lines tall. */
 /* Never more than its column's share (`--share`, tables.css, plus half for the name), so the columns that keep their line still fit beside it. */
-.data-table td:has(> strong:first-child) { min-width: min(11rem, 40cqi, 1.5 * var(--share)); }
+.data-table td:has(> [data-cell~=name]) { min-width: min(11rem, 40cqi, 1.5 * var(--share)); }
 /* A name in the muted line under the row's name is context the row shares with its neighbors: one line, cut at the cell's edge, holding out for none of it (`--cut-floor`). */
 .data-table td .muted { --cut-lines: 1; --cut-floor: 0px; }
-@container style(--box: whole) {
-}
 /* A value quoted in a cell can hold a run with no seam (a link, a digest), so it breaks wherever it must and never widens its column; marked on the cell when the whole cell is such text. */
-.data-table :is(td.cell-data, td .cell-data, :is(td.cell-data, td .cell-data) .token) { overflow-wrap: anywhere; }
+.data-table :is(td[data-cell~=data], td [data-cell~=data], :is(td[data-cell~=data], td [data-cell~=data]) .token) { overflow-wrap: anywhere; }
 /* Two links in one cell read as two: the span gets the flex box, since a td given flex leaves table layout. */
 .row-actions { white-space: nowrap; }
 span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 td.row-actions > * + * { margin-left: var(--space-6); }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }
-/* Axis labels are HTML over the plot, positioned by percentage of the geometry's viewBox: text inside the SVG scales with the drawing and shrinks to illegibility in a phone-width card. */
+/* Axis labels are a layer over the plot with no viewBox, placed by percentage of the geometry's: text inside the drawing scales with it and shrinks to illegibility in a phone-width card. */
 /* Capped with the drawing it labels, since every label is a percentage of this box. */
 .chart-frame {
   position: relative;
@@ -164,45 +158,37 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 @container chart (max-width: 460px) {
   .chart-frame-dense .chart-category { display: none; }
   .chart-frame-dense .chart-cats .chart-category:first-child,
-  .chart-frame-dense .chart-cats .chart-category:last-child { display: block; }
+  .chart-frame-dense .chart-cats .chart-category:last-child { display: inline; }
 }
-/* Where a label goes is computed from the data and arrives as `--at`; everything about how it looks is here. */
+/* Where a label goes is computed from the data and arrives as its x and y; everything about how it looks is here. */
 .chart-frame .chart-axis {
-  position: absolute;
   color: var(--muted);
   font-size: var(--text-2xs);
   line-height: 1;
   white-space: nowrap;
   pointer-events: none;
 }
+/* The frame's box, with the labels at either end hanging into the card's padding. */
+.chart-labels {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.chart-labels .chart-axis { fill: var(--muted); dominant-baseline: central; }
 /* Right-aligned against the plot's left edge, in a gutter given as the same share of the width the geometry uses, so the two agree at any card size. */
-.chart-frame .chart-tick {
-  top: var(--at);
-  left: var(--gutter);
-  padding-right: var(--space-3);
-  transform: translate(-100%, -50%);
-}
-/* A layer of its own, so "first" and "last" mean the first and last date, not the y-axis ticks. */
-.chart-cats { position: absolute; inset: 0; pointer-events: none; }
-/* Every label is centered on its point, the ends too: anchored inward they would overlap their neighbors; the drawing keeps a strip either side for the overhang. */
-.chart-frame .chart-category {
-  left: var(--at);
-  bottom: 0;
-  transform: translateX(-50%);
-}
-/* <figure> carries a UA margin of 1em 40px, which would inset every chart card from the grid. */
+.chart-labels .chart-tick { text-anchor: end; transform: translateX(calc(-1 * var(--space-3))); }
+/* Every label is centered on its point, the ends too: anchored inward they would overlap their neighbors; the drawing keeps a strip either side for the overhang. Its line sits on the frame's bottom edge. */
+.chart-labels .chart-category { text-anchor: middle; transform: translateY(-.5em); }
+/* A figure an extension frames as a card of its own: <figure> carries a UA margin of 1em 40px, which would inset it from the grid. */
 .chart-card { margin: 0 0 var(--stack-gap); }
-.chart-card figcaption h2 { margin: 0; }
-/* Held to the plot's width so the figure reads as one column, not a full-bleed sentence over a fixed-width drawing. */
-.chart-card figcaption p { margin: var(--space-2) 0 0; max-width: var(--chart-max); color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
-/* Two lines are reserved only when the pair sits side by side, so the drawings start level; 656px is two 320px tracks and the gap `.two-col` resolves to. */
-/* A calendar's legend comes between caption and days, so a reserved line there is only a blank band. */
-@container pair (min-width: 656px) {
-  .chart-card:not(.calendar-card) figcaption p { min-height: calc(2 * 1.45em); }
-}
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: var(--space-6) 0 var(--space-1); color: var(--muted); font-size: var(--text-xs); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
 .chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
+/* A legend in a figure's head, or in the row over a calendar's days, takes its place from what holds it. */
+:is(.section-aside, .calendar-legend) > .chart-legend { margin: 0; }
 /* `.chart-scroll` has no rule on purpose: a chart has no floor, so there is nothing to scroll, and an end label hangs into the card's padding. */
 /* Fills the card at a height this sheet decides: its parts are rectangles and rules, so `preserveAspectRatio="none"` stretches them truthfully, the labels are HTML so no type stretches, and a floor could only ever turn into a scrollbar. */
 .bar-chart {
@@ -295,10 +281,11 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 /* A chip that wraps is as wide as its line, so in a link the chip and its token run inline, a chip on each line, and the arrow follows the last. */
 .external-link:not(td *, th *) > code,
 .external-link:not(td *, th *) > code > .token { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-/* Each line of such a chip draws its padding, so a part on a line of its own takes the line less the chip's two sides. */
+/* Each line of such a chip draws its padding, so a part on a line of its own takes the line less the chip's two sides. A part longer than that wraps inside its own box, which the chip's ground reaches only if the box paints it too. */
 .external-link:not(td *, th *) > code .whole { max-width: calc(100% - 2 * var(--space-2)); }
+.external-link:not(td *, th *) > code :is(.token, .cut, .whole) { background: inherit; border-radius: inherit; }
 /* A band lays out as whole even rows by how many cells it has (seven or more as rows of six, four, three, two or one), read off the band itself, so no page says how many it holds and none is left with three over one; cells are counted, not children (`--band-cell`). */
-:is(.control-summary, .insight-grid, .sweep-grid, .machine-telemetry-metrics, .service-band, .fact-band, .kpi-grid:not(:is(.card, .highlight-card) > *)) {
+:is(.control-summary, .insight-grid, .sweep-grid, .machine-telemetry-metrics, .service-band, .fact-band, .kpi-grid:not(.card > *)) {
   &:has(> :nth-child(1 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: 100%; grid-template-columns: repeat(auto-fit, minmax(100%, 1fr)); }
   &:has(> :nth-child(2 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: var(--tracks-2-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-2-1), 1fr)); }
   &:has(> :nth-child(3 of :not(dialog, .band-meta)):nth-last-child(1 of :not(dialog, .band-meta))) { --band-cell: var(--tracks-3-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
@@ -345,16 +332,12 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; max-width: 100%; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-/* Beside its heading while it fits on one line; otherwise under it at its own line height. */
-.heading-aside { display: inline-block; max-width: 100%; color: var(--muted); font-size: var(--text-md); font-weight: 500; line-height: 1.5; letter-spacing: 0; text-wrap: balance; }
 .band-meta { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); padding: var(--space-5) var(--space-9); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
 /* The origin reads under the facet row rather than as a fifth card: four is what a name needs, a fifth would wrap the row. */
 .control-origin { margin: calc(var(--space-3) * -1) 0 22px; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
 .control-origin strong { color: var(--ink); font-weight: 600; }
 
 /* The links chooser opens as a dialog; "Edit" is its trigger. */
-.ext-edit { margin-left: auto; color: var(--muted); font-size: var(--text-xs); }
-.ext-edit:hover { color: var(--ink); }
 /* One row per choice: the tick, the label whole while it fits, then its subtitle wrapping in the room the label leaves. */
 .ext-choices { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-1); max-height: 15rem; overflow-y: auto; }
 .ext-choices label {
@@ -364,8 +347,6 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .ext-choices label:hover { background: var(--bg-tint); }
 .ext-choice-label { overflow-wrap: anywhere; }
 .ext-choice-sub { font-size: var(--text-xs); text-align: end; }
-.ext-chooser-actions { display: flex; align-items: center; gap: var(--space-4); }
-.ext-chooser-status { font-size: var(--text-xs); }
 .icon { width: 1em; height: 1em; flex: none; }
 /* Each control is its own POST, so its own form, laid inline so the actions row does not stack them as blocks. */
 .page-actions form { margin: 0; display: inline-flex; }

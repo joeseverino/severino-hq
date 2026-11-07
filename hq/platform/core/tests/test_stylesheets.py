@@ -17,15 +17,21 @@ QUERY_NAME = re.compile(r"([a-zA-Z_][\w-]*)\s*(?=\(|not\b|style\()")
 # asked of the element's parent, never of a size container.
 STYLE_QUERY = re.compile(r"(?:not\s+)?style\(")
 CONTAINER_NAMES = re.compile(r"(?:^|[{;])\s*container(?:-name)?\s*:\s*([^;{}/]+)")
+# A query of whether a sticky container is stuck or scrolled, which is asked
+# of a scroll-state container, never of a size one.
+SCROLL_STATE_QUERY = re.compile(r"([a-zA-Z_][\w-]*)\s+scroll-state\(")
+SCROLL_STATE = re.compile(r"\bscroll-state\b")
 # A rule with no rule nested in it: its selector and its declarations.
 RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
 CELL = re.compile(r"(?<![\w.#-])(?:td|th)(?![\w-])")
-HELD_WIDTH = re.compile(r"(?:^|;)\s*min-width\s*:(?!\s*0(?:px)?\s*(?:;|$))", re.MULTILINE)
 NOWRAP = re.compile(r"white-space\s*:\s*nowrap")
+# A selector whose subject is a control: a `.btn` or a `button`, last in it.
+BUTTON = re.compile(r"(?:\.btn\b|(?<![\w.#-])button\b)[^\s>+~,]*\)?\s*(?:,|$)")
 CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
 # The one-pixel clip that keeps text for a screen reader alone.
 CLIP_RECIPE = re.compile(r"clip-path\s*:\s*inset\(50%\)")
-TABLE_PRIMITIVES = frozenset({"tables.css", "figures.css"})
+# The sheets the table primitive is drawn in (docs/Design.md).
+TABLE_PRIMITIVES = frozenset({"base.css", "cuts.css", "figures.css", "tables.css", "surfaces.css"})
 FONT_FACE = re.compile(r"@font-face\s*\{[^{}]*\}")
 FETCHED = re.compile(r"\burl\(|@import\b")
 
@@ -35,6 +41,43 @@ def _uncommented(css: str) -> str:
 
 
 @tag("source", "tree")
+def _scroll_state_containers(css: str) -> set[str]:
+    """The names a rule declares with a scroll-state container type."""
+
+    names = set()
+    for _selector, body in RULE.findall(css):
+        if not SCROLL_STATE.search(body):
+            continue
+        names |= {name for found in CONTAINER_NAMES.findall(body) for name in found.split()}
+    return names
+
+
+def container_query_faults(css: str) -> tuple[list[str], list[str]]:
+    """The container queries in ``css`` that name no container, and those
+    that name one no sheet declares: a size query a declared container, a
+    scroll-state query one declared with `container-type: scroll-state`."""
+
+    declared = {name for names in CONTAINER_NAMES.findall(css) for name in names.split()}
+    scrolled = _scroll_state_containers(css)
+    unnamed, undeclared = [], []
+    for prelude in (query.strip() for query in CONTAINER_QUERY.findall(css)):
+        if STYLE_QUERY.match(prelude):
+            continue
+        if SCROLL_STATE.search(prelude):
+            named = SCROLL_STATE_QUERY.match(prelude)
+            if named is None:
+                unnamed.append(prelude)
+            elif named.group(1) not in scrolled:
+                undeclared.append(prelude)
+            continue
+        named = QUERY_NAME.match(prelude)
+        if named is None or named.group(1) == "not":
+            unnamed.append(prelude)
+        elif named.group(1) not in declared:
+            undeclared.append(prelude)
+    return unnamed, undeclared
+
+
 class SheetTests(SimpleTestCase):
     def test_every_sheet_in_the_directory_is_linked(self):
         """A sheet left out of the list is never linked, and every check of the
@@ -66,26 +109,34 @@ class SheetTests(SimpleTestCase):
         a name nothing declares is the same silence."""
 
         css = "\n".join(_uncommented(path.read_text(encoding="utf-8")) for path in sheet_paths())
-        declared = {name for names in CONTAINER_NAMES.findall(css) for name in names.split()}
-        unnamed, undeclared = [], []
-        for prelude in (query.strip() for query in CONTAINER_QUERY.findall(css)):
-            if STYLE_QUERY.match(prelude):
-                continue
-            named = QUERY_NAME.match(prelude)
-            if named is None or named.group(1) == "not":
-                unnamed.append(prelude)
-            elif named.group(1) not in declared:
-                undeclared.append(prelude)
+        unnamed, undeclared = container_query_faults(css)
 
         self.assertEqual(unnamed, [], "a size query names the container it is asked of")
         self.assertEqual(undeclared, [], "every container a query names is declared")
 
+    def test_a_scroll_state_query_is_held_to_a_scroll_state_container(self):
+        declared = ".bar { container: bar / scroll-state; } .size { container-name: size; }"
+
+        self.assertEqual(
+            container_query_faults(declared + "@container bar scroll-state(stuck: bottom) { .a { color: red; } }"),
+            ([], []),
+        )
+        self.assertEqual(
+            container_query_faults(declared + "@container size scroll-state(stuck: bottom) { .a { color: red; } }"),
+            ([], ["size scroll-state(stuck: bottom)"]),
+        )
+        self.assertEqual(
+            container_query_faults(declared + "@container scroll-state(stuck: bottom) { .a { color: red; } }"),
+            (["scroll-state(stuck: bottom)"], []),
+        )
+
     def test_only_the_table_primitives_hold_a_cells_line(self):
         """How wide a cell's line holds out is bounded by its column's share of
         the region (`--hold`, tables.css), so the holds of a table never sum
-        past its box. A page's own nowrap or min-width on cell content holds
-        out unbounded and widens the table past it. A nowrap that clips is a
-        cut, bounded by its box, and stays allowed."""
+        past its box. A page's own nowrap on cell content holds out unbounded
+        and widens the table past it; a page's width there is refused by
+        `lint:css`. A nowrap that clips is a cut, bounded by its box, and
+        stays allowed."""
 
         found = []
         for path in sheet_paths():
@@ -94,11 +145,36 @@ class SheetTests(SimpleTestCase):
             for selector, body in RULE.findall(_uncommented(path.read_text(encoding="utf-8"))):
                 if not CELL.search(selector):
                     continue
-                unbounded = HELD_WIDTH.search(body) or (NOWRAP.search(body) and not CLIPPED.search(body))
+                unbounded = NOWRAP.search(body) and not CLIPPED.search(body)
                 if unbounded:
                     found.append(f"{path.name}: {' '.join(selector.split())}")
 
         self.assertEqual(found, [], "a cell's line is held only by the table primitives")
+
+    def test_a_controls_label_keeps_its_line_from_the_button_rule_alone(self):
+        """A label wrapped onto two or three lines reads as several controls
+        and leaves the buttons beside it uneven. The button rule holds every
+        label to one line, so no page or column restates it; only a tight
+        table lets one wrap (tables.css). A control whose label is cut
+        (cuts.css) holds its line for the cut."""
+
+        rules = [
+            (path.name, " ".join(selector.split()), body)
+            for path in sheet_paths()
+            for selector, body in RULE.findall(_uncommented(path.read_text(encoding="utf-8")))
+        ]
+        held = [name for name, selector, body in rules if selector == ".btn, button" and NOWRAP.search(body)]
+        restated = [
+            f"{name}: {selector}"
+            for name, selector, body in rules
+            if selector != ".btn, button"
+            and BUTTON.search(selector)
+            and NOWRAP.search(body)
+            and not CLIPPED.search(body)
+        ]
+
+        self.assertEqual(held, ["page.css"], "the button rule keeps a control's label on one line")
+        self.assertEqual(restated, [], "a control's line is held by the button rule alone")
 
     def test_text_for_a_screen_reader_alone_is_hidden_by_the_one_class(self):
         """What only a screen reader hears is `.visually-hidden`

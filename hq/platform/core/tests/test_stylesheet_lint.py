@@ -21,6 +21,11 @@ CUTS = "static/css/app/cuts.css"
 CUT = "declaration-property-value-disallowed-list"
 WHY = "/* stylelint-disable-next-line declaration-property-value-disallowed-list"
 REFERENCE = "static/css/api-reference.css"
+TABLES = "static/css/app/tables.css"
+SIZED = "rule-selector-property-disallowed-list"
+# A text's case, which only a kicker over a group sets.
+CASE = SIZED
+ROLE = "selector-disallowed-list"
 
 REFUSED = [
     (APP, ".a { color: #0a0a0a; }", "color-no-hex"),
@@ -38,7 +43,24 @@ REFUSED = [
     (APP, ".facts dt { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
     (APP, ".band-label, .x { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
     (APP, ".kpi .label { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
+    (APP, ".job-state { text-transform: uppercase; }", CASE),
+    (APP, ".a { text-transform: none; }", CASE),
+    (APP, ".a { font-variant-caps: all-small-caps; }", CASE),
+    (APP, ".eyebrow .a { text-transform: uppercase; }", CASE),
+    (APP, ".eyebrow-a { text-transform: uppercase; }", CASE),
+    (APP, ".eyebrow, .a { text-transform: uppercase; }", CASE),
+    (APP, ".month-grid thead { text-transform: uppercase; }", CASE),
+    (TABLES, ".a { text-transform: uppercase; }", CASE),
+    (TOKENS, ".a { text-transform: uppercase; }", CASE),
+    (REFERENCE, ".a { text-transform: uppercase; }", CASE),
     (APP, ".a { color: var(--ink); } .a { color: var(--muted); }", "no-duplicate-selectors"),
+    (APP, ".data-table td > .a { min-width: 20ch; }", SIZED),
+    (APP, ".a-table .row-detail .a { max-width: 72ch; }", SIZED),
+    (APP, ".data-table .a > li { flex: none; }", SIZED),
+    (APP, ".a,\n.data-table > tbody .b { inline-size: 40ch; }", SIZED),
+    (APP, ".a th .b { flex-basis: 12rem; }", SIZED),
+    (APP, ".row-columns { grid-template-columns: 1fr 1fr; }", SIZED),
+    (APP, ".row-columns dt { text-transform: uppercase; }", SIZED),
     (REFERENCE, ".a { color: #fff; }", "color-no-hex"),
     (REFERENCE, ".a { background: color-mix(in srgb, var(--bg), var(--ink)); }", "function-disallowed-list"),
     (REFERENCE, ".a { font-family: serif; }", "property-disallowed-list"),
@@ -56,6 +78,13 @@ REFUSED = [
     (APP, ".day :is(.label, .month-mark) { opacity: .6; }", "hq/faded-text"),
     (APP, ".month-mark span { opacity: .6; }", "hq/faded-text"),
     (APP, "@keyframes example-fade { to { opacity: .4; } }", "hq/faded-text"),
+    (APP, ".a { position: sticky; background: var(--bg); }", "hq/ground-cover"),
+    (
+        APP,
+        ".a { position: sticky; background: color-mix(in srgb, var(--surface) 90%, transparent); }",
+        "hq/ground-cover",
+    ),
+    (APP, ".a::before { background: linear-gradient(transparent, var(--bg) 35%); }", "hq/ground-cover"),
     (APP, ".a { overflow: hidden; }", CUT),
     (APP, ".a { overflow-x: clip; }", CUT),
     (APP, ".a { overflow: auto hidden; }", CUT),
@@ -65,14 +94,34 @@ REFUSED = [
     (TOKENS, ".a { overflow: hidden; }", CUT),
     (APP, f"{WHY} */\n.a {{ overflow: hidden; }}", "--report-descriptionless-disables"),
     (APP, f"{WHY} -- a frame's corners */\n.a {{ overflow: auto; }}", "--report-needless-disables"),
+    (TABLES, ".data-table td .whole:not(td > strong:first-child *) { white-space: nowrap; }", ROLE),
+    (TABLES, ".data-table td .whole:not(td > a:first-child > strong *) { white-space: nowrap; }", ROLE),
+    (TABLES, ".data-table td:has(> strong:first-child) { color: var(--ink); }", ROLE),
+    (TABLES, ".data-table td .whole:not(.cell-data *) { white-space: nowrap; }", ROLE),
+    (TABLES, ".data-table td .a, .b { white-space: nowrap; }", ROLE),
+    (TABLES, ".row-detail .attention-title .token { white-space: nowrap; }", ROLE),
+    (CUTS, ".data-table td .service-name strong > [data-entity] { overflow: hidden; }", ROLE),
 ]
 
 PASSED = [
     (APP, ".a { color: var(--ink); background: color-mix(in srgb, var(--bg) 50%, transparent); }"),
+    (APP, ".a { position: sticky; background: color-mix(in srgb, var(--ground) 90%, transparent); }"),
+    (APP, ".a { position: sticky; background: var(--surface-2); }"),
+    (APP, ".a::before { background: linear-gradient(transparent, var(--ground) 35%); }"),
     (APP, ".a { border-color: currentColor; outline-color: inherit; }"),
     (APP, ".a { font-size: .9em; padding: 7px 1px; gap: calc(var(--space-2) + 8px); }"),
     (APP, ".pill-green { color: var(--ok); }"),
     (APP, ".eyebrow { text-transform: uppercase; }"),
+    (APP, ".month-grid th,\n.calendar-weekday { text-transform: uppercase; letter-spacing: .08em; }"),
+    (TABLES, ".eyebrow { text-transform: uppercase; }"),
+    (
+        APP,
+        ".data-table { width: 100%; } .a-list > li { flex: none; } .data-table td .a { padding: 0; } .width-td { width: 1rem; }",
+    ),
+    (
+        TABLES,
+        ".data-table td code { min-width: 0; max-width: 100%; } .row-columns { grid-template-columns: max-content minmax(0, 1fr); }",
+    ),
     (TOKENS, ":root { --x: #fff; --y: rgb(0 0 0); --z: canvas; --w: tomato; }"),
     (APP, '.a::before { content: "\\203A" / ""; } .b::after { content: "/" / ""; }'),
     (APP, '.a::before { content: "Dismissed: " / "Dismissed: "; } .b::before { content: ""; }'),
@@ -87,6 +136,15 @@ PASSED = [
     (APP, ".day.is-past .month-mark, .day.is-past .month-item::before { opacity: .62; }"),
     (APP, "@keyframes conn-pulse { 50% { opacity: .35; } }"),
     (CUTS, ".a { overflow: hidden; text-overflow: ellipsis; } .b { -webkit-line-clamp: 2; line-clamp: 2; }"),
+    (
+        TABLES,
+        (
+            ".data-table td .whole:not([data-cell~=name] *, code *) { white-space: nowrap; }"
+            " .data-table.a-table td .token { overflow-wrap: anywhere; }"
+            " .data-table td strong > [data-entity] { color: var(--ink); }"
+        ),
+    ),
+    (APP, ".a-table td .attention-title { font-weight: 600; }"),
     (APP, ".a { overflow: auto; } .b { overflow-x: visible; overflow-y: scroll; }"),
     (APP, f"{WHY} -- a frame's corners clip its fill */\n.a {{ overflow: hidden; }}"),
 ]

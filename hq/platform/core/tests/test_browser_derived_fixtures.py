@@ -4,9 +4,9 @@ The dense estate is written by hand, so it holds only the values someone
 thought of; a list nobody wrote rows for lays out on whatever the sparse estate
 gives it. Here every view in the URLconf that draws its rows through
 ``TableListMixin`` gets a page, and its model's rows are derived from the
-model's own fields: text at its ``max_length`` in words that must wrap with one
-unbroken identifier among them, a paragraph for free text, an address as long
-as the field takes, a number at the largest its field and validators allow,
+model's own fields: text at its ``max_length`` in words that must wrap with an
+identifier and a digest among them, a paragraph for free text, an address as
+long as the field takes, a number at the largest its field and validators allow,
 and the longest label of every choice. One more row leaves every field that
 may be empty empty, since a list can show only the rows where a field (a
 removal time, say) is unset. Every row has a row of each model that points
@@ -49,8 +49,9 @@ _WORDS = (
 _PARAGRAPH = (
     "An example note written the way an operator writes one: what was bought or done, why it was needed, "
     "what it replaced, and what to check the next time it comes up. It runs to several sentences, names an "
-    "identifier such as {token} in passing, and keeps going long enough that a cell showing it must clamp "
-    "or wrap it rather than widen its column to fit. A layout that holds this holds a real one."
+    "identifier such as {token} and a digest such as {digest} in passing, and keeps going long enough that "
+    "a cell showing it must clamp or wrap it rather than widen its column to fit. A layout that holds this "
+    "holds a real one."
 )
 
 
@@ -60,14 +61,21 @@ def _token(index: int) -> str:
     return f"example-{index:04d}-0123456789ab"
 
 
+def _digest(index: int) -> str:
+    """A run of letters and digits with no seam or hyphen in it, as long as a
+    content digest or a subject an identity provider issues."""
+
+    return f"{index:04x}{'0123456789abcdef' * 4}"[:64]
+
+
 _DERIVED = re.compile(r"example-\d{4}-0123456789ab")
 
 
 def _words(length: int, index: int) -> str:
-    """Words to ``length``, the identifier among them, unique to the row."""
+    """Words to ``length``, the identifier and the digest among them, unique to the row."""
 
     words = _WORDS.split()
-    said = " ".join((*words[:2], _token(index)))
+    said = " ".join((*words[:2], _token(index), _digest(index)))
     for word in words[2:] * 4:
         if len(said) + 1 + len(word) > length:
             break
@@ -126,7 +134,7 @@ def _value(field: models.Field, index: int):
     if isinstance(field, models.CharField):
         return _words(length, index)
     if isinstance(field, models.TextField):
-        return _PARAGRAPH.format(token=_token(index))
+        return _PARAGRAPH.format(token=_token(index), digest=_digest(index))
     if isinstance(field, (models.DecimalField, models.IntegerField)):
         return _largest(field)
     if isinstance(field, models.DateTimeField):
