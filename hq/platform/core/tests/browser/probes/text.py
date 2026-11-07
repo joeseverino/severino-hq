@@ -4,10 +4,12 @@ from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, LINES
 
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width. A word
-# inside a run with no space in it (a link, a digest) that is itself wider than
-# its cell breaks somewhere wherever the column is, so it is not counted.
+# inside a run with no space in it (a link, a digest, an identifier however its
+# seams split it) that is itself wider than its line breaks somewhere wherever
+# a closed row's column is, so it is not counted there; in an open row only a
+# word wider than the room the row owes it may break.
 BROKEN_WORDS = (
-    "() => {"
+    "(identifier) => {"
     + DESCRIBE
     + TEXT_SHOWN
     + """
@@ -23,23 +25,49 @@ BROKEN_WORDS = (
   const lineOf = (node, cell) => {
     let box = node.parentElement;
     while (box !== cell && ['inline', 'contents'].includes(getComputedStyle(box).display)) box = box.parentElement;
+    return inside(box);
+  };
+  const inside = (box) => {
     const style = getComputedStyle(box);
     return box.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
   };
+  const widthOf = (node, start, end) => across(node, start, end).reduce((sum, r) => sum + r.width, 0);
+  // An identifier (`breakable`'s token, one word) is one run, though its
+  // seams split it into several text nodes.
+  const tokenWidth = (token) => {
+    const walker = document.createTreeWalker(token, NodeFilter.SHOW_TEXT);
+    let sum = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) sum += widthOf(node, 0, node.length);
+    return sum;
+  };
   for (const cell of document.querySelectorAll('main td')) {
+    const open = cell.closest('tr:has(> * > [aria-expanded="true"]), tr:has(> * > [aria-expanded="true"]) + tr[data-row-detail]');
     const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
       if (!textShown(node)) continue;
       const line = lineOf(node, cell);
+      // What an open row's line beneath owes a value: the whole line, while
+      // beside its label the value is left less of it than the label takes.
+      const beneath = open && node.parentElement.closest('tr[data-row-detail] > td > *');
+      const room = beneath && 2 * line < inside(beneath) ? inside(beneath) : line;
+      const token = node.parentElement.closest(identifier);
       for (const run of node.textContent.matchAll(/\\S+/g)) {
-        const wide = across(node, run.index, run.index + run[0].length).reduce((sum, r) => sum + r.width, 0) > line;
+        const [wide, length] = token
+          ? [tokenWidth(token) > line, token.textContent.trim().length]
+          : [widthOf(node, run.index, run.index + run[0].length) > line, run[0].length];
         for (const match of run[0].matchAll(/[A-Za-z]{4,}/g)) {
           const at = run.index + match.index;
-          const lines = new Set(across(node, at, at + match[0].length).map((r) => Math.round(r.top)));
-          // A run wider than its line is cut in a closed row and broken in
-          // an open one, which is how the row shows it whole.
-          const shownWhole = wide && node.parentElement.closest('tr:has(> * > [aria-expanded="true"]), tr:has(> * > [aria-expanded="true"]) + tr[data-row-detail]');
-          if (lines.size > 1 && !shownWhole && !(wide && match[0].length < run[0].length)) found.push(`${describe(cell)} breaks "${match[0]}"`);
+          const rects = across(node, at, at + match[0].length);
+          if (new Set(rects.map((r) => Math.round(r.top))).size < 2) continue;
+          // A closed row's run wider than its line breaks wherever its column
+          // is. An open row shows a value whole, breaking it at its seams,
+          // spaces and hyphens: a word breaks there only when what it stands
+          // in between two of them is wider than all the room the row has.
+          const part = [...run[0].matchAll(/[^-]*-?/g)].find((p) => p.index <= match.index && match.index < p.index + p[0].length);
+          const must = open
+            ? widthOf(node, run.index + part.index, run.index + part.index + part[0].length) > room
+            : wide && match[0].length < length;
+          if (!must) found.push(`${describe(cell)} breaks "${match[0]}"`);
         }
       }
     }
@@ -130,6 +158,155 @@ OVERLAPPING_TEXT = (
       if (x > 2 && y > 2) {
         found.push(`"${one.data.trim().slice(0, 30)}" (${describe(one.parentElement)}) over "${other.data.trim().slice(0, 30)}" (${describe(other.parentElement)})`);
       }
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+# Two runs of text set side by side on one line with no space drawn between
+# them and less than a space's width between their glyphs, each as much of it
+# as is painted: a heading and the status beside it in a flex row, where the
+# space between them in the markup is dropped, read as one word. Runs in one
+# block's line with nothing between their glyphs are one word the markup wrote
+# across elements, as is a name `breakable` split at its seams (`identifier`);
+# a run that ends opening, or starts closing, a phrase or a figure (a bracket,
+# a comma, a dash) is set against its neighbor on purpose. A line is held only
+# against lines in its own layer, as overlapping text holds it.
+TOUCHING_TEXT = (
+    "([floating, identifier]) => {"
+    + DESCRIBE
+    + PAINTED_PART
+    + r"""
+  const range = document.createRange();
+  const blockOf = (el) => {
+    while (el.parentElement && ['inline', 'contents'].includes(getComputedStyle(el).display)) el = el.parentElement;
+    return el;
+  };
+  // A space as the element draws one, in the face the page loaded: no rule
+  // of the page sizes the mark, and out of flow no grid or flex stretches it.
+  const spaces = new Map();
+  const space = (el) => {
+    const style = getComputedStyle(el);
+    const face = [style.fontStyle, style.fontWeight, style.fontSize, style.fontFamily, style.wordSpacing, style.letterSpacing].join(' ');
+    if (!spaces.has(face)) {
+      const mark = document.createElement('span');
+      mark.style.cssText = 'all:unset;position:absolute;white-space:pre';
+      mark.textContent = ' ';
+      el.append(mark);
+      spaces.set(face, mark.getBoundingClientRect().width);
+      mark.remove();
+    }
+    return spaces.get(face);
+  };
+  // Whether a space is drawn between two runs, the second after the first:
+  // the end of the one, the start of the other, or a node between them.
+  const spaced = (node, from, to) => {
+    if (from >= to) return false;
+    range.setStart(node, from);
+    range.setEnd(node, to);
+    return [...range.getClientRects()].some((r) => r.width > 0.5);
+  };
+  const spacedBetween = (a, b) => {
+    if (spaced(a.node, a.at, a.node.length) || spaced(b.node, 0, b.at)) return true;
+    if (!(a.node.compareDocumentPosition(b.node) & Node.DOCUMENT_POSITION_FOLLOWING)) return false;
+    const between = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    between.currentNode = a.node;
+    for (let node = between.nextNode(); node && node !== b.node; node = between.nextNode()) {
+      if (node.data.trim()) return false;
+      if (spaced(node, 0, node.length)) return true;
+    }
+    return false;
+  };
+  const ends = [];
+  const starts = [];
+  const walker = document.createTreeWalker(document.querySelector('main'), NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const first = node.data.search(/\S/);
+    if (first < 0) continue;
+    const last = node.data.trimEnd().length;
+    range.setStart(node, first);
+    range.setEnd(node, last);
+    const lines = [...range.getClientRects()].map((line) => painted(node.parentElement, line)).filter((r) => r && r.width > 1 && r.height > 2);
+    if (!lines.length) continue;
+    const el = node.parentElement;
+    const run = {node, el, block: blockOf(el), layer: el.closest(floating), token: el.closest(identifier)};
+    ends.push({...run, rect: lines.at(-1), ch: node.data[last - 1], at: last});
+    starts.push({...run, rect: lines[0], ch: node.data[first], at: first});
+  }
+  starts.sort((a, b) => a.rect.top - b.rect.top);
+  // A run on a's line starts at most the tallest run's height above it.
+  const tallest = starts.reduce((most, b) => Math.max(most, b.rect.height), 0);
+  const OPENS = /[\p{Ps}\p{Pi}\p{Pd}\p{Pc}\/]/u;
+  const CLOSES = /[\p{Pe}\p{Pf}\p{Po}\p{Pd}\p{Pc}\/]/u;
+  const found = [];
+  for (const a of ends) {
+    if (OPENS.test(a.ch)) continue;
+    let low = 0, high = starts.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (starts[mid].rect.top < a.rect.top - tallest) low = mid + 1; else high = mid;
+    }
+    for (let j = low; j < starts.length && starts[j].rect.top < a.rect.bottom; j++) {
+      const b = starts[j];
+      if (b.node === a.node || b.layer !== a.layer || CLOSES.test(b.ch)) continue;
+      if (a.token && a.token === b.token) continue;
+      const shared = Math.min(a.rect.bottom, b.rect.bottom) - Math.max(a.rect.top, b.rect.top);
+      if (shared <= Math.min(a.rect.height, b.rect.height) / 2) continue;
+      const gap = b.rect.left - a.rect.right;
+      if (gap <= -2 || gap >= Math.min(space(a.el), space(b.el)) - 0.5) continue;
+      if (a.block === b.block && Math.abs(gap) <= 0.5) continue;
+      if (spacedBetween(a, b)) continue;
+      found.push(`"${a.node.data.trim().slice(-30)}" (${describe(a.el)}) touches "${b.node.data.trim().slice(0, 30)}" (${describe(b.el)}), ${gap.toFixed(1)}px apart`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+# A chip (an identifier, a tag, or any box set in a line, or in a row of
+# them, that paints a background or an edge of its own) draws all its text on
+# what it paints, its own box and the boxes inside it that paint (a cell's
+# identifier, a grid around its token, paints only through them, tables.css),
+# and a word of it laid out past them reads as a stray line beneath the chip. What a
+# box cuts away is not drawn, so a chip cut short draws nothing past itself.
+CHIPS_PAST_THEIR_PAINT = (
+    "([chips, unseen]) => {"
+    + DESCRIBE
+    + PAINTED_PART
+    + TEXT_SHOWN
+    + r"""
+  const range = document.createRange();
+  const shown = (color) => !/^(transparent|rgba\(.*,\s*0\)|color\(.*\/\s*0\))$/.test(color);
+  const paints = (el) => {
+    const style = getComputedStyle(el);
+    return shown(style.backgroundColor) || style.backgroundImage !== 'none'
+      || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
+        && style[`border${side}Style`] !== 'none' && shown(style[`border${side}Color`]));
+  };
+  const inLine = (el) => getComputedStyle(el).display.startsWith('inline')
+    || /^inline-(flex|grid)$/.test(getComputedStyle(el.parentElement).display);
+  const rects = (el) => [...el.getClientRects()].filter((r) => r.width && r.height);
+  const found = [];
+  // A chip inside one already found is the same chip's text.
+  const off = [];
+  for (const chip of document.querySelectorAll('main *')) {
+    if (off.some((outer) => outer.contains(chip))) continue;
+    if (!(chip.matches(chips) || (inLine(chip) && paints(chip))) || chip.closest(unseen) || !chip.checkVisibility()) continue;
+    // What it paints: its own box and the boxes inside it that paint.
+    const boxes = [chip, ...chip.querySelectorAll('*')].filter(paints).flatMap(rects);
+    if (!boxes.length) continue;
+    const within = (r) => boxes.some((b) => r.left >= b.left - 1 && r.right <= b.right + 1 && r.top >= b.top - 1 && r.bottom <= b.bottom + 1);
+    const walker = document.createTreeWalker(chip, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const first = node.data.search(/\S/);
+      if (first < 0 || node.parentElement.closest(unseen) || !textShown(node)) continue;
+      range.setStart(node, first);
+      range.setEnd(node, node.data.trimEnd().length);
+      const drawn = [...range.getClientRects()].map((r) => painted(node.parentElement, r)).filter((r) => r && r.width > 1);
+      if (drawn.every(within)) continue;
+      found.push(`${describe(chip)} "${chip.textContent.trim().slice(0, 40)}" draws "${node.data.trim().slice(0, 30)}" off its chip`);
+      if (off.at(-1) !== chip) off.push(chip);
     }
   }
   return [...new Set(found)];

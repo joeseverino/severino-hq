@@ -1,5 +1,6 @@
 """The layout rules held over single components, drawn on probe pages and pages of the stress estate."""
 
+import base64
 import io
 import json
 import re
@@ -19,7 +20,7 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.money import money
 from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, line_chart
 from hq.platform.core.stylesheets import DIRECTORY, stylesheet
-from hq.platform.core.tests.browser.gate import add_css, tab_key, with_script
+from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
@@ -33,6 +34,7 @@ from hq.platform.core.tests.browser.probes.tables import (
     CUT_AND_CLOSED,
     CUT_TABLE,
     CUT_WHEN_OPEN,
+    HEADING_DROP,
     IDENTIFIER_TABLES,
     IDENTIFIER_VALUES,
     OPEN_ROW_TABLE,
@@ -54,7 +56,9 @@ from hq.platform.core.tests.browser.probes.text import (
     BROKEN_TOKENS,
     BROKEN_WORDS,
     BROKEN_WORDS_IN_TEXT,
+    CHIPS_PAST_THEIR_PAINT,
     OVERLAPPING_TEXT,
+    TOUCHING_TEXT,
 )
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -84,6 +88,17 @@ def authored_selectors(css: str) -> list[str]:
                     found.append(header)
             start = at + 1
     return found
+
+
+def _top_level_comma(selector: str) -> bool:
+    """Whether ``selector`` is a list of more than one, a comma outside any parentheses."""
+
+    depth = 0
+    for char in selector:
+        depth += {"(": 1, ")": -1}.get(char, 0)
+        if char == "," and not depth:
+            return True
+    return False
 
 
 def _plain_selector(selector: str) -> str:
@@ -215,6 +230,46 @@ _STUCK_HEADING_TOP = """(region) => {
 }"""
 
 
+# A share row as analytics draws it, half full, added to the page for a shot.
+_A_SHARE_ROW = """() => {
+  const list = document.createElement('ol');
+  list.className = 'bar-list';
+  const row = document.createElement('li');
+  row.className = 'bar-row';
+  const meter = document.createElement('meter');
+  meter.className = 'bar-track';
+  Object.assign(meter, { min: 0, max: 100, value: 50 });
+  const label = document.createElement('span');
+  label.className = 'bar-label';
+  label.textContent = 'example';
+  row.append(meter, label);
+  list.append(row);
+  document.querySelector('main').prepend(list);
+}"""
+
+# Of a shot (a PNG's base64) read down two columns, one inside a half-full
+# share's fill and one past it: how many pixel rows the shot has, and in how
+# many the two differ, which is how tall the fill is drawn. A meter's parts
+# are the engine's own, out of a script's reach, so its pixels are what tell.
+_FILL_ROWS = """async (png) => {
+  const image = new Image();
+  image.src = `data:image/png;base64,${png}`;
+  await image.decode();
+  const canvas = document.createElement('canvas');
+  Object.assign(canvas, { width: image.width, height: image.height });
+  const drawn = canvas.getContext('2d');
+  drawn.drawImage(image, 0, 0);
+  const column = (x) => drawn.getImageData(Math.round(x), 0, 1, image.height).data;
+  const inside = column(image.width * 0.4);
+  const past = column(image.width * 0.75);
+  let filled = 0;
+  for (let y = 0; y < image.height; y += 1) {
+    if ([0, 1, 2].some((channel) => inside[y * 4 + channel] !== past[y * 4 + channel])) filled += 1;
+  }
+  return { rows: image.height, filled };
+}"""
+
+
 def others(rows, opened):
     """Every row's height but the one that opened."""
 
@@ -297,8 +352,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_a_folds_rows_offer_their_toggles_as_they_appear(self):
-        """The rows a fold shows are measured in the press that shows them,
-        so a row with something cut offers its toggle at once."""
+        """The rows a fold shows are measured before the frame that draws
+        them, so a row with something cut offers its toggle as it appears."""
 
         self.pages = {
             **self.pages,
@@ -313,8 +368,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
         }
         self.open("fold-probe", PHONE_SCREEN[0])
         offered = self.page.evaluate(
-            """() => {
+            """async () => {
               document.querySelector('[data-fold-toggle]').click();
+              await new Promise((drawn) => requestAnimationFrame(drawn));
               return [...document.querySelectorAll('tr[data-folded] [data-row-toggle]')]
                 .filter((toggle) => toggle.checkVisibility()).map((toggle) => toggle.closest('tr').id);
             }"""
@@ -721,9 +777,74 @@ class ComponentLayoutTests(LayoutBrowserTests):
           cell.parentElement.closest('table').style.cssText = `table-layout: fixed; inline-size: ${range.getBoundingClientRect().width + 4}px`;
           chip('an exampleword', 'word-break: break-all; inline-size: 10ch');
         }""")
-        found = [line for line in self.page.evaluate(BROKEN_WORDS) if "abcdef" in line or "example" in line]
+        found = [
+            line
+            for line in self.page.evaluate(BROKEN_WORDS, SELECTORS["identifier"])
+            if "abcdef" in line or "example" in line
+        ]
         self.assertEqual(len(found), 1)
         self.assertIn("example", found[0])
+
+    def test_an_identifier_split_at_its_seams_is_one_run_and_a_plain_word_is_not(self):
+        """An identifier wider than its line breaks at its seam and then
+        wherever it must, though the seam leaves its last part a text node of
+        its own: the run is the identifier. A plain word broken in the same
+        line is found."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const table = document.createElement('table');
+          table.style.cssText = 'table-layout: fixed; inline-size: 6ch';
+          const token = document.createElement('span');
+          const seam = document.createElement('span');
+          token.className = 'token';
+          seam.className = 'seam';
+          token.append('plant:', seam, 'somewhere');
+          for (const content of [token, 'everywhere']) {
+            const cell = table.insertRow().insertCell();
+            cell.style.cssText = 'padding: 0; overflow-wrap: anywhere';
+            cell.append(content);
+          }
+          document.querySelector('main').append(table);
+        }""")
+        found = [line for line in self.page.evaluate(BROKEN_WORDS, SELECTORS["identifier"]) if "where" in line]
+        self.assertEqual(len(found), 1, found)
+        self.assertIn('"everywhere"', found[0])
+
+    def test_an_open_rows_value_breaks_a_word_only_when_the_whole_line_is_narrower(self):
+        """In the line beneath an open row a value left less of the line than
+        its label takes breaks a word the whole line holds, and that is found:
+        the row shows a value whole. A word longer than the whole line breaks
+        where it must."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate("""() => {
+          const table = document.createElement('table');
+          const row = table.insertRow();
+          const toggle = document.createElement('button');
+          toggle.setAttribute('aria-expanded', 'true');
+          row.insertCell().append(toggle);
+          const detail = table.insertRow();
+          detail.dataset.rowDetail = '';
+          const pairs = document.createElement('dl');
+          pairs.style.cssText = 'display: grid; grid-template-columns: 7rem 4ch; inline-size: 20rem; margin: 0; overflow-wrap: anywhere';
+          for (const word of ['Unrecognized', 'Example'.repeat(12)]) {
+            const [term, value] = [document.createElement('dt'), document.createElement('dd')];
+            term.textContent = 'Label';
+            value.textContent = word;
+            value.style.margin = '0';
+            pairs.append(term, value);
+          }
+          detail.insertCell().append(pairs);
+          document.querySelector('main').append(table);
+        }""")
+        found = [
+            line
+            for line in self.page.evaluate(BROKEN_WORDS, SELECTORS["identifier"])
+            if "Unrecognized" in line or "Example" in line
+        ]
+        self.assertEqual(len(found), 1, found)
+        self.assertIn('"Unrecognized"', found[0])
 
     def test_a_long_word_breaks_rather_than_widening_the_page(self):
         """A word too long for its line (a URL, a key, a digest) written in
@@ -1057,12 +1178,93 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertIn(("example clashed", "example under"), pairs)
         self.assertIn(("example first", "example second"), pairs)
 
+    def test_text_set_flush_against_another_element_s_text_touches_it_and_a_word_split_at_its_seams_does_not(self):
+        """A heading and its status as items of a flex row lose the space
+        between them in the markup and read as one word; the same pair with
+        a space drawn between them, and a name ``breakable`` split into
+        boxes at its seams, are each one run of words. Two marks each centered
+        in a button of its own, a gap between the buttons, stand apart, as
+        the page's rules for what the buttons hold size them."""
+
+        from hq.platform.core.templatetags.value_tags import breakable
+
+        self.pages = {
+            **self.pages,
+            "touching-probe": probe(
+                '<div style="display: flex; align-items: baseline"><h2 style="margin: 0">Example heading</h2> '
+                "<span>Example touching</span></div>"
+                '<div><h2 style="display: inline-block; margin: 0">Example spaced</h2> '
+                '<span style="display: inline-block">Example status</span></div>'
+                f'<p class="example-seams">{breakable("status.example-host-name.example.com")}</p>'
+                '<nav class="example-buttons" style="display: flex; gap: 4px">'
+                + "".join(f'<a href="#">{mark}</a>' for mark in "xy")
+                + "</nav>"
+            ),
+        }
+        self.open("touching-probe", WIDE)
+        add_css(self.page, ".example-seams .token > * { display: inline-block; }")
+        add_css(
+            self.page,
+            ".example-buttons :is(a, span) { display: grid; place-items: center; inline-size: 28px; block-size: 28px; font-size: 20px; }",
+        )
+        found = self.page.evaluate(TOUCHING_TEXT, [SELECTORS["floating"], SELECTORS["identifier"]])
+        said = " ".join(found)
+        self.assertIn('"Example heading"', said)
+        self.assertNotIn('"Example spaced"', said)
+        for part in ("status.", "example-host-name", '"y"'):
+            self.assertNotIn(part, said)
+
+    def test_a_chip_draws_its_text_on_what_it_paints(self):
+        """A chip whose words are laid out past the box it paints is found,
+        and the tailnet's port chips, each with the name of what answers on
+        it, draw every word on their chip."""
+
+        from hq.platform.core.templatetags.value_tags import breakable
+
+        self.pages = {
+            **self.pages,
+            "chip-probe": probe(
+                '<p><code style="display: inline-block; inline-size: 4ch; block-size: 1lh; background: #eee">'
+                f"{breakable('Example overrun')}</code></p>"
+            ),
+        }
+        arg = [SELECTORS["chip"], SELECTORS["unseen"]]
+        self.open("chip-probe", WIDE)
+        self.assertTrue(self.page.evaluate(CHIPS_PAST_THEIR_PAINT, arg))
+        for width in WIDTHS:
+            with self.subTest(width=width):
+                self.open("dense/tailnet", width)
+                self.assertEqual(self.page.evaluate(CHIPS_PAST_THEIR_PAINT, arg), [])
+
     def test_every_selector_parses(self):
+        """Every rule the stylesheet writes is one the engine keeps, but for
+        another engine's own part (``::-moz-progress-bar`` in WebKit) in a
+        rule of its own: an engine drops a whole rule whose list names a part
+        it does not know, so such a part shares its rule with nothing."""
+
         authored = authored_selectors(stylesheet())
         self.open(next(iter(PAGES)), WIDTHS[-1])
         kept = {_plain_selector(selector) for selector in self.page.evaluate(KEPT_SELECTORS, f"/{DIRECTORY}/")}
+        own = "-moz-" if self.browser.browser_type.name == "firefox" else "-webkit-"
 
-        self.assertEqual([selector for selector in authored if _plain_selector(selector) not in kept], [])
+        def anothers_part_alone(selector):
+            parts = set(re.findall(r"::(-(?:moz|webkit)-)", selector))
+            return bool(parts) and own not in parts and not _top_level_comma(selector)
+
+        dropped = [selector for selector in authored if _plain_selector(selector) not in kept]
+        self.assertEqual([selector for selector in dropped if not anothers_part_alone(selector)], [])
+
+    def test_a_share_fills_its_row_from_edge_to_edge(self):
+        """A share's fill is as tall as its row, in every engine (`.bar-track`
+        in pages.css)."""
+
+        self.open(next(iter(PAGES)), WIDE)
+        self.page.evaluate(_A_SHARE_ROW)
+        # The page's own shot, which drops the style WebKit adds to take one.
+        shot = self.page.screenshot(clip=self.page.locator(SELECTORS["share_bar"]).first.bounding_box())
+        fill = self.page.evaluate(_FILL_ROWS, base64.b64encode(shot).decode())
+        self.assertGreater(fill["rows"], 10)
+        self.assertGreaterEqual(fill["filled"], fill["rows"] - 1, fill)
 
     def test_the_dashboard_pairs_its_cards_on_a_wide_screen(self):
         self.open("dashboard", 1280)
@@ -1165,8 +1367,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         toggle = self.page.locator("main " + SELECTORS["row_toggle"])
         toggle.evaluate("(button) => button.click()")
+        self.page.evaluate(SETTLE)
         self.assertEqual(self.page.evaluate(TITLED_ROWS), [])
         toggle.evaluate("(button) => button.click()")
+        self.page.evaluate(SETTLE)
         self.assertEqual(self.page.evaluate(TITLED_ROWS), ["opens"])
 
     @with_script
@@ -1415,7 +1619,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.open(name, WIDE)
         was = self.scheme()
         self.a_chosen_theme_paints_as_the_systems(name)
-        add_css(self.page, "@media (prefers-color-scheme: dark) { body { background: rgb(1, 2, 3) } }")
+        # Linked, so the page loaded again from its own HTML keeps it.
+        self.page.evaluate(
+            "(href) => document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href }))",
+            served_sheet("@media (prefers-color-scheme: dark) { body { background: rgb(1, 2, 3) } }"),
+        )
         with self.assertRaises(AssertionError) as caught:
             self.a_chosen_theme_paints_as_the_systems(name)
         for chosen in ("dark", "light"):
@@ -1447,14 +1655,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 self.assertNotIn("Nothing", shown)
                 self.assertIn("Title", shown)
                 self.assertIn("Runs", shown)
-                self.assertEqual(self.page.evaluate(BROKEN_WORDS), [])
+                self.assertEqual(self.page.evaluate(BROKEN_WORDS, SELECTORS["identifier"]), [])
 
     @with_script
     def test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls(self):
         """On the narrowest phone a row's controls stand one above the other
         and wrap their labels, so their table fits its card; a table nothing
-        it gives can fit scrolls in its region, and nothing on the page runs
-        past it sideways."""
+        it gives can fit scrolls in its region, its heading on its first row,
+        and nothing on the page runs past it sideways."""
 
         self.pages = {**self.pages, "row-actions-probe": probe(ROW_ACTIONS_TABLES)}
         self.open("row-actions-probe", NARROWEST)
@@ -1465,6 +1673,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertEqual(self.page.evaluate(region, "unfittable"), "auto")
         self.assertEqual(self.page.evaluate(region, "actions"), "visible")
         self.assertEqual(self.page.evaluate(SIDEWAYS, SELECTORS["sideways"]), [])
+        self.assertEqual(self.page.evaluate(HEADING_DROP, "unfittable"), 0)
 
     @with_script
     def test_an_identifier_in_a_table_is_whole_while_a_column_can_leave(self):
