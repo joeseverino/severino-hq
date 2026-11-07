@@ -8,9 +8,10 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource, OperationRequest
 from hq.domains.projects.models import Project
+from hq.platform.core.models import AuditLog
 
-from ..approvals import ApprovalError, ApproveCommand, approve, preview
-from ..capabilities import execute_capability
+from ..approvals import AUDIT_LABELS, ApprovalError, ApproveCommand, approve, preview
+from ..capabilities import execute_capability, run_capability
 from ..domains import records_of
 from ..projects import DEPENDENCY_UPDATES
 from ..security import Capability, Principal, cli_principal, mcp_principal
@@ -129,3 +130,49 @@ class RecordStalenessTests(TestCase):
         Project.objects.filter(pk=self.project.pk).update(name="Renamed App")
 
         self.assertEqual(decided(self.held), ApprovalRequest.State.STALE)
+
+
+class SettledThroughTheRunnerTests(TestCase):
+    """A decision a person posts carries a retry key, so it runs inside the key's
+    transaction; a refusal that settles the request still leaves it settled."""
+
+    def setUp(self):
+        from hq.platform.application.adoption_testing import managing_everything
+
+        managing_everything()
+        ManagedResource.objects.create(key="photos", kind=REWRITE, spec=dict(RECORD))
+        self.held = held_for("infrastructure.resource.remove", reconcile_payload(), "photos")
+
+    def posted(self, decision: str) -> dict:
+        return run_capability(
+            f"approval.{decision}",
+            {"approval_id": str(self.held.id)},
+            principal=an_operator(),
+            idempotency_key=f"example-{decision}-key",
+        ).answer
+
+    def settled_as(self, state: str) -> None:
+        self.held.refresh_from_db()
+        self.assertEqual(self.held.state, state)
+        said = AuditLog.objects.filter(object_type__in=AUDIT_LABELS, object_id=str(self.held.id))
+        self.assertTrue(said.exclude(action=AuditLog.Action.CREATED).exists(), "the settle is in the audit log")
+
+    def test_a_moved_baseline_is_refused_and_stays_stale(self):
+        ManagedResource.objects.filter(key="photos").update(spec={**RECORD, "answer": "192.0.2.20"})
+
+        self.assertFalse(self.posted("approve")["ok"])
+        self.settled_as(ApprovalRequest.State.STALE)
+
+    def lapsed(self, decision: str) -> None:
+        ApprovalRequest.objects.filter(pk=self.held.pk).update(
+            expires_at=timezone.now() - timezone.timedelta(minutes=1)
+        )
+
+        self.assertFalse(self.posted(decision)["ok"])
+        self.settled_as(ApprovalRequest.State.EXPIRED)
+
+    def test_approving_a_lapsed_request_is_refused_and_it_stays_lapsed(self):
+        self.lapsed("approve")
+
+    def test_rejecting_a_lapsed_request_is_refused_and_it_stays_lapsed(self):
+        self.lapsed("reject")

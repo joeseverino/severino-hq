@@ -38,7 +38,7 @@ from .agent_devices import (
     set_device_blocked,
 )
 from .appearance import SET_THEME, ThemeCommand, set_theme
-from .approvals import APPROVE, DESTRUCTIVE_EFFECT, REJECT, ApproveCommand, RejectCommand, approve, reject
+from .approvals import APPROVE, DESTRUCTIVE_EFFECT, REJECT, ApproveCommand, RejectCommand, answered, approve, reject
 from .cadence import ControllerSweepCommand, request_controller_sweep
 from .capability_policy import SET_POLICY, PolicyCommand, apply_changes
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
@@ -552,7 +552,7 @@ CORE_CAPABILITY_SPECS = (
         "remote_write",
         Capability.DECIDE_APPROVALS,
         ApproveCommand,
-        approve,
+        answered(approve),
         execution_notes=(
             "Refuse a request that was decided, expired, or asked for by whoever is deciding.",
             "Refuse when what it changes moved on after it was asked for.",
@@ -567,7 +567,7 @@ CORE_CAPABILITY_SPECS = (
         "remote_write",
         Capability.DECIDE_APPROVALS,
         RejectCommand,
-        reject,
+        answered(reject),
         execution_notes=("Record the refusal, who made it and the note, and apply nothing.",),
         label="Reject a held change",
         reached_from="action_items",
