@@ -36,7 +36,9 @@ class SeedTests(TestCase):
         operator = authenticate(username="operator", password="an-example-password")
         self.assertTrue(operator.is_superuser)
         self.assertEqual(pins.pinned(operator, pins.SERVICE), set(FAVORITES))
-        self.assertEqual(env_file.read_text(), "SEVERINO_POSTURE=advanced\n")
+        shown_under = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
+        self.assertEqual(shown_under, dict(seeds.get("showcase").settings))
+        self.assertEqual(shown_under["SEVERINO_POSTURE"], "advanced")
 
     def test_the_empty_set_is_its_operator_and_nothing_else(self):
         seed("empty")

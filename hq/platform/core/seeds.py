@@ -142,9 +142,12 @@ def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
 
 
 # Each builder is reached through a function, so reading the registry imports none.
+# The example estate is a set-up HQ, so public DNS changes are on, as its installer sets them.
+_SET_UP = frozendict({"SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS": "1"})
+
 SEEDS: dict[str, Seed] = {
-    "showcase": Seed(_estate, frozendict({"SEVERINO_POSTURE": "advanced"})),
-    "standard": Seed(_estate),
+    "showcase": Seed(_estate, frozendict({**_SET_UP, "SEVERINO_POSTURE": "advanced"})),
+    "standard": Seed(_estate, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.
