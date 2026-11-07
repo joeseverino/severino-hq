@@ -72,7 +72,8 @@ def land(command: list[str]) -> int:
 
     path = lock_file(GATE)
     path.parent.mkdir(parents=True, exist_ok=True)
-    gate = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    # Only its owner opens it: mise, run as the same user, opens it read-write to take it too.
+    gate = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     record = path.with_suffix(".json")
     threading.Thread(target=hold, args=(gate, record), daemon=True).start()
     held = {*filter(None, os.environ.get(HELD, "").split(",")), GATE}
