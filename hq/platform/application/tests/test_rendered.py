@@ -8,7 +8,8 @@ crawled the same way, which is how the extension gate covers their pages.
 
 Every page it reaches must answer, and each must have one heading, no form inside a form, no id used
 twice, and no em dash or count that disagrees with its noun ("1 resources",
-"account(s)") in what it says.
+"account(s)") in what it says. No answer, a fragment's included, writes a
+style: HQ's policy takes one only from a sheet of its own origin.
 """
 
 import re
@@ -103,6 +104,8 @@ class _Page(HTMLParser):
         # Open elements, each marked when it is a sideways scroll container.
         self._open: list[tuple[str, bool]] = []
         self.unwrapped_tables = 0
+        # Each element that writes a style the policy refuses.
+        self.styled: list[str] = []
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)
@@ -118,6 +121,8 @@ class _Page(HTMLParser):
             self.h1 += 1
         if attrs.get("id"):
             self.ids[attrs["id"]] = self.ids.get(attrs["id"], 0) + 1
+        if tag == "style" or "style" in attrs:
+            self.styled.append("<style>" if tag == "style" else f"<{tag} style>")
         if tag == "a" and attrs.get("href"):
             self.links.append(attrs["href"])
         if tag in {"script", "style", "template"}:
@@ -186,6 +191,8 @@ class RenderedPageTests(TestCase):
             html = response.content.decode()
             page = _Page()
             page.feed(html)
+            if page.styled:
+                refused.append(f"{path}: writes a style the policy refuses: {', '.join(page.styled[:5])}")
             # A fragment fetched into another page (a deferred panel) is judged
             # as part of that page, not as a page of its own.
             if "<main" in html:

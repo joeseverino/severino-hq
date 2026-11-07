@@ -93,7 +93,7 @@ _PAINTED_BY = """
         if (rule.cssRules) walk(rule.cssRules, selector);
       }
     };
-    for (const sheet of document.styleSheets) {
+    for (const sheet of [...document.styleSheets, ...document.adoptedStyleSheets]) {
       if (vendored && sheet.ownerNode?.closest?.(vendored)) continue;
       let rules;
       try { rules = sheet.cssRules; } catch { continue; }
