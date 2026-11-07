@@ -26,16 +26,10 @@ from hq.platform.application.entity_links import (
 )
 from hq.platform.application.labels import DOT, DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
+    WHEN_FORMS as _WORDS_FORMS,
     ago as _ago,
-    ahead as _ahead,
     elapsed as _elapsed,
-    length as _length,
-    month as _month,
-    numeral as _numeral,
     span as said,
-    weekday as _weekday,
-    weekday_initials as _weekday_initials,
-    when as _when,
     when_day as _when_day,
     when_exact as _when_exact,
 )
@@ -173,20 +167,9 @@ def _dated_mark(value: date):
     )
 
 
-# What ``when`` can be asked for, and the words each one shows.
-_WHEN_FORMS = {
-    "": _when,  # "Oct 3, 9:29 AM"; a date reads "Oct 3"
-    "ago": lambda value: _ago(value) if isinstance(value, datetime) else _when_day(value),  # "5 days ago"
-    "day": _when_day,  # the day a moment fell on
-    "exact": _when_exact,  # "Oct 3, 2026, 9:29:15 AM CDT"
-    "mark": _dated_mark,
-    "weekday": _weekday,  # "Monday"
-    "initials": _weekday_initials,  # "Mo", where a column is narrow
-    "month": _month,  # "October 2026", the month a calendar shows
-    "numeral": _numeral,  # "3", the day of the month in a calendar's cell
-    "length": _length,  # "5 minutes", how far it lies from now either way
-    "ahead": _ahead,  # "in 3 days", or "5 days ago" once it has passed
-}
+# What ``when`` can be asked for: the words ``application.moments`` declares,
+# and the one form that is markup, a dated row's mark.
+_WHEN_FORMS = {**_WORDS_FORMS, "mark": _dated_mark}
 
 
 @register.filter

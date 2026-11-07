@@ -688,7 +688,7 @@ and `when_range`. The year is said only when it is not this one. The spaces insi
 neither wraps inside itself.
 
 A page shows them through the built-in `|when` filter, which wraps the words
-in `<time datetime title>`. The `datetime` is what a table sorts on, so a date
+in `<time datetime title>`. Its forms are `moments.WHEN_FORMS`, where a new one is added. The `datetime` is what a table sorts on, so a date
 column needs nothing else.
 
 | Write | Says | For |
@@ -697,6 +697,7 @@ column needs nothing else.
 | `{{ at\|when:"ago" }}` | "5 days ago", one unit, the exact moment on hover | a list |
 | `when:"day"` | "Oct 3" | a day |
 | `when:"exact"` | "Oct 3, 2026, 9:29:15 AM CDT" | the exact moment |
+| `when:"clock"` | "Oct 3, 9:29:15 AM" | a list of events, where several fall in one minute |
 | `when:"weekday"`, `"month"`, `"numeral"` | "Monday", "October 2026", "3" | a calendar |
 | `when:"length"` | "5 minutes", either way from now | a wait |
 | `when:"ahead"` | "in 3 days" | a wait |

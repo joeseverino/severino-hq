@@ -151,6 +151,16 @@ class WhenFilterTests(SimpleTestCase):
         self.assertEqual(self.moment(moment, "day")[2], "Oct\xa03,\xa02019")
         self.assertEqual(self.moment(moment, "exact")[2], "Oct\xa03,\xa02019, 9:29:15\xa0AM\xa0CDT")
 
+    def test_the_clock_form_tells_apart_moments_within_one_minute(self):
+        first, second = this_year(10, 3, 9, 29, 15), this_year(10, 3, 9, 29, 40)
+
+        self.assertEqual(self.moment(first, "clock"), (first.isoformat(), when_exact(first), "Oct\xa03, 9:29:15\xa0AM"))
+        self.assertNotEqual(self.moment(first, "clock")[2], self.moment(second, "clock")[2])
+        self.assertEqual(
+            self.moment(datetime(2019, 10, 3, 9, 29, 15, tzinfo=CHICAGO), "clock")[2],
+            "Oct\xa03,\xa02019, 9:29:15\xa0AM",
+        )
+
     def test_the_calendar_forms_keep_the_day_behind_their_words(self):
         day = date(2026, 10, 5)
 

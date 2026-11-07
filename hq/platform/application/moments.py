@@ -102,6 +102,19 @@ def when(value: date) -> str:
     return f"{when_day(value)}, {_written(value, CLOCK_FORMAT)}"
 
 
+def when_clock(value: date) -> str:
+    """A moment to the second: "Oct 3, 9:29:15 AM", "Oct 3, 2025, 9:29:15 AM".
+
+    What a list of events says when several fall within one minute and their
+    order is the point. A bare date reads as ``when_day`` writes it.
+    """
+
+    if not isinstance(value, datetime):
+        return when_day(value)
+    value = _local(value)
+    return f"{when_day(value)}, {_written(value, CLOCK_EXACT_FORMAT)}"
+
+
 def when_exact(value: date) -> str:
     """A moment in full: "Oct 3, 2026, 9:29:15 AM CDT".
 
@@ -210,3 +223,26 @@ def span(days: int) -> str:
     said = counted(abs(days), "day") if abs(days) <= DAYS_SAID_AS_DAYS else duration(timedelta(days=abs(days)))
     # A count below nothing is that long past.
     return f"{said} overdue" if days < 0 else said
+
+
+def _ago_or_day(value: date) -> str:
+    """An age for a moment; a bare date, which has no time of day, as its day."""
+
+    return ago(value) if isinstance(value, datetime) else when_day(value)
+
+
+# What the ``when`` filter can be asked for, and the words each form writes.
+# A new form is added here and in docs/Design.md's table, nowhere else.
+WHEN_FORMS = {
+    "": when,  # "Oct 3, 9:29 AM"; a date reads "Oct 3"
+    "ago": _ago_or_day,  # "5 days ago"
+    "clock": when_clock,  # "Oct 3, 9:29:15 AM", where events within a minute are told apart
+    "day": when_day,  # the day a moment fell on
+    "exact": when_exact,  # "Oct 3, 2026, 9:29:15 AM CDT"
+    "weekday": weekday,  # "Monday"
+    "initials": weekday_initials,  # "Mo", where a column is narrow
+    "month": month,  # "October 2026", the month a calendar shows
+    "numeral": numeral,  # "3", the day of the month in a calendar's cell
+    "length": length,  # "5 minutes", how far it lies from now either way
+    "ahead": ahead,  # "in 3 days", or "5 days ago" once it has passed
+}
