@@ -113,17 +113,24 @@ func TestARefreshDuringAGlanceStartsTheNext(t *testing.T) {
 // glance writes nowhere the controller cannot.
 func TestTheGlanceUnitIsGivenNoMoreThanTheControllers(t *testing.T) {
 	systemd := filepath.Join("..", "..", "deploy", "systemd")
-	controller, glance := filepath.Join(systemd, ControllerUnit), filepath.Join(systemd, GlanceUnit)
 	for _, key := range []string{"User", "Group", "NoNewPrivileges", "PrivateTmp", "ProtectHome", "ProtectSystem", "WorkingDirectory"} {
-		if want, got := unitValue(t, controller, key), unitValue(t, glance, key); got != want {
+		want, _ := effective(t, systemd, ControllerUnit, key)
+		if got, _ := effective(t, systemd, GlanceUnit, key); got != want {
 			t.Errorf("%s=%q for the glance, %q for the controller", key, got, want)
 		}
 	}
-	writable := strings.Fields(unitValue(t, controller, "ReadWritePaths"))
-	for path := range strings.FieldsSeq(unitValue(t, glance, "ReadWritePaths")) {
-		if !slices.Contains(writable, path) {
-			t.Errorf("the glance may write %s, which the controller may not", path)
+	// What the glance may write, hold or reach is what the controller may.
+	for _, key := range []string{"ReadWritePaths", "CapabilityBoundingSet", "RestrictAddressFamilies", "SystemCallFilter"} {
+		_, wide := effective(t, systemd, ControllerUnit, key)
+		_, given := effective(t, systemd, GlanceUnit, key)
+		for _, word := range given {
+			if !slices.Contains(wide, word) {
+				t.Errorf("the glance's %s holds %s, which the controller's does not", key, word)
+			}
 		}
+	}
+	if net, _ := effective(t, systemd, GlanceUnit, "PrivateNetwork"); !systemdTrue(net) {
+		t.Errorf("the glance reaches the host's network (PrivateNetwork=%q), and reads nothing there", net)
 	}
 	if got, bound := unitSetting(t, GlanceUnit, "TimeoutStartSec"), unitSetting(t, ControllerUnit, "TimeoutStartSec"); got >= bound {
 		t.Errorf("a glance may run %s, as long as a sweep's %s", got, bound)

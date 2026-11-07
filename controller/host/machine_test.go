@@ -34,6 +34,8 @@ type fakeHost struct {
 	// boot is what starting the web unit does to the host, as an image's
 	// entrypoint would.
 	boot func()
+	// on is what each command, by its whole line, does to the host as it runs.
+	on map[string]func()
 	// files is what an image holds outside /app, by image then path. An image
 	// it names has only those; one it does not holds any file asked for.
 	files   map[string]map[string]string
@@ -57,6 +59,9 @@ func (f *fakeHost) program(ctx context.Context, name string, args ...string) *ex
 	f.mu.Unlock()
 	if f.boot != nil && call == "systemctl restart "+hostcore.WebUnit {
 		f.boot()
+	}
+	if do, ok := f.on[call]; ok {
+		do()
 	}
 	answer := func(out string, code int) *exec.Cmd {
 		return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' "$1"; exit "$2"`, "sh", out, strconv.Itoa(code))
@@ -192,6 +197,16 @@ func (f *fakeHost) ship(name, body string) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		f.t.Fatal(err)
 	}
+}
+
+// installed is which of names are in the systemd directory now.
+func (f *fakeHost) installed(names ...string) map[string]bool {
+	found := map[string]bool{}
+	for _, name := range names {
+		_, err := os.Stat(filepath.Join(f.machine.Systemd, name))
+		found[name] = err == nil
+	}
+	return found
 }
 
 func (f *fakeHost) calls() []string {

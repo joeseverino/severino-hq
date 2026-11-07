@@ -256,17 +256,15 @@ func (d *Deployer) verifyRelease(ctx context.Context) error {
 	return nil
 }
 
-// installWebUnit installs the synced tree's web unit and its drop-ins.
+// installWebUnit installs the synced tree's web unit and every drop-in.
 func (d *Deployer) installWebUnit(ctx context.Context) error {
 	shipped, err := Shipped(d.UnitDir())
 	if err != nil {
 		return err
 	}
-	for _, name := range shipped {
-		if name == hostcore.WebUnit || strings.HasPrefix(name, hostcore.WebUnit+".d/") {
-			if err := InstallUnit(d.UnitDir(), d.Systemd, name); err != nil {
-				return err
-			}
+	for _, name := range WithDropIns(shipped, hostcore.WebUnit) {
+		if err := InstallUnit(d.UnitDir(), d.Systemd, name); err != nil {
+			return err
 		}
 	}
 	return d.run(ctx, "systemctl", "daemon-reload")

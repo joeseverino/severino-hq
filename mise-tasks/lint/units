@@ -1,0 +1,66 @@
+#!/bin/sh
+#MISE description="Every severino-hq service's sandbox, as systemd-analyze scores it offline over deploy/systemd, at or under the exposure its bar here allows"
+#MISE hide=true
+# systemd's own score of a unit's confinement, read the way a host reads the
+# units: each file with every drop-in that reaches it, the shared sandbox
+# (severino-hq-.service.d/20-sandbox.conf) and each unit's own widening.
+#
+# systemd-analyze is Linux's, so CI's lint job runs this. Elsewhere it says it
+# did not run and passes, unless CI is set.
+set -eu
+
+# Each service's bar: the exposure it may score, times ten, which is what
+# --threshold takes (2.0 is 20). A service scores at or under its bar; one
+# above it fails. A template is scored as an instance of it. Reads name.
+bar() {
+    case "${name}" in
+        severino-hq-backup.service) echo 12 ;;
+        severino-hq-controller.service) echo 19 ;;
+        severino-hq-glance.service) echo 12 ;;
+        severino-hq-job@.service) echo 7 ;;
+        severino-hq-renovate.service) echo 14 ;;
+        severino-hq-script-drift.service) echo 9 ;;
+        severino-hq-secrets.service) echo 19 ;;
+        severino-hq-unit@.service) echo 7 ;;
+        severino-hq-web.service) echo 7 ;;
+        *) return 1 ;;
+    esac
+}
+
+if ! command -v systemd-analyze >/dev/null 2>&1; then
+    if [ "${CI:-}" = true ]; then
+        echo "lint:units: CI's runner has no systemd-analyze." >&2
+        exit 1
+    fi
+    echo "lint:units did not run: systemd-analyze is Linux's, and CI's lint job runs it."
+    exit 0
+fi
+
+root="$(mktemp -d)"
+trap 'rm -rf "${root}"' EXIT
+mkdir -p "${root}/etc/systemd/system"
+cp -R deploy/systemd/. "${root}/etc/systemd/system/"
+
+failed=0
+for file in deploy/systemd/*.service; do
+    name="${file##*/}"
+    if ! threshold="$(bar)"; then
+        echo "lint:units: ${name} has no bar: give it one in mise-tasks/lint/units, the exposure systemd-analyze scores it." >&2
+        failed=1
+        continue
+    fi
+    case "${name}" in
+        *@.service) unit="${name%@.service}@lint.service" ;;
+        *) unit="${name}" ;;
+    esac
+    if ! systemd-analyze security --offline=true --root="${root}" --no-pager \
+        --threshold="${threshold}" "${unit}" >"${root}/scored" 2>&1; then
+        # The directives it lacks, and its score; anything else is an error.
+        grep -e '✗' -e 'Overall exposure' "${root}/scored" >&2 || cat "${root}/scored" >&2
+        echo "lint:units: ${name} is more exposed than its bar of ${threshold}: each line marked ✗ above is a directive it lacks. Confine it in severino-hq-.service.d/20-sandbox.conf, or its own 30-sandbox.conf." >&2
+        failed=1
+        continue
+    fi
+    tail -n 1 "${root}/scored"
+done
+exit "${failed}"

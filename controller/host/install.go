@@ -14,8 +14,8 @@ import (
 )
 
 // Install puts the release in Lib on the host: its units, its tmpfiles rule
-// and its verifier. The renderer's units go first and alone, because what
-// follows consumes what it renders. If the install fails, every unit file is
+// and its verifier. The renderer's unit goes first, with every drop-in
+// (WithDropIns), because what follows consumes what it renders. If the install fails, every unit file is
 // put back as it was. Enabling severino-hq-web.service is what moves a host
 // from a compose-run container to the unit: the unit replaces the container
 // that holds HQ's name with its own, and is not enabled unless HQ comes up.
@@ -40,14 +40,8 @@ func (m *Machine) Install(ctx context.Context, connections func() error) (err er
 		return err
 	}
 
-	var render, rest []string
-	for _, name := range shipped {
-		if name == SecretsUnit || strings.HasPrefix(name, SecretsUnit+".d/") {
-			render = append(render, name)
-		} else {
-			rest = append(rest, name)
-		}
-	}
+	render := WithDropIns(shipped, SecretsUnit)
+	rest := slices.DeleteFunc(slices.Clone(shipped), func(name string) bool { return slices.Contains(render, name) })
 	restore, err := m.SnapshotUnits()
 	if err != nil {
 		return err

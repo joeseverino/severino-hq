@@ -18,8 +18,4 @@ ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host controller --glance
 TimeoutStartSec=5min
 
 # Never more than the controller unit is given, and no certificate state.
-NoNewPrivileges=yes
-PrivateTmp=yes
-ProtectHome=yes
-ProtectSystem=strict
 ReadWritePaths=/run

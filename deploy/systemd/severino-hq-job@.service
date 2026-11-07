@@ -16,10 +16,3 @@ ExecStart=/usr/bin/docker exec severino-hq hq-controller job %i
 # Past the caller's own bound on one job, so the answer is the job's and not
 # systemd's.
 TimeoutStartSec=35min
-
-NoNewPrivileges=yes
-ProtectHome=yes
-PrivateTmp=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
-LockPersonality=yes
