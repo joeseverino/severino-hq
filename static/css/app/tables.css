@@ -408,11 +408,9 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table[data-break] :is(td, th) :is(code, .token, .whole, [data-entity]) { overflow-wrap: anywhere; }
 /* A pill that wraps (tight, or in an opened row) flows as text: as a flex box its words and an identifier among them are items side by side, each squeezed until it breaks inside a word. Its corners round by half of one line, so it is a capsule on one line and a rounded box on several. */
 .data-table[data-tight] td .pill, .data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
-/* A row's controls side by side are wider than any other cell, so tight they stand one above the other, each its own width, and a label longer than the room left wraps at its spaces: a control column keeps its labels whole only while the table is not tight. */
+/* A row's controls side by side are wider than any other cell, so tight they stand one above the other, each its own width; a label stays whole on its line (the button rule) and the other columns give way to it. */
 .data-table[data-tight] td.row-actions > * { display: block; width: fit-content; margin-inline: auto 0; }
 .data-table[data-tight] td.row-actions > * + * { margin-top: var(--space-2); }
-.data-table[data-tight] td.row-actions, .data-table[data-tight] td :is(.btn, button) { white-space: normal; }
-.data-table[data-tight] td.row-actions :is(.btn, button) { text-align: end; }
 .data-table > * > tr > [data-dropped] { display: none; }
 .data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }
 .data-table:has(> tbody > tr > td[data-dropped]:not([data-blank])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }

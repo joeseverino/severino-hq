@@ -1659,10 +1659,11 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls(self):
-        """On the narrowest phone a row's controls stand one above the other
-        and wrap their labels, so their table fits its card; a table nothing
-        it gives can fit scrolls in its region, its heading on its first row,
-        and nothing on the page runs past it sideways."""
+        """On the narrowest phone a row's controls, each label whole, leave
+        with their column for the line beneath the row, so their table fits
+        its card; a table nothing it gives can fit scrolls in its region, its
+        heading on its first row, and nothing on the page runs past it
+        sideways."""
 
         self.pages = {**self.pages, "row-actions-probe": probe(ROW_ACTIONS_TABLES)}
         self.open("row-actions-probe", NARROWEST)

@@ -25,6 +25,7 @@ SCROLL_STATE = re.compile(r"\bscroll-state\b")
 RULE = re.compile(r"([^{}]+)\{([^{}]*)\}")
 CELL = re.compile(r"(?<![\w.#-])(?:td|th)(?![\w-])")
 NOWRAP = re.compile(r"white-space\s*:\s*nowrap")
+WRAPS = re.compile(r"white-space\s*:\s*(?:normal|pre-wrap|pre-line|break-spaces)|text-wrap-mode\s*:\s*wrap")
 # A selector whose subject is a control: a `.btn` or a `button`, last in it.
 BUTTON = re.compile(r"(?:\.btn\b|(?<![\w.#-])button\b)[^\s>+~,]*\)?\s*(?:,|$)")
 CLIPPED = re.compile(r"overflow(?:-x)?\s*:\s*(?:hidden|clip)")
@@ -154,9 +155,9 @@ class SheetTests(SimpleTestCase):
     def test_a_controls_label_keeps_its_line_from_the_button_rule_alone(self):
         """A label wrapped onto two or three lines reads as several controls
         and leaves the buttons beside it uneven. The button rule holds every
-        label to one line, so no page or column restates it; only a tight
-        table lets one wrap (tables.css). A control whose label is cut
-        (cuts.css) holds its line for the cut."""
+        label to one line, so no page or column restates it, and no rule
+        lets one wrap while a column can give way to its labels. A control
+        whose label is cut (cuts.css) holds its line for the cut."""
 
         rules = [
             (path.name, " ".join(selector.split()), body)
@@ -173,8 +174,19 @@ class SheetTests(SimpleTestCase):
             and not CLIPPED.search(body)
         ]
 
+        # An opened queue row on a phone stands its buttons one to a line
+        # across the row, so a label longer than the phone has nothing left
+        # to give way and wraps.
+        spans_the_line = "cards.css: .queue-table .row-detail .row-columns > dd .btn"
+        wrapped = [
+            f"{name}: {selector}"
+            for name, selector, body in rules
+            if BUTTON.search(selector) and WRAPS.search(body) and f"{name}: {selector}" != spans_the_line
+        ]
+
         self.assertEqual(held, ["page.css"], "the button rule keeps a control's label on one line")
         self.assertEqual(restated, [], "a control's line is held by the button rule alone")
+        self.assertEqual(wrapped, [], "a control's label keeps its line; its column gives way")
 
     def test_text_for_a_screen_reader_alone_is_hidden_by_the_one_class(self):
         """What only a screen reader hears is `.visually-hidden`

@@ -235,9 +235,8 @@ a.kpi:hover { background: var(--surface-2); }
 .queue-table .queue-act:not(:has(> *)) { padding: 0; }
 /* A row's buttons stand one to a line, each as wide as its label, so the column asks for the longest label; the cap is a grid track the clamp-lifting rule leaves alone, so opening a row moves no column. */
 .queue-table .queue-buttons > .attention-actions { display: grid; width: max-content; grid-template-columns: fit-content(var(--hold)); justify-items: end; }
-.queue-table .queue-buttons .btn { white-space: normal; text-align: end; }
-/* A label is one run of text, so a name in it wraps with the words around it, and a button asks no more than the cap: a longer name is cut at the button's edge. */
-.queue-table .attention-actions .btn { display: block; min-width: 0; max-width: 100%; }
+/* A label keeps its line (the button rule) and holds out for all of it, so the track grows past the cap and the other columns give way. */
+.queue-table .attention-actions .btn { display: block; max-width: 100%; }
 @media (scripting: enabled) {
   /* Past the first two, a row's buttons wait in the line beneath at any
      width, with the rest of what it holds. */

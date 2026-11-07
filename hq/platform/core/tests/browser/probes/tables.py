@@ -464,14 +464,14 @@ BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
 </tbody></table>{% endtable_region %}"""
 
 # A row's two controls with labels of two words, beside a name and a status,
-# in a card: on the narrowest phone they stand one above the other and their
-# labels wrap. Beside it a table that nothing it gives can fit, a cell asking
-# more than a phone has, which scrolls in its region rather than run past its
-# card.
+# in a card: on the narrowest phone their column leaves for the line beneath
+# the row, each label whole. Beside it a table that nothing it gives can fit,
+# a cell asking more than a phone has, which scrolls in its region rather than
+# run past its card.
 ROW_ACTIONS_TABLES = """<section class="card">
 {% table_region "Devices" %}<table class="data-table" data-probe="actions"><thead><tr>
 {% table_heading "Device" "identifier" gutter=True %}{% table_heading "Approval" "status" %}
-{% table_heading "Calls" drop=1 %}{% table_heading "Approve or block" "control" hidden=True %}</tr></thead><tbody>
+{% table_heading "Calls" drop=1 %}{% table_heading "Approve or block" "control" hidden=True drop=2 %}</tr></thead><tbody>
 <tr><th scope="row">example-host-01</th><td><span class="pill">Needs approval</span></td><td>2 calls</td>
 <td class="row-actions"><form><button type="button" class="btn compact primary">Withdraw approval</button></form><form><button type="button" class="btn compact">Block device</button></form></td></tr>
 </tbody></table>{% endtable_region %}
