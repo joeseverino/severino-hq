@@ -28,6 +28,8 @@ class OperationContext:
     ``device`` is the tailnet device an agent's call came from
     (``Principal.device``), empty where HQ could not place it. ``cause`` is
     the operation that started this one, empty for one that started itself.
+    ``approved_by`` is who agreed to the act where one had to
+    (``Principal.approved_by``), so each row of it says who allowed it.
     """
 
     interface: str
@@ -36,6 +38,7 @@ class OperationContext:
     operation_id: str = ""
     device: str = ""
     cause: str = ""
+    approved_by: str = ""
 
 
 _operation_context: ContextVar[OperationContext | None] = ContextVar("hq_operation_context", default=None)
@@ -60,6 +63,7 @@ def operation_context(
     operation_id: str = "",
     device: str = "",
     cause: str = "",
+    approved_by: str = "",
     rebinds: bool = False,
 ) -> Iterator[None]:
     """Attach adapter-neutral attribution to audit events in this operation.
@@ -93,8 +97,11 @@ def operation_context(
     elif not cause and outer is not None:
         cause = outer.cause
     operation_id = operation_id or within or str(uuid7())
-    # A nested binding of the same caller keeps the device the outer one placed.
-    device = device or (outer.device if outer is not None and outer.actor == actor else "")
+    # A nested binding of the same caller keeps the device the outer one
+    # placed, and the consent the outer one carried.
+    same_caller = outer is not None and outer.actor == actor
+    device = device or (outer.device if same_caller else "")
+    approved_by = approved_by or (outer.approved_by if same_caller else "")
     with _operation_context.set(
         OperationContext(
             interface=interface,
@@ -103,6 +110,7 @@ def operation_context(
             operation_id=operation_id,
             device=device,
             cause=cause,
+            approved_by=approved_by,
         )
     ):
         yield

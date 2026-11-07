@@ -231,6 +231,7 @@ def audit_operation(
         operation_id=operation_id,
         device=getattr(principal, "device", None) or "",
         cause=cause,
+        approved_by=getattr(principal, "approved_by", None) or "",
         rebinds=rebinds,
     ):
         yield
@@ -516,6 +517,7 @@ def record_event(
         **({"device": context.device} if context.device else {}),
         **({"subject": subject} if subject else {}),
         **({"cause": context.cause} if context.cause else {}),
+        **({"approved_by": context.approved_by} if context.approved_by else {}),
         **facet_metadata(facets),
         **(metadata or {}),
         **stamps.get("metadata", {}),
