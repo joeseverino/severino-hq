@@ -257,8 +257,8 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::after { overflow-wrap: anywhere; }
 /* A narrow box has no width to hold out with (`--cut-floor`), read from the table's mark since a style query does not reach a pseudo-element in every engine. */
 .data-table[data-narrow] td code:not(:where(td) :is(p, li) *) > .strut::before { display: none; }
-/* Outside it a closed row's chip holds out for its whole name, up to half the region, so it is cut only once its table has no column left to give way. */
-.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::before { white-space: nowrap; }
+/* Outside it a closed row's chip holds out for its whole name, up to half the region, so it is cut only once its table has no column left to give way. One in a context line (`.muted`) holds out only for its longest piece, as a name there does (figures.css): the row's name sizes the column. */
+.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *, .muted *) > .strut::before { white-space: nowrap; }
 /* With its cuts lifted an opened row lays an identifier out as a page does (base.css): a part that fits moves whole, and breaks inside only when longer than its line. */
 .data-table > tbody > tr.is-expanded > td .whole:not([data-cell~=name] *, [data-cell~=data] *, .visually-hidden *) { display: inline-block; }
 /* In a chip such a part is set by its top, so a part that wraps leaves the chip's first line on the baseline its line shares (a change's arrow beside it): an inline block's baseline is its last line, and WebKit has no `baseline-source`. The chip's token sets every part in its own face, so the top puts the first line where the baseline would. */

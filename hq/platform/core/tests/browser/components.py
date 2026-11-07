@@ -33,6 +33,7 @@ from hq.platform.core.tests.browser.probes.tables import (
     COLUMNS_SHOWN,
     CUT_AND_CLOSED,
     CUT_TABLE,
+    CUT_VALUES,
     CUT_WHEN_OPEN,
     HEADING_DROP,
     IDENTIFIER_TABLES,
@@ -1317,13 +1318,14 @@ class ComponentLayoutTests(LayoutBrowserTests):
         shows it, and a cut there in a row that cannot open is found. A cut
         that draws no ellipsis (a clamp's counts) is found at any width,
         title or not, since nothing tells a reader there is more to hover
-        for; a name's chip in a row's muted line draws its own. A cut with no
-        title outside a narrow box is the survey's plant."""
+        for; a name's chip in a row's muted line draws its own, and a narrow
+        box breaks it whole. A cut with no title outside a narrow box is the
+        survey's plant."""
 
-        self.pages = {**self.pages, "cut-probe": probe(CUT_TABLE)}
+        self.pages = {**self.pages, "cut-probe": probe(CUT_TABLE, **CUT_VALUES)}
         rows = ("untitled", "titled", "opens", "clamped", "inline", "unmarked", "chip")
         for width, expected in {
-            PHONE_SCREEN[0]: {"untitled", "titled", "clamped", "inline", "unmarked", "chip"},
+            PHONE_SCREEN[0]: {"untitled", "titled", "clamped", "inline", "unmarked"},
             1280: {"unmarked"},
         }.items():
             with self.subTest(width=width):

@@ -606,14 +606,14 @@ ROW_TOGGLE_TABLES = """
 # A table of cut values, each the word its row is probed by then more: one
 # with no title, one carrying its whole text as a title, one titled in a row
 # that opens, two past the line a clamp ends with an ellipsis (a block and a
-# link set in its line, as a cell's name is), and two cut
-# where no ellipsis can land: a box of words around a
-# box of its own, and a name's chip in the muted line under a row's name, as
-# a unit's page drew one; the third, titled too, stands in a table of its own
-# whose rows open, since every row under a gutter heading does. A note wider
-# than a phone puts each table in a narrow box there, which keeps the gutter of
-# a table whose rows open, so the third opens; a wide box shows each titled value whole on hover, and a cut
-# with no ellipsis tells no one to hover.
+# link set in its line, as a cell's name is), one cut where no ellipsis can
+# land, a box of words around a box of its own, and a name's chip in the muted
+# line under a row's name, as a unit's page drew one, which draws its own; the
+# third, titled too, stands in a table of its own whose rows open, since every
+# row under a gutter heading does. A note wider than a phone puts each table in
+# a narrow box there, which keeps the gutter of a table whose rows open, so the
+# third opens, and breaks the chip whole; a wide box shows each titled value
+# whole on hover, and a cut with no ellipsis tells no one to hover.
 _CUT = (
     '<div style="max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"{}>'
     "{} value far too long to fit</div>"
@@ -636,14 +636,17 @@ CUT_TABLE = (
     f"line</a></td>{_NOTE}</tr>" + '<tr><td>Unmarked</td><td><div style="max-width: 40px; overflow: hidden; '
     'text-overflow: ellipsis; white-space: nowrap"><span style="display: inline-block">unmarked value far too long '
     f"to fit</span></div></td>{_NOTE}</tr>"
-    + f'<tr><td>Chip<br><span class="muted"><code>{{{{ "{_CHIP}"|breakable }}}}</code></span></td>'
-    f"<td>Short</td>{_NOTE}</tr>"
+    + f'<tr><td>Chip<br><span class="muted"><code>{{{{ chip|breakable }}}}</code></span></td><td>Short</td>{_NOTE}</tr>'
     + "</tbody></table>{% endtable_region %}"
     + '{% table_region "Opening" %}<table class="data-table"><thead><tr>'
     '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
     + f"<tr><td>Opens</td><td>{_CUT.format(_OPENS_TITLE, 'opens')}</td>{_NOTE}</tr>"
     "</tbody></table>{% endtable_region %}"
 )
+
+# The chip's name is a value the page prints, as a template's is: a literal is
+# already safe, so `breakable` would pass it as plain words, which wrap.
+CUT_VALUES = {"chip": _CHIP}
 
 # Rows that open, as an event's log draws them: a host name in a column a
 # phone lets go, so an opened row shows it in the line beneath, and a value
