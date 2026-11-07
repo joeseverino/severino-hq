@@ -37,6 +37,7 @@ from .moments import ago
 from .projection import read_once
 from .security import Principal
 lazy from .entity_links import entity_link
+lazy from .ui import STATUS_VALUES
 
 # The family the controller observes on HQ's behalf. It leads every inventory
 # because it is the one the page is about; the gateways beside it are the
@@ -322,7 +323,7 @@ def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> Co
 def _check_reading(instance: ConnectionInstance) -> None:
     """The status a connection was read in, where it was read and by whom."""
 
-    if instance.status not in {"good", "attention", "serious", "neutral"}:
+    if instance.status not in STATUS_VALUES:
         raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid status {instance.status!r}.")
     if not instance.status_label.strip():
         raise ImproperlyConfigured(f"Connection {instance.id!r} has no status label.")

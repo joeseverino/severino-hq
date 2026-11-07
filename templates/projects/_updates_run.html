@@ -8,8 +8,8 @@ in. The page's Update dependencies control refreshes this fact.
 {% if run %}
   <br><span data-updates-run="{{ run.outcome }}">
   {% if run.outcome == "ok" %}Last ran {{ run.started_at|when:"ago" }}
-  {% elif run.outcome == "handed_off" %}Started {{ run.started_at|when:"ago" }} <span class="pill pill-attention">Running</span>
-  {% else %}Last run {{ run.started_at|when:"ago" }} <span class="pill pill-serious">{% if run.outcome == "timeout" %}Stopped early{% else %}Failed{% endif %}</span>{% endif %}</span>
+  {% elif run.outcome == "handed_off" %}Started {{ run.started_at|when:"ago" }} {% status "Running" tone="attention" %}
+  {% else %}Last run {{ run.started_at|when:"ago" }} {% if run.outcome == "timeout" %}{% status "Stopped early" tone="serious" %}{% else %}{% status "Failed" tone="serious" %}{% endif %}{% endif %}</span>
 {% elif project.dependency_updates %}
   <br><span data-updates-run="">Not run yet</span>
 {% endif %}

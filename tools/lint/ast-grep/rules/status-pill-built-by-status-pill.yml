@@ -1,0 +1,18 @@
+# A state drawn as a pill from Python is `status_pill` (status_tags.py), the
+# same pill `{% status %}` draws, so its words are sentence case and its tone
+# is named once. Markup spelling the pill's class by hand bypasses both.
+id: status-pill-built-by-status-pill
+language: python
+severity: error
+message: Python builds a status pill's markup by hand.
+note: Call status_pill(label, tone=...) from hq.platform.core.templatetags.status_tags.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/*_tests.py"
+rule:
+  kind: string
+  regex: class=\\?["']pill(\s|\\?["'])

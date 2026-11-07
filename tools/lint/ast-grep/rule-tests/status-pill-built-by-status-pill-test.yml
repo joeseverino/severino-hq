@@ -1,0 +1,7 @@
+id: status-pill-built-by-status-pill
+valid:
+  - 'status_pill(record.get_status_display(), tone=record.status)'
+  - 'format_html("<code>{}</code>", value)'
+invalid:
+  - "format_html('<span class=\"pill pill-{}\">{}</span>', record.status, label)"
+  - 'mark_safe("<span class=\"pill\">Draft</span>")'

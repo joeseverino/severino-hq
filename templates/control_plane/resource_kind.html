@@ -10,7 +10,7 @@ its own name and description: no edit to this page.
       <strong>{{ provider.label|breakable }}</strong>
       <span class="kind-choice-summary">{{ provider.summary|breakable }}</span>
       {% if provider.public_effect %}
-        <span class="pill pill-attention">Visible on the internet</span>
+        {% status "Visible on the internet" tone="attention" %}
       {% endif %}
     </a>
   {% endfor %}

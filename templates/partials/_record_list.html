@@ -12,7 +12,7 @@ entry needs interpreting rather than just identifying.
       <span class="row-main">
         {% if row.url and row.external %}<strong>{% entity row.url|outside label=row.title %}</strong>{% elif row.url %}<a href="{{ row.url }}"><strong>{{ row.title|breakable }}</strong></a>{% else %}<strong>{{ row.title|breakable }}</strong>{% endif %}
         {% if row.detail %}<span class="muted">{{ row.detail|breakable }}</span>{% endif %}
-        {% if row.badge %}<span class="pill pill-{{ row.status|default:'neutral' }}">{{ row.badge|breakable }}</span>{% endif %}
+        {% if row.badge %}{% status row.badge tone=row.status|default:"neutral" %}{% endif %}
       </span>
       {% if row.meta or row.at %}<span class="row-meta">{% if row.meta %}{{ row.meta|breakable }}{% endif %}{% if row.meta and row.at %}{% dot %}{% endif %}{% if row.at %}{{ row.at|when:"day" }}{% endif %}</span>{% endif %}
     </li>
