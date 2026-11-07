@@ -217,6 +217,7 @@ _TEMPLATE_TAG = re.compile(r"\{[{%#].*?[}%#]\}", re.DOTALL)
 _CLASS = re.compile(r"\bclass=\"([^\"]*)\"")
 _LITERAL = re.compile(r"([\"'])(.*)\1")
 _HOOK = re.compile(r"\s(data-[a-z][a-z0-9-]*)")
+_STYLE = re.compile(r"\sstyle\s*=", re.IGNORECASE)
 
 
 def _is_register(node: ast.AST) -> bool:
@@ -462,6 +463,11 @@ class _Template:
             if match.group(1) not in hooks:
                 line = markup.count("\n", 0, match.start()) + 1
                 self.problem(line, f"{match.group(1)} is not a public script hook")
+        # HQ's policy refuses a style attribute, so the page would draw without
+        # it; a value drawn to scale goes through a host partial.
+        for match in _STYLE.finditer(markup):
+            line = markup.count("\n", 0, match.start()) + 1
+            self.problem(line, "writes a style attribute, which HQ's policy refuses; draw it through a public partial")
 
 
 def template_violations(source_root: str | Path, contract: dict[str, Any] | None = None) -> list[str]:

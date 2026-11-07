@@ -369,8 +369,8 @@ class ChartCategory:
 class PlacedLabel:
     """An axis label and where it sits, as a share of the drawing.
 
-    Rendered outside the SVG, so it needs its position as a percentage rather
-    than in chart units. Derived by the chart rather than supplied with the
+    Drawn in a layer of its own with no viewBox, so it needs its position as a
+    percentage rather than in chart units. Derived by the chart rather than supplied with the
     category, because the share depends on the chart's width and a caller
     building its own categories (the mile profile and the route elevation
     both do) has no reason to know it.

@@ -17,6 +17,36 @@
 @font-face { font-family: Inter; font-style: normal; font-weight: 400 700; font-display: optional; src: url("../../fonts/inter/inter-variable-latin.woff2") format("woff2"); }
 @layer tokens, base, components;
 
+/* Markup a vendored script draws (`data-vendored` on its mount) is styled by
+   its own sheets alone. HQ's words for its parts (`section`, `card`) are
+   common words, and every element or component rule of HQ's would otherwise
+   reach the vendor's markup wherever the vendor's own rules leave a property
+   unsaid. So each layer of HQ's that holds element rules gives way there to
+   the one before it, down to the browser's own styles and what the markup's
+   own attributes say (an icon's path and fill); the vendor's rules,
+   unlayered or in layers it declares once HQ's links have declared these,
+   outrank all of them. Inherited values and custom properties still flow in
+   from the page, which is how the vendor is themed. Each rule outranks every
+   other in its layer by naming two ids no element has. */
+@layer base {
+  :where([data-vendored]) :not(#_):not(#_),
+  :where([data-vendored]) :not(#_):not(#_)::before,
+  :where([data-vendored]) :not(#_):not(#_)::after,
+  :where([data-vendored]) :not(#_):not(#_)::marker,
+  :where([data-vendored]) :not(#_):not(#_)::placeholder,
+  :where([data-vendored]) :not(#_):not(#_)::selection,
+  :where([data-vendored]) :not(#_):not(#_)::backdrop { all: revert-layer; }
+}
+@layer components {
+  :where([data-vendored]) :not(#_):not(#_),
+  :where([data-vendored]) :not(#_):not(#_)::before,
+  :where([data-vendored]) :not(#_):not(#_)::after,
+  :where([data-vendored]) :not(#_):not(#_)::marker,
+  :where([data-vendored]) :not(#_):not(#_)::placeholder,
+  :where([data-vendored]) :not(#_):not(#_)::selection,
+  :where([data-vendored]) :not(#_):not(#_)::backdrop { all: revert-layer; }
+}
+
 @layer tokens {
 
 /* Two palettes, one set of names. Every color token is written
@@ -43,6 +73,10 @@
   --bg-tint: light-dark(#eeeee8, #25262b);
   --surface: light-dark(#ffffff, #18191c);
   --surface-2: light-dark(#fafaf7, #1d1e22);
+  /* What a box sits on: the page, or the surface of the frame that holds it
+     (surfaces.css), so a box that covers what scrolls beneath it paints the
+     color it covers. */
+  --ground: var(--bg);
   --ink: light-dark(#18181b, #ececee);
   --ink-2: light-dark(#2a2a2e, #d6d6da);
   /* Words set back that a reader still follows, on a source's tinted fill
@@ -317,20 +351,11 @@
      collision is instead measured: `Chart.dense` sums the width the labels
      need, and a container query asks how wide the card is. */
   --chart-max: 640px;
-  /* Where one axis label sits, as a share of the drawing it labels. Set per
-     label on the element itself, because there is one per data point and the
-     position is computed from the data: this declaration is the default a
-     label falls back to if it ever arrives without one, and the reason the
-     property is a declared part of the contract rather than an invention of a
-     template. */
+  /* How far along one mark is, as a share, set on the element by the script
+     that draws it (connection.js): this declaration is the default a mark
+     falls back to before it is set, and the reason the property is a
+     declared part of the contract rather than an invention of a script. */
   --at: 0%;
-  /* Where a chart's plot begins, as a share of its width; set per chart. */
-  --gutter: 0%;
-  /* How much of a whole one segment of an allocation is, as a share. Set per
-     segment for the same reason `--at` is set per label: it is computed from
-     the data, so the template supplies the number and this file decides what a
-     share looks like. Declared here so it is part of the contract. */
-  --part: 0%;
   /* On a dark page a soft shadow has nothing to fall on, so there it is
      darker and tighter, and the edge is carried by the surface's own hairline
      and its step up in lightness. */
