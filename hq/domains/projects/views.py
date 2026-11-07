@@ -12,6 +12,7 @@ from django.views.generic import (
     UpdateView,
     View,
 )
+lazy from django.template.defaultfilters import linebreaksbr
 lazy from django.template.loader import render_to_string
 lazy from django.utils import timezone
 
@@ -31,7 +32,6 @@ from hq.platform.application.projects import (
 )
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import web_principal
-from hq.platform.application.services import service_url_for
 from hq.platform.application.tables import (
     TableColumn,
     TableFilter,
@@ -41,6 +41,7 @@ from hq.platform.application.tables import (
 )
 from hq.platform.application.timestamps import moment
 from hq.platform.application.web_writes import execute_posted
+from hq.platform.application.where_it_runs import where_it_runs
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
 lazy from hq.platform.application.asks import (
     FAILED,
@@ -114,7 +115,7 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction("New project", reverse("projects:create"), primary=True),)
+        return (PageAction(capability_words("project.create"), reverse("projects:create"), primary=True),)
 
     @override
     def get_queryset(self):
@@ -218,10 +219,6 @@ class ProjectDetailView(PageMixin, DetailView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # The reverse of the tie the service page makes. A project says where it
-        # is published and HQ manages that name, so the two are one thing seen
-        # from either side, and only one side led anywhere.
-        context["service_url"] = service_url_for(self.object.public_url)
         context["github"] = self.repository
         project = self.object
         documents = related_documents(project.documentation_records.all(), about=project)
@@ -238,17 +235,13 @@ class ProjectDetailView(PageMixin, DetailView):
             context["run_asked"] = self.run_asked
 
         # Its state beside its name, as a service shows its reach; the category
-        # leads the one line under it.
+        # leads the line of facts under it.
         context["page_badges"] = (PageBadge(self.object.get_status_display(), self.object.status),)
+        context["page_facts"] = self.facts()
         return context
 
-    @override
-    def get_page_title(self):
-        return self.object.name
-
-    @override
-    def get_page_lede(self):
-        """The one line under the name, inside the head beside its actions."""
+    def facts(self):
+        """Where the project lives and runs, the head's line of facts."""
 
         # The work moves where the code does: a push says when it last
         # changed better than the last edit of this record does.
@@ -257,13 +250,27 @@ class ProjectDetailView(PageMixin, DetailView):
             "projects/_project_meta.html",
             {
                 "project": self.object,
-                "service_url": service_url_for(self.object.public_url),
+                # The reverse of the tie the service page makes: where it is
+                # published names the service, and the service what runs it.
+                "runs_on": where_it_runs(self.object.public_url),
+                "address": _written_as(self.object.public_url),
                 "pushed_at": moment(str(repository.pushed_at or "")) if repository is not None else None,
                 # The GitHub panel names the repository when it is read.
                 "repository_url": "" if repository is not None else web_url(self.object.repository_url),
+                "repository": _written_as(self.object.repository_url),
                 "sections": hq_sections(self.object),
             },
         )
+
+    @override
+    def get_page_title(self):
+        return self.object.name
+
+    @override
+    def get_page_lede(self):
+        """What the project is, in its own words."""
+
+        return linebreaksbr(self.object.description)
 
     @override
     def get_page_actions(self):
@@ -367,6 +374,12 @@ class WatchingView(PageMixin, TemplateView):
 
 # The part of the Watching page a finished read is shown in.
 WATCHING_REGION = "[data-watching]"
+
+
+def _written_as(url: str) -> str:
+    """An address as a reader names it: no scheme, no closing slash."""
+
+    return str(url or "").removeprefix("https://").removeprefix("http://").rstrip("/")
 
 
 def _profile_status(asked) -> str:

@@ -10,7 +10,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import Any
-from urllib.parse import urlparse
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
@@ -704,7 +703,7 @@ def _points_nowhere(origin: Origin | None, dns: ServiceFacet | None = None) -> s
     address = split_endpoint(origin.address)[0] or origin.address
     if is_documentation(address):
         return f"Resolves to {address}, a documentation address. Nothing answers there."
-    if address in {"0.0.0.0", "::"}:
+    if address in {"0.0.0.0", "::"}:  # noqa: S104 - an address read from a record, never bound
         return f"Resolves to {address}, which is not a reachable address."
     return ""
 
@@ -720,16 +719,3 @@ def _served_by_the_provider(dns: ServiceFacet | None) -> bool:
     """
 
     return dns is not None and any(claim.fronted for claim in dns.claims)
-
-
-def service_url_for(public_url: str) -> str:
-    """The service page for a published URL, when HQ manages that name.
-
-    The reverse of the tie the service page makes, kept beside it so the two
-    cannot come to disagree about which names HQ knows.
-    """
-
-    hostname = normalized_hostname(urlparse(public_url or "").hostname or "")
-    if not hostname or not find_service(hostname):
-        return ""
-    return entity_link("service", hostname).url

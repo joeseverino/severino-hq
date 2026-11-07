@@ -1,15 +1,13 @@
 """A project from the side of what serves it, and names in a note as links."""
 
-from django.template import Context, Template
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.docs_index.models import DocumentationRecord
 
-from ..entity_links import EntityLink, container_link
+from ..entity_links import EntityLink
 from ..projection import projection_scope
 from ..where_it_runs import named_links, where_it_runs
-from .markup import links, text
 from .test_relationships import estate
 
 
@@ -31,26 +29,6 @@ class WhereItRunsTests(TestCase):
         with projection_scope():
             self.assertIsNone(where_it_runs("https://elsewhere.example.org/"))
             self.assertIsNone(where_it_runs(""))
-
-    def test_the_partial_says_it_in_one_line_of_links(self):
-        runs = where_it_runs.__globals__["RunsOn"](
-            service=EntityLink("app.example.com", "/infrastructure/services/app.example.com/", kind="service"),
-            machine=EntityLink("example-box", "/infrastructure/machines/example-box/", kind="machine"),
-            container=container_link("example-box", "app"),
-        )
-
-        drawn = Template('{% include "partials/_runs_on.html" %}').render(Context({"runs_on": runs}))
-
-        self.assertEqual(
-            links(drawn),
-            [
-                ("example-box", "/infrastructure/machines/example-box/"),
-                ("app", "/infrastructure/machines/example-box/#container-app"),
-                ("app.example.com", "/infrastructure/services/app.example.com/"),
-            ],
-        )
-        for said in ("Runs on example-box", "container app", "Served as app.example.com"):
-            self.assertIn(said, text(drawn))
 
 
 class NamedLinksTests(TestCase):

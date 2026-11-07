@@ -52,6 +52,34 @@ from hq.platform.core.tests.test_browser_fixtures import PAGES
 # What runs past the page's edge, wherever a box that scrolls does not hold it.
 _ESCAPES_READ = (SIDEWAYS, ANY_SCROLLER)
 
+# A page's note on its readings, saying nothing and then the longest line it
+# says (a failure that names what it could not read), against the band
+# between the bar and the page: where it stands, how far its end is from the
+# end of the person's control, and where each part of the page is with it
+# silent, saying that, and gone. The note is left saying what it said.
+_PAGE_NOTE = """([noteSelector, barSelector, accountSelector]) => [...document.querySelectorAll(noteSelector)].map((note) => {
+  const bar = document.querySelector(barSelector).getBoundingClientRect();
+  const account = document.querySelector(accountSelector).getBoundingClientRect();
+  const parent = note.parentElement;
+  const parts = () => [...parent.children].filter((part) => part !== note && part.getClientRects().length)
+    .map((part) => { const r = part.getBoundingClientRect(); return [r.top, r.left, r.width, r.height].map(Math.round).join(' '); });
+  const said = note.textContent;
+  note.textContent = '';
+  const silent = parts();
+  note.textContent = 'Cannot refresh: ' + Array.from({length: 24}, (_, at) => `example reading ${at}`).join(', ') + '.';
+  const saying = parts();
+  const r = note.getBoundingClientRect();
+  const first = [...parent.children].find((part) => part !== note && part.getClientRects().length);
+  const placed = {top: r.top - bar.bottom, bottom: (first ? first.getBoundingClientRect().top : Infinity) - r.bottom,
+    start: r.left, end: account.right - r.right, lines: note.scrollHeight > note.clientHeight + 0.5};
+  const sibling = note.nextSibling;
+  note.remove();
+  const gone = parts();
+  parent.insertBefore(note, sibling);
+  note.textContent = said;
+  return {silent, saying, gone, placed};
+})"""
+
 
 class LayoutBrowserTests(BrowserGate):
     """The layout rules over the stress estate.
@@ -126,7 +154,7 @@ class LayoutBrowserTests(BrowserGate):
                 self.layout_audit_structural_rules,
             ]
         if width in WIDTHS:
-            rules += self.overflow_reads(name)
+            rules += [*self.overflow_reads(name), self.a_heads_note_costs_its_head_no_room]
         return rules
 
     def overflow_reads(self, name):
@@ -203,6 +231,25 @@ class LayoutBrowserTests(BrowserGate):
     @reads(_ESCAPES_READ)
     def nothing_escapes_the_page_sideways_with_every_disclosure_open(self, _name, found):
         self.assertEqual(found, [])
+
+    def a_heads_note_costs_its_head_no_room(self, name):
+        """A page's note on its readings stands in the band between the bar
+        and the page, its end under the end of the person's control, on one
+        line however long what it says: the page is laid out as it is with no
+        note at all, and saying something moves nothing."""
+
+        notes = self.page.evaluate(_PAGE_NOTE, [SELECTORS["page_note"], SELECTORS["bar"], SELECTORS["account"]])
+        if 'form="page-visit"' in self.pages[name]:
+            self.assertGreater(len(notes), 0, "the probe measured nothing")
+        for note in notes:
+            self.assertEqual(note["silent"], note["gone"])
+            self.assertEqual(note["saying"], note["gone"])
+            placed = note["placed"]
+            self.assertGreaterEqual(placed["top"], -0.5)
+            self.assertGreaterEqual(placed["bottom"], -0.5)
+            self.assertGreaterEqual(placed["start"], -0.5)
+            self.assertAlmostEqual(placed["end"], 0, delta=0.5)
+            self.assertFalse(placed["lines"])
 
     def no_block_breaks_a_paragraph(self, _name):
         # A block written inside a <p> closes it early and leaves an empty <p>
@@ -339,7 +386,7 @@ class LayoutBrowserTests(BrowserGate):
             self.page.unroute(address, answer)
         self.page.evaluate(FINISH_TRANSITIONS)
 
-    @reads(BROKEN_WORDS)
+    @reads((BROKEN_WORDS, SELECTORS["identifier"]))
     def no_column_is_narrower_than_its_words(self, _name, found):
         self.assertEqual(found, [])
 
@@ -411,12 +458,13 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
 
     def a_table_fits_its_box_at_every_width(self, name):
-        """Every table on the page, with every disclosure open, fits its box at
-        every window width from the narrowest phone up."""
+        """Every table on the page, with every disclosure open, fits its box
+        and keeps every table check, its rows opened, at every window width
+        from the narrowest phone up."""
 
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)
-        self.assertEqual(self.tables_that_do_not_fit_at_any_width(), {})
+        self.assertEqual(self.table_defects_at_every_width(), {})
 
     def card_rows(self, key):
         """The cards of one dashboard grid, grouped by the row they sit on."""

@@ -26,7 +26,7 @@ from hq.platform.application.glance import (
     glance_context,
 )
 from hq.platform.application.outward_links import link_choices, outward_links
-from hq.platform.application.pages import page_context
+from hq.platform.application.pages import PageVisit, page_context
 from hq.platform.application.request_path import request_path
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
@@ -176,7 +176,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             controller=controller_standing(),
             # What the queue is drawn from, asked for again once the page is
             # showing, when any of it is due.
-            ask_readings=worth_asking("page", "dashboard"),
+            page_visit=PageVisit("page", "dashboard") if worth_asking("page", "dashboard") else None,
             # The rows the controller last read: reading them asks no one, so
             # the card is drawn with the page.
             recent_contacts=[

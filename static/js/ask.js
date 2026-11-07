@@ -19,7 +19,9 @@
 //   [data-ask-button] the button that asks; a form[data-ask-auto] asks when
 //                     the page is showing, with nobody pressing anything
 //   data-ask-outcome  the page draws how the work ended, failure included
-//   [data-ask-note]   the live region: it changes only when the state does
+//   [data-ask-note]   the live region: it changes only when the state does.
+//                     One drawn apart from its control is an <output> naming
+//                     the control's form (`form=`), as a page's note does
 //   [data-ask-elapsed] ticks beside it, outside the region
 //
 // Polling rather than a socket: one small question every couple of seconds
@@ -65,8 +67,14 @@
     span.textContent = text;
     return span;
   };
+  // A note drawn apart from its control (a page's, _visit_refresh.html) is
+  // found through the form it names, so a note drawn again finds it anew.
+  const noteOf = (control) =>
+    control.querySelector("[data-ask-note]") ||
+    [...control.querySelectorAll("form")].flatMap((form) => [...form.elements]).find((field) => field.matches("[data-ask-note]"));
+
   const say = (control, text, word = "") => {
-    const note = control.querySelector("[data-ask-note]");
+    const note = noteOf(control);
     if (!note) return;
     // The server writes what the button is for apart from its title, which
     // holds the work's last note while there is one (`data-ask-reason`,
@@ -81,7 +89,8 @@
     if (note.textContent === said) return;
     if (said === text) note.textContent = text;
     else note.replaceChildren(part("ask-word", word), part("ask-sentence", text));
-    if (control.matches(".ask-quiet")) note.hidden = !text;
+    // A line of the head's own keeps its room whether or not it says anything.
+    if (control.matches(".ask-quiet") && control.contains(note)) note.hidden = !text;
     if ("askWord" in note.dataset) sayBelow(control, text && word ? `${word}: ${text}` : text);
   };
 
@@ -163,14 +172,10 @@
     if (label && standing.label) label.textContent = standing.label;
     const bar = control.querySelector("[data-ask-bar]");
     if (bar) {
-      const known = standing.percent !== null && standing.percent !== undefined;
-      bar.parentElement.classList.toggle("job-bar-unknown", !known);
-      if (known) {
-        bar.style.setProperty("--at", `${standing.percent}%`);
-        bar.parentElement.setAttribute("aria-valuenow", String(standing.percent));
-      } else {
-        bar.parentElement.removeAttribute("aria-valuenow");
-      }
+      // A <progress> with no value is indeterminate, which is what work that
+      // cannot say how far along it is should draw.
+      if (standing.percent !== null && standing.percent !== undefined) bar.value = standing.percent;
+      else bar.removeAttribute("value");
     }
   };
 
@@ -187,7 +192,7 @@
   // and leaves showing it to them.
   const reload = (control) => {
     const offer = () => {
-      const note = control.querySelector("[data-ask-note]");
+      const note = noteOf(control);
       if (!note) return;
       const link = document.createElement("a");
       link.href = window.location.href;

@@ -120,6 +120,16 @@ class PageBadge:
 
 
 @dataclass(frozen=True, slots=True)
+class PageVisit:
+    """What a page is about, as the readings it asks for when opened name it
+    (``visit_refresh.SUBJECTS``). Context rather than a Page field, as
+    ``page_badges`` is, so the SDK's Page is unchanged."""
+
+    subject: str
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
 class Page:
     title: str
     lede: str = ""
