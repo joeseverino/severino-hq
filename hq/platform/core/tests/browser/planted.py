@@ -180,6 +180,22 @@ PLANTS = {
         "Example</span>{% endsection %}"
         '{% section "Example two" %}<p>Example</p>{% endsection %}</div>'
     ),
+    # A frame stopped at its words' width in the page's column.
+    "frames span their column": Plant('<div class="card" style="inline-size: fit-content">Example</div>'),
+    # A head that spreads its items, a marker set before its heading.
+    "titles at the head's start": Plant(
+        '<header class="section-head"><span style="flex: none">x</span><h2>Example</h2></header>'
+    ),
+    # A select narrower than its chosen value, and a button whose words wrap.
+    "control words on one line": Plant(
+        '<select aria-label="Example" style="inline-size: 5rem"><option>Example group name</option></select>'
+        '<button type="button" class="btn" style="inline-size: 5rem; white-space: normal">Example label words</button>'
+    ),
+    # A toolbar's control held taller than the one beside it.
+    "one height to a row of controls": Plant(
+        '<div style="display: flex; align-items: center; gap: 1rem"><button type="button" class="btn">Example</button>'
+        '<button type="button" class="btn" style="min-block-size: calc(var(--control-size) + 4px)">Example</button></div>'
+    ),
     # A select left to the browser's own arrow.
     "select arrows": Plant(
         '<select aria-label="Example" style="appearance: auto; background-image: none"><option>Example</option></select>'
@@ -245,6 +261,29 @@ PLANTS = {
     "fills": Plant('<p><span style="background: light-dark(#ccc, transparent)">Example</span></p>'),
 }
 
+# What a check passes that is close to what it finds: the case its plant
+# differs from, so a check that finds everything is caught as surely as one
+# that finds nothing.
+PASSES = {
+    # A frame across its column, and frames that share a row.
+    "frames span their column": Plant(
+        '<div class="card">Example</div><div style="display: flex; gap: 1rem">'
+        '<div class="card">Example</div><div class="card">Example</div></div>'
+    ),
+    "titles at the head's start": Plant(
+        '{% section "Example" %}<p>Example</p>{% aside %}<a href="#">Example</a>{% endsection %}'
+    ),
+    "control words on one line": Plant(
+        '<select aria-label="Example"><option>Example group name</option></select>'
+        '<button type="button" class="btn">Example label words</button>'
+    ),
+    # A button, a field and a select in one row, each the control size.
+    "one height to a row of controls": Plant(
+        '<div style="display: flex; gap: 1rem"><button type="button" class="btn">Example</button>'
+        '<input type="search" aria-label="Example"><select aria-label="Example"><option>Example</option></select></div>'
+    ),
+}
+
 _BARE = "planted/bare"
 
 # A style a page a test puts together writes, against a rule of HQ's that
@@ -265,8 +304,8 @@ def _said(finding):
     return json.dumps(finding, sort_keys=True)
 
 
-def page_of(check):
-    return f"planted/{check.replace(' ', '-')}"
+def page_of(check, kind="planted"):
+    return f"{kind}/{check.replace(' ', '-').replace("'", '')}"
 
 
 class PlantedBrowserTests(LayoutBrowserTests):
@@ -277,7 +316,8 @@ class PlantedBrowserTests(LayoutBrowserTests):
     @override
     def render(cls):
         pages = {page_of(check): probe(plant.markup, **plant.values) for check, plant in PLANTS.items()}
-        return {**pages, _BARE: probe(""), _LIFTED: probe(_OUTRANKED)}
+        passes = {page_of(check, "passes"): probe(plant.markup, **plant.values) for check, plant in PASSES.items()}
+        return {**pages, **passes, _BARE: probe(""), _LIFTED: probe(_OUTRANKED)}
 
     def found(self, name, plant):
         self.open(name, WIDE)
@@ -302,6 +342,11 @@ class PlantedBrowserTests(LayoutBrowserTests):
                     continue
                 planted = set(map(_said, found.get(check, []))) - set(map(_said, bare[plant.path].get(check, [])))
                 self.assertTrue(planted, f"{check} finds nothing of its plant: {found}")
+
+    def test_each_check_passes_its_near_miss(self):
+        for check, plant in PASSES.items():
+            with self.subTest(check=check):
+                self.assertEqual(self.found(page_of(check, "passes"), plant).get(check, []), [])
 
     def records_layout_shifts(self):
         return self.page.evaluate("() => PerformanceObserver.supportedEntryTypes.includes('layout-shift')")

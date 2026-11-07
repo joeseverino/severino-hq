@@ -36,6 +36,7 @@ from hq.platform.core.tests.browser import (
 from hq.platform.core.tests.browser.probes import (
     axe,
     boxes,
+    controls,
     describe,
     headings,
     palette,
@@ -82,6 +83,7 @@ MODULES = (
     widths,
     axe,
     boxes,
+    controls,
     describe,
     headings,
     palette,
@@ -167,6 +169,7 @@ class PlantTests(SimpleTestCase):
         self.assertIn("sideways", checks)
         self.assertEqual(sorted(set(checks) - set(planted.PLANTS)), [], "a check with no plant in planted.PLANTS")
         self.assertEqual(sorted(set(planted.PLANTS) - set(checks)), [], "a plant for no check the survey runs")
+        self.assertEqual(sorted(set(planted.PASSES) - set(checks)), [], "a near miss for no check the survey runs")
 
 
 class LostFillTests(SimpleTestCase):

@@ -11,14 +11,18 @@ from hq.platform.core.tests.browser.probes.boxes import (
     CRAMPED_HEADS,
     CUT_RINGS,
     FRAMES_OUT_OF_ROW,
+    FRAMES_SHORT_OF_THEIR_COLUMN,
     HEAD_CONTROLS,
     INSET_IN_THE_FRAME,
     INTO_A_NEIGHBOR,
     OVERLAPS,
+    PAGE_FRAMES,
     SHORT_OF_ITS_BUTTONS,
     SIDEWAYS,
     SMALL_TARGETS,
+    TITLES_OFF_THEIR_START,
 )
+from hq.platform.core.tests.browser.probes.controls import CONTROL_HEIGHTS, WRAPPED_CONTROLS
 from hq.platform.core.tests.browser.probes.headings import HEADINGS_IN_CAPITALS, QUIET_LINKS_IN_THE_LINE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES, FIELD_CONTRAST, FIELD_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
@@ -187,6 +191,16 @@ _GEOMETRY = {
     "section asides": (ASIDES_WRAPPED_WITH_ROOM, SELECTORS["section_head"]),
     "inset in the frame": (INSET_IN_THE_FRAME, SELECTORS["section_body"]),
     "frames in a row": (FRAMES_OUT_OF_ROW, [SELECTORS["section_head"], SELECTORS["section_body"]]),
+    "frames span their column": (FRAMES_SHORT_OF_THEIR_COLUMN, [PAGE_FRAMES, SELECTORS["floating"]]),
+    "titles at the head's start": (TITLES_OFF_THEIR_START, SELECTORS["section_head"]),
+    "control words on one line": (
+        WRAPPED_CONTROLS,
+        [SELECTORS["pressed"], SELECTORS["choice"], SELECTORS["unseen"], SELECTORS["vendored"]],
+    ),
+    "one height to a row of controls": (
+        CONTROL_HEIGHTS,
+        [SELECTORS["pressed"], SELECTORS["fillable"], SELECTORS["vendored"]],
+    ),
     "dialogs": (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
     "select arrows": (SELECT_ARROWS, [SELECTORS["dropdown"], SELECTORS["vendored"]]),
     "link underlines": (PARTS_NOT_UNDERLINED, [SELECTORS["link"], SELECTORS["vendored"]]),

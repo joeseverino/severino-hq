@@ -646,3 +646,91 @@ CUT_RINGS = (
   return [...new Set(found)];
 }"""
 )
+
+
+# A frame in the page's flow (a card, a section, a form, a notice, an empty
+# state: what ``frames`` selects) spans the column it stands in. Its column is
+# its parent when nothing between it and the page's content paints a frame of
+# its own or is drawn over the page, and that parent stacks what it holds: a
+# block, a flex column or a grid of one track. A frame narrower than that
+# column's content box stops short of the edge every frame beside it reaches.
+# A frame in a frame, and one that is an item of a row, are sized by what
+# holds them.
+PAGE_FRAMES = ".card, .section, form, .notice, [data-empty-state]"
+
+FRAMES_SHORT_OF_THEIR_COLUMN = (
+    "([frames, floating]) => {"
+    + DESCRIBE
+    + """
+  const seen = (color) => color && !/^(transparent|rgba\\(.*,\\s*0\\))$/.test(color);
+  const paints = (style) => seen(style.backgroundColor) || style.backgroundImage !== 'none'
+    || style.boxShadow !== 'none'
+    || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
+      && style[`border${side}Style`] !== 'none' && seen(style[`border${side}Color`]));
+  const tracks = (value) => value.replace(/\\[[^\\]]*\\]/g, ' ').trim().split(/\\s+/).length;
+  const stacks = (style) => {
+    if (['block', 'flow-root', 'list-item'].includes(style.display)) return style.columnCount === 'auto' && style.columnWidth === 'auto';
+    if (style.display === 'flex') return style.flexDirection.startsWith('column');
+    if (style.display === 'grid') return style.gridTemplateColumns === 'none' ? !style.gridAutoFlow.startsWith('column') : tracks(style.gridTemplateColumns) === 1;
+    return false;
+  };
+  const inPageFlow = (el, main) => {
+    for (let up = el.parentElement; up !== main; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      if (style.display === 'contents') continue;
+      if (up.matches(floating) || ['absolute', 'fixed'].includes(style.position) || style.display.startsWith('inline') || paints(style)) return false;
+    }
+    return true;
+  };
+  const found = [];
+  for (const el of document.querySelectorAll('main ' + frames)) {
+    const main = el.closest('main');
+    const style = getComputedStyle(el);
+    if (!el.checkVisibility() || style.display === 'contents' || style.display.startsWith('inline')
+      || ['absolute', 'fixed'].includes(style.position) || style.float !== 'none' || !inPageFlow(el, main)) continue;
+    let column = el.parentElement;
+    while (column !== main && getComputedStyle(column).display === 'contents') column = column.parentElement;
+    const at = getComputedStyle(column);
+    if (!stacks(at)) continue;
+    const room = column.clientWidth - parseFloat(at.paddingLeft) - parseFloat(at.paddingRight);
+    const width = box(el).width;
+    if (width < room - 2) found.push(`${describe(el)} in ${describe(column)} is ${Math.round(width)}px of its column's ${Math.round(room)}px`);
+  }
+  return found;
+}"""
+)
+
+
+# A section's heading starts where its head does: the first line of the
+# head's heading begins at the head's inline start edge, inside its border
+# and padding, whatever else the head holds before it (a fold's marker) or
+# beside it, and however the head spreads its items.
+TITLES_OFF_THEIR_START = (
+    "(selector) => {"
+    + DESCRIBE
+    + """
+  const words = document.createRange();
+  const found = [];
+  for (const head of document.querySelectorAll('main ' + selector)) {
+    if (!head.checkVisibility()) continue;
+    const title = [...head.children].find((child) => child.matches('h1, h2, h3, h4, h5, h6, hgroup'));
+    const heading = title?.matches('hgroup') ? title.querySelector('h1, h2, h3, h4, h5, h6') : title;
+    if (!heading || !heading.checkVisibility()) continue;
+    words.selectNodeContents(heading);
+    const first = [...words.getClientRects()].find((r) => r.width > 0 && r.height > 0);
+    if (!first) continue;
+    const style = getComputedStyle(head);
+    const r = box(head);
+    const rtl = style.direction === 'rtl';
+    const start = rtl
+      ? r.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight)
+      : r.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    const off = rtl ? start - first.right : first.left - start;
+    if (Math.abs(off) > 2) {
+      const text = heading.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40);
+      found.push(`${describe(heading)} "${text}" starts ${Math.round(off)}px from the start of ${describe(head)} (${Math.round(r.width)}px wide)`);
+    }
+  }
+  return found;
+}"""
+)

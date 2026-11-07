@@ -1,0 +1,156 @@
+"""Probes of controls drawn as controls: their words on one line, and one height to a row."""
+
+from hq.platform.core.tests.browser.probes.describe import DESCRIBE, TEXT_SHOWN
+
+# A control drawn as one: a select, or a box the selector names that
+# paints an edge, a fill or a shadow. A bare button is a link set in a
+# button's element (a row's toggle, a heading's sort), so its words are text,
+# and a summary holding a heading is a folded section's head.
+_DRAWN = r"""
+const seen = (color) => color && !/^(transparent|rgba\(.*,\s*0\))$/.test(color);
+const paints = (style) => seen(style.backgroundColor) || style.backgroundImage !== 'none'
+  || style.boxShadow !== 'none'
+  || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
+    && style[`border${side}Style`] !== 'none' && seen(style[`border${side}Color`]));
+const drawn = (el) => !el.matches('summary:has(h1, h2, h3, h4, h5, h6, hgroup)')
+  && (el.matches('select') || paints(getComputedStyle(el)));
+// The words a control says itself, a control inside it left out.
+const ownWords = (el, controls) => {
+  const copy = el.cloneNode(true);
+  copy.querySelectorAll(controls).forEach((inner) => inner.remove());
+  return (copy.textContent || el.getAttribute('aria-label') || '').trim().replace(/\s+/g, ' ').slice(0, 40);
+};
+// What a line of `text` takes in `el`'s face, measured off the page's flow.
+const oneLine = (el, text) => {
+  const style = getComputedStyle(el);
+  const line = document.createElement('span');
+  line.textContent = text;
+  for (const name of ['fontFamily', 'fontSize', 'fontStyle', 'fontWeight', 'fontStretch', 'fontVariant',
+    'fontFeatureSettings', 'letterSpacing', 'wordSpacing', 'textTransform']) line.style[name] = style[name];
+  Object.assign(line.style, {position: 'fixed', insetBlockStart: '0', insetInlineStart: '0', visibility: 'hidden', whiteSpace: 'pre'});
+  document.body.append(line);
+  const width = line.getBoundingClientRect().width;
+  line.remove();
+  return width;
+};
+"""
+
+# A control's own words keep one line: a pressed control drawn as one whose
+# words lay out on more than one line in any box of it, or a select or an
+# input button whose chosen value (which the engine draws, so no range reads
+# it) is wider in its face than the box it is drawn in. Words of a control
+# inside it are that control's, and words kept from sight are no label.
+WRAPPED_CONTROLS = (
+    "([pressed, choice, unseen, vendored]) => {"
+    + DESCRIBE
+    + TEXT_SHOWN
+    + _DRAWN
+    + """
+  const controls = `${pressed}, ${choice}`;
+  const words = document.createRange();
+  const found = [];
+  const lines = (el) => {
+    const blocks = new Map();
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (!node.data.trim() || parent.closest(controls) !== el || parent.closest(unseen) || !textShown(node)) continue;
+      let block = parent;
+      let placed = false;
+      while (block !== el) {
+        const style = getComputedStyle(block);
+        if (['absolute', 'fixed'].includes(style.position)) placed = true;
+        if (style.display !== 'inline' && style.display !== 'contents') break;
+        block = block.parentElement;
+      }
+      if (placed) continue;
+      words.selectNodeContents(node);
+      const rects = [...words.getClientRects()].filter((r) => r.width > 0 && r.height > 0);
+      blocks.set(block, [...(blocks.get(block) || []), ...rects]);
+    }
+    let most = 1;
+    for (const rects of blocks.values()) {
+      rects.sort((a, b) => a.top - b.top);
+      let count = 0;
+      let bottom = -Infinity;
+      for (const r of rects) {
+        if ((r.top + r.bottom) / 2 > bottom) { count += 1; bottom = r.bottom; }
+      }
+      most = Math.max(most, count);
+    }
+    return most;
+  };
+  for (const el of document.querySelectorAll(controls)) {
+    if (!el.checkVisibility() || el.closest(vendored) || !drawn(el)) continue;
+    const width = Math.round(box(el).width);
+    if (el.matches('select, input')) {
+      if (el.multiple || el.size > 1) continue;
+      const value = el.matches('select') ? (el.selectedOptions[0]?.label ?? '') : el.value;
+      if (!value.trim()) continue;
+      const style = getComputedStyle(el);
+      const room = el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const needs = oneLine(el, value.trim());
+      if (needs > room + 1) {
+        found.push(`${describe(el)} "${value.trim().replace(/\\s+/g, ' ').slice(0, 40)}" needs ${needs.toFixed(1)}px for its line, has ${room.toFixed(1)}px (${width}px wide)`);
+      }
+      continue;
+    }
+    const count = lines(el);
+    if (count > 1) found.push(`${describe(el)} "${ownWords(el, controls)}" takes ${count} lines at ${width}px`);
+  }
+  return found;
+}"""
+)
+
+# Controls side by side in one row (a toolbar, a page's or a section's head)
+# are one height, the control size the tokens set: a control drawn as one
+# that shares a line of a flex or grid row with another of a different
+# height, and is not the control size itself. A row of compact controls all
+# one height is a size of its own. A control in a control (a label's select)
+# is part of the outer one; a table's cell is a row of its own, which a table
+# lays out.
+CONTROL_HEIGHTS = (
+    "([pressed, fillable, vendored]) => {"
+    + DESCRIBE
+    + _DRAWN
+    + """
+  const controls = `${pressed}, ${fillable}`;
+  const size = (() => {
+    const probe = document.createElement('div');
+    Object.assign(probe.style, {position: 'fixed', visibility: 'hidden', blockSize: 'var(--control-size)', inlineSize: '1px'});
+    document.body.append(probe);
+    const height = probe.getBoundingClientRect().height;
+    probe.remove();
+    return height;
+  })();
+  const rowOf = (el) => {
+    for (let up = el.parentElement; up && up !== document.body; up = up.parentElement) {
+      if (up.matches('td, th')) return null;
+      const display = getComputedStyle(up).display;
+      if (display.endsWith('grid')) return up;
+      if (display.endsWith('flex') && getComputedStyle(up).flexDirection.startsWith('row')) return up;
+    }
+    return null;
+  };
+  const rows = new Map();
+  for (const el of document.querySelectorAll(controls)) {
+    if (!el.checkVisibility() || el.closest(vendored) || el.matches('textarea, select[multiple], select[size]:not([size="1"]), input[type=checkbox], input[type=radio]')) continue;
+    const outer = el.parentElement.closest(controls);
+    if (!drawn(el) || (outer && drawn(outer))) continue;
+    const row = rowOf(el);
+    if (row) rows.set(row, [...(rows.get(row) || []), [el, box(el)]]);
+  }
+  const found = [];
+  for (const [row, members] of rows) {
+    for (const [el, r] of members) {
+      const beside = members.filter(([other, o]) => other !== el
+        && Math.min(r.bottom, o.bottom) - Math.max(r.top, o.top) > Math.min(r.height, o.height) / 2);
+      const heights = [...new Set(beside.map(([, o]) => Math.round(o.height)))];
+      const differs = beside.some(([, o]) => Math.abs(o.height - r.height) > 1);
+      if (!differs || Math.abs(r.height - size) <= 1) continue;
+      found.push(`${describe(el)} "${ownWords(el, controls)}" in ${describe(row)} is ${r.height.toFixed(1)}px beside controls of ${heights.join(', ')}px (the control size ${size}px)`);
+    }
+  }
+  return found;
+}"""
+)
