@@ -160,18 +160,20 @@ def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline:
 
 
 def _baseline_of(resource: ManagedResource) -> dict[str, Any]:
-    """The declaration as it stands, in the three terms a change moves.
+    """The declaration as it stands, in the three terms a change moves, and the
+    live record as the spec it reproduces, which an apply is compared against.
 
     The generation is in here deliberately. Two declarations can carry the same
     spec with different histories, and an approval of "apply what is declared"
-    is an approval of the revision that was declared when it was asked for.
+    is an approval of the revision that was declared when it was asked for. The
+    live record is its spec alone: every sweep rewrites the rest of what it read.
     """
 
     return {
         "spec": resource.spec,
         "enabled": resource.enabled,
         "generation": resource.generation,
-        "observed": resource.status or {},
+        "observed": (resource.status and record_spec(resource.kind, resource.status)) or {},
     }
 
 
@@ -218,6 +220,12 @@ def _record_subject(spec, target: Any) -> ApprovalSubject | None:
     except UnsupportedResourceOperation, InvalidResourceInput:
         # No canonical read: still holdable, but staleness cannot be detected.
         baseline = {}
+    if baseline and spec.effect != DESTRUCTIVE_EFFECT:
+        # A change shows the fields it sends, as they are now, and the record's
+        # name; the rest of a read (a last push, open pulls) moves with sweeps.
+        read = baseline.get("resource", baseline)
+        sent = {key: baseline[key] for key in capability_fields(spec) if key in baseline}
+        baseline = {"name": item_name(read) if isinstance(read, dict) else "", **sent}
     return ApprovalSubject(kind, str(target), baseline)
 
 
@@ -757,11 +765,9 @@ def preview(held: ApprovalRequest) -> ChangePreview:
         # A start, stop or restart leaves the declaration as it is: what is
         # approved is the act its sentence names.
         return ChangePreview(label="", rows=(), lines=())
-    observed = held.baseline.get("observed") or {}
-    if isinstance(observed, Mapping) and observed:
-        live = record_spec(held.resource_kind, observed)
-        if live:
-            return compare(live, declared, label="The live record would change")
+    live = held.baseline.get("observed")
+    if isinstance(live, Mapping) and live:
+        return compare(dict(live), declared, label="The live record would change")
     return compare({}, declared, label="Would be applied")
 
 
