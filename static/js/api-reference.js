@@ -151,6 +151,9 @@ const markPathsIn = (added) => {
 
 document.addEventListener("DOMContentLoaded", () => {
   const root = document.getElementById("api-reference-root");
+  // From the server, set before the viewer draws: each tag's list of
+  // operations sits in a section of its own, and they line up only at one width.
+  root.style.setProperty("--longest-path", `${root.dataset.longestPath}ch`);
   // Each path is split as the viewer draws it, in the same task, so no line
   // is drawn first and moved after. What the splitting itself changes is
   // dropped unread.

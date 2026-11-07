@@ -18,6 +18,7 @@ from django.urls import reverse
 lazy from playwright.sync_api import expect
 
 from hq.platform.application.plugin_testing import form_keyed
+from hq.platform.core.stylesheets import SHEETS
 from hq.platform.core.tests.browser.gate import BrowserGate, answered
 from hq.platform.core.tests.browser.probes.axe import contrast_read
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, TEXT_SHOWN
@@ -50,6 +51,10 @@ REFERENCE_PHONE = PHONE_SCREEN[0]
 # A laptop's window too narrow for the viewer's sidebar, yet past the width at
 # which the viewer stacks a tag's description over its list of operations.
 _LAPTOP_WINDOW = 924
+
+# The engines the browser legs draw in (mise-tasks/browser.toml): WebKit, the
+# gates' own, and Chromium, which CI's layout legs add. No leg runs Firefox.
+GATE_ENGINES = ("webkit", "chromium")
 
 # The viewer is one large script: parsing it takes longer than a page's load.
 REFERENCE_READY = 30_000
@@ -674,40 +679,93 @@ _REFERENCE_WORDS = (
 }"""
 )
 
-# The elements HQ's element rules style as controls.
-_CONTROLS = ("button", "input", "select", "textarea", "a")
-
-# Every control in the viewer, drawn as HQ's sheets have it, then again with
-# every rule of HQ's that names one of those elements taken out: the sheets the
-# page links, the viewer's own configuration (`own`) apart. What changed is a
-# property an HQ rule gave a control of the viewer's.
-_REFERENCE_CONTROLS = (
-    "([root, tags, own]) => {"
+# Every element the viewer draws, and the boxes it draws before and after
+# one, read as HQ's sheets have them (`sheets`, the stylesheet's links), then
+# again with every rule of those sheets held to the elements outside the
+# viewer: each selector, nested ones included, is told `:not(<root> *)` and
+# put back after. Nothing outside the viewer changes, so what changed inside
+# is a property an HQ rule gave the viewer's markup, named with the element and
+# each HQ rule that matches it and says that property (or every one that
+# matches, where the property is set by a shorthand with a var() in it).
+# Transitions are stopped while it reads, so a change is read at once.
+_REFERENCE_REACHED = (
+    "([root, sheets]) => {"
     + DESCRIBE
     + r"""
-  const controls = [...document.querySelector(root).querySelectorAll(tags.join(', '))];
-  const read = () => controls.map((el) => {
-    const style = getComputedStyle(el);
-    return Object.fromEntries([...style].filter((name) => !name.startsWith('--')).map((name) => [name, style.getPropertyValue(name)]));
-  });
-  const before = read();
-  const names = new RegExp(`(^|[^\\w-])(${tags.join('|')})(?![\\w-])`);
-  const strip = (list) => {
-    for (let i = list.cssRules.length - 1; i >= 0; i -= 1) {
-      const rule = list.cssRules[i];
-      if (rule instanceof CSSStyleRule && names.test(rule.selectorText)) list.deleteRule(i);
-      else if (rule.cssRules) strip(rule);
+  const split = (list) => {
+    const parts = [];
+    let depth = 0;
+    let start = 0;
+    for (let i = 0; i < list.length; i += 1) {
+      if ('(['.includes(list[i])) depth += 1;
+      else if (')]'.includes(list[i])) depth -= 1;
+      else if (list[i] === ',' && !depth) { parts.push(list.slice(start, i).trim()); start = i + 1; }
+    }
+    return [...parts, list.slice(start).trim()];
+  };
+  const PSEUDO = /(?:::[\w-]+(?:\([^)]*\))?|:(?:before|after|first-line|first-letter))+$/;
+  const subject = (part) => { const m = PSEUDO.exec(part); return m ? [part.slice(0, m.index), m[0]] : [part, '']; };
+  const rules = [];
+  const collect = (list) => {
+    for (const rule of list.cssRules) {
+      if (rule instanceof CSSStyleRule) rules.push(rule);
+      if (rule.cssRules) collect(rule);
     }
   };
-  [...document.styleSheets].filter((sheet) => sheet.href && new URL(sheet.href).pathname !== own).forEach(strip);
+  const app = [...document.styleSheets].filter((sheet) => sheet.href && sheets.includes(new URL(sheet.href).pathname));
+  app.forEach(collect);
+  const full = (rule) => {
+    const own = split(rule.selectorText);
+    if (!(rule.parentRule instanceof CSSStyleRule)) return own;
+    const parent = full(rule.parentRule).join(', ');
+    return own.map((part) => (part.includes('&') ? part.replaceAll('&', `:is(${parent})`) : `:is(${parent}) ${part}`));
+  };
+  const matches = (rule, el, pseudo) => {
+    try {
+      return full(rule).some((part) => {
+        const [base, own] = subject(part);
+        return (own && !own.startsWith('::') ? `:${own}` : own) === pseudo && el.matches(base || '*');
+      });
+    } catch { return false; }
+  };
+  const viewer = document.querySelector(root);
+  const els = [...viewer.querySelectorAll('*')];
+  // What any rule of HQ's says, but for one that says every property (`all`).
+  const names = [...new Set(rules.filter((rule) => !rule.style.getPropertyValue('all')).flatMap((rule) => [...rule.style]))].filter((name) => !name.startsWith('--'));
+  const pageSheet = [...document.styleSheets].find((sheet) => sheet.href && !app.includes(sheet));
+  const still = pageSheet.insertRule('*, ::before, ::after { transition: none !important; }', pageSheet.cssRules.length);
+  const read = () => els.map((el) => Object.fromEntries(['', '::before', '::after'].map((pseudo) => {
+    const style = getComputedStyle(el, pseudo || null);
+    return [pseudo, pseudo && style.content === 'none' ? ['none'] : names.map((name) => style.getPropertyValue(name))];
+  })));
+  const before = read();
+  const written = rules.map((rule) => rule.selectorText);
+  const unwritten = [];
+  rules.forEach((rule, i) => {
+    rule.selectorText = split(written[i]).map((part) => { const [base, pseudo] = subject(part); return `${base}:not(${root} *)${pseudo}`; }).join(', ');
+    if (rule.selectorText === written[i]) unwritten.push(written[i]);
+  });
   const after = read();
-  const changed = [];
-  controls.forEach((el, i) => {
-    for (const [name, value] of Object.entries(before[i])) {
-      if (after[i][name] !== value) changed.push(`${describe(el)} ${name}: ${value} (HQ's), ${after[i][name]} (the viewer's)`);
+  rules.forEach((rule, i) => { rule.selectorText = written[i]; });
+  pageSheet.deleteRule(still);
+  const reached = new Set();
+  els.forEach((el, i) => {
+    for (const [pseudo, values] of Object.entries(before[i])) {
+      const now = after[i][pseudo];
+      if (values.length !== now.length) {
+        reached.add(`${describe(el)}${pseudo} content: drawn by HQ's rules alone`);
+        continue;
+      }
+      values.forEach((value, j) => {
+        if (value === now[j]) return;
+        const matched = rules.filter((rule) => matches(rule, el, pseudo));
+        const saying = matched.filter((rule) => rule.style.getPropertyValue(names[j]) !== '');
+        const by = (saying.length ? saying : matched).map((rule) => rule.selectorText).join(' | ');
+        reached.add(`${describe(el)}${pseudo} ${names[j]}: ${value} (HQ's), ${now[j]} (the viewer's), by ${by}`);
+      });
     }
   });
-  return {controls: controls.length, changed: [...new Set(changed)].slice(0, 40)};
+  return {elements: els.length, unwritten, reached: [...reached].slice(0, 40)};
 }"""
 )
 
@@ -929,6 +987,29 @@ class ReferenceBrowserTests(BrowserGate):
         self.assertEqual([url for url in self.requests if not url.startswith(ORIGIN)], [])
         self.assertEqual(self.refused, [])
 
+    def test_no_engine_refuses_a_style_the_viewer_writes(self):
+        """In each engine a browser leg draws in, the reference drawn whole in
+        both themes is refused nothing by its policy, which admits the
+        <style> elements the bundle writes without a nonce."""
+
+        own = type(self).browser
+        for engine in GATE_ENGINES:
+            self.browser = own if engine == own.browser_type.name else getattr(self.playwright, engine).launch()
+            # Closed once the subtest is over, so a failure is shot first.
+            try:
+                with self.subTest(engine=engine):
+                    self.start()
+                    for name in (REFERENCE, REFERENCE_DARK):
+                        self.visit(WIDE, name)
+                        self.assertEqual(draw_whole_reference(self.page), 0)
+                    self.assertEqual(self.refusals_so_far(), [])
+            finally:
+                self.close_context()
+                self.context = None
+                if self.browser is not own:
+                    self.browser.close()
+                self.browser = own
+
     def assert_read_whole(self):
         """No text the viewer draws is cut short, marked with an ellipsis or
         not, nothing scrolls sideways, and a path starts a new line only at a
@@ -962,22 +1043,22 @@ class ReferenceBrowserTests(BrowserGate):
         self.assertTrue(drawn)
         self.assertEqual(sorted(named & drawn), [])
 
-    def assert_own_controls(self):
-        """No element rule of HQ's (a button's raised box, a field's height, a
-        link's color) reaches a button, field or link the viewer draws: with
-        every one of those rules taken out of HQ's sheets, every control is
-        drawn as it was. It takes HQ's rules out of the page, so it is read
-        last."""
+    def assert_drawn_by_the_viewer_alone(self):
+        """No rule of HQ's stylesheet reaches an element the viewer draws (an
+        element rule, or a class of HQ's whose word the viewer also uses): with
+        every one of them held to the page outside the viewer, every element
+        and every box drawn before or after one is drawn as it was."""
 
-        own = static("css/api-reference.css")
-        reached = self.page.evaluate(_REFERENCE_CONTROLS, [SELECTORS["reference"], list(_CONTROLS), own])
-        self.assertGreater(reached["controls"], 100)
-        self.assertEqual(reached["changed"], [])
+        sheets = [static(sheet) for sheet in SHEETS]
+        reached = self.page.evaluate(_REFERENCE_REACHED, [SELECTORS["reference"], sheets])
+        self.assertGreater(reached["elements"], 100)
+        self.assertEqual(reached["unwritten"], [])
+        self.assertEqual(reached["reached"], [])
 
     def test_the_reference_opened_whole_reads_whole(self):
         """The reference opened once, every tag as a reader opens it, read at
         each width: whole in both palettes, at the widest each field by its
-        type, and last, at the phone, the viewer's controls its own."""
+        type and the viewer's markup drawn by its own rules alone."""
 
         opened = every_tag(self.document)
         self.visit(WIDTHS[0])
@@ -990,12 +1071,10 @@ class ReferenceBrowserTests(BrowserGate):
                 self.assertEqual(undrawn, [])
                 self.assert_read_whole()
                 if width == WIDE:
+                    with self.subTest(check="the viewer's markup is drawn by its own rules alone"):
+                        self.assert_drawn_by_the_viewer_alone()
                     with self.subTest(check="a field reads by its type"):
                         self.assert_fields_read_by_type()
-        with self.subTest(check="the viewer draws its own controls"):
-            self.page.set_viewport_size({"width": REFERENCE_PHONE, "height": 900})
-            self.settle()
-            self.assert_own_controls()
 
     def test_a_path_starts_a_line_only_at_a_mark(self):
         """A hyphenated path starts each line at a mark, never after a hyphen;
