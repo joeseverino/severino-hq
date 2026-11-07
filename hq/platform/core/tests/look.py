@@ -675,6 +675,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     # Whether the page open is the API reference with its viewer drawn, as
     # ``open`` finds it.
     on_reference = False
+    # Whether the run takes its screenshots, as ``asked_for`` decides.
+    shooting = True
 
     # What the run was asked and the base it is held to, set once by `setUpClass`.
     tree: str
@@ -883,6 +885,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         unanswered = [f"{name} answered {status}, not 200" for name, status in self.unanswered_pages.items()]
         base = f", the base's in {_shown(this_run() / BASE_OUT)}/" if self.base is not None else ""
         shots = f"Screenshots in {_shown(this_run())}/{base}"
+        if not self.shooting:
+            shots = f"Findings in {_shown(this_run())}/, no screenshots: --shots takes them"
         # Last, as it voids every verdict before it.
         changed = [moved] if (moved := changed_since(self.tree, Path(settings.BASE_DIR))) else []
         print(*printed, *unanswered, shots, *changed, sep="\n", flush=True)
@@ -934,6 +938,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         rule = self.rule_asked()
         self.css = _css(_asked().text("css"))
         self.script = _script(_asked().text("eval"))
+        # A run that judges is read by its findings, and a shot and its bands
+        # cost more than the rule that reads the page, so it shoots only when
+        # asked or when what it was asked reads the shots: a base's are kept
+        # beside this run's, and --eval and --operation name the band that
+        # shows what they point at.
+        asked = _asked()
+        self.shooting = not rule or asked.switch("shots") or any(map(asked.text, ("base", "eval", "operation", _SHOTS)))
         self.dialogs = _listed("dialog")
         unnamed = [dialog for dialog in self.dialogs if not re.fullmatch(r"[\w-]+", dialog)]
         self.assertFalse(unnamed, f"--dialog takes dialog ids (connection) or all, not {unnamed}")
@@ -1292,9 +1303,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         holds, from the top of ``frame``'s scrolled content, or the page's).
         The page is settled after the script, so the shot draws what it
         changed. One that throws says so and the look goes on. ``--probe``
-        reads the page the shot drew. What ``take`` said each file holds."""
+        reads the page the shot drew. What ``take`` said each file holds; a
+        run that takes no shots (``shooting``) runs only ``--probe``."""
 
         where = f"{name} {shows}" if shows else name
+        if not self.shooting:
+            if self.probe:
+                self.probe_beside(name, width, state, where)
+            return []
         threw, returned = self.evaluate_script(where, width) if self.script else ("", None)
         if self.script:
             self.settle()
@@ -1304,9 +1320,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             said = threw or _evaluated(where, width, _placed(returned, boxes, bands))
             self.keep_beside(name, width, state, "eval", said)
         if self.probe:
-            [outcome] = self.outcomes([(self.probe_source, self.probe_arg)])
-            self.keep_beside(name, width, state, "probe", _probed(where, width, self.probe, outcome))
+            self.probe_beside(name, width, state, where)
         return bands
+
+    def probe_beside(self, name, width, state, where):
+        """``--probe`` run on the page as it stands, and what it said kept beside the shot."""
+
+        [outcome] = self.outcomes([(self.probe_source, self.probe_arg)])
+        self.keep_beside(name, width, state, "probe", _probed(where, width, self.probe, outcome))
 
     def keep_beside(self, name, width, state, kind, said):
         """What ``--eval`` or ``--probe`` said of one shot, printed with the

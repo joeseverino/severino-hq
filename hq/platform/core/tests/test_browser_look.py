@@ -302,6 +302,7 @@ class _Looker:
     with_each_dialog = look.Look.with_each_dialog
     look = look.Look.look
     css, script, dialogs, on_reference = "", "() => document.title", [], False
+    shooting = True
     probe = probe_source = ""
     probe_arg = None
 
@@ -365,6 +366,42 @@ class EvalOrderTests(SimpleTestCase):
         self.assertEqual(probes, [("(selector) => []", ".example")])
         self.assertIn("SIDEWAYS", kept)
         self.assertIn(kept.strip(), printed.getvalue())
+
+
+@tag("source")
+class ShootingTests(SimpleTestCase):
+    def shooting(self, **asked):
+        looker = _Looker(_Drawing())
+        given = {f"usage_{name}": value for name, value in asked.items()}
+        with mock.patch.dict(os.environ, {**ASKED, **given}, clear=True):
+            looker.asked_for()
+        return looker.shooting
+
+    def test_a_run_that_judges_shoots_only_when_asked_or_when_what_it_was_asked_reads_the_shots(self):
+        self.assertTrue(self.shooting())
+        self.assertFalse(self.shooting(rule="survey", shots="false"))
+        self.assertTrue(self.shooting(rule="survey", shots="true"))
+        self.assertTrue(self.shooting(rule="survey", base="HEAD"))
+        self.assertTrue(self.shooting(rule="survey", eval="pyproject.toml"))
+        self.assertTrue(self.shooting(rule="survey", operation="GET /api/v2/"))
+        # The base a look against one runs, which keeps its shots beside this run's.
+        self.assertTrue(self.shooting(rule="survey", shots_into="var/look/example/base"))
+
+    def test_a_run_that_takes_no_shots_takes_none_and_still_says_what_its_probe_found(self):
+        def take():
+            raise AssertionError("shot a run that takes none")
+
+        with (
+            tempfile.TemporaryDirectory() as out,
+            mock.patch.object(look, "this_run", lambda: Path(out)),
+            mock.patch.dict(os.environ, ASKED),
+            mock.patch("sys.stdout", new_callable=io.StringIO),
+        ):
+            looker = _Looker(_Drawing())
+            looker.shooting = False
+            looker.probe, looker.probe_source, looker.probe_arg = "SIDEWAYS", "(selector) => []", ".example"
+            self.assertEqual(looker.take_shot("example", 402, take), [])
+            self.assertIn("SIDEWAYS", (Path(out) / "example-402.probe.txt").read_text(encoding="utf-8"))
 
 
 class _Dialogs:
@@ -452,6 +489,7 @@ class _Opener:
     close_dialog = look.Look.close_dialog
     take_shot = look.Look.take_shot
     script = probe = ""
+    shooting = True
 
     def __init__(self, page, dialogs):
         self.page, self.dialogs, self.shots = page, dialogs, []
@@ -873,6 +911,7 @@ class _Unanswered:
     """A look whose estate page answered 404, closing with no rule and no base."""
 
     close = look.Look.close
+    shooting = True
 
     def __init__(self):
         self.base, self.base_errors, self.errors = None, {}, {("estate/example", 402): []}
