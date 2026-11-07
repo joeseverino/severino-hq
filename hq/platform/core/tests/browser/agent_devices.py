@@ -1,7 +1,7 @@
 """The Agents page in a real browser: a device waiting for the person is
 approved from its prompt, then blocked from its row, each press answered by
-the page HQ draws after it; and each agent's open update streams drawn on its
-row, warned of only at the cap."""
+the page HQ draws after it; and each agent's open update streams said in its
+row's detail, warned of in the row only at the cap."""
 
 from typing import override
 from urllib.parse import parse_qs, urlsplit
@@ -40,7 +40,7 @@ class AgentDeviceBrowserTests(BrowserGate):
             client = Client()
             sign_in(client, owner)
             cls.page_path = reverse("agent_policy")
-            pk = AgentDevice.objects.get(identity__client_id=ASSISTANT).pk
+            pk = AgentDevice.objects.get(identity__client_id=ASSISTANT, person=owner).pk
             cls.device, cls.anchor = str(pk), device_anchor(pk)
             before = answered(client.get(cls.page_path, secure=True, **REQUEST))
             cls.after = {}
@@ -102,17 +102,23 @@ class AgentDeviceBrowserTests(BrowserGate):
         self.assertEqual(self.row().get_attribute("data-device-standing"), "blocked")
         self.assertEqual(self.row().get_by_role("button", name=capability_words(BLOCK_AGENT_DEVICE, "off")).count(), 1)
 
-    def test_an_agents_open_streams_are_on_its_row_and_warned_of_only_at_the_cap(self):
+    def test_a_full_set_of_streams_is_warned_of_in_its_row_and_open_ones_are_said_in_the_detail(self):
         self.page.goto(f"{ORIGIN}{self.page_path}", wait_until="load")
 
-        drawn = self.page.locator(SELECTORS["agent_streams"]).all()
+        def drawn(selector):
+            # A row names its agent as client@person, so the client is what is compared.
+            return {
+                element.evaluate("element => element.closest('[data-agent]').dataset.agent").partition("@")[0]: (
+                    element.get_attribute("data-streams")
+                )
+                for element in self.page.locator(selector).all()
+            }
 
-        found = {
-            element.evaluate("element => element.closest('[data-agent]').dataset.agent"): element.get_attribute(
-                "data-streams"
-            )
-            for element in drawn
-        }
-        self.assertEqual(found, {AGENT: "open", ASSISTANT: "full"}, "an agent holding none shows nothing more")
-        for element in drawn:
-            self.assertTrue(element.is_visible(), "the streams show without opening the row")
+        self.assertEqual(drawn(SELECTORS["agent_streams"]), {ASSISTANT: "full"}, "only a full set is in the row's cell")
+        self.assertEqual(
+            drawn(SELECTORS["agent_streams_detail"]),
+            {AGENT: "open"},
+            "an agent holding none shows nothing more",
+        )
+        for element in self.page.locator(SELECTORS["agent_streams"]).all():
+            self.assertTrue(element.is_visible(), "a full set shows without opening the row")

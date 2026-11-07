@@ -61,7 +61,7 @@ The project's agent and skills, and a pass: [AI](docs/AI.md).
   `hq/platform/application/tables.py`, and the matching `hq_sdk.*` modules are
   the shared frontend contract.
 - The machine API's current contract is `/api/v2/`. Writes are capability
-  authorized, schema validated, transactionally audited, and idempotent.
+  authorized, schema validated and transactionally audited.
 
 Detail: [Architecture](docs/Architecture.md), [Plugins](docs/Plugins.md),
 [API](docs/API.md).
@@ -74,10 +74,12 @@ repository names none of them: not their inventory, repository
 identifiers, routes, models, fixtures or vocabulary. Examples and tests use
 the synthetic `example.*` namespace.
 
-A host that names an extension has taken a dependency on it. The properties
-this design exists for then quietly stop being true: add an extension without
-touching the host, run the host with none installed, develop the two on
-independent schedules.
+A host that names an extension has taken a dependency on it, and loses what
+this design exists for:
+
+- an extension is added without touching the host;
+- the host runs with none installed;
+- the two are developed on independent schedules.
 
 Runtime-supplied composition metadata is the only place the real installed
 set meets the host; two tests in `hq/platform/application/tests/test_plugins.py`
@@ -127,6 +129,10 @@ architecture test, a glob) fails when its path matches nothing.
   own.
 - Every mutation is atomic and audit-attributed. Machine writes are safely
   retryable with durable idempotency.
+- Money computed in the database (a `GeneratedField`, an annotation) works
+  in whole cents, exact integers, and rounds there, as
+  `business_use.deductible` does: SQLite holds a decimal as a double, where a
+  half cent is inexact. A test holds it to `quantize_money` over every cent.
 - A change to `hq_sdk`'s shape (`hq_sdk/contract.json`) is a fleet change:
   decide whether `PLUGIN_API_VERSION` moves, and give a new export a case in
   `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).

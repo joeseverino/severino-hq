@@ -484,8 +484,10 @@ starts a process or sleeps. While a request is served, that event raises
 `OutboundInRequest`, so the call never leaves.
 
 A place a request must wait is a named entry in `ALLOWED` with its reason,
-entered with `allowed("name")`. There are two: signing in (bounded by
-`OIDC_TIMEOUT`), and a public lookup an operator asked for by name.
+entered with `allowed("name")`. There are three: signing in (bounded by
+`OIDC_TIMEOUT`), a public lookup an operator asked for by name, and the
+question to tailscaled on HQ's own host of which tailnet device sent an
+agent's call ([Security](Security.md), devices).
 `RequestNeverWaitsTests` holds the entries to their places.
 
 The setting `SEVERINO_OUTBOUND_IN_REQUEST = "report"` logs
@@ -503,6 +505,23 @@ and a job's work held, so the time is the request's own.
 `hq/platform/core/tests/test_action_budgets.py` pins each converted action's
 queries at two estate sizes, and asserts it answers before the work it asked
 for.
+
+### An agent's call
+
+Each MCP request runs its synchronous work on a thread of its own, as
+Django's handler gives each web request, so one slow call never queues
+another agent's. The door enters `thread_of_its_own`
+(`hq/platform/core/outside_requests.py`), the one way HQ's work outside
+Django's request cycle gets that thread and its connections checked before
+and closed after; `lint:ast-grep` holds that nothing else does it. A listen
+stream gives its request's thread and connections back once admitted, so an
+open stream holds neither; its brakes each borrow a thread for the moment
+they are asked. The agent limits' counts are kept in the serving process's
+memory, and the listen bus (`hq/platform/mcp/listen.py`) reaches every stream
+from there, which is right only while the image serves from one process
+(`test_one_serving_process.py`); an agent not calling holds nothing there.
+The Agents page reads each agent's open streams from those counts, and says
+when it holds all of them, since its next is refused `too_many_calls`.
 
 ## Search
 
