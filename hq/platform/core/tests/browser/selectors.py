@@ -222,6 +222,9 @@ SELECTORS = {
     "chart_tab": ".chart-tablist > .chart-tab",
     "chart_tab_input": ".chart-tab-input",
     "chart_panel": ".chart-tabs .chart-panel",
+    # A drawing: every chart, trend, bar and calendar a page draws, an icon
+    # aside.
+    "drawing": "main svg:not(.icon), table.activity-calendar",
     "dialog": 'dialog.modal[id^="modal-"]',
     "dialog_opener": '[data-modal-open], [aria-haspopup="dialog"][aria-controls]',
 }

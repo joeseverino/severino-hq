@@ -72,8 +72,8 @@ class Dots:
 class Trend:
     """A figure's recent readings, oldest first, drawn as a line beside it.
 
-    A direction, shown where the card has room; the figure and its note still
-    carry the numbers. ``tips`` says what each reading is when pointed at, in
+    A direction, beside the value or under it where the card is narrow; the
+    figure and its note still carry the numbers. ``tips`` says what each reading is when pointed at, in
     the domain's own words (its date, its amount); without them a point names
     its bare number.
     """

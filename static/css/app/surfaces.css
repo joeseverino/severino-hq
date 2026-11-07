@@ -74,8 +74,9 @@
   }
   /* What a figure looks like, beside it: dots for a part of a whole, a line
      for a direction. A filled dot is solid and an empty one is a ring, so the
-     count does not rest on color. The line takes the room the value leaves
-     and is drawn only in a card wide enough to give it some. */
+     count does not rest on color. The line takes the room the value leaves,
+     or the line under the value where less is left than a direction reads in,
+     so it is drawn at any width. */
   /* The gap keeps a short value's hit area and the first dot's apart
      (page.css), beside it or under it. Dots that do not fit beside the value
      take the line under it, so they never reach past the figure's column, and
@@ -100,15 +101,12 @@
   a.kpi-dot:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
   .kpi a.value { color: inherit; text-decoration: none; }
   .kpi a.value:hover { text-decoration: underline; }
-  .kpi-trend { display: none; flex: 1 1 0; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
+  .kpi-trend { flex: 1 1 6rem; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
   .kpi-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   .kpi-trend-hit { fill: transparent; }
   .kpi-trend-dot { stroke: var(--accent); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0; pointer-events: none; }
   .kpi-trend-dot.is-latest, .kpi-trend-hit:hover + .kpi-trend-dot { opacity: 1; }
   .kpi-grid.is-featured > :first-child .kpi-trend { height: 40px; }
-  @container kpi (min-width: 340px) {
-    .kpi-trend { display: block; }
-  }
 
   /* The contributor's first of four figures leads the overview. The same
      values and links appear once; supporting facts form a compact second row. */

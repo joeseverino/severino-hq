@@ -15,7 +15,7 @@ from django.utils.html import escape
 
 from hq.platform.application import calendar
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
-from hq.platform.application.drawings import AllocationBar, Share
+from hq.platform.application.drawings import AllocationBar, Share, Trend
 from hq.platform.application.pages import Page, PageAction
 from hq.platform.application.ui import (
     ActivityCalendar,
@@ -27,7 +27,7 @@ from hq.platform.application.ui import (
 )
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
 lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 
 
@@ -57,6 +57,14 @@ HEAD = "partials/_page_head.html"
 _ONE_LINE = """(values) => [...document.querySelectorAll(values)]
   .filter((value) => Math.round(value.getBoundingClientRect().height / parseFloat(getComputedStyle(value).lineHeight)) < 2)
   .map((value) => value.textContent.trim())"""
+
+
+# Each drawing with no box of its own while the box that holds it has one.
+_UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
+  const held = drawing.parentElement.getBoundingClientRect();
+  const drawn = drawing.getBoundingClientRect();
+  return held.width > 0 && held.height > 0 && (drawn.width < 1 || drawn.height < 1);
+}).map((drawing) => drawing.outerHTML.slice(0, 120))"""
 
 
 def _holding(entry: CalendarEvent) -> Callable[[date, date], tuple[CalendarEvent, ...]]:
@@ -318,6 +326,22 @@ CATALOG = {
         {"items": [Kpi("Example range", "10.5–12.5 mi"), Kpi("Example phrase", "up to 2 a week")]},
         premise=(_ONE_LINE, SELECTORS["figure_value"]),
     ),
+    # A domain's overview as the dashboard draws it, its lead figure with the
+    # line of its recent readings beside it.
+    "part/figure-trend": Entry(
+        '<div class="dashboard-highlights">{% section "Example overview" css="highlight-card" %}'
+        '{% include "partials/_kpi_grid.html" with featured=True %}{% endsection %}</div>',
+        {
+            "items": [
+                Kpi(
+                    "Example balance", "$12,480", "Across every example account", drawing=Trend((9.0, 11.0, 10.0, 12.5))
+                ),
+                Kpi("Example income", "$4,200"),
+                Kpi("Example spending", "$3,100"),
+                Kpi("Example saved", "26%"),
+            ]
+        },
+    ),
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
     "part/month-gone-by": Entry(
@@ -448,6 +472,18 @@ class CatalogLayoutTests(LayoutBrowserTests):
                 self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
                 self.in_scheme("light")
                 self.hold(name, width, [self.open_every_disclosure, self.every_layout_check_holds], disclosures="open")
+
+    def test_every_drawing_is_drawn_on_a_phone(self):
+        """A chart, a trend, a bar or a calendar is drawn wherever what holds
+        it is: on a phone a drawing hidden for want of room is a figure that
+        shows nothing, when the table beside it or the line under it has the
+        room to show it."""
+
+        for name in CATALOG:
+            if not self.loaded(name, PHONE_SCREEN[0]):
+                continue
+            with self.subTest(page=name):
+                self.assertEqual(self.read([(_UNDRAWN, SELECTORS["drawing"])])[0], [])
 
     def draws_the_state_it_stands_for(self, name):
         if premise := CATALOG[name].premise:
