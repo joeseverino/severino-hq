@@ -100,9 +100,9 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 .name-line { display: grid; grid-auto-flow: column; justify-content: start; align-items: center; gap: var(--space-4); }
 /* There the name is one token, never broken: cut on the link itself where its row has no more room, holding out for a few characters (`--cut-floor`, tables.css) with a pixel of slack as code's chip has. */
 .data-table td .name-line > strong { display: grid; grid-template-columns: minmax(0, max-content); min-width: var(--cut-floor); }
-/* A clamped name shows two lines whatever its width, so it asks no more than its column's share (`--hold`, tables.css); a name the cell cuts asks for its whole length, and its longest word is its least so the table never counts as fitting while a word breaks. */
+/* A clamped name asks for its whole length, so it takes the room its row has and is clamped only past it, and its longest word is its least so the table never counts as fitting while a word breaks. */
 .data-table td :is([data-entity], .cell-line):not(strong > *, .row-gutter > *, :has(> code), :has(> .token[data-sole] > .cut), :has(> .cut)) {
-  max-width: var(--hold); min-width: min-content;
+  min-width: min-content;
   .row-detail & { min-width: 0; }
 }
 .data-table td [data-entity]:has(> .token[data-sole] > .cut)::after { align-self: end; }

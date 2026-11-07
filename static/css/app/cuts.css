@@ -106,9 +106,10 @@
   max-width: 100%;
   & > .whole { vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }
-/* A line clamped to a preview (`.table-clamp`) is cut by its clamp, and WebKit draws a grid on a line past the clamp, so there a part is an inline box held to its column's share. */
+/* A line clamped to a preview (`.table-clamp`) is cut by its clamp, and WebKit draws a grid on a line past the clamp, so there a part is an inline box held to its column's share; outside a narrow box a column may be wider than its share, and the part takes its whole line there, so it is cut only where longer than its cell. */
 .data-table td .table-clamp .token:not([data-sole]) > .whole:not(code *, [data-entity] *, .cut *) {
   display: inline-block; max-width: var(--hold); vertical-align: top; overflow: hidden; text-overflow: ellipsis;
+  .data-table:not([data-narrow]) > tbody > tr > td & { max-width: max(var(--hold), 100%); }
 }
 /* The muted line under a row's name: one line. */
 .data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
