@@ -112,6 +112,12 @@ it. Nothing under `.claude/worktrees`, `.venv` or `var/` does, so another
 worktree's edits leave it running. The extension set is the one
 `mise.local.toml` names ([The extension set](#the-extension-set)).
 
+A server migrates its database before it starts, and each worker a reload
+starts applies the migrations it ships that the database has not recorded
+before it serves (`hq/config/dev_asgi.py`, the application factory Uvicorn
+loads), as the container migrates at boot. A landing that adds a migration
+needs no restart.
+
 Only `dev` reads `dev.local.toml`, and a new worktree does not copy it, so the
 others never take its bind or database. Each checkout has its own scratch
 database, so servers in different worktrees run side by side; a second server

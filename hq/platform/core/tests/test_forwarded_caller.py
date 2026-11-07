@@ -263,12 +263,18 @@ class ServerReadsNoForwardedHeadersTests(SimpleTestCase):
     def test_every_launch_of_the_application_turns_it_off(self):
         root = Path(settings.BASE_DIR)
         launches = {
-            "Dockerfile": (root / "Dockerfile").read_text(encoding="utf-8").replace("\\\n", ""),
-            "tools/dev/dev.sh": (root / "tools/dev/dev.sh").read_text(encoding="utf-8"),
+            "Dockerfile": (
+                (root / "Dockerfile").read_text(encoding="utf-8").replace("\\\n", ""),
+                "hq.config.asgi:application",
+            ),
+            "tools/dev/dev.sh": (
+                (root / "tools/dev/dev.sh").read_text(encoding="utf-8"),
+                "hq.config.dev_asgi:migrated_application",
+            ),
         }
-        for name, text in launches.items():
+        for name, (text, served) in launches.items():
             with self.subTest(launch=name):
-                lines = [line for line in text.splitlines() if "hq.config.asgi:application" in line]
+                lines = [line for line in text.splitlines() if served in line]
                 self.assertTrue(lines, f"{name} no longer launches the application")
                 for line in lines:
                     self.assertIn("--no-proxy-headers", line)
