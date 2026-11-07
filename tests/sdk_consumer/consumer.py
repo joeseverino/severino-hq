@@ -8,7 +8,7 @@ able to make carries the error mypy reports for it. ``warn_unused_ignores``
 fails the gate the day one of those stops being an error.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import AbstractContextManager
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -19,8 +19,10 @@ from django.db import models
 from django.http import HttpRequest, HttpResponse
 from django.urls import reverse_lazy
 from django.utils.functional import Promise
+from django.utils.safestring import SafeString
 
 from hq_sdk import (
+    audit,
     capabilities,
     connections,
     demo,
@@ -113,6 +115,11 @@ def sentences(registrar: str) -> None:
 
     ui.ended(None)  # type: ignore[arg-type]
     assert_type(ui.dotted(registrar, 3, None), str)
+    assert_type(ui.status_pill("Renewing", registrar, tone="attention", title=registrar), SafeString)
+    ui.status_pill("Renewing", tone=3)  # type: ignore[arg-type]
+    # The same state as its words in its tone, with no pill around them.
+    assert_type(ui.status_pill("+3 bpm", tone="good", pill=False), SafeString)
+    ui.status_pill("+3 bpm", pill="no")  # type: ignore[arg-type]
     assert_type(validation.sentence_closes("src"), list[str])
 
 
@@ -126,6 +133,15 @@ def the_demo(due: date, at: datetime) -> None:
     assert_type(demo.showing_demo(), bool)
 
     demo.amount(Decimal(1))  # type: ignore[call-arg]
+
+
+def a_demo_made_by_hand(at: datetime) -> None:
+    with audit.seeded_by_hand("/examples/notes/", at=at):
+        pass
+
+    audit.seeded_by_hand("/examples/notes/")  # type: ignore[call-arg]
+    audit.seeded_by_hand("/examples/notes/", at="2026-01-01")  # type: ignore[arg-type]
+    audit.seeded_by_hand("/examples/notes/", at)  # type: ignore[call-arg]
 
 
 def importing(progress: jobs.Progress) -> dict[str, Any]:
@@ -426,7 +442,7 @@ class WronglyDeclared(tables.TableListMixin):
 
 
 def a_column() -> None:
-    assert_type(tables.TableColumn("Cost", css="num-col").kind, str)
+    assert_type(tables.TableColumn("Cost", kind="numeric").kind, str)
     assert_type(tables.TableColumn("Note", drop=2).drop, int)
     tables.TableColumn("Note", drop="2")  # type: ignore[arg-type]
 
@@ -531,6 +547,17 @@ def an_attention_url() -> None:
     plugin.PluginIntegration(attention=tuple, attention_url="/x/")  # type: ignore[arg-type]
 
 
+def a_demo() -> None:
+    # The records the showcase writes for an extension, and a page of each kind.
+    def plant(owner: object) -> None:
+        return None
+
+    integration = plugin.PluginIntegration(demo_seed=plant, demo_pages=lambda: ("/examples/notes/first/",))
+    assert_type(integration.demo_pages, Callable[[], Iterable[str]] | None)
+
+    plugin.PluginIntegration(demo_pages=("/examples/notes/first/",))  # type: ignore[arg-type]
+
+
 def a_gated_insight() -> None:
     # An item about what only some capabilities may read names them; left
     # out, every reader of the queue is shown it.
@@ -545,6 +572,48 @@ def an_insight_about_one_part() -> None:
     about = ui.Insight("attention", "Finding", "Example is restarting", "", "", part="example-web")
     assert_type(about.part, str)
     ui.Insight("attention", "Finding", "Example", "", "", part=("example-web",))  # type: ignore[arg-type]
+
+
+def a_section(hosts: int) -> None:
+    # A page built in code draws the section a template writes as {% section %}:
+    # its body from a template, or its empty line when it has none.
+    part = ui.SectionPart("Hosts", count=hosts, template="example/_hosts.html", context={"hosts": ()})
+    assert_type(part.__html__(), SafeString)
+    assert_type(part.heading_id, str)
+    ui.SectionPart("Hosts", empty="No host yet.", fold=True, data={"fragment": "hosts"})
+    # Its empty line offers the link that fills it; its heading may name a
+    # moment, or be one.
+    ui.SectionPart("Hosts", empty="No host yet.", remedy_label="Add a host", remedy_url="/example/hosts/new/")
+    ui.SectionPart(moment=date(2026, 11, 1), when="month", template="example/_month.html")
+    # A tile that stands on its own draws its head inside its frame.
+    ui.SectionPart("Hosts", head="above", template="example/_hosts.html", context={"hosts": ()})
+    # Its foot says how to read the body, its aside links to the whole, and a
+    # drawing is a figure whose head is its caption.
+    ui.SectionPart("Hosts", foot="Counted daily.", template="example/_hosts.html", context={"hosts": ()})
+    ui.SectionPart("Hosts", more_label="View hosts", more_url="/example/hosts/", template="example/_hosts.html")
+    ui.SectionPart("Pace", figure=True, template="example/_pace.html")
+    ui.SectionPart("Pace", figure="yes")  # type: ignore[arg-type]
+    ui.SectionPart("Hosts", foot=("Counted daily.",))  # type: ignore[arg-type]
+    ui.SectionPart("Hosts", head=True)  # type: ignore[arg-type]
+    ui.SectionPart("Hosts", moment="2026-11-01")  # type: ignore[arg-type]
+    ui.SectionPart("Hosts", count=1.5)  # type: ignore[arg-type]
+    ui.SectionPart("Hosts", template=("example/_hosts.html",))  # type: ignore[arg-type]
+
+
+def an_allocation(cash: Decimal, owed: Decimal) -> None:
+    # Parts of one whole, each its own amount; the host draws the bar.
+    bar = ui.AllocationBar("Assets by kind", (ui.Share("Cash", float(cash), 1), ui.Share("Owed", float(owed), 2)))
+    assert_type(bar.parts, tuple[ui.Share, ...])
+    assert_type(bar.spoken, str)
+    ui.AllocationBar("Assets by kind", [ui.Share("Cash", 1.0, 1)])  # type: ignore[arg-type]
+    ui.Share("Cash", 1.0, "one")  # type: ignore[arg-type]
+    # A part its legend links onward, with its amount as the page says it.
+    owing = ui.Share("Owed", float(owed), 2, url="/example/?type=owed", detail=f"-${owed}", tone="attention")
+    assert_type(owing.url, str)
+    assert_type(owing.detail, str)
+    assert_type(owing.tone, str)
+    assert_type(bar.legend, tuple[tuple[ui.Share, str], ...])
+    ui.Share("Cash", 1.0, 1, url=None)  # type: ignore[arg-type]
 
 
 def a_list_with_its_own_fields(rows: Callable[..., dict[str, Any]]) -> None:

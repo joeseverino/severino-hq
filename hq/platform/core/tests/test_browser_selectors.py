@@ -12,10 +12,13 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.template import engines
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.page_parts import SectionPart
 from hq.platform.application.tests.facts import ROOT as FACTS_ROOT, STRING, TOP, grouped, scan, strings
 from hq.platform.core.stylesheets import stylesheet
+from hq.platform.core.templatetags.part_tags import SectionNode
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser_modules import browser_modules
 
@@ -66,6 +69,46 @@ def tokens(selector: str) -> set[tuple[str, str]]:
     )
 
 
+def _literal(expression) -> str:
+    """A tag argument written as a quoted string, or "" for anything the page supplies."""
+
+    if expression is None or expression.is_var or expression.filters:
+        return ""
+    return expression.var
+
+
+def generated_ids(source: str) -> set[str]:
+    """The ids the parts in a template draw that its source never writes: a
+    section's heading id, as ``{% section %}`` names it from the id or heading
+    the tag is given (``SectionPart.heading_id``), read from Django's own parse
+    of the tag. A section whose id and heading both come from the page names
+    an id no selector can know."""
+
+    ids = set()
+    for node in engines["django"].engine.from_string(source).nodelist.get_nodes_by_type(SectionNode):
+        named = _literal(node.kwargs.get("id"))
+        heading = _literal(node.args[0]) if node.args else ""
+        if named or heading:
+            ids.add(SectionPart(heading=heading or named, id=named).heading_id)
+    return ids
+
+
+def _template_markup(source: str, classes: set[str], ids: set[str], text: list[str]) -> None:
+    """Add one template's classes, ids and markup."""
+
+    text.append(source)
+    for value in re.findall(r'\bclass="([^"]*)"', source):
+        classes.update(value.split())
+    ids.update(re.findall(r'\bid="([^"{}]+)"', source))
+    ids.update(generated_ids(source))
+    # A card's class, id and data- attributes are its tag's options.
+    for options in re.findall(r"\{%\s*card\s([^%]*)%\}", source):
+        classes.update(("card", *" ".join(re.findall(r'\bcss="([^"]*)"', options)).split()))
+        ids.update(re.findall(r'\bid="([^"{}]+)"', options))
+        drawn = (name.replace("_", "-") for name in re.findall(r"\b(data_\w+)=", options))
+        text.append(f"<div {' '.join(drawn)}>")
+
+
 @cache
 def markup() -> tuple[set[str], set[str], str]:
     """(classes, ids, all markup text) across TEMPLATE_ROOTS and the tag libraries."""
@@ -75,23 +118,24 @@ def markup() -> tuple[set[str], set[str], str]:
     text = []
     for folder in TEMPLATE_ROOTS:
         for template in folder.rglob("*.html"):
-            source = template.read_text(encoding="utf-8")
-            text.append(source)
-            for value in re.findall(r'\bclass="([^"]*)"', source):
-                classes.update(value.split())
-            ids.update(re.findall(r'\bid="([^"{}]+)"', source))
-            # A card's class, id and data- attributes are its tag's options.
-            for options in re.findall(r"\{%\s*card\s([^%]*)%\}", source):
-                classes.update(("card", *" ".join(re.findall(r'\bcss="([^"]*)"', options)).split()))
-                ids.update(re.findall(r'\bid="([^"{}]+)"', options))
-                drawn = (name.replace("_", "-") for name in re.findall(r"\b(data_\w+)=", options))
-                text.append(f"<div {' '.join(drawn)}>")
+            _template_markup(template.read_text(encoding="utf-8"), classes, ids, text)
+    # The section part writes its landmark's class and attributes in code:
+    # each option that adds one, drawn by the part itself.
+    for part in (SectionPart(heading="Example", fold=True), SectionPart(heading="Example", head="above")):
+        opening = str(part._landmark(part.heading_id)["opening"])
+        text.append(opening)
+        for value in re.findall(r'\bclass="([^"]*)"', opening):
+            classes.update(value.split())
     for library in TAG_LIBRARIES.glob("*.py"):
         source = library.read_text(encoding="utf-8")
         # A tag library writes markup too: its attributes are rendered.
         text.append(source)
         for value in re.findall(r'\bclass="([\w\s{}-]*)"', source):
             classes.update(value.replace("{}", " ").split())
+        # One that sets its class as an attribute's value (status_tags'
+        # `classes`), its interpolations aside.
+        for value in re.findall(r'\bclasses = f?"([\w\s{}-]*)"', source):
+            classes.update(re.sub(r"\{\w*\}", " ", value).split())
     return classes, ids, "\n".join(text)
 
 
@@ -145,6 +189,17 @@ class SelectorExtractionTests(SimpleTestCase):
         self.assertFalse(rendered("class", "dashboard-board"))
         self.assertTrue(rendered("class", "dashboard-highlights"))
         self.assertTrue(rendered("attribute", "data-chart"))
+
+    def test_a_section_heading_id_the_part_draws_is_rendered(self):
+        """The example extension's ``{% section "Notes" id="example-notes" %}``
+        draws its heading's id; a heading with no id is named for its words."""
+
+        self.assertTrue(rendered("id", "example-notes-heading"))
+        self.assertEqual(
+            generated_ids('{% section "Open updates" %}x{% endsection %}{% section day id="day" %}x{% endsection %}'),
+            {"open-updates-heading", "day-heading"},
+        )
+        self.assertEqual(generated_ids("{% section day.name %}x{% endsection %}"), set())
 
 
 @tag("source", "tree")

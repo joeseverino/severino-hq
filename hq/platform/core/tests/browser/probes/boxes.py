@@ -1,6 +1,7 @@
 """Probes of boxes: what escapes the page, frames, overlaps, targets, the map and the chrome's insets."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # Nothing moves sideways except inside a box ``allowed`` selects: past the
 # page's edge it is cut off, and a box that clips or scrolls what it holds
@@ -197,7 +198,10 @@ SMALL_TARGETS = (
       const r = area(el);
       if (r.width >= least - .5 && r.height >= least - .5) sized.add(el);
     }
-    const region = (el) => el.closest('td, th, section, [role=region]');
+    // A table's box is its region, whatever role it carries.
+    const region = (el) => el.closest('td, th, """
+    + SELECTORS["table_scroll"]
+    + """, section, [role=region]');
     const standIn = (el) => {
       const named = document.getElementById(el.dataset.targetEquivalent || '');
       return Boolean(named && sized.has(named) && region(named) === region(el));
@@ -362,6 +366,145 @@ CRAMPED_HEADS = (
 )
 
 
+# What sits beside a section's heading keeps to one line while its row has
+# room for that line: a part of the head other than its heading that takes
+# more lines than it does with its wrapping held, when its one-line width fits
+# beside what shares its row with a pixel to spare (a line that fills its
+# room to a fraction of a pixel is as likely to wrap in one engine as not). The heading and its line under it give up room
+# down to their least width, which is what they keep beside it.
+ASIDES_WRAPPED_WITH_ROOM = (
+    "(selector) => {"
+    + DESCRIBE
+    + """
+  const held = (el, css, read) => {
+    const before = el.style.cssText;
+    el.style.cssText += css;
+    const value = read();
+    el.style.cssText = before;
+    return value;
+  };
+  const extent = (el) => {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    return range.getBoundingClientRect().width;
+  };
+  const isHeading = (el) => el.matches('h1, h2, h3, h4, h5, h6, hgroup');
+  const found = [];
+  for (const head of document.querySelectorAll('main ' + selector)) {
+    if (!head.checkVisibility()) continue;
+    const style = getComputedStyle(head);
+    const inner = head.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    const gap = parseFloat(style.columnGap) || 0;
+    const items = inFlow(head);
+    for (const [part, , r] of items) {
+      if (isHeading(part)) continue;
+      const [oneLine, oneLineHeight] = held(part, ';white-space: nowrap !important',
+        () => [extent(part), box(part).height]);
+      if (r.height <= oneLineHeight + 1) continue;
+      const beside = items.filter(([el, , o]) => el !== part && o.top < r.bottom && o.bottom > r.top);
+      const taken = beside.reduce((sum, [el, s, o]) => sum + (isHeading(el)
+        ? (s.minWidth === '0px' ? 0 : held(el, ';flex: none !important; inline-size: min-content !important', () => box(el).width))
+        : o.width) + gap, 0);
+      if (oneLine + 1 <= inner - taken) {
+        const words = part.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40);
+        found.push(`${describe(part)} "${words}" takes ${Math.round(r.height / oneLineHeight)} lines, its one line ${oneLine.toFixed(2)}px with ${(inner - taken).toFixed(2)}px of room`);
+      }
+    }
+  }
+  return found;
+}"""
+)
+
+
+# What a section's frame holds that draws its own edges, cells or fill
+# reaches the frame's sides, as a table's region does, rather than drawing a
+# box inside the box. A child of a section's body draws them when boxes it or
+# its descendants lay out as blocks (a cell, a row, a band's fact, never a
+# chip in a line of text) paint a border, a shadow or a fill at both of its
+# sides; what they paint must start and end at the frame's inner edges. A box
+# rounded at every corner (a code block, a callout) is a thing of its own the
+# frame's padding holds, never a cell. A
+# section in a section is part of the outer frame, so its body's children
+# are measured against that frame.
+INSET_IN_THE_FRAME = (
+    "(selector) => {"
+    + DESCRIBE
+    + """
+  const seen = (color) => color && !/^(transparent|rgba\\(.*,\\s*0\\))$/.test(color);
+  const paints = (el, style) => seen(style.backgroundColor) || style.backgroundImage !== 'none'
+    || style.boxShadow !== 'none'
+    || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
+      && style[`border${side}Style`] !== 'none' && seen(style[`border${side}Color`]));
+  const rounded = (style) => ['TopLeft', 'TopRight', 'BottomRight', 'BottomLeft']
+    .every((corner) => parseFloat(style[`border${corner}Radius`]) >= 2);
+  const frameOf = (body) => {
+    let frame = body;
+    for (let up = body.parentElement?.closest(selector); up; up = up.parentElement?.closest(selector)) {
+      if (parseFloat(getComputedStyle(frame).paddingLeft) > 0) break;
+      frame = up;
+    }
+    return frame;
+  };
+  const found = [];
+  for (const body of document.querySelectorAll('main ' + selector)) {
+    if (!body.checkVisibility()) continue;
+    const frame = frameOf(body);
+    const edges = getComputedStyle(frame);
+    const f = box(frame);
+    const inner = {left: f.left + parseFloat(edges.borderLeftWidth), right: f.right - parseFloat(edges.borderRightWidth)};
+    for (const [child, , c] of inFlow(body)) {
+      if ([...child.children].some((inner) => inner.matches(selector))) continue;
+      const painted = [child, ...child.querySelectorAll('*')].flatMap((el) => {
+        const style = getComputedStyle(el);
+        if (style.display.startsWith('inline') || style.display === 'contents' || !el.checkVisibility()) return [];
+        if (!paints(el, style) || rounded(style)) return [];
+        const r = box(el);
+        return r.width >= 1 && r.height >= 1 ? [r] : [];
+      });
+      if (!painted.some((r) => r.left <= c.left + 1) || !painted.some((r) => r.right >= c.right - 1)) continue;
+      const left = Math.min(...painted.map((r) => r.left));
+      const right = Math.max(...painted.map((r) => r.right));
+      const start = Math.round(left - inner.left);
+      const end = Math.round(inner.right - right);
+      if (start > 1 || end > 1) found.push(`${describe(child)} paints ${start}px and ${end}px inside its frame's sides`);
+    }
+  }
+  return found;
+}"""
+)
+
+
+# Sections that share a row start their frames together, whatever their heads
+# hold: two heads followed by their frames, side by side with their tops on
+# one line, are followed by frames whose tops are on one line too (a pixel
+# apart is the same line in one engine or another). A section whose head stands
+# inside its frame is framed by its landmark, the edge around head and body.
+FRAMES_OUT_OF_ROW = (
+    "([head, frame]) => {"
+    + DESCRIBE
+    + """
+  const sections = [...document.querySelectorAll('main ' + head)].flatMap((h) => {
+    const body = h.nextElementSibling;
+    if (!h.checkVisibility() || !body?.matches(frame) || !body.checkVisibility()) return [];
+    const enclosing = parseFloat(getComputedStyle(h.parentElement).borderTopWidth) > 0;
+    return [[h, box(h), box(enclosing ? h.parentElement : body)]];
+  });
+  const found = [];
+  sections.forEach(([a, ha, fa], at) => {
+    for (const [b, hb, fb] of sections.slice(at + 1)) {
+      if (Math.abs(ha.top - hb.top) > 1 || (ha.left < hb.right && hb.left < ha.right)) continue;
+      const apart = Math.abs(fa.top - fb.top);
+      if (apart > 1) {
+        const named = (h) => `${describe(h.parentElement)} "${h.textContent.trim().split(/\\s+/).slice(0, 4).join(' ')}"`;
+        found.push(`${named(a)} and ${named(b)} share a row, their frames ${apart.toFixed(1)}px apart`);
+      }
+    }
+  });
+  return found;
+}"""
+)
+
+
 # The map scrolls with the page, and draws no lane with nothing in it.
 MAP = """([map, lane, node]) => {
   const box = document.querySelector(map);
@@ -433,5 +576,73 @@ HEAD_CONTROLS = (
     if (row.some((r) => r.top >= row[0].bottom || r.bottom <= row[0].top)) found.push(`${name} wraps its controls onto two lines`);
   }
   return found;
+}"""
+)
+
+
+# A focus ring drawn whole: each control a reader can reach, focused, rings
+# outside its box (an outline, or a ring a box shadow spreads) as far as its
+# style says, and every box above it that clips what it holds (overflow,
+# `clip-path`) leaves that ring whole wherever the control itself is shown
+# whole. A hover ring is the same ring, so this reads both. A control cut by
+# what holds it is another check's; one scrolled out of its box is not seen.
+# The ring's reach is read from the control's own style while it is focused,
+# so a ring drawn inside its box reaches nowhere and is never cut. Only a
+# control a box clips near its edge is focused, the rest of the page is read
+# once, and focus is put back where it was.
+CUT_RINGS = (
+    "(selector) => {"
+    + DESCRIBE
+    + PAINTED_PART
+    + r"""
+  const found = [];
+  // Past this a ring would be drawn into its neighbors: no style reaches it.
+  const FAR = 8;
+  const grown = (r, by) => ({left: r.left - by, top: r.top - by, right: r.right + by, bottom: r.bottom + by});
+  const cutBy = (whole, shown) => ['left', 'top', 'right', 'bottom'].filter((side) =>
+    shown === null || Math.abs(shown[side] - whole[side]) > 0.5);
+  // A shadow around the box, not cast to one side: how far it spreads.
+  const spread = (shadow) => Math.max(0, ...shadow.split(/,(?![^(]*\))/)
+    .filter((one) => !/\binset\b/.test(one))
+    .map((one) => (one.replace(/[a-z-]+\([^)]*\)/g, '').match(/-?[\d.]+px/g) || []).map(parseFloat))
+    .filter(([x = 0, y = 0]) => x === 0 && y === 0)
+    .map(([, , blur = 0, size = 0]) => size + blur));
+  const reach = (style) => Math.max(
+    style.outlineStyle === 'none' ? 0 : parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth),
+    style.boxShadow === 'none' ? 0 : spread(style.boxShadow));
+  const near = [];
+  for (const el of document.querySelectorAll(selector)) {
+    if (!el.checkVisibility({visibilityProperty: true})) continue;
+    const r = box(el);
+    if (r.width < 1 || r.height < 1) continue;
+    const shown = painted(el, r);
+    if (!shown || cutBy(r, shown).length) continue;
+    const room = grown(r, FAR);
+    if (cutBy(room, painted(el, room, true)).length) near.push([el, r]);
+  }
+  const was = document.activeElement;
+  for (const [el, r] of near) {
+    el.focus({preventScroll: true});
+    if (document.activeElement !== el) continue;
+    const by = reach(getComputedStyle(el));
+    if (by <= 0) continue;
+    const ring = grown(r, by);
+    const sides = cutBy(ring, painted(el, ring, true));
+    if (!sides.length) continue;
+    let clips = null;
+    for (let up = el.parentElement; up && !clips; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      if (style.overflowX !== 'visible' || style.overflowY !== 'visible' || style.clipPath !== 'none') {
+        const b = up.getBoundingClientRect();
+        const inner = {left: b.left + up.clientLeft, top: b.top + up.clientTop};
+        const edge = {...inner, right: inner.left + up.clientWidth, bottom: inner.top + up.clientHeight};
+        if (style.clipPath !== 'none' || sides.some((side) => (side === 'left' || side === 'top') ? ring[side] < edge[side] - 0.5 : ring[side] > edge[side] + 0.5)) clips = up;
+      }
+    }
+    found.push(`${describe(el)}: its ${by}px ring is cut at its ${sides.join(', ')} by ${clips ? describe(clips) : 'a box above it'}`);
+  }
+  if (was && was !== document.body) was.focus({preventScroll: true});
+  else document.activeElement?.blur();
+  return [...new Set(found)];
 }"""
 )

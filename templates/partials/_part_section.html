@@ -1,0 +1,11 @@
+{% comment %}
+The section part (docs/Design.md, "A section is drawn by {% section %}"),
+drawn from a page_parts.SectionPart by {% section %} and by the part itself:
+the landmark, its head on the page, then in the frame its body and the foot
+that says how to read it or, with no body, its empty line and the link that
+fills it. A folded section's head is its toggle, and a figure's its caption.
+{% endcomment %}
+{{ opening|safe }}
+{% include "partials/_section_head.html" with heading=section.heading|breakable id=heading_id lede=section.lede count=section.count level=section.level aside=aside toggle=section.fold caption=section.figure moment=section.moment when=section.when only %}
+{% card element="div" css="section-body" %}{% if body %}{{ body|safe }}{% if foot %}<p class="section-foot">{{ foot|safe }}</p>{% endif %}{% else %}{% include "partials/_empty_state.html" with message=empty action_url=section.remedy_url action_label=section.remedy_label only %}{% endif %}{% endcard %}
+{{ closing|safe }}
