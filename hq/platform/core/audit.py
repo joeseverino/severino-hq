@@ -406,19 +406,20 @@ def _connection_of(extract: Callable[[Any], str] | None, instance) -> str:
         return ""
 
 
-def _subject_of(obj: Model | None) -> str:
-    """The key of the record a row about ``obj`` is about, or blank."""
+def subject_of(obj: Model | None) -> str | None:
+    """The key of the record a row about ``obj`` is about, in the words its
+    model registered (``register_audit``'s ``subject``), or None."""
 
     if obj is None:
-        return ""
+        return None
     extract = _SUBJECTS.get(type(obj))
     if extract is None:
-        return ""
+        return None
     try:
-        return str(extract(obj) or "")
+        return str(extract(obj) or "") or None
     except Exception:  # attribution never blocks the event
         logger.exception("Could not name the subject of an audited %s", type(obj))
-        return ""
+        return None
 
 
 def audit_events() -> QuerySet[AuditLog]:
@@ -509,7 +510,7 @@ def record_event(
     stamp = _stamp_context.get()
     stamps = (stamp(obj, action, object_type) if stamp is not None else None) or {}
     user = stamps.get("user", user)
-    subject = _subject_of(obj)
+    subject = subject_of(obj)
     # Facets first, so an explicit `metadata` key still wins.
     event_metadata = {
         "interface": context.interface,

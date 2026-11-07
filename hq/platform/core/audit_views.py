@@ -5,6 +5,7 @@ from typing import override
 from urllib.parse import urlencode
 lazy from datetime import date, datetime, time, timedelta
 
+from django.core.exceptions import ValidationError
 from django.core.paginator import Page, Paginator
 from django.db.models import BooleanField, ExpressionWrapper, F, Q
 from django.urls import reverse, reverse_lazy
@@ -15,7 +16,7 @@ from hq.platform.application import approvals, history
 from hq.platform.application.doors import door_words
 from hq.platform.application.labels import dotted
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.payload_words import STEP, path_words, value_words
+from hq.platform.application.payload_words import path_words, value_words
 from hq.platform.application.projection import day_span, projection_scope
 from hq.platform.application.record_timeline import record_timeline
 from hq.platform.application.security import Capability
@@ -28,6 +29,8 @@ from hq.platform.application.tables import (
 )
 lazy from hq.platform.application.approvals import AUDIT_LABELS, awaiting_ids
 
+from .audit import audited_labels, audited_subjects, subject_of
+from .audit_words import change_rows, words_of
 from .models import AuditLog
 
 # The toggles that bring the asks for a fresh reading, and the work HQ did on
@@ -227,13 +230,29 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
 _STATED_ABOVE = frozenset({"changes", "operation", "actor", "interface", "approved_by", "cause", "subject"})
 
 
-def operation_words(operation: str, interface: str) -> str:
-    """How an event's page names its operation: in the words that declared it,
-    else, for a request, as a request through its door, never by its route."""
+def operation_words(event: AuditLog) -> str:
+    """How an event's page names the operation ``event`` was written in: in the
+    words that declared it, else as a request through its door, never by its route."""
 
-    if not operation:
+    if not (event.metadata or {}).get("operation"):
         return ""
-    return history.operation_title(operation, interface) or f"A request {door_words(interface)}"
+    return words_of(event).title or f"A request {door_words(event.interface)}"
+
+
+def _subject(event: AuditLog) -> str:
+    """The key of the record ``event`` is about: the one it stored, else, for a
+    row written before rows named one, its object's while that object exists."""
+
+    if event.subject or not event.object_id:
+        return event.subject
+    labels = audited_labels()
+    for model in audited_subjects():
+        if labels[model] == event.object_type:
+            try:
+                return subject_of(model._default_manager.filter(pk=event.object_id).first()) or ""
+            except ValueError, ValidationError:  # an id its model's key cannot hold
+                return ""
+    return ""
 
 
 def about_url(key: str) -> str:
@@ -261,33 +280,8 @@ def _cause(event: AuditLog) -> tuple[str, str] | None:
     )
     if started is None:
         return None
-    metadata = started.metadata or {}
-    named = (
-        started.object_repr
-        if started.own_row and started.object_repr
-        else operation_words(str(metadata.get("operation") or ""), started.interface)
-    )
+    named = started.object_repr if started.own_row and started.object_repr else operation_words(started)
     return named or started.summary, reverse("core:audit_detail", args=[started.pk])
-
-
-def _change_rows(changes: dict) -> list[dict]:
-    """Field-level changes, as rows rather than as a blob of JSON.
-
-    A plain field is stored as its pair of values; a record or list as the
-    values in it that moved, each already in words, by where it is.
-    """
-
-    rows = []
-    for field, change in changes.items():
-        named = path_words((field,))
-        if isinstance(change, dict):
-            rows.extend(
-                {"field": f"{named}{STEP}{inner}" if inner else named, "before": pair[0], "after": pair[1]}
-                for inner, pair in change.items()
-            )
-        elif isinstance(change, list) and len(change) == 2:
-            rows.append({"field": named, "before": value_words(change[0]), "after": value_words(change[1])})
-    return rows
 
 
 class AuditLogDetailView(PageMixin, DetailView):
@@ -329,9 +323,9 @@ class AuditLogDetailView(PageMixin, DetailView):
         metadata = event.metadata or {}
         # What happened, and to what kind of thing, as the event's heading.
         context["event_heading"] = dotted(event.get_action_display(), event.object_type and event.type_label)
-        context["changes"] = _change_rows(metadata.get("changes") or {})
+        context["changes"] = change_rows(metadata.get("changes"))
         # The operation's name and id are one fact, stated in its own row.
-        context["operation"] = operation_words(str(metadata.get("operation") or ""), event.interface)
+        context["operation"] = operation_words(event)
         # A row about the operation itself has its id as its object's, already said there.
         context["operation_id"] = event.operation_id if event.operation_id != event.object_id else ""
         # Who acted is the Who row; the recorded actor is said beside it only where it differs.
@@ -341,8 +335,8 @@ class AuditLogDetailView(PageMixin, DetailView):
         approver = str(metadata.get("approved_by") or "")
         context["approved_by"] = approver if approver != event.actor_label else ""
         context["cause"] = _cause(event)
-        if event.subject:
-            context["about"] = (event.subject, about_url(event.subject))
+        if subject := _subject(event):
+            context["about"] = (subject, about_url(subject))
         # Everything else in the metadata, minus what those rows already say.
         context["extra"] = {
             path_words((key,)): value_words(value)

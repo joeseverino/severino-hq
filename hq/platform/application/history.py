@@ -36,6 +36,7 @@ from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 lazy from hq.domains.control_plane.models import ReadRequest
 lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
+lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
 
 from .entity_links import container_link
@@ -44,10 +45,8 @@ from .labels import lower_first, plural
 from .routes import reverse
 from .timestamps import moment
 from .ui import counted
-lazy from .capabilities import capability_registry, capability_title
 lazy from .glance import AUDIT_LABEL as DASHBOARD_AUDIT_TYPE
 lazy from .inventory import READING_AUDIT_TYPE
-lazy from .security import API_INTERFACE, WEB_INTERFACE
 
 # How far either side of a moment counts as near it.
 NEAR = timedelta(hours=6)
@@ -317,7 +316,7 @@ class HistoryLine:
         if head is not None:
             return head.object_repr or head.type_label, ""
         newest = self.events[0]
-        named = operation_title(str((newest.metadata or {}).get("operation") or ""), newest.interface)
+        named = words_of(newest).title
         if named:
             return named, ""
         # Nothing declared its words, so the event is named by what it changed.
@@ -378,20 +377,6 @@ class HistoryLine:
             else counted(count, "event")
             for kind, count in self.counts
         )
-
-
-def operation_title(operation: str, interface: str) -> str:
-    """What a person calls ``operation``, in the words of whatever declared it,
-    or nothing when nothing did.
-
-    A capability declares its title. A request through the web or the API is
-    named by its route, which is a name for code and declares no words, so a
-    request is told by what it changed instead.
-    """
-
-    if not operation or (interface in {WEB_INTERFACE, API_INTERFACE} and operation not in capability_registry()):
-        return ""
-    return capability_title(operation)
 
 
 def moments(*, since: datetime, until: datetime | None = None, limit: int = 200) -> tuple[Moment, ...]:

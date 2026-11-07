@@ -48,7 +48,7 @@ class RouteWordsGuard(SimpleTestCase):
             )
             # The history's words are read before the page's, which the base lacks a name for.
             self.assertUnworded(HistoryLine(timezone.now(), events=rows).title, forbidden, name, "history")
-            self.assertUnworded(audit_views.operation_words(name, interface), forbidden, name, "event page")
+            self.assertUnworded(audit_views.operation_words(rows[0]), forbidden, name, "event page")
 
     def assertUnworded(self, said: str, forbidden: set[str], route: str, place: str):
         for word in forbidden:

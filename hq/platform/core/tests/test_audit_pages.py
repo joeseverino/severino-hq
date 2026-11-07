@@ -10,11 +10,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.assets.models import Asset
+from hq.domains.control_plane.bridge_actions import ACTIONS
+from hq.domains.control_plane.models import ManagedResource
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.tests.markup import hrefs, text, within
-from hq.platform.core.audit import operation_context
+from hq.platform.core.audit import audited_labels, operation_context
 from hq.platform.core.models import AuditLog
 
 from .signed_in_case import _AuthedTestCase
@@ -157,6 +159,67 @@ class AuditDetailPageTests(_AuthedTestCase):
         # The object's own history is what folds; the rest of the operation stays open.
         (link,) = [each for each in inside if each.attrs.get("href") == reverse("core:audit_detail", args=[updated.pk])]
         self.assertTrue(any(ancestor is folded for ancestor in link.ancestors))
+
+    def test_a_row_written_before_rows_named_their_record_still_names_it(self):
+        resource = ManagedResource.objects.create(key="example-older", kind="example.record", spec={})
+        label = audited_labels()[ManagedResource]
+        older = AuditLog.objects.create(
+            action=AuditLog.Action.UPDATED, object_type=label, object_id=str(resource.pk), object_repr="example-older"
+        )
+
+        page = self.client.get(reverse("core:audit_detail", args=[older.pk]))
+
+        self.assertIn(f"{reverse('core:audit_list')}?about=example-older", hrefs(page))
+
+    def test_a_row_whose_record_is_gone_or_unreadable_names_none(self):
+        label = audited_labels()[ManagedResource]
+        for object_id in ("00000000-0000-7000-8000-000000000000", "not-a-key"):
+            with self.subTest(object_id=object_id):
+                row = AuditLog.objects.create(action=AuditLog.Action.DELETED, object_type=label, object_id=object_id)
+
+                page = self.client.get(reverse("core:audit_detail", args=[row.pk]))
+
+                self.assertEqual(page.status_code, 200)
+                self.assertNotIn("about", page.context)
+
+    def test_an_operation_is_titled_in_the_words_that_declared_it_and_never_by_its_name(self):
+        claim = next(action for action in ACTIONS if action.name == "claim")
+        for operation, interface, said, unsaid in (
+            ("bridge.claim", "controller", claim.title, "Bridge Claim"),
+            ("example.untitled", "cli", "", "Example Untitled"),
+        ):
+            with self.subTest(operation=operation):
+                # Two rows, so the log's line is named by its operation rather than by one row's record.
+                row, _other = (
+                    AuditLog.objects.create(
+                        action=AuditLog.Action.UPDATED,
+                        object_type="example.record",
+                        object_repr=f"example-{letter}",
+                        operation_id=operation,
+                        metadata={"operation": operation, "interface": interface, "actor": "example-actor"},
+                    )
+                    for letter in "ab"
+                )
+
+                shown = [text(self.client.get(reverse("core:audit_detail", args=[row.pk])))]
+                shown.append(text(self.client.get(reverse("core:audit_list"))))
+
+                for page in shown:
+                    self.assertNotIn(unsaid, page)
+                    if said:
+                        self.assertIn(said, page)
+
+    def test_a_redacted_field_shows_that_it_changed_and_never_its_value(self):
+        row = AuditLog.objects.create(
+            action=AuditLog.Action.UPDATED,
+            object_type="example.record",
+            metadata={"changes": {"token": ["«redacted»", "«redacted»"]}},
+        )
+
+        page = self.client.get(reverse("core:audit_detail", args=[row.pk]))
+
+        self.assertEqual([change["field"] for change in page.context["changes"]], ["Token"])
+        self.assertNotIn("«redacted»", text(page))
 
     def test_the_detail_page_needs_a_session(self):
         project = Project.objects.create(name="Private", status=Project.Status.IDEA)

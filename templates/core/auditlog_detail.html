@@ -25,8 +25,13 @@
         {% for change in changes %}
         <tr>
           <th>{{ change.field|breakable }}</th>
-          <td class="cell-data">{% if change.before is None or change.before == "" %}{% empty_value %}{% else %}{{ change.before|breakable }}{% endif %}</td>
-          <td class="cell-data">{% if change.after is None or change.after == "" %}{% empty_value %}{% else %}{{ change.after|breakable }}{% endif %}</td>
+          {% if change.redacted %}
+          <td class="cell-data muted">redacted</td>
+          <td class="cell-data muted">redacted</td>
+          {% else %}
+          <td class="cell-data">{% if change.before %}{{ change.before|breakable }}{% else %}{% empty_value %}{% endif %}</td>
+          <td class="cell-data">{% if change.after %}{{ change.after|breakable }}{% else %}{% empty_value %}{% endif %}</td>
+          {% endif %}
         </tr>
         {% endfor %}
       </tbody>
