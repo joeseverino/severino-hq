@@ -1701,6 +1701,24 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertNotIn("Logins", shown)
 
     @with_script
+    def test_a_table_whose_content_widens_after_its_fit_gives_way_again(self):
+        """A table fitted at its region's width whose own content then grows
+        (a face settling, a style arriving) with the region unchanged lets a
+        ranked column go again, so it still fits its box."""
+
+        self.pages = {**self.pages, "identifier-probe": probe(IDENTIFIER_TABLES, **IDENTIFIER_VALUES)}
+        self.open("identifier-probe", 820)
+        self.page.evaluate(SETTLE)
+        shown = self.page.evaluate(COLUMNS_SHOWN)
+        # A style's change, which no script hears as a change to the tree:
+        # every sentence now asks for its whole line.
+        self.page.evaluate("() => { document.querySelector('main table').style.whiteSpace = 'nowrap'; }")
+        # The size a layout reports reaches the page's observers a frame or two later.
+        self.page.evaluate("() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))")
+        self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+        self.assertLess(len(self.page.evaluate(COLUMNS_SHOWN)), len(shown), "no column left")
+
+    @with_script
     def test_the_survey_finds_the_same_twice_on_a_page_that_answers_changes_to_its_tree(self):
         """A page script that answers a change in its tree, as tables.js fits
         a region again when what it holds changes (here the phrase in the

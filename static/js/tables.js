@@ -146,17 +146,27 @@
   // same frame, which the browser raises as an error: a region the observer
   // fitted is let go until the next frame, whose first report of it is the
   // width it was just fitted at.
-  // eslint-disable-next-line no-restricted-syntax -- a region's width changed by nothing the page saw, which only a layout knows
-  const fitted = new ResizeObserver((entries) => entries.forEach(({ target: region }) => {
-    if (!region.isConnected) {
-      fitted.unobserve(region);
+  // A region's table is observed too: one whose own content widens after its
+  // fit (a face settling, a style arriving) with its region's width unchanged
+  // gives way again while it overflows, and is let go until the next frame as
+  // a region is.
+  // eslint-disable-next-line no-restricted-syntax -- a width changed by nothing the page saw, which only a layout knows
+  const fitted = new ResizeObserver((entries) => entries.forEach(({ target }) => {
+    if (!target.isConnected) {
+      fitted.unobserve(target);
       return;
     }
-    const was = regionWidths.get(region);
-    fitIn(region);
-    if (regionWidths.get(region) === was) return;
-    fitted.unobserve(region);
-    requestAnimationFrame(() => fitted.observe(region));
+    if (target.matches(REGION)) {
+      const was = regionWidths.get(target);
+      fitIn(target);
+      if (regionWidths.get(target) === was) return;
+    } else {
+      if ("rowsHeld" in target.dataset || !target.parentElement?.matches(REGION) || !overflows(target)) return;
+      fit(target, false);
+      markCut(target);
+    }
+    fitted.unobserve(target);
+    requestAnimationFrame(() => fitted.observe(target));
   }));
   // The browser's find reaches what a closed row holds back: the line beneath
   // it is hidden until found, so find searches it and a match opens the row
@@ -184,6 +194,11 @@
     if (!watched.has(region)) {
       watched.add(region);
       fitted.observe(region);
+    }
+    const table = tableIn(region);
+    if (table && !watched.has(table)) {
+      watched.add(table);
+      fitted.observe(table);
     }
     fitIn(region, changed.has(region));
   });
@@ -576,9 +591,11 @@
   }, true);
   // Whether a value is cut depends on the face it is drawn in, and so does
   // how wide a table is in a region whose width did not change, so both are
-  // asked again when the faces are in.
+  // asked again when the faces are in. Every region is watched from here
+  // too, so a page whose parser finished before this script ran is fitted
+  // as one it watched being parsed.
   document.fonts?.ready.then(() => {
-    document.querySelectorAll(REGION).forEach((region) => fitIn(region, true));
+    fitEvery(new Set(document.querySelectorAll(REGION)));
     markTables();
   });
 
