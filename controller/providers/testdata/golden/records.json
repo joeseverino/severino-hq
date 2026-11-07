@@ -1032,6 +1032,7 @@
       ],
       "authorized": true,
       "lock_error": "example",
+      "lock_key": "example",
       "update_available": true,
       "client_version": "example",
       "ssh_enabled": true,
@@ -1134,6 +1135,9 @@
             "example"
           ]
         }
+      ],
+      "funnel": [
+        "example"
       ]
     }
   ],

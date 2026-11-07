@@ -58,6 +58,10 @@ def __getattr__(name: str) -> str:
     raise AttributeError(name)
 
 
+# Where HQ's image serves: the --host and --port its Dockerfile's CMD gives
+# Uvicorn, which test_hq_self holds this to.
+LISTENS_AT = ("127.0.0.1", 8000)
+
 # Names a deployment answers to that are not a place anyone reaches it by.
 _NOT_A_SITE = frozenset({"localhost", "testserver"})
 

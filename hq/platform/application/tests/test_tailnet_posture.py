@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderConnection
+from hq.domains.control_plane.models import ManagedResource, ProviderConnection
 
 from ..findings import findings
 from ..inventory_testing import store
@@ -289,7 +289,7 @@ class PortNameTests(TestCase):
     def test_without_a_request_port_hq_names_nothing(self):
         self.assertEqual(self._hq_names(None), "")
 
-    def test_the_policy_page_renders_the_name_in_the_chip(self):
+    def test_the_policy_page_renders_the_port_as_a_chip_and_its_name_beside_it(self):
         policy(
             groups=[{"name": "group:admins", "members": ["someone@example.com"]}],
             grants=[{"src": ["group:admins"], "dst": ["tag:server"], "ip": ["tcp:7722"]}],
@@ -299,7 +299,8 @@ class PortNameTests(TestCase):
 
         response = self.client.get(reverse("control_plane:tailnet"))
 
-        self.assertIn("tcp:7722 SSH", texts(response, "code"))
+        self.assertIn("tcp:7722", texts(response, "code"))
+        self.assertIn("tcp:7722 SSH", texts(response, "td"))
 
 
 class TrustedNetworksWidthTests(TestCase):
@@ -374,3 +375,151 @@ class PolicyDocumentTests(TestCase):
         found = read_policy()
 
         self.assertEqual((len(found.grants), found.acls), (1, ()))
+
+
+def _own(*addresses):
+    return mock.patch(
+        "hq.platform.application.hq_self.host_addresses",
+        return_value=frozenset({"127.0.0.1", "::1", *addresses}),
+    )
+
+
+class GrantReachesOnlyLoopbackTests(TestCase):
+    """A grant port where what HQ knows listens there binds only loopback."""
+
+    RULE = "grant-reaches-only-loopback"
+    GRANT = {"src": ["example-mac"], "dst": ["example-host"], "ip": ["tcp:443", "tcp:8000"]}
+    TEST = {"src": "example-mac", "proto": "tcp", "accept": ["example-host:443", "example-host:8000"]}
+
+    def setUp(self):
+        import json
+
+        tailnet_connection()
+        ManagedResource.objects.create(
+            key="example-host", kind="machine", spec={"name": "example-host", "addresses": ["100.64.0.5"]}
+        )
+        store(TAILNET_KIND, {"name": "example-host", "addresses": ["100.64.0.5"]})
+        written = {**self.GRANT, "srcPosture": ["posture:latest"]}
+        policy(
+            hosts={"example-host": "100.64.0.5"},
+            grants=[self.GRANT],
+            tests=[self.TEST],
+            document=json.dumps({"grants": [written], "tests": [self.TEST]}),
+        )
+
+    def containers(self, *runtimes):
+        """Containers on the machine, each ``(name, runtime fields)``, as Portainer read them."""
+
+        store(
+            "portainer.container", *({"host": "example-host", "name": name, "state": "running"} for name, _ in runtimes)
+        )
+        store(
+            "portainer.runtime",
+            *(
+                {"host": "example-host", "container": name, "network_mode": "bridge", **fields}
+                for name, fields in runtimes
+            ),
+        )
+
+    def proxy(self):
+        """A container publishing 443 on every address, so that port is served."""
+
+        return ("example-proxy", {"port_bindings": [{"container_port": "443/tcp", "host_ip": "", "host_port": "443"}]})
+
+    def test_hqs_own_port_on_its_machine_is_raised_with_the_fix(self):
+        import json
+
+        self.containers(self.proxy())
+
+        with _own("100.64.0.5"):
+            (finding,) = raised(self.RULE)
+
+        self.assertEqual(finding["severity"], "neutral")
+        self.assertIn("HQ listens on 8000 only on loopback", finding["explanation"])
+        self.assertNotIn("443", finding["title"])
+        self.assertIn({"label": "Port", "value": "example-host tcp:8000"}, finding["evidence"])
+        grant, test = (json.loads(step["command"]) for step in finding["operator_steps"] if step["command"])
+        # The grant as written, every key kept, without the port.
+        self.assertEqual(
+            grant,
+            {"src": ["example-mac"], "dst": ["example-host"], "ip": ["tcp:443"], "srcPosture": ["posture:latest"]},
+        )
+        self.assertEqual(
+            test, {"src": "example-mac", "proto": "tcp", "accept": ["example-host:443"], "deny": ["example-host:8000"]}
+        )
+
+    def test_hqs_own_host_network_container_does_not_count_as_serving_it(self):
+        from types import SimpleNamespace
+
+        self.containers(self.proxy(), ("example-hq", {"network_mode": "host", "exposed_ports": [8000]}))
+
+        with (
+            _own("100.64.0.5"),
+            mock.patch(
+                "hq.platform.application.tailnet_loopback.own_container",
+                return_value=SimpleNamespace(address="example-host:example-hq"),
+            ),
+        ):
+            self.assertEqual(len(raised(self.RULE)), 1)
+
+    def test_a_port_every_container_binds_to_loopback_is_raised(self):
+        policy(hosts={"example-host": "100.64.0.5"}, grants=[{**self.GRANT, "ip": ["tcp:443", "tcp:5432"]}])
+        self.containers(
+            self.proxy(),
+            (
+                "example-db",
+                {"port_bindings": [{"container_port": "5432/tcp", "host_ip": "127.0.0.1", "host_port": "5432"}]},
+            ),
+        )
+
+        with _own():
+            (finding,) = raised(self.RULE)
+
+        self.assertIn("binds it to loopback", finding["explanation"])
+        self.assertIn({"label": "Port", "value": "example-host tcp:5432"}, finding["evidence"])
+
+    def test_a_port_something_serves_on_another_address_says_nothing(self):
+        policy(hosts={"example-host": "100.64.0.5"}, grants=[{**self.GRANT, "ip": ["tcp:5432"]}])
+        bound = {"container_port": "5432/tcp", "host_port": "5432"}
+        for other in (
+            {"port_bindings": [{**bound, "host_ip": "0.0.0.0"}]},
+            {"port_bindings": [{**bound, "host_ip": "100.64.0.5"}]},
+            {"network_mode": "host", "exposed_ports": [5432]},
+        ):
+            with self.subTest(other=other):
+                self.containers(
+                    ("example-db", {"port_bindings": [{**bound, "host_ip": "127.0.0.1"}]}), ("example-other", other)
+                )
+                with _own():
+                    self.assertEqual(raised(self.RULE), [])
+
+    def test_hqs_port_where_another_host_network_container_exposes_it_says_nothing(self):
+        self.containers(("example-app", {"network_mode": "host", "exposed_ports": [8000]}))
+
+        with _own("100.64.0.5"):
+            self.assertEqual(raised(self.RULE), [])
+
+    def test_a_machine_whose_containers_were_not_read_says_nothing(self):
+        with _own("100.64.0.5"):
+            self.assertEqual(raised(self.RULE), [])
+
+
+class FunnelSettingTests(TestCase):
+    """The settings say which nodes may publish to the internet, once the reading says."""
+
+    def rows(self, **record):
+        from ..tailnet import policy as read_policy
+
+        policy(grants=[{"src": ["*"], "dst": ["*"], "ip": ["*"]}], **record)
+        return dict(read_policy().facts)
+
+    def test_no_node_holding_funnel_says_it_is_off(self):
+        self.assertEqual(self.rows(funnel=[])["Funnel"], "Off: no node holds the funnel attribute")
+
+    def test_each_target_holding_funnel_is_named(self):
+        self.assertEqual(
+            self.rows(funnel=["autogroup:member", "tag:web"])["Funnel"], "Allowed for autogroup:member, tag:web"
+        )
+
+    def test_a_reading_that_does_not_say_shows_no_row(self):
+        self.assertNotIn("Funnel", self.rows())

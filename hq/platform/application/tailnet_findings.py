@@ -1,5 +1,6 @@
 """Findings about the tailnet's policy and settings."""
 
+import json
 from dataclasses import dataclass
 
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_KIND
@@ -7,6 +8,7 @@ from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_POLICY_
 from . import trusted_networks
 from .action_links import command_url
 from .finding_model import (
+    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -14,9 +16,11 @@ from .finding_model import (
     OperatorStep,
     Said,
     built_findings,
+    connections_carrying,
     per_connection,
 )
-from .ui import counted, counted_forms
+from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, LoopbackGrant, LoopbackPort
+from .ui import counted, counted_forms, ended
 
 
 def _devices_join_without_approval(estate: FindingEstate) -> tuple[Finding, ...]:
@@ -167,6 +171,86 @@ def _tailnet_dns_off_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
     )
 
 
+def _grant_reaches_only_loopback(estate: FindingEstate) -> tuple[Finding, ...]:
+    """A grant opens a port on a machine where what HQ knows listens there binds only loopback.
+
+    The port is open in the policy for nothing HQ knows of, and a policy test
+    that accepts it keeps it so. What the card claims is only what HQ read.
+    """
+
+    found = []
+    for node, values in connections_carrying(estate, GRANT_REACHES_ONLY_LOOPBACK):
+        grants = tuple(LoopbackGrant.of(value) for value in values)
+        found.append(_loopback_finding(node, grants))
+    return tuple(found)
+
+
+def _loopback_finding(node, grants: tuple[LoopbackGrant, ...]) -> Finding:
+    return Finding(
+        rule=GRANT_REACHES_ONLY_LOOPBACK,
+        subject=node.id,
+        severity="neutral",
+        title=_loopback_title(grants),
+        explanation=" ".join(_loopback_why(item, port) for item in grants for port in item.ports),
+        evidence=tuple(
+            evidence
+            for item in grants
+            for evidence in (
+                ("Grant", f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"),
+                *(("Port", f"{item.machine} {port.entry}") for port in item.ports),
+            )
+        ),
+        steps=tuple(step for item in grants for step in _loopback_steps(item)),
+    )
+
+
+def _loopback_title(grants: tuple[LoopbackGrant, ...]) -> str:
+    ports = [port for item in grants for port in item.ports]
+    if len(grants) == 1 and len(ports) == 1:
+        (item,), (port,) = grants, ports
+        listens = "HQ serves only on loopback" if port.hq else "every container publishing it binds to loopback"
+        return f"A grant opens {port.entry} on {item.machine}, which {listens}"
+    return f"{counted(len(ports), 'granted port is', 'granted ports are')} bound only to loopback"
+
+
+def _loopback_why(item: LoopbackGrant, port: LoopbackPort) -> str:
+    if port.hq:
+        return ended(
+            f"HQ listens on {port.port} only on loopback, so this grant reaches nothing of HQ's on {item.machine}"
+        )
+    return (
+        f"Every container publishing {port.port} on {item.machine} binds it to loopback, "
+        "so this grant reaches none of them."
+    )
+
+
+def _loopback_steps(item: LoopbackGrant) -> tuple[OperatorStep, ...]:
+    """The grant without the ports, then each test that accepts them with them moved to deny."""
+
+    whom = f"{', '.join(item.grant.get('src') or ())} to {', '.join(item.grant.get('dst') or ())}"
+    fragment = item.fragment
+    edit = (
+        OperatorStep(
+            label=f"In the Tailscale admin console, open Access controls and replace the grant from {whom} with this one.",
+            command=json.dumps(fragment),
+        )
+        if fragment
+        else OperatorStep(
+            label=ended(f"In the Tailscale admin console, open Access controls and remove the grant from {whom}"),
+        )
+    )
+    tests = tuple(
+        OperatorStep(
+            label="Replace the policy test that accepts the port with this one, which denies it.",
+            command=json.dumps(test),
+            notes=("Tailscale rejects a policy whose test fails, so the port cannot be opened again by mistake.",),
+        )
+        for test in item.tests
+    )
+    last = (*tests, OperatorStep(label=THEN_CHECK_AGAIN))
+    return (edit, *last)
+
+
 def _trusted_wider_than_tailnet(estate: FindingEstate) -> tuple[Finding, ...]:
     return built_findings(trusted_networks.wider_than_tailnet(estate))
 
@@ -210,6 +294,17 @@ RULES: tuple[FindingRule, ...] = (
             "Remove the group from the policy's groups and from every rule that names it, or add its members."
         ),
         no_help_reason=("HQ can only edit the policy once the policy is managed in HQ."),
+    ),
+    FindingRule(
+        GRANT_REACHES_ONLY_LOOPBACK,
+        "A grant opens a port bound only to loopback",
+        "neutral",
+        _grant_reaches_only_loopback,
+        operator_action=(
+            "In the Tailscale admin console, remove the port from the grant, "
+            "and move it to the deny list of the policy test that accepts it."
+        ),
+        no_help_reason="HQ cannot edit the tailnet policy in Tailscale's admin console.",
     ),
     FindingRule(
         "trusted-wider-than-tailnet",
