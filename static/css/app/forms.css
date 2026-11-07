@@ -300,7 +300,9 @@
    last, which a row aligned on baselines (an opened row's panel) would lift
    over the rows above, as base.css does for an identifier, and where an
    engine has no `baseline-source` it sits on its last line's baseline. */
-.tag { display: inline-block; padding: 1px var(--space-4); margin-right: var(--space-2); background: var(--bg-tint); border-radius: 999px; font-size: var(--text-2xs); color: var(--ink-2); baseline-source: first; }
+.tag { display: inline-block; padding: 1px var(--space-4); margin-inline-end: var(--space-2); background: var(--bg-tint); border-radius: 999px; font-size: var(--text-2xs); color: var(--ink-2); baseline-source: first; }
+/* The margin parts a chip from the next; the last has none to part, so it takes the whole of its line, and a value in it is cut only past its cell's edge. */
+.tag:last-child { margin-inline-end: 0; }
 
 .search-page-form input[type=search] { flex-basis: 420px; }
 .command-center-grid {
