@@ -1,6 +1,5 @@
 """The inner-loop gate maps a change to the tests and quick gates that reach
-it, runs the light gates beside the tests and those that take the heavy turn
-after them, and names every failed step in its verdict."""
+it, runs them in one mise run, and names every failed step in its verdict."""
 
 import io
 import json
@@ -23,11 +22,10 @@ from hq.config.sandbox import RUN
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.test_runner import excluded_tags
 from hq.platform.core.tests.task import RefError, Usage, names, trusted_mise
-from tests.mise_tasks import mise_tasks, takes_the_turn
+from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks, takes_the_turn
 from tools.gate import fast as fast_gate, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase
 from tools.gate.tests.fast_runs import run_main
-from tools.gate.turn import IN_TURN
 from tools.gate.verdict import FailedTest
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -297,7 +295,7 @@ class FastGateTreeTests(GateTestCase):
         walked.assert_called_once_with(fast_gate.ROOT, "tree")
         self.assertEqual(set(labels), {"hq.a.tests.test_b", *tree})
         self.assertEqual(fast_gate.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"]), ["hq.a.tests.test_b"])
-        command = fast_gate.test_command(labels, "2")
+        command = fast_gate.run_command((), [], labels, "2")
         self.assertLessEqual(set(labels), set(command))
         self.assertNotIn("--tag", command)
         self.assertNotIn("--exclude-tag", command)
@@ -319,14 +317,44 @@ class FastGateTreeTests(GateTestCase):
 class FastGateBaseTests(GateTestCase):
     REFS = {"main": "aaa", "topic": "bbb"}
 
-    def resolve(self, base):
+    def resolve(self, base, landing=()):
         def git(*args):
             if args[-1] not in self.REFS:
                 raise RefError(f"no ref {args[-1]}")
             return [self.REFS[args[-1]]]
 
-        with patch.object(fast_gate, "git", git):
+        with patch.object(fast_gate, "git", git), patch.object(fast_gate, "landing", return_value=list(landing)):
             return fast_gate.merge_base(base)
+
+    def test_with_none_asked_for_the_branch_head_lands_on_is_the_base(self):
+        self.assertEqual(self.resolve(None, landing=["topic"]), "bbb")
+
+    def test_the_branch_a_worktree_lands_on_is_the_one_it_was_made_from(self):
+        """A worktree's branch tracks nothing; the branch it was made from tracks a remote one and has moved on
+        since. Its own upstream, where it has one, is the base."""
+        with tempfile.TemporaryDirectory() as directory:
+            origin, clone = Path(directory) / "origin", Path(directory) / "clone"
+            origin.mkdir()
+            git = fixture_git(origin)
+            git("init", "-q", "-b", "main")
+            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "main")
+            git("checkout", "-q", "-b", "integration")
+            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "ahead of main")
+            subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True)
+            git = fixture_git(clone)
+            git("checkout", "-q", "-b", "local-only")
+            git("checkout", "-q", "integration")
+            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "landed, not pushed")
+            fork = git("rev-parse", "HEAD")
+            self.assertEqual(fast_gate.landing(clone), ["origin/integration"])
+            git("checkout", "-q", "-b", "worker")
+            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "the worker's change")
+            git("checkout", "-q", "integration")
+            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "another worker landed")
+            git("checkout", "-q", "worker")
+            (nearest,) = fast_gate.landing(clone)
+            self.assertEqual(nearest, "refs/heads/integration")
+            self.assertEqual(git("merge-base", "HEAD", nearest), fork)
 
     def test_a_base_asked_for_is_the_one_used(self):
         self.assertEqual(self.resolve("topic"), "bbb")
@@ -490,9 +518,9 @@ class FastGateGroupTaskTests(GateTestCase):
 
         recorder = Recorder()
         run_main((changed,), (), recorder, touches_shared_ui=False)
-        commands = dict(recorder.calls)
-        gates = [word for label, cmd in recorder.calls if label != "tests" for word in cmd]
-        return commands["tests"], gates
+        (run,) = [cmd for _, cmd in recorder.calls if fast_gate.TESTS in cmd]
+        tests = run.index(fast_gate.TESTS)
+        return run[tests:], run[:tests]
 
     def test_a_change_that_reaches_the_module_runs_its_task_and_no_label_for_it(self):
         labels, gates = self.run_on(GROUP_MODULE)
@@ -653,12 +681,13 @@ class GateVerdictTests(GateTestCase):
         self.assertIn("usage", result.stderr)
 
     def test_fast_names_each_failed_step_and_keeps_its_pass_line(self):
-        ruff = gate_verdict.Step("tasks", ok=False, tasks=["lint:ruff"])
-        tests = gate_verdict.Step("tests", ok=False, tests=[FailedTest("hq.x.tests.test_y.Case.test_z")])
+        run = gate_verdict.Step(
+            "quick gates and tests", ok=False, tasks=["lint:ruff"], tests=[FailedTest("hq.x.tests.test_y.Case.test_z")]
+        )
         integrity = gate_verdict.Step("patch integrity", ok=False)
         for steps, expected in (
-            ([ruff, tests, integrity], ": lint:ruff; tests: hq.x.tests.test_y.Case.test_z; patch integrity"),
-            ([gate_verdict.Step("tests")], "passed in"),
+            ([run, integrity], ": lint:ruff; tests: hq.x.tests.test_y.Case.test_z; patch integrity"),
+            ([gate_verdict.Step("quick gates and tests")], "passed in"),
         ):
             with self.subTest(expected=expected):
                 code, printed = run_main(selected=("lint:ruff",), step=[*steps, *[gate_verdict.Step("more")] * 3])
@@ -668,31 +697,37 @@ class GateVerdictTests(GateTestCase):
 
 @tag("source", "tree")
 class FastGateTurnTests(GateTestCase):
-    """fast holds the machine's heavy turn for its test run alone, so a worktree's quick gates never queue,
-    and a quick gate that takes the turn itself runs after the tests, never beside them."""
+    """fast holds the machine's heavy turn for its test run alone, which runs in one run of mise with the quick
+    gates it selected. A gate that takes the heavy lock itself runs after, once that run has passed: mise
+    stops no task still waiting for a lock when another fails."""
 
-    def test_only_the_tests_and_the_gates_that_take_it_wait_for_the_heavy_turn(self):
+    def run_fast(self, *, ok: bool = True) -> list[tuple[str, list[str]]]:
+        calls: list[tuple[str, list[str]]] = []
+
+        def step(label: str, cmd: list[str]) -> gate_verdict.Step:
+            calls.append((label, cmd))
+            return gate_verdict.Step(label, ok=ok or fast_gate.TESTS not in cmd)
+
         quick = (*fast_gate.TASKS, fast_gate.SHELL)
-        taking = {task for task in quick if takes_the_turn(mise_tasks()[task])}
-        self.assertTrue(taking)
-        recorder = Recorder()
-        run_main(("hq/example.py",), quick, recorder, affected=(set(), set()), test_labels=([], 0))
+        run_main(("hq/example.py",), quick, step, affected=(set(), set()), test_labels=([], 0))
+        return calls
 
-        labels = [label for label, _ in recorder.calls]
-        tests = labels.index("tests")
-        before = {word for _, cmd in recorder.calls[:tests] for word in cmd}
-        after = {word for _, cmd in recorder.calls[tests:] for word in cmd}
-        self.assertFalse(before & taking)
-        self.assertLessEqual(taking, after)
-        self.assertLessEqual(set(quick), before | after)
-        for label, cmd in recorder.calls:
-            with self.subTest(step=label):
-                self.assertEqual(" ".join(IN_TURN) in " ".join(cmd), label == "tests")
-        # Summary output holds each task's lines until it ends, a wait for the turn among them,
-        # so only the light gates' run, the first, has it.
-        summarized = [label for label, cmd in recorder.calls if "--output summary" in " ".join(cmd)]
-        self.assertEqual(summarized, labels[:1])
+    def test_the_gates_run_beside_the_tests_and_those_that_take_the_lock_after(self):
+        quick = (*fast_gate.TASKS, fast_gate.SHELL)
+        locking = {task for task in quick if HEAVY_LOCK in locks(task)}
+        self.assertTrue(locking)
+        calls = self.run_fast()
+        (run,) = [cmd for _, cmd in calls if fast_gate.TESTS in cmd]
+        later = {word for _, cmd in calls[[cmd for _, cmd in calls].index(run) + 1 :] for word in cmd}
+        self.assertLessEqual(set(quick) - locking, set(run))
+        self.assertFalse(set(run) & locking)
+        self.assertLessEqual(locking, later)
+        self.assertTrue(takes_the_turn(mise_tasks()[fast_gate.TESTS]))
         self.assertFalse(takes_the_turn(mise_tasks()["fast"]))
+
+    def test_after_a_failure_the_gates_that_take_the_lock_do_not_run(self):
+        words = {word for _, cmd in self.run_fast(ok=False) for word in cmd}
+        self.assertFalse(words & {task for task in (*fast_gate.TASKS, fast_gate.SHELL) if HEAVY_LOCK in locks(task)})
 
 
 TREE = "1" * 40
@@ -716,7 +751,7 @@ class FastGatePassRecordTests(GateTestCase):
             run_main(
                 selected=selected,
                 group_tasks=groups,
-                step=lambda label, cmd: result if label == "tests" else gate_verdict.Step(label),
+                step=lambda label, cmd, *_: result if fast_gate.TESTS in cmd else gate_verdict.Step(label),
                 affected=(set(), set()),
                 test_labels=(list(labels), total),
                 judged=TREE if still else None,

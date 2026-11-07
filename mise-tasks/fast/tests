@@ -1,0 +1,26 @@
+#!/bin/sh
+#MISE description="fast's test run, once fast:source has passed the source checks HQ_FAST_SOURCE names: mise run fast"
+#MISE hide=true
+#MISE extends="django"
+#MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
+#MISE output="prefix"
+#MISE depends=["fast:source {{ get_env(name='HQ_FAST_SOURCE', default='') }}"]
+#USAGE flag "--parallel <workers>" default="auto" help="Test workers per suite"
+#USAGE arg "[labels]..." var=#true help="The test labels fast selected"
+
+# fast runs this beside the quick gates, in one run of mise (tools/gate/fast.py).
+# The source checks come in the environment: `mise tasks validate` reads a
+# dependency templated from usage as a task's name, and refuses it.
+# Its own output setting outranks the summary of that run's config
+# (mise.fast.toml), so the tests print as they run, under this task's name,
+# where the verdict reads which test failed under which task.
+set -eu
+# mise hands the words over shell-quoted, one word each.
+eval "set -- ${usage_labels:-}"
+[ "$#" -gt 0 ] || exit 0
+test_arguments="--noinput --parallel ${usage_parallel:-auto} ${usage_labels:-}"
+turn_bound=30m
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+# The tests' own mise runs read the checkout's config alone.
+exec env -u MISE_ENV uv run python manage.py test --noinput --parallel "${usage_parallel:-auto}" "$@"

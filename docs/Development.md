@@ -198,7 +198,11 @@ On an 8 GB Apple silicon machine:
 | `mise run fast` | one to two minutes |
 
 `mise run fast [BASE]` maps the changed files against the merge base (`BASE`,
-`$CHECK_BASE`, then `origin/main`, `main`). `--list` prints the selection.
+`$CHECK_BASE`, then the branch HEAD lands on, then `origin/main`, `main`).
+The branch HEAD lands on is its own branch's upstream, or else the local
+branch tracking a remote one whose history HEAD left most recently: a
+worktree's branch tracks nothing and is made from the branch it lands on.
+`--list` prints the selection.
 The tests it selects are:
 
 - the test modules that import a changed file, directly or through one module
@@ -230,19 +234,21 @@ environment (`uv run --group fuzz`), which the tests' environment lacks, is
 never a label. When the selection above would reach it, its task runs as a
 quick gate instead, read from the task's own `run`.
 
-The quick gates run while the tests do. Their output is held and printed
-after the tests', under `quick gates, beside the tests`, in mise's summary
-output: a gate that passed is its `passed in` line, and one that failed prints
-whole. A gate that fails is told the moment it does, with its last lines and
-`rerun it now: mise run <task>`, while the tests go on, so it is fixed during
-their wait and the next run passes whole. mise's summary output prints a
-failed task's lines as it ends but says it failed only once the whole run
-does, so fast reads any line under a task's name other than its `passed in`
-or up-to-date line as that task's failure.
+The quick gates and the tests run in one `mise run`, in the config
+environment `mise.fast.toml` sets: mise's summary output, where a gate that
+passed prints its `passed in` line as it ends and one that failed prints
+whole as it ends. The tests run as `fast:tests` (`mise-tasks/fast/`), whose
+own output setting outranks the environment's, so they print as they run,
+their wait for the heavy turn included; `--output` or `MISE_TASK_OUTPUT`
+would outrank both.
 
-A quick gate that takes the heavy turn of its own (the shell gate, for its
-suites) runs after the tests instead, so it never waits on the turn they hold, and
-prints as it runs, its wait for the turn included.
+mise stops the run at the first failure, and the verdict's last line names
+the rerun. mise stops no task still waiting for a lock, so a quick gate that
+takes the heavy lock itself (the shell gate, for its suites) runs after, in a
+run of its own, once the first has passed. The selected tests that read every
+browser gate module (each imports `browser_modules`: the selector guard among
+them) start no browser, and run first as `fast:source`; the tests start only
+once they pass, so a refusal there ends the run in seconds.
 
 A test run prints its failures, each with what the test printed, and nothing
 of a passing test or of its own progress: the runner sets Django's `--buffer`
