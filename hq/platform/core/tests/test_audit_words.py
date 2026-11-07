@@ -1,17 +1,19 @@
-"""Every audit row says what happened in words: an update its changes."""
+"""Every audit row says what happened in words: an update its changes, and
+any row the operation it was written in, older rows as well as new ones."""
 
 from datetime import date
 from decimal import Decimal
 
 from django.test import SimpleTestCase, TestCase
 
-from hq.domains.control_plane.models import OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.domains.expenses.models import Expense
 from hq.platform.application.adoption_testing import managing_everything
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.test_record_timeline import KEY, REWRITE, claim_and_report
 from hq.platform.core import audit
+from hq.platform.core.attribution import operation_context
 from hq.platform.core.audit import audited_labels, register_audit
 from hq.platform.core.models import AuditLog
 
@@ -118,3 +120,71 @@ class UpdateMessageTests(TestCase):
         for row in updates:
             with self.subTest(row=f"{row.object_type} {row.object_repr}"):
                 self.assertTrue(row.message, row.metadata.get("changes"))
+
+
+def title_of(operation):
+    # Imported where it runs, so this module imports at a base without it.
+    from hq.platform.core.audit_words import title_of as titled
+
+    return titled(operation)
+
+
+def words_of(row):
+    # Imported where it runs, so this module imports at a base without it.
+    from hq.platform.core.audit_words import words_of as said
+
+    return said(row)
+
+
+class StoredRowTests(TestCase):
+    def older(self, *, operation: str, message: str = "", changes=None, object_repr: str = "") -> AuditLog:
+        """A row as HQ stored it before rows said anything, written past the audit signals."""
+
+        with operation_context(interface="controller", actor="controller", operation=operation):
+            return AuditLog.objects.create(
+                action=AuditLog.Action.UPDATED,
+                object_type=audited_labels()[OperationRequest],
+                object_id="example-operation",
+                object_repr=object_repr,
+                message=message,
+                metadata={"operation": operation, **({"changes": changes} if changes else {})},
+            )
+
+    def test_a_row_written_before_updates_said_anything_reads_as_a_new_one(self):
+        row = self.older(
+            operation="bridge.claim",
+            changes={"state": ["queued", "claimed"]},
+            object_repr="example-rewrite: reconcile (claimed)",
+        )
+
+        said = words_of(row)
+        self.assertEqual(said.title, title_of("bridge.claim"))
+        self.assertNotIn("claimed)", said.title)
+        self.assertIn("claimed", said.message)
+
+    def test_a_row_s_own_message_is_kept(self):
+        row = self.older(operation="bridge.report", message="Rewrite applied.", changes={"state": ["a", "b"]})
+
+        self.assertEqual(words_of(row).message, "Rewrite applied.")
+
+    def test_a_held_change_is_titled_by_what_it_does_whoever_asked(self):
+        row = self.older(
+            operation="infrastructure.resource.remove", object_repr="Remove a record on example-dns by example-agent"
+        )
+
+        title = words_of(row).title
+        self.assertTrue(title)
+        self.assertNotIn("example-agent", title)
+
+
+class ApprovalTitleTests(TestCase):
+    def test_a_held_change_s_name_never_names_who_asked(self):
+        held = ApprovalRequest(
+            capability="infrastructure.resource.remove",
+            resource_key="example-dns",
+            requested_actor="example-agent",
+            requested_interface="mcp",
+        )
+
+        self.assertIn("example-dns", str(held))
+        self.assertNotIn("example-agent", str(held))

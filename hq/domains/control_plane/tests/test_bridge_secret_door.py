@@ -1,13 +1,14 @@
 """The bridge takes in no secret: a credential anywhere in a payload is struck at its door."""
 
 import json
+from dataclasses import replace
 from typing import Any
 
 from django.test import TestCase
 from pydantic import BaseModel
 
 from hq.domains.control_plane import bridge_application
-from hq.domains.control_plane.bridge_actions import ACTIONS, Action
+from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.bridge_contract import operations
 
 from . import bridge_client
@@ -119,7 +120,7 @@ def _recording(ran: list[tuple[str, Any]]):
     def noted(name: str):
         return lambda parameters, payload: ran.append((name, payload)) or {"ok": True}
 
-    return bridge_application.bridge(tuple(Action(action.name, noted(action.name)) for action in ACTIONS))
+    return bridge_application.bridge(tuple(replace(action, run=noted(action.name)) for action in ACTIONS))
 
 
 def _at(value: Any, path: tuple[str | int, ...]) -> Any:
@@ -265,7 +266,7 @@ class OutsiderTextTests(TestCase):
 class AnswerTests(TestCase):
     def _app(self, run) -> Any:
         return bridge_application.bridge(
-            tuple(Action(action.name, run if action.name == "steps" else action.run) for action in ACTIONS)
+            tuple(replace(action, run=run) if action.name == "steps" else action for action in ACTIONS)
         )
 
     def test_an_echo_of_the_payload_cannot_carry_a_secret_past_the_door(self):

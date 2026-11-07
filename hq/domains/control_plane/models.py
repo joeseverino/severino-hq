@@ -663,7 +663,8 @@ class ApprovalRequest(TimestampedModel):
     @override
     def __str__(self) -> str:
         subject = self.target or self.resource_key
-        return f"{capability_title(self.capability)}{f' on {subject}' if subject else ''} by {self.requested_actor}"
+        # Who asked and who decided are the row's Who, never its title.
+        return f"{capability_title(self.capability)}{f' on {subject}' if subject else ''}"
 
 
 class AddressReading(models.Model):

@@ -275,7 +275,7 @@ def documentation_status() -> DocumentationStatus:
     return read_models.documentation_status(principal=current_principal())
 
 
-@tool("What changed lately", requires=holding(Capability.READ_AUDIT_LOG), budget=Budget(12_300))
+@tool("What changed lately", requires=holding(Capability.READ_AUDIT_LOG), budget=Budget(12_500))
 def recent_activity(*, limit: int = 25) -> RecentActivity:
     """The newest audit-log events, newest first: who did what to which
     record, and when, without the events' metadata.
