@@ -1,5 +1,6 @@
 """Canonical, non-mutating HQ projections shared by delivery adapters."""
 
+from datetime import datetime
 from typing import Any, Literal, TypedDict, cast
 
 from django.db.models import FETCH_RAISE, Count
@@ -106,6 +107,13 @@ class RecentActivity(TypedDict):
     count: int
 
 
+def _second(at: datetime) -> str:
+    """When an event happened, to the second: the list's order already sets
+    apart the events of one second, so a fraction is bytes no reader needs."""
+
+    return at.isoformat(timespec="seconds")
+
+
 def _activity_row(event: AuditLog) -> ActivityRow:
     return {
         "id": event.id,
@@ -116,7 +124,7 @@ def _activity_row(event: AuditLog) -> ActivityRow:
         "object_repr": event.object_repr,
         "message": event.message,
         "actor": event.actor_label,
-        "created_at": event.created_at.isoformat(),
+        "created_at": _second(event.created_at),
     }
 
 
@@ -138,7 +146,7 @@ def recent_activity(*, principal: Principal, limit: int = 25) -> RecentActivity:
             "action_label": line.action_label,
             "actor": line.actor,
             "message": line.message,
-            "created_at": line.at.isoformat(),
+            "created_at": _second(line.at),
             "operation_id": line.events[0].operation_id,
             "items": [_activity_row(item) for item in line.items],
             # The items past those carried, and the page that lists every one.
