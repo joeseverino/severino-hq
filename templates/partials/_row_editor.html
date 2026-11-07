@@ -1,0 +1,11 @@
+{% comment %}
+A row's editor ({% row_editor %}, docs/Design.md, A row's editor opens under
+it): the link that opens it, which is the page with this row's editor open,
+and, where the address opens it, the form, which the table region moves into
+the line beneath the row and opens the row on. With script the link and the
+form are answered in the table's region (`data-fragment-target` empty, the
+region's own); the form says where to come back to (`next`), the page with
+the editor closed, and its Cancel closes it there.
+{% endcomment %}
+<a id="row-{{ slug }}-edit" href="{% if open %}{{ close_url }}{% else %}{{ open_url }}{% endif %}" aria-expanded="{% if open %}true{% else %}false{% endif %}"{% if open %} aria-controls="row-{{ slug }}"{% endif %} data-row-edit data-fragment-target="">{{ label|breakable }}</a>
+{% if open %}<div class="row-editor" id="row-{{ slug }}">{% include "partials/_form.html" with form=form action=action verb=verb cancel_url=close_url next=close_url in_place=True note="" choices="" choice_field="" bar="" fields="" table_body="" %}</div>{% endif %}
