@@ -19,6 +19,7 @@ from ..default_hold import may_be_held_by_default
 from ..entity_links import kind_label
 from ..infrastructure import ManagedResourceCommand, save_managed_resource
 from ..integration_specs import capability_schema
+from ..labels import lower_first
 from ..record_errors import PolicyError
 from ..security import DEVICE_INTERFACE, Capability, Principal, cli_principal, could_hold
 from ..zones import ADOPT_ZONE
@@ -204,7 +205,7 @@ class WordsTests(TestCase):
         rows = {row.name: row for group in groups for row in group.rows}
 
         for kind in public_kinds():
-            label = kind_label(kind).lower()
+            label = lower_first(kind_label(kind))
             with self.subTest(kind=kind):
                 self.assertIn(label, rows["infrastructure.resource.update"].default)
                 self.assertNotIn(label, rows[ADOPT].default)

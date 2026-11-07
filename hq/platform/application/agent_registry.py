@@ -12,6 +12,7 @@ from functools import partial
 
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.db.models import Q, QuerySet
 from django.dispatch import Signal
 from django.utils import timezone
 
@@ -21,7 +22,7 @@ from hq.platform.core.models import AgentIdentity, AgentSignIn, AuditLog
 from . import agent_devices
 from .doors import door_words
 from .linked_accounts import SIGN_IN
-from .security import AGENT_SURFACES, Principal
+from .security import AGENT_SURFACES, Principal, agent_subject, subject_parts
 from .ui import counted
 lazy from .tailnet import Device
 
@@ -86,17 +87,28 @@ def observe(principal: Principal | None, device: Device | None = None) -> None:
         )
 
 
+def identity_of(subject: str) -> QuerySet[AgentIdentity]:
+    """The row ``subject`` names (``security.agent_subject``): a client as a
+    person, or a machine's client whole, whatever its id holds."""
+
+    client_id, person_key = subject_parts(subject)
+    return AgentIdentity.objects.filter(
+        Q(client_id=subject, person_key="") | Q(client_id=client_id, person_key=person_key)
+    )
+
+
 def _observe(principal: Principal) -> tuple[AgentIdentity, object]:
     now = timezone.now()
     granted = sorted(principal.granted)
     signs_in = AgentSignIn.PERSON if principal.person_key else AgentSignIn.MACHINE
     person = _person(principal.person_key)
-    row = AgentIdentity.objects.filter(client_id=principal.actor).first()
+    keyed = {"client_id": principal.actor, "person_key": principal.person_key}
+    row = AgentIdentity.objects.filter(**keyed).first()
     if row is None:
         try:
             with transaction.atomic():
                 row = AgentIdentity.objects.create(
-                    client_id=principal.actor,
+                    **keyed,
                     interfaces=[principal.interface],
                     granted=granted,
                     signs_in=signs_in,
@@ -104,14 +116,14 @@ def _observe(principal: Principal) -> tuple[AgentIdentity, object]:
                     last_seen=now,
                 )
         except IntegrityError:
-            row = AgentIdentity.objects.get(client_id=principal.actor)
+            row = AgentIdentity.objects.get(**keyed)
         else:
             record_event(
                 action=AuditLog.Action.CREATED,
                 obj=row,
                 type_label=AUDIT_LABEL,
                 message=(
-                    f"First seen: {principal.actor}, {door_words(principal.interface)}, "
+                    f"First seen: {row}, {door_words(principal.interface)}, "
                     f"granted {counted(len(granted), 'permission')}"
                 ),
                 metadata={
@@ -141,7 +153,8 @@ def _observe(principal: Principal) -> tuple[AgentIdentity, object]:
         changed.append("granted")
         # Whether a tool is listed is the grant's to say, so a stream this
         # agent holds open is told to list again.
-        tools_changed(lambda listening: listening.actor == principal.actor)
+        subject = agent_subject(principal)
+        tools_changed(lambda listening: agent_subject(listening) == subject)
         record_event(
             action=AuditLog.Action.UPDATED,
             obj=row,

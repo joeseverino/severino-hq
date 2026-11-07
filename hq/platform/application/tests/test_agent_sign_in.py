@@ -46,11 +46,14 @@ class SignInTests(TestCase):
 
         self.assertEqual(_signs_in(), "machine")
 
-    def test_a_client_that_changes_how_it_signs_in_is_recorded_as_it_is_now(self):
+    def test_a_client_signing_in_both_ways_is_a_row_each_way(self):
         observe(token_principal(MACHINE, "mcp"))
         observe(token_principal(DELEGATED, "mcp"))
 
-        self.assertEqual(_signs_in(), "person")
+        self.assertEqual(
+            sorted(AgentIdentity.objects.filter(client_id=AGENT).values_list("signs_in", flat=True)),
+            ["machine", "person"],
+        )
 
     def test_signing_in_through_a_person_makes_it_theirs(self):
         self.assertEqual(person_of(token_principal(DELEGATED, "mcp")), self.person)

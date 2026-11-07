@@ -149,9 +149,7 @@ def _refused(streams: list[Stream]) -> frozenset[Stream]:
     """The streams whose caller the brakes refuse now: the question a tool call is asked, unrecorded."""
 
     with connections_of_its_own():
-        return frozenset(
-            stream for stream in streams if agent_access.refusal(stream.principal, source=stream.source) is not None
-        )
+        return frozenset(stream for stream in streams if agent_access.refusal(stream.principal) is not None)
 
 
 # The one bus every server in this process publishes to, as every stream it

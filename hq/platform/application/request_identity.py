@@ -8,7 +8,6 @@ lazy from urllib.parse import urlsplit
 
 from django.conf import settings
 
-lazy from hq.platform.core.network import client_ip
 lazy from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, sso_only
 
 from . import tailnet
@@ -124,7 +123,7 @@ def identity_of(request, device: tailnet.Device | None, principal: Principal | N
     """Who is asking: the session's person, or ``principal``'s device approval for an agent's token call."""
 
     if principal is not None and principal.interface in AGENT_SURFACES:
-        return _agent(principal, device, client_ip(request))
+        return _agent(principal, device)
     user = signed_in(request)
     backends = tuple(settings.AUTHENTICATION_BACKENDS)
     session = getattr(request, "session", None)
@@ -156,10 +155,10 @@ def identity_of(request, device: tailnet.Device | None, principal: Principal | N
     )
 
 
-def _agent(principal: Principal, device: tailnet.Device | None, source: str) -> Identity:
+def _agent(principal: Principal, device: tailnet.Device | None) -> Identity:
     """An agent's call, as the record of the device it came from stands."""
 
-    standing = agent_devices.standing(principal, source=source)
+    standing = agent_devices.standing(principal)
     record = agent_devices.record_of(principal) if standing is DeviceStanding.APPROVED else None
     approver = record.approved_by if record is not None else None
     return Identity(

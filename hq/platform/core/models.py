@@ -138,7 +138,7 @@ class AuditLog(models.Model):
         VIEWED = "viewed", "Viewed"
         DENIED = "denied", "Denied"
         # HQ looking through a connection: a probe or a routine read.
-        OBSERVED = "observed", "Observed"
+        OBSERVED = "observed", "Checked"
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -149,12 +149,12 @@ class AuditLog(models.Model):
     )
     action = models.CharField(max_length=32, choices=Action.choices)
     object_type = models.CharField(max_length=64, blank=True)
-    object_id = models.CharField(max_length=64, blank=True)
+    object_id = models.CharField("object ID", max_length=64, blank=True)
     object_repr = models.CharField(max_length=200, blank=True)
     # Stable application-operation identity. Domain status tables may retain
     # this value without importing or foreign-keying the host audit model, and
     # operators can follow one action across web/API/MCP adapters directly.
-    operation_id = models.CharField(max_length=128, blank=True, db_index=True)
+    operation_id = models.CharField("operation ID", max_length=128, blank=True, db_index=True)
     # The connection the work went through, by connection_ref, or blank.
     connection = models.CharField(max_length=160, blank=True)
     message = models.TextField(blank=True)
@@ -278,7 +278,7 @@ class Pin(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.user_id}:{self.target_kind}:{self.target_key}"
+        return f"{self.target_key}, pinned by {self.user.get_username()}"
 
 
 class AgentAccess(models.Model):
@@ -312,9 +312,18 @@ class AgentSignIn(models.TextChoices):
 
 
 class AgentIdentity(models.Model):
-    """An identity that has presented a verified token, and its grant as of the latest one."""
+    """One client as one person, or a machine's client alone, that has presented
+    a verified token, and its grant as of the latest one.
 
-    client_id = models.CharField(max_length=160, unique=True)
+    The row is the unit HQ answers for (``security.agent_subject``): a rule,
+    a block and a device approval are its own, never shared with another
+    person who signed the same client in.
+    """
+
+    client_id = models.CharField("client ID", max_length=160)
+    # The sign-in key (``linked_accounts.sign_in_subject``) of the person whose
+    # sign-in its tokens come through; blank for a machine's own token.
+    person_key = models.CharField(max_length=64, blank=True, default="")
     interfaces = models.JSONField(default=list)
     granted = models.JSONField(default=list)
     first_seen = models.DateTimeField(default=timezone.now, editable=False)
@@ -341,8 +350,11 @@ class AgentIdentity(models.Model):
     )
 
     class Meta:
-        ordering = ("client_id",)
+        ordering = ("client_id", "person_key")
         constraints = [
+            models.UniqueConstraint(
+                fields=("client_id", "person_key"), name="agent_identity_one_per_client_and_person"
+            ),
             # Whoever set a block, it says when; a person deleted since leaves the block standing.
             Rule(
                 condition=models.Q(blocked_by__isnull=True) | models.Q(blocked_at__isnull=False),
@@ -360,7 +372,7 @@ class AgentIdentity(models.Model):
 
     @override
     def __str__(self) -> str:
-        return self.client_id
+        return self.client_id if self.person is None else f"{self.client_id} for {self.person.get_username()}"
 
 
 class AgentDevice(models.Model):
@@ -381,7 +393,7 @@ class AgentDevice(models.Model):
     person = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True, related_name="+"
     )
-    node_id = models.CharField(max_length=64)
+    node_id = models.CharField("node ID", max_length=64)
     # As the tailnet named it at the latest call, for a person to recognize.
     name = models.CharField(max_length=200, blank=True)
     os = models.CharField(max_length=64, blank=True)
@@ -443,7 +455,7 @@ class OwnDevice(models.Model):
     """
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="own_devices")
-    client_id = models.CharField(max_length=160)
+    client_id = models.CharField("client ID", max_length=160)
     registered_at = models.DateTimeField(default=timezone.now, editable=False)
 
     class Meta:
@@ -455,7 +467,7 @@ class OwnDevice(models.Model):
         return self.client_id
 
 
-class ActionItemRead(models.Model):  # noqa: DJ008 - stored state, never shown by name
+class ActionItemRead(models.Model):
     """An action item a person has seen: which item, and which revision of it."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
@@ -465,6 +477,10 @@ class ActionItemRead(models.Model):  # noqa: DJ008 - stored state, never shown b
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=("user", "key"), name="unique_action_item_read")]
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.key}, seen by {self.user.get_username()}"
 
 
 class LinkedAccount(models.Model):
@@ -489,7 +505,7 @@ class LinkedAccount(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.provider}:{self.login}"
+        return f"{self.login} on {self.provider}"
 
 
 class PersonRole(models.Model):
@@ -508,18 +524,22 @@ class PersonRole(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.user_id}:{self.role}"
+        return f"{self.user.get_username()} as {self.get_role_display()}"
 
 
-class UpstreamReading(models.Model):  # noqa: DJ008 - stored state, never shown by name
+class UpstreamReading(models.Model):
     """The last value read from a service outside HQ, and when it was read."""
 
     key = models.CharField(max_length=100, primary_key=True)
     value = models.JSONField()
     observed_at = models.DateTimeField()
 
+    @override
+    def __str__(self) -> str:
+        return f"{self.key} as last read"
 
-class IdempotencyRecord(models.Model):  # noqa: DJ008 - stored state, never shown by name
+
+class IdempotencyRecord(models.Model):
     """A command's retry key and the answer it was given, so a retry replays it across restarts.
 
     Every transport keeps one (``hq.platform.application.idempotency``), a
@@ -546,6 +566,10 @@ class IdempotencyRecord(models.Model):  # noqa: DJ008 - stored state, never show
         ]
         ordering = ("-created_at",)
 
+    @override
+    def __str__(self) -> str:
+        return f"A retry key of {self.actor}"
+
 
 class Revision(models.Model):
     """How many times one table has been written.
@@ -560,7 +584,7 @@ class Revision(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.name}@{self.value}"
+        return f"{self.name}, written {self.value} times"
 
 
 class Appearance(models.Model):
@@ -581,7 +605,7 @@ class Appearance(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.user_id}:{self.theme}"
+        return f"{self.user.get_username()}'s theme"
 
 
 class Avatar(models.Model):
@@ -604,4 +628,4 @@ class Avatar(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.user_id}:{self.digest[:12]}"
+        return f"{self.user.get_username()}'s picture"

@@ -252,7 +252,9 @@ def hold_for_approval(
         # and creates nothing new.
         return _awaiting(existing, repeated=True)
     outstanding = ApprovalRequest.objects.filter(
-        requested_actor=principal.actor, state=ApprovalRequest.State.PENDING
+        requested_actor=principal.actor,
+        requested_person_key=principal.person_key,
+        state=ApprovalRequest.State.PENDING,
     ).count()
     if outstanding >= MAX_PENDING_PER_ACTOR:
         raise TooManyPendingApprovals(
@@ -308,6 +310,7 @@ def _asked_already(capability: str, target: Any, digest: str, principal: Princip
         content_fingerprint=digest,
         requested_actor=principal.actor,
         requested_interface=principal.interface,
+        requested_person_key=principal.person_key,
         state=ApprovalRequest.State.PENDING,
     ).first()
 
