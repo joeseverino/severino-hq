@@ -3,14 +3,16 @@
 #MISE extends="django"
 #MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
 #MISE depends=[{task="setup:browser", args=["{{usage.engine}}"]}, "setup:lint-tools"]
-#USAGE long_about "Each run shoots into a folder of its own, var/look/<when it began>/, named as the look closes; it removes the runs older than KEPT_FOR (a day) beyond the newest KEPT_RUNS (hq/platform/core/tests/look.py) as it starts.\n\nA page at the phone, 820 and 1360:\n  mise run dev:look estate/infrastructure/containers\n\nAfter a change to a record's template, the first page of the estate that draws it:\n  mise run dev:look template:control_plane/_container_detail.html\n\nThe same with every row a reader can open opened, and var/probe.js (a function, such as () => document.title) run on what the screenshot shows:\n  mise run dev:look --expand --eval var/probe.js estate/infrastructure/containers\n\nWhich band file shows each heading, var/heads.js holding () => [...document.querySelectorAll('main h2')]:\n  mise run dev:look --widths 820 --eval var/heads.js connections\n\nEvery page, judged by every check the browser gates hold:\n  mise run dev:look --rule survey all\n\nThe API reference with each tag opened, in the dark palette at 820 (the document is the registry's, the same on any data):\n  mise run dev:look --open --dark --widths 820 api/docs\n\nOne operation of the reference opened, its body and every response with each property in them; the shot's line names the band files that show it:\n  mise run dev:look --widths 820 --operation 'GET /api/v2/resources/projects/{identifier}/' api/docs\n\nThe host's and the extensions' pages together, as mise.local.toml composes them:\n  mise run dev:look --composed estate/all"
-#USAGE arg "[pages]" var=#true help="Pages, unless --docs: a gate page (connections, dense/services, derived/<app>/<list>, the last filled with the longest values its model holds, as LongestValueLayoutTests fills it), api/docs, estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), one record's page of the estate by the route that takes it (control_plane:detail, its first record the estate's pages link to) or by a template it draws (template:control_plane/_container_detail.html, or template:_container_detail.html), estate/all, or all. A name that is none is refused with the names to type instead"
+#USAGE long_about "Each run shoots into a folder of its own, var/look/<when it began>/, named as the look closes; it removes the runs older than KEPT_FOR (a day) beyond the newest KEPT_RUNS (hq/platform/core/tests/look.py) as it starts.\n\nA page at the phone, 820 and 1360:\n  mise run dev:look estate/infrastructure/containers\n\nAfter a change to a record's template, the first page of the estate that draws it:\n  mise run dev:look template:control_plane/_container_detail.html\n\nThe same with every row a reader can open opened, and var/probe.js (a function, such as () => document.title) run on what the screenshot shows:\n  mise run dev:look --expand --eval var/probe.js estate/infrastructure/containers\n\nWhich band file shows each heading, var/heads.js holding () => [...document.querySelectorAll('main h2')]:\n  mise run dev:look --widths 820 --eval var/heads.js connections\n\nOne probe of the survey's tried on a page, with the argument it takes:\n  mise run dev:look --probe boxes:ASIDES_WRAPPED_WITH_ROOM --arg '\".section-head\"' estate/projects/hq\n\nA candidate CSS fix judged against the tree as it stands, by every check the gates hold:\n  mise run dev:look --base HEAD --css var/fix.css --rule survey estate/projects/hq\n\nEvery page, judged by every check the browser gates hold:\n  mise run dev:look --rule survey all\n\nA table finding the layout legs report at some width, reproduced as they find it (loaded at 320, then resized through every width the layout changes shape at):\n  mise run dev:look --rule a_table_fits_its_box_at_every_width --widths 320 services\n\nThe API reference with each tag opened, in the dark palette at 820 (the document is the registry's, the same on any data):\n  mise run dev:look --open --dark --widths 820 api/docs\n\nOne operation of the reference opened, its body and every response with each property in them; the shot's line names the band files that show it:\n  mise run dev:look --widths 820 --operation 'GET /api/v2/resources/projects/{identifier}/' api/docs\n\nThe host's and the extensions' pages together, as mise.local.toml composes them:\n  mise run dev:look --composed estate/all"
+#USAGE arg "[pages]" var=#true help="Pages, unless --docs: a gate page (connections, dense/services, derived/<app>/<list>, the last filled with the longest values its model holds, as LongestValueLayoutTests fills it), api/docs, estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), one record's page of the estate by the route that takes it (control_plane:detail, its first record the estate's pages link to) or by a template it draws (template:control_plane/_container_detail.html, or template:_container_detail.html), estate/all (every estate page the layout gate reads: the navigation's, and a record's page of each kind the seed holds), or all (those, every gate page and api/docs). A name that is none is refused with the names to type instead"
 #USAGE flag "--docs" help="Redraw every screenshot in the docs from the showcase demo instead, after a change to a page one shows"
 #USAGE flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
 #USAGE flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt"
-#USAGE flag "--css <css>" help="Extra CSS after app.css, as text or a file: the defect a new rule must catch"
-#USAGE flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings and errors new or fixed here, its screenshots kept in base/ inside this run's folder; implies --rule survey and --perf. Both sides are judged by this checkout's probes, so a finding is new or fixed for what the pages draw, never for a change to a probe"
-#USAGE flag "--perf" negate="--no-perf" help="Then measure the estate pages asked with mise run perf, beside --base's; on by default with --base"
+#USAGE flag "--css <css>" help="A stylesheet, as text or a file, laid over each page after its own sheets on every load, before the shot, --eval, --probe and --rule: a candidate fix or a planted defect, judged with no edit to static/css. It is adopted as a constructed sheet (document.adoptedStyleSheets), which the page's content security policy does not govern, where a <style> is refused; Playwright's bypass_csp would lift the whole policy, so the policy refusals the run reports would go unseen. A --base is drawn without it, so --base HEAD --css <file> --rule survey says what the sheet fixes and what it breaks"
+#USAGE flag "--probe <probe>" help="Run one browser probe, <module>:<NAME> of hq/platform/core/tests/browser/probes/ (boxes:ASIDES_WRAPPED_WITH_ROOM), on each shot the look takes, as the survey runs it, and print what it finds beside the shot (.probe.txt): each finding on a line, or what it returns or throws. A name that is none is refused with those its module offers"
+#USAGE flag "--arg <arg>" help="The argument --probe's function takes, as JSON: a selector is a quoted string ('\".section-head\"'), several a list; none is null"
+#USAGE flag "--base <ref>" help="Also look at <ref> in a temporary worktree and report only findings and errors new or fixed here, its screenshots kept in base/ inside this run's folder; implies --rule survey and --perf, so it also measures the pages perf serves beside the base's. Both sides are judged by this checkout's probes, so a finding is new or fixed for what the pages draw, never for a change to a probe"
+#USAGE flag "--perf" negate="--no-perf" help="Then measure with mise run perf the pages asked it serves, beside --base's, naming each it leaves out (a gate page, a record found by template or by the estate's links); on by default with --base"
 #USAGE flag "--seed <name>" default="showcase" help="The data set the estate pages are drawn on, by its name in hq.platform.core.seeds"
 #USAGE flag "--columns" help="Also print each table's column widths as drawn, at min-content and at max-content"
 #USAGE flag "--eval <file>" help="Run the function in <file> on each shot the look takes, at each width, and print what it returns beside the shot: the page once --expand has opened its rows, each tag --open opens, each popover and each dialog, so it reads what each shot shows. An element it returns prints as the band file (.band-NN.png) that shows it; the page settles after it, so the shot draws what it changed"
@@ -81,8 +83,10 @@ if [ -z "${usage_base:-}" ]; then
 fi
 
 looked=0
+# What the look prints is its output, which the test runner holds back for a
+# test that passes unless told not to.
 HQ_BROWSER_ENGINE="${usage_engine:?}" HQ_BROWSER_FACE="${usage_fallback_face:+fallback}" \
-    uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --noinput --parallel 1 \
+    uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --noinput --parallel 1 --no-buffer \
     ${keep} || looked=$?
 [ -z "${keep}" ] || rm -f "${kept}/running"
 
@@ -93,21 +97,12 @@ case "${usage_perf:-}" in
 esac
 [ -n "${measure}" ] || exit "${looked}"
 
-# `mise run perf` serves the example estate alone, so it measures the estate pages asked.
+# perf says which pages asked it cannot serve and measures the rest; its all
+# is the estate's pages, never the gate pages dev:look's all adds.
 for page do
-    shift
-    case "${page}" in
-        estate | estate/* | /* | *:*) set -- "$@" "${page}" ;;
-        all)
-            set -- "$@" all
-            echo "mise run perf measures the example estate's pages of all, not the stress or reference pages"
-            ;;
-        *) echo "mise run perf does not measure ${page}: it serves the example estate's pages alone" ;;
-    esac
+    [ "${page}" != all ] || echo "mise run perf measures the estate's pages of all, not the gate pages"
 done
-[ "$#" -gt 0 ] || exit "${looked}"
-
 measured=0
-mise run perf "$@" --seed "${usage_seed:?}" ${usage_base:+--base "${usage_base}"} || measured=$?
+mise run perf "$@" --skip-unservable --seed "${usage_seed:?}" ${usage_base:+--base "${usage_base}"} || measured=$?
 [ "${looked}" -ne 0 ] && exit "${looked}"
 exit "${measured}"

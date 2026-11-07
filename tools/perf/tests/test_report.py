@@ -1,5 +1,6 @@
-"""perf fails a run where a page it measures answers anything but 200, refuses a page that is none,
-and measures a page that redirects as the page it lands on."""
+"""perf fails a run where a page it measures answers anything but 200, refuses a page that is none
+or, asked to skip such pages, names each and measures the rest, and measures a page that redirects
+as the page it lands on."""
 
 import io
 import subprocess
@@ -46,6 +47,36 @@ class AskedTests(TestCase):
         measured.assert_not_called()
         self.assertIn("No page estate/containers", err.getvalue())
         self.assertIn("\n  estate/infrastructure/containers (the estate's control_plane:containers)", err.getvalue())
+
+    def test_asked_to_skip_what_it_cannot_serve_it_names_each_such_page_and_measures_the_rest(self):
+        environment = {
+            "usage_pages": "template:control_plane/controller.html connections /infrastructure/containers/",
+            "usage_skip_unservable": "true",
+            "usage_seed": "showcase",
+            "usage_requests": "2",
+        }
+        with mock.patch.dict("os.environ", environment), redirect_stdout(io.StringIO()) as said:
+            asked = report.plan()
+
+        self.assertEqual(asked.pages, ["/infrastructure/containers/"])
+        for left_out in ("template:control_plane/controller.html", "connections"):
+            self.assertIn(f"perf leaves out {left_out}", said.getvalue())
+
+    def test_asked_to_skip_what_it_cannot_serve_when_it_serves_none_it_measures_nothing_and_passes(self):
+        environment = {
+            "usage_pages": "connections",
+            "usage_skip_unservable": "true",
+            "usage_seed": "showcase",
+            "usage_requests": "2",
+        }
+        with (
+            mock.patch.dict("os.environ", environment),
+            mock.patch.object(report, "measure_run") as measured,
+            redirect_stdout(io.StringIO()) as said,
+        ):
+            self.assertEqual(report.main(), 0)
+        measured.assert_not_called()
+        self.assertIn("perf leaves out connections", said.getvalue())
 
     def test_the_pages_asked_are_read_as_mise_hands_a_variadic_argument(self):
         environment = {

@@ -298,19 +298,26 @@ def pages(
 ) -> list[str]:
     """The pages ``asked`` names, in order and once each: an estate page as its
     address, a page known by name (``named``, dev:look's gate pages) as its
-    name. ``every`` is the addresses the estate's navigation lists, which
+    name. ``every`` is the estate's pages the browser gate reads, which
     ``estate/all`` and nothing asked stand for; ``all`` is those and ``named``.
     ``records`` is the estate drawn, which a record's page is found in and
-    checked against. Every name that is no page is refused together, each
-    with the names it would take."""
+    checked against, and a record's page of ``every`` it does not hold is left
+    out of both. Every name that is no page is refused together, each with the
+    names it would take."""
 
     found, refused = [], []
     record_routes = _record_routes()
+
+    def estate() -> list[str]:
+        if records is None:
+            return list(every)
+        return [address for address in every if not _takes_a_record(address) or records.at(address) is not None]
+
     for name in asked or ["all"]:
         if name == "all":
-            found += [*named, *every]
+            found += [*named, *estate()]
         elif name == f"{ESTATE}/all":
-            found += every
+            found += estate()
         elif name in named:
             found.append(name)
         else:

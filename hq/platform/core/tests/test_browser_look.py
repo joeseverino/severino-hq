@@ -1,5 +1,5 @@
 """dev:look reads what it was asked only from its task, reads --css as a file
-from the checkout, reports page by page, shoots a dialog open as a reader
+from the checkout and --probe as a probe module's, reports page by page, shoots a dialog open as a reader
 opens it, and compares against a base in a worktree it always removes, keeping
 the base's shots."""
 
@@ -19,6 +19,7 @@ from hq.platform.core import seeds
 
 from . import look, look_report, look_tables
 from .browser import stress
+from .browser.probes import boxes
 
 ASKED = {"usage_pages": "example"}
 
@@ -76,6 +77,42 @@ class AskedTests(SimpleTestCase):
         self.assertIn('"372px"', "\n".join(lines))
         self.assertEqual(look._evaluated("example/one", 402, "a\nb"), "example/one at 402:\n  a\n  b")
         self.assertEqual(look._evaluated("example/one", 402, None), "example/one at 402:\n  null")
+
+    def test_the_task_prints_what_a_look_that_passes_prints(self):
+        """The test runner buffers a passing test's output, and a look's output is its shots and findings."""
+
+        task = Path(look.settings.BASE_DIR, "mise-tasks", "dev", "look").read_text(encoding="utf-8")
+        [run] = [line for line in task.splitlines() if "manage.py test" in line and not line.lstrip().startswith("#")]
+        self.assertIn("--no-buffer", run.split())
+
+    def test_a_probe_is_named_by_its_module_and_name_and_a_name_that_is_none_is_refused_with_those_offered(self):
+        self.assertEqual(
+            look._probe("boxes:ASIDES_WRAPPED_WITH_ROOM"), ("ASIDES_WRAPPED_WITH_ROOM", boxes.ASIDES_WRAPPED_WITH_ROOM)
+        )
+        self.assertEqual(look._probe(""), ("", ""))
+        with self.assertRaisesMessage(AssertionError, "ASIDES_WRAPPED_WITH_ROOM"):
+            look._probe("boxes:EXAMPLE_MISSING")
+        # A value of the module's that is no probe's source.
+        with self.assertRaisesMessage(AssertionError, "is no probe"):
+            look._probe("boxes:ANY_SCROLLER")
+        with self.assertRaisesMessage(AssertionError, "boxes"):
+            look._probe("example_missing:SIDEWAYS")
+
+    def test_a_probes_argument_is_json_and_a_bare_selector_is_refused_saying_to_quote_it(self):
+        self.assertEqual(look._argument('".section-head"'), ".section-head")
+        self.assertEqual(look._argument('[".chip", ".unseen"]'), [".chip", ".unseen"])
+        self.assertIsNone(look._argument(""))
+        with self.assertRaisesMessage(AssertionError, "quoted string"):
+            look._argument(".section-head")
+
+    def test_what_a_probe_found_reads_a_finding_a_line_under_its_page_width_and_name(self):
+        lines = look._probed("example/one", 402, "SIDEWAYS", (True, ["a cut", "a spill"])).splitlines()
+        self.assertIn("example/one at 402", lines[0])
+        self.assertIn("SIDEWAYS", lines[0])
+        self.assertEqual([line.strip() for line in lines[1:]], ["a cut", "a spill"])
+        self.assertEqual(len(look._probed("example/one", 402, "SIDEWAYS", (True, [])).splitlines()), 1)
+        self.assertIn("threw (boom)", look._probed("example/one", 402, "SIDEWAYS", (False, "boom\nat line 1")))
+        self.assertIn('"inline": 3', look._probed("example/one", 402, "SIDEWAYS", (True, {"inline": 3})))
 
 
 @tag("source")
@@ -265,6 +302,8 @@ class _Looker:
     with_each_dialog = look.Look.with_each_dialog
     look = look.Look.look
     css, script, dialogs, on_reference = "", "() => document.title", [], False
+    probe = probe_source = ""
+    probe_arg = None
 
     def __init__(self, page):
         self.page, self.read, self.measured, self.base = page, {}, {}, None
@@ -287,6 +326,10 @@ class _Looker:
         self.read["shot"] = self.page.seen()
         return [(f"{name}.png", 0, 1)]
 
+    def outcomes(self, probes):
+        self.read["probe"] = (self.page.seen(), probes)
+        return [(True, [])]
+
 
 @tag("source")
 class EvalOrderTests(SimpleTestCase):
@@ -303,6 +346,25 @@ class EvalOrderTests(SimpleTestCase):
             looker.look("example", 402, "")
         self.assertEqual(looker.read["eval"], {"disclosures", look._FOLD_TOGGLES, look.ROW_TOGGLES})
         self.assertEqual(looker.read["eval"], looker.read["shot"])
+
+    def test_a_probe_reads_the_page_the_screenshot_shows_given_its_argument_and_says_it_beside_the_shot(self):
+        page = _Drawing()
+        asked = {**ASKED, "usage_open": "true", "usage_expand": "true"}
+        with (
+            tempfile.TemporaryDirectory() as out,
+            mock.patch.object(look, "this_run", lambda: Path(out)),
+            mock.patch.dict(os.environ, asked),
+            mock.patch("sys.stdout", new_callable=io.StringIO) as printed,
+        ):
+            looker = _Looker(page)
+            looker.probe, looker.probe_source, looker.probe_arg = "SIDEWAYS", "(selector) => []", ".example"
+            looker.look("example", 402, "")
+            kept = (Path(out) / "example-402.probe.txt").read_text(encoding="utf-8")
+        seen, probes = looker.read["probe"]
+        self.assertEqual(seen, looker.read["shot"])
+        self.assertEqual(probes, [("(selector) => []", ".example")])
+        self.assertIn("SIDEWAYS", kept)
+        self.assertIn(kept.strip(), printed.getvalue())
 
 
 class _Dialogs:
@@ -389,7 +451,7 @@ class _Opener:
     shoot_dialog = look.Look.shoot_dialog
     close_dialog = look.Look.close_dialog
     take_shot = look.Look.take_shot
-    script = ""
+    script = probe = ""
 
     def __init__(self, page, dialogs):
         self.page, self.dialogs, self.shots = page, dialogs, []
@@ -756,11 +818,14 @@ class WorktreeTests(SimpleTestCase):
             def relay(_command, _sink, _ref, cwd, env):
                 seen["test"] = Path(cwd, "hq", "tests", "test_new.py").read_text(encoding="utf-8")
                 seen["database"] = env.get("SEVERINO_TEST_DATABASE_PATH")
+                seen["css"] = env.get("usage_css")
                 Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
 
             with (
                 mock.patch.dict(
-                    os.environ, {**ASKED, "SEVERINO_TEST_DATABASE_PATH": "var/example.sqlite3"}, clear=True
+                    os.environ,
+                    {**ASKED, "usage_css": "main { color: red }", "SEVERINO_TEST_DATABASE_PATH": "var/example.sqlite3"},
+                    clear=True,
                 ),
                 mock.patch.object(look, "LENS", ()),
                 mock.patch.object(look, "this_run", lambda: checkout / "var" / "look" / "example-run"),
@@ -770,6 +835,7 @@ class WorktreeTests(SimpleTestCase):
                 self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}))
             self.assertEqual(seen["test"], "new\n")
             self.assertIsNone(seen["database"], "the base migrates a database of its own")
+            self.assertEqual(seen["css"], "", "the base is drawn as its tree draws, without --css")
 
     def test_the_base_shoots_into_this_runs_folder_so_its_shots_outlive_its_worktree(self):
         with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):

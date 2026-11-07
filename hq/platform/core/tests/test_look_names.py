@@ -11,7 +11,7 @@ from django.test import SimpleTestCase, TestCase
 from django.urls import resolve, reverse
 
 from hq.platform.core.tests import look
-from hq.platform.core.tests.browser.estate import ask_as_production, owner_client
+from hq.platform.core.tests.browser.estate import ask_as_production, estate_once, landings, owner_client
 from hq.platform.core.tests.task import estate_name, estate_path, is_estate
 
 ASKED = {"usage_pages": "", "usage_seed": "showcase"}
@@ -61,11 +61,20 @@ class RefusedRuleTests(SimpleTestCase):
         self.assertNotIn("--rule every_", said)
 
 
-class EveryPageTests(SimpleTestCase):
+class EveryPageTests(TestCase):
     def test_all_holds_the_api_reference_light_and_dark(self):
         pages = _named("all")
 
         self.assertLessEqual(set(look.REFERENCE_PAGES), set(pages))
+
+    def test_all_reads_every_page_the_estate_gate_walks(self):
+        # Each as the page it lands on, as the gate lists them and dev:look draws them.
+        asked = [estate_path(page) for page in _named("all") if is_estate(page)]
+        walked, _ = estate_once()
+        with owner_client() as client:
+            read = landings(lambda address: ask_as_production(client, address), asked)
+
+        self.assertEqual(sorted(read), sorted(walked))
 
 
 class GuessTests(SimpleTestCase):

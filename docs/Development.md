@@ -233,9 +233,16 @@ quick gate instead, read from the task's own `run`.
 The quick gates run while the tests do. Their output is held and printed
 after the tests', under `quick gates, beside the tests`, in mise's summary
 output: a gate that passed is its `passed in` line, and one that failed prints
-whole. One that takes the heavy turn of its own (the shell gate, for its
-suites) runs after the tests instead, so it never waits on the turn they hold,
-and prints as it runs, its wait for the turn included.
+whole. A gate that fails is told the moment it does, with its last lines and
+`rerun it now: mise run <task>`, while the tests go on, so it is fixed during
+their wait and the next run passes whole. mise's summary output prints a
+failed task's lines as it ends but says it failed only once the whole run
+does, so fast reads any line under a task's name other than its `passed in`
+or up-to-date line as that task's failure.
+
+A quick gate that takes the heavy turn of its own (the shell gate, for its
+suites) runs after the tests instead, so it never waits on the turn they hold, and
+prints as it runs, its wait for the turn included.
 
 A test run prints its failures, each with what the test printed, and nothing
 of a passing test or of its own progress: the runner sets Django's `--buffer`
@@ -512,7 +519,8 @@ JavaScript off and on.
 It checks what a reader would lose:
 
 - nothing escapes the page sideways;
-- a table fits its region at every width;
+- a table fits its region at every width, and keeps every table check there
+  with its rows open;
 - no text runs out of its box or over other text;
 - nothing is out of reach;
 - text and controls keep their contrast;
@@ -572,6 +580,15 @@ and `manage.py seed showcase` show) is read by
 It is read with script on and deferred parts loaded, at 402, 820, 1360 and
 1680 pixels and at `WIDE_TABLES`, in the light palette and the dark. A finding
 names its check, page, width and theme.
+
+Its tables are also read at every shape of the layout, in a leg of their own
+(`browser:table-fit`, `hq.platform.core.tests.browser.table_fit`): from 320
+pixels up, at each edge of the stylesheet's viewport queries and wherever a
+box around a table changes shape between two, every row a reader can open is
+opened and every table check is read, with what opening the rows moved. A
+finding names its check and the first width it was found at.
+`TableSweepPlantedTests` plants a defect of each kind in a span of widths no
+other gate reads, and requires the sweep to find it there.
 
 `WIDE_TABLES` is read from the stylesheet: the narrowest window where a
 table's region, on the page and in a card, has passed the breakpoint its wide
@@ -658,7 +675,9 @@ gating. `mise run dev:look --help` gives its pages, its flags and the commands
 to copy. What follows is how a look behaves, which the help does not say.
 
 A record's page is found in the estate the seed builds, and a record's address
-that seed does not hold is refused with the ones it does. An unknown page or
+that seed does not hold is refused with the ones it does. Composed, the
+showcase and standard seeds hold each extension's demo too, and `all` reads
+the record pages it names ([Plugins](Plugins.md#demo-data)). An unknown page or
 rule is refused before anything runs, and a page that answers anything but 200
 fails the run.
 
@@ -704,8 +723,9 @@ or reach out is refused and reported instead.
 
 `--rule survey` runs every check the gates hold (`BrowserGate.findings`), so
 what it finds on a page the gates read is what they fail on. Markup a vendored
-script draws (`SELECTORS["vendored"]`, the API reference's viewer) is held by
-its own tests instead.
+script draws (`data-vendored` on its mount, `SELECTORS["vendored"]`: the API
+reference's viewer) is styled by its own rules alone, and held by its own
+tests instead.
 
 What a rule finds is written beside each screenshot (`<page>-<width>.txt`) as
 the run goes, so a run stopped part way keeps it, and to `var/gate/look.txt`
@@ -727,8 +747,22 @@ contrast is kept to its power of four. So a finding whose row number moved,
 whose overflow grew by a few pixels, or that names another record is neither
 new nor fixed, and one grown many times over is new.
 
-With `--columns` or `--eval`, each line the base measured otherwise is printed
-under this checkout's, marked with the ref.
+With `--columns`, `--eval` or `--probe`, each line the base measured otherwise
+is printed under this checkout's, marked with the ref.
+
+`--probe <module>:<NAME>` runs one probe of
+`hq/platform/core/tests/browser/probes/` on each shot, as the survey runs it,
+with `--arg`'s JSON as its argument (the selector the survey passes it, from
+`SELECTORS`). Its findings print a line each beside the shot and are kept as
+`.probe.txt`, so a probe is tried on a page before it is wired into the
+survey.
+
+`--css` lays a stylesheet over every page the look loads, before the shot,
+`--eval`, `--probe` and the rule. It is adopted as a constructed sheet, which
+the page's content security policy does not govern; lifting the policy
+instead would hide the refusals the run reports. The base is drawn without
+it, so `--base HEAD --css <file> --rule survey` reports what a candidate fix
+fixes and what it breaks before any sheet in `static/css` is edited.
 
 `--eval` takes a file holding a function, called with nothing, or one
 expression. What it returns prints under the page and width (as JSON unless
