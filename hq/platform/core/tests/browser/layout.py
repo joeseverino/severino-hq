@@ -475,9 +475,9 @@ class LayoutBrowserTests(BrowserGate):
 
     def no_value_is_cut_while_its_row_has_room(self, name):
         """A value in a closed row is cut only once its row has no room
-        left to show more of it: none in its cell past what shares its line,
-        none in a column wider than its widest cell asks. Every table on the
-        page, with every disclosure open."""
+        left that would show it whole: in its cell past what shares its line,
+        and in the columns wider than their widest cell asks. Every table on
+        the page, with every disclosure open."""
 
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)

@@ -286,11 +286,20 @@ PASSES = {
         '<select aria-label="Example"><option>Example group name</option></select>'
         '<button type="button" class="btn">Example label words</button>'
     ),
-    # A value cut at its cell's edge beside a sentence that wraps: its row has no room left.
+    # A value cut at its cell's edge beside a sentence that wraps: its row has
+    # no room left. The second fills a padded box, whose padding is no room;
+    # the third is cut beside room too narrow to show it whole.
     "cut beside room": Plant(
         '<div class="table-scroll" style="inline-size: 20rem"><table class="data-table"><tbody><tr><td>'
         '<span style="display: block; contain: inline-size; min-inline-size: 6ch; overflow: hidden; '
         'text-overflow: ellipsis; white-space: nowrap">Example value cut short</span></td>'
+        f"<td>{_LINES}</td></tr><tr><td>"
+        '<span style="display: block; padding-inline: 1.5rem"><span style="display: block; contain: inline-size; '
+        'min-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">'
+        "Example value cut short</span></span></td>"
+        f"<td>{_LINES}</td></tr><tr><td>"
+        '<span style="display: block; max-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; '
+        'white-space: nowrap">an-example-value-far-longer-than-the-room-its-cell-leaves-beside-it</span></td>'
         f"<td>{_LINES}</td></tr></tbody></table></div>"
     ),
     # A button, a field and a select in one row, each the control size.

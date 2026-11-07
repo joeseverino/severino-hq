@@ -289,13 +289,13 @@ CUT_WITH_ROOM = (
 )
 
 
-# A value cut in a closed row while the row leaves room it could show more of
-# it in: room in its own cell past what shares its line, and the room each
-# other column showing holds past what its widest cell asks (each cell's
-# table laid out again at its max-content, unseen, beside it so its rules
-# still reach it). A column holding a cut gives none, and a fixed
-# layout's columns none at all. More of a value shows in any room an em wide,
-# or all of it in less.
+# A value cut in a closed row while the row leaves room that would show it
+# whole: room in its own cell past what shares its line (a box the value
+# fills keeps its padding), and the room each other column showing holds
+# past what its widest cell asks (each cell's table laid out again at its
+# max-content, unseen, beside it so its rules still reach it). A column
+# holding a cut gives none, and a fixed layout's columns none at all. A value
+# longer than its row's room is cut wherever it goes, so that room is none.
 CUT_BESIDE_ROOM = (
     "(unseen) => {"
     + DESCRIBE
@@ -341,10 +341,12 @@ CUT_BESIDE_ROOM = (
       const r = by.getBoundingClientRect();
       // What shares the cut box's lines in its cell, which the box's growing would push.
       let end = r.right;
-      // A box around it on the line (a link with its arrow, a tag's padding) grows with it.
+      // A box around it on the line (a link with its arrow, a tag's padding)
+      // grows with it; a box it fills gives it none of its own padding.
       for (let up = by.parentElement; up && up !== cell; up = up.parentElement) {
-        const shown = getComputedStyle(up).display;
-        if (/inline-/.test(shown)) end = Math.max(end, up.getBoundingClientRect().right);
+        const around = getComputedStyle(up);
+        if (/inline-/.test(around.display)) end = Math.max(end, up.getBoundingClientRect().right);
+        else if (!['inline', 'contents'].includes(around.display)) end += parseFloat(around.paddingRight) + parseFloat(around.borderRightWidth);
       }
       const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
       for (let text = walker.nextNode(); text; text = walker.nextNode()) {
@@ -357,12 +359,18 @@ CUT_BESIDE_ROOM = (
       const own = Math.max(0, inner(cell).right - end);
       const others = [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
       const room = own + others;
-      const first = boxes[0];
-      const style = getComputedStyle(first);
-      const short = first.scrollWidth > first.clientWidth + 1 && first.scrollHeight <= first.clientHeight + 1
-        ? first.scrollWidth - first.clientWidth : Infinity;
-      const needs = Math.min(parseFloat(style.fontSize), short);
-      if (room >= needs + 1) {
+      if (room < 1) continue;
+      // Each box that cuts it given the room, to see whether it then shows
+      // the value whole; room it would still cut the value in cures nothing.
+      // A pixel less than the room, since a cut is read past a pixel's slack.
+      const kept = boxes.map((box) => [box, box.style.cssText, box.getBoundingClientRect().width]);
+      for (const [box, was, wide] of kept) {
+        box.style.cssText = `${was}; box-sizing: border-box !important; inline-size: ${wide + room - 1}px !important; `
+          + 'min-inline-size: 0 !important; max-inline-size: none !important';
+      }
+      const cured = !cutsIn(cell, unseen).some((cut) => cut.node === node);
+      for (const [box, was] of kept) box.style.cssText = was;
+      if (cured) {
         found.push(`${describe(by)} "${node.data.trim().slice(0, 40)}" is cut beside ${Math.round(room)}px of room `
           + `(${Math.round(own)}px in its cell, ${Math.round(others)}px in the other columns)`);
       }
