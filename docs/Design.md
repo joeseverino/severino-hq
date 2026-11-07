@@ -3,7 +3,10 @@
 HQ has one look, built from a small set of primitives. A page is assembled
 from them; it does not style itself. If a page needs something the primitives
 cannot express, the primitive grows (in its sheet under `static/css/app/` and its partial),
-and every page that uses it gets the improvement. Extensions ship no CSS for
+and every page that uses it gets the improvement. A page that needs a
+different look of a part gets an option on that part; a new part is added
+only when the structure differs (what it is, never how it looks), as the
+command palette's group labels inside its menu are. Extensions ship no CSS for
 the same reason: they render host classes and inherit every fix.
 
 The stylesheet is the sheets `hq/platform/core/stylesheets.py` lists, each
@@ -48,10 +51,28 @@ per thing:
 | a fresh read from a thing's page | "Refresh" ("Refresh all" for everything) |
 | a fresh read from a problem card | "Check again" |
 | a filter form's button | "Filter" |
+| making a new record, on its list, its form and its command | "Add" and the record: "Add an asset" (`labels.adding`) |
+| saving the form of a record that exists | "Save changes" (`labels.SAVE_CHANGES`) |
 | a wait | "shortly" |
 
 A capability and the button that runs it say the same words.
 *Gate:* `lint:prose`, over the paths `tools/lint/vale/.vale.ini` gives Plain.
+
+**No page writes a style.** A page's look comes only from HQ's own sheets.
+The policy's `style-src-elem 'self'` refuses a `<style>` element, and HQ
+writes no `style` attribute either: one would be refused once
+`style-src-attr` is `'self'` too, which waits only on a WebKit defect
+(`WebKitSelectCanaryTests` says when it is fixed). A value drawn to scale is
+an element that carries it (`<meter>`, `<progress>`, an SVG mark placed in
+percent, `partials/_allocation.html`); a script that places a part writes
+through the CSSOM (`style.setProperty`), which the policy does not govern. A
+browser test is answered under the same policy, and the gate lifts a style
+its own fixture writes into a sheet it serves (`gate.lifted`).
+*Gates:* `test_style_attributes_are_the_only_relaxation_in_the_policy`;
+`RenderedPageTests` over every page and fragment, an extension's included;
+the template contract, for an extension's template; every browser test,
+which fails on a refusal or a report to `/csp-report/`, and
+`PolicyReportBrowserTests` over the navigation.
 
 **One frame per thing.** A box that holds content is a *surface*: one border,
 one radius, one background, one shadow, drawn by the single surface rule in
@@ -124,10 +145,22 @@ the least room.
 
 The region marks each body cell that says nothing (`data-blank`) and every
 cell of a column blank in every row (`data-blank-column`), which is not drawn.
+Each cell of a column whose heading is `numeric` carries that kind too, so a
+figure aligns under its heading on fixed digit widths with nothing written on
+the cell.
 
 Since a table fits, its region is no scroll box and its heading pins under the
-page's chrome (a scroll box in either axis would pin it to the region). Only a region declared a pane, or a chart's (`chart=True`),
-scrolls, pins its heading to its own edge, and takes focus. A pane
+page's chrome (a scroll box in either axis would pin it to the region). A
+table that scrolls once it has given all it can (`data-scrolls`) is in such a
+box, so its heading sticks to nothing and stays on its first row.
+*Gate:* `test_a_rows_controls_stay_in_its_card_and_a_table_that_cannot_fit_scrolls`.
+Only a region declared a pane, or a chart's (`chart=True`),
+scrolls, pins its heading to its own edge, and takes focus: it is named, so
+the stop says what it holds, as the focusable scroll box of the usual
+responsive-table pattern is. It is a `group` where that pattern writes
+`region`, and a region that fits is a plain box, so neither is a landmark:
+the section or card around a table is one already, often by the same name.
+*Gate:* `test_a_section_and_the_table_in_it_are_one_landmark`. A pane
 (`pane=True`) has a height of its own, as a chart's data or the topology
 ledger has, or is a table sized to its content. A table never stacks into
 cards and is not swiped through.
@@ -171,8 +204,11 @@ first, then each part under its column's name (`dl.row-columns`).
   opened, is fitted as it would stand with its rows closed and held there, in
   a table without headings too.
 
-Every row that can open has its toggle drawn by the server
-(`{% row_toggle %}`). It shows only where the row holds something back now: a
+Every row that can open has its toggle drawn by the server. The region draws
+it, last in the row's cell under the heading that keeps the gutter
+(`table_heading ... gutter=True`), and marks that column's cells `row-gutter`;
+a toggle written by hand there is refused. Only a table with no headings to
+name its gutter draws its own (`{% row_toggle %}`). It shows only where the row holds something back now: a
 column that left with something in it, a `narrow-more` or `row-below` part, a
 fold, or a value `tables.js` found cut (`data-cut`).
 
@@ -189,10 +225,26 @@ With no script a toggle opens nothing, so nothing is held back for one: every
 column and part stays, and the table is sized to its content inside its region.
 *Gate:* `test_a_wide_table_fits_a_phone_and_opening_a_row_moves_nothing`.
 
+**A row's editor opens under it.** A row edited on the page holds
+`{% row_editor form key label=... action=... verb=... field=value %}` in a
+cell: a link to the page with that row's editor open (`?edit=<key>`, the
+other query kept). On that page the region moves the form (`.row-editor`)
+into the line beneath the row and draws the row open, its toggle saying so,
+and with no script that line shows, since no toggle can open it. The view
+declares one form for the table; it is drawn for the open row alone, with the
+values the cell gives by field name, or as it was sent when it is bound, and
+its ids carry the row's key, so none is drawn twice. A region that holds an
+editor's link is a region of the page (`data-fragment`, its id from its
+label), so with script the link, the form and its Cancel are answered there
+through `fragment.js`'s own paths; the form posts `next`, the page with the
+editor closed.
+*Gate:* `hq/platform/core/tests/test_row_editor.py`.
+
 **Every table sorts.** A list its server sorts has links in its headings
 (`table_heading sort=`). Any other table whose rows are worth sorting has the
-same control, looking the same, drawn as a button (`local_sort=rows|sortable`,
-or a row count where rows come in groups). `tables.js` sorts the rows on the
+same control, looking the same, drawn as a button (`local_sort=True`), which
+the region keeps only where the table holds two rows to put in order, counted
+across its groups. `tables.js` sorts the rows on the
 page: ascending, descending, then as they came. Amounts, dates and lengths
 of time sort as what they are; a cell may say its own value with `data-sort`.
 Sections keep their own rows. No table is drawn by hand, an extension's
@@ -242,15 +294,36 @@ draws, the naming column's half a share more. So the holds of a table never
 sum past its box: what fits its share stays whole, and what does not wraps or
 is cut.
 
-Free text in a cell (a message, a record's words) is marked `cell-data` and
-breaks a run with no seam in it (a link, a digest) wherever it must, so it
-never holds its column wider than its box. An identifier in a prose column
+What each part of a cell is decides how it wraps, and the region marks it
+(`data-cell`, `table_tags.mark_cells`), so the stylesheet keys its cuts,
+holds and wraps on that mark and never on a page's class or a cell's tags.
+The bold a cell leads with, or its leading link's, is the row's `name`; free
+text (a message, a record's words) is declared `cell-data` and marked `data`;
+what a row means in words is declared `cell-prose`. A context line is the
+shared `.muted`, and a row's name set in one line with its controls (a star,
+a move) is a `.name-line`, where the name is cut rather than wrapped. A table
+written later sets as every other does by writing those, and
+`lint:css` refuses a table primitive rule that tells a cell's part by
+anything else. Free text breaks a run with no seam in it (a link, a digest)
+wherever it must, so it never holds its column wider than its box. An identifier in a prose column
 waits for the open row (`row-more`) rather than holding that column at its cap.
 
 A run of links longer than the count its template declares folds behind "+N",
 and a stacked list longer than four shows three and "+N more". A row that
 holds anything back gets one toggle that lifts every cut and opens every fold
 in it.
+
+An open row and the line beneath it hold every box in them to its cell, in
+one rule of the table primitive (`surfaces.css`): no box asks for a width of
+its own or grows wider than what holds it, and a chip is a box, its padding
+inside that width. So nothing there runs past or over a cell at any width,
+whatever a page's own rule says, and no page sizes a box inside a table:
+`lint:css` refuses a width, an inline size, a flex basis or a grid's columns
+on a selector that reaches inside one (`.data-table` and a combinator, a
+cell, `.row-detail`, `.row-columns`) in any sheet but the table primitive's
+(`base.css`, `cuts.css`, `figures.css`, `tables.css`, `surfaces.css`).
+*Gates:* `cells` and `cell labels` in the layout survey, read with rows open
+by `dev:look --expand`; `test_stylesheet_lint`.
 
 An intrinsic size (`max-content`, `min-content`) goes on an element inside a
 cell, never on the `td`. Chromium ignores it on a table cell and WebKit does
@@ -291,7 +364,8 @@ label left, value right.
 
 What names a value (`.band-label`, a tile's label, a `<dt>`) is sentence case
 in the muted voice. Capitals are for a kicker over a group (`.eyebrow`), never
-a value's name (`test_no_value_is_named_in_capitals`).
+a value's name, a state or a tag; `lint:css` holds every selector to the
+kickers listed in `tools/lint/stylelint.config.mjs`.
 
 A list of short steps (`.step-list`) is read down its columns, so its columns
 end within a step of each other. The
@@ -312,13 +386,41 @@ row while both keep a readable width and wraps to a column when they cannot.
 Pairs (`.two-col`) are at most two columns and pair like with like: a table
 beside a table, a chart beside a chart, so each row ends together.
 
-**Forms are two columns, or one.** Fields flow in reading order, two to a row
-where there is room and none narrower than 18rem. A row's fields share its
-whole width: pairs sit side by side and the odd one of a run takes its row, so
-no row is left with a field and a hole beside it. A textarea, a group of
-choices, errors, a command's confirmation and the actions take the row. A
-group of checkboxes reads across. A command's form is this grid too: `.form`
-is the one form layout.
+**A form's fields take as many columns as fit.** Fields flow in reading order
+across as many columns as hold a field of 18rem, so a wide frame gains columns
+rather than stretching each input, and a phone's is one. A textarea, a group
+of choices, a field marked wide, errors, a command's confirmation and the
+actions take the row. A group of checkboxes reads across. A command's form is
+this grid too: `.form` is the one form layout.
+
+**Every form a page is about is drawn one way.** A record's form and a
+command's are one card spanning its column (`.form-card`) holding one partial,
+`partials/_form.html` (its token, errors, fields and closing row; `fields`
+names a template for fields beyond the form's own loop, `bar=True` pins the
+closing row to the screen's foot once the form has changed, drawn in its place
+from the first draw so nothing moves), the form's errors above
+the fields (`partials/_form_errors.html`), each field with its help under it
+(`templates/django/forms/field.html`), and one closing row
+(`partials/_form_actions.html`): the primary verb, Cancel, and a note on what
+saving does where the page has one. A field's help is its command's meaning
+(`records.described`), so the form and the command page say the same; a form
+writes its own only for what it alone asks. The view supplies the verb and
+the way back, never the template.
+*Gate:* `hq/platform/core/tests/test_form_actions.py`, which reads every form
+template.
+
+A form whose fields stand one to a row of a table (a group chosen for each
+record, a verdict for each request) is the same partial with `table_body`
+naming the template that draws the table, in its `table_region`. The form lays
+out no fields of its own, so it adds no box: the table reaches its section's
+sides as a table section's does, and the closing row stands under it. The form
+declares one field for each row, named by the row (`group-<id>`), so each
+control's name and id are its own and a row moved between two drawings still
+posts its own value, where a formset's names follow each row's place. Each
+row's cell draws its field with `partials/_row_field.html`: the control, its
+label for a screen reader alone (the column's heading names it on the page),
+and its errors under it. A row's own buttons are `post_button`s, which post
+the page's own form, so they sit in this one.
 
 **Nothing empty takes space.** A panel with nothing to show is not drawn: the
 page closes up rather than carrying a card that says "nothing here". An empty
@@ -379,6 +481,67 @@ card is a `data_*` option the stylesheet reads, never a class written inside an
 track it is placed in (`.card { min-inline-size: 0 }`), so on a phone what it
 holds wraps inside it.
 
+**A section is drawn by `{% section %}`.** `{% section "Agents" count=n lede="..." %}body{% aside %}a line, a link, a control{% empty %}No agent has connected yet.{% foot %}How to read the body.{% endsection %}`
+(`part_tags.py`, drawn by `partials/_part_section.html`) is a titled part of
+a page: a `<section>` labeled by its heading, its head on the page (the
+heading with its count standing in it, the lede under it and the aside
+beside it), then its body in the frame, and after the body its foot: the
+line that says how to read it (what a figure means, where the numbers come
+from), quieter than the body, and drawn only with one. The heading's line is one control
+tall, so a control beside it adds no height and heads in one row are one
+height. The aside is one box at the row's end, so its parts (a count, a dot, a link) wrap as one line of text, and it
+keeps to one line while the row has room for it. What draws its own edges,
+cells or fill (a table's region, a band of facts, a row of metrics, a month's
+grid, a list whose rows carry their own padding) fills the frame with no
+inset and no second border, as a card's flush list group does in Bootstrap;
+prose, facts and the empty line sit in the frame's padding.
+*Gate:* `section asides` and `inset in the frame` in the layout survey. With no body it draws its empty part as the empty state's line,
+followed by the link that fills it when `remedy_label` and `remedy_url` name
+one (`{% section "Receipts" remedy_label="Upload one" remedy_url=url %}{% empty %}No receipts.{% endsection %}`),
+and with neither it draws nothing. `more_label` and `more_url` end the aside
+with the quiet link to the whole of what the section shows part of ("View
+Estate", "All runs"), after a dot when the aside says something too; with no
+address the link is left out, so a page passes the one it has. `figure=True`
+draws the section as a `<figure>`, its head the `<figcaption>`, for a drawing
+(a chart, a calendar) whose title, line under it and legend are a section's
+head like any other. A section inside a section heads itself a level
+down inside the outer frame, adding no frame or inset of its own, two of one
+heading name their own ids, `id` is the section's own (a link to it, a
+region refreshed in place), `fold=True` draws it closed with its head as its
+toggle (`open` starts it open), and `css` and `data_*` are the section's, on a
+landmark that never pads itself, whatever `css` names: the frame holds the
+padding. A section draws its head inside its frame, over a rule, unless its
+body is one table region and nothing else, whose head stands above the frame
+so the table reaches its edges (`:has()` in surfaces.css decides; a page picks
+nothing). `head="above"` or `head="inside"` overrides it for a page that
+needs the other look. Frames that share a row start together, so in a pair
+(`.two-col`) a table section beside a section whose body is anything else
+takes its head inside its frame; alone, or beside another table, it keeps its
+head above. A
+heading is plain words, never markup a filter draws (`|when`): `SectionPart`
+refuses markup in it, and a template meets that only as it renders. A
+heading that names a moment gives it as `moment`, in the `when` form
+`|when` takes, and the part draws the `<time>`: after the heading's words,
+quieter than them (`{% section day.name moment=day.day when="day" %}`), or
+as the whole heading when it has none (`{% section moment=month
+when="month" %}`). A page built in code builds the same part as
+`hq_sdk.ui.SectionPart`, its body drawn from `template` and `context`, and
+writes `{{ part }}`. The part is the head, the frame and the spacing between,
+so a page states the content and never the spacing, the frame or the count's
+look.
+
+**A state is a pill drawn by `{% status %}`.** `{% status row.get_status_display tone=row.status %}`
+(`status_tags.py`; `hq_sdk.ui.status_pill` from Python) says the state in
+sentence case (`labels.sentence`), whatever its source wrote: Docker's
+"exited" reads "Exited" beside a model's "Done". Its `tone` names its color
+(`good`, `attention`, `serious`, `neutral`, or a status the stylesheet colors),
+and a declared resource's health state ("healthy", "drifted") takes the tone
+every page draws it in. Several parts are one label (`{% status "HQ expects"
+desired tone="serious" %}`); `href`, `title`, `tip`, `css` and `data_*` say
+the rest. No template or module writes a pill by hand.
+*Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
+`test_status_tags.py`, which reads every template root for a hand-written pill.
+
 **The header is one row.** When room runs out, the search field collapses to a
 button that opens over the navigation, then the sections move behind the
 toggle. The navigation never shrinks below its own content, and the bar's
@@ -422,8 +585,8 @@ the theme has its row. Then where the menu leads.
 turned when open. A section that folds (`section-fold`) uses its heading as the
 toggle, with its count beside it; never a separate "Show all". What it holds
 sits on a panel like its neighbors: a fold of one table has the table's
-region, and any other fold is the card (`{% card element="details" %}`), its
-heading inside it (the survey's "bare folds").
+region, and any other fold is a folded `{% section %}`, its body in the
+section's frame (the survey's "bare folds").
 
 **One filter bar.** `.filter-bar`: a search field, selects, Apply, and Clear
 when anything is set. No chip walls.
@@ -470,6 +633,16 @@ on its part when the column leaves for the row's open line. The survey's
 `links at rest` check reads every link on every page from the rendered layout
 and names one underlined alone or among words without a cue of its own (an
 underline, or a weight, size or face as axe accepts).
+
+**A link's line runs under its name alone.** The mark a sentence puts after
+a name (`breakable`'s `mark`, `{% entity link mark="," %}`) keeps to the
+name's last line inside the link, and `base.css` draws it clear of the
+underline. A separator between items (a dot list's dot, the meta line's) is
+drawn in front of an item that holds the link, never on the link itself, and
+a status tag sits beside a link, never inside it. The survey's
+`lined past the name` check reads every link on every page and names one
+whose drawn text ends in a sentence's mark, begins or ends with a separator,
+or holds a tag.
 
 An external link's arrow (`.external-link`) is joined to its last word by a
 no-break space. A link whose name is one box (a cut token, a chip in a table)
@@ -558,7 +731,11 @@ fill, `--muted` on a surface, `--code-muted` beside code.
 
 **Buttons.** Primary for the one thing a page is for; default for the rest;
 `ghost` for link-like actions that sit inline; `danger` in red text on the same
-surface as its neighbors, loud only in its confirmation.
+surface as its neighbors, loud only in its confirmation. A label keeps its
+line, from the button rule alone (`page.css`); only a tight table lets one
+wrap. A label too long for a phone is shortened where it is declared.
+*Gate:* `test_a_controls_label_keeps_its_line_from_the_button_rule_alone`, and
+the `action-intent-names-no-value` ast-grep rule.
 
 **An action says its command's words.** What a button, link, remedy or toast
 says is declared on the command it runs ([Plugins](Plugins.md), "Capabilities")
@@ -567,8 +744,10 @@ and read from there, so a page and the button it describes cannot disagree.
 - A link that runs a command is `action_links.command_action`, which takes a
   `variant` of the declared words and no label.
 - A finding's `FindingRemedy` says its command's words too, or its own
-  `intent` where the command's name would not say what this press does ("Put
-  an access list in front of x"), declared once on the remedy.
+  `intent` where the command's name would not say what this press does ("Add
+  an access list"), declared once on the remedy. An intent names no value: the
+  row it stands in names the thing, and a name would stretch the button past a
+  phone's width.
 - A template names a button with `{% words "name" "variant" %}`, in a control
   and in a sentence that says which one to press.
 
@@ -661,7 +840,10 @@ its kind (`.conn-rows` flows each row once it is too narrow for three columns).
 A thing's state sits on its title's line (`page_aside`), as words. The facts
 about it at a glance are a band under the head, as a service, a machine and
 HQ's own page open. A line that dates or sources a section goes beside its
-heading (`.heading-aside`), not loose under it.
+heading (`.heading-aside`), not loose under it. So does a card's way to
+everything it lists ("All projects", "View Estate"): a quiet link
+(`.subtle-link`) in its heading's aside, never a foot under the list: a
+section's `more_label` and `more_url` draw it.
 
 A section's heading that follows a form, a table or a list in the same box
 starts a section of its own. `.section-head` clears what is above it by the
@@ -690,6 +872,9 @@ A link to a part of a page lands below the sticky header, from one
 `scroll-padding-top`. A table's row, or a control in one, lands below its
 sticky heading too (`--heading-height`). The chrome a part sticks under is
 only what the page draws: a page without the header has no inset.
+A part that covers what scrolls beneath it (a sticky head or bar, a fade)
+paints `var(--ground)`, the surface it sits on: the page's, or a frame's
+inside one (`tools/lint/stylelint-ground-cover.mjs`, in `lint:css`, holds it).
 
 **An item is open until its owner stops raising it.** Nobody closes one by
 looking at it. What a reader can do with one they are not acting on is dismiss
@@ -775,8 +960,10 @@ were. Nothing on the dashboard is fetched after it has rendered unless
 somebody opens it, or a reading its queue is drawn from is due (below).
 
 **A page about one thing asks for that thing's readings.** A machine's page,
-a service's page and a record's page include `partials/_visit_refresh.html`,
-naming which page they are. The dashboard includes it only when a reading its
+a service's page and a record's page name which page they are as
+`page_visit` (`application.pages.PageVisit`); `page.html` draws the ask
+(`partials/_visit_refresh.html`) and its note says what it waits for, in the
+band between the bar and the page, under the person's control. The dashboard names itself only when a reading its
 queue is drawn from is due (`visit_refresh.PAGES`), and the connection panel
 only when the tailnet, container or posture readings it shows are due. The
 panel asks once its dialog is open, and names itself as the part to refresh:
@@ -993,7 +1180,8 @@ Alignment:
   from the first stop's mark to the last's, each mark holding its glyph in its
   middle.
 - Paired sections end each row together, and so do cards drawn side by side,
-  the dashboard's included.
+  the dashboard's included. Sections that share a row start their frames
+  together too, whatever their heads hold (the survey's `frames in a row`).
 - A band lays out as whole even rows, and each of its cells keeps its padding;
   so does any filled box.
 - A form fills its rows, controls in a row share one height, a wrapped bar of

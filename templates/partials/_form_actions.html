@@ -1,0 +1,28 @@
+{% comment %}
+The closing row of every form HQ draws, so each ends the same way: its one
+primary verb (`verb`, from the view: the create command's words, or Save
+changes), Cancel back to `cancel_url`, and `note`, what saving does where the
+page says so.
+
+A switch is pressed as the words that set it (`choices`, each a value and its
+words, posted as `choice_field`), and only the one of a single choice is
+primary. A form answered in place (`live`) says how it went in the line its
+fragment fills, and its Cancel closes it there, the region it stands in
+answering it when it is `in_place`; any other says Working… while
+it is sent (`data-submit-busy` on the form, app.js). `bar` pins the row to
+the bottom of the screen once the form has changed (pages.css).
+{% endcomment %}
+<div class="form-actions{% if bar %} save-bar{% endif %}">
+  {% if choices %}
+    {% for value, words in choices %}<button class="btn{% if forloop.length == 1 %} primary{% endif %}" type="submit" name="{{ choice_field }}" value="{{ value }}">{{ words|breakable }}</button>{% endfor %}
+  {% else %}
+    <button class="btn primary" type="submit">{{ verb|breakable }}</button>
+  {% endif %}
+  {% if cancel_url %}<a class="btn" href="{{ cancel_url }}"{% if live %} data-live-cancel{% endif %}{% if in_place %} data-fragment-target=""{% endif %}>Cancel</a>{% endif %}
+  {% if note %}<span class="muted form-actions-note">{{ note|breakable }}</span>{% endif %}
+  {% if live %}
+    <span class="muted form-actions-note" data-fragment-status role="status"></span>
+  {% else %}
+    <span class="muted form-actions-note" data-submit-status hidden role="status">Working…</span>
+  {% endif %}
+</div>

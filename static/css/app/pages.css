@@ -74,7 +74,7 @@
   padding: var(--space-1) var(--space-1) var(--space-4);
 }
 .topology-node-list > * { break-inside: avoid; }
-.topology-lane h2 { margin: 0; font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .055em; color: var(--muted); }
+.topology-lane h2 { margin: 0; font-size: var(--text-sm); color: var(--muted); }
 .topology-kind-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .topology-kind-controller { background: var(--topology-controller); }
 .topology-kind-connection { background: var(--accent-2); }
@@ -122,7 +122,7 @@
 .topology-detail[aria-busy="true"] { opacity: .6; }
 .topology-detail-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
 .topology-detail-head h2 {
-  margin: 0; font-size: var(--text-md); letter-spacing: normal; text-transform: none; color: var(--ink); overflow-wrap: anywhere;
+  margin: 0; font-size: var(--text-md); letter-spacing: normal; color: var(--ink); overflow-wrap: anywhere;
 }
 .topology-detail-head .muted { font-size: var(--text-xs); }
 .topology-node-body { display: grid; gap: var(--space-5); min-width: 0; }
@@ -175,20 +175,16 @@
 .topology-relation-arrow { grid-area: 1 / 1 / 3 / 2; color: var(--muted); font-size: var(--text-sm); }
 .topology-relation-out .topology-relation-arrow { color: var(--accent-2); }
 .topology-relation-verb {
-  grid-area: 1 / 2 / 2 / 4; font-size: var(--text-3xs); text-transform: uppercase;
-  letter-spacing: .055em; color: var(--muted);
+  grid-area: 1 / 2 / 2 / 4; font-size: var(--text-3xs); color: var(--muted);
 }
 .topology-relation .pill { flex: 0 0 auto; }
 .btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
 .topology-node:has(> [aria-current]) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
 .topology-node.is-related { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .topology-node[hidden], .topology-lane[hidden] { display: none; }
-.topology-relations { margin-top: var(--space-6); }
-.topology-relations-head { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: baseline; }
-.topology-relations-head h2 { margin: 0; font-size: var(--text-sm); }
 /* A fixed reading height, so the ledger is a pane. Scroll chaining is kept:
    reaching the last edge hands the wheel back to the page. */
-.topology-relations .table-scroll { max-height: 480px; margin-top: var(--space-6); overflow-y: auto; }
+.topology-relations .table-scroll { max-height: 480px; overflow-y: auto; }
 .topology-relations tr.is-related { background: var(--accent-tint); }
 
 
@@ -215,7 +211,7 @@
 /* Two tools side by side where there is room, stacked where there is not.
    Neither is primary, so neither takes the wider column. */
 .lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-.lookup-form { display: flex; gap: var(--space-5); align-items: flex-end; margin: var(--space-6) 0 var(--space-8); flex-wrap: wrap; }
+.lookup-form { display: flex; gap: var(--space-5); align-items: flex-end; margin: 0 0 var(--space-8); flex-wrap: wrap; }
 .lookup-form .field { flex: 1 1 200px; }
 /* The input and its button share a line, so the spacing that separates stacked
    fields would knock them out of alignment: `flex-end` lines up margin boxes,
@@ -223,7 +219,7 @@
    below the box it belongs to. The field takes the existing `.compact`
    modifier; the actions give up their stack margin here. */
 .lookup-form .form-actions { margin-top: 0; }
-.tool-intro > :last-child, .tool-result > :last-child { margin-bottom: 0; }
+.tool-result > :last-child { margin-bottom: 0; }
 
 /* Side-by-side tools have to agree on where their rows are, and left to
    themselves they do not: each card is its own grid, so a three-line
@@ -281,13 +277,19 @@
   position: relative; display: flex; align-items: baseline; gap: var(--space-5);
   padding: var(--space-3) var(--space-5); border-radius: 4px; font-size: var(--text-sm); min-inline-size: 0;
 }
-/* Width arrives as a value, not as presentation: the same `--at` contract the
-   chart marks use, so the template supplies a share and this decides how a
-   share looks. */
+/* A `<meter>`, so the browser draws the share from its value and the template
+   writes no width; this decides how a share looks. The floor keeps a share
+   too small to round up visible. */
 .bar-track {
-  position: absolute; inset: 0 auto 0 0; inline-size: var(--at, 0%);
-  background: var(--bg-tint); border-radius: 4px; min-inline-size: 2px;
+  appearance: none; position: absolute; inset: 0; inline-size: 100%; block-size: 100%;
+  border: 0; border-radius: 4px; background: transparent;
 }
+/* Blink sets the bar in the middle half of the grid its meter draws in
+   (`::-webkit-meter-inner-element`, rows 1fr 2fr 1fr in its html.css), so
+   the bar spans every row. */
+.bar-track::-webkit-meter-bar { grid-row: 1 / -1; block-size: 100%; border: 0; border-radius: inherit; background: transparent; }
+.bar-track::-webkit-meter-optimum-value { min-inline-size: 2px; border-radius: 4px; background: var(--bg-tint); }
+.bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: 4px; background: var(--bg-tint); }
 .bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
 
 /* Vitals sit under the breakdowns, not above them: they are the check you run
@@ -309,10 +311,10 @@
 /* A held request: who asks, what would happen, the decision. */
 .approval-card { border-left: 3px solid var(--line); }
 .approval-card[data-state="pending"] { border-left-color: var(--warn); }
-.approval-head h2 { margin: 0; font-size: var(--text-xl); font-weight: 500; line-height: 1.4; text-transform: none; letter-spacing: 0; color: var(--ink); }
+.approval-head h2 { margin: 0; font-size: var(--text-xl); font-weight: 500; line-height: 1.4; letter-spacing: 0; color: var(--ink); }
 .approval-head > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
 .approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-left: 2px solid var(--line-strong); color: var(--ink-2); font-size: var(--text-sm); }
-.approval-label { margin: var(--space-10) 0 var(--space-4); font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.approval-label { margin: var(--space-10) 0 var(--space-4); font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
 .approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
 .approval-actions form { margin: 0; }
 
@@ -322,7 +324,7 @@
 .agent-state-main > .btn { margin: 0 0 0 auto; }
 .agent-state-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 16%, transparent); }
 .agent-state[data-paused] .agent-state-dot { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 16%, transparent); }
-.agent-state-copy h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); font-weight: 650; letter-spacing: 0; text-transform: none; }
+.agent-state-copy h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); font-weight: 650; letter-spacing: 0; }
 .agent-state-copy p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
 .agent-state-facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-10); margin: 0; padding-top: var(--space-6); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
 /* Each fact that links is a line a target tall (`--target-min`), since they wrap onto lines of their own on a phone. */
@@ -331,8 +333,9 @@
 .agent-state-facts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 /* An agent's latest events, under its row: one line each, newest first. */
 .agent-events { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-/* A person's devices are a few short names and one field, so the card is narrowed to them. */
-.own-devices { max-inline-size: var(--measure); }
+/* A person's apps take the row as every card on the page does; the one field
+   under them keeps the measure a line of input is read at. */
+.own-devices > .form { max-inline-size: var(--measure); }
 /* What the MCP server tells an agent first: prose in paragraphs, so it keeps the measure. */
 .mcp-instructions { display: grid; gap: var(--space-4); max-inline-size: var(--measure); }
 .mcp-instructions > p { margin: 0; }
@@ -341,7 +344,7 @@
 .policy-table .policy-select { width: 100%; max-width: 11rem; }
 .policy-table thead th:first-child { color: var(--ink-2); font-size: var(--text-xs); }
 .policy-table tbody th { font-weight: 500; color: var(--ink); }
-.policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted-2); }
+.policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; color: var(--muted-2); }
 .policy-effect.effect-destructive { color: var(--danger); }
 .policy-effect.effect-infrastructure_change { color: var(--warn); }
 .policy-default { color: var(--muted); }
@@ -350,12 +353,29 @@
 .policy-select.rule-allow { color: var(--ok); border-color: currentColor; }
 .policy-select.rule-approve { color: var(--warn); border-color: currentColor; }
 .policy-select.rule-deny { color: var(--danger); border-color: currentColor; }
-/* A save button pinned to the bottom of a long form. It shows once the form
-   has changed, and holds its room until then, so showing moves nothing:
-   app.js marks the form clean on load and the first edit clears the mark.
-   Without script the mark is never set, so the bar always shows. */
-form[data-clean] .save-bar { visibility: hidden; }
-.save-bar { position: sticky; bottom: 0; z-index: 2; display: flex; justify-content: flex-end; padding: var(--space-6) 0 calc(var(--space-6) + env(safe-area-inset-bottom, 0px)); background: linear-gradient(transparent, var(--bg) 35%); }
+/* A long form's closing row: drawn in its place from the first draw, so
+   nothing moves when the form changes and its frame ends with a row that
+   holds the verb rather than with room kept for one. Once the form has
+   changed (app.js marks the first edit) it is pinned to the bottom of the
+   screen. Its box is the same pinned or not, so pinning moves nothing; what
+   it covers while stuck is painted behind it in the ground it sits on. */
+form[data-changed] .save-bar { position: sticky; bottom: 0; z-index: 2; }
+/* The ground reaches the frame's sides, as a table in the form does. */
+form[data-changed] .save-bar::before { content: ""; position: absolute; z-index: -1; inset: 0 calc(-1 * var(--section-side, 0px)); background: var(--ground); }
+/* Where the row can tell it is stuck, it stands off the screen's foot and the
+   ground fades in above it and fills below it only while it is: in its place
+   it covers nothing, so it paints nothing. */
+@supports (container-type: scroll-state) {
+  form[data-changed] .save-bar { container: save-bar / scroll-state; bottom: calc(var(--space-6) + env(safe-area-inset-bottom, 0px)); }
+  form[data-changed] .save-bar::before {
+    inset-block: calc(-1 * var(--space-6)) calc(-1 * (var(--space-6) + env(safe-area-inset-bottom, 0px)));
+    background: linear-gradient(transparent, var(--ground) var(--space-6));
+    visibility: hidden;
+  }
+  @container save-bar scroll-state(stuck: bottom) {
+    form[data-changed] .save-bar::before { visibility: visible; }
+  }
+}
 
 /* ── Dashboard ──────────────────────────────────────────────────────
    A header, then rows. Each row is a grid whose cards share one width and one
@@ -368,18 +388,31 @@ form[data-clean] .save-bar { visibility: hidden; }
 .dash-status a { color: var(--ink-2); }
 .dash-status strong { color: var(--accent); font-variant-numeric: tabular-nums; }
 /* What a page says while its own readings are being read, and once they are
-   in: one quiet line at the end of the room between the head and the page,
-   never a banner. The room is there whether or not it says anything, in
-   place of the gap that would stand there anyway, so saying it moves
-   nothing. */
+   in: one quiet line, never a banner. A region that fills itself (a dialog's
+   panel) says it at its top, in room held whether or not it says anything,
+   so saying it moves nothing. */
 .ask.ask-quiet {
   --head-room: calc(var(--stack-gap) + var(--space-4));
-  display: flex; align-items: center; justify-content: flex-end;
+  display: flex; align-items: center; justify-content: flex-start;
   min-block-size: var(--head-room);
 }
-.content > .ask-quiet, .content > .ask-quiet + * { margin-top: 0; }
-.content > :has(+ .ask-quiet) { margin-bottom: 0; }
-.visit-status { margin: 0; color: var(--muted); font-size: var(--text-xs); text-align: end; overflow-wrap: anywhere; }
+.ask.ask-quiet[hidden] { display: none; }
+.visit-status { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; overflow-wrap: anywhere; }
+/* A dot before what it says, in the tone of how the read stands: moving
+   while it is read, the way a live reading does (connection.css). A page's
+   note stands apart from its ask, so it reads the state off the form it
+   names. */
+.visit-status:not(:empty)::before {
+  content: ""; display: inline-block; inline-size: 6px; block-size: 6px;
+  margin-inline-end: var(--space-4); border-radius: 50%; vertical-align: .1em;
+  background: var(--muted-2);
+}
+.visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { background: var(--accent); }
+.visit-status:is(.ask[data-ask-state="done"] > *, :root:has(.ask[data-ask-state="done"] > #page-visit) [form="page-visit"])::before { background: var(--ok); }
+.visit-status:is(.ask[data-ask-state="failed"] > *, :root:has(.ask[data-ask-state="failed"] > #page-visit) [form="page-visit"])::before { background: var(--danger); }
+@media (prefers-reduced-motion: no-preference) {
+  .visit-status:is(.ask[aria-busy="true"] > *, :root:has(.ask[aria-busy="true"] > #page-visit) [form="page-visit"])::before { animation: conn-pulse 1.8s ease-in-out infinite; }
+}
 /* An ask: a button and how the work it asked for stands (partials/_ask.html).
    It lays nothing out of its own, so its button stands wherever a button
    does. What it says takes a line under the row the button stands in, as
@@ -391,10 +424,15 @@ form[data-clean] .save-bar { visibility: hidden; }
   contain: inline-size; min-block-size: 1lh;
   color: var(--muted); font-size: var(--text-xs); white-space: normal;
 }
-/* A head's controls end at the page's edge, so what one says ends there too.
-   Its line makes the controls taller than their buttons, so the title stands
-   on their labels' baseline rather than at the middle of the two. */
+/* A head is one short line, so what one of its controls says takes a line
+   under them only while there is something to say, as a menu's copy does
+   below: the server draws work it finds under way already saying so, and a
+   press is what makes the line, under the reader's own hand. It ends where
+   the controls end, at the page's edge. */
 .page-head .page-actions > .ask > .ask-said { justify-content: flex-end; text-align: end; }
+.page-head .page-actions > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
+/* The title stands on the controls' labels' baseline, so a line under them
+   moves it nothing. */
 .page-head:has(> .page-actions > .ask) { align-items: first baseline; }
 /* A menu is drawn over the page, so its copy of an ask says something only
    once there is something to say, in the menu's own inset. */
@@ -477,13 +515,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 .dash-controller.is-silent .conn-dot { background: var(--attn); }
 .dash-connection-checks { color: var(--muted-2); font-size: var(--text-3xs); white-space: nowrap; }
 .dash-connection-checks.is-attention { color: var(--attn); font-weight: 650; }
-.section-period { margin-left: var(--space-3); color: var(--muted-2); font-weight: 500; letter-spacing: 0; text-transform: none; }
+.section-period { margin-left: var(--space-3); color: var(--muted-2); font-weight: 500; letter-spacing: 0; }
 .empty-value { color: var(--muted-2); }
-.dash-empty { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-/* The heading and its Edit share the first line; the links wrap under both,
-   so no row is left holding one control. */
-.dash-links { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: var(--space-4) var(--space-6); padding: var(--surface-inset, var(--space-5) var(--space-8)); }
-.dash-links > .ext-links { grid-column: 1 / -1; }
-.dash-links h2 { margin: 0; color: var(--muted-2); font-size: var(--text-2xs); font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
 
 }

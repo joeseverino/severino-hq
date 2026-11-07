@@ -1,0 +1,8 @@
+{% comment %}
+A receipt form's fields (partials/_form.html). The file field is what
+the page is for, so it gets the target the shared primitive draws rather than
+a one-line row like a vendor name's. It also takes a file dropped on it, as a
+receipt is uploaded from a desktop.
+{% endcomment %}
+{% include "partials/_dropzone.html" with field=form.file title="Drop a receipt here, or choose a file" %}
+{% for field in form %}{% if field.name != "file" %}{{ field.as_field_group }}{% endif %}{% endfor %}

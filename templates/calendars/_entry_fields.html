@@ -1,0 +1,14 @@
+{% comment %}
+A calendar entry's fields (partials/_form.html): how it repeats shows only
+once it repeats, and the weekdays only when it repeats weekly (`data-when`,
+read by forms.css).
+{% endcomment %}
+{% for field in form %}
+  {% if field.name == "interval" or field.name == "repeat_until" %}
+    <div data-when="repeat">{{ field.as_field_group }}</div>
+  {% elif field.name == "weekdays" %}
+    <div data-when="repeat=weekly">{{ field.as_field_group }}</div>
+  {% else %}
+    {{ field.as_field_group }}
+  {% endif %}
+{% endfor %}

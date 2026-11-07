@@ -2,7 +2,6 @@ from typing import override
 
 from django.db.models import Q, Sum
 from django.urls import reverse, reverse_lazy
-from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -22,6 +21,7 @@ from hq.platform.application.references import ReferencePickerMixin, reference_o
 from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+from hq.platform.core.templatetags.status_tags import status_pill
 
 from .forms import AssetForm
 from .models import ASSET_CATEGORY_CHOICES, Asset
@@ -57,7 +57,7 @@ class AssetListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction("New asset", reverse("assets:create"), primary=True),)
+        return (PageAction(capability_words("asset.create"), reverse("assets:create"), primary=True),)
 
     @override
     def get_queryset(self):
@@ -126,7 +126,7 @@ class AssetDetailView(PageMixin, DetailView):
     def get_page_lede(self):
         return dotted_html(
             self.object.get_category_display(),
-            format_html('<span class="pill pill-{}">{}</span>', self.object.status, self.object.get_status_display()),
+            status_pill(self.object.get_status_display(), tone=self.object.status),
         )
 
     @override

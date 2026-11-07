@@ -30,7 +30,7 @@ from hq.platform.application.integrations import integration_graph
 from hq.platform.application.plugins import plugin_capability_specs
 from hq.platform.application.projects import DEPENDENCY_UPDATES
 from hq.platform.application.security import Capability, could_hold
-from hq.platform.application.tests.markup import select, with_class, within
+from hq.platform.application.tests.markup import select, within
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
 from hq.platform.core.models import AgentAccess
@@ -39,9 +39,8 @@ from hq_sdk.capabilities import StrictCommand
 from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
 User = get_user_model()
-# How each kind of change is said on its page: a note, or the confirmation
-# its button waits on. A read says nothing.
-NOTED = {"remote_write"}
+# The changes said on their page, by the confirmation their button waits on.
+# A change to HQ alone is said by its lede and its button.
 CONFIRMED = {"infrastructure_change", "destructive"}
 
 
@@ -50,9 +49,7 @@ def buttons(page) -> list[str]:
 
 
 def stated(page, effect: str) -> bool:
-    if effect in CONFIRMED:
-        return bool(select(page, "name", "__confirm_effect"))
-    return effect not in NOTED or bool(with_class(page, "command-effect-note"))
+    return effect not in CONFIRMED or bool(select(page, "name", "__confirm_effect"))
 
 
 def switch_words(spec) -> list[str]:

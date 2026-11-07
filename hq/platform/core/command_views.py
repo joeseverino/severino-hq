@@ -159,6 +159,8 @@ class CommandView(View):
             "result_table": table,
             "result_json": (json.dumps(result["payload"], indent=2, sort_keys=True) if result else ""),
             "return_url": safe_next(self.request),
+            # Cancel goes back where it was opened from, else to the trail's end.
+            "cancel_url": safe_next(self.request) or trail[-1][1],
             "resource_url": resource_url,
             "resource_label": resource.label if resource else "",
             "hydrates_target": bool(self.spec.target_initial_fields),

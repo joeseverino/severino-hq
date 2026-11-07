@@ -14,6 +14,7 @@ from hq.platform.application.certificates import UPLOAD
 from hq.platform.application.entity_links import kind_label
 from hq.platform.application.glance import DASHBOARD_MACHINE, dashboard_machine_selected
 from hq.platform.application.infrastructure import resolved_spec, suggest_key
+from hq.platform.application.labels import SAVE_CHANGES, adding, lower_first
 from hq.platform.application.naming import name_context
 from hq.platform.application.pages import page_context
 from hq.platform.application.plugins import import_reference
@@ -119,8 +120,6 @@ class ResourceFormView(View):
                 # that is not usable without material should not be creatable
                 # without it.
                 "material": material,
-                "cancel_url": _cancel_url(request, kind, resource),
-                "apply_note": _apply_note(kind),
                 # What this resource already is, when editing one. A form whose
                 # fields are mostly derived elsewhere shows empty boxes and
                 # nothing else, and an edit page for a certificate would say
@@ -130,7 +129,7 @@ class ResourceFormView(View):
                 "show_on_dashboard": bool(
                     resource and kind == MACHINE_KIND and dashboard_machine_selected(resource.key)
                 ),
-                **_form_page(kind, resource),
+                **_form_page(request, kind, resource),
             },
         )
 
@@ -167,7 +166,7 @@ class ResourceFormView(View):
                 "show_on_dashboard": bool(
                     resource and kind == MACHINE_KIND and dashboard_machine_selected(resource.key)
                 ),
-                **_form_page(kind, resource),
+                **_form_page(request, kind, resource),
             },
         )
 
@@ -215,14 +214,17 @@ class ResourceFormView(View):
         return redirect(_after_save(request, kind, resource, saved))
 
 
-def _form_page(kind: str, resource) -> dict:
-    """The head of the resource form, the same on a first render and a retry."""
+def _form_page(request, kind: str, resource) -> dict:
+    """The head and the closing row of the resource form, the same on a first
+    render and a retry."""
 
-    label = kind_label(kind)
-    return page_context(
-        f"Edit {resource.key}" if resource else f"Add {label}",
-        PROVIDERS[kind].summary,
-    )
+    verb = SAVE_CHANGES if resource else adding(lower_first(kind_label(kind)))
+    return {
+        **page_context(f"Edit {resource.key}" if resource else verb, PROVIDERS[kind].summary),
+        "form_verb": verb,
+        "cancel_url": _cancel_url(request, kind, resource),
+        "apply_note": _apply_note(kind),
+    }
 
 
 def _apply_note(kind: str) -> str:

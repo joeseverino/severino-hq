@@ -32,6 +32,17 @@ def one(noun: str) -> str:
     return f"{'an' if noun[:1].lower() in 'aeiou' else 'a'} {noun}"
 
 
+# What a form that changes a record it already holds is submitted by.
+SAVE_CHANGES = "Save changes"
+
+
+def adding(noun: str) -> str:
+    """What makes one new ``noun``, on its list, its form and its command:
+    "Add an asset". The one create verb of Design's one-name table."""
+
+    return f"Add {one(noun)}"
+
+
 def lower_first(text: str) -> str:
     """A label as it reads mid-sentence, leaving an acronym alone.
 
@@ -43,6 +54,17 @@ def lower_first(text: str) -> str:
     if text[1:2].isupper():
         return text
     return text[:1].lower() + text[1:]
+
+
+def sentence(text: str) -> str:
+    """A label in sentence case, as every status reads: "exited" → "Exited",
+    "Changed outside HQ" as it is. The rest of the words keep their own case,
+    so a name or an acronym inside it survives; an acronym first ("iOS",
+    "HQ") is left alone, as ``lower_first`` leaves it."""
+
+    if text[1:2].isupper():
+        return text
+    return text[:1].upper() + text[1:]
 
 
 _SIBILANT_ENDINGS = ("s", "x", "z", "ch", "sh")
@@ -97,7 +119,7 @@ def dotted_html(*parts: object) -> SafeString:
     """``dotted`` for markup: each part escaped unless it is markup already,
     joined by ``{% dot %}``'s mark."""
 
-    return mark_safe(DOT_MARKUP.join(conditional_escape(part) for part in parts if _drawn(part)))
+    return mark_safe(DOT_MARKUP.join(conditional_escape(part) for part in parts if _drawn(part)))  # noqa: S308 - each part escaped here
 
 
 # What running a command does, in the words every page uses for it: the search

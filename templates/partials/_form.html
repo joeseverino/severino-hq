@@ -1,0 +1,31 @@
+{% comment %}
+A form that writes, drawn one way (docs/Design.md, "Every form a page is
+about is drawn one way"):
+
+  {% include "partials/_form.html" with verb=form_verb cancel_url=cancel_url %}
+
+its write token, what was wrong with it as a whole (partials/_form_errors.html),
+its fields, and its closing row (partials/_form_actions.html), which says
+Working… while it is sent. `form` is the Django form; a page whose fields are
+more than the form's own loop (a dropzone, a field shown only for a value)
+names the template that draws them as `fields`, drawn with the page's
+context. A form whose fields stand one to a row of a table names the template
+that draws that table (its `table_region`, each row's control drawn by
+partials/_row_field.html) as `table_body`: the form draws its hidden fields
+and lays out no fields of its own (no `.form`), so the table reaches its
+frame's sides as a table section's does, and its closing row sits under the
+table. `action` is where it posts, the page itself unless given; it takes a
+file when the form does. `verb`, `cancel_url`, `note`, `choices` and
+`choice_field` are the closing row's, and `bar` pins that row to the bottom
+of the screen once something has changed, for a long form. `next` is the
+page to come back to once it is saved. A form answered in place (`in_place`)
+is sent to the region it stands in and says how it went in its closing row,
+whose Cancel is answered there too.
+{% endcomment %}
+<form method="post"{% if action %} action="{{ action }}"{% endif %}{% if form.is_multipart %} enctype="multipart/form-data"{% endif %}{% if not table_body %} class="form"{% endif %}{% if in_place %} data-fragment-target="" data-fragment-busy="Working…"{% else %} data-submit-busy data-submit-label="Working…"{% endif %}>
+  {% write_token %}
+  {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
+  {% include "partials/_form_errors.html" %}
+  {% if table_body %}{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}{% include table_body %}{% elif fields %}{% include fields %}{% else %}{{ form }}{% endif %}
+  {% if in_place %}{% include "partials/_form_actions.html" with verb=verb cancel_url=cancel_url note=note choices=choices choice_field=choice_field bar=bar live=True in_place=True only %}{% else %}{% include "partials/_form_actions.html" with verb=verb cancel_url=cancel_url note=note choices=choices choice_field=choice_field bar=bar only %}{% endif %}
+</form>

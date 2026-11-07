@@ -24,13 +24,18 @@ lazy from django.http import HttpResponse
 
 from hq.platform.application.routes import reverse
 
+from .contracts import route_url
 from .deletion import DeleteCommand
+from .domains import load
+from .labels import SAVE_CHANGES
 from .record_errors import RecordConflict, RecordNotFound
-from .records import delete_instance, display_noun, records_for, save_form
+from .records import delete_instance, described, display_noun, records_for, save_form
 from .refusal_status import refusal_of
 from .security import web_principal
 from .ui import ended
 from .web_writes import posted_answer, refused, write_once
+lazy from .capabilities import capability_registry, capability_words
+lazy from .integrations import integration_graph
 lazy from .security import Principal
 
 
@@ -253,8 +258,24 @@ class RecordFormMixin(PostedOnce, WriteMessages):
     For ``CreateView`` and ``UpdateView``; saved through
     ``application.records.save_form``, so noun, permission and target come
     from the domain's declaration. ``created_message`` and ``updated_message``
-    may reword the announcement.
+    may reword the announcement. Its help, its verb and its way back come
+    from the declaration too, so it reads as the command's page does.
     """
+
+    def get_form(self, form_class: Any = None) -> Any:
+        form = super().get_form(form_class)
+        return described(form, load(records_for(form._meta.model).command))
+
+    def get_form_verb(self, form: Any) -> str:
+        """What makes a new one: its create command's words."""
+
+        return capability_words(f"{records_for(form._meta.model).noun}.create")
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        form = context["form"]
+        listed = route_url(integration_graph().resources[records_for(form._meta.model).resource].web_route)
+        return {**context, **form_close(self.object, self.get_form_verb(form), listed)}
 
     def form_valid(self, form: BaseForm) -> HttpResponse:
         adding = form.instance._state.adding
@@ -275,6 +296,34 @@ class RecordFormMixin(PostedOnce, WriteMessages):
         noun = display_noun(records_for(type(self.object)))
         announce(self.request, template, noun, self.object)
         return redirect(self.object.get_absolute_url())
+
+
+class CommandFormPage:
+    """A record's form whose create goes through a named command (``creates``)
+    rather than its domain's declaration: its help is that command's, and it
+    closes with its words, or Save changes, and Cancel (``listed_route`` for a
+    new one)."""
+
+    creates = ""
+    listed_route = ""
+
+    def get_form(self, form_class: Any = None) -> Any:
+        return described(super().get_form(form_class), capability_registry()[self.creates].command_type)
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        adds = capability_words(self.creates)
+        return {**context, **form_close(self.object, adds, reverse(self.listed_route))}
+
+
+def form_close(stored: Any, adds: str, listed: str) -> dict[str, str]:
+    """What a record's form closes with (partials/_form_actions.html): ``adds``
+    and Cancel to ``listed`` for a new one, Save changes and Cancel back to
+    ``stored``, the record as stored, which a refused edit's form does not hold."""
+
+    if stored is None:
+        return {"form_verb": adds, "cancel_url": listed}
+    return {"form_verb": SAVE_CHANGES, "cancel_url": stored.get_absolute_url()}
 
 
 def _saved(instance: Any, *, adding: bool) -> dict[str, Any]:
