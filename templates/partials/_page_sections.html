@@ -13,21 +13,19 @@
   Expects: `sections`: an iterable of ServiceSection.
 {% endcomment %}
 {% for section in sections %}
-<section id="{{ section.id }}" class="page-section" data-page-section>
-  {% comment %}
-  Folded, the heading is the toggle: its count says what is behind it and the
-  mark beside it says it opens. A separate "Show all" under the heading reads as
-  a control belonging to nothing.
-  {% endcomment %}
-  {% if section.folded %}<details class="section-fold"><summary><h2>{{ section.label|breakable }} <span class="heading-aside">{{ section.records|length }}</span></h2></summary>{% else %}<h2>{{ section.label|breakable }}</h2>{% endif %}
+{% comment %}
+Folded, the heading is the toggle and its count says what is behind it. A
+separate "Show all" under the heading reads as a control belonging to nothing.
+{% endcomment %}
+{% section section.label id=section.id count=section.records|length fold=section.folded %}
   {% table_region section.label %}
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
-      <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=section.records|sortable gutter=True %}{% elif forloop.length > 2 %}{% table_heading column local_sort=section.records|sortable drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=section.records|sortable %}{% endif %}{% endfor %}</tr></thead>
+      <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=True gutter=True %}{% elif forloop.length > 2 %}{% table_heading column local_sort=True drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=True %}{% endif %}{% endfor %}</tr></thead>
       <tbody>
         {% for record in section.records %}
           <tr>
             {% for cell in record %}
-              <td{% if forloop.first %} class="row-gutter"{% endif %}>
+              <td>
                 {% if cell.link %}
                   {% entity cell.link %}
                 {% elif cell.url %}
@@ -37,7 +35,6 @@
                 {% else %}
                   {{ cell.text|breakable }}
                 {% endif %}
-                {% if forloop.first %}{% row_toggle %}{% endif %}
               </td>
             {% endfor %}
           </tr>
@@ -45,15 +42,11 @@
       </tbody>
     </table>
   {% endtable_region %}
-  {% if section.folded %}</details>{% endif %}
   {% for label, text in section.readouts %}
     <details class="section-readout">
       <summary>{{ label|breakable }}</summary>
       <pre tabindex="0">{{ text|breakable }}</pre>
     </details>
   {% endfor %}
-  {% for label, url in section.actions %}
-    <p class="muted"><a class="subtle-link" href="{{ url }}">{{ label|breakable }}{% arrow %}</a></p>
-  {% endfor %}
-</section>
+{% endsection %}
 {% endfor %}

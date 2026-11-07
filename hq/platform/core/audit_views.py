@@ -271,6 +271,8 @@ class AuditLogDetailView(PageMixin, DetailView):
         event = self.object
 
         metadata = event.metadata or {}
+        # What happened, and to what kind of thing, as the event's heading.
+        context["event_heading"] = dotted(event.get_action_display(), event.object_type and event.type_label)
         context["changes"] = _change_rows(metadata.get("changes") or {})
         # The operation's name and id are one fact, stated in its own row.
         context["operation"] = operation_words(str(metadata.get("operation") or ""), event.interface)

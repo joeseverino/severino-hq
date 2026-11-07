@@ -419,7 +419,7 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("calendar:month"))
 
-        (upcoming,) = select(response, "aria-labelledby", "calendar-upcoming-title")
+        (upcoming,) = select(response, "aria-labelledby", "upcoming-heading")
         self.assertIn("Renew the example.com certificate before it lapses", upcoming.words)
 
     def test_the_month_the_day_and_an_entry_link_together(self):

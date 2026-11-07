@@ -41,7 +41,7 @@ def chosen_options(page) -> list[str]:
 
 
 def result_title(page) -> str | None:
-    found = select(page, "id", "command-result-title")
+    found = select(page, "id", "command-result-heading")
     return found[0].words if found else None
 
 
@@ -102,7 +102,9 @@ class CommandViewTests(TestCase):
     def test_the_page_is_a_title_what_it_changes_and_one_button(self):
         response = self.client.get("/commands/project.create/")
 
-        self.assertEqual([button.words for button in submits(response)], ["Create a project"])
+        self.assertEqual(
+            [button.words for button in submits(response)], [capability_registry()["project.create"].title]
+        )
         self.assertNotIn("project.create", text(response))
         for built in ("manage_projects", "JSON Schema", "Strict input", "Run command", "additionalProperties"):
             self.assertNotContains(response, built)

@@ -7,23 +7,7 @@ Activity calendar: one month of plan vs. execution.
 per ChartSeries slot), missed, planned, empty. Paging is plain links so a month
 can be linked to directly and works without JavaScript.
 {% endcomment %}
-{% card element="figure" css="chart-card calendar-card" id=calendar_id|default:'training-calendar' data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
-  <figcaption class="calendar-head">
-    <div class="calendar-head-copy">
-      <h2>{{ calendar.title|breakable }}</h2>
-      <p class="calendar-description">{{ calendar.description|breakable }}</p>
-    </div>
-    <div class="calendar-controls">
-      {% if calendar.period_label %}<span class="calendar-period">{{ calendar.period_label|breakable }}</span>{% endif %}
-      {% if calendar.previous_url or calendar.next_url %}
-        <nav class="calendar-nav" aria-label="Change month">
-          {% if calendar.previous_url %}<a href="{{ calendar.previous_url }}" rel="prev" aria-label="Previous month">&lsaquo;</a>{% else %}<span aria-hidden="true" aria-disabled="true">&lsaquo;</span>{% endif %}
-          {% if calendar.current_url %}<a class="calendar-now" href="{{ calendar.current_url }}">Today</a>{% endif %}
-          {% if calendar.next_url %}<a href="{{ calendar.next_url }}" rel="next" aria-label="Next month">&rsaquo;</a>{% else %}<span aria-hidden="true" aria-disabled="true">&rsaquo;</span>{% endif %}
-        </nav>
-      {% endif %}
-    </div>
-  </figcaption>
+{% section calendar.title lede=calendar.description figure=True id=calendar_id|default:'training-calendar' data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
   <div class="calendar-legend">
     {% if calendar.series %}
       <div class="chart-legend" aria-label="Legend">
@@ -64,4 +48,14 @@ can be linked to directly and works without JavaScript.
       {% endfor %}
     </tbody>
   </table>
-{% endcard %}
+{% aside %}{% if calendar.period_label or calendar.previous_url or calendar.next_url %}<div class="calendar-controls">
+  {% if calendar.period_label %}<span class="calendar-period">{{ calendar.period_label|breakable }}</span>{% endif %}
+  {% if calendar.previous_url or calendar.next_url %}
+    <nav class="calendar-nav" aria-label="Change month">
+      {% if calendar.previous_url %}<a href="{{ calendar.previous_url }}" rel="prev" aria-label="Previous month">&lsaquo;</a>{% else %}<span aria-hidden="true" aria-disabled="true">&lsaquo;</span>{% endif %}
+      {% if calendar.current_url %}<a class="calendar-now" href="{{ calendar.current_url }}">Today</a>{% endif %}
+      {% if calendar.next_url %}<a href="{{ calendar.next_url }}" rel="next" aria-label="Next month">&rsaquo;</a>{% else %}<span aria-hidden="true" aria-disabled="true">&rsaquo;</span>{% endif %}
+    </nav>
+  {% endif %}
+</div>{% endif %}
+{% endsection %}

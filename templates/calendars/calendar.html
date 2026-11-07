@@ -7,31 +7,23 @@ opening a day ask this page for the `calendar` part and take it in place.
 {% endcomment %}
 {% partialdef calendar inline %}
 <div class="split calendar-layout" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
-  {% card css="calendar-month" id="calendar-month" heading="calendar-period" %}
-    {% section_head id="calendar-period" %}{{ calendar.month|when:"month" }}{% aside %}
-      <nav class="calendar-nav" aria-label="Change month">
-        <a href="{{ previous_url }}" rel="prev" aria-label="Previous month" data-hotkey="ArrowLeft k p">&lsaquo;</a>
-        <a class="calendar-now" href="{{ today_url }}" data-hotkey="t"{% if calendar.is_current %} aria-current="date"{% endif %}>Today</a>
-        <a href="{{ next_url }}" rel="next" aria-label="Next month" data-hotkey="ArrowRight j n">&rsaquo;</a>
-      </nav>
-    {% endsection_head %}
+  {% section moment=calendar.month when="month" id="calendar-month" css="calendar-month" %}
     {% include "calendars/_month_grid.html" %}
-  {% endcard %}
+  {% aside %}
+    <nav class="calendar-nav" aria-label="Change month">
+      <a href="{{ previous_url }}" rel="prev" aria-label="Previous month" data-hotkey="ArrowLeft k p">&lsaquo;</a>
+      <a class="calendar-now" href="{{ today_url }}" data-hotkey="t"{% if calendar.is_current %} aria-current="date"{% endif %}>Today</a>
+      <a href="{{ next_url }}" rel="next" aria-label="Next month" data-hotkey="ArrowRight j n">&rsaquo;</a>
+    </nav>
+  {% endsection %}
 
   <aside class="calendar-aside">
     {% if day %}
-      {% card css="day-panel" id="day-panel" heading="day-panel-title" %}
-        {% section_head id="day-panel-title" %}{% if day.day == day.today %}Today{% else %}{{ day.day|when:"weekday" }}{% endif %} <span class="muted">{{ day.day|when:"day" }}</span>{% aside %}
-          <nav class="calendar-nav" aria-label="Change day">
-            <a href="{{ day.previous_url }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
-            <a href="{{ day.next_url }}" rel="next" aria-label="Next day">&rsaquo;</a>
-            <a href="{{ calendar.url }}" aria-label="Close this day" data-hotkey="Escape">&times;</a>
-          </nav>
-        {% endsection_head %}
+      {% section day.name moment=day.day when="day" id="day-panel" %}
         {% if entry %}
           <article class="day-panel-entry" aria-label="{{ entry.object.title }}">
             <h3>{{ entry.object.title|breakable }}</h3>
-            <p class="day-panel-when">{{ entry.when|breakable }}</p>
+            <p>{{ entry.when|breakable }}</p>
             {% if entry.object.location or entry.repeat %}<p class="muted">{% if entry.object.location %}{{ entry.object.location|breakable }}{% endif %}{% if entry.object.location and entry.repeat %}{% dot %}{% endif %}{{ entry.repeat|breakable }}</p>{% endif %}
             {% if entry.about %}<p class="muted">About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}</p>{% endif %}
             {% if entry.next %}<p class="muted">Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</p>{% endif %}
@@ -46,14 +38,19 @@ opening a day ask this page for the `calendar` part and take it in place.
           {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
         {% endfor %}
         <div><a href="{{ day.new_entry_url }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></div>
-      {% endcard %}
+      {% aside %}
+        <nav class="calendar-nav" aria-label="Change day">
+          <a href="{{ day.previous_url }}" rel="prev" aria-label="Previous day">&lsaquo;</a>
+          <a href="{{ day.next_url }}" rel="next" aria-label="Next day">&rsaquo;</a>
+          <a href="{{ calendar.url }}" aria-label="Close this day" data-hotkey="Escape">&times;</a>
+        </nav>
+      {% endsection %}
     {% endif %}
 
     {% if upcoming %}
-      {% card css="calendar-upcoming" heading="calendar-upcoming-title" %}
-        {% section_head id="calendar-upcoming-title" %}Upcoming{% endsection_head %}
+      {% section "Upcoming" %}
         {% include "partials/_record_list.html" with rows=upcoming label="Upcoming" %}
-      {% endcard %}
+      {% endsection %}
     {% endif %}
 
     {% card css="calendar-sources" id="calendar-sources" label="Calendars" %}

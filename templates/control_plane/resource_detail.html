@@ -1,6 +1,5 @@
 {% extends "page.html" %}
 {% block page %}
-{% include "partials/_visit_refresh.html" with subject="resource" name=resource.key %}
 {% comment %}
 Nothing to act on while a removal is in flight, so the head offers nothing and
 this says why. Otherwise the page would invite an operator to edit something
@@ -43,8 +42,7 @@ declaration's machinery: the controller's actions are the buttons above, and
 
 {% if resolved_spec or resolution_error %}
   <div class="two-col">
-    <section class="control-card">
-      <h2>Certificate</h2>
+    {% section "Certificate" %}
       {% include "control_plane/_record_says.html" %}
       <dl class="kv compact">
         <dt>Name</dt><dd>{{ resolved_spec.certificate_name|breakable }}</dd>
@@ -54,20 +52,18 @@ declaration's machinery: the controller's actions are the buttons above, and
       </dl>
       <h3>Names</h3>
       <p>{% for domain in resolved_spec.domains %}<span class="tag">{{ domain|breakable }}</span>{% endfor %}</p>
-    </section>
-    <section class="control-card">
-      <h2>Where it is installed</h2>
+    {% endsection %}
+    {% section "Where it is installed" %}
       {% if display_consumers %}
       {% table_region "Where it is installed" %}
       <table class="data-table compact-table">
-        <thead><tr>{% table_heading "Place" "identifier" gutter=True local_sort=display_consumers|sortable %}{% table_heading "Names checked" "identifier" local_sort=display_consumers|sortable %}</tr></thead>
+        <thead><tr>{% table_heading "Place" "identifier" gutter=True local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
         <tbody>
           {% for consumer in display_consumers %}
             <tr>
-              <td class="row-gutter">
+              <td>
                 <strong>{% if consumer.url %}<a href="{{ consumer.url }}">{{ consumer.name|breakable }}</a>{% else %}{{ consumer.name|breakable }}{% endif %}</strong>
                 <br><span class="muted">through {% entity "connection"|entity_of:consumer.connection_ref %}</span>
-                {% row_toggle %}
               </td>
               <td>{% for domain in consumer.display_domains %}{% entity "service"|entity_of:domain mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</td>
             </tr>
@@ -78,8 +74,6 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% elif resolution_error %}
         {% comment %}Why it is installed nowhere, where the list would be.{% endcomment %}
         <div class="notice notice-attention"><strong>Not installed</strong><p>{{ resolution_error|breakable }}</p></div>
-      {% else %}
-        <p class="muted">Not installed anywhere yet.</p>
       {% endif %}
       {% comment %}
       Named beside the consumers that answered. A reading that covers six of
@@ -95,7 +89,8 @@ declaration's machinery: the controller's actions are the buttons above, and
           </ul>
         </details>
       {% endif %}
-    </section>
+    {% empty %}Not installed anywhere yet.
+    {% endsection %}
   </div>
 {% endif %}
 
@@ -115,8 +110,7 @@ stretches across the page.
   {% endcomment %}
   {% comment %}A running container says all of this in its Upgrade and How it runs sections.{% endcomment %}
   {% if not container.item and not resolved_spec and not resolution_error %}
-  <section class="control-card">
-    <h2>{{ label|breakable }}</h2>
+  {% section label %}
     {% include "control_plane/_record_says.html" %}
     {% comment %}
     The names this serves, and the way through to them: the hostname, and the
@@ -160,7 +154,7 @@ stretches across the page.
         {% elif container.running %}
           <dt>State</dt>
           <dd>
-            <span class="pill pill-{% if container.running.healthy %}reachable{% else %}unreachable{% endif %}">{{ container.running.state|default:"unknown"|breakable }}</span>
+            {% status container.running.state|default:"unknown" tone=container.running.healthy|yesno:"reachable,unreachable" %}
             {% if container.running.status %}<span class="muted">{{ container.running.status|breakable }}</span>{% endif %}
           </dd>
           <dt>Image</dt><dd><code>{{ container.running.image_label|breakable }}</code></dd>
@@ -187,7 +181,7 @@ stretches across the page.
           <dd>
             {% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %} {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}{{ value|readout }}{% endif %}{% endwith %}{% endif %}
             {% if desired and observed and desired != observed %}
-              <span class="pill pill-serious">HQ expects {{ desired|breakable }}</span>
+              {% status "HQ expects" desired tone="serious" %}
             {% endif %}
           </dd>
         {% endfor %}
@@ -211,7 +205,7 @@ stretches across the page.
         </dl>
       </details>
     {% endif %}
-  </section>
+  {% endsection %}
   {% endif %}
 {% comment %}
 A certificate from the side of what it serves: each service served with it,
@@ -219,17 +213,15 @@ and the names on it nothing is served under. The service's own page names the
 certificate, so the relation reads from both ends.
 {% endcomment %}
 {% if certificate_use %}
-  <section class="control-card" id="used-by">
-    <h2>Used by</h2>
+  {% section "Used by" id="used-by" %}
     {% if certificate_use.used_by %}
       <p>{{ certificate_use.used_by|length|counted:"service" }}: {% for hostname in certificate_use.used_by %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
-    {% else %}
-      <p class="muted">No service is served with this certificate.</p>
+      {% if certificate_use.unused %}
+        <p class="muted">Nothing is served under {% for name in certificate_use.unused %}{% with mark=forloop.last|then:"." %}<code>{{ name|breakable:mark }}</code>{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
+      {% endif %}
     {% endif %}
-    {% if certificate_use.unused and certificate_use.used_by %}
-      <p class="muted">Nothing is served under {% for name in certificate_use.unused %}{% with mark=forloop.last|then:"." %}<code>{{ name|breakable:mark }}</code>{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
-    {% endif %}
-  </section>
+  {% empty %}No service is served with this certificate.
+  {% endsection %}
 {% endif %}
   {% comment %}
   Where this certificate's facts are recorded, and whether the last reconcile
@@ -237,26 +229,25 @@ certificate, so the relation reads from both ends.
   without this the only record of it is the raw status below.
   {% endcomment %}
   {% if resource.status.published_facts %}
-    <section class="control-card">
-      <h2>Saved to 1Password</h2>
+    {% section "Saved to 1Password" %}
       {% table_region "Saved to 1Password" %}
       <table class="data-table compact-table">
-        <thead><tr>{% table_heading "Item" "identifier" local_sort=resource.status.published_facts|sortable %}{% table_heading "Last saved" "status" local_sort=resource.status.published_facts|sortable %}</tr></thead>
+        <thead><tr>{% table_heading "Item" "identifier" local_sort=True %}{% table_heading "Last saved" "status" local_sort=True %}</tr></thead>
         <tbody>
           {% for publication in resource.status.published_facts %}
             <tr>
               <td><strong>{{ publication.target|breakable }}</strong></td>
               <td>
                 {% if publication.detail %}
-                  <span class="pill pill-serious">Not saved</span>
+                  {% status "Not saved" tone="serious" %}
                   <br><span class="muted">{{ publication.detail|breakable }}</span>
                 {% elif publication.written %}
-                  <span class="pill pill-good">Saved</span>
+                  {% status "Saved" tone="good" %}
                   {% if publication.fields or publication.material == "written" %}
                     <br><span class="muted">{% if publication.material == "written" %}certificate, key{% if publication.fields %}, {% endif %}{% endif %}{% for field in publication.fields %}{{ field|lower|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}</span>
                   {% endif %}
                 {% else %}
-                  <span class="pill pill-good">Already up to date</span>
+                  {% status "Already up to date" tone="good" %}
                 {% endif %}
               </td>
             </tr>
@@ -264,19 +255,16 @@ certificate, so the relation reads from both ends.
         </tbody>
       </table>
       {% endtable_region %}
-    </section>
+    {% endsection %}
   {% endif %}
 {% include "partials/_relationships.html" %}
 {% referenced_by resource.kind resource.key cards=True %}
 </div>
 
-<details class="control-diagnostics">
-  <summary>Raw data</summary>
-  <div class="two-col">
-    <section><h2>HQ's config</h2><pre tabindex="0">{{ spec_json|breakable }}</pre></section>
-    <section><h2>Last reading</h2><pre tabindex="0">{{ diagnostic_status|breakable }}</pre></section>
-  </div>
-</details>
+{% section "Raw data" fold=True %}
+  <h3>HQ's config</h3><pre tabindex="0">{{ spec_json|breakable }}</pre>
+  <h3>Last reading</h3><pre tabindex="0">{{ diagnostic_status|breakable }}</pre>
+{% endsection %}
 
 {% comment %}
 Beside the raw readings rather than in the head, so a download never sits at
@@ -294,16 +282,16 @@ Each operation that changed something: a check that ran and found what the row
 above it found is not a row.
 {% endcomment %}
 {% if operations %}
-<h2>History</h2>
+{% section "History" %}
 {% table_region "History" %}
   <table class="data-table">
-    <thead><tr>{% table_heading "What" gutter=True local_sort=operations|sortable %}{% table_heading "Result" local_sort=operations|sortable %}{% table_heading "By" drop=1 local_sort=operations|sortable %}{% table_heading "When" "status" local_sort=operations|sortable %}</tr></thead>
+    <thead><tr>{% table_heading "What" gutter=True local_sort=True %}{% table_heading "Result" local_sort=True %}{% table_heading "By" drop=1 local_sort=True %}{% table_heading "When" "status" local_sort=True %}</tr></thead>
     <tbody>
       {% for operation in operations %}
         <tr>
-          <td class="row-gutter">{{ operation.action_label|breakable }}{% row_toggle %}</td>
+          <td>{{ operation.action_label|breakable }}</td>
           <td class="operation-result">
-            <span class="pill pill-{{ operation.tone }}">{{ operation.state_label|breakable }}</span>
+            {% status operation.state_label tone=operation.tone %}
             <strong class="cell-data">{{ operation.headline|breakable }}</strong>
             {% if operation.affected %}
               <span class="muted">{{ operation.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}</span>
@@ -326,5 +314,6 @@ above it found is not a row.
     </tbody>
   </table>
 {% endtable_region %}
+{% endsection %}
 {% endif %}
 {% endblock %}

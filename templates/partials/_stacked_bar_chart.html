@@ -1,16 +1,7 @@
-{% card element="figure" css="chart-card" %}
-  <figcaption>
-    <h2>{{ chart.title|breakable }}</h2>
-    <p>{{ chart.description|breakable }}</p>
-  </figcaption>
-  {% if chart.empty %}
-    {% include "partials/_empty_state.html" with message="Not enough data to chart yet." %}
-  {% else %}
-    <div class="chart-legend" aria-label="Legend">
-      {% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}
-    </div>
+{% section chart.title lede=chart.description figure=True %}
+  {% if not chart.empty %}
     <div class="chart-scroll">
-      <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}" style="--gutter: {{ chart.gutter }}%">
+      <div class="chart-frame{% if chart.dense %} chart-frame-dense{% endif %}">
       {% comment %}
       aria-hidden, with the exact numbers in the data table below. A screen
       reader announcing 60 bars one at a time is worse than a table it can
@@ -22,23 +13,27 @@
 
       </svg>
         {% comment %}
-        The axis, in HTML. Positioned by the same percentages the geometry above
-        is drawn at, so a label sits over its own point at any card width, and
-        rendered by the browser rather than by the SVG, so it stays 11px however
-        far the drawing has been scaled to fit.
+        The axis, over the drawing in a layer of its own with no viewBox: each
+        label is placed at the same percentages the geometry above is drawn at,
+        so it sits over its own point at any card width, and nothing scales
+        it, so it stays 11px however far the drawing has been scaled to fit.
+        The table below says every label too.
         {% endcomment %}
-        {% for tick in chart.axis_y %}<span class="chart-axis chart-tick" style="--at: {{ tick.at }}%">{{ tick.label|breakable }}</span>{% endfor %}
-        <div class="chart-cats">{% for category in chart.axis_x %}<span class="chart-axis chart-category" style="--at: {{ category.at }}%">{{ category.label|breakable }}</span>{% endfor %}</div>
+        <svg class="chart-labels" aria-hidden="true">
+          {% for tick in chart.axis_y %}<text class="chart-axis chart-tick" x="{{ chart.gutter }}%" y="{{ tick.at }}%">{{ tick.label }}</text>{% endfor %}
+          <g class="chart-cats">{% for category in chart.axis_x %}<text class="chart-axis chart-category" x="{{ category.at }}%" y="100%">{{ category.label }}</text>{% endfor %}</g>
+        </svg>
       </div>
     </div>
-    <details class="chart-data">
-      <summary>View chart data</summary>
-      {% table_region chart.title pane=True %}
+    {% section "View chart data" fold=True %}
+      {% table_region chart.title chart=True %}
         <table class="data-table compact-table">
           <thead><tr>{% table_heading "Period" "status" %}{% for heading in chart.table_headings %}{% table_heading heading "numeric" %}{% endfor %}</tr></thead>
           <tbody>{% for row in chart.table_rows %}<tr><th>{{ row.label|breakable }}</th>{% for cell in row.cells %}<td>{{ cell|breakable }}</td>{% endfor %}</tr>{% endfor %}</tbody>
         </table>
       {% endtable_region %}
-    </details>
+    {% endsection %}
   {% endif %}
-{% endcard %}
+{% aside %}{% if not chart.empty %}<div class="chart-legend" aria-label="Legend">{% for series in chart.series %}<span><i class="chart-series-{{ series.slot }}" aria-hidden="true"></i>{{ series.label|breakable }}</span>{% endfor %}</div>{% endif %}
+{% empty %}Not enough data to chart yet.
+{% endsection %}

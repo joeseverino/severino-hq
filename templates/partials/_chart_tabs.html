@@ -14,9 +14,10 @@ markup.
 Each radio sits inside its tab's label, and the stylesheet reads which one is
 checked through `:has()`. The strip carries no tablist role: its children are
 radios, which assistive technology already announces as one group by their
-shared name, and a tablist owning no tabs would say otherwise.
+shared name, and a tablist owning no tabs would say otherwise. Each panel is
+its chart's own figure, so the strip stands over the frame of the one shown.
 {% endcomment %}
-{% card element="div" css="chart-tabs" %}
+<div class="chart-tabs">
   <div class="chart-tablist">
     {% for chart in charts %}
       <label class="chart-tab"><input type="radio" name="tabs-{{ group }}" class="chart-tab-input"{% if forloop.first %} checked{% endif %}>{{ chart.title|breakable }}</label>
@@ -31,4 +32,4 @@ shared name, and a tablist owning no tabs would say otherwise.
       {% endif %}
     </div>
   {% endfor %}
-{% endcard %}
+</div>

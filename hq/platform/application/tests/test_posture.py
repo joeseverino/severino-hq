@@ -160,7 +160,7 @@ class ReadingTests(TestCase):
     def test_an_unread_check_says_which_cause_holds_it(self):
         tailnet_connection()
         cases = (
-            ("no controller has run", lambda: None, "No controller has read it"),
+            ("no controller has run", lambda: None, "HQ has not read it"),
             (
                 "no read has arrived",
                 lambda: store("example.other"),
@@ -275,7 +275,7 @@ class PageTests(TestCase):
     def test_the_connections_page_shows_each_check_and_no_paragraph_of_them(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "HQ's standard")
+        self.assertIn("HQ's standard", text(response))
         # How to enforce it is the docs', not a call to action on the page.
         self.assertNotContains(response, "SEVERINO_POSTURE=advanced")
         said = text(response)

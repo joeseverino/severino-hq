@@ -283,6 +283,13 @@ class CalendarDayView:
     groups: tuple[tuple[SourceView, tuple[CalendarEvent, ...]], ...] = field(default=())
 
     @property
+    def name(self) -> str:
+        """The words a day's panel is headed by, before its date: "Today", or
+        its weekday."""
+
+        return "Today" if self.day == self.today else weekday(self.day)
+
+    @property
     def previous_url(self) -> str:
         previous = self.day - timedelta(days=1)
         return month_url(previous, previous)

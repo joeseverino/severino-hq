@@ -17,7 +17,7 @@
   {% if asset.warranty_date %}<dt>Warranty until</dt><dd>{{ asset.warranty_date|when }}</dd>{% endif %}
 </dl>
 
-{% if asset.notes %}<h2>Notes</h2><p>{{ asset.notes|breakable|linebreaksbr }}</p>{% endif %}
+{% if asset.notes %}{% section "Notes" %}<p>{{ asset.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
 <div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
 {% endblock %}

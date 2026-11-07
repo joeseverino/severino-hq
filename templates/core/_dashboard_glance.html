@@ -5,7 +5,7 @@ server draws `data-fragment-poll` and the strip is asked again; each panel is a
 part, so only a panel that changed is replaced, and its popover, found by its
 id, is shown again if it was open.
 {% endcomment %}
-<section class="dashboard-glance" data-fragment="{% url 'dashboard_glance' %}"{% if dashboard_refreshing %} data-fragment-poll="3"{% endif %}>
+<div class="dashboard-glance" data-fragment="{% url 'dashboard_glance' %}"{% if dashboard_refreshing %} data-fragment-poll="3"{% endif %}>
   {% comment %}
   The strip refreshes itself when a reading is due: the second form is sent
   once when the page is showing. Asking by hand is in each panel's popover,
@@ -79,5 +79,5 @@ id, is shown again if it was open.
       </div>
     {% endfor %}
   </div>
-  <span class="glance-status visually-hidden" data-fragment-status role="status"></span>
-</section>
+  <span class="visually-hidden" data-fragment-status role="status"></span>
+</div>

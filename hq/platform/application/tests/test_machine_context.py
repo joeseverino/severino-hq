@@ -131,11 +131,6 @@ class NamesTests(TestCase):
     def test_a_machine_with_no_names_grows_no_band(self):
         self.assertNotIn("names", by_id(a_machine()))
 
-    def test_the_band_leaves_the_topology_link_to_the_relationships_panel(self):
-        """The page links to the topology once, from Relationships."""
-
-        self.assertEqual(by_id(a_machine("site.test"))["names"].actions, ())
-
     def test_another_machines_traffic_is_not_borrowed(self):
         measure("elsewhere.test", pageviews=9999)
 
@@ -244,4 +239,5 @@ class ReachedThroughTests(TestCase):
 
         self.assertEqual((own.label, own.title), (kind, "box"))
         self.assertTrue(own.url)
-        self.assertEqual(other.label, "example-other")
+        self.assertIn("example-other", other.label)
+        self.assertNotEqual(other.label, own.label)

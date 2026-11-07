@@ -6,8 +6,10 @@
 SELECTORS = {
     # A device on the Agents page waiting for the reader's approval.
     "device_prompt": "[data-prompt]",
-    # An agent's open update streams in its own row's cell, and their state.
+    # An agent's update streams: a full set warned of in its row's cell, and
+    # the streams it holds open under the cap said in the row's detail.
     "agent_streams": "tr[data-agent] > td [data-streams]",
+    "agent_streams_detail": "tr[data-agent] > th .row-below [data-streams]",
     # The fragment primitive: a placeholder's failure line, the disclosure
     # holding one, and the calendar it pages in place.
     "fragment_failure": "main > [data-fragment-load] > .notice",
@@ -15,14 +17,33 @@ SELECTORS = {
     # A folded section, and a part of one drawn only once it opens.
     "section_fold": "details.section-fold",
     "drawn_when_opened": "[data-fragment-load]",
-    "calendar_period": "#calendar-period",
+    # A kicker over a group, the one label drawn in capitals, and a quiet
+    # link ("Change", "All projects").
+    "kicker": ".eyebrow",
+    # A form's closing row (a long form's save bar is one), the section frame
+    # it ends, and a control a row of the form chooses with.
+    "save_bar": ".form-actions",
+    "section_frame": ".section",
+    "choice": "select",
+    "quiet_link": ".subtle-link",
+    "calendar_period": "#calendar-month > .section-head h2",
     "calendar_next": '#calendar a[rel="next"]',
     "decisions": "[data-attention-item]",
     # What a page says of the readings it asked for on opening.
     "ask_note": "[data-ask-note]",
+    # A page's note on its readings, the bar it stands under and the person's
+    # control at the bar's end.
+    "page_note": '.content > [data-ask-note][form="page-visit"]',
+    "bar": ".site-header",
+    "account": ".user-menu",
     # A family's toggle, the row toggle, and a row's own dismiss.
     "decision_family": "[data-queue-family] [data-fold-toggle]",
     "row_toggle": "[data-row-toggle]",
+    # A fold of rows' toggle, and a row's own, as a reader presses them.
+    "row_fold": "main [data-fold-toggle]",
+    "row_opener": "main [data-row-toggle]:not([data-fold-toggle])",
+    # A table's own rows of records, the lines beneath them left out.
+    "own_records": ":scope > tbody > tr:not(.row-detail)",
     "decision_dismiss": "[data-triage] button",
     "decision_title": ".attention-title",
     "decision_steps": ".resolution-workflow",
@@ -68,7 +89,7 @@ SELECTORS = {
     "nav_menu_panel": ".primary-nav [data-menu] > [popover]",
     "nav_drawer": ".primary-nav",
     "nav_toggle": "[popovertarget=primary-navigation]",
-    "highlights": ".dashboard-highlights > .highlight-card",
+    "highlights": ".dashboard-highlights > section",
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .card",
@@ -76,6 +97,10 @@ SELECTORS = {
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A link that goes somewhere.
     "link": "a[href]",
+    # A status tag (`{% status %}`), which says a state beside a name.
+    "tag": ".pill",
+    # The mark a sentence puts after a name (`breakable`'s).
+    "mark": ".mark",
     # A select; the probes that judge one that opens to its choices leave out a
     # list box (multiple or sized), which Django's widgets mark, not a template.
     "dropdown": "select, .table-filter-menu > button",
@@ -107,6 +132,8 @@ SELECTORS = {
     "selectable_table": "[data-selectable-table]",
     # What a parser leaves where a <p> was closed early by a block inside it.
     "broken_paragraph": "main p:empty:not([hidden])",
+    # A share's bar, a <meter> behind its row's words (analytics).
+    "share_bar": "main .bar-track",
     # What an open menu or a dialog draws over the page.
     "floating": "dialog, [popover]",
     # Where the contrast check samples text: the page and the header over it.
@@ -117,9 +144,10 @@ SELECTORS = {
     "reference": "#api-reference-root",
     # A block of code the reference's viewer draws: a request or answer.
     "reference_sample": "#api-reference-root pre",
-    # Where a vendored script draws markup HQ does not write: the API
+    # Where a vendored script draws markup HQ does not write, which HQ's
+    # stylesheet leaves to the vendor's own rules (tokens.css): the API
     # reference's viewer, which ReferenceBrowserTests holds to its own rules.
-    "vendored": "#api-reference-root",
+    "vendored": "[data-vendored]",
     # A check in the connection panel: what it says, then what it was read from.
     "check_statement": ".conn-layer-label",
     "check_evidence": ".conn-layer-evidence",
@@ -161,14 +189,16 @@ SELECTORS = {
     # What an ask says on the line its row opens to.
     "ask_why": "[data-ask-why]",
     # An identifier in a table's cell, and what in a row wraps by design,
-    # where one may break (figures.css): the line a row opens, the row's own
-    # name, free text, a preview, a context line, a chip that wraps, a
-    # control, a phrase's word whose hyphenated parts are each cut at the
-    # cell's edge, and a panel the cell shows, which is laid out as a page.
+    # where one may break (figures.css): the line a row opens, each part a
+    # cell marks with its role (the row's own name, what a row means, free
+    # text, a context line), a preview, a chip that wraps, a control, a
+    # phrase's word whose hyphenated parts are each cut at the cell's edge,
+    # and a panel the cell shows, which is laid out as a page.
     "cell_token": "main .data-table > tbody > tr > td .token",
+    # An identifier as `breakable` draws it, one run however its seams split it.
+    "identifier": ".token",
     "wraps_in_a_cell": (
-        "tr.row-detail, .row-gutter, td > strong:first-child, td > a:first-child > strong,"
-        " .cell-data, .muted, .attention-title, .attention-detail, .table-clamp, code.cell-whole, .btn,"
+        "tr.row-detail, .row-gutter, [data-cell], .table-clamp, code.cell-whole, .btn,"
         " .token:not([data-sole]):has(> .whole), [popover]"
     ),
     # Words said to a reader and never drawn.
@@ -178,6 +208,8 @@ SELECTORS = {
     # it opens a dialog and names it.
     # A section's heading (partials/_section_head.html).
     "section_head": ".section-head",
+    # A section's body, the frame what it holds is drawn in (partials/_part_section.html).
+    "section_body": ".section-body",
     # A fact whose value is a list of names (partials' .code-list, .address-list).
     "fact_list": "main .kv > dd:has(> :is(.code-list, .address-list) > :nth-child(2))",
     # What keeps its line wherever it is drawn: the count of planned days kept

@@ -3,44 +3,44 @@
 {% if already_linked %}
   <div class="msg msg-info">Already linked to {% include "receipts/_linked_to.html" %}.</div>
 {% else %}
-  {% if matches %}
-    <p class="page-lede">Expenses without a receipt that match this vendor or amount:</p>
+  {% words "expense.create" as add_expense %}
+  {% section "Matching expenses" lede="Expenses without a receipt that match this vendor or amount." remedy_label=add_expense remedy_url=new_expense %}
+    {% if matches %}
     {% table_region "Matching expenses" %}
       <table class="data-table">
         <thead>
           <tr>
-            {% table_heading "Date" "status" local_sort=matches|sortable gutter=True %}
-            {% table_heading "Vendor" local_sort=matches|sortable %}
-            {% table_heading "Item" local_sort=matches|sortable %}
-            {% table_heading "Cost" "numeric" local_sort=matches|sortable drop=2 %}
+            {% table_heading "Date" "status" local_sort=True gutter=True %}
+            {% table_heading "Vendor" local_sort=True %}
+            {% table_heading "Item" local_sort=True %}
+            {% table_heading "Cost" "numeric" local_sort=True drop=2 %}
             {% table_heading "Link" "control" hidden=True drop=1 %}
           </tr>
         </thead>
         <tbody>
           {% for exp in matches %}
             <tr>
-              <td class="row-gutter">{{ exp.date|when }}{% row_toggle %}</td>
+              <td>{{ exp.date|when }}</td>
               <td><strong>{{ exp.vendor|breakable }}</strong></td>
               <td>{{ exp.item|breakable }}</td>
               <td>{{ exp.total_cost|money }}</td>
-              <td>{% post_button "Link this" request.path name="expense_id" value=exp.pk css="btn primary small" %}</td>
+              <td>{% post_button "Link this" request.path name="expense_id" value=exp.pk css="btn primary" %}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     {% endtable_region %}
-  {% else %}
-    {% include "partials/_empty_state.html" with message="No expense without a receipt matches this vendor or amount." action_url=new_expense action_label="New expense" only %}
-  {% endif %}
+    {% endif %}
+  {% empty %}None match.
+  {% endsection %}
 {% endif %}
 
-{% card css="mt-2" %}
-  {% section_head %}Receipt details{% endsection_head %}
+{% section "Receipt details" %}
   <dl class="kv">
     <dt>Vendor</dt><dd>{{ receipt.vendor|or_empty }}</dd>
     <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
     <dt>Amount</dt><dd>{{ receipt.amount|money }}</dd>
     <dt>Original file</dt><dd>{{ receipt.original_filename|breakable }}</dd>
   </dl>
-{% endcard %}
+{% endsection %}
 {% endblock %}

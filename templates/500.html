@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Something broke{% endblock %}
 {% block content %}
-<section class="notice-page">
+<div class="notice-page">
   <p class="notice-code">500</p>
   <h1>Something broke</h1>
   <p class="notice-body">
@@ -10,5 +10,5 @@
   <p class="page-actions">
     <a class="btn primary" href="{% url 'dashboard' %}">Back to the dashboard</a>
   </p>
-</section>
+</div>
 {% endblock %}

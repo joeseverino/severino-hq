@@ -1,4 +1,4 @@
-<section class="kpi-grid{% if featured %} is-featured{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>
+<div class="kpi-grid{% if featured %} is-featured{% endif %}"{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
   {% for item in items %}
     {% with drawing=item.drawing %}
     {% comment %}
@@ -34,4 +34,4 @@
     {% if item.url and not drawing.links %}</a>{% else %}</div>{% endif %}
     {% endwith %}
   {% endfor %}
-</section>
+</div>
