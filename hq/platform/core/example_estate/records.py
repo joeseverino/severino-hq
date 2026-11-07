@@ -73,6 +73,8 @@ PROJECTS = (
         "A nightly encrypted copy of the server's volumes to cloud storage, restored once a quarter to prove it works.",
     ),
 )
+# What each project is built with, where its operator wrote it down.
+STACKS = {"hq": "Django, SQLite, Go", "photo-library": "Immich, PostgreSQL"}
 # Slug, title, the project it writes up, how long ago it was published.
 WRITEUPS = (
     ("why-a-control-panel", "Why the homelab has a control panel", "hq", 40),
@@ -115,6 +117,7 @@ def projects():
             status="active",
             public_url=url,
             description=about,
+            technologies_used=STACKS.get(slug, ""),
             repository_url=f"https://github.com/example/{repository}",
             dependency_updates=repository == UPDATED,
         )
@@ -180,6 +183,8 @@ def calendar():
 # The server, bought refurbished just before it was declared in HQ
 # (``history.MACHINE_DAYS``): how long ago, from whom, what, its expense
 # category, cost, and how much of its use is the business's.
+# The server as an asset, by its slug.
+SERVER_ASSET = "sff-server"
 SERVER = (430, "eBay", "Small form factor server", "hardware", "389.00", 80)
 # How long ago each monthly storage bill was paid since the backups started.
 STORAGE = (2, 32, 62, 92, 122)
@@ -192,7 +197,7 @@ def money():
     today = timezone.localdate()
     asset = Asset.objects.create(
         item_name=SERVER[2],
-        slug="sff-server",
+        slug=SERVER_ASSET,
         vendor=SERVER[1],
         category="server_hardware",
         purchase_date=today - timedelta(days=SERVER[0]),

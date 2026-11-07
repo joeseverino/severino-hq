@@ -284,7 +284,10 @@ class Image:
 
         password = {"DJANGO_SUPERUSER_PASSWORD": os.urandom(12).hex()}
         if "seed" in self._manage("help", "--commands").split():
-            self._manage("seed", self.seed, "--owner", USER, env=password)
+            # A composed image's extensions write their demos only in a development
+            # process (hq.platform.core.seeds), and the image names a database of its
+            # own, which SEVERINO_SANDBOX leaves as it is: DEBUG says this one is.
+            self._manage("seed", self.seed, "--owner", USER, env={**password, "DJANGO_DEBUG": "1"})
             return
         # An image older than the seed registry, measured as the base, holds the showcase alone.
         if self.seed != "showcase":

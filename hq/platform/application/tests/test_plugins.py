@@ -12,7 +12,7 @@ from unittest import TestCase, mock
 
 from django.core.exceptions import ImproperlyConfigured
 from django.template.loader import render_to_string
-from django.test import SimpleTestCase, tag
+from django.test import SimpleTestCase, TestCase as DatabaseTestCase, tag
 from django.utils import timezone
 
 from ..domains import domain_navigation
@@ -820,3 +820,21 @@ class AttentionOrderTests(SimpleTestCase):
         order = [entry["item"].title for entry in ordered_attention(entries)]
 
         self.assertEqual(order, ["serious", "older", "newer", "undated", "a notice"])
+
+
+class DemoPageTests(DatabaseTestCase):
+    """Each installed extension's demo, held to the pages it names: the layout
+    gate and dev:look read them, and an extension's CI runs this beside its own."""
+
+    def test_each_page_an_extensions_demo_names_answers_for_the_showcases_owner(self):
+        from hq.platform.core import seeds
+        from hq.platform.core.example_estate.testing import throwaway_media
+
+        with throwaway_media(), seeds.built("showcase") as owner:
+            pages = seeds.demo_pages()
+            if not pages:
+                self.skipTest("No extension installed here writes a demo.")
+            self.client.force_login(owner)
+            for address in pages:
+                with self.subTest(address):
+                    self.assertEqual(self.client.get(address).status_code, 200)

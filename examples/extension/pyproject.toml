@@ -25,12 +25,17 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "DJ", "SIM", "PTH", "C4", "RUF", "
 
 [tool.ruff.lint.per-file-ignores]
 "src/**/tests/*.py" = ["S101"]
+# Written by makemigrations, as Django writes every migration.
+"src/**/migrations/*.py" = ["E501", "RUF012"]
+
+[tool.ruff.format]
+exclude = ["src/**/migrations/*.py"]
 
 [tool.mypy]
 strict = true
 plugins = ["mypy_django_plugin.main"]
 files = ["src"]
-exclude = "(^|/)tests/"
+exclude = "(^|/)(migrations|tests)/"
 mypy_path = "src"
 explicit_package_bases = true
 follow_imports = "silent"

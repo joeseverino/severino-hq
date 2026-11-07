@@ -110,6 +110,19 @@ def door_of_its_own(*, interface: str, actor: str, operation: str, operation_id:
         yield
 
 
+@contextmanager
+def outside_every_door() -> Iterator[None]:
+    """Nothing bound in the block, whatever is bound around it, so a row
+    written there is refused unless the code that writes it binds its own door.
+
+    For an extension's demo (``seeds``), which says how each of its events was
+    made, so none takes the door of whatever runs the seed.
+    """
+
+    with _operation_context.set(None):
+        yield
+
+
 def bind_this_thread(*, interface: str, actor: str, operation: str) -> None:
     """Bind the calling thread for the rest of its life, under no id of its own,
     so each operation nested in it mints its own.
