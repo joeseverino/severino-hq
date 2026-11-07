@@ -17,7 +17,7 @@ as HQ; no page is made for the demo alone.
 
 | Seed | Built with | What it shows |
 | --- | --- | --- |
-| Showcase (default) | the example estate | A small homelab that has run for months: every reading present and current, every service set up, every expense with its receipt. Advanced HQ Posture is on. |
+| Showcase (default) | the example estate | A small homelab that has run for months: every reading present and current, every service set up, every expense with its receipt. Every connection lets HQ make changes and public DNS changes are on, so every action is offered. Advanced HQ Posture is on. |
 | Standard | `standard` | The same homelab with Advanced HQ Posture off. |
 | Empty | `empty` | A fresh install: one signed-in user and nothing else. What someone sees the first time. |
 
