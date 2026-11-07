@@ -92,7 +92,7 @@ SELECTORS = {
     "highlights": ".dashboard-highlights > section",
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".dash-readings .glance-panel-head",
-    "patterns": ".dashboard-patterns > .card",
+    "patterns": ".dashboard-patterns > .section",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A link that goes somewhere.

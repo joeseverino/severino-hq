@@ -110,7 +110,6 @@
 .dashboard-counts .kpi { display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding: 0; background: none; }
 .dashboard-counts .kpi .value { font-size: var(--text-md); order: -1; }
 .dashboard-counts .kpi .muted { font-size: var(--text-2xs); }
-.dashboard-patterns > .card { display: flex; flex-direction: column; margin: 0; padding: var(--space-6); }
 /* Sections side by side end their frames together: each frame takes what its
    row leaves under its head. */
 :is(.dashboard-patterns, .dashboard-highlights) > .section { display: flex; flex-direction: column; }
