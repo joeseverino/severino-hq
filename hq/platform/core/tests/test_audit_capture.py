@@ -39,6 +39,7 @@ from ..audit import (
     record_event,
     register_audit,
 )
+from ..audit_words import changes_said
 from ..models import AuditLog
 from .estate_sizes import assert_cost_does_not_grow
 
@@ -82,6 +83,7 @@ def register_eager(model, type_label, *, redact=(), observation=(), connection=N
             action=AuditLog.Action.CREATED if created else AuditLog.Action.UPDATED,
             obj=instance,
             type_label=type_label,
+            message=changes_said(changes),
             metadata={"changes": changes} if changes else None,
             connection=_connection_of(connection, instance),
         )

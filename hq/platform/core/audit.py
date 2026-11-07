@@ -30,6 +30,7 @@ lazy from hq.platform.application.request_identity import signed_in
 
 from . import speculation
 from .attribution import OperationContext, bound, operation_context
+from .audit_words import REDACTED, changes_said
 from .facets import as_metadata as facet_metadata
 from .logging import get_request_id
 from .models import AuditLog
@@ -80,7 +81,6 @@ if {action for action, _ in ROUTINE_EVENTS} & SECURITY_ACTIONS:
 # What a value looks like in the log. Audit rows are JSON, so a Decimal, date
 # or UUID has to be a string first: left as it is, the row fails to write and
 # `record_event` swallows it.
-REDACTED = "«redacted»"
 VALUE_CHARS = 200
 
 
@@ -373,8 +373,9 @@ def register_audit(
             action=AuditLog.Action.CREATED if created else AuditLog.Action.UPDATED,
             obj=instance,
             type_label=type_label,
-            # What this save meant, when the one saving it knows; once.
-            message=str(instance.__dict__.pop("audit_said", "") or ""),
+            # What this save meant, when the one saving it knows, once; else
+            # what it moved.
+            message=str(instance.__dict__.pop("audit_said", "") or "") or changes_said(changes),
             metadata={"changes": changes} if changes else None,
             connection=_connection_of(connection, instance),
         )
