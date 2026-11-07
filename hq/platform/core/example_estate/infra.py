@@ -115,11 +115,14 @@ def _observe_everything():
 
 
 def connections():
+    # Each manages, as a set-up HQ's do, so every action is offered. Only a
+    # controller applies one, and the estate has none.
     def answering(ref, provider, endpoint, detail, reaches=()):
         return {
             "connection_ref": ref,
             "provider": provider,
             "endpoint": endpoint,
+            "manages": True,
             "reaches": list(reaches),
             "ok": True,
             "probed": True,

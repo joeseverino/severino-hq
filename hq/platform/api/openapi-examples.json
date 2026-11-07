@@ -372,6 +372,44 @@
       }
     }
   },
+  "getAssetsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "business_use_percentage": 80,
+          "category": "server_hardware",
+          "estimated_deductible_amount": "311.20",
+          "infrastructure": "machine:docker-host-01",
+          "item_name": "Small form factor server",
+          "notes": "",
+          "payment_method": "credit",
+          "purchase_date": "2024-11-11",
+          "relationships": {
+            "content": [],
+            "documentation": [],
+            "expense_ids": [
+              1
+            ],
+            "projects": [
+              "hq",
+              "media-server",
+              "photo-library",
+              "self-hosted-git",
+              "tailnet-hardening"
+            ]
+          },
+          "serial_number": "",
+          "slug": "sff-server",
+          "status": "active",
+          "total_cost": "389.00",
+          "updated_at": "2024-11-11T19:45:00+00:00",
+          "vendor": "eBay",
+          "warranty_date": null
+        },
+        "ok": true
+      }
+    }
+  },
   "getConnectionsV2": {
     "responses": {
       "200": {
@@ -390,41 +428,67 @@
               "url": "/infrastructure/connections/"
             }
           ],
-          "authority": "undeclared",
+          "authority": "whole_account",
           "changes": [
             {
               "action": null,
               "available": true,
               "capability": null,
               "effect": "infrastructure_change",
-              "evidence": "unverified",
+              "evidence": "coarse",
               "grant": null,
-              "label": "Domain",
+              "label": "Internal DNS record",
               "missing_scopes": [],
-              "name": "cloudflare.zone",
+              "name": "adguard.rewrite",
               "required_scopes": [],
               "subject_resource": "infrastructure"
             }
           ],
-          "connection_ref": "api-cloudflare",
-          "controller_id": "controller",
+          "connection_ref": "adguard",
+          "controller_id": "example-controller",
           "credential_fix": null,
-          "credential_model": "scoped",
-          "dependencies": [],
-          "detail": "",
-          "endpoint": null,
+          "credential_model": "coarse",
+          "dependencies": [
+            {
+              "label": "hq-dns",
+              "resource_key": "hq-dns",
+              "url": "/infrastructure/hq-dns/"
+            }
+          ],
+          "detail": "5 rewrites.",
+          "endpoint": "http://10.100.200.214:3080",
           "facts": [],
           "family": "infrastructure.controllers",
           "family_label": "Infrastructure",
           "granted_scopes": [],
-          "id": "controller:api-cloudflare",
-          "kind": "cloudflare_dns",
-          "label": "api-cloudflare",
-          "last_activity": null,
-          "lifecycle": "reachable",
+          "id": "example-controller:adguard",
+          "kind": "adguard",
+          "label": "adguard",
+          "last_activity": {
+            "audit_id": 72,
+            "created_at": "2026-01-15T09:30:00+00:00",
+            "summary": "Allowed to manage its records"
+          },
+          "lifecycle": "ready",
           "observed_at": "2026-01-15T09:30:00+00:00",
           "open_problems": 0,
-          "reach": null,
+          "reach": {
+            "address": "10.100.200.214",
+            "direct_endpoint": null,
+            "handshake": null,
+            "host": "10.100.200.214",
+            "label": "Reached on your network",
+            "machine": {
+              "name": "docker-host-01",
+              "url": "/infrastructure/machines/docker-host-01/"
+            },
+            "network": "network",
+            "peer_path": null,
+            "relay": null,
+            "rx_bytes": null,
+            "summary": "Reached on your network at docker-host-01",
+            "tx_bytes": null
+          },
           "read_now": null,
           "read_requested_at": null,
           "reads": [
@@ -433,32 +497,32 @@
                 "action": null,
                 "available": true,
                 "capability": null,
-                "effect": "infrastructure_change",
-                "evidence": "unverified",
+                "effect": "read",
+                "evidence": "coarse",
                 "grant": null,
-                "label": "Domain",
+                "label": "DNS server",
                 "missing_scopes": [],
-                "name": "cloudflare.zone",
+                "name": "adguard.dns",
                 "required_scopes": [],
-                "subject_resource": "infrastructure"
+                "subject_resource": null
               },
-              "label": "Domain",
+              "label": "DNS server",
               "sight": {
                 "error": "",
-                "freshness": "never",
-                "freshness_label": "No reading yet",
-                "kind": "cloudflare.zone",
-                "label": "Domain",
-                "observed_at": null,
+                "freshness": "current",
+                "freshness_label": "Current",
+                "kind": "adguard.dns",
+                "label": "DNS server",
+                "observed_at": "2026-01-15T09:30:00+00:00",
                 "parts": [],
                 "permissions": [],
-                "records": 0,
+                "records": 1,
                 "refusal": "",
                 "remedy": "",
                 "requires": "",
-                "source": "resource",
-                "state": "never_swept",
-                "state_label": "Never read"
+                "source": "reading",
+                "state": "readable",
+                "state_label": "Readable"
               }
             }
           ],
@@ -466,15 +530,15 @@
           "secret_store": "1Password",
           "sight": {
             "credential_refusal": "",
-            "label": "Cloudflare DNS",
+            "label": "AdGuard Home",
             "manages": [
-              "Domain"
+              "Internal DNS record"
             ],
-            "provider": "cloudflare_dns",
+            "provider": "adguard",
             "tally": [
               {
-                "count": 2,
-                "state": "Never read"
+                "count": 4,
+                "state": "Readable"
               }
             ]
           },
@@ -482,13 +546,229 @@
           "status_label": "Working",
           "targets": [
             {
-              "label": "example.com",
+              "label": "docker-host-01",
               "resource_key": "",
-              "url": ""
+              "url": "/infrastructure/machines/docker-host-01/"
             }
           ],
           "used_for": "Infrastructure",
           "would_also_see": []
+        },
+        "ok": true
+      }
+    }
+  },
+  "getContainersV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "address": "docker-host-01:home-automation",
+          "compose_project": "home-automation",
+          "image": {
+            "built": "2026-01-01T09:30:00+00:00",
+            "digest": "sha256:d28e6c9378c30c97b2d3117373b60184d2cac0294e2dd6e8432a80f3a868b1ad",
+            "image_id": "sha256:2ea7ef5ffa5094891fd2e69f52eb6bc3eaeaa8ba28fe8f9954c4ce9da275afc6",
+            "pinned": true,
+            "reference": "registry.example.net/example-builds/home-automation-server:2024.11.3-ubu2404-ls45@sha256:d28e6c9378c30c97b2d3117373b60184d2cac0294e2dd6e8432a80f3a868b1ad",
+            "registry": "registry.example.net",
+            "repository": "example-builds/home-automation-server",
+            "source": "https://github.com/example-builds/home-automation-server",
+            "tag": "2024.11.3-ubu2404-ls45"
+          },
+          "machine": "docker-host-01",
+          "name": "home-automation",
+          "posture": {
+            "by_design": [],
+            "checks": [
+              {
+                "id": "no-devices",
+                "label": "No host devices",
+                "state": "met"
+              }
+            ],
+            "measured": 13,
+            "met": 13,
+            "unmet": []
+          },
+          "project": null,
+          "repository": null,
+          "runtime": {
+            "cap_drop": [
+              "ALL"
+            ],
+            "connection_ref": "portainer",
+            "container": "home-automation",
+            "cpu_percent": 1.9,
+            "cpu_time": 155520000000000,
+            "environment_id": 1,
+            "exposed_ports": [
+              8123
+            ],
+            "health": "healthy",
+            "healthcheck": true,
+            "host": "docker-host-01",
+            "host_address": "10.100.200.214",
+            "image_id": "sha256:2ea7ef5ffa5094891fd2e69f52eb6bc3eaeaa8ba28fe8f9954c4ce9da275afc6",
+            "memory_limit": 1073741824,
+            "memory_usage": 301989888,
+            "memory_usage_basis": "anon",
+            "mounts": [
+              {
+                "destination": "/data",
+                "read_only": false,
+                "source": "home-automation_data",
+                "type": "volume"
+              }
+            ],
+            "network_mode": "bridge",
+            "pids_limit": 512,
+            "port_bindings": [
+              {
+                "container_port": "8123/tcp",
+                "host_ip": "10.100.200.214",
+                "host_port": "8123"
+              }
+            ],
+            "restart_count": 0,
+            "restart_policy": "unless-stopped",
+            "security_opt": [
+              "no-new-privileges:true"
+            ],
+            "service": "home-automation",
+            "stack": "home-automation",
+            "started_at": "2026-01-03T09:30:00+00:00",
+            "usage_read_at": "2026-01-15T09:26:00+00:00",
+            "user": "1000:1000"
+          },
+          "serves": [
+            "home-automation-dashboard.example.com"
+          ],
+          "standing": {
+            "advisories": [],
+            "latest": "2024.12.1-ubu2404-ls48",
+            "newer": [
+              "2024.12.1-ubu2404-ls48"
+            ],
+            "registry_read_at": "2026-01-15T06:30:00+00:00",
+            "release": {
+              "published": "2026-01-11T09:30:00+00:00",
+              "tag": "2024.12.1-ubu2404-ls48",
+              "url": "https://github.com/example-builds/home-automation-server/releases/tag/2024.12.1-ubu2404-ls48"
+            },
+            "state": "behind",
+            "summary": "2024.12.1-ubu2404-ls48 available",
+            "unmatched_advisories": 0,
+            "unread": "",
+            "upstream_read_at": "2026-01-15T06:30:00+00:00"
+          },
+          "state": "running",
+          "status": "Up 12 days (healthy)",
+          "supply_chain": {
+            "attestations_unread": "",
+            "packages": 3,
+            "provenance": {
+              "builder": "https://github.com/actions/runner",
+              "built_at": "2025-12-25T09:30:00+00:00",
+              "built_on": [
+                "alpine:3.20"
+              ],
+              "commit_url": "https://github.com/example-builds/home-automation-server/commit/b501bd36a409bfccc460d8ad4d08bf3f4ff569ef",
+              "format": "https://slsa.dev/provenance/v1",
+              "revision": "b501bd36a409bfccc460d8ad4d08bf3f4ff569ef"
+            },
+            "sbom": "spdx",
+            "source": "example-builds/home-automation-server",
+            "source_known_by": "label",
+            "standard": {
+              "by_design": [],
+              "checks": [
+                {
+                  "id": "sbom",
+                  "label": "Has a package list (SBOM)",
+                  "state": "met"
+                }
+              ],
+              "measured": 7,
+              "met": 7,
+              "unmet": []
+            },
+            "urgent": [],
+            "vulnerabilities": [],
+            "vulnerabilities_read_at": "2026-01-15T06:30:00+00:00"
+          },
+          "url": "/infrastructure/home-automation-container/",
+          "usage": {
+            "cpu_limit": null,
+            "cpu_percent_of_one_core": 1.9,
+            "memory_bytes": 301989888,
+            "memory_counted_as": "anonymous memory",
+            "memory_limit_bytes": 1073741824,
+            "memory_of_limit_percent": 28.1,
+            "read_at": "2026-01-15T09:26:00+00:00"
+          }
+        },
+        "ok": true
+      }
+    }
+  },
+  "getCredentialsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "credential_refusal": "",
+          "label": "ACME certificate authority",
+          "manages": [],
+          "provider": "acme",
+          "sights": [],
+          "tally": []
+        },
+        "ok": true
+      }
+    }
+  },
+  "getDomainsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "connection_ref": "cloudflare-dns",
+          "declaration": "example-com",
+          "insights": [
+            {
+              "concern": false,
+              "detail": "All fully wired.",
+              "label": "Services",
+              "notice": false,
+              "url": "/infrastructure/services/",
+              "value": "8 services"
+            }
+          ],
+          "name": "example.com",
+          "node": "zone:example.com",
+          "observed_at": "2026-01-15T09:30:00+00:00",
+          "reachable": true,
+          "records": [
+            {
+              "declaration": "example-com-mx",
+              "name": "example.com",
+              "observed_only": false,
+              "proxied": false,
+              "record_type": "MX",
+              "ttl": 3600,
+              "value": "0 ."
+            }
+          ],
+          "registration": {
+            "auto_renew": true,
+            "expires": "2026-08-03T09:30:00+00:00",
+            "source": "Registration"
+          },
+          "services": [
+            {
+              "hostname": "example.com",
+              "status": "neutral"
+            }
+          ],
+          "url": "/domains/example.com/"
         },
         "ok": true
       }
@@ -502,8 +782,8 @@
             "actions": {
               "reconcile": {
                 "automatic": true,
-                "enabled": false,
-                "reason": "This connection only reads. Its setup guide says how to let HQ make changes through it."
+                "enabled": true,
+                "reason": ""
               }
             },
             "awaiting_approval": 0,
@@ -511,30 +791,33 @@
             "expiry": null,
             "health": {
               "label": "Working",
-              "message": "Matches HQ's config.",
-              "reason": "Observed",
+              "message": "",
+              "reason": "Reconciled",
               "state": "healthy"
             },
             "in_sync": true,
-            "origin_machine": null,
+            "origin_machine": {
+              "name": "docker-host-01",
+              "url": "/infrastructure/machines/docker-host-01/"
+            },
             "provider_machine": null,
             "readout": [
               {
-                "desired": "192.0.2.10",
+                "desired": "10.100.200.214",
                 "label": "Answers with",
-                "observed": "192.0.2.10"
+                "observed": "10.100.200.214"
               }
             ],
             "removal": {
-              "mode": "forget",
+              "mode": "delete",
               "pending": false,
               "reason": ""
             },
             "resolution_error": "",
             "services": [
               {
-                "hostname": "sentinel.example.test",
-                "url": "/infrastructure/services/sentinel.example.test/"
+                "hostname": "git.example.com",
+                "url": "/infrastructure/services/git.example.com/"
               }
             ],
             "unused_names": [],
@@ -544,9 +827,8 @@
           "resource": {
             "conditions": [
               {
-                "message": "Matches HQ's config.",
-                "reason": "Observed",
-                "since": "2026-01-15T09:30:00+00:00",
+                "message": "",
+                "reason": "Reconciled",
                 "status": true,
                 "type": "Ready"
               }
@@ -555,26 +837,28 @@
             "generation": 1,
             "health": {
               "label": "Working",
-              "message": "Matches HQ's config.",
-              "reason": "Observed",
+              "message": "",
+              "reason": "Reconciled",
               "state": "healthy"
             },
             "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
             "in_sync": true,
-            "key": "sentinel-rewrite",
+            "key": "forgejo-dns",
             "kind": "adguard.rewrite",
             "last_observed_at": "2026-01-15T09:30:00+00:00",
             "observed_generation": 1,
             "public_effect": false,
             "spec": {
-              "answer": "192.0.2.10",
-              "domain": "sentinel.example.test"
+              "answer": "10.100.200.214",
+              "connection_ref": "adguard",
+              "domain": "git.example.com"
             },
             "status": {
-              "answer": "192.0.2.10",
-              "domain": "sentinel.example.test"
+              "answer": "10.100.200.214",
+              "connection_ref": "adguard",
+              "domain": "git.example.com"
             },
-            "updated_at": "2026-01-15T09:30:00+00:00"
+            "updated_at": "2025-03-21T20:18:00+00:00"
           }
         },
         "ok": true
@@ -599,6 +883,89 @@
   },
   "getMachinesV2": {
     "responses": {
+      "200": {
+        "data": {
+          "addresses": [
+            "10.100.200.214"
+          ],
+          "aliases": [],
+          "containers": [
+            {
+              "image": "jc21/nginx-proxy-manager:2.12.1",
+              "name": "nginx-proxy-manager",
+              "observed_at": "2026-01-15T09:30:00+00:00",
+              "published": "81",
+              "stack": "nginx-proxy-manager",
+              "state": "running",
+              "status": "Up 12 days (healthy)",
+              "watcher": "nginx-proxy-manager-container"
+            }
+          ],
+          "containers_visible": true,
+          "declaration": "docker-host-01",
+          "header_addresses": [
+            {
+              "address": "10.100.200.214",
+              "holder": "",
+              "label": "LAN"
+            }
+          ],
+          "hostnames": [
+            "hq.example.com"
+          ],
+          "hq_hostnames": [],
+          "name": "docker-host-01",
+          "node": "machine:docker-host-01",
+          "opened_by": [
+            "portainer"
+          ],
+          "presence": {
+            "advertised_routes": [
+              "10.100.200.0/24"
+            ],
+            "authorized": true,
+            "blocks_incoming": false,
+            "client_version": "1.76.6-t3b1a6e2c4-g5e7f9a1b3",
+            "dns_name": "docker-host-01.tailc0ffee.ts.net",
+            "enabled_routes": [
+              "10.100.200.0/24"
+            ],
+            "exit_node_approved": false,
+            "key_expires": null,
+            "lan_address": "10.100.200.214",
+            "last_seen": null,
+            "observed_at": "2026-01-15T09:30:00+00:00",
+            "offers_exit_node": false,
+            "online": true,
+            "os": "linux",
+            "ssh_enabled": false,
+            "tags": [
+              "tag:server"
+            ],
+            "tailnet_address": "100.101.102.103",
+            "tailnet_name": "docker-host-01",
+            "update_available": false
+          },
+          "reached_by": [
+            "portainer"
+          ],
+          "resources": [
+            "hq-container"
+          ],
+          "role": "Docker host",
+          "roles": [
+            {
+              "id": "tailnet-dns",
+              "label": "Tailnet DNS"
+            }
+          ],
+          "runs_hq": false,
+          "state": "online",
+          "unanswered": [],
+          "url": "/infrastructure/machines/docker-host-01/"
+        },
+        "ok": true
+      },
       "404": {
         "error": {
           "code": "not_found",
@@ -621,8 +988,40 @@
     "responses": {
       "200": {
         "data": {
-          "name": "Selected over the wire",
-          "slug": "selected-over-the-wire"
+          "category": "homelab",
+          "dependency_updates": false,
+          "description": "The control panel for the homelab: every machine, service, renewal and bill in one place.",
+          "last_push_at": null,
+          "name": "HQ",
+          "public_url": "https://hq.example.com/",
+          "relationships": {
+            "assets": [
+              "sff-server"
+            ],
+            "content": [
+              "why-a-control-panel"
+            ],
+            "documentation": [
+              "rb-public-site",
+              "rb-upgrade-containers"
+            ],
+            "expense_ids": []
+          },
+          "repository_url": "https://github.com/example/hq",
+          "slug": "hq",
+          "status": "active",
+          "technologies": [
+            "Django",
+            "SQLite",
+            "Go"
+          ],
+          "updated_at": "2026-01-15T00:36:00+00:00",
+          "updates": {
+            "last_run": null,
+            "oldest_pull_days": null,
+            "open_pulls": 0,
+            "unmatched_alerts": null
+          }
         },
         "ok": true
       },
@@ -678,12 +1077,214 @@
     "responses": {
       "200": {
         "data": {
+          "error": "",
+          "facet": "",
           "items": [
             {
-              "record": "perimeter"
+              "addresses": [
+                "100.101.102.104"
+              ],
+              "connection_ref": "adguard",
+              "filtering_enabled": true,
+              "ids": [
+                "100.101.102.104"
+              ],
+              "name": "macbook-pro-16",
+              "source": "persistent",
+              "use_global_settings": true
+            },
+            {
+              "addresses": [
+                "100.101.102.105"
+              ],
+              "connection_ref": "adguard",
+              "filtering_enabled": true,
+              "ids": [
+                "100.101.102.105"
+              ],
+              "name": "iphone-16-pro",
+              "source": "persistent",
+              "use_global_settings": true
             }
           ],
-          "observed_at": "2026-01-15T09:30:00+00:00"
+          "kind": "adguard.client",
+          "label": "DNS client",
+          "observed_at": "2026-01-15T09:30:00+00:00",
+          "provider": "adguard",
+          "provider_label": "AdGuard Home",
+          "read_by": "controller",
+          "records": 2,
+          "refusal": "",
+          "relation": "Name in AdGuard",
+          "remedy": "",
+          "requires": [],
+          "state": "readable"
+        },
+        "ok": true
+      }
+    }
+  },
+  "getServicesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "path": {
+            "hostname": "docs.example.com",
+            "line": "External DNS to Served outside example.net",
+            "machine": "",
+            "observed": [],
+            "redirects_to": "",
+            "routes": [
+              {
+                "hops": [
+                  {
+                    "certificate": null,
+                    "detail": "CNAME",
+                    "label": "External DNS",
+                    "link": {
+                      "external": false,
+                      "kind": "cloudflare.dns_record",
+                      "kind_label": "Public DNS record",
+                      "label": "example-docs.pages.example.net",
+                      "url": "/infrastructure/example-com-docs/"
+                    },
+                    "name": "example-docs.pages.example.net",
+                    "overlays": [],
+                    "source": {
+                      "connection": "cloudflare-dns",
+                      "declared": "",
+                      "kind": "cloudflare.dns_record",
+                      "label": "Public DNS record",
+                      "observed_at": "2026-01-15T09:30:00+00:00"
+                    },
+                    "step": "dns",
+                    "unread": ""
+                  },
+                  {
+                    "certificate": null,
+                    "detail": "example-docs.pages.example.net",
+                    "label": "Served outside",
+                    "link": null,
+                    "name": "example.net",
+                    "overlays": [],
+                    "source": null,
+                    "step": "external",
+                    "unread": ""
+                  }
+                ],
+                "line": "External DNS to Served outside example.net",
+                "port": null,
+                "via": "External DNS"
+              }
+            ],
+            "unread": []
+          },
+          "service": {
+            "facets": [
+              {
+                "id": "runtime",
+                "label": "Container",
+                "present": false,
+                "resources": [],
+                "state": ""
+              },
+              {
+                "id": "dns",
+                "label": "DNS",
+                "present": true,
+                "resources": [
+                  "example-com-docs"
+                ],
+                "state": "good"
+              },
+              {
+                "id": "proxy",
+                "label": "Proxy",
+                "present": false,
+                "resources": [],
+                "state": ""
+              },
+              {
+                "id": "certificate",
+                "label": "Certificate",
+                "present": true,
+                "resources": [
+                  "wildcard-example-com"
+                ],
+                "state": "good"
+              }
+            ],
+            "faults": [],
+            "hostname": "docs.example.com",
+            "mark": "",
+            "origin": {
+              "address": "example-docs.pages.example.net",
+              "container": "",
+              "host": ""
+            },
+            "project": null,
+            "status": "unknown",
+            "status_label": "DNS record only"
+          }
+        },
+        "ok": true
+      }
+    }
+  },
+  "getUpgradesV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "address": "docker-host-01:home-automation",
+          "blockers": [
+            {
+              "id": "no-apply-path",
+              "reason": "HQ cannot apply an upgrade on docker-host-01 yet."
+            }
+          ],
+          "change": "minor",
+          "data": [
+            {
+              "destination": "/data",
+              "read_only": false,
+              "source": "home-automation_data",
+              "type": "volume"
+            }
+          ],
+          "fixes": [],
+          "from": {
+            "digest": "sha256:d28e6c9378c30c97b2d3117373b60184d2cac0294e2dd6e8432a80f3a868b1ad",
+            "tag": "2024.11.3-ubu2404-ls45"
+          },
+          "introduces": [],
+          "not_automatic": [
+            {
+              "id": "not-a-patch",
+              "reason": "A minor update waits for you."
+            }
+          ],
+          "release": {
+            "published": "2026-01-11T09:30:00+00:00",
+            "tag": "2024.12.1-ubu2404-ls48",
+            "url": "https://github.com/example-builds/home-automation-server/releases/tag/2024.12.1-ubu2404-ls48"
+          },
+          "risk": "medium",
+          "stateful": true,
+          "steps": [
+            {
+              "detail": "home-automation_data",
+              "id": "snapshot",
+              "label": "Stop it and snapshot its data"
+            }
+          ],
+          "to": {
+            "digest": "sha256:dea20f655573fcd50487b9c7866f12391d3f6aa0dfc38d3a63bc0078495477ba",
+            "tag": "2024.12.1-ubu2404-ls48"
+          },
+          "verified_by": [
+            "its health check"
+          ],
+          "viable": false
         },
         "ok": true
       }
