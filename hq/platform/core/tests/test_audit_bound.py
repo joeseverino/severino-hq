@@ -104,7 +104,7 @@ class BoundedEventTests(TestCase):
         *_shown, rest = [element for element in within(html, "data-folded", head.attrs["id"]) if element.tag == "a"]
         self.assertLess(len(folded), 12)
         self.assertEqual(rest.words, f"{12 - (len(folded) - 1)} more changes")
-        self.assertEqual(rest.attrs["href"], reverse("core:audit_detail", args=[newest.pk]))
+        self.assertEqual(rest.attrs["href"], f"{reverse('core:audit_detail', args=[newest.pk])}#rest-of-operation")
 
     def test_recent_activity_says_how_many_more_and_where_they_are(self):
         _items(12)
