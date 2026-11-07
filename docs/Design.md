@@ -132,8 +132,8 @@ row, standing in for the columns that left (the audit log's action under its
 name).
 
 A table still wider in a narrow box is tight (`data-tight`). Its headings,
-times, statuses, a value's parts and a row's control labels wrap at their
-spaces, its row's controls stand one above another, and its cells stand
+times, statuses and a value's parts wrap at their spaces, its row's controls
+stand one above another, each label whole on its line, and its cells stand
 closer. Still wider, its identifiers break where they must (`data-break`).
 A table wider than its region even then scrolls in it (`data-scrolls`), so no
 table runs past its card at any width, and the gates fail it: the narrowest
@@ -265,7 +265,8 @@ styled in one place. Every other text wraps. A box that
 clips something other than text (a frame's corners, a scroll region) says why
 beside its declaration.
 *Gate:* `lint:css` (`cutText` in `tools/lint/stylelint.config.mjs`), and the
-layout survey's `cut and closed`, `cut when open` and `cut with room`.
+layout survey's `cut and closed`, `cut when open`, `cut with room` and
+`cut beside room`.
 
 A long identifier is one line, cut with an ellipsis at a share of its region's
 width (`--identifier-max`, in container units between a floor and a ceiling).
