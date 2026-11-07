@@ -24,7 +24,7 @@ from hq.platform.core.example_estate.testing import throwaway_media
 from ..contract import served_resources
 from ..identity import set_principal
 from ..server import mcp
-from ..shapes import answer_type
+from ..shapes import answer_type, omission_schema, whole_schema
 
 # An agent holding every grant, an extension's too, so each kind is read rather than refused.
 READER = Principal("example-reader", "mcp", operator_capabilities())
@@ -97,11 +97,12 @@ def _is(schema, kind):
 def _named(schema, path):
     """Each field ``schema`` names only some answers hold, at any depth and in
     any branch, and where it first sits. A required one is the validator's,
-    which refuses an answer that lacks it."""
+    which refuses an answer that lacks it, and one whose default the shape
+    states is held at that default wherever its parent is, left out or not."""
 
     for shape in _branches(schema):
         for key, inner in (shape.get("properties") or {}).items():
-            if key not in shape.get("required", ()):
+            if key not in shape.get("required", ()) and "default" not in inner:
                 yield _field(shape, key), f"{path}.{key}"
             yield from _named(inner, f"{path}.{key}")
         if _is(shape, "array"):
@@ -124,15 +125,79 @@ def _held(schema, value, path, held):
 
 def _unheld(listed, answers):
     """Where each field a listed tool's success shape names sits, when no
-    successful answer among ``answers`` holds it."""
+    successful answer among ``answers`` holds it, its left-out fields
+    restored."""
 
     successes = {tool.name: tool.output_schema["anyOf"][0] for tool in listed}
     named = dict(field for name, schema in successes.items() for field in _named(schema, name))
     held: set[tuple[str, str]] = set()
     for name, _arguments, result in answers:
         if not result.is_error:
-            _held(successes[name], result.structured_content, name, held)
+            _held(successes[name], _restored(name, result.structured_content), name, held)
     return sorted(where for field, where in named.items() if field not in held)
+
+
+def _pairs(whole, said, key):
+    """``whole`` and ``said`` side by side, and each pair of choices they offer, where ``key`` is in both."""
+
+    found = [(whole, said)] if key in whole else []
+    for choice in ("anyOf", "oneOf", "allOf"):
+        for inner in zip(whole.get(choice) or (), said.get(choice) or (), strict=True):
+            found += _pairs(*inner, key)
+    return found
+
+
+def _fits(value, whole, said):
+    fields = whole["properties"]
+    closed = whole.get("additionalProperties") is False
+    return (not closed or set(value) <= set(fields)) and all(
+        name in value or "default" in said["properties"][name] for name in whole.get("required", ())
+    )
+
+
+def _filled(value, whole, said):
+    """``value`` with each field its type requires and it left out given the
+    default ``said`` states, the shape it fits read first."""
+
+    if isinstance(value, list):
+        arrays = _pairs(whole, said, "items")
+        if len(arrays) != 1:
+            return value
+        ((shape, stated),) = arrays
+        return [_filled(item, shape["items"], stated["items"]) for item in value]
+    if not isinstance(value, dict):
+        return value
+    for shape, stated in _pairs(whole, said, "properties"):
+        if _fits(value, shape, stated):
+            return _filled_object(value, shape, stated)
+    maps = [
+        pair
+        for pair in _pairs(whole, said, "additionalProperties")
+        if isinstance(pair[0]["additionalProperties"], dict)
+    ]
+    if len(maps) == 1:
+        ((shape, stated),) = maps
+        return {
+            key: _filled(inner, shape["additionalProperties"], stated["additionalProperties"])
+            for key, inner in value.items()
+        }
+    return value
+
+
+def _filled_object(value, shape, stated):
+    fields, defaults = shape["properties"], stated["properties"]
+    missing = {name: defaults[name]["default"] for name in shape.get("required", ()) if name not in value}
+    return {
+        key: _filled(inner, fields[key], defaults[key]) if key in fields else inner
+        for key, inner in {**value, **missing}.items()
+    }
+
+
+def _restored(name, value):
+    """``name``'s answer ``value`` with each field its type requires and it left out at its default given back."""
+
+    kind = answer_type(mcp.tools[name].handler)
+    return _filled(value, whole_schema(kind), omission_schema(kind))
 
 
 class OutputShapeTests(TestCase):
@@ -206,4 +271,4 @@ class OutputShapeTests(TestCase):
         for name, arguments, result in [*answered, *written]:
             if not result.is_error:
                 with self.subTest(tool=name, arguments=arguments):
-                    declared[name].validate_python(result.structured_content)
+                    declared[name].validate_python(_restored(name, result.structured_content))

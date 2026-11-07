@@ -20,7 +20,7 @@ from hq.platform.application.security import Principal
 from .contract import served_resources
 from .declarations import HANDLERS, argument_model, tool_contract
 from .identity import caller_address, current_principal
-from .shapes import Requirement, declared
+from .shapes import Requirement, Schema, answer_type, declared, omission_schema, omitted
 
 logger = logging.getLogger("severino.mcp")
 
@@ -48,11 +48,26 @@ class Tool:
     # only to a caller it admits. A declared tool's is its declaration's; a
     # probe's own tool is anyone's.
     requires: Requirement = ANYONE
+    # What a success answers, whose defaults its answer leaves out
+    # (``shapes.omitted``); None answers whatever it returns whole.
+    answers: Any = None
     execute: Callable[..., Any] = field(init=False)
+    _omission: dict[str, Schema] = field(init=False, default_factory=dict)
 
     def __post_init__(self) -> None:
         run = partial(_held, self.handler, self.requires)
         object.__setattr__(self, "execute", sync_to_async(run, thread_sensitive=True))
+
+    def answered(self, value: Any) -> Any:
+        """``value``, a success's JSON, as this tool answers it: without the
+        fields that hold their defaults. The schema that says them is built
+        at the first answer, so listing the tools never builds it."""
+
+        if self.answers is None:
+            return value
+        if not self._omission:
+            self._omission["schema"] = omission_schema(self.answers)
+        return omitted(value, self._omission["schema"])
 
     def offered_to(self, principal: Principal) -> bool:
         """Whether tools/list names this tool to ``principal``: the rule a call is refused by."""
@@ -129,5 +144,6 @@ def bind_tools() -> dict[str, Tool]:
             title=entry["title"],
             output_schema=entry["outputSchema"],
             requires=declared(handler).requires,
+            answers=answer_type(handler),
         )
     return tools

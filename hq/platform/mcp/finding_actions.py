@@ -35,6 +35,12 @@ from hq.platform.application.workflow_contracts import ActionLink, WorkflowOutco
 AGENT_FINDINGS_SCHEMA_VERSION = 3
 
 _CLOSED = ConfigDict(extra="forbid")
+
+# Each finding carries its evidence and every call that acts on it, so an
+# answer holds the most severe few unless asked for more, whatever the estate
+# and its extensions raise. The API answers every one: its query is the same,
+# so absent is the door's to read.
+FIRST_FINDINGS = 2
 type Label = Annotated[str, Describe("What the call does here, in words a person reads.")]
 
 
@@ -291,7 +297,10 @@ def agent_finding(finding: Finding) -> AgentFinding:
 
 
 def agent_findings(*, principal: Principal, **narrowing: object) -> AgentFindings:
-    """The open problems as ``get_findings`` answers them; ``narrowing`` is ``FindingsQuery``'s."""
+    """The open problems as ``get_findings`` answers them, the most severe
+    ``FIRST_FINDINGS`` without a ``limit``; ``narrowing`` is ``FindingsQuery``'s."""
 
+    if narrowing.get("limit") is None:
+        narrowing["limit"] = FIRST_FINDINGS
     read = narrowed_findings(principal=principal, **narrowing)
     return cast(AgentFindings, read.answer(AGENT_FINDINGS_SCHEMA_VERSION, agent_finding))

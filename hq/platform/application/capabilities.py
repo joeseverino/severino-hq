@@ -48,6 +48,7 @@ from .security import (
     Capability,
     PolicyDenied,
     Principal,
+    agent_subject,
     could_ever_hold,
     require_all,
 )
@@ -78,18 +79,28 @@ def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
     require_all(principal, spec.required_capabilities)
 
 
-class CapabilityDescription(TypedDict):
-    """One registry entry as every adapter describes it."""
+class CapabilitySummary(TypedDict):
+    """One registry entry as an index names it: what it is and whether the caller may run it, without its schema."""
 
     name: Annotated[str, Describe("The command's dotted name, which running it takes.")]
     label: Annotated[str, Describe("What a person calls the command.")]
+    summary: Annotated[str, Describe("What the command does, in a sentence.")]
+    effect: Annotated[str, Describe(ended(f"What running it does: {listed(EFFECT_MEANINGS)}"))]
+    resource: Annotated[
+        str | None,
+        Describe("The list its targets are read from, by the name `describe_resources` gives it; null for none."),
+    ]
+    permitted: Permitted
+
+
+class CapabilityDescription(CapabilitySummary):
+    """One registry entry as every adapter describes it."""
+
     verb: Annotated[str, Describe("What its button says.")]
     variants: Annotated[
         dict[str, str],
         Describe("What its button says in each of its modes, by the mode's name, where one button cannot say all."),
     ]
-    summary: Annotated[str, Describe("What the command does, in a sentence.")]
-    effect: Annotated[str, Describe(ended(f"What running it does: {listed(EFFECT_MEANINGS)}"))]
     required_capabilities: RequiredPermissions
     target: Annotated[
         str | None,
@@ -105,12 +116,7 @@ class CapabilityDescription(TypedDict):
     target_initial_fields: Annotated[
         list[str], Describe("The fields of its command filled in from the target's record, to be changed from there.")
     ]
-    resource: Annotated[
-        str | None,
-        Describe("The list its targets are read from, by the name `describe_resources` gives it; null for none."),
-    ]
     input_schema: Annotated[dict[str, Any], Describe("The JSON Schema of the command it takes as `payload`.")]
-    permitted: Permitted
 
 
 class InvalidCapabilityQuery(QueryRefusal):
@@ -336,7 +342,7 @@ def _authorized_run(
             key,
             {"command": payload, "target": target, "expected_updated_at": expected_updated_at},
             act,
-            actor=principal.actor,
+            actor=agent_subject(principal),
         )
     except IdempotencyConflict as exc:
         return Ran(refuse("idempotency_conflict", exc.reason))

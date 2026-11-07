@@ -7,9 +7,7 @@ from pydantic import Field, SkipValidation
 from hq.platform.application import read_models
 from hq.platform.application.access import ANYONE, READS_A_LIST, READS_A_RECORD, RUNS_A_CAPABILITY, holding
 from hq.platform.application.capabilities import (
-    CapabilityCatalog,
     Performed,
-    describe_capabilities as describe_application_capabilities,
     execute_capability as execute_application_capability,
 )
 from hq.platform.application.connections import (
@@ -17,7 +15,6 @@ from hq.platform.application.connections import (
     describe_connections as describe_application_connections,
 )
 from hq.platform.application.contracts import effect_glossary
-from hq.platform.application.dashboard import OperatingSnapshot, operating_snapshot
 from hq.platform.application.findings import FindingsQuery
 from hq.platform.application.held_answer import HeldCall
 from hq.platform.application.input_errors import unknown_field_errors
@@ -43,9 +40,14 @@ from hq.platform.application.resources import (
 from hq.platform.application.security import Capability
 from hq.platform.application.topology import TopologyQuery, topology as application_topology
 from hq.platform.application.topology_answer import TopologyAnswer
+from hq.platform.mcp.capability_answer import CapabilityDetail, CapabilityIndex, agent_capabilities
+from hq.platform.mcp.dashboard_answer import ACTION_ITEMS_PAGE, AgentSnapshot, agent_snapshot
 from hq.platform.mcp.finding_actions import AgentFindings, agent_findings
 from hq.platform.mcp.identity import current_principal
-from hq.platform.mcp.shapes import tool
+from hq.platform.mcp.shapes import Budget, tool
+
+# The kind whose first page this tool answers smaller than the kind's own default.
+QUEUE = "action_items"
 
 # A page's size, beside the filters; the kind's own query holds it to its bounds.
 type PageSize = Annotated[
@@ -53,33 +55,50 @@ type PageSize = Annotated[
     Field(
         description=(
             f"How many records a page holds, at most {MAX_PAGE_SIZE} unless `describe_resources` names a kind's "
-            "lower most; absent, the kind's own default."
+            f"lower most; absent, the kind's own default, or {ACTION_ITEMS_PAGE} for `{QUEUE}`."
         )
     ),
 ]
 
 
-@tool("Capability catalog", requires=ANYONE)
-def describe_capabilities(name: str = "", resource: str = "") -> CapabilityCatalog:
-    """Describe JSON-executable HQ capabilities and their canonical schemas.
+@tool("Capability catalog", requires=ANYONE, budget=Budget(15_800))
+def describe_capabilities(name: str = "", resource: str = "") -> CapabilityIndex | CapabilityDetail:
+    """Describe JSON-executable HQ capabilities: with no argument, an index
+    without schemas; narrow by `name` or `resource` for each capability in
+    full with its `input_schema`, whose `#/$defs/<name>` read the answer's
+    root `$defs`.
 
-    The whole catalog is large: narrow it. `name` is a capability name or a
-    prefix of whole dotted segments (`infrastructure` returns every
-    `infrastructure.*`); `resource` keeps the capabilities that act on that
-    resource, as `describe_resources` names it.
+    `name` is a capability name or a prefix of whole dotted segments
+    (`infrastructure` returns every `infrastructure.*`); `resource` keeps the
+    capabilities that act on that resource, as `describe_resources` names it.
     """
 
-    return describe_application_capabilities(principal=current_principal(), name=name, resource=resource)
+    return agent_capabilities(principal=current_principal(), name=name, resource=resource)
 
 
 # The meaning of each effect is declared once, beside the effects themselves.
 describe_capabilities.__doc__ = f"{describe_capabilities.__doc__}\n{effect_glossary('effect')}\n"
 
 
-@tool("Run a capability", requires=RUNS_A_CAPABILITY)
+@tool(
+    "Run a capability",
+    requires=RUNS_A_CAPABILITY,
+    budget=Budget(
+        420,
+        frozendict(
+            {
+                "name": "project.create",
+                "payload": frozendict(
+                    {"name": "Budget", "slug": "budget", "status": "active", "idempotency_key": "example-budget"}
+                ),
+            }
+        ),
+    ),
+)
 def execute_capability(
     name: str,
-    payload: dict[str, Any],
+    # Absent means an empty one, as an answer's left-out field means its default.
+    payload: dict[str, Any] | None = None,
     # Read by the capability runner once the caller may run it, as every door's are.
     target: SkipValidation[str | int | None] = None,
     expected_updated_at: SkipValidation[str | None] = None,
@@ -100,7 +119,7 @@ def execute_capability(
 
     answer = execute_application_capability(
         name,
-        payload,
+        payload or {},
         principal=current_principal(),
         target=target,
         expected_updated_at=expected_updated_at,
@@ -110,7 +129,7 @@ def execute_capability(
     return cast(Performed | HeldCall, answer)
 
 
-@tool("Resource catalog", requires=ANYONE)
+@tool("Resource catalog", requires=ANYONE, budget=Budget(12_800))
 def describe_resources(name: str | None = None) -> ResourceCatalog:
     """Describe every readable HQ resource, its supported operations, and whether you are permitted each.
 
@@ -123,14 +142,14 @@ def describe_resources(name: str | None = None) -> ResourceCatalog:
     return describe_application_resources(principal=current_principal(), name=name or "")
 
 
-@tool("Connection catalog", requires=ANYONE)
+@tool("Connection catalog", requires=ANYONE, budget=Budget(16_000))
 def describe_connections() -> ConnectionCatalog:
     """Describe installed connection families, abilities, scopes, routes, and whether you are permitted each."""
 
     return describe_application_connections(principal=current_principal())
 
 
-@tool("Open findings", requires=holding(Capability.READ), arguments=FindingsQuery)
+@tool("Open findings", requires=holding(Capability.READ), arguments=FindingsQuery, budget=Budget(5_000))
 def get_findings(**narrowing: Any) -> AgentFindings:
     """What HQ currently claims is wrong, with evidence and suggested remedies.
 
@@ -141,14 +160,15 @@ def get_findings(**narrowing: Any) -> AgentFindings:
     workflow step's call) is a tool call: send its `arguments` to its `tool`.
     A remedy absent means this principal cannot run it.
     `severity` is a floor (`attention` also returns `serious`) and
-    `limit` caps how many come back, most severe first; `summary` still
-    counts them all and says whether any were held back.
+    `limit` caps how many come back, most severe first, the few most severe
+    when absent; `summary` still counts them all and says whether any were
+    held back, which a higher `limit` or a `rule` reads.
     """
 
     return agent_findings(principal=current_principal(), **narrowing)
 
 
-@tool("Infrastructure topology", requires=holding(Capability.READ), arguments=TopologyQuery)
+@tool("Infrastructure topology", requires=holding(Capability.READ), arguments=TopologyQuery, budget=Budget(1_300))
 def get_topology(**narrowing: Any) -> TopologyAnswer:
     """Return the live infrastructure graph with safe canonical actions.
 
@@ -162,7 +182,11 @@ def get_topology(**narrowing: Any) -> TopologyAnswer:
     return application_topology(principal=current_principal(), **narrowing)
 
 
-@tool("List records", requires=READS_A_LIST)
+@tool(
+    "List records",
+    requires=READS_A_LIST,
+    budget=Budget(1_700, frozendict({"name": "action_items"})),
+)
 def list_resource(
     name: str,
     filters: dict[str, Any] | None = None,
@@ -190,12 +214,17 @@ def list_resource(
     if paging := sorted(PAGING & query.keys()):
         # Paging is an argument of its own, as on every tool that pages.
         raise InvalidResourceInput(name, unknown_field_errors([f"filters.{field}" for field in paging]))
+    # The queue's page is this tool's own; the kind's query still bounds a limit sent.
+    if limit is None and name == QUEUE:
+        limit = ACTION_ITEMS_PAGE
     query |= {field: value for field, value in (("limit", limit), (PAGE_FIELD, cursor)) if value is not None}
     return list_application_resource(name, query, principal=current_principal(), strict=True, fields=fields)
 
 
 # One record of its kind, with the fields describe_resources names for it.
-@tool("Read one record", requires=READS_A_RECORD)
+@tool(
+    "Read one record", requires=READS_A_RECORD, budget=Budget(700, frozendict({"name": "projects", "identifier": "hq"}))
+)
 def get_resource(
     name: str, identifier: str | int, fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None
 ) -> dict[str, Any]:
@@ -209,7 +238,7 @@ def get_resource(
     return get_application_resource(name, identifier, principal=current_principal(), strict=True, fields=fields)
 
 
-@tool("Undocumented projects and assets", requires=holding(Capability.READ))
+@tool("Undocumented projects and assets", requires=holding(Capability.READ), budget=Budget(120))
 def audit_registry() -> RegistryAudit:
     """The Project and Asset records no documentation points to.
 
@@ -220,7 +249,7 @@ def audit_registry() -> RegistryAudit:
     return audit_application_registry(principal=current_principal())
 
 
-@tool("Export a year summary", requires=holding(Capability.READ))
+@tool("Export a year summary", requires=holding(Capability.READ), budget=Budget(4_700, frozendict({"year": 2026})))
 def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary:  # noqa: A002 - the MCP tool's parameter, by name
     """One year's summary as text: its expenses, projects, writeups,
     documentation pointers and assets bought, as Markdown or JSON.
@@ -232,7 +261,7 @@ def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary: 
     return export_application_year_summary(year, format, principal=current_principal())
 
 
-@tool("Documentation coverage", requires=holding(Capability.READ))
+@tool("Documentation coverage", requires=holding(Capability.READ), budget=Budget(1_200))
 def documentation_status() -> DocumentationStatus:
     """The documentation HQ points to: counts by status and type, and the
     first page of records, each with its title, system and where it lives.
@@ -246,19 +275,19 @@ def documentation_status() -> DocumentationStatus:
     return read_models.documentation_status(principal=current_principal())
 
 
-@tool("What changed lately", requires=holding(Capability.READ_AUDIT_LOG))
+@tool("What changed lately", requires=holding(Capability.READ_AUDIT_LOG), budget=Budget(12_300))
 def recent_activity(*, limit: int = 25) -> RecentActivity:
     """The newest audit-log events, newest first: who did what to which
     record, and when, without the events' metadata.
 
     Needs the audit-log read permission (`read_audit_log`); a caller without it
-    is refused. Pick it for what changed lately; `dashboard_snapshot` carries
-    the same events beside HQ's other figures.
+    is refused. Pick it for what changed lately; `dashboard_snapshot` is what
+    needs doing.
     """
     return read_models.recent_activity(principal=current_principal(), limit=limit)
 
 
-@tool("HQ health check", requires=holding(Capability.READ))
+@tool("HQ health check", requires=holding(Capability.READ), budget=Budget(200))
 def system_health() -> SystemHealth:
     """Whether HQ answers: its database is checked, and the record count of each domain returned.
 
@@ -269,16 +298,20 @@ def system_health() -> SystemHealth:
     return read_models.system_health(principal=current_principal())
 
 
-@tool("HQ at a glance", requires=holding(Capability.READ))
-def dashboard_snapshot() -> OperatingSnapshot:
-    """HQ at a glance: its figures, the priority queue, work in progress and recent activity.
+@tool("HQ at a glance", requires=holding(Capability.READ), budget=Budget(7_400))
+def dashboard_snapshot() -> AgentSnapshot:
+    """HQ at a glance: its figures, the priority queue's most urgent items and the docs due a review.
 
     Pick it first for what needs doing. `system_health` says whether HQ
     answers, `get_findings` what is wrong, and the `status-brief` prompt is
     both for a person.
 
-    A part this caller may not read is left empty and named in `unread`; an
-    empty `recent_activity` with `unread` empty means there was no activity.
+    `priority` is the queue's first page and `priority_count` counts the
+    whole queue. `lists` names the call that reads each of HQ's other lists
+    (the whole queue, the recent activity, the active projects, the draft
+    and published content): send its `arguments` to its `tool`. A part this caller may not read is named
+    in `unread`. Each queue item's `steps` are the plan that resolves it, in
+    order.
     """
 
-    return operating_snapshot(principal=current_principal())
+    return agent_snapshot(principal=current_principal())

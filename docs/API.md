@@ -35,10 +35,12 @@ A web operator holds every capability HQ has. A token holds less:
 An agent's call from a tailnet device does nothing until the person it acts
 for approves that device for its client on the Agents page: until then it is
 a 403 `device_awaiting_approval`, and from a device a person blocked a 403
-`device_blocked`, while the client's other devices run. A call HQ cannot
-place on a device (from loopback or the LAN, or a deployment with no tailnet
-reading) keeps the client's own rules, and a person's own device needs no
-approval ([Security](Security.md#agents)).
+`device_blocked`, while the client's other devices run. Where the deployment
+has a tailnet, a call no tailnet device sent (from loopback, or an address no
+peer holds) is a 403 `device_unknown`, and one tailscaled could not answer for
+a 503 `tailnet_unavailable` with `retry_after`. Only a deployment with no
+tailnet keeps the client's own rules for every call, and a person's own device
+needs no approval ([Security](Security.md#agents)).
 
 The catalogs' `permitted` flags (capabilities, resources and connections,
 here and on `/api/mcp/` alike) say what the caller may use after that cap, by
@@ -226,7 +228,10 @@ reference, not a client:
   `static/css/api-reference.css`. That sheet holds no color, size or face of
   its own, and both of the viewer's modes take the same tokens, so the page
   follows the operator's theme (`data-theme` on `<html>`, else the system's)
-  with no toggle of its own.
+  with no toggle of its own. No rule of HQ's own stylesheet reaches the
+  markup the viewer draws: its mount carries `data-vendored`, where each of
+  HQ's layers gives way (`tokens.css`), and `ReferenceBrowserTests` reads
+  every element it draws for a property an HQ rule gave it.
 - **Facts are fields.** A capability's `x-hq-effect` and
   `x-hq-required-capabilities` are drawn on its operation (`showExtensions`),
   and each refusal's codes are its `code` field's `const`, or its `enum`
@@ -542,6 +547,22 @@ beside `details.filters`, what the kind's list narrows by, and `details.next`,
 `describe_resources` with the kind's `name`, which answers each filter's type
 and choices.
 
+### An agent's limits
+
+An agent past its call rate is refused `rate_limited`; past its calls or
+listen streams at once, or past every agent's calls at once together,
+`too_many_calls`; and a tool call waited on past its timeout answers
+`call_timed_out` (the `SEVERINO_AGENT_*` settings in
+`hq/config/settings.py`). Each door says how long to wait in the refusal's
+`error.retry_after`. The machine API answers a limit with `429` and repeats
+it as `Retry-After`. `/api/mcp/` answers a tool call with an error result
+carrying the code, the wait repeated in its `_meta.retry_after`, and a prompt
+or resource read refused for its rate carries it in the protocol error's
+`data`. The door still serves `initialize` and the tool list, since a client
+drops a server whose connection is refused. A refused call runs nothing. The
+rate is spent before the agent is observed, so a flood writes no row past its
+refusals, and those are one audit row an agent a minute, with their count.
+
 ### Safe retries
 
 Every capability whose effect is not `read` requires a retry key from every
@@ -698,7 +719,10 @@ A value outside them is a refusal naming the field, through either door.
 the document lists as their parameters: a choice (a lens, a direction, a
 rule, a severity) is a `Literal` read from where it is declared, and a bound
 (`depth`, `limit`) is the model's, so both doors publish one schema and refuse
-one input in one sentence.
+one input in one sentence. What an absent `limit` means is each door's own:
+the API answers every finding, and `get_findings` the most severe few
+(`finding_actions.FIRST_FINDINGS`), since each carries its evidence and every
+call that acts on it, its `summary` counting every one.
 
 Unknown arguments, mistyped values and stringified JSON objects are rejected.
 Validation errors do not include rejected input values. Authorization and
@@ -736,8 +760,28 @@ spec has every structured result meet the schema, with no exception for
 alone would be broken by every refusal. The success is the handler's return
 annotation, the TypedDict the application returns
 (`hq/platform/mcp/services.py`), and the API document's `data` for the same
-read is that type too, so the two doors describe one answer, but for
-`get_findings`, whose shape is MCP's own (`finding_actions.AgentFindings`). `ok` is the
+read is that type too, so the two doors describe one answer, but for the
+shapes that are MCP's own: `get_findings` (`finding_actions.AgentFindings`), `dashboard_snapshot`
+(`dashboard_answer.AgentSnapshot`) and `describe_capabilities`
+(`capability_answer`). `describe_capabilities` answers in two levels, as an
+API catalog is read: with no `name` and no `resource`, an index of each
+capability's name, label, summary, effect, resource and `permitted`, without
+its schema; narrowed, each entry in full, as `/api/v2/capabilities/` answers
+it, but with the definitions its `input_schema`s share held once in the
+answer's root `$defs`, which each `#/$defs/<name>` there points to. The API
+answers every entry in full with each schema whole, since its readers index
+one entry's schema alone and its document and recorded examples hold that
+shape. `dashboard_snapshot` answers what needs doing: the figures, the
+cards, the priority queue's first page, with `priority_count` counting it
+whole, and the docs due a review. For the whole queue and each other list
+the page shows (the recent activity, the active projects, the draft and
+published content), its `lists` names the `recent_activity` or
+`list_resource` call that reads it, and leaves out one the caller may not
+read. Every domain, an extension's too, raises items into the queue, so
+`list_resource` answers `action_items` a page of
+`dashboard_answer.ACTION_ITEMS_PAGE` when no `limit` is sent, `next.cursor`
+reading the rest; the API's page is every list's default, since what an
+absent `limit` means is each door's own. `ok` is the
 door's own: the API wraps each answer in `Ok`, and a tool's answer is the
 type alone, its refusal saying `ok: false` beside `error`. A capability's
 result is its runner's answer, so `execute_capability` alone carries `ok:
@@ -754,15 +798,33 @@ dataclass (`json_schemas.Written`, a topology node or a finding's operator steps
 typed whole in the API document and left an object in the tool's shape. The
 SDK's client checks a success against the schema and never a refusal, so
 `test_output_shapes.py` calls every tool both ways on the showcase's data,
-checks each answer with the client's own validator, holds each success to its
-handler's type through Pydantic, so a required key an answer lacks fails, and
-fails a field a shape names that no answer holds.
+checks each answer with the client's own validator, holds each success, its
+left-out fields restored to their defaults, to its handler's type through
+Pydantic, so a required key an answer lacks fails, and fails a field a shape
+names that no answer holds or leaves out.
+
+A success leaves out each field that holds its default, as protobuf's JSON
+mapping does, so an answer costs an agent only what it says. A field's
+default is the one its type declares, or else its empty value: null for a
+field that takes null, else empty text, `false`, or an empty list or object.
+A number is a figure, so a zero is said. Each such field states its `default`
+in the tool's `outputSchema` and is not `required` there. The rule reads the
+answer's type, a `Written` part typed whole as the API document types it, in
+the one place every success is encoded (`server._answer`, through
+`shapes.omitted`). A part its type leaves untyped (a record `get_resource`
+reads, a capability's JSON Schema, a map's entries) is answered as it is, and
+a refusal is answered whole. `execute_capability` takes an absent `payload` as
+an empty one, so a call an answer carries is sent as it reads. The machine
+API answers every field: it encodes its answers itself (`views._json`), its
+readers (Shortcuts, scripts) index each key, and its document and recorded
+examples hold each one.
 
 `mise run audit:mcp --base <ref>` measures what the listings cost and what
 an agent's first request costs a served process. It reports the tools/list
 answer's bytes and approximate tokens, each tool's part, the bytes of the
-prompt, resource and resource template lists, and the server's load and first
-answers. The API document and the SDK are named apart, host alone and composed.
+prompt, resource and resource template lists, each tool's answer on the
+standard data set with the share of it that is empty values and repeated
+text, and the server's load and first answers. The API document and the SDK are named apart, host alone and composed.
 A stage after those makes as many slow calls at once as the agent limits let
 every agent make, and the same calls one after another. For each it reports the
 resident and traced memory while they are in flight, and the threads and calls
@@ -819,7 +881,7 @@ handlers, over HQ's registries (`hq/platform/mcp/prompts.py`,
 
 | Resource | Reads |
 |---|---|
-| `hq://action_items` | the action queue, as `needs-me` reads it |
+| `hq://action_items` | the whole action queue, every page of it, as `needs-me` reads it |
 | `hq://approvals` | the held requests, as `held-requests` reads them |
 | `hq://hq` | the `hq` resource's list |
 | `hq://<kind>/{identifier}`, a template per kind | one record, through `get_resource` |

@@ -7,7 +7,8 @@ what any served process holds is boot. The server then loads as that first reque
 (asgi.py starts it on demand), and answers ``initialize`` and ``tools/list`` over its own
 streamable HTTP application, as a client's POSTs reach it, then the prompt, resource and resource
 template lists, and the structured answers of a describe_resources call with no arguments and of
-the action queue's largest page through list_resource; a list the server does not serve counts nothing. The templates are the caller's,
+the action queue's largest page through list_resource, then every listed tool's answer, each called
+once (``answer_arguments``); a list the server does not serve counts nothing. The templates are the caller's,
 so every request is asked as the agent holding every grant. Each stage's growth is counted twice:
 what tracemalloc traced, charged to each module as audit:memory charges it, and the resident set,
 less tracemalloc's own, which also holds what pydantic-core and other native code allocate.
@@ -24,6 +25,7 @@ process only, to measure what that upstream change would save.
 """
 
 import asyncio
+import dataclasses
 import gc
 import importlib
 import json
@@ -34,6 +36,7 @@ import sys
 import threading
 import tracemalloc
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +51,7 @@ lazy from hq.platform.mcp.binding import Tool
 lazy from hq.platform.mcp.identity import set_principal
 lazy from hq.platform.mcp.security import MCPBoundary, TailnetGate
 lazy from hq.platform.mcp.server import ToolServer
+lazy from hq.platform.mcp.shapes import declared
 
 SERVER = "hq.platform.mcp.server"
 LOADED = "server"
@@ -106,6 +110,58 @@ def queue_call(tools: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 QUEUE_ITEMS = f"{QUEUE} items"
+# Every listed tool's answer, each tool called once.
+ANSWERS = "answers"
+# A string this long or longer is repeated text from its second appearance in one answer.
+REPEATED_AT = 16
+# The JSON values an answer says nothing with.
+EMPTY: tuple[Any, ...] = ("", False, None, [], {})
+# The one write the probe makes, on its throwaway database.
+CREATED = {"name": "Audit MCP", "slug": "audit-mcp", "status": "active", "idempotency_key": "audit-mcp"}
+
+
+def answer_arguments(tools: list[dict[str, Any]], project: str, year: int) -> dict[str, dict[str, Any]]:
+    """The arguments each listed tool is called with: none but where it needs some, the action
+    queue's largest page for list_resource, and ``project`` for get_resource."""
+
+    named = {
+        "list_resource": queue_call(tools)["arguments"],
+        "get_resource": {"name": "projects", "identifier": project},
+        "execute_capability": {"name": "project.create", "payload": CREATED},
+        "export_year_summary": {"year": year},
+    }
+    return {tool["name"]: named.get(tool["name"], {}) for tool in tools}
+
+
+def _member(key: str, value: Any) -> int:
+    """What ``"key":value,`` costs in compact JSON."""
+
+    return len(compact(key)) + len(compact(value)) + 2
+
+
+def weighed(text: str) -> dict[str, int]:
+    """An answer's bytes, and how many of them are a member holding an empty or false value, and
+    a long string said again."""
+
+    seen: set[str] = set()
+    found = {"bytes": len(text.encode()), "empty": 0, "repeated": 0}
+
+    pending: list[Any] = [json.loads(text)]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            found["empty"] += sum(_member(key, inner) for key, inner in value.items() if _is_empty(inner))
+            pending += value.values()
+        elif isinstance(value, list):
+            pending += value
+        elif isinstance(value, str) and len(value) >= REPEATED_AT:
+            found["repeated"] += len(compact(value)) if value in seen else 0
+            seen.add(value)
+    return found
+
+
+def _is_empty(value: Any) -> bool:
+    return any(value == empty and type(value) is type(empty) for empty in EMPTY)
 
 
 def tool_calls(tools: list[dict[str, Any]]) -> tuple[tuple[str, dict[str, Any]], ...]:
@@ -205,10 +261,12 @@ async def _answer(application, body: dict[str, Any], headers: list[tuple[bytes, 
     return json.loads(text)
 
 
-async def answered(server, counted: Callable[[], None]) -> tuple[dict[str, Any], dict[str, int]]:
+async def answered(
+    server, counted: Callable[[], None]
+) -> tuple[dict[str, Any], dict[str, int], dict[str, dict[str, Any]]]:
     """The tools/list result the server's own application answers, after an initialize, and,
-    once ``counted`` has closed the first answer's stage, each other list's result bytes: 0 for
-    one it refuses."""
+    once ``counted`` has closed the first answer's stage, each other list's result bytes, 0 for
+    one it refuses, and each listed tool's answer weighed."""
 
     served = server.served()
     lists: dict[str, int] = {}
@@ -224,8 +282,34 @@ async def answered(server, counted: Callable[[], None]) -> tuple[dict[str, Any],
             if answer.get("isError"):
                 raise SystemExit(f"mcp_probe: {name} was refused: {answer}")
             lists[name] = len(compact(answer["structuredContent"]))
-        lists[QUEUE_ITEMS] = len(answer["structuredContent"]["items"])
-    return result, lists
+        # An empty list is left out of an answer.
+        lists[QUEUE_ITEMS] = len(answer["structuredContent"].get("items", []))
+        answers = await tool_answers(server, served.application, result["tools"], ident)
+    return result, lists, answers
+
+
+async def tool_answers(server, application, tools: list[dict[str, Any]], ident: int) -> dict[str, dict[str, Any]]:
+    """Each listed tool's answer as a client reads it, its text, weighed, and whether it was refused:
+    to the call its budget declares, or, in a tree older than budgets, to ``answer_arguments``'."""
+
+    async def call(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        nonlocal ident
+        ident += 1
+        body = {**_asked("tools/call", ident), "params": {"name": name, "arguments": arguments}}
+        return (await _answer(application, body))["result"]
+
+    projects = (await call("list_resource", {"name": "projects", "limit": 1}))["structuredContent"].get("items", [])
+    year = datetime.now(UTC).year
+    weights = {}
+    fallback = answer_arguments(tools, projects[0]["slug"] if projects else "", year)
+    for name, older in fallback.items():
+        said = declared(server.tools[name].handler)
+        # A tree older than budgets declares none.
+        budgeted = "budget" in {field.name for field in dataclasses.fields(said)}
+        arguments = json.loads(json.dumps(said.budget.call, default=dict)) if budgeted else older
+        answer = await call(name, arguments)
+        weights[name] = weighed(answer["content"][0]["text"]) | {"refused": bool(answer.get("isError"))}
+    return weights
 
 
 def resident_now() -> int:
@@ -374,7 +458,7 @@ def main(out: str) -> None:
     def answer():
         # The resource templates are the caller's: asked as the agent holding every grant.
         with set_principal(mcp_principal()):
-            found["result"], found["lists"] = asyncio.run(answered(found["server"].mcp, counted))
+            found["result"], found["lists"], found[ANSWERS] = asyncio.run(answered(found["server"].mcp, counted))
 
     probe.current = BOOT
     boot()
@@ -394,6 +478,7 @@ def main(out: str) -> None:
                 "deferred": probe.defer,
                 "list": {"bytes": len(compact(result)), "tools": len(result["tools"])},
                 "lists": found["lists"],
+                ANSWERS: found[ANSWERS],
                 "tools": {
                     tool["name"]: {part: len(compact(value)) for part, value in tool.items() if part != "name"}
                     for tool in result["tools"]

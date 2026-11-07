@@ -127,7 +127,7 @@ class FiltersInTheSchemaTests(TestCase):
                 arguments["limit"] = paging["limit"]["maximum"]
             (answer,) = calls(("list_resource", arguments))
             with self.subTest(kind=resource.name):
-                self.assertEqual(set(described["filters"]), set(sent))
+                self.assertEqual(set(described.get("filters", [])), set(sent))
                 self.assertFalse(answer.is_error, answer.structured_content)
 
     def test_a_value_outside_a_filters_choices_is_refused_naming_the_field(self):
@@ -165,12 +165,12 @@ class DescribeResourcesNarrowsTests(TestCase):
             {entry["name"] for entry in catalog["resources"]}, {r.name for r in served_resources().described}
         )
         for entry in catalog["resources"]:
-            listed = entry["operations"]["list"]
+            listed = entry["operations"].get("list")
             if listed is not None:
                 with self.subTest(kind=entry["name"]):
                     self.assertNotIn("query_schema", listed)
                     self.assertNotIn("paging", listed)
-                    self.assertIsInstance(listed["filters"], list)
+                    self.assertIsInstance(listed.get("filters", []), list)
         # The catalog names the call that answers one kind's whole schema.
         self.assertIn("describe_resources", catalog["schemas"])
         self.assertIn("name", catalog["schemas"])
@@ -181,7 +181,7 @@ class DescribeResourcesNarrowsTests(TestCase):
 
         self.assertEqual(entry["name"], "projects")
         # Its filters are what narrows it; limit and cursor page it, described beside them.
-        listed = entry["operations"]["list"]
+        listed = entry["operations"].get("list")
         self.assertEqual(set(listed["query_schema"]["properties"]), set(listed["filters"]))
         self.assertEqual(set(listed["paging"]["properties"]), {"limit", "cursor"})
 

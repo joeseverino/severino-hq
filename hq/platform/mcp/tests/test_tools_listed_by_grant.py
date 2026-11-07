@@ -32,8 +32,8 @@ ARGUMENTS = {"export_year_summary": {"year": 2026}}
 # The tools run or read by kind, and the catalog entry each is usable by.
 BY_CATALOG = {
     "execute_capability": ("describe_capabilities", "capabilities", lambda entry: True),
-    "list_resource": ("describe_resources", "resources", lambda entry: entry["operations"]["list"] is not None),
-    "get_resource": ("describe_resources", "resources", lambda entry: entry["operations"]["get"] is not None),
+    "list_resource": ("describe_resources", "resources", lambda entry: entry["operations"].get("list") is not None),
+    "get_resource": ("describe_resources", "resources", lambda entry: entry["operations"].get("get") is not None),
 }
 # A record no kind holds: reading it is refused for the grant before it is looked for.
 MISSING = "example-missing"
@@ -55,8 +55,9 @@ async def _tools(client, server):
     for name in server.tools:
         if name in BY_CATALOG:
             catalog, field, serves = BY_CATALOG[name]
-            entries = (await client.call_tool(catalog, {})).structured_content[field]
-            usable[name] = any(entry["permitted"] and serves(entry) for entry in entries)
+            # An entry left out of its catalog, or its `permitted`, holds the default: none, false.
+            entries = (await client.call_tool(catalog, {})).structured_content.get(field, [])
+            usable[name] = any(entry.get("permitted", False) and serves(entry) for entry in entries)
         else:
             answer = await client.call_tool(name, ARGUMENTS.get(name, {}))
             usable[name] = not answer.is_error or answer.structured_content["error"]["code"] != "forbidden"

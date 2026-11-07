@@ -2,6 +2,7 @@
 rule registry, its listed outputSchema names every field it answers, and every
 action a finding carries is a tool call an agent can make, never a web path."""
 
+from dataclasses import replace
 from datetime import timedelta
 from unittest import mock
 
@@ -21,6 +22,7 @@ from hq.platform.application.topology_model import Topology, TopologyEdge, Topol
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
+from ..finding_actions import FIRST_FINDINGS
 from ..identity import set_principal
 from ..server import mcp
 
@@ -77,20 +79,28 @@ class FindingsChoicesTests(TestCase):
         # above refused any field it does not name; each named here was read.
         success = listed["get_findings"].output_schema["anyOf"][0]
         item = success["properties"]["findings"]["items"]
-        self.assertEqual(set(answer.structured_content), set(success["properties"]))
-        self.assertEqual(set(finding), set(item["properties"]))
-        self.assertEqual(set(finding["remedies"][0]), set(item["properties"]["remedies"]["items"]["properties"]))
+        # A field left out is one whose default the schema states.
+        for held, shape in (
+            (answer.structured_content, success),
+            (finding, item),
+            (finding["remedies"][0], item["properties"]["remedies"]["items"]),
+        ):
+            with self.subTest(held=sorted(held)):
+                self.assertLessEqual(set(held), set(shape["properties"]))
+                left_out = set(shape["properties"]) - set(held)
+                self.assertEqual({name for name in left_out if "default" not in shape["properties"][name]}, set())
         self.assertFalse(item["additionalProperties"])
 
 
 def actions(finding):
     """Every action ``finding`` carries, by where it sits."""
 
-    yield from (("remedies", call) for call in finding["remedies"])
-    yield from (("offers", call) for call in finding["offers"])
-    yield from (("investigations", call) for call in finding["investigations"])
-    for step in (finding["workflow"] or {}).get("steps", ()):
-        yield from ((f"workflow.{step['phase']}", call) for call in step["calls"])
+    # A list left out holds its default, none.
+    yield from (("remedies", call) for call in finding.get("remedies", ()))
+    yield from (("offers", call) for call in finding.get("offers", ()))
+    yield from (("investigations", call) for call in finding.get("investigations", ()))
+    for step in (finding.get("workflow") or {}).get("steps", ()):
+        yield from ((f"workflow.{step['phase']}", call) for call in step.get("calls", ()))
 
 
 def paths(value, where="answer"):
@@ -163,7 +173,7 @@ class FindingActionsTests(TestCase):
             with self.subTest(command=arguments):
                 spec = registry[arguments["name"]]
                 # A target exactly where the command takes one, or execute_capability refuses it.
-                self.assertEqual(arguments["target"] is not None, bool(spec.target_kind))
+                self.assertEqual(arguments.get("target") is not None, bool(spec.target_kind))
 
     def test_the_listed_shape_closes_every_action_over_its_tool_and_arguments(self):
         listed, _ = session()
@@ -230,14 +240,29 @@ class FindingPlanTests(TestCase):
         refresh = "infrastructure.controller.refresh"
         self.assertEqual(
             [(call["tool"], call["arguments"]) for call in act["calls"]],
-            [("execute_capability", {"name": refresh, "target": None, "payload": {}})],
+            # A null target and an empty payload are left out, as the call takes them.
+            [("execute_capability", {"name": refresh})],
         )
         # The read the check asks for is its payload, then the check itself is this read again.
         self.assertEqual(
             [(call["tool"], call["arguments"]) for call in verify["calls"]],
             [
-                ("execute_capability", {"name": refresh, "target": None, "payload": {"every_connection": True}}),
+                ("execute_capability", {"name": refresh, "payload": {"every_connection": True}}),
                 ("get_findings", {"rule": finding["rule"]}),
             ],
         )
         self.assertEqual(list(paths(answer.structured_content)), [])
+
+
+class FindingsPageTests(TestCase):
+    def test_an_estate_raising_more_than_the_first_few_is_answered_those_and_counted_whole(self):
+        raised = tuple(replace(RAISED, subject=f"example-{n}") for n in range(FIRST_FINDINGS + 3))
+        with mock.patch("hq.platform.application.findings.estate_findings", return_value=raised):
+            _, (first, every) = session(("get_findings", {}), ("get_findings", {"limit": len(raised)}))
+
+        self.assertEqual(len(first.structured_content["findings"]), FIRST_FINDINGS)
+        self.assertEqual(
+            (first.structured_content["summary"]["findings"], first.structured_content["summary"]["truncated"]),
+            (len(raised), True),
+        )
+        self.assertEqual(len(every.structured_content["findings"]), len(raised))
