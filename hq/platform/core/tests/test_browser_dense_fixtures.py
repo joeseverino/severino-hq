@@ -536,6 +536,7 @@ def build_dense_estate(user):
         connection=PORTAINER,
     )
     _audit_trail(user)
+    _inventory_pass()
     _unbroken_words(user)
     _starred(user)
     _operations(user)
@@ -768,6 +769,32 @@ def _audit_trail(user):
             },
             "requested_from": SERVICE,
         },
+    )
+
+
+def _inventory_pass():
+    """A controller pass that changed ninety records under an id no row of it
+    names, the shape whose fold counts the rest, and a change an agent made
+    that a person approved: the history's longest Who."""
+
+    operation = "an-example-inventory-pass-0123456789abcdef"
+    controller = {"operation": "bridge.inventory", "interface": "controller", "actor": "controller"}
+    AuditLog.objects.bulk_create(
+        AuditLog(
+            action=AuditLog.Action.UPDATED,
+            object_type="Managed resource",
+            object_id=f"record-{index}",
+            object_repr=f"{_hostname(index % 3)}-record-{index}",
+            operation_id=operation,
+            metadata={**controller, "subject": f"record-{index}"},
+        )
+        for index in range(90)
+    )
+    AuditLog.objects.create(
+        action=AuditLog.Action.CREATED,
+        object_type="Infrastructure operation",
+        object_repr=f"{AUDITED}: reconcile",
+        metadata={"actor": "an-example-agent-with-a-long-name", "approved_by": "an-example-operator"},
     )
 
 
