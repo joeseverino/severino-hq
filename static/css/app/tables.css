@@ -265,13 +265,25 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table > tbody > tr.is-expanded > td code:not(:where(td) :is(p, li) *, .cell-whole) > .token[data-sole] .whole { vertical-align: top; }
 /* A box that cut a value is as wide as its track, never its content, or a run with no seam would push past the column. */
 .data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole) > .token[data-sole], [data-entity] > :is(.token[data-sole], .cut)) { width: 100%; }
-/* A row header's one-token name asks for its whole length up to its column's hold (`--hold`, a share of the region), so the header gives way with the other columns; past it the chip is cut, and the opened row shows it whole. A grid, so the chip sits on its token's baseline as a cell's does. */
+/* A row header's one-token name asks for its whole length and fills the room its row has, so the header gives way with the other columns; past it the chip is cut, and the opened row shows it whole. A grid, so the chip sits on its token's baseline as a cell's does. */
 .data-table th[scope=row] > code:has(> .token[data-sole]) {
   display: inline-grid; grid-template-columns: minmax(0, max-content);
-  width: max-content; max-width: min(var(--identifier-max), var(--hold)); padding: 0; background: none; vertical-align: baseline;
+  max-width: 100%; padding: 0; background: none; vertical-align: baseline;
 }
 .data-table th[scope=row] > code > .token[data-sole] .whole { display: contents; }
-.data-table > tbody > tr.is-expanded > th[scope=row] > code:has(> .token[data-sole]) { width: auto; }
+/* Outside a narrow box a closed row's header holds out for its name up to its column's hold (`--hold`, a share of the region) through its strut, as a cell's chip does: one copy holds out, one asks for the whole name, and the name itself asks nothing. */
+.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > th[scope=row] > code:has(> .token[data-sole]) {
+  grid-template-columns: minmax(min-content, max-content);
+  & > .token[data-sole] { grid-area: 1 / 1; contain: inline-size; justify-self: stretch; }
+  & > .strut { display: contents; }
+  & > .strut::before, & > .strut::after {
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
+    content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden;
+    padding-inline: var(--space-2) calc(var(--space-2) + 1px);
+  }
+  & > .strut::before { grid-area: 2 / 1; white-space: nowrap; max-width: min(var(--identifier-max), var(--hold)); }
+  & > .strut::after { grid-area: 3 / 1; white-space: normal; overflow-wrap: anywhere; }
+}
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line, so its column can give way without hiding any of it. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .data-table td code.cell-whole .whole { white-space: nowrap; }

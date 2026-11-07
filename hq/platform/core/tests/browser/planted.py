@@ -128,6 +128,12 @@ PLANTS = {
         '<span class="token" data-sole style="display: inline-block; max-inline-size: 3ch; overflow: hidden; '
         'white-space: nowrap">example-name</span></td><td>Example</td></tr></tbody></table></div>'
     ),
+    # A value cut short of the room its cell holds, beside a column wider than it asks.
+    "cut beside room": Plant(
+        '<div class="table-scroll"><table class="data-table"><tbody><tr><td>'
+        '<span style="display: block; max-inline-size: 6ch; overflow: hidden; text-overflow: ellipsis; '
+        'white-space: nowrap">Example value cut short</span></td><td>Example</td></tr></tbody></table></div>'
+    ),
     # A value cut with an ellipsis in a row with no toggle to open it.
     "cut and closed": Plant(
         _TABLE.format(
@@ -279,6 +285,13 @@ PASSES = {
     "control words on one line": Plant(
         '<select aria-label="Example"><option>Example group name</option></select>'
         '<button type="button" class="btn">Example label words</button>'
+    ),
+    # A value cut at its cell's edge beside a sentence that wraps: its row has no room left.
+    "cut beside room": Plant(
+        '<div class="table-scroll" style="inline-size: 20rem"><table class="data-table"><tbody><tr><td>'
+        '<span style="display: block; contain: inline-size; min-inline-size: 6ch; overflow: hidden; '
+        'text-overflow: ellipsis; white-space: nowrap">Example value cut short</span></td>'
+        f"<td>{_LINES}</td></tr></tbody></table></div>"
     ),
     # A button, a field and a select in one row, each the control size.
     "one height to a row of controls": Plant(

@@ -112,17 +112,17 @@
 }
 /* The muted line under a row's name: one line. */
 .data-table td .muted [data-entity] { -webkit-line-clamp: 1; line-clamp: 1; }
-/* The muted line of plain words under the row's name is one line cut at the column's edge, asking no width of its own (`contain: inline-size`) so the name alone sizes it; `narrow-only` words in it are never cut away. A chip (`code`) is a box of its own, where the line's ellipsis cannot land, so a line holding one is left to the chip's own cut. */
-.data-table td.row-gutter > br + .muted:not(:has([data-entity], .narrow-only, code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The muted line of plain words under the row's name is one line cut at the column's edge, asking no width of its own (`contain: inline-size`) so the name alone sizes it; `narrow-only` words in it are never cut away. A chip (`code`) is a box of its own, where the line's ellipsis cannot land, so a line holding one is left to the chip's own cut; a description (`.table-clamp`) keeps its two lines and asks for its length, so its column takes the room its row has. */
+.data-table td.row-gutter > br + .muted:not(.table-clamp, :has([data-entity], .narrow-only, code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @container style(--box: whole) {
-  .data-table td.row-gutter > br + .muted:not(:has([data-entity], code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .data-table td.row-gutter > br + .muted:not(.table-clamp, :has([data-entity], code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 /* A match's context is two lines at most. WebKit lays a value's parts out past its clamp, so the box holds two lines too. */
 .search-snippet { margin: var(--space-1) 0 0; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; max-block-size: 2lh; overflow: hidden; }
 /* A snippet is a run of prose cut from a record, so a value in it flows as its words do: a box of its own would set a word the match splits in two apart from its matched half. */
 .search-snippet :is(.token, .whole) { display: inline; }
-/* A cell's own identifier (one in a sentence, a `p` or `li`, wraps as a page's does and is never cut) never breaks across lines and never takes more than --identifier-max, a share of the region (`cqi`) since a percentage counts for nothing while columns are sized; past it, it is cut and the opened row shows it whole. */
-.data-table td code:not(:where(td) :is(p, li) *) { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(var(--identifier-max), var(--hold)); vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; }
+/* A cell's own identifier (one in a sentence, a `p` or `li`, wraps as a page's does and is never cut) never breaks across lines and never takes more than --identifier-max, a share of the region (`cqi`) since a percentage counts for nothing while columns are sized; past it, it is cut and the opened row shows it whole. Code of plain words (no part `breakable` marks, value_tags) is words no longer than a word may be, so it wraps between them as text does and is never cut. */
+.data-table td code:not(:where(td) :is(p, li) *):where(:has(.token, .whole)) { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(var(--identifier-max), var(--hold)); vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; }
 /* The chip's baseline is its token's: the grid's first row, ahead of the
    strut's rows, whose text has none of the chip's padding. */
 .data-table td code:not(:where(td) :is(p, li) *, .cell-whole) > .token[data-sole] {
@@ -171,9 +171,10 @@
 .month-item > span { overflow: hidden; text-overflow: ellipsis; }
 .calendar-source > span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* A description under a row's name: two lines at most, and never wider than
-   a name column should be, so the columns beside it stay on screen. */
-.table-clamp { display: -webkit-box; max-width: 28ch; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; }
+/* A description under a row's name: two lines at most, as wide as its
+   column lets it be; it holds out for its longest word, so its column gives
+   way with the others. */
+.table-clamp { display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; -webkit-line-clamp: 2; line-clamp: 2; }
 
 /* The command center: a result's title and what it says, one line each,
    two on a phone. */

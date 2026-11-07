@@ -22,6 +22,7 @@ from hq.platform.core.tests.browser.probes.palette import PAINT
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE, STYLESHEETS
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
+    CUT_BESIDE_ROOM,
     PAST_THE_GUTTER,
     TABLES,
     TABLES_THAT_DO_NOT_FIT,
@@ -456,6 +457,16 @@ class LayoutBrowserTests(BrowserGate):
         self.open_every_disclosure(name)
         self.page.evaluate(SETTLE)
         self.assertEqual(self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), [])
+
+    def no_value_is_cut_while_its_row_has_room(self, name):
+        """A value in a closed row is cut only once its row has no room
+        left to show more of it: none in its cell past what shares its line,
+        none in a column wider than its widest cell asks. Every table on the
+        page, with every disclosure open."""
+
+        self.open_every_disclosure(name)
+        self.page.evaluate(SETTLE)
+        self.assertEqual(self.read([(CUT_BESIDE_ROOM, SELECTORS["unseen"])])[0], [])
 
     def a_table_fits_its_box_at_every_width(self, name):
         """Every table on the page, with every disclosure open, fits its box

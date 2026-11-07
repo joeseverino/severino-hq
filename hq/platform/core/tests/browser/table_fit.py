@@ -118,6 +118,11 @@ PLANTS = {
         "closed": '<span class="token" data-sole style="display: inline-block; max-inline-size: var(--plant, none); '
         'overflow: hidden; white-space: nowrap">example-name</span>'
     },
+    # A value cut short of the room its cell holds, in a row that does not open.
+    "cut beside room": {
+        "closed": '<span title="Example value" style="display: block; max-inline-size: var(--plant, none); '
+        'overflow: hidden; text-overflow: ellipsis; white-space: nowrap">Example value</span>'
+    },
     # A value cut with no ellipsis, in a row that does not open.
     "cut and closed": {
         "closed": '<span style="display: block; max-inline-size: var(--plant, none); overflow: hidden; '
@@ -142,6 +147,7 @@ _MEASURES = {
     "broken identifiers": "5ch",
     "cell labels": "2rem",
     "cut with room": "3ch",
+    "cut beside room": "3ch",
     "cut and closed": "3ch",
     "cut when open": "3ch",
 }

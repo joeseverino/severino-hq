@@ -43,6 +43,7 @@ from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFT
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
     CUT_AND_CLOSED,
+    CUT_BESIDE_ROOM,
     CUT_WHEN_OPEN,
     CUT_WITH_ROOM,
     PAST_THE_GUTTER,
@@ -181,6 +182,7 @@ _GEOMETRY = {
     "short of its buttons": (SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]),
     "cut code in text": (CUT_DECISIONS, [SELECTORS["running_text"], SELECTORS["code"], SELECTORS["unseen"]]),
     "cut with room": (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]),
+    "cut beside room": (CUT_BESIDE_ROOM, SELECTORS["unseen"]),
     "cut and closed": (CUT_AND_CLOSED, SELECTORS["unseen"]),
     "cut when open": (CUT_WHEN_OPEN, SELECTORS["unseen"]),
     "changes": CHANGES_READ,
@@ -245,6 +247,7 @@ TABLE_CHECKS = (
     "unseen columns",
     "cell labels",
     "cut with room",
+    "cut beside room",
     "cut and closed",
     "cut when open",
 )

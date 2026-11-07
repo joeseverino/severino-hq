@@ -119,11 +119,29 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* Outside a narrow box the wrapping columns give way first; a name of plain parts holds out for its whole length up to its column's share (`--name-hold`, tables.css), and a name in a context line (`.muted`) holds out for nothing. */
 @container style(--box: whole) {
   .data-table td [data-entity]:not(strong > *, .row-gutter > *, .muted *):has(> .token[data-sole]):not(:has(> .token > .cut)) { width: max-content; max-width: var(--name-hold); }
-  /* A name the cell cuts holds out the same way, so it is cut only once its table has no column left to give way. */
-  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :is(
-    [data-entity]:not(strong > *, .row-gutter > *):has(> .token[data-sole] > .cut),
-    .token[data-sole]:not([data-entity] *, .cell-line *):has(> .cut)
-  ):not(code *, [data-cell~=name] *, [data-cell~=data] *, .muted *) { width: max-content; max-width: var(--name-hold); }
+}
+/* A linked name the cell cuts holds out the same way through its unseen strut (value_tags), as code's chip does (tables.css): one copy holds out for the name up to its column's hold, one asks for the whole name, and the name itself asks nothing, so it fills whatever room its row has and is cut only past it. Read from the table's mark, since a style query does not reach a pseudo-element in every engine. */
+.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td [data-entity]:not(strong > *, .row-gutter > *, code *, [data-cell~=name] *, [data-cell~=data] *, .muted *):has(> .token[data-sole] > .cut) {
+  grid-template-columns: minmax(min-content, max-content);
+  & > .token[data-sole] { grid-area: 1 / 1; contain: inline-size; justify-self: stretch; }
+  & > .strut { display: contents; }
+  & > .strut::before, & > .strut::after {
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
+    content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden;
+    /* A pixel of slack: the name's parts, each a box of its own, can measure a fraction wider than the strut's one run. */
+    padding-inline-end: 1px;
+  }
+  & > .strut::before { grid-area: 2 / 1; white-space: nowrap; max-width: var(--name-hold); }
+  & > .strut::after { grid-area: 3 / 1; white-space: normal; overflow-wrap: anywhere; }
+}
+/* A name the cell cuts outside a link holds out the same way, its strut beside it a float of no height, which its cell counts at its width and no line makes room for; the name asks for its whole length and fills what its row leaves. */
+.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td .strut:has(+ .token[data-sole]:not([data-entity] *, .cell-line *, code *, [data-cell~=name] *, [data-cell~=data] *, .muted *) > .cut) {
+  display: inline;
+  &::before {
+    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
+    content: attr(data-strut); float: inline-start; visibility: hidden; block-size: 0; overflow: hidden;
+    white-space: nowrap; max-width: var(--name-hold); padding-inline-end: 1px;
+  }
 }
 /* Outside a narrow box an identifier is one line. One that breaks only at its seams holds its whole length, so its table lets a ranked column go before the name would break (tables.js); a name the cell cuts shows one line, cut. A narrow box has no column left to let go, so there it breaks at its seams again. Every part a cell marks with its role (`data-cell`: the row's own name, what a row means, free text), a context line, a preview, an identifier that wraps by design (`cell-whole`) and a phrase's word whose hyphenated parts are each cut at the cell's edge (below) wrap as they always do; `broken identifiers` in the layout survey holds the rest. */
 @container style(--box: whole) {

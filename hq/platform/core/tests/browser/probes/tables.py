@@ -289,6 +289,90 @@ CUT_WITH_ROOM = (
 )
 
 
+# A value cut in a closed row while the row leaves room it could show more of
+# it in: room in its own cell past what shares its line, and the room each
+# other column showing holds past what its widest cell asks (each cell's
+# table laid out again at its max-content, unseen, beside it so its rules
+# still reach it). A column holding a cut gives none, and a fixed
+# layout's columns none at all. More of a value shows in any room an em wide,
+# or all of it in less.
+CUT_BESIDE_ROOM = (
+    "(unseen) => {"
+    + DESCRIBE
+    + CUTS
+    + """
+  const found = [];
+  const inner = (cell) => {
+    const s = getComputedStyle(cell);
+    const left = cell.getBoundingClientRect().left + cell.clientLeft + parseFloat(s.paddingLeft);
+    return {left, right: left + cell.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)};
+  };
+  const records = ':scope > tbody > tr:not(.row-detail, [data-row-detail], .is-expanded)';
+  for (const table of document.querySelectorAll('main table')) {
+    if (!table.checkVisibility() || table.closest('details:not([open])')) continue;
+    const rows = [...table.querySelectorAll(records)].filter((row) => row.checkVisibility());
+    const cells = rows.flatMap((row) => [...row.querySelectorAll(':scope > :is(td, th)')])
+      .filter((cell) => cell.colSpan === 1 && cell.checkVisibility());
+    const cuts = cells.flatMap((cell) => cutsIn(cell, unseen).map((cut) => ({cell, ...cut})));
+    if (!cuts.length) continue;
+    // The same table at its max-content width, where each column is as wide
+    // as its widest cell asks.
+    const ruler = table.cloneNode(true);
+    ruler.setAttribute('aria-hidden', 'true');
+    ruler.querySelectorAll('colgroup[data-held]').forEach((group) => group.remove());
+    ruler.style.cssText += '; position: absolute; visibility: hidden; inset: 0 auto auto 0; inline-size: max-content; max-inline-size: none';
+    table.after(ruler);
+    const asks = new Map();
+    for (const cell of [...ruler.querySelectorAll(records)].flatMap((row) => [...row.querySelectorAll(':scope > :is(td, th)')])) {
+      if (cell.colSpan === 1 && cell.checkVisibility()) asks.set(cell.cellIndex, cell.getBoundingClientRect().width);
+    }
+    ruler.remove();
+    const slack = new Map();
+    for (const cell of cells) {
+      const place = cell.cellIndex;
+      const held = cuts.some((cut) => cut.cell.cellIndex === place) ? 0 : cell.getBoundingClientRect().width - (asks.get(place) ?? Infinity);
+      slack.set(place, Math.max(0, Math.min(slack.get(place) ?? Infinity, held)));
+    }
+    // A fixed layout's columns are set by its first row and never share.
+    if (getComputedStyle(table).tableLayout === 'fixed') slack.clear();
+    const range = document.createRange();
+    for (const {cell, node, boxes} of cuts) {
+      const by = boxes.at(-1);
+      const r = by.getBoundingClientRect();
+      // What shares the cut box's lines in its cell, which the box's growing would push.
+      let end = r.right;
+      // A box around it on the line (a link with its arrow, a tag's padding) grows with it.
+      for (let up = by.parentElement; up && up !== cell; up = up.parentElement) {
+        const shown = getComputedStyle(up).display;
+        if (/inline-/.test(shown)) end = Math.max(end, up.getBoundingClientRect().right);
+      }
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        if (!text.data.trim() || by.contains(text) || !textShown(text)) continue;
+        range.selectNodeContents(text);
+        for (const line of range.getClientRects()) {
+          if (line.width && Math.min(line.bottom, r.bottom) - Math.max(line.top, r.top) > line.height / 2) end = Math.max(end, line.right);
+        }
+      }
+      const own = Math.max(0, inner(cell).right - end);
+      const others = [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
+      const room = own + others;
+      const first = boxes[0];
+      const style = getComputedStyle(first);
+      const short = first.scrollWidth > first.clientWidth + 1 && first.scrollHeight <= first.clientHeight + 1
+        ? first.scrollWidth - first.clientWidth : Infinity;
+      const needs = Math.min(parseFloat(style.fontSize), short);
+      if (room >= needs + 1) {
+        found.push(`${describe(by)} "${node.data.trim().slice(0, 40)}" is cut beside ${Math.round(room)}px of room `
+          + `(${Math.round(own)}px in its cell, ${Math.round(others)}px in the other columns)`);
+      }
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
 # A value cut short that nothing shows whole: its row does not open at this
 # width, and either the cut draws no ellipsis, so nothing tells a reader there
 # is more to see, or, outside a narrow box (`--box`, tables.css), where a
