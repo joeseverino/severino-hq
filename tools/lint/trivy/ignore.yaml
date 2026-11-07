@@ -1,0 +1,10 @@
+# What lint:trivy-config does not hold, each with its reason. Trivy reads a
+# YAML ignore file only by --ignorefile, and a check that fires on a missing
+# instruction cannot be ignored by an inline comment.
+misconfigurations:
+  - id: DS-0026
+    paths:
+      - composition/Dockerfile
+    statement: >-
+      The composed image builds on the host image, whose HEALTHCHECK it
+      inherits; Trivy cannot see it through the HQ_IMAGE build argument.

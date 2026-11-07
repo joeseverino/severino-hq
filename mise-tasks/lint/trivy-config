@@ -1,0 +1,28 @@
+#!/bin/sh
+#MISE description="Trivy's Dockerfile checks pass over every Dockerfile git tracks, or tools/lint/trivy/ignore.yaml says why not"
+#MISE hide=true
+
+# The checks are the ones built into the Trivy mise.toml pins, so the result
+# moves only with that pin and the run reaches no network: an empty cache and
+# --skip-check-update leave Trivy its embedded checks rather than the bundle
+# it would download, and the version check and telemetry are off. Trivy logs
+# that fallback as an error, so its log is quiet and the report is the output.
+# The Dockerfiles are copied out by their tracked paths, which the ignore
+# file names, so no untracked tree (a worktree, node_modules) is walked.
+set -eu
+
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+mkdir "${work}/tree"
+git ls-files -z -- ':(glob)**/Dockerfile' >"${work}/listed"
+tr '\0' '\n' <"${work}/listed" >"${work}/files"
+test -s "${work}/files"
+while IFS= read -r path; do
+    mkdir -p "${work}/tree/$(dirname "${path}")"
+    cp "${path}" "${work}/tree/${path}"
+done <"${work}/files"
+
+trivy config --quiet --cache-dir "${work}/cache" --skip-check-update \
+    --skip-version-check --disable-telemetry \
+    --misconfig-scanners dockerfile --exit-code 1 \
+    --ignorefile tools/lint/trivy/ignore.yaml "${work}/tree"

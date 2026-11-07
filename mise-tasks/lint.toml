@@ -123,6 +123,17 @@ description = "The Go controller is formatted and linted, its generated types cu
 hide = true
 run = "controller/scripts/check.sh"
 
+# Every advisory whose vulnerable function the controller can reach, through
+# its own calls and its tests' (-test), which fails only on exposure. Pinned
+# in go.mod's tool block, hashed in go.sum, as the generator is: mise's
+# registry has no govulncheck.
+# It queries vuln.go.dev, so fast never selects it.
+["lint:govulncheck"]
+description = "No advisory the controller can reach, through its own calls or its tests'"
+hide = true
+dir = "controller"
+run = "go tool govulncheck -test ./..."
+
 # Each derived file against its source, in the order fix:derived writes them.
 
 ["lint:drift-sdk-contract"]
