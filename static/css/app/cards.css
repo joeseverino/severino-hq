@@ -137,7 +137,7 @@ a.kpi:hover { background: var(--surface-2); }
 }
 .insight-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; }
 .insight-value { font-size: var(--text-xl); font-weight: 650; letter-spacing: -.015em; font-feature-settings: "tnum"; white-space: nowrap; }
-.insight-title { margin: 0; font-size: var(--text-2xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.insight-title { margin: 0; font-size: var(--text-md); font-weight: 650; }
 .insight-title a { color: inherit; }
 .insight-body { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-2); }
 /* Sits with the body it follows, not pinned to the card's floor: pinned, it
@@ -259,7 +259,9 @@ a.kpi:hover { background: var(--surface-2); }
 .queue-table .row-detail > td { padding-inline: calc(var(--row-gutter) + var(--space-6)) var(--space-6); }
 .queue-table .row-detail > td > * { margin-bottom: var(--space-8); }
 .queue-more > :first-child { margin-top: 0; }
-.queue-table .row-detail .row-columns { grid-template-columns: minmax(0, 1fr); padding: 0; background: none; }
+.queue-table .row-detail .row-columns { padding: 0; background: none; }
+/* One column: each part spans both of the line's tracks. */
+.queue-table .row-detail .row-columns > * { grid-column: 1 / -1; }
 .queue-table .row-detail .row-columns > dd { display: flex; flex-wrap: wrap; gap: var(--space-4); }
 .queue-table .row-detail .row-columns > dd > .attention-actions { display: contents; }
 /* The buttons past the first two wait in the line at any width, so in a whole
@@ -271,7 +273,7 @@ a.kpi:hover { background: var(--surface-2); }
 }
 @container style(--box: narrow) {
   .queue-table .row-detail .row-columns > dd { flex-direction: column; }
-  .queue-table .row-detail .row-columns > dd .btn { width: 100%; contain: inline-size; justify-content: center; white-space: normal; text-align: center; }
+  .queue-table .row-detail .row-columns > dd .btn { contain: inline-size; justify-content: center; white-space: normal; text-align: center; }
 }
 /* A family: how bad, what kind and how many, opening to its rows, which are
    set in under its name. Its name heads them, so it reads below a title. */
@@ -290,18 +292,12 @@ a.kpi:hover { background: var(--surface-2); }
 .queue-row[data-dismissed] .attention-title { color: var(--muted); font-weight: 400; }
 .queue-row[data-dismissed] .attention-title::before { content: "Dismissed: " / "Dismissed: "; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
-.action-items-card { padding-top: var(--space-5); }
-.action-items-aside[open] > summary { margin-bottom: var(--space-6); }
-/* The urgent problems about the thing a page shows: the queue's rows in one box. */
+/* A card of the problems about the thing a page shows holds only the queue's
+   rows, which keep their own gutter, so they reach its sides as a section's
+   table does. */
+.card.problems { padding-inline: 0; }
+/* The urgent ones: their box above the page. */
 .problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }
-/* A problem that is not urgent: one unframed line, its button beside it. */
-.problem-lines { list-style: none; margin: 0 0 var(--space-4); padding: 0; display: grid; gap: var(--space-3); }
-.problem-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
-.problem-line > p { flex: 0 1 auto; max-width: var(--measure); margin: 0; font-size: var(--text-sm); color: var(--ink-2); }
-.problem-line > .pill { flex: none; }
-.problem-line > p > strong { color: var(--ink); }
-.problem-line > .attention-actions { margin: 0; }
-.problem-line > :is(.resolution-workflow, .resolution-fold) { flex-basis: 100%; margin-top: 0; }
 /* The short queue on the dashboard, under the greeting: a card like any other. */
 .dash-needs { margin-bottom: var(--stack-gap); }
 /* Steps or checks side by side, each an icon, a title and a sentence. Read
@@ -349,5 +345,85 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .resolution-fold > summary { width: fit-content; max-width: 100%; color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
 
 .quick-actions.vertical { display: grid; grid-template-columns: 1fr; }
+
+/* A card that folds hangs its disclosure mark (surfaces.css) in its padding,
+   so its title starts at the edge every other card's heading starts at. The
+   mark is its own width plus its gap, both in its own ems. */
+details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)); }
+
+/* A section ({% section %}): its head inside its frame, over a rule, or,
+   when its body is one table region (or head="above" says so), its head on
+   the page and its body the frame (surfaces.css holds the same test). What
+   draws its own edges, cells or fill reaches the frame's sides, as a card's
+   flush list group does in Bootstrap: the frame names each such part, and the
+   survey's "inset in the frame" finds one it does not name. Anything else
+   sits in the frame's padding. A section inside a section is part of the
+   outer frame: its body adds no inset, and what fills it reaches the outer
+   frame's sides, and its foot when it ends the outer frame. */
+/* The landmark never pads itself: whatever a page's css= names on it, its
+   head starts at the column's edge and its frame spans the column. */
+:is(section, details, figure).section { padding: 0; }
+/* A figure's own margin is the browser's; the page's stacking gives it its room. */
+:where(figure.section) { margin: 0; }
+.section > .section-head { margin-bottom: var(--space-5); }
+/* A head inside the frame stands at the inset the body's words stand at. */
+.section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)) > .section-head {
+  margin: 0; padding: var(--space-4) var(--space-9);
+  border-block-end: 1px solid var(--line);
+}
+/* A section's heading line is one control tall, its words centered in it, so
+   a control beside it (a button, a month's arrows) adds no height, and heads
+   that share a row are one height and start their frames together. */
+.section > .section-head > :is(h2, h3, h4, h5, h6) { min-block-size: var(--control-size); align-content: center; }
+.section > .section-body {
+  --section-start: var(--space-8);
+  --section-end: var(--space-8);
+  --section-side: var(--space-9);
+  padding: var(--section-start) var(--section-side) var(--section-end);
+}
+.section .section > .section-body { --section-start: 0; padding: 0; }
+/* A heading inside a frame heads part of the section above it, so it reads
+   quieter than that section's, never as its sibling. */
+.section .section > .section-head :is(h3, h4, h5, h6) { color: var(--muted); font-size: var(--text-sm); font-weight: 600; }
+.section-body > .section:not(:last-child) > .section-body { --section-end: 0; }
+/* Each part that reaches the sides. Its rows, where they draw no edge of
+   their own at the frame's side, keep the frame's inset as their padding
+   (`--frame-inset`), so their words stand where the frame's prose does. */
+/* A form in the body that lays out no fields of its own (not .form) adds no box: what it holds reaches the sides as the body's own part would. */
+:is(.section > .section-body, .section > .section-body > form:not(.form)) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
+  .fact-band, .service-band, .control-summary, .insight-grid, .connection-control-grid, .sweep-grid,
+  .month-grid, .list-rows, .setup-list, .day-panel-entry, .search-hits, .conn-rows) {
+  --frame-inset: var(--section-side);
+  margin-inline: calc(-1 * var(--section-side));
+  max-inline-size: calc(100% + 2 * var(--section-side));
+  /* A table is as wide as it is told, never as wide as its block's room. */
+  &:where(table) { inline-size: calc(100% + 2 * var(--section-side)); }
+}
+/* What also draws its first and last rows reaches the frame's top and foot
+   when it starts or ends the frame, its corners the frame's. A list of rows
+   or a month, whose outer rows draw no edge there, keeps the frame's padding
+   above and below it. */
+:is(.section > .section-body, .section > .section-body > form:not(.form)) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
+  .fact-band, .service-band, .control-summary, .insight-grid, .connection-control-grid, .sweep-grid) {
+  --section-corner: calc(var(--radius) - 1px);
+  /* In a form that starts the body, its hidden fields draw nothing, so they
+     do not count. */
+  &:where(.section-body > *):first-child,
+  &:where(.section-body > form:first-child > *):nth-child(1 of :not(input[type="hidden"])) {
+    margin-block-start: calc(-1 * var(--section-start));
+    border-start-start-radius: min(var(--section-start), var(--section-corner));
+    border-start-end-radius: min(var(--section-start), var(--section-corner));
+  }
+  &:where(.section-body > *):last-child,
+  &:where(.section-body > form:last-child > *):last-child {
+    margin-block-end: calc(-1 * var(--section-end));
+    border-end-start-radius: min(var(--section-end), var(--section-corner));
+    border-end-end-radius: min(var(--section-end), var(--section-corner));
+  }
+}
+.section-body > * + .section, .section-body > .section + * { margin-block-start: var(--stack-gap); }
+/* A folded section's mark hangs before its heading, so the heading starts
+   where every other section's does. */
+details.section.section-fold > summary.section-head::before { margin-inline: calc(-1em - var(--space-1)) calc(var(--space-1) - var(--space-6)); }
 
 }
