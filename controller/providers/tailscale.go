@@ -203,6 +203,7 @@ type TailscaleDeviceRecord struct {
 	EnabledRoutes     []string       `json:"enabled_routes"`
 	Authorized        bool           `json:"authorized"`
 	LockError         string         `json:"lock_error"`
+	LockKey           string         `json:"lock_key"`
 	UpdateAvailable   bool           `json:"update_available"`
 	ClientVersion     string         `json:"client_version"`
 	SSHEnabled        bool           `json:"ssh_enabled"`
@@ -377,7 +378,7 @@ func (c tailnetClient) tailnetAPIDevices(ctx context.Context) ([]tsapi.Device, e
 }
 
 // errNoTailnetReading is a controller started without the local daemon's status.
-var errNoTailnetReading = &ProviderError{Message: "this controller was not given a tailnet reading"}
+var errNoTailnetReading = &ProviderError{Message: "HQ was not given a tailnet reading on this machine"}
 
 // readTailnetNodes reads the tailnet status file: Self first, then each Peer
 // in the order the file lists them.
@@ -604,6 +605,7 @@ func (r *Registry) tailscaleDeviceInventory(ctx context.Context) ([]any, error) 
 		device.AdvertisedRoutes = sortedCopy(identity.AdvertisedRoutes)
 		device.EnabledRoutes = sortedCopy(identity.EnabledRoutes)
 		device.LockError = identity.TailnetLockError
+		device.LockKey = identity.TailnetLockKey
 		device.UpdateAvailable = identity.UpdateAvailable
 		device.ClientVersion = identity.ClientVersion
 		device.SSHEnabled = identity.SSHEnabled

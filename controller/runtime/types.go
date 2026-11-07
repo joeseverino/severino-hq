@@ -38,6 +38,10 @@ type ProviderError struct {
 	HTTPStatus int    // the provider's non-2xx answer, when it gave one
 	Body       []byte // that answer's body, bounded; some providers explain a refusal there
 	Err        error  // the cause, when there is one
+	// Limited is a stop for an allowance spent, the provider's or the
+	// controller's own budget for it: nothing is wrong, the last reading
+	// stands and the next sweep reads again.
+	Limited bool
 }
 
 func (e *ProviderError) Error() string {
@@ -76,7 +80,7 @@ func Classify(err error) (FailureClass, Refusal, string) {
 
 // HTTPRefusal is a provider's non-2xx answer: 401 refuses the credential, 403 permission.
 func HTTPRefusal(code int) *ProviderError {
-	return &ProviderError{Message: fmt.Sprintf("provider answered %d", code), Failure: StatusFailure(code), HTTPStatus: code}
+	return &ProviderError{Message: fmt.Sprintf("the service answered %d", code), Failure: StatusFailure(code), HTTPStatus: code}
 }
 
 // StatusFailure is what a 401 or 403 from a provider says went wrong: 401

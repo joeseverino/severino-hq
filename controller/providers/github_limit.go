@@ -182,9 +182,9 @@ func (b *githubBudget) check(now time.Time) {
 	}
 	switch {
 	case b.known && b.remaining < githubFloor:
-		b.tripped = githubLimited(fmt.Sprintf("GitHub allows the app's installation %d more requests, under the %d the controller leaves its other users", b.remaining, githubFloor), b.resets, now)
+		b.tripped = githubLimited(fmt.Sprintf("GitHub allows the app's installation %d more requests, under the %d HQ leaves its other users", b.remaining, githubFloor), b.resets, now)
 	case b.spent >= githubSweepCeiling:
-		b.tripped = &ProviderError{Message: fmt.Sprintf("this sweep spent %d GitHub requests, the controller's ceiling for one sweep: rate limited until the next sweep, the last reading stands", b.spent)}
+		b.tripped = &ProviderError{Message: fmt.Sprintf("this round of reads spent %d GitHub requests, the most HQ spends on one: rate limited until the next round, the last reading stands", b.spent), Limited: true}
 	}
 }
 
@@ -212,7 +212,7 @@ func githubLimited(why string, resets, now time.Time) error {
 	default:
 		until = "rate limited until " + resets.UTC().Format("2006-01-02 15:04 UTC")
 	}
-	return &ProviderError{Message: why + ": " + until + ", the last reading stands"}
+	return &ProviderError{Message: why + ": " + until + ", the last reading stands", Limited: true}
 }
 
 // githubRateLimited is a refusal GitHub gave for an allowance, primary or

@@ -1,9 +1,12 @@
 package providers
 
 import (
+	"errors"
+	"net/http"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -185,7 +188,7 @@ func TestTheFuseStopsASweepAtItsCeiling(t *testing.T) {
 	}
 	stopped := 0
 	for _, refused := range report.RefusedParts {
-		if strings.Contains(refused.Reason, "the controller's ceiling for one sweep") && strings.Contains(refused.Reason, "the last reading stands") {
+		if strings.Contains(refused.Reason, "the most HQ spends on one") && strings.Contains(refused.Reason, "the last reading stands") {
 			stopped++
 		}
 	}
@@ -195,7 +198,7 @@ func TestTheFuseStopsASweepAtItsCeiling(t *testing.T) {
 }
 
 // A 403 or 429 GitHub gives for its rate limit is the limit, with when it
-// lifts: never "provider answered 403", and never a permission to grant.
+// lifts: never "the service answered 403", and never a permission to grant.
 func TestARefusalForTheRateLimitIsNamedAsTheLimit(t *testing.T) {
 	for _, c := range []struct {
 		name    string
@@ -227,5 +230,33 @@ func TestARefusalForTheRateLimitIsNamedAsTheLimit(t *testing.T) {
 	h.refuse(githubFakeAPI, "/repos/example/app", 403)
 	if report, _ := repositorySweep(t, h); report.Refusal != runtime.RefusalPermission {
 		t.Fatalf("%+v", report)
+	}
+}
+
+// Every stop for an allowance, the controller's own or GitHub's, says so in
+// a typed mark the worker reads, so a pass it ends is not a failure; a 403
+// for anything else is not marked.
+func TestEveryStopForAnAllowanceIsMarkedLimited(t *testing.T) {
+	now := time.Unix(githubFakeReset-3600, 0).UTC()
+	limited := func(err error) bool {
+		refusal, ok := errors.AsType[*ProviderError](err)
+		return ok && refusal.Limited
+	}
+	for name, budget := range map[string]*githubBudget{
+		"the sweep's ceiling":      {spent: githubSweepCeiling},
+		"the floor left to others": {known: true, remaining: githubFloor - 1},
+	} {
+		budget.check(now)
+		if !limited(budget.tripped) {
+			t.Errorf("%s: %#v", name, budget.tripped)
+		}
+	}
+	secondary := githubRateLimited(http.Header{"Retry-After": {"60"}}, &ProviderError{HTTPStatus: http.StatusTooManyRequests}, now)
+	if !limited(secondary) {
+		t.Errorf("GitHub's own limit: %#v", secondary)
+	}
+	refused := githubRateLimited(http.Header{}, &ProviderError{HTTPStatus: http.StatusForbidden, Failure: runtime.FailureClassPermission}, now)
+	if limited(refused) {
+		t.Errorf("a refusal of permission is no limit: %#v", refused)
 	}
 }

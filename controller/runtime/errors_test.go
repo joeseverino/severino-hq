@@ -56,7 +56,7 @@ func TestProviderErrorSaysWhatFailedThenWhy(t *testing.T) {
 func TestHTTPRefusalKeepsTheStatusAndClass(t *testing.T) {
 	for code, want := range map[int]FailureClass{401: FailureClassCredential, 403: FailureClassPermission, 404: FailureClassUnclassified} {
 		err := HTTPRefusal(code)
-		if err.HTTPStatus != code || err.Failure != want || err.Error() != fmt.Sprintf("provider answered %d", code) {
+		if err.HTTPStatus != code || err.Failure != want || err.Error() != fmt.Sprintf("the service answered %d", code) {
 			t.Errorf("%d: %+v", code, err)
 		}
 	}

@@ -529,7 +529,7 @@ class PartReasonTests(SimpleTestCase):
         def said(reason: str) -> str:
             return PartRefusal(kind="example", part=part, refusal="", reason=reason, scope="example/app").said
 
-        self.assertEqual(said("provider answered 404"), f"hidden from HQ's {label}")
+        self.assertEqual(said("the service answered 404"), f"hidden from HQ's {label}")
         self.assertEqual(said("Example 403 for /repos/example/app/rules"), f"closed to HQ's {label}")
         self.assertEqual(said("provider answered 503"), "the service failed to answer; the next read tries again")
         for reason in ("Example timed out", "Example listed more than 10 pages"):

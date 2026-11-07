@@ -206,7 +206,7 @@ func TestNPMListRefusalsAreClassified(t *testing.T) {
 	}{
 		{http.StatusUnauthorized, runtime.FailureClassCredential, "certificate list: credential refused"},
 		{http.StatusForbidden, runtime.FailureClassPermission, "certificate list needs certificates: view"},
-		{http.StatusInternalServerError, runtime.FailureClassUnclassified, "certificate list: provider answered 500"},
+		{http.StatusInternalServerError, runtime.FailureClassUnclassified, "certificate list: the service answered 500"},
 	}
 	for _, c := range cases {
 		t.Run(http.StatusText(c.status), func(t *testing.T) {
