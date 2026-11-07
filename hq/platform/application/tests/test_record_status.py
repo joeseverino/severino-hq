@@ -104,6 +104,42 @@ class RecordPageTests(TestCase):
         self.assertEqual(len([cell for cell in cells if "pill" in cell.classes]), 1)
         self.assertIn("Working", row.words)
 
+    def test_what_each_state_means_is_said_beside_it_in_its_tone(self):
+        """The sentence is the state's own, so it stands on the title's line
+        with the state and reads as good, waiting or wrong as the state does."""
+
+        now = timezone.now()
+        drift = [{"type": "Drifted", "status": True, "reason": "Drifted", "message": "Points at 192.0.2.99."}]
+        fault = [{"type": "Degraded", "status": True, "reason": "Unreachable", "message": "AdGuard answered 502."}]
+        for state, fields in {
+            "working": {"conditions": READY, "last_observed_at": now},
+            "drifted": {"conditions": drift, "last_observed_at": now},
+            "degraded": {"conditions": fault, "last_observed_at": now},
+            "pending": {"generation": 2, "conditions": READY, "last_observed_at": now},
+            "off": {"enabled": False, "conditions": READY, "last_observed_at": now},
+            "unseen": {"conditions": READY, "last_observed_at": now - timedelta(days=14)},
+            "unread": {"conditions": []},
+        }.items():
+            with self.subTest(state):
+                record = ManagedResource.objects.create(
+                    key=f"app-{state}",
+                    kind="adguard.rewrite",
+                    spec={"domain": f"{state}.example.com", "answer": "192.0.2.10"},
+                    **{"generation": 1, "observed_generation": 1, **fields},
+                )
+                status = record_status(record, newest=now)
+                page = all_elements(self.client.get(reverse("control_plane:detail", args=[record.key])))
+                (line,) = [element for element in page if element.attrs.get("data-record-status") == state]
+                tones = {
+                    element.words: {tone for tone in element.classes if tone.startswith("toned-")}
+                    for element in page
+                    if "toned" in element.classes and any(outer is line for outer in element.ancestors)
+                }
+
+                self.assertTrue(status.detail)
+                self.assertTrue(tones.get(status.label))
+                self.assertEqual(tones.get(status.detail), tones[status.label])
+
     def test_a_row_about_its_own_service_shows_where_the_record_leads(self):
         from ..service_declarations import Claim
 

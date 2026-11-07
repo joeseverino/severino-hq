@@ -538,9 +538,15 @@ sentence case (`labels.sentence`), whatever its source wrote: Docker's
 and a declared resource's health state ("healthy", "drifted") takes the tone
 every page draws it in. Several parts are one label (`{% status "HQ expects"
 desired tone="serious" %}`); `href`, `title`, `tip`, `css` and `data_*` say
-the rest. No template or module writes a pill by hand.
+the rest. No template or module writes a pill by hand. With `pill=False` it
+is the state's words in its tone, as a headline or a line of text says a
+state, and the sentence that says what a state means takes the same tone
+beside it: a record's title line is "Working · Matches HQ's config.", both
+green, as parts of one `.dot-list`, so the sentence shares the state's line
+where it fits and wraps under it where it does not.
 *Gates:* the `status-pill-built-by-status-pill` ast-grep rule and
-`test_status_tags.py`, which reads every template root for a hand-written pill.
+`test_status_tags.py`, which reads every template root for a hand-written pill
+or a state's tone written as a class.
 
 **The header is one row.** When room runs out, the search field collapses to a
 button that opens over the navigation, then the sections move behind the

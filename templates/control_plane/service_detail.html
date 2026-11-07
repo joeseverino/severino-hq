@@ -72,7 +72,7 @@ is open.
       {% endcomment %}
       {% if facet.present and facet.observed %}
         {% with claim=facet.claims.0 %}
-          <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst|breakable }}</strong>
+          <strong>{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}</strong>
           <span class="readout prose">
             {% entity claim.link code=True label=facet.observed.name %}
             {% if facet.machine %}on {% entity facet.machine.link %}{% endif %}
@@ -132,7 +132,7 @@ is open.
         What differs per card is what is not needed, and each facet already
         says that: its own providers are the things it would otherwise want.
         {% endcomment %}
-        <strong class="control-unknown">Not needed</strong>
+        <strong>{% status "Not needed" tone="unknown" pill=False %}</strong>
         {% for kind, label in facet.declarable %}
           <span class="readout">No {{ label|breakable }} needed.</span>
         {% endfor %}
@@ -147,7 +147,7 @@ is open.
 
         Never an Edit link. HQ does not manage this and must not imply it could.
         {% endcomment %}
-        <strong class="{% if facet.observed.healthy %}control-good{% else %}control-serious{% endif %}">{{ facet.observed.state|default:"unknown"|capfirst|breakable }}</strong>
+        <strong>{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}</strong>
         <span class="readout prose"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</span>
         <details class="control-diagnostics">
           <summary>What is running</summary>
@@ -192,16 +192,16 @@ is open.
         <strong>{{ hq_label|breakable }}</strong>
         <span class="readout"><span class="readout-label">Runs on</span> {% entity hq_machine %}</span>
       {% elif facet.not_visible and not facet.reading_lines %}
-        <strong class="control-unknown">Not visible</strong>
-        <span>{{ facet.not_visible|breakable }}</span>
+        <strong>{% status "Not visible" tone="unknown" pill=False %}</strong>
+        <span>{% status facet.not_visible tone="unknown" pill=False %}</span>
         {% if not read_only %}{% for kind, label in facet.declarable %}
           <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></span>
         {% endfor %}{% endif %}
       {% elif read_only %}
-        <strong class="control-unknown">Not set up</strong>
+        <strong>{% status "Not set up" tone="unknown" pill=False %}</strong>
       {% else %}
-        <strong class="control-unknown">Not set up</strong>
-        <span>HQ has none for {{ service.hostname|breakable:"." }}</span>
+        <strong>{% status "Not set up" tone="unknown" pill=False %}</strong>
+        <span>{% status "HQ has none for" service.hostname|add:"." tone="unknown" pill=False %}</span>
         {% comment %}
         Named by the provider's own label. The bare kind reads as
         "Add cloudflare.dns_record": an identifier where a sentence belongs.
