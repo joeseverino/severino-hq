@@ -677,6 +677,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     on_reference = False
     # Whether the run takes its screenshots, as ``asked_for`` decides.
     shooting = True
+    # A look's record is its findings and shots; a trace would snapshot the
+    # page at every step of every page the look reads.
+    traced = False
 
     # What the run was asked and the base it is held to, set once by `setUpClass`.
     tree: str

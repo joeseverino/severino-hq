@@ -382,6 +382,8 @@ class BrowserGate(SimpleTestCase):
 
     databases = {"default"}
     scripted = False
+    # Whether a test keeps Playwright's trace of what it did (``start``).
+    traced = True
     # Set once a class by setUpClass, and a test's context by start.
     policy: dict[str, str]
     pages: Mapping[Any, Any]
@@ -458,7 +460,8 @@ class BrowserGate(SimpleTestCase):
         self.context.set_default_navigation_timeout(30_000)
         # Playwright's record of what the test did, each step with the page as
         # it stood, kept beside a failure's screenshot (``shoot``).
-        self.context.tracing.start(snapshots=True)
+        if self.traced:
+            self.context.tracing.start(snapshots=True)
         if options["java_script_enabled"]:
             self.context.expose_binding("hqRefused", self.refused_by_policy)
             self.context.add_init_script(_REPORT_REFUSALS)
@@ -616,8 +619,8 @@ class BrowserGate(SimpleTestCase):
     def shoot(self, name):
         """The page as it stands, saved as ``name``.png in this test's own
         folder of ``browser_failures()``, which CI keeps when a gate fails,
-        and beside it as ``name``.zip the trace of what the test did since
-        its last failure, which `playwright show-trace` opens. The trace is
+        and beside it, for a traced test, as ``name``.zip the trace of what
+        the test did since its last failure, which `playwright show-trace` opens. The trace is
         kept first, so a shot that cannot be taken still leaves it. A page
         past what a shot holds is shot to there, and the line says so
         (``shoot_page``)."""
@@ -627,11 +630,12 @@ class BrowserGate(SimpleTestCase):
             folder.mkdir(parents=True, exist_ok=True)
             self.failures = Path(tempfile.mkdtemp(prefix=f"{self._testMethodName}-", dir=folder))
         path = self.failures / f"{name}.png"
-        trace = path.with_suffix(".zip")
-        tracing = self.page.context.tracing
-        tracing.stop_chunk(path=trace)
-        tracing.start_chunk()
-        print(f"Browser failure trace: {trace}")
+        if self.traced:
+            trace = path.with_suffix(".zip")
+            tracing = self.page.context.tracing
+            tracing.stop_chunk(path=trace)
+            tracing.start_chunk()
+            print(f"Browser failure trace: {trace}")
         cut = shoot_page(self.page, path, timeout=_FAILURE_SHOT_WITHIN)
         print(f"Browser failure screenshot: {path}" + (f" ({cut})" if cut else ""))
 
