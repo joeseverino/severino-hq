@@ -6,7 +6,9 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.core.interface_text import TEMPLATE_COMMENT
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
+from hq.platform.core.templatetags import table_tags
 
 from .source import template_files
 
@@ -542,26 +544,69 @@ class StyleContractTests(SimpleTestCase):
             )
 
 
-@tag("source", "tree")
-class SharedPrimitiveStyleTests(SimpleTestCase):
-    """Shared partials may only use classes the style bundle actually defines.
+# A class a script or a test finds an element by, which no rule styles. Each
+# says who reads it; a class that styles nothing and nothing reads is deleted.
+HOOK_CLASSES: dict[str, str] = {}
 
-    A class the bundle lacks raises no error; it is simply unstyled. The partials are the host's published UI
-    contract, so anything they name has to exist here, otherwise the first
-    surface to adopt a primitive is the one that discovers it is unstyled.
+# Decided at render time, so a word joined to one is not a literal class.
+_INTERPOLATED = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
+
+
+def literal_classes(text: str) -> set[str]:
+    """Every class a template names in full, outside its comments: in a class
+    attribute, or as the css= a tag draws as one."""
+
+    text = TEMPLATE_COMMENT.sub("", text)
+    options = [css for tag in _INTERPOLATED.findall(text) for css in re.findall(r'\bcss="([^"]*)"', tag)]
+    attributes = re.findall(r'\bclass="([^"]*)"', _INTERPOLATED.sub("\0", text))
+    return {word for value in (*options, *attributes) for word in value.split() if "\0" not in word}
+
+
+def defined_classes() -> set[str]:
+    """Every class a stylesheet HQ serves defines: the bundle every page
+    links, and a sheet one page links on its own."""
+
+    sheets = (path.read_text(encoding="utf-8") for path in (STATIC / "css").rglob("*.css"))
+    return {name for sheet in sheets for name in re.findall(r"\.([a-z][a-z0-9-]*)", sheet)}
+
+
+@tag("source", "tree")
+class TemplateClassStyleTests(SimpleTestCase):
+    """Every class a template names is one the stylesheet defines.
+
+    A class the bundle lacks raises no error; the element is unstyled,
+    so a page that means a primitive and misspells it, or keeps a class whose
+    rule is gone, looks wrong with nothing to say why. Read over every
+    template Django loads, an extension's included, since extensions draw
+    with the host's stylesheet.
     """
 
-    def test_partial_classes_are_defined_in_the_stylesheet(self):
+    maxDiff = None
 
-        root = Path(__file__).resolve().parents[4]
-        defined = set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet()))
-        offenders = []
-        for template in sorted((root / "templates" / "partials").rglob("*.html")):
-            text = template.read_text(encoding="utf-8")
-            for attribute in re.findall(r'class="([^"]*)"', text):
-                # Interpolated values are decided at render time; the pieces
-                # that make them up are checked where they are defined instead.
-                if "{{" in attribute or "{%" in attribute:
-                    continue
-                offenders.extend(f"{template.name}: .{name}" for name in attribute.split() if name not in defined)
-        self.assertEqual(sorted(set(offenders)), [])
+    def test_template_classes_are_defined_in_the_stylesheet(self):
+
+        # A class that declares a part's role in a table is read by the region,
+        # which marks the part for the stylesheet (table_tags.mark_cells).
+        defined = defined_classes() | set(table_tags.ROLE_CLASSES)
+        offenders = sorted(
+            f"{name}: .{word}"
+            for name, path in template_files()
+            for word in literal_classes(path.read_text(encoding="utf-8"))
+            if word not in defined and word not in HOOK_CLASSES
+        )
+        self.assertEqual(offenders, [], "define the class where its part is styled, or delete it")
+
+    def test_a_hook_class_is_one_no_rule_styles(self):
+        """An allowance for a class the stylesheet defines has no job left."""
+
+        self.assertEqual(sorted(set(HOOK_CLASSES) & defined_classes()), [])
+
+    def test_literal_classes_reads_attributes_and_tag_options(self):
+
+        self.assertEqual(
+            literal_classes(
+                '<p class="note {{ tone }} tone-{{ x }}{% if a == "b" %} on {% endif %}">{% card css="frame wide" %}'
+                '{% comment %}<b class="gone">{% endcomment %}{# class="gone" #}'
+            ),
+            {"note", "on", "frame", "wide"},
+        )

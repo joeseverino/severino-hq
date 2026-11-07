@@ -6,7 +6,7 @@ reading to confirm yet is not a problem, and not green either: the dot takes
 the network's color only once every check is confirmed. The panel behind the
 link has the rest, and works without script.
 {% endcomment %}
-<a class="glance-panel-head dash-reading dash-connection conn-badge-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}"
+<a class="glance-panel-head dash-reading conn-badge-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}"
    href="{% url 'connection' %}"
    data-modal-open="connection">
   <span class="glance-symbol">{% include "partials/_icon.html" with name="network" %}</span>
