@@ -5,7 +5,7 @@ The answer to the policy test. The tailnet page answers it alone as its
 <div id="whatif-result" data-fragment="{% url 'control_plane:tailnet' %}" data-fragment-name="whatif">
 {% if verdict %}
   <p class="verdict">
-    <span class="pill pill-{% if not verdict.known %}unprobed{% elif verdict.allowed %}reachable{% else %}unreachable{% endif %}">{{ verdict.label|breakable }}</span>
+    {% if not verdict.known %}{% status verdict.label tone="unprobed" %}{% else %}{% status verdict.label tone=verdict.allowed|yesno:"reachable,unreachable" %}{% endif %}
     {{ verdict.detail|breakable }}
   </p>
   {% if verdict.rules %}
@@ -29,7 +29,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     </table>
     {% endtable_region %}
   {% endif %}
-  {% if proposal and policy_declaration %}
+  {% if proposal and policy_edit_url %}
     {% comment %}
     The refusal and the fix, together. Nobody reads "not allowed" and stops
     there: the next question is always what it would take, so the grant that
@@ -50,7 +50,7 @@ The answer to the policy test. The tailnet page answers it alone as its
       </tbody>
     </table>
     {% endtable_region %}
-    <p><a class="btn" href="{% url 'control_plane:edit' policy_declaration %}">Open the policy editor{% arrow %}</a></p>
+    <p><a class="btn" href="{{ policy_edit_url }}">Open the policy editor{% arrow %}</a></p>
   {% endif %}
 {% endif %}
 </div>

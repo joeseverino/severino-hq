@@ -80,9 +80,7 @@ class RecordsLedeTests(SimpleTestCase):
     def test_the_count_says_how_many_are_folded_under_it(self):
         zone = SimpleNamespace(managed=True, adoptable=(), managed_count=4, records=(), policy=(1, 2, 3))
 
-        self.assertEqual(
-            _records_lede(zone), "4 records, all managed by HQ, 3 of them under Policy and verification below"
-        )
+        self.assertEqual(_records_lede(zone), "4 records, all managed by HQ, 3 of them policy and verification records")
 
 
 class RecordTableTests(SimpleTestCase):

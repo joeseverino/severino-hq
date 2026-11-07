@@ -11,7 +11,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 
 from ..adoption_testing import managing_everything
 from ..security import cli_principal
-from .markup import text, texts
+from .markup import hrefs, text, texts
 from .zone_records import DNS_CONNECTIONS, RECORD_KIND, ZONE_KIND, record, sweep
 
 
@@ -125,6 +125,58 @@ class DomainPageCostTests(TestCase):
         )
 
 
+class PublicDnsOffTests(TestCase):
+    """With public DNS changes off the records are read-only, so the page
+    offers no control that changes them: every edit and removal there would
+    be refused."""
+
+    def setUp(self):
+        managing_everything(*DNS_CONNECTIONS)
+        sweep(records=[record("app.example.com", "A", "203.0.113.1", rid="r1")])
+        ManagedResource.objects.get_or_create(
+            key="example-com",
+            kind=ZONE_KIND,
+            defaults={"spec": {"zone": "example.com", "connection_ref": "cf-example"}, "enabled": True},
+        )
+        # A record HQ manages, so its row carries the controls that change it.
+        ManagedResource.objects.create(
+            key="example-com-app",
+            kind=RECORD_KIND,
+            spec={
+                "zone": "example.com",
+                "name": "app.example.com",
+                "record_type": "A",
+                "content": "203.0.113.1",
+                "proxied": False,
+                "ttl": 1,
+            },
+            enabled=True,
+        )
+        self.client.force_login(get_user_model().objects.create_user("operator", password="x" * 20))
+
+    def changes_offered(self):
+        response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
+        self.assertEqual(response.status_code, 200)
+        # Letting HQ stop managing the domain leaves its records live, so it
+        # stays offered; a record's removal and any edit change them.
+        forget = reverse("control_plane:remove", args=["example-com"])
+        return [href for href in hrefs(response) if "/edit/" in href or ("/remove/" in href and href != forget)]
+
+    @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
+    def test_with_changes_on_the_records_and_the_domain_offer_them(self):
+        offered = self.changes_offered()
+        edit = reverse("control_plane:edit", args=["example-com-app"])
+        remove = reverse("control_plane:remove", args=["example-com-app"])
+
+        self.assertTrue(any(href.startswith(edit) for href in offered), offered)
+        self.assertIn(remove, offered)
+        self.assertTrue(any(href.startswith(reverse("control_plane:edit", args=["example-com"])) for href in offered))
+
+    @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=False)
+    def test_with_changes_off_nothing_offers_a_change_it_would_refuse(self):
+        self.assertEqual(self.changes_offered(), [])
+
+
 class ResourceDetailIsProviderDeclaredTests(TestCase):
     """Every kind gets a detail card, including ones added after this page. The
     card is generic, because reaching into a provider's spec fields
@@ -158,6 +210,7 @@ class ResourceDetailIsProviderDeclaredTests(TestCase):
         self.assertContains(response, PROVIDERS[RECORD_KIND].label)
         self.assertContains(response, "203.0.113.1")
 
+    @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
     def test_a_domain_lives_on_its_zone_page(self):
         response = self._detail(
             "a-domain",

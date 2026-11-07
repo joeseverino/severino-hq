@@ -4,7 +4,8 @@ A zone's DNS records as one table: the records that send traffic somewhere,
 then the policy and verification records folded away under their own group,
 so both halves share one set of columns and sort alike.
 
-Expects `routing`, `policy`, `zone` and `public_dns_enabled`. A state is said
+Expects `routing`, `policy`, `zone` and `public_dns_enabled`; with public DNS
+changes off, a record offers no Edit or Remove it would refuse. A state is said
 only where it is not healthy, and a TTL only where it is not automatic:
 seventeen rows that each say "Healthy" and "Auto" say nothing. Where the Value
 column has left, a record that shares its name and type with another says its
@@ -12,19 +13,18 @@ value under its name (`record.summary`), so the two still read as two.
 {% endcomment %}
 {% partialdef record_row %}
         <tr{% if folded %} data-folded="{{ folded }}"{% endif %}>
-          <td class="row-gutter">
+          <td>
             {% if record.service_url %}
               <strong>{% entity "service"|entity_of:record.name %}</strong>
             {% else %}
               <strong>{{ record.name|breakable }}</strong>
             {% endif %}
-            {% row_toggle %}
             {% if record.summary %}<span class="narrow-only"><br><span class="muted cell-data">{{ record.summary|breakable }}</span></span>{% endif %}
           </td>
           <td><code>{{ record.record_type|breakable }}</code></td>
           <td>
             <span class="zone-value">{{ record.value|breakable }}</span>
-            {% if record.proxied %}<span class="pill pill-neutral">Proxied</span>{% endif %}
+            {% if record.proxied %}{% status "Proxied" tone="neutral" %}{% endif %}
           </td>
           <td>{% if record.ttl != 1 %}{{ record.ttl|breakable }}&nbsp;s{% endif %}</td>
           {% if zone.managed %}
@@ -37,18 +37,18 @@ value under its name (`record.summary`), so the two still read as two.
               ought to act on it.
               {% endcomment %}
               {% if not record.manageable %}
-                <span class="pill pill-neutral">{{ record.record_type|breakable }} not managed</span>
+                {% status record.record_type "not managed" tone="neutral" %}
               {% elif record.managed %}
-                {% if record.health.state != "healthy" %}<span class="pill control-{{ record.health.state }}">{{ record.health.label|breakable }}</span>{% endif %}
+                {% if record.health.state != "healthy" %}{% status record.health.label tone=record.health.state %}{% endif %}
               {% else %}
-                <span class="pill pill-attention">New</span>
+                {% status "New" tone="attention" %}
               {% endif %}
             </td>
             <td class="actions-col">
-              {% if record.managed %}
+              {% if record.edit_url or record.remove_url %}
                 <span class="row-actions">
-                  <a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>
-                  <a class="subtle-link" href="{{ record.remove_url }}">{% words "infrastructure.resource.remove" %}</a>
+                  {% if record.edit_url %}<a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>{% endif %}
+                  {% if record.remove_url %}<a class="subtle-link" href="{{ record.remove_url }}">{% words "infrastructure.resource.remove" %}</a>{% endif %}
                 </span>
               {% endif %}
             </td>
@@ -56,14 +56,14 @@ value under its name (`record.summary`), so the two still read as two.
         </tr>
 {% endpartialdef %}
 {% table_region "Records" %}
-  <table class="data-table zone-record-table">
+  <table class="data-table">
     <thead>
       <tr>
-        {% table_heading "Name" "identifier" gutter=True local_sort=routing|add:policy|sortable %}
-        {% table_heading "Type" "identifier" css="key-col" local_sort=routing|add:policy|sortable %}
-        {% table_heading "Value" "identifier" drop=4 local_sort=routing|add:policy|sortable %}
-        {% table_heading "TTL" "status" drop=3 local_sort=routing|add:policy|sortable %}
-        {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=routing|add:policy|sortable %}{% table_heading "Actions" css="actions-col" drop=1 hidden=True %}{% endif %}
+        {% table_heading "Name" "identifier" gutter=True local_sort=True %}
+        {% table_heading "Type" "identifier" css="key-col" local_sort=True %}
+        {% table_heading "Value" "identifier" drop=4 local_sort=True %}
+        {% table_heading "TTL" "status" drop=3 local_sort=True %}
+        {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=True %}{% table_heading "Actions" css="actions-col" drop=1 hidden=True %}{% endif %}
       </tr>
     </thead>
     <tbody>

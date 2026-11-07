@@ -18,8 +18,13 @@ from hq.platform.application.machine_context import (
     sections_for as machine_sections,
 )
 from hq.platform.application.machines import declaration_seed, machine
-from hq.platform.application.pages import PageAction, PageDialog, PageMixin
-from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY, resource_capabilities
+from hq.platform.application.pages import PageAction, PageDialog, PageMixin, PageVisit
+from hq.platform.application.resource_capabilities import (
+    UPDATE_CAPABILITY,
+    Offered,
+    offered_changes,
+    resource_capabilities,
+)
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.application.tailnet_context import tailnet_context
@@ -59,6 +64,13 @@ class MachineListView(PageMixin, TemplateView):
         return context
 
 
+def policy_edit_url(key: str) -> str:
+    """The tailnet policy's editor, when its declaration offers one."""
+
+    resource = ManagedResource.objects.filter(key=key).first() if key else None
+    return offered_changes([resource])[key].edit_url if resource is not None else ""
+
+
 def whatif_context(request, default: str = "", *, target_default: str | None = None) -> dict:
     """Everything the reachability panel needs, wherever it is included.
 
@@ -79,7 +91,7 @@ def whatif_context(request, default: str = "", *, target_default: str | None = N
         "ports": ports(),
         "asked": asked,
         "whatif_action": request.path,
-        "policy_declaration": declaration(),
+        "policy_edit_url": policy_edit_url(declaration()),
     }
     # Answered only when all three were given. A half-filled form is a question
     # nobody has asked yet, not one whose answer is "no".
@@ -109,7 +121,7 @@ class TailnetView(PageMixin, TemplateView):
 
     @override
     def get_page_actions(self):
-        policy_declaration = self.tailnet.declaration
+        policy_edit = policy_edit_url(self.tailnet.declaration)
         return (
             PageAction(
                 "Policy test",
@@ -122,16 +134,7 @@ class TailnetView(PageMixin, TemplateView):
                     lede="Check whether the policy allows a connection. Tailscale evaluates it.",
                 ),
             ),
-            *(
-                (
-                    PageAction(
-                        capability_words(UPDATE_CAPABILITY),
-                        reverse("control_plane:edit", args=[policy_declaration]),
-                    ),
-                )
-                if policy_declaration
-                else ()
-            ),
+            *((PageAction(capability_words(UPDATE_CAPABILITY), policy_edit),) if policy_edit else ()),
             PageAction("All machines", reverse("control_plane:machines")),
         )
 
@@ -179,15 +182,12 @@ class MachineDetailView(PageMixin, TemplateView):
         if self.found.declaration:
             # The machine's declaration is edited from its own page.
             key = self.found.declaration
-            actions = [
-                PageAction(capability_words(UPDATE_CAPABILITY), reverse("control_plane:edit", args=[key])),
-            ]
             resource = ManagedResource.objects.filter(key=key).first()
             capabilities = resource_capabilities(resource) if resource is not None else None
-            if capabilities is not None and capabilities.removal != "unavailable":
-                actions.append(
-                    PageAction(capabilities.removal_words, reverse("control_plane:remove", args=[key]), danger=True)
-                )
+            offered = capabilities.offered if capabilities is not None else Offered()
+            actions = [PageAction(capability_words(UPDATE_CAPABILITY), offered.edit_url)] if offered.edit_url else []
+            if capabilities is not None and offered.remove_url:
+                actions.append(PageAction(capabilities.removal_words, offered.remove_url, danger=True))
         else:
             # Seeded with what HQ knows, and back here after saving. A machine the
             # tailnet device declaration already names gets its details added; one
@@ -253,6 +253,7 @@ class MachineDetailView(PageMixin, TemplateView):
         context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["hq_label"] = HQ_LABEL
         context["page_aside"] = "control_plane/_machine_status.html"
+        context["page_visit"] = PageVisit("machine", found.name)
         context["container_kind"] = CONTAINER_KIND
 
         # Whether what each container runs is current and safe, as the
