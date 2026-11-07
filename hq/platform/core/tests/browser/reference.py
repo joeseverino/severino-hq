@@ -1013,9 +1013,10 @@ class ReferenceBrowserTests(BrowserGate):
     def assert_read_whole(self):
         """No text the viewer draws is cut short, marked with an ellipsis or
         not, nothing scrolls sideways, and a path starts a new line only at a
-        "/", "." or "-" (or a query's mark), in each palette."""
+        "/", "." or "-" (or a query's mark), in each palette: the one the page
+        is in first, since a switch restyles the whole opened reference."""
 
-        for palette in ("light", "dark"):
+        for palette in sorted(("light", "dark"), key=lambda palette: palette != self.scheme()):
             with self.subTest(palette=palette):
                 self.in_scheme(palette)
                 self.settle()
