@@ -1,7 +1,9 @@
 """Every check the survey runs, proven able to fail: the smallest defect that
 makes each one find something, planted on a probe page of its own. A check
 with no plant here is one nothing shows can fail, so a new check lands with
-its plant (test_browser_probes holds the two lists to each other)."""
+its plant (test_browser_probes holds the two lists to each other). A plant
+that is a flex row sets its ``align-items``, so the row does not stretch its
+items to one height and hide the defect."""
 
 import json
 from dataclasses import dataclass, field
@@ -172,13 +174,14 @@ PLANTS = {
     ),
     # A filled block in a section's frame, held in the frame's padding.
     "inset in the frame": Plant('{% section "Example" %}<div style="background: #eee">Example</div>{% endsection %}'),
-    # Two sections side by side, one head held taller by what stands beside
-    # its heading than any control is.
+    # Two sections side by side, their heads above their frames, one held
+    # taller by what stands beside its heading than any control is. A head
+    # the stylesheet stands inside its frame leaves the frames together.
     "frames in a row": Plant(
-        '<div style="display: flex; gap: 1rem">'
-        '{% section "Example one" %}<p>Example</p>{% aside %}<span style="display: inline-block; block-size: 4rem">'
-        "Example</span>{% endsection %}"
-        '{% section "Example two" %}<p>Example</p>{% endsection %}</div>'
+        '<div style="display: flex; align-items: start; gap: 1rem">'
+        '{% section "Example one" head="above" %}<p>Example</p>{% aside %}'
+        '<span style="display: inline-block; block-size: 4rem">Example</span>{% endsection %}'
+        '{% section "Example two" head="above" %}<p>Example</p>{% endsection %}</div>'
     ),
     # A frame stopped at its words' width in the page's column.
     "frames span their column": Plant('<div class="card" style="inline-size: fit-content">Example</div>'),
