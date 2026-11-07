@@ -18,6 +18,11 @@
 }
 .form > :not(.field), .form > .field:has(textarea), .form > .field:has(> div > * + *), .form .field.is-wide { grid-column: 1 / -1; }
 .form > .field { margin-bottom: 0; }
+/* A range's start and end (`field-range`) begin a row together, in the form's
+   own columns, so a third column never takes one and leaves the other; on a
+   phone they stack in order. */
+.form > .field-range { display: grid; grid-template-columns: subgrid; align-items: start; }
+.field-range > .field { margin-bottom: 0; }
 /* A lone checkbox sits beside its label, the help under both, rather than
    alone on a line under its own question. */
 .field:has(> input[type=checkbox]) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--space-4); }

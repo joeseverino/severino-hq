@@ -1,13 +1,19 @@
 {% comment %}
 A calendar entry's fields (partials/_form.html): how it repeats shows only
 once it repeats, and the weekdays only when it repeats weekly (`data-when`,
-read by forms.css).
+read by forms.css). The days it spans and the times it spans are each a range
+(`field-range`), its start and its end on one row, in the order the form's
+Meta.fields gives them.
 {% endcomment %}
 {% for field in form %}
   {% if field.name == "interval" or field.name == "repeat_until" %}
     <div data-when="repeat">{{ field.as_field_group }}</div>
   {% elif field.name == "weekdays" %}
     <div data-when="repeat=weekly">{{ field.as_field_group }}</div>
+  {% elif field.name == "starts_on" or field.name == "starts_at" %}
+    <div class="field-range">{{ field.as_field_group }}
+  {% elif field.name == "ends_on" or field.name == "ends_at" %}
+    {{ field.as_field_group }}</div>
   {% else %}
     {{ field.as_field_group }}
   {% endif %}
