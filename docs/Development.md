@@ -743,8 +743,10 @@ script draws (`data-vendored` on its mount, `SELECTORS["vendored"]`: the API
 reference's viewer) is styled by its own rules alone, and held by its own
 tests instead.
 
-What a rule finds is written beside each screenshot (`<page>-<width>.txt`) as
-the run goes, so a run stopped part way keeps it, and to `var/gate/look.txt`
+A run that judges takes no screenshots, since a shot and its bands cost more
+than the rule that reads the page: `--shots` takes them too, and `--base`,
+`--eval` and `--operation`, which read them, take them anyway. What a rule
+finds is written in the run's folder (`<page>-<width>.txt`) as the run goes, so a run stopped part way keeps it, and to `var/gate/look.txt`
 once the run ends. Console errors, uncaught script errors and policy refusals
 are judged as findings are: without a base any fails the run, against one only
 a new one does.
