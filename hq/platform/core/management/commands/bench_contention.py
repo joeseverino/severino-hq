@@ -114,7 +114,7 @@ def _loop(go: threading.Event, stop: threading.Event, step: Callable[[], None]) 
 def _reader(seeded: Seeded, urls: list[str], tally: RoleTimings, headers: dict[str, str], seed_value: int):
     client = Client(headers=headers, raise_request_exception=False)
     client.force_login(seeded.user)
-    order = random.Random(seed_value)
+    order = random.Random(seed_value)  # noqa: S311 - a seeded, repeatable order, no secret
     pending: list[str] = []
 
     def step() -> None:

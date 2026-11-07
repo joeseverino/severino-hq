@@ -635,7 +635,7 @@ def sendable(test: unittest.TestCase, err):
 
 def _pickles(value) -> bool:
     try:
-        pickle.loads(pickle.dumps(value))
+        pickle.loads(pickle.dumps(value))  # noqa: S301 - a value of its own, round-tripped to learn whether it crosses to the parent
     except Exception:  # noqa: BLE001 - whatever pickling raises, the value cannot cross to the parent.
         return False
     return True

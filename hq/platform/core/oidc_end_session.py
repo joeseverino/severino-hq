@@ -13,7 +13,7 @@ from django.http import HttpRequest
 from django.shortcuts import resolve_url
 from mozilla_django_oidc.utils import absolutify
 
-ID_TOKEN_SESSION_KEY = "oidc_id_token"
+ID_TOKEN_SESSION_KEY = "oidc_id_token"  # noqa: S105 - a session key's name, no credential
 
 
 def end_session_url(request: HttpRequest) -> str:

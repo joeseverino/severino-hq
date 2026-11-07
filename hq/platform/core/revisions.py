@@ -74,9 +74,10 @@ def install(connection=default_connection) -> list[str]:
         for table in tables:
             for event in EVENTS:
                 # The table name is a model's own, quoted as an identifier and
-                # as a literal; nothing a request supplies reaches this SQL.
+                # as a literal; nothing a request supplies reaches this SQL, and
+                # SQLite takes no parameter in a trigger's body.
                 cursor.execute(
-                    f"CREATE TRIGGER IF NOT EXISTS {quote(_trigger(table, event))} "
+                    f"CREATE TRIGGER IF NOT EXISTS {quote(_trigger(table, event))} "  # noqa: S608 - see above
                     f"AFTER {event.upper()} ON {quote(table)} BEGIN "
                     f"INSERT INTO {revision} (name, value) VALUES ('{table}', 1) "
                     "ON CONFLICT (name) DO UPDATE SET value = value + 1; END"
@@ -116,7 +117,7 @@ def read(connection=default_connection) -> Revisions | None:
     try:
         with connection.cursor() as cursor:
             cursor.execute(
-                f"SELECT name, value FROM {connection.ops.quote_name(Revision._meta.db_table)} "
+                f"SELECT name, value FROM {connection.ops.quote_name(Revision._meta.db_table)} "  # noqa: S608 - a model's own table, quoted
                 "UNION ALL "
                 "SELECT name, -1 FROM sqlite_master WHERE type = 'trigger' AND name GLOB %s",
                 [f"{TRIGGER_PREFIX}*"],

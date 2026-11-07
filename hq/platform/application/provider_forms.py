@@ -18,7 +18,6 @@ from django.core.validators import RegexValidator
 from django.utils.datastructures import MultiValueDict
 from pydantic import ValidationError as SpecError
 lazy from django.utils.html import format_html, format_html_join
-lazy from django.utils.safestring import mark_safe
 
 from hq.domains.control_plane.provider_spec import NameContext, ProviderSpec
 from hq.domains.control_plane.providers import PROVIDERS, validate_spec
@@ -118,14 +117,12 @@ class NameListWidget(forms.Widget):
             "</div>",
             name,
         )
-        return mark_safe(
-            format_html(
-                '<div class="name-list" data-name-list>{}{}'
-                '<button type="button" class="btn name-list-add" data-name-list-add>'
-                "Add another</button></div>",
-                rows,
-                blank,
-            )
+        return format_html(
+            '<div class="name-list" data-name-list>{}{}'
+            '<button type="button" class="btn name-list-add" data-name-list-add>'
+            "Add another</button></div>",
+            rows,
+            blank,
         )
 
 

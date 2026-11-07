@@ -83,7 +83,8 @@ def host_check(destination: str) -> int:
                 ["ssh", "-o", "BatchMode=yes", destination, REMOTE], cwd=ROOT, stdin=subprocess.PIPE, stderr=said
             ) as proc,
         ):
-            assert proc.stdin
+            if proc.stdin is None:
+                raise RuntimeError("ssh was started without a pipe to its input")
             sent = send(proc.stdin, work / "payload")
             status = proc.wait()
             said.seek(0)

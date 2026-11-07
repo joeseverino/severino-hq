@@ -673,7 +673,7 @@ def seed(scale: float = 1.0, owner: Any = None) -> Seeded:
     """Fill the current database; ``scale`` multiplies every count. Its
     operator is ``owner``, or a superuser it signs up when none is given."""
 
-    rng = random.Random(20261004)
+    rng = random.Random(20261004)  # noqa: S311 - a seeded, repeatable fill, no secret
     today = timezone.localdate()
     user = owner or get_user_model().objects.create_superuser("bench", "bench@example.com")
     projects = _projects(scale)

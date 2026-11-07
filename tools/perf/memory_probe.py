@@ -33,7 +33,7 @@ lazy from django.conf import settings
 lazy import hq.config.asgi as served
 
 BOOT = "boot"
-PASS = "pass"
+PASS = "pass"  # noqa: S105 - a phase's name, no credential
 # What a server answers once it is ready to serve, which the count of boot ends on.
 READY = "/health/ready/"
 REDIRECTS = {301, 302, 303, 307, 308}

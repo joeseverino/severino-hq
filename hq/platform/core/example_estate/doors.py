@@ -61,7 +61,8 @@ def stamp(door: AbstractContextManager[None]) -> dict[str, Any]:
 
     with door:
         context = bound()
-    assert context is not None  # a door binds
+    if context is None:
+        raise RuntimeError(f"{door!r} bound no operation")
     return {
         "metadata": {"interface": context.interface, "operation": context.operation},
         "operation_id": context.operation_id,
