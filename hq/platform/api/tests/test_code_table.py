@@ -47,7 +47,7 @@ def _codes(spec, table=CODES):
 
 class DerivedSetTests(SimpleTestCase):
     def test_a_code_added_to_the_table_reaches_each_set_derived_from_it(self):
-        table = {**CODES, EXAMPLE: Code(429, frozenset(Door), waits=True)}
+        table = {**CODES, EXAMPLE: Code(429, frozenset(Door), "it is an example", waits=True)}
 
         self.assertEqual(statuses(table)[EXAMPLE], 429)
         self.assertIn(EXAMPLE, waiting(table))
@@ -87,7 +87,7 @@ class CapabilityCodeTests(SimpleTestCase):
         self.assertNotIn("target_required", untargeted)
 
     def test_a_stale_write_is_answered_only_by_a_handler_that_checks_for_one(self):
-        table = {**CODES, EXAMPLE: Code(409, frozenset({Door.STALE_WRITE}))}
+        table = {**CODES, EXAMPLE: Code(409, frozenset({Door.STALE_WRITE}), "it is an example")}
 
         self.assertIn(EXAMPLE, _codes(_Spec(handler=_checking_handler), table))
         self.assertNotIn(EXAMPLE, _codes(_Spec(), table))

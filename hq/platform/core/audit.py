@@ -455,6 +455,8 @@ def record_event(
 
     object_type = type_label or (obj.__class__.__name__ if obj is not None else "")
     object_id = str(obj.pk) if obj is not None else ""
+    # The object as its owner calls it, its model's own name, as Django's admin
+    # log keeps one; test_audit_names holds every host model to having one.
     object_repr = ""
     if obj is not None:
         try:

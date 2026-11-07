@@ -22,6 +22,7 @@ from hq.platform.core.write_bounds import Bound
 
 from .ui import ended
 lazy from .capabilities import capability_title
+lazy from .refusal_status import why
 
 logger = logging.getLogger("severino.denials")
 
@@ -210,7 +211,13 @@ def _recounted(row: AuditLog) -> None:
 
 
 def _message(reason: str, *, actor: str, capability: str, detail: str) -> str:
+    """The row's sentence: who was refused what, and why in the words its code declares.
+
+    A code the table does not hold leaves the why off, so the row never shows a raw code.
+    """
+
     who = actor or "An unauthenticated caller"
     what = f" “{capability_title(capability)}”" if capability else ""
-    said = f"{who} was refused{what}: {reason.replace('_', ' ')}"
+    because = why(reason)
+    said = f"{who} was refused{what}" + (f": {because}" if because else "")
     return f"{ended(said)} {detail}".strip() if detail else said

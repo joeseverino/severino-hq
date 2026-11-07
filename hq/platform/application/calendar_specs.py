@@ -31,7 +31,7 @@ from .deletion import DeleteCommand, delete_calendar_entry
 from .describe import Describe, listed
 from .integration_specs import CapabilitySpec, ResourceSpec
 from .record_fields import Notes
-from .records import KEPT
+from .records import EDIT, KEPT
 from .resources import BoundedQuery, limit_words
 from .search_contracts import SearchDefinition
 from .security import Capability
@@ -124,8 +124,8 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             "calendar",
             target_label="Event",
             target_help="The event to change.",
-            label="Edit an event",
-            verb="Edit",
+            label=f"{EDIT} an event",
+            verb=EDIT,
         ),
         CapabilitySpec(
             "calendar.entry.delete",

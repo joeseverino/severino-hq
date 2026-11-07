@@ -67,86 +67,104 @@ class Door(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Code:
-    """One code's facts: its status, the doors that answer it, and whether it says "later"."""
+    """One code's facts: its status, the doors that answer it, why it refused, and whether it says "later"."""
 
     status: int
     doors: frozenset[Door]
+    # Why, as the end of the audit log's sentence for the refusal: "example was
+    # refused “Edit a record”: it has no grant for this".
+    said: str
     # Only a refusal that says "later" carries ``retry_after``, and the API's
     # ``Retry-After`` header repeats it.
     waits: bool = False
 
 
-def _code(status: int, *doors: Door, waits: bool = False) -> Code:
-    return Code(status, frozenset(doors), waits)
+def _code(status: int, said: str, *doors: Door, waits: bool = False) -> Code:
+    return Code(status, frozenset(doors), said, waits)
 
 
 # Every code, once, with its facts. Each set below is derived from it.
 CODES = {
-    "unknown_capability": _code(404, Door.NAME),
-    "forbidden": _code(403, Door.ENDPOINT, Door.CAPABILITY),
+    "unknown_capability": _code(404, "HQ has no command by that name", Door.NAME),
+    "forbidden": _code(403, "it has no grant for this", Door.ENDPOINT, Door.CAPABILITY),
     # The operator's standing rule refuses this client. Like a missing grant,
     # no change to the request gets it through.
-    "denied_by_policy": _code(403, Door.CAPABILITY),
-    "not_found": _code(404, Door.RESOURCE, Door.CAPABILITY),
-    "unknown_resource": _code(404, Door.RESOURCE),
+    "denied_by_policy": _code(403, "the operator's rule refuses this client", Door.CAPABILITY),
+    "not_found": _code(404, "the record it names is not there", Door.RESOURCE, Door.CAPABILITY),
+    "unknown_resource": _code(404, "HQ has no list by that name", Door.RESOURCE),
     # The resource exists, and has no list or detail to read.
-    "unsupported_operation": _code(405, Door.RESOURCE),
+    "unsupported_operation": _code(405, "that list has nothing of that kind to read", Door.RESOURCE),
     # The call had to be held, and the record it names could not be read to
     # show the person deciding: the target is not there.
-    "approval_subject_unreadable": _code(404, Door.HOLD),
+    "approval_subject_unreadable": _code(
+        404, "the record it names could not be read to show the person deciding", Door.HOLD
+    ),
     # A held call that could not be made to wait; its kinds say why.
-    "refused_hold": _code(409, Door.HOLD),
+    "refused_hold": _code(409, "it could not be held for a person to decide", Door.HOLD),
     # A held call a person refused: asking again the same way gets the same answer.
-    "declined": _code(403, Door.DECISION),
+    "declined": _code(403, "a person declined it", Door.DECISION),
     # A held call nobody decided in time, or whose subject moved before it ran.
-    "expired": _code(409, Door.DECISION),
-    "stale": _code(409, Door.DECISION),
-    "conflict": _code(409, Door.CAPABILITY, Door.STALE_WRITE),
-    "idempotency_conflict": _code(409, Door.RETRY_KEY),
+    "expired": _code(409, "nobody decided it in time", Door.DECISION),
+    "stale": _code(409, "what it acts on changed before it ran", Door.DECISION),
+    "conflict": _code(409, "what it acts on changed since it was read", Door.CAPABILITY, Door.STALE_WRITE),
+    "idempotency_conflict": _code(409, "its retry key was sent before with a different request", Door.RETRY_KEY),
     # The request is valid; the state it acts on refuses it until it changes.
-    "precondition": _code(409, Door.CAPABILITY),
+    "precondition": _code(409, "what it acts on does not allow it yet", Door.CAPABILITY),
     # The domain refused the command as sent (a confirmation that does not match).
-    "rejected": _code(409, Door.CAPABILITY),
+    "rejected": _code(409, "HQ refused the command as sent", Door.CAPABILITY),
     # The work ran to its end and failed; the message is the job's own note.
-    "work_failed": _code(409, Door.CAPABILITY),
+    "work_failed": _code(409, "the work ran and failed", Door.CAPABILITY),
     # Something HQ did not expect went wrong: the log holds it, the answer says nothing of it.
-    "operation_failed": _code(500, Door.ENDPOINT, Door.CAPABILITY),
-    "invalid_input": _code(400, Door.RESOURCE, Door.CAPABILITY),
-    "target_required": _code(400, Door.TARGETED),
-    "target_not_allowed": _code(400, Door.UNTARGETED),
+    "operation_failed": _code(500, "something HQ did not expect went wrong", Door.ENDPOINT, Door.CAPABILITY),
+    "invalid_input": _code(400, "what it sent is not valid", Door.RESOURCE, Door.CAPABILITY),
+    "target_required": _code(400, "it names no record to act on", Door.TARGETED),
+    "target_not_allowed": _code(400, "it names a record, and this acts on none", Door.UNTARGETED),
     # The uploaded certificate or key cannot be used; the message says why.
-    "invalid_material": _code(400, Door.CAPABILITY),
+    "invalid_material": _code(400, "the certificate or key cannot be used", Door.CAPABILITY),
     # Nothing is wrong with the request. This client is holding more decisions
     # than a person has answered, so the honest status is the one that says
     # "later", not the one that says "malformed".
-    "too_many_pending_approvals": _code(429, Door.HOLD),
+    "too_many_pending_approvals": _code(429, "it is holding more requests than a person has answered", Door.HOLD),
     # The agent is calling faster than its rate, or has as many calls in
     # flight as it, or every agent together, may have: later, never malformed.
-    "rate_limited": _code(429, Door.ADMISSION, waits=True),
-    "too_many_calls": _code(429, Door.ADMISSION, waits=True),
+    "rate_limited": _code(429, "it is calling faster than its rate", Door.ADMISSION, waits=True),
+    "too_many_calls": _code(429, "it has as many calls in flight as it may", Door.ADMISSION, waits=True),
     # The token is missing, malformed, expired or not HQ's.
-    "invalid_token": _code(401, Door.ADMISSION),
+    "invalid_token": _code(401, "its access token is missing, malformed, expired or not HQ's", Door.ADMISSION),
     # A good token that grants nothing HQ can use, or lacks a permission its
     # person holds: granting it to the client and signing in again gets it
     # through, and `details.scope` names it.
-    "insufficient_scope": _code(403, Door.ADMISSION, Door.ENDPOINT, Door.CAPABILITY),
+    "insufficient_scope": _code(
+        403, "its token lacks a permission this needs", Door.ADMISSION, Door.ENDPOINT, Door.CAPABILITY
+    ),
     # The operator's brakes: no change to the request gets it through.
-    "agents_paused": _code(403, Door.ADMISSION),
-    "agent_blocked": _code(403, Door.ADMISSION),
+    "agents_paused": _code(403, "agents are paused", Door.ADMISSION),
+    "agent_blocked": _code(403, "the operator blocked this client", Door.ADMISSION),
     # A tailnet device nobody approved for this agent, or one a person blocked:
     # approving or allowing it on the Agents page gets it through.
-    "device_awaiting_approval": _code(403, Door.ADMISSION),
-    "device_blocked": _code(403, Door.ADMISSION),
+    "device_awaiting_approval": _code(403, "nobody has approved it on this device yet", Door.ADMISSION),
+    "device_blocked": _code(403, "it is blocked on this device", Door.ADMISSION),
+    # The tailnet could not place the call: no device sent it, so nothing can be
+    # approved, or tailscaled did not answer, so asking again may.
+    "device_unknown": _code(403, "no tailnet device sent the call", Door.ADMISSION),
+    "tailnet_unavailable": _code(503, "HQ could not ask tailscaled which device sent the call", Door.ADMISSION),
     # HQ stopped waiting for a call that may still finish.
-    "call_timed_out": _code(504, Door.WAIT),
-    "not_configured": _code(503, Door.ENDPOINT),
-    "method_not_allowed": _code(405, Door.ENDPOINT),
-    "unsupported_media_type": _code(415, Door.BODY),
-    "request_too_large": _code(413, Door.BODY),
-    "invalid_json": _code(400, Door.BODY),
-    "idempotency_key_required": _code(400, Door.RETRY_KEY),
-    "invalid_idempotency_key": _code(400, Door.RETRY_KEY),
+    "call_timed_out": _code(504, "HQ stopped waiting for the call", Door.WAIT),
+    "not_configured": _code(503, "HQ is not set up for this", Door.ENDPOINT),
+    "method_not_allowed": _code(405, "that address does not take this method", Door.ENDPOINT),
+    "unsupported_media_type": _code(415, "its body is not a type HQ takes", Door.BODY),
+    "request_too_large": _code(413, "its body is too large", Door.BODY),
+    "invalid_json": _code(400, "its body is not valid JSON", Door.BODY),
+    "idempotency_key_required": _code(400, "it sent no retry key", Door.RETRY_KEY),
+    "invalid_idempotency_key": _code(400, "its retry key is not valid", Door.RETRY_KEY),
 }
+
+
+def why(code: str, table: Mapping[str, Code] = CODES) -> str:
+    """Why ``code`` refused, as the end of a sentence; nothing for a code the table does not hold."""
+
+    facts = table.get(code)
+    return facts.said if facts is not None else ""
 
 
 def statuses(table: Mapping[str, Code] = CODES) -> dict[str, int]:
