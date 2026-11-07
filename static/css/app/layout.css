@@ -129,9 +129,6 @@
    as its longest line, so on a phone its content wraps inside it rather than
    pushing it past the screen's edge. */
 .card { min-inline-size: 0; }
-/* A confirmation is as wide as what it says and the buttons under it, up to a
-   line's measure, never a frame stretched across the page around them. */
-.card.confirm { inline-size: fit-content; max-inline-size: min(100%, var(--measure)); }
 /* Inside a layout container the gap is the separation, so a section's own
    stacking margin is dead space. Declared after the section rules above so it
    wins on source order at equal specificity. */
