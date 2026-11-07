@@ -1,7 +1,7 @@
 {% comment %}Expects `entry` from approvals.review(). Decisions only while pending.{% endcomment %}
 {% card element="article" css="approval-card" data_state=entry.held.state %}
   <header class="approval-head">
-    <h2><code>{{ entry.asked.actor|breakable }}</code> {{ entry.asked.before|breakable }}{% if entry.asked.target %}{% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.asked.target|breakable }}</a>{% else %}<code>{{ entry.asked.target|breakable }}</code>{% endif %}{% endif %}{{ entry.asked.after|breakable }}</h2>
+    <h2 class="prose"><code>{{ entry.asked.actor|breakable }}</code> {{ entry.asked.before|breakable }}{% if entry.asked.target %}{% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.asked.target|breakable }}</a>{% else %}<code>{{ entry.asked.target|breakable }}</code>{% endif %}{% endif %}{{ entry.asked.after|breakable }}</h2>
     <p class="muted">
       {{ entry.held.requested_interface|interface_label|breakable }}{% dot %}asked {{ entry.held.created_at|ago }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
       {% else %}{% dot %}<strong>{{ entry.held.get_state_display|breakable }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor|breakable }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
