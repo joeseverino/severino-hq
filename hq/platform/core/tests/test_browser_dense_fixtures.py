@@ -551,6 +551,8 @@ seeds.register("dense", seeds.Seed(build_dense_estate))
 # A record whose history and queued work fill the records list, its own page
 # and the controller's: on its own record, so no other page changes.
 OPERATED = "an-example-proxy-host-whose-operations-are-recorded"
+# The proxy host an agent asks to remove (`_held`).
+REMOVED = f"{OPERATED}-and-queued"
 
 
 def _operations(user):
@@ -558,7 +560,7 @@ def _operations(user):
 
     now = timezone.now()
     operated = _proxy(OPERATED, f"{OPERATED}.example.com", ADDRESS, 9100)
-    queued = _proxy(f"{OPERATED}-and-queued", f"{OPERATED}-and-queued.example.com", ADDRESS, 9101)
+    queued = _proxy(REMOVED, f"{REMOVED}.example.com", ADDRESS, 9101)
 
     def asked(resource, action, state, message, interface="web", **fields):
         return OperationRequest.objects.create(
@@ -659,7 +661,9 @@ def _tailnet_policy():
 
 def _held():
     """An agent's docs import waiting for a person: a list of records and a
-    flag, the payload a held request most often carries."""
+    flag, the payload a held request most often carries. Beside it the same
+    agent's removal of a proxy host, whose decision card lists every field
+    the removal would take."""
 
     CapabilityRule.objects.create(
         subject="an-example-agent-with-a-long-name", capability="documentation.sync", rule="approve"
@@ -683,6 +687,20 @@ def _held():
     )
     if not is_held(answer):
         raise AssertionError(f"the agent's docs import was answered {answer}, not held for a person")
+    CapabilityRule.objects.create(
+        subject="an-example-agent-with-a-long-name", capability="infrastructure.resource.remove", rule="approve"
+    )
+    remover = Principal(
+        "an-example-agent-with-a-long-name", "mcp", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE})
+    )
+    answer = execute_capability(
+        "infrastructure.resource.remove",
+        keyed({"reason": "An example reason for removing the proxy host, long enough to wrap"}),
+        principal=remover,
+        target=REMOVED,
+    )
+    if not is_held(answer):
+        raise AssertionError(f"the agent's removal was answered {answer}, not held for a person")
 
 
 def _starred(user):
@@ -860,7 +878,18 @@ DENSE_PAGES = {
     "dense/audit": (lambda: reverse("core:audit_list"), ExitStack),
     # The held request's decision card, on the audit entry its link opens.
     "dense/approval": (
-        lambda: reverse("core:audit_detail", args=[entry_event(ApprovalRequest.objects.get().pk).pk]),
+        lambda: reverse(
+            "core:audit_detail",
+            args=[entry_event(ApprovalRequest.objects.get(capability="documentation.sync").pk).pk],
+        ),
+        ExitStack,
+    ),
+    # A held removal's card, which lists what approving it would take away.
+    "dense/removal": (
+        lambda: reverse(
+            "core:audit_detail",
+            args=[entry_event(ApprovalRequest.objects.get(capability="infrastructure.resource.remove").pk).pk],
+        ),
         ExitStack,
     ),
     "dense/audit-event": (
