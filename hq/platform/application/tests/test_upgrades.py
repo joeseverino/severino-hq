@@ -406,10 +406,54 @@ class HelperCopyTests(TestCase):
                 self.subTest(image=image, source=source),
                 override_settings(SEVERINO_HQ_SOURCE=source),
                 mock.patch("hq.platform.application.hq_self.own_container", return_value=running),
+                mock.patch("hq.platform.application.hq_self.own_machine", return_value=None),
             ):
                 fetch, *_ = install_steps("example-edge")
-                self.assertIn("HQ cannot name the signed image it runs", fetch.detail)
-                self.assertNotIn("docker create", fetch.detail)
+                self.assertEqual(fetch.detail, "")
+                self.assertIn("cannot", fetch.label)
+
+    def test_without_a_release_by_digest_hq_host_is_copied_from_hqs_machine_on_the_same_platform(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from ..upgrades import HELPER, install_steps
+
+        running = SimpleNamespace(running=SimpleNamespace(image="ghcr.io/example/hq/composition:latest"))
+        with (
+            mock.patch("hq.platform.application.hq_self.own_container", return_value=running),
+            mock.patch("hq.platform.application.hq_self.own_machine", return_value=SimpleNamespace(name="example-box")),
+        ):
+            fetch, *_ = install_steps("example-edge")
+
+        self.assertTrue(fetch.detail.endswith(f"scp -3 example-box:{HELPER} example-edge:hq-host"), fetch.detail)
+        # Nothing is copied before the two platforms are found the same.
+        self.assertLess(fetch.detail.index('[ "$built" = "$runs" ]'), fetch.detail.index("scp"))
+
+    def test_the_steps_name_no_path_of_hqs_own(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from django.test import override_settings
+
+        from ..upgrades import install_steps
+
+        signed = "ghcr.io/example/hq/composition@sha256:" + "b" * 64
+        for image, machine in ((signed, None), ("example:latest", None), ("example:latest", "example-box")):
+            with (
+                self.subTest(image=image, machine=machine),
+                override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"),
+                mock.patch(
+                    "hq.platform.application.hq_self.own_container",
+                    return_value=SimpleNamespace(running=SimpleNamespace(image=image)),
+                ),
+                mock.patch(
+                    "hq.platform.application.hq_self.own_machine",
+                    return_value=machine and SimpleNamespace(name=machine),
+                ),
+            ):
+                for step in install_steps("example-edge"):
+                    # A path belongs in a command, never in what a step says it does.
+                    self.assertNotRegex(step.label, r"(^|\s)/\w")
 
 
 @tag("source")

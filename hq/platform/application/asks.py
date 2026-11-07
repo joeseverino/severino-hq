@@ -46,7 +46,7 @@ WAITING = "Waiting…"
 REFRESHING = "Refreshing…"
 # What a read asked of the controller says while it waits for one to arrive,
 # and when none is arriving to take it.
-READ_WAITING = "Refresh asked for; waiting for the controller."
+READ_WAITING = "Refresh asked for; HQ reads it shortly."
 READ_UNTAKEN = "Cannot refresh: {absent}"
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."

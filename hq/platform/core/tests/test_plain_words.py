@@ -30,12 +30,15 @@ def vale(files: dict[str, str]) -> list[tuple[str, int, str]]:
         config = (VALE / ".vale.ini").read_text().replace("StylesPath = styles", f"StylesPath = {VALE / 'styles'}")
         (root / ".vale.ini").write_text(config + EVERY_RULE)
         for name, text in files.items():
+            (root / name).parent.mkdir(parents=True, exist_ok=True)
             (root / name).write_text(text, encoding="utf-8")
+        # Relative to the copy's root, so a section naming a directory matches.
         out = subprocess.run(
-            ["vale", "--config", str(root / ".vale.ini"), "--output=JSON", *(str(root / name) for name in files)],
+            ["vale", "--config", str(root / ".vale.ini"), "--output=JSON", *files],
             capture_output=True,
             text=True,
             check=False,
+            cwd=root,
         )
         alerts = json.loads(out.stdout or "{}")
     return sorted(
@@ -155,6 +158,32 @@ class ValeRuleTests(SimpleTestCase):
 
         self.assertEqual(vale({"views.py": source}), [("views.py", 8, "Sweep"), ("views.py", 9, "Drift")])
 
+    def test_the_hosts_go_is_read_for_the_messages_a_page_shows(self):
+        """A ProviderError's message and decodeAs's reach a finding; a log, a
+        comment, another field and a test are for whoever writes the code."""
+
+        source = (
+            "package providers\n"
+            "// A sweep of every provider.\n"
+            "func f() error {\n"
+            '\tlog.Printf("the sweep reached every provider")\n'
+            '\tif a { return &ProviderError{Message: "the provider said no", Reason: "a provider reason"} }\n'
+            '\tif b { return &runtime.ProviderError{Message: fmt.Sprintf("the kind %s", x), Err: err} }\n'
+            '\tif c { return &ProviderError{Message: "read " + x + " in this sweep", Err: err} }\n'
+            '\treturn decodeAs[T](raw, "the resource "+what+" did not decode")\n'
+            "}\n"
+        )
+
+        self.assertEqual(
+            vale({"controller/providers/example.go": source, "controller/providers/example_test.go": source}),
+            [
+                ("example.go", 5, "Provider"),
+                ("example.go", 6, "Kind"),
+                ("example.go", 7, "Sweep"),
+                ("example.go", 8, "Resource"),
+            ],
+        )
+
     def test_narration_is_found_in_any_file(self):
         files = {
             "views.py": "x = 1  # This turned out to be wrong.\n",
@@ -209,6 +238,42 @@ class TemplatePieceTests(SimpleTestCase):
             plain_words.document([Path("templates/no-such-page.html")])
 
 
+def command_labels() -> list[tuple[str, str]]:
+    """``(capability.field, label)`` for each field a command's form labels,
+    its target included, as every command form and held request shows it."""
+
+    from django import forms
+
+    from hq.platform.application.capabilities import capability_registry
+    from hq.platform.application.command_forms import command_form_class
+
+    return [
+        (f"{name}.{field_name}", str(field.label))
+        for name, spec in sorted(capability_registry().items())
+        for field_name, field in command_form_class(spec).base_fields.items()
+        if field.label and not isinstance(field.widget, forms.HiddenInput)
+    ]
+
+
+@tag("source")
+class DerivedLabelTests(SimpleTestCase):
+    """A field with no title is labeled from its name, so a new one can show a
+    word Plain refuses without any file saying it."""
+
+    def test_every_command_field_is_labeled_in_plain_words(self):
+        labels = command_labels()
+
+        self.assertGreater(len(labels), 100)
+        self.assertEqual(plain_words.refused(labels), [])
+
+    def test_a_label_derived_from_a_name_plain_refuses_is_found(self):
+        from hq.platform.application.labels import field_label
+
+        found = plain_words.refused([("example.create.kind", field_label("kind")), ("example.create.note", "Note")])
+
+        self.assertEqual([line.split(": ")[:2] for line in found], [["example.create.kind", "Plain.Kind"]])
+
+
 RETIRED = (
     "Action items",
     "Command Center",
@@ -234,4 +299,6 @@ RETIRED = (
     "Open the deploy",
     "Sync the vault",
     "Sync documentation",
+    "Topology",
+    "topology",
 )

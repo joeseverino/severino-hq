@@ -76,7 +76,7 @@ class DeclarationRefusalTests(RefusalCase):
         error = self.refused("infrastructure.resource.restart", _operation(), target=KEY)
 
         self.assertEqual(error["code"], "precondition")
-        self.assertIn("The controller does not do that to this kind of record.", error["message"])
+        self.assertIn("HQ does not do that to this type of record.", error["message"])
         self.assertNotIn("adguard.rewrite", error["message"])
 
 

@@ -19,7 +19,7 @@ class ActionLink:
 
     name: Annotated[
         str,
-        Describe("What the link is for, such as `remedy`, `verify` or `topology`, which a page places it by."),
+        Describe("What the link is for, such as `remedy` or `verify`, which a page places it by."),
     ]
     label: Annotated[str, Describe("The words on the link or button: its command's own, where it runs one.")]
     effect: Annotated[

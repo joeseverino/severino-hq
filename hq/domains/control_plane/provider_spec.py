@@ -112,7 +112,7 @@ class ConnectionShape:
         if set(names) & ENVELOPE_SETTINGS:
             raise ValueError(f"{self.name} declares a setting every connection already has.")
         if self.provider and self.default_provider:
-            raise ValueError(f"{self.name} fixes its provider or defaults it, not both.")
+            raise ValueError(f"{self.name} fixes its service or defaults it, not both.")
 
 
 # What every connection states about itself, whatever its shape.
@@ -185,7 +185,7 @@ class ControllerActionPolicy(ProviderModel):
     def why_locked(self) -> Sentence:
         """Why the controller may not run this, as a refusal says it."""
 
-        return self.reason or "The controller cannot run this action."
+        return self.reason or "HQ cannot run this action."
 
     @model_validator(mode="after")
     def validate_mode(self) -> ControllerActionPolicy:
@@ -576,13 +576,12 @@ class ProviderSpec:
     def __post_init__(self) -> None:
         if self.facet and self.facet not in SERVICE_FACET_IDS:
             raise ValueError(
-                f"Provider {self.kind!r} declares unknown service facet "
+                f"{self.kind!r} names an unknown part of a service, "
                 f"{self.facet!r}; expected one of {sorted(SERVICE_FACET_IDS)}."
             )
         if (self.covers or self.hostnames or self.origin) and not self.facet:
             raise ValueError(
-                f"Provider {self.kind!r} describes hostnames but names no "
-                "service facet, so nothing would ever read them."
+                f"{self.kind!r} describes hostnames but names no part of a service, so nothing would ever read them."
             )
 
     def why_not_adoptable(self) -> Sentence:

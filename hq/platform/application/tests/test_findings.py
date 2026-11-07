@@ -253,7 +253,7 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertEqual([offer.url for offer in general[0].offers], ["/connections/"])
         self.assertEqual(
             [action.label for action in general[0].investigations],
-            ["See it in the topology", "See what depends on it"],
+            ["See it on the map", "See what depends on it"],
         )
         self.assertIn("focus=controller%3Aone", general[0].investigations[0].url)
         self.assertEqual(

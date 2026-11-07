@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Annotated, Literal, TypedDict
 
 from django.db import transaction
+from pydantic import Field
 
 from .command_fields import Describe
 from .documentation import (
@@ -24,11 +25,13 @@ from .security import Principal
 
 @dataclass(frozen=True, slots=True)
 class HQSyncCommand:
-    manifest: Annotated[list[ManifestEntry], Describe("The records to sync, one per entry.")]
+    manifest: Annotated[list[ManifestEntry], Field(title="Records"), Describe("The records to sync, one per entry.")]
     update_existing: UpdateExisting = True
-    report_orphans: Annotated[bool, Describe("Report records the manifest no longer lists.")] = True
-    prune_orphans: PruneOrphans = False
-    confirm_prune: ConfirmPrune = False
+    report_orphans: Annotated[
+        bool, Field(title="Report unlisted records"), Describe("Report records the manifest no longer lists.")
+    ] = True
+    prune_orphans: Annotated[PruneOrphans, Field(title="Delete unlisted records")] = False
+    confirm_prune: Annotated[ConfirmPrune, Field(title="Confirm the delete")] = False
 
 
 class HqSynced(TypedDict):

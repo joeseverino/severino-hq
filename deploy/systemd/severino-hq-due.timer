@@ -1,5 +1,5 @@
 [Unit]
-Description=Do the scheduled work whose cadence has come round, the host's and the extensions'
+Description=Do the scheduled work that is due, the host's and the extensions'
 
 [Timer]
 OnBootSec=5min

@@ -15,12 +15,15 @@ from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND, UPL
 from . import action_items, pins
 from .adoption import ADOPT, ADOPT_SERVICE, AdoptCommand, AdoptServiceCommand, adopt, adopt_service
 from .agent_access import (
+    REMOVE_AGENT,
     SET_AGENT_ACCESS,
     SET_AGENT_BLOCK,
     AgentAccessCommand,
     AgentBlockCommand,
+    AgentRemoveCommand,
     agents_paused,
     blocked,
+    remove_agent,
     set_agent_blocked,
     set_agents_paused,
 )
@@ -63,6 +66,7 @@ from .glance import (
 )
 from .infrastructure import ManagedResourceCommand, save_managed_resource
 from .integration_specs import ON_ITS_PAGE, CapabilitySpec
+from .labels import adding
 from .lookup import (
     LOOK_UP_ADDRESS,
     LOOK_UP_NAME,
@@ -85,7 +89,7 @@ from .receipts import (
     replace_receipt,
     upload_receipt,
 )
-from .records import KEPT
+from .records import EDIT, KEPT
 from .registry_import import REQUIRED_CAPABILITIES as IMPORT_CAPABILITIES, HQImportCommand, execute_hq_import
 from .resource_operations import (
     ACTION_CAPABILITY,
@@ -110,7 +114,7 @@ from .zones import ADOPT_ZONE, AdoptZoneCommand, adopt_zone
 # Named, so prose that tells a person which button to press reads its words.
 CONTROLLER_REFRESH = CapabilitySpec(
     "infrastructure.controller.refresh",
-    "Ask the controller to read everything again now.",
+    "Ask HQ to read everything again now.",
     "infrastructure_change",
     Capability.MANAGE_INFRASTRUCTURE,
     ControllerSweepCommand,
@@ -217,7 +221,7 @@ CORE_CAPABILITY_SPECS = (
         ManagedResourceCommand,
         save_managed_resource,
         subject_resource="infrastructure",
-        label="Add a record",
+        label=adding("record"),
     ),
     CapabilitySpec(
         "infrastructure.resource.update",
@@ -231,8 +235,8 @@ CORE_CAPABILITY_SPECS = (
         target_label="Record",
         target_help="The record to change.",
         target_initial_fields=("key", "kind", "spec", "enabled"),
-        label="Change what HQ expects",
-        verb="Edit",
+        label=f"{EDIT} a record",
+        verb=EDIT,
         wants="change the expected settings of {target}",
     ),
     CapabilitySpec(
@@ -413,7 +417,7 @@ CORE_CAPABILITY_SPECS = (
         "key",
         "infrastructure",
         target_label="Certificate",
-        target_help="The certificate used by a machine the controller could not reach.",
+        target_help="The certificate used by a machine HQ could not reach.",
         # Scoped to what it acts on, not to what it changes. The amendment
         # lands on the tailnet policy, but the thing an operator selects is the
         # certificate whose consumer went unread: the same split that keeps
@@ -503,7 +507,7 @@ CORE_CAPABILITY_SPECS = (
         upload_receipt,
         subject_resource="receipts",
         execution_notes=_RECEIPT_FILE_NOTES,
-        label="Upload a receipt",
+        label=adding("receipt"),
     ),
     CapabilitySpec(
         RECEIPT_REPLACE,
@@ -600,6 +604,25 @@ CORE_CAPABILITY_SPECS = (
         variants=(("on", "Block"), ("off", "Allow")),
         reached_from="agent_policy",
         state=blocked,
+    ),
+    CapabilitySpec(
+        REMOVE_AGENT,
+        "Remove one agent HQ has seen, with its devices and its own rules, so it is listed no more.",
+        DESTRUCTIVE_EFFECT,
+        Capability.GOVERN_AGENTS,
+        AgentRemoveCommand,
+        remove_agent,
+        "key",
+        target_label="Client",
+        target_help="The client id of an agent HQ has seen.",
+        execution_notes=(
+            "Refuse a client HQ has never seen.",
+            "Refuse a blocked agent, so removing it never lifts its block.",
+            "Keep the audit log and what it asked for; a client that signs in again is a new agent.",
+        ),
+        label="Remove an agent",
+        verb="Remove",
+        reached_from="agent_policy",
     ),
     CapabilitySpec(
         APPROVE_AGENT_DEVICE,
@@ -731,7 +754,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
                 "Set each named row aside as it was drawn.",
                 "Set each named item aside as the queue holds it now.",
             ),
-            label="Set action items aside",
+            label="Set aside action items",
             verb="Set aside",
             reached_from="action_items",
         ),
@@ -742,7 +765,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
             Capability.SET_ASIDE_ACTION_ITEMS,
             action_items.RestoreCommand,
             action_items.restore,
-            label="Bring action items back",
+            label="Bring back action items",
             verb="Bring back",
             reached_from="action_items",
         ),
@@ -796,7 +819,7 @@ def watching() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
             PROFILE_READ_NOW,
-            "Ask the controller to read a signed-in person's GitHub profile now.",
+            "Ask HQ to read a signed-in person's GitHub profile now.",
             "infrastructure_change",
             # A public lookup that spends GitHub's allowance, and a wake of the
             # controller, as Refresh is.
@@ -807,7 +830,7 @@ def watching() -> tuple[CapabilitySpec, ...]:
                 "Refuse a login no sign-in names.",
                 "Ask for the profile reading now; the controller reads GitHub with its own credentials.",
             ),
-            label="Read a GitHub profile now",
+            label="Refresh a GitHub profile",
             reached_from="watching",
             verb=CONTROLLER_REFRESH.words(),
         ),

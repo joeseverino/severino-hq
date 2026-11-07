@@ -31,12 +31,12 @@ type NetTLSDialer struct {
 func (d NetTLSDialer) roots() (*x509.CertPool, error) {
 	roots, err := x509.SystemCertPool()
 	if err != nil {
-		return nil, &ProviderError{Message: "controller CA bundle could not be loaded"}
+		return nil, &ProviderError{Message: "HQ's CA bundle could not be loaded"}
 	}
 	if d.CAFile != "" {
 		data, err := os.ReadFile(d.CAFile)
 		if err != nil || !roots.AppendCertsFromPEM(data) {
-			return nil, &ProviderError{Message: "controller CA bundle could not be loaded"}
+			return nil, &ProviderError{Message: "HQ's CA bundle could not be loaded"}
 		}
 	}
 	return roots, nil

@@ -6,7 +6,7 @@ from datetime import date
 from functools import partial
 from typing import Annotated, Any, Literal, TypedDict, final
 
-from pydantic import ConfigDict, with_config
+from pydantic import ConfigDict, Field, with_config
 
 from hq.domains.docs_index.importer import (
     import_manifest_data,
@@ -115,11 +115,15 @@ type ConfirmPrune = Annotated[bool, Describe("Confirms the delete that prune_orp
 
 @dataclass(frozen=True, slots=True)
 class DocumentationSyncCommand:
-    manifest: Annotated[list[ManifestEntry], Describe("The documentation records to sync, one per doc.")]
+    manifest: Annotated[
+        list[ManifestEntry], Field(title="Docs"), Describe("The documentation records to sync, one per doc.")
+    ]
     update_existing: UpdateExisting = True
-    report_orphans: Annotated[bool, Describe("Report records the manifest no longer lists.")] = False
-    prune_orphans: PruneOrphans = False
-    confirm_prune: ConfirmPrune = False
+    report_orphans: Annotated[
+        bool, Field(title="Report unlisted docs"), Describe("Report records the manifest no longer lists.")
+    ] = False
+    prune_orphans: Annotated[PruneOrphans, Field(title="Delete unlisted docs")] = False
+    confirm_prune: Annotated[ConfirmPrune, Field(title="Confirm the delete")] = False
 
 
 # A doc's fields as its command writes them and its row reads them back, each said once.
@@ -187,7 +191,7 @@ class DocumentationCommand:
     status: DocStatus = "draft"
     sensitivity: DocSensitivity = "internal"
     obsidian_path: ObsidianPath = ""
-    github_path: GithubPath = ""
+    github_path: Annotated[GithubPath, Field(title="GitHub path")] = ""
     external_url: ExternalUrl = ""
     last_reviewed: LastReviewed = None
     published_at: PublishedAt = None

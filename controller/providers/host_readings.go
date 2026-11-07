@@ -89,13 +89,13 @@ type HostRenderStatusRecord struct {
 func (r *Registry) hostRenderStatus(context.Context) ([]any, error) {
 	configured := r.Env.RenderStatus
 	if configured == "" {
-		return nil, &ProviderError{Message: "no render status was configured"}
+		return nil, &ProviderError{Message: "no list of HQ's secret files was configured"}
 	}
 	found, seen := []any{}, map[string]bool{}
 	for entry := range strings.SplitSeq(configured, ",") {
 		name, path, ok := strings.Cut(entry, "=")
 		if !ok || !rendererName.MatchString(name) || path == "" || seen[name] {
-			return nil, &ProviderError{Message: "the render status list is not name=path pairs with distinct names"}
+			return nil, &ProviderError{Message: "the list of HQ's secret files is not name=path pairs with distinct names"}
 		}
 		seen[name] = true
 		found = append(found, renderStatusRecord(name, path))

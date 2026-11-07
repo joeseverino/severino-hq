@@ -130,7 +130,7 @@ def _fields(provider: str, shape: ConnectionShape) -> tuple[ItemField, ...]:
 
     return (
         ItemField("connection_ref", provider.replace("_", "-"), "Any name; how HQ refers to this connection."),
-        ItemField("projection", shape.name, "The shape the controller reads the item as."),
+        ItemField("projection", shape.name, "The shape HQ reads the item as."),
         ItemField("env_prefix", provider.upper(), "Says which service it is for."),
         *(_field(setting) for setting in shape.settings),
         ItemField("manages", "1", "Optional. Lets HQ make changes through it, not only read."),
@@ -150,7 +150,7 @@ def _field(setting: Setting) -> ItemField:
 REFERENCE_HEADER = """# Connections
 
 What to create for each service HQ connects to, in the order to connect them,
-and the 1Password item the controller reads it from. Written by `manage.py
+and the 1Password item HQ reads it from. Written by `manage.py
 connections_reference` from what HQ expects of each service; the Connections
 page shows the same, for each one not yet connected. A test fails when this
 file falls behind.

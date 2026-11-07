@@ -59,7 +59,7 @@ TITLES = {
     "severino-hq-controller.path": "Start the Severino HQ controller when HQ has queued work",
     "severino-hq-controller.service": "Severino HQ infrastructure controller",
     "severino-hq-controller.timer": "Run Severino HQ infrastructure controller",
-    "severino-hq-due.timer": "Do the scheduled work whose cadence has come round, the host's and the extensions'",
+    "severino-hq-due.timer": "Do the scheduled work that is due, the host's and the extensions'",
     "severino-hq-job@due.service": "Severino HQ scheduled work: due",
     "severino-hq-script-drift.service": (
         "Check that the host is its release: the root-owned tree, the units, the runner's sudo rules and nothing else"

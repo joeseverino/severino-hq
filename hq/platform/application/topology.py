@@ -98,17 +98,18 @@ def _resource_actions(
             resource.get_absolute_url(),
         )
     ]
-    if not principal.permits(Capability.MANAGE_INFRASTRUCTURE):
+    if not principal.permits(Capability.MANAGE_INFRASTRUCTURE) or removal_pending:
         return tuple(actions)
-    actions.append(
-        command_action(
-            "edit",
-            "infrastructure.resource.update",
-            reverse("control_plane:edit", kwargs={"key": key}),
-            target=key,
-        )
-    )
     capabilities = resource_capabilities(resource, running=(), removal_pending=removal_pending, manages=manages)
+    if capabilities.offered.edit_url:
+        actions.append(
+            command_action(
+                "edit",
+                "infrastructure.resource.update",
+                capabilities.offered.edit_url,
+                target=key,
+            )
+        )
     drifted = is_drifted(resource)
     if drifted:
         # Something changed it outside HQ: keeping that is the choice that
@@ -143,12 +144,12 @@ def _resource_actions(
                 target=key,
             )
         )
-    if capabilities.removal != "unavailable":
+    if capabilities.offered.remove_url:
         actions.append(
             command_action(
                 "remove",
                 REMOVAL_CAPABILITY,
-                reverse("control_plane:remove", kwargs={"key": key}),
+                capabilities.offered.remove_url,
                 target=key,
                 intent=capabilities.removal_words,
             )
@@ -650,7 +651,7 @@ _DIRECTION: Any = Literal[TRACE_DIRECTIONS]
 TopologyQuery = create_model(
     "TopologyQuery",
     __config__=QUERY,
-    __doc__="What a topology read is narrowed by.",
+    __doc__="What a read of the map is narrowed by.",
     lens=(_LENS | None, Field(None, description="A question the graph is narrowed to, such as what has a problem.")),
     focus=(
         Annotated[str, StringConstraints(strip_whitespace=True)],
@@ -718,7 +719,7 @@ def topology(*, principal: Principal, **narrowing: object) -> TopologyAnswer:
         projection = apply_lens(projection, selected)
     if focus and focus not in {node.id for node in projection.nodes}:
         raise InvalidTopologyQuery(
-            "topology: focus names no node here; it is a node's id, as a lens's answer gives each one."
+            "The focus names no node on the map; it is a node's id, as a lens's answer gives each one."
         )
     projection, trace = apply_trace(projection, focus, direction=query["direction"], depth=query["depth"])
     return serialize_topology(projection, lens=selected, trace=trace)

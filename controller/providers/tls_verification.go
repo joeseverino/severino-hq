@@ -209,9 +209,9 @@ func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (R
 			for _, item := range unreachable {
 				reasons = append(reasons, item.Reason)
 			}
-			return Result{}, nil, &ProviderError{Message: "no TLS consumer could be reached: " + strings.Join(reasons, "; ")}
+			return Result{}, nil, &ProviderError{Message: "no service that serves the certificate could be reached: " + strings.Join(reasons, "; ")}
 		}
-		return Result{}, nil, &ProviderError{Message: "no TLS verification domains were declared"}
+		return Result{}, nil, &ProviderError{Message: "no domains to verify TLS on were set"}
 	}
 	soonest, newest := observations[0], observations[0]
 	for _, item := range observations[1:] {
@@ -252,7 +252,7 @@ func (r *Registry) reconcileTLS(ctx context.Context, spec TLSCertificateSpec) (R
 func tlsVerificationPolicy(ctx context.Context) (time.Duration, time.Duration, error) {
 	policy, ok := runtime.VerificationFrom(ctx)
 	if !ok {
-		return 0, 0, &ProviderError{Message: "TLS renewal declares no verification policy"}
+		return 0, 0, &ProviderError{Message: "TLS renewal sets no verification policy"}
 	}
 	timeout, interval := policy.TimeoutSeconds, policy.IntervalSeconds
 	if timeout < verificationTimeoutMin || timeout > verificationTimeoutMax || interval < verificationIntervalMin || interval > verificationIntervalMax || interval > timeout {
@@ -355,7 +355,7 @@ func (r *Registry) verifyTLSDeployment(ctx context.Context, spec TLSCertificateS
 				details = append(details, failing[consumer]...)
 			}
 			return Result{}, nil, &ProviderError{
-				Message: fmt.Sprintf("%d of %d TLS consumers did not activate the certificate within %ds: %s", len(failing), len(spec.Consumers), int(timeout.Seconds()), strings.Join(details, "; ")),
+				Message: fmt.Sprintf("%d of %d services did not start serving the certificate within %ds: %s", len(failing), len(spec.Consumers), int(timeout.Seconds()), strings.Join(details, "; ")),
 				Status:  evidence,
 			}
 		}

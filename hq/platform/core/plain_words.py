@@ -103,27 +103,33 @@ def document(paths: Iterable[Path]) -> tuple[str, list[tuple[Path, int]]]:
     """Every piece under ``paths`` as one document, a paragraph per line, and
     where each line of it came from."""
 
-    lines: list[str] = []
-    origins: list[tuple[Path, int]] = []
-    for path in _templates(paths):
-        for line, text in shown(path.read_text(encoding="utf-8", errors="replace")):
-            lines.append(" ".join(text.split()))
-            origins.append((path, line))
-    return "\n\n".join(lines) + "\n", origins
+    pieces = [
+        ((path, line), text)
+        for path in _templates(paths)
+        for line, text in shown(path.read_text(encoding="utf-8", errors="replace"))
+    ]
+    return _joined(text for _origin, text in pieces), [origin for origin, _text in pieces]
 
 
-def findings(alerts: dict, origins: list[tuple[Path, int]]) -> list[str]:
-    """Vale's alerts on the document, each at the template line its piece came from."""
+def _joined(texts: Iterable[str]) -> str:
+    return "\n\n".join(" ".join(text.split()) for text in texts) + "\n"
+
+
+def findings(alerts: dict, origins: list) -> list[str]:
+    """Vale's alerts on the document, each at the place its piece came from:
+    a template's ``(path, line)``, or any name a caller gives a piece."""
 
     found = []
     for alert in next(iter(alerts.values()), []):
-        path, line = origins[(alert["Line"] - 1) // 2]
-        found.append(f"{path}:{line}: {alert['Check']}: {alert['Message']}")
+        origin = origins[(alert["Line"] - 1) // 2]
+        where = f"{origin[0]}:{origin[1]}" if isinstance(origin, tuple) else origin
+        found.append(f"{where}: {alert['Check']}: {alert['Message']}")
     return found
 
 
-def main(arguments: list[str]) -> int:
-    text, origins = document(Path(argument) for argument in arguments)
+def _vale(text: str) -> tuple[int, dict]:
+    """Vale's exit status on ``text`` and its alerts, which an error leaves empty."""
+
     vale = subprocess.run(
         ["vale", f"--config={VALE_CONFIG}", f"--ext={_EXTENSION}", "--output=JSON"],
         input=text,
@@ -133,8 +139,27 @@ def main(arguments: list[str]) -> int:
     )
     if vale.returncode not in (0, 1):
         sys.stderr.write(vale.stdout + vale.stderr)
-        return vale.returncode
-    found = findings(json.loads(vale.stdout or "{}"), origins)
+        return vale.returncode, {}
+    return 0, json.loads(vale.stdout or "{}")
+
+
+def refused(pieces: Iterable[tuple[str, str]]) -> list[str]:
+    """Vale's findings on shown text that lives nowhere a file names it, such as
+    a label HQ derives, each ``(where, text)`` reported at its ``where``."""
+
+    pieces = list(pieces)
+    status, alerts = _vale(_joined(text for _where, text in pieces))
+    if status:
+        raise subprocess.CalledProcessError(status, "vale")
+    return findings(alerts, [where for where, _text in pieces])
+
+
+def main(arguments: list[str]) -> int:
+    text, origins = document(Path(argument) for argument in arguments)
+    status, alerts = _vale(text)
+    if status:
+        return status
+    found = findings(alerts, origins)
     print("\n".join(found) if found else f"{len(origins)} attributes and tag literals read: no finding")
     return 1 if found else 0
 

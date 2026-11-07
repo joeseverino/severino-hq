@@ -66,8 +66,8 @@ class HeldRequestWordsTests(TestCase):
         (item,) = waiting_for_approval()
 
         self.assertEqual(dumped(item.body), [], item.body)
-        self.assertIn("manifest set to 4 entries", item.body)
-        self.assertIn("confirm prune set to yes", item.body)
+        self.assertIn("docs set to 4 entries", item.body)
+        self.assertIn("confirm the delete set to yes", item.body)
 
     def test_a_command_on_no_record_is_not_said_to_create_one(self):
         (item,) = waiting_for_approval()

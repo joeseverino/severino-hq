@@ -459,7 +459,7 @@ CERTIFICATE = ProviderSpec(
     seed=_certificate_seed,
     covers=True,
     unobserved_reason=("HQ updates this when it issues or installs the certificate."),
-    removal_gap=("The controller cannot delete certificates yet, so renewals would not stop."),
+    removal_gap=("HQ cannot delete certificates yet, so renewals would not stop."),
 )
 
 UPLOADED_CERTIFICATE = ProviderSpec(

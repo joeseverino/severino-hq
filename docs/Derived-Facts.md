@@ -495,7 +495,7 @@ Findings from these readings:
   (`hq/platform/application/certificate_expiry.py`).
 
 The machine, service, domain and declaration pages render the section, with
-"See in topology" (`?focus=<node>`), one "Not readable" line linking to the
+"See on the map" (`?focus=<node>`), one "Not readable" line linking to the
 connections page, and each source's raw records under a disclosure.
 
 ## Links

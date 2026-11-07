@@ -146,7 +146,7 @@ func (r *Registry) cloudflareBreaker(held string) error {
 	if !refused {
 		return nil
 	}
-	return &ProviderError{Message: "cloudflare refused the credential earlier this sweep: " + reason, Failure: runtime.FailureClassCredential, Reason: reason}
+	return &ProviderError{Message: "cloudflare refused the credential earlier in this read: " + reason, Failure: runtime.FailureClassCredential, Reason: reason}
 }
 
 // cloudflareRefused is the error for a refusal, recording a refused credential

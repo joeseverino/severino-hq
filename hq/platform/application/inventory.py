@@ -640,7 +640,7 @@ def record_connections(
             unreported_at=observed_at,
             reachable=False,
             failure="",
-            detail="Not in the controller's last report.",
+            detail="Not in HQ's last read.",
         )
     return {
         "ok": True,

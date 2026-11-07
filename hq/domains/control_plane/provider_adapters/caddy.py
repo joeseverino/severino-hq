@@ -185,7 +185,7 @@ DEFINITION = ProviderSpec(
         "This route is in the edge's own Caddyfile, which HQ reads and never "
         "changes. To have HQ serve a name, add a route in HQ."
     ),
-    removal_gap=("The controller cannot delete Caddy routes yet, so the edge would keep serving it."),
+    removal_gap=("HQ cannot delete Caddy routes yet, so the edge would keep serving it."),
 )
 DEFINITIONS = (DEFINITION,)
 

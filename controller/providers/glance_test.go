@@ -155,9 +155,9 @@ func TestWeatherGlance(t *testing.T) {
 	}
 
 	for point, want := range map[string]string{
-		"40":         "SEVERINO_NWS_POINT must be latitude,longitude",
-		"north,west": "SEVERINO_NWS_POINT is not numeric",
-		"91,0":       "SEVERINO_NWS_POINT is outside valid coordinates",
+		"40":         "the weather location must be latitude,longitude",
+		"north,west": "the weather location is not numeric",
+		"91,0":       "the weather location is outside valid coordinates",
 	} {
 		if _, err := r.weatherGlance(t.Context(), runtime.GlanceWeatherTarget{Point: point, Endpoint: server.URL}); err == nil || err.Error() != want {
 			t.Errorf("%s: %v", point, err)

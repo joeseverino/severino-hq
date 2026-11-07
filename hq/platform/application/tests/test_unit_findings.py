@@ -454,7 +454,7 @@ class UnreadTests(TestCase):
         (finding,) = raised("unit-state-unread")
 
         self.assertEqual(finding["severity"], "attention")
-        self.assertEqual(finding["evidence"][0]["value"], "The controller could not read them")
+        self.assertEqual(finding["evidence"][0]["value"], "HQ could not read them")
         self.assertNotIn("mounted", repr(finding["evidence"]))
 
     def test_a_record_the_schema_refused_is_said_beside_the_units_that_were_read(self):

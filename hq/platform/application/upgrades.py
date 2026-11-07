@@ -7,6 +7,7 @@ HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 """
 
 import re
+import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -455,13 +456,7 @@ def _copy_steps(machine: str) -> tuple[Step, ...]:
     image = _running_image()
     identity = signer(settings.SEVERINO_HQ_SOURCE)
     if not (image and identity):
-        fetch = Step(
-            "fetch",
-            "Take the helper from the release HQ runs",
-            "HQ cannot name the signed image it runs, so take hq-host from the one the machine HQ deploys to "
-            "records in /var/lib/severino-hq/release, at /app/deploy/bin/hq-host in it, after verifying "
-            "its signature.",
-        )
+        fetch = _copy_from_hq(machine)
     else:
         platform = "{{.Os}}/{{.Architecture}}"
         fetch = Step(
@@ -490,6 +485,33 @@ def _copy_steps(machine: str) -> tuple[Step, ...]:
     )
 
 
+def _copy_from_hq(machine: str) -> Step:
+    """The helper copied from the machine HQ runs on, where every deploy
+    installs it from the signed release, when HQ cannot name that release
+    itself; refused when the two machines run different platforms."""
+
+    hq_machine = hq_self.own_machine()
+    source = str(hq_machine.name) if hq_machine is not None else ""
+    if not source or source == machine:
+        return Step(
+            "fetch",
+            f"Copy hq-host to {machine} from the machine HQ runs on, where every deploy of HQ installs it, "
+            "if the two machines run the same platform. HQ cannot tell which machine that is, so it cannot "
+            "write the command.",
+            "",
+        )
+    there, here = shlex.quote(source), shlex.quote(machine)
+    return Step(
+        "fetch",
+        f"From your own computer, copy hq-host to {machine} from {source}, where every deploy of HQ "
+        "installs it. It stops if the two machines run different platforms.",
+        f'built="$(ssh {there} uname -sm)" && runs="$(ssh {here} uname -sm)" '
+        f'&& {{ [ "$built" = "$runs" ] || {{ echo "hq-host on {source} is built for $built; '
+        f'{machine} runs $runs" >&2; false; }}; }} '
+        f"&& scp -3 {there}:{HELPER} {here}:hq-host",
+    )
+
+
 def install_steps(machine: str, *, deployed_here: bool = False) -> tuple[Step, ...]:
     """The helper's install on one machine: on the machine HQ deploys to, every
     deploy brings it; anywhere else it is copied there root-owned first. Then
@@ -503,16 +525,18 @@ def install_steps(machine: str, *, deployed_here: bool = False) -> tuple[Step, .
     return (() if deployed_here else _copy_steps(machine)) + (
         Step(
             "allow",
-            f"On {machine}, let the controller's account run it with an upgrade's arguments, and nothing else. "
-            "HQ does not know which account that is: set account= to it first.",
+            f"On {machine}, let the controller run it with an upgrade's arguments, and nothing else. "
+            "HQ does not know which account the controller signs in as there: put that account in place of "
+            "CONTROLLER_ACCOUNT first.",
             'account=CONTROLLER_ACCOUNT && id -u "$account" >/dev/null '
             f"&& printf '%s ALL=(root) NOPASSWD: %s\\n' \"$account\" '{sudoers_command()}' "
             f"| sudo tee {SUDOERS} >/dev/null && sudo chmod 0440 {SUDOERS} && sudo visudo -cf {SUDOERS}",
         ),
         Step(
             "check",
-            "Signed in as that account, check that sudo allows it. sudo -l only says whether a call is allowed, "
-            "and the call it asks about names a stack that does not exist (example) and a digest of zeros.",
+            "Signed in as that account, check that sudo allows it: sudo prints the helper's command when the "
+            "rule allows it. sudo -l only says whether a call is allowed, and the call it asks about names a "
+            "stack that does not exist (example) and a digest of zeros.",
             f"sudo -n -l {HELPER} {_PROBE}",
         ),
     )
