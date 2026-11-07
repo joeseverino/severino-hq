@@ -148,14 +148,17 @@
   // width it was just fitted at.
   // A region's table is observed too: one whose own content widens after its
   // fit (a face settling, a style arriving) with its region's width unchanged
-  // gives way again while it overflows, and is let go until the next frame as
-  // a region is.
+  // gives way again while it overflows. Its fit can make its region taller,
+  // and the browser delivers nothing shallower than what it last delivered
+  // in the same frame, so the table and its region are both let go until the
+  // next frame.
   // eslint-disable-next-line no-restricted-syntax -- a width changed by nothing the page saw, which only a layout knows
   const fitted = new ResizeObserver((entries) => entries.forEach(({ target }) => {
     if (!target.isConnected) {
       fitted.unobserve(target);
       return;
     }
+    let letGo = [target];
     if (target.matches(REGION)) {
       const was = regionWidths.get(target);
       fitIn(target);
@@ -164,9 +167,12 @@
       if ("rowsHeld" in target.dataset || !target.parentElement?.matches(REGION) || !overflows(target)) return;
       fit(target, false);
       markCut(target);
+      letGo = [target, target.parentElement];
     }
-    fitted.unobserve(target);
-    requestAnimationFrame(() => fitted.observe(target));
+    letGo.forEach((box) => {
+      fitted.unobserve(box);
+      requestAnimationFrame(() => fitted.observe(box));
+    });
   }));
   // The browser's find reaches what a closed row holds back: the line beneath
   // it is hidden until found, so find searches it and a match opens the row
