@@ -73,13 +73,18 @@ def unsampled_span():
 
 
 # A table whose first row opens (a list it folds keeps its toggle at every
-# width) and whose second cannot, a plant in each: ``opened`` in the row that
-# opens, ``closed`` in the one that does not.
+# width) and whose second has nothing to open, and a table with no gutter,
+# whose row cannot open, a plant in each that reads one: ``opened`` in the row
+# that opens, ``closed`` in the one that cannot.
 _TABLE = """{% table_region "Planted" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Tags" %}</tr></thead><tbody>
-<tr><td class="row-gutter">Opens{% row_toggle %}</td><td>OPENED</td>
+<tr><td>Opens</td><td>OPENED</td>
 <td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
-<tr><td class="row-gutter">Stays</td><td>CLOSED</td><td><span class="tag">One</span></td></tr>
+<tr><td>Stays</td><td>Example</td><td><span class="tag">One</span></td></tr>
+</tbody></table>{% endtable_region %}
+{% table_region "Fixed" %}<table class="data-table"><thead><tr>
+{% table_heading "Name" %}{% table_heading "Value" %}{% table_heading "Tags" %}</tr></thead><tbody>
+<tr><td>Fixed</td><td>CLOSED</td><td><span class="tag">One</span></td></tr>
 </tbody></table>{% endtable_region %}"""
 
 # What an open row lifts (surfaces.css) it lifts with `!important`, which only

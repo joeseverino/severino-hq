@@ -472,7 +472,7 @@ ROW_ACTIONS_TABLES = """<section class="card">
 {% table_region "Devices" %}<table class="data-table" data-probe="actions"><thead><tr>
 {% table_heading "Device" "identifier" gutter=True %}{% table_heading "Approval" "status" %}
 {% table_heading "Calls" drop=1 %}{% table_heading "Approve or block" "control" hidden=True %}</tr></thead><tbody>
-<tr><th scope="row" class="row-gutter">example-host-01{% row_toggle %}</th><td><span class="pill">Needs approval</span></td><td>2 calls</td>
+<tr><th scope="row">example-host-01</th><td><span class="pill">Needs approval</span></td><td>2 calls</td>
 <td class="row-actions"><form><button type="button" class="btn compact primary">Withdraw approval</button></form><form><button type="button" class="btn compact">Block device</button></form></td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Unfittable" %}<table class="data-table" data-probe="unfittable"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody>
@@ -502,20 +502,20 @@ COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
-<tr data-probe="dropped"><td class="row-gutter">Dropped{% row_toggle %}</td><td>Short</td>
+<tr data-probe="dropped"><td>Dropped</td><td>Short</td>
 <td><span style="display: inline-block; inline-size: 30rem">Something too wide for a phone to keep</span></td></tr>
-<tr data-probe="dropped-blank"><td class="row-gutter">Blank{% row_toggle %}</td><td>Short</td><td>–</td></tr>
-<tr data-probe="screen-reader"><td class="row-gutter">Chest{% row_toggle %}</td>
+<tr data-probe="dropped-blank"><td>Blank</td><td>Short</td><td>–</td></tr>
+<tr data-probe="screen-reader"><td>Chest</td>
 <td><span class="cadence-mark is-hit" aria-hidden="true"></span>
 <span class="visually-hidden">One session in the week of Aug 10, said in full</span></td><td>–</td></tr>
-<tr data-probe="cut"><td class="row-gutter">Name{% row_toggle %}</td>
+<tr data-probe="cut"><td>Name</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td><td>–</td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Folding" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
-<tr data-probe="folded"><td class="row-gutter">Folded{% row_toggle %}</td>
+<tr data-probe="folded"><td>Folded</td>
 <td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
-<tr data-probe="cut-in-a-kept-gutter"><td class="row-gutter">Name{% row_toggle %}</td>
+<tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
@@ -525,9 +525,10 @@ ROW_TOGGLE_TABLES = """
 # link set in its line, as a cell's name is), and two cut
 # where no ellipsis can land: a box of words around a
 # box of its own, and a name's chip in the muted line under a row's name, as
-# a unit's page drew one. A note wider than a phone puts the table in a
-# narrow box there, which keeps the gutter of a table whose rows open, so the
-# third opens; a wide box shows each titled value whole on hover, and a cut
+# a unit's page drew one; the third, titled too, stands in a table of its own
+# whose rows open, since every row under a gutter heading does. A note wider
+# than a phone puts each table in a narrow box there, which keeps the gutter of
+# a table whose rows open, so the third opens; a wide box shows each titled value whole on hover, and a cut
 # with no ellipsis tells no one to hover.
 _CUT = (
     '<div style="max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"{}>'
@@ -535,28 +536,29 @@ _CUT = (
 )
 _CHIP = "chip-" + "-".join(["example-unit-name-long-enough-to-be-cut"] * 4) + ".timer"
 _NOTE = '<td><span style="display: inline-block; inline-size: 30rem">A note wider than a phone</span></td>'
+_OPENS_TITLE = ' title="opens value far too long to fit"'
 CUT_TABLE = (
     '{% load value_tags %}{% table_region "Cuts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    '{% table_heading "Name" %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
     + "".join(
-        f'<tr><td class="row-gutter">{name.title()}{toggle}</td><td>{_CUT.format(title.format(name), name)}</td>{_NOTE}</tr>'
-        for name, title, toggle in (
-            ("untitled", "", ""),
-            ("titled", ' title="{} value far too long to fit"', ""),
-            ("opens", ' title="{} value far too long to fit"', "{% row_toggle %}"),
-        )
+        f"<tr><td>{name.title()}</td><td>{_CUT.format(title.format(name), name)}</td>{_NOTE}</tr>"
+        for name, title in (("untitled", ""), ("titled", ' title="{} value far too long to fit"'))
     )
-    + '<tr><td class="row-gutter">Clamped</td><td><div style="display: -webkit-box; -webkit-box-orient: vertical; '
+    + '<tr><td>Clamped</td><td><div style="display: -webkit-box; -webkit-box-orient: vertical; '
     '-webkit-line-clamp: 1; overflow: hidden; max-width: 80px">clamped value far too long to fit on its one line'
     f"</div></td>{_NOTE}</tr>"
-    + '<tr><td class="row-gutter">Inline</td><td><a href="#" style="display: -webkit-inline-box; -webkit-box-orient: '
+    + '<tr><td>Inline</td><td><a href="#" style="display: -webkit-inline-box; -webkit-box-orient: '
     'vertical; -webkit-line-clamp: 1; overflow: hidden; max-width: 80px">inline value far too long to fit on its one '
-    f"line</a></td>{_NOTE}</tr>"
-    + '<tr><td class="row-gutter">Unmarked</td><td><div style="max-width: 40px; overflow: hidden; '
+    f"line</a></td>{_NOTE}</tr>" + '<tr><td>Unmarked</td><td><div style="max-width: 40px; overflow: hidden; '
     'text-overflow: ellipsis; white-space: nowrap"><span style="display: inline-block">unmarked value far too long '
     f"to fit</span></div></td>{_NOTE}</tr>"
-    + f'<tr><td class="row-gutter">Chip<br><span class="muted"><code>{{{{ "{_CHIP}"|breakable }}}}</code></span></td>'
-    f"<td>Short</td>{_NOTE}</tr>" + "</tbody></table>{% endtable_region %}"
+    + f'<tr><td>Chip<br><span class="muted"><code>{{{{ "{_CHIP}"|breakable }}}}</code></span></td>'
+    f"<td>Short</td>{_NOTE}</tr>"
+    + "</tbody></table>{% endtable_region %}"
+    + '{% table_region "Opening" %}<table class="data-table"><thead><tr>'
+    '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    + f"<tr><td>Opens</td><td>{_CUT.format(_OPENS_TITLE, 'opens')}</td>{_NOTE}</tr>"
+    "</tbody></table>{% endtable_region %}"
 )
 
 # Rows that open, as an event's log draws them: a host name in a column a
@@ -565,9 +567,9 @@ CUT_TABLE = (
 OPEN_ROW_TABLE = """{% load value_tags %}
 {% table_region "Opened" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Object" drop=1 %}{% table_heading "Note" %}</tr></thead><tbody>
-<tr><td class="row-gutter">Updated{% row_toggle %}</td><td>{{ host|breakable }}</td>
+<tr><td>Updated</td><td>{{ host|breakable }}</td>
 <td><span style="display: inline-block; inline-size: 14rem">A note that keeps its line</span></td></tr>
-<tr><td class="row-gutter">Created{% row_toggle %}</td><td>{{ host|breakable }}</td>
+<tr><td>Created</td><td>{{ host|breakable }}</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
@@ -577,11 +579,14 @@ OPEN_ROW_VALUES = {"host": "example-hostname-with-a-long-descriptive-name-01.exa
 # cannot open, and one always cut in a row that can, whose toggle a wide box
 # does not show; tables.js titles each while it is cut and its row is closed.
 TITLED_CUTS = """{% table_region "Titled" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
-<tr data-probe="narrows"><td class="row-gutter">Narrows</td>
+{% table_heading "Name" %}{% table_heading "Value" %}</tr></thead><tbody>
+<tr data-probe="narrows"><td>Narrows</td>
 <td><div style="max-inline-size: 50vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">
 a value that is whole on a wide screen and cut at half of a phone's</div></td></tr>
-<tr data-probe="opens"><td class="row-gutter">Opens{% row_toggle %}</td>
+</tbody></table>{% endtable_region %}
+{% table_region "Opening" %}<table class="data-table"><thead><tr>
+{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
+<tr data-probe="opens"><td>Opens</td>
 <td><div style="max-inline-size: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
 

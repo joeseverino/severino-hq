@@ -361,7 +361,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '{% table_region "Folding" %}<table class="data-table"><thead><tr>'
                 '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>'
                 '{% row_group "Example group" 1 folds="example-fold" %}'
-                '<tr id="example-cut" data-folded="example-fold"><td class="row-gutter">Name{% row_toggle %}</td>'
+                '<tr id="example-cut" data-folded="example-fold"><td>Name</td>'
                 '<td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div>'
                 "</td></tr></tbody></table>{% endtable_region %}"
             ),
@@ -565,7 +565,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             "ask-probe": probe(
                 '{% table_region "Things" %}<table class="data-table"><thead><tr>'
                 '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
-                '<tr><td class="row-gutter">A{% row_toggle %}</td>'
+                "<tr><td>A</td>"
                 '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
                 '<form id="hq-post" method="post" hidden></form>'
                 '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
@@ -1668,7 +1668,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.open("row-actions-probe", NARROWEST)
         self.page.evaluate(SETTLE)
         misfits = self.page.evaluate(TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"])
-        self.assertEqual([misfit.rpartition(" +")[0] for misfit in misfits], ["Unfittable"])
+        # One table, the one that scrolls below: a region draws no landmark, so
+        # the probe names a table by its heading.
+        self.assertEqual(len(misfits), 1, misfits)
         region = "(probe) => getComputedStyle(document.querySelector(`[data-probe=${probe}]`).parentElement).overflowX"
         self.assertEqual(self.page.evaluate(region, "unfittable"), "auto")
         self.assertEqual(self.page.evaluate(region, "actions"), "visible")
