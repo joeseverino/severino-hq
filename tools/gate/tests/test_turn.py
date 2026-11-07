@@ -173,6 +173,20 @@ class HeavyTaskTests(GateTestCase):
             with self.subTest(task=name):
                 self.assertRegex(task["timeout"] or "", r"^\d+[smh]$")
 
+    def test_every_task_that_takes_the_lock_waits_at_the_gate_first(self):
+        """A landing holds the gate (mise run landing), so a heavy task that took the
+        turn without it would start while the landing waits, and could again after
+        each of its own runs. The gate sorts first: mise takes a task's locks in
+        sorted order, so a task waiting at the gate holds no turn."""
+
+        self.assertLess(GATE, LOCK)
+        locking = {name for name in mise_tasks() if LOCK in locks(name)}
+        self.assertGreater(len(locking), 10)
+        self.assertIn("turn", locking)
+        for name in locking:
+            with self.subTest(task=name):
+                self.assertIn(GATE, locks(name))
+
     def test_every_task_that_takes_the_lock_runs_under_the_measurer(self):
         """Each heavy run ends with the line on what its process tree spent
         (tools/lib/measured): a TOML task through its template's shell, a file
@@ -191,6 +205,8 @@ class HeavyTaskTests(GateTestCase):
                     sourced(code(body(task)))
 
 
+# The lock a landing holds (tools/gate/turn.py's GATE, which test_landing holds to this).
+GATE = "gate"
 # What ends a heavy run with the line on what its process tree spent.
 MEASURER = "tools/lib/measured"
 

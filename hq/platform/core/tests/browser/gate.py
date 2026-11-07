@@ -1,6 +1,7 @@
 """The browser gate every real-browser test is built on: one browser, pages served locally, a failure saved."""
 
 import io
+import json
 import mimetypes
 import os
 import pickle
@@ -8,7 +9,9 @@ import re
 import tempfile
 from collections import deque
 from collections.abc import Mapping
-from functools import partial
+from functools import cache, partial
+from hashlib import sha256
+from html import unescape
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast, override
 from unittest import TestResult, mock
@@ -20,6 +23,7 @@ from django.urls import reverse
 from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.core.csp_views import _blocked, _csp_violations, _directive
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.test_runner import browser_failures, stall_watch
@@ -41,12 +45,12 @@ from hq.platform.core.tests.browser.probes.settle import (
     STILL,
     hushed,
 )
-from hq.platform.core.tests.browser.probes.tables import TABLE_LAYOUT
+from hq.platform.core.tests.browser.probes.tables import opened_tables_read
 from hq.platform.core.tests.browser.reading import _in_one_trip, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN, static_file
 from hq.platform.core.tests.browser.shots import shoot_page
-from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes
+from hq.platform.core.tests.browser.survey import AS_FINDINGS, _as_is, geometry_probes, palette_probes, table_probes
 from hq.platform.core.tests.browser.uncaught import Uncaught
 from hq.platform.core.tests.browser.widths import LARGEST, NARROWEST, query_edges, viewport, viewport_queries
 
@@ -70,6 +74,9 @@ def failure_name(params):
 # capture the browser lays the whole page out for, past an action's 5 s; it is
 # given a navigation's 30 s, the failure it shows being already decided.
 _FAILURE_SHOT_WITHIN = 30_000
+# A browser that never comes up fails its class rather than holding the heavy
+# turn for Playwright's own three minutes.
+_LAUNCH_WITHIN = 30_000
 
 # What a running test holds that holds the test itself; the parent has no use
 # for either, and Django sends them as None.
@@ -145,6 +152,18 @@ class _Watched:
         self.result.addSubTest(test, subtest, err)
 
 
+@cache
+def cuts_marked_after():
+    """How long after a resize tables.js measures the tables' cuts again
+    (`markTablesSoon`), in milliseconds, read from the script itself."""
+
+    asset = static_file("js/tables.js")
+    said = re.search(r"setTimeout\(markTables, (\d+)\)", asset[1].decode() if asset else "")
+    if not said:
+        raise AssertionError("tables.js no longer measures cuts on a timer after a resize the way the sweep waits for")
+    return int(said[1])
+
+
 def tab_key(browser):
     """The key that moves focus to every control: Option-Tab in WebKit, as
     Safari has it (plain Tab there skips buttons and links), Tab elsewhere."""
@@ -155,12 +174,17 @@ def tab_key(browser):
 def add_css(page, css):
     """``css`` added to ``page`` after its own sheets, with script on or off.
 
-    Playwright's ``add_style_tag`` waits, with no timeout, for the style's
-    load event on a handler of the page's, which never runs with script off.
+    A constructed sheet, which the page's policy does not govern, where a
+    ``<style>`` (Playwright's ``add_style_tag`` too) is one it refuses.
     """
 
     page.evaluate(
-        "(css) => document.head.append(Object.assign(document.createElement('style'), { textContent: css }))", css
+        """(css) => {
+          const sheet = new CSSStyleSheet();
+          sheet.replaceSync(css);
+          document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+        }""",
+        css,
     )
 
 
@@ -207,6 +231,70 @@ def answered(response):
     return sent(
         response.content.decode(), {name: value for name, value in response.items() if name != "Content-Length"}
     )
+
+
+# HQ's policy takes a style only from a sheet of its own origin, and a page a
+# test puts together is answered under it, so the gate lifts each style
+# attribute such a page writes into a sheet it serves. Each element is named
+# by a data attribute and its declarations are written twice: unlayered, where
+# they outrank every rule of HQ's layered stylesheet as an inline style does,
+# and in a layer named before HQ's, where an !important one outranks HQ's own
+# as an inline one does. A page HQ answered is never lifted: a style it writes
+# is refused, which is the policy's point, and test_rendered holds HQ's markup
+# to writing none.
+_STYLE_ATTRIBUTE = re.compile(r'(<[a-zA-Z][^>]*?)\sstyle="([^"]*)"')
+_HEAD = re.compile(r"<head\b[^>]*>", re.IGNORECASE)
+_DOCTYPE = re.compile(r"<!doctype html>", re.IGNORECASE)
+LIFTED = "/gate-lifted-styles/"
+_LIFTED_SHEETS: dict[str, str] = {}
+
+
+def served_sheet(css):
+    """The address the gate serves ``css`` at, a sheet of the page's own
+    origin, which its policy admits."""
+
+    path = f"{LIFTED}{sha256(css.encode()).hexdigest()[:16]}.css"
+    _LIFTED_SHEETS[path] = css
+    return path
+
+
+@cache
+def lifted(body):
+    """``body`` with its style attributes moved to a sheet ``LIFTED`` serves,
+    linked ahead of every other so its layer is the first one named."""
+
+    declared = []
+
+    def named(match):
+        declared.append(unescape(match[2]))
+        return f'{match[1]} data-gate-style="{len(declared)}"'
+
+    body = _STYLE_ATTRIBUTE.sub(named, body)
+    if not declared:
+        return body
+    rules = "\n".join(f'[data-gate-style="{at}"] {{ {style} }}' for at, style in enumerate(declared, 1))
+    path = served_sheet(f"@layer gate-lifted {{\n{rules}\n}}\n{rules}\n")
+    opening = _HEAD.search(body) or _DOCTYPE.search(body)
+    at = opening.end() if opening else 0
+    return f'{body[:at]}<link rel="stylesheet" href="{path}">{body[at:]}'
+
+
+def policy_reports(body):
+    """Each violation a report to HQ's endpoint names, as the page's path, the
+    directive and what it refused, read as the endpoint reads it."""
+
+    try:
+        violations = _csp_violations(json.loads(body))
+    except ValueError:
+        return [("", "an unreadable report", body[:80] or "nothing")]
+    return [
+        (
+            urlsplit(str(violation.get("document-uri") or violation.get("documentURL") or "")).path,
+            _directive(violation) or "a directive",
+            _blocked(violation) or "inline",
+        )
+        for violation in violations
+    ]
 
 
 # What carries the policy: Django's two headers, and the endpoint core.middleware
@@ -328,7 +416,7 @@ class BrowserGate(SimpleTestCase):
         engine = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
         if engine not in {"chromium", "firefox", "webkit"}:
             raise ValueError("HQ_BROWSER_ENGINE must be chromium, firefox, or webkit.")
-        options: dict[str, object] = {"headless": True}
+        options: dict[str, object] = {"headless": True, "timeout": _LAUNCH_WITHIN}
         if channel := os.environ.get("HQ_BROWSER_CHANNEL"):
             options["channel"] = channel
         cls.browser = getattr(cls.playwright, engine).launch(**options)
@@ -378,7 +466,25 @@ class BrowserGate(SimpleTestCase):
         self.context.route("**/*", self.respond)
         self.page = self.context.new_page()
         self.page.on("console", self.heard)
+        # A report is a ping the browser sends past the routes, so it is heard
+        # as a request rather than answered.
+        self.page.on("request", self.reported)
+        self.page.screenshot = self.shot_by(self.page.screenshot)
         self.uncaught = Uncaught(self.page, self.where_and_width)
+
+    def shot_by(self, screenshot):
+        """``screenshot``, with what the policy refuses while it is taken
+        dropped: WebKit's adds a ``<style>`` of Playwright's own, which a
+        page's policy refuses as it would one of the page's."""
+
+        def shot(*args, **options):
+            kept = len(self.refusals)
+            try:
+                return screenshot(*args, **options)
+            finally:
+                del self.refusals[kept:]
+
+        return shot
 
     def where(self):
         parts = urlsplit(self.page.url)
@@ -411,8 +517,11 @@ class BrowserGate(SimpleTestCase):
         its own, for a page HQ answered, or HQ's policy, for one put together
         by a test."""
 
-        headers = page.headers if isinstance(page, Sent) else {"Content-Type": content_type, **self.policy}
-        route.fulfill(headers=headers, body=str(page))
+        if isinstance(page, Sent):
+            route.fulfill(headers=page.headers, body=str(page))
+            return
+        body = lifted(str(page)) if content_type == "text/html" else str(page)
+        route.fulfill(headers={"Content-Type": content_type, **self.policy}, body=body)
 
     def settle(self):
         """Wait until the page has drawn what it just did and nothing is moving."""
@@ -450,11 +559,26 @@ class BrowserGate(SimpleTestCase):
         if not self.holds(route):
             self.serve(route)
 
+    def reported(self, request):
+        """A report the policy sent HQ, which is a refusal of the page's: no
+        page a reader opens has one to send."""
+
+        if urlsplit(request.url).path != settings.SEVERINO_CSP_REPORT_PATH:
+            return
+        body = request.post_data or ""
+        for page, directive, blocked in policy_reports(body) or [
+            (self.where(), "a report it reads none in", body[:300])
+        ]:
+            self.refusals.append(f"{page}: {settings.SEVERINO_CSP_REPORT_PATH} was sent {directive} refusing {blocked}")
+
     def serve(self, route):
         """What every page asks for, or what this class answers."""
 
-        if (served := self.served.get(urlsplit(route.request.url).path)) is not None:
+        path = urlsplit(route.request.url).path
+        if (served := self.served.get(path)) is not None:
             self.fulfill(route, served)
+        elif (sheet := _LIFTED_SHEETS.get(path)) is not None:
+            route.fulfill(content_type="text/css", body=sheet)
         else:
             self.answer(route)
 
@@ -544,10 +668,13 @@ class BrowserGate(SimpleTestCase):
 
         return self.checked(geometry_probes(path, width))
 
-    def tables_that_do_not_fit_at_any_width(self):
-        """Each table on the loaded page wider than its region at some window
-        width from the narrowest phone up, with the first width it was found
-        at; the page is left at the width it was loaded at.
+    def table_defects_at_every_width(self):
+        """What the table checks (`TABLE_CHECKS`) find on the loaded page at
+        some window width from the narrowest phone up, as it was resized and
+        with every row a reader can open opened, and whether opening them
+        moved what stayed closed, by check, each finding with the first width
+        it was found at; the page is left at the width it was loaded at, its
+        rows closed.
 
         A table's room changes only where the layout around it changes shape
         (`TABLE_LAYOUT`): at an edge of the stylesheet's viewport queries, and
@@ -557,20 +684,38 @@ class BrowserGate(SimpleTestCase):
         first width of each new shape. Within a shape a region grows with the
         window and a table at its narrowest asks no more than it did, so a
         table that fits at the first width of a shape fits at every width of
-        it."""
+        it. Each width is one trip and one page state (`opened_tables_read`)."""
 
         loaded = self.page.viewport_size
         queries = viewport_queries(stylesheet())
-        arg = [SELECTORS["table_scroll"], queries]
-        found: dict[str, str] = {}
+        probes = table_probes()
+        sources, args = zip(*probes.values(), strict=True)
+        script = opened_tables_read(hushed(_in_one_trip(sources)))
+        arg = [
+            [SELECTORS["table_scroll"], queries],
+            cuts_marked_after(),
+            SELECTORS["row_fold"],
+            SELECTORS["row_opener"],
+            SELECTORS["own_records"],
+            list(args),
+        ]
+        # Each finding once, as first found: the same defect at another width
+        # differs only in its measures.
+        found: dict[str, dict[str, str]] = {}
         shapes: dict[int, str] = {}
+
+        def take(check, said, width):
+            kept = found.setdefault(check, {})
+            for line in said:
+                kept.setdefault(re.sub(r"\d+", "#", str(line)), f"{line} at {width}px")
 
         def read(width):
             self.page.set_viewport_size(viewport(width))
-            shape, sizes, misfits = self.page.evaluate(TABLE_LAYOUT, arg)
-            for misfit in misfits:
-                table, _, by = misfit.rpartition(" +")
-                found.setdefault(table, f"+{by} at {width}px")
+            shape, sizes, misfits, outcomes, moved = self.page.evaluate(script, arg)
+            take("tables fit", misfits, width)
+            for check, (returned, value) in zip(probes, outcomes, strict=False):
+                take(check, AS_FINDINGS.get(check, _as_is)(value) if returned else [f"the probe threw: {value}"], width)
+            take("opening rows moves", moved, width)
             shapes[width] = shape
             return sizes
 
@@ -590,7 +735,7 @@ class BrowserGate(SimpleTestCase):
                 between(low, high)
         self.page.set_viewport_size(loaded)
         self.page.evaluate(SETTLE)
-        return found
+        return {check: list(said.values()) for check, said in found.items() if said}
 
     def scheme(self):
         """The palette the system asks the page for."""

@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Run one command in a built image, holding the Docker VM until it ends"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE depends_post=["image:docker stop"]
 #USAGE arg "<command>..." var=#true double_dash="automatic" help="The command and its arguments, run as the image's entrypoint"

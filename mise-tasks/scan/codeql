@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="CodeQL, security-and-quality: no alerts"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 

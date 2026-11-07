@@ -176,12 +176,15 @@ env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "
 # A task that loads the machine takes the heavy turn: mise's task lock
 # `heavy`, one name every checkout and worktree on the machine shares, so two
 # such tasks never share its memory (docs/Development.md, Heavy gates take
-# turns). Its timeout starts once it holds the lock and stops a hung holder:
+# turns). It first passes `gate`, which a landing holds while its gate runs
+# (mise run landing), so no new heavy run starts ahead of the landing; mise
+# takes locks in sorted order, so a task waiting there holds no turn. Its
+# timeout starts once it holds the lock and stops a hung holder:
 # well above the slowest gate (the suite, a browser gate). Its shell is mise's
 # own default run under tools/lib/measured, so the run ends with the line on
 # what it spent.
 [task_templates.heavy]
-lock = "heavy"
+lock = ["gate", "heavy"]
 timeout = "30m"
 shell = "tools/lib/measured sh -o errexit -c"
 
@@ -190,7 +193,7 @@ shell = "tools/lib/measured sh -o errexit -c"
 # task names in `vars.classes`, which mise renders from the extending task's own vars.
 [task_templates.django-browser]
 env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
-lock = "heavy"
+lock = ["gate", "heavy"]
 timeout = "30m"
 shell = "tools/lib/measured sh -o errexit -c"
 depends = [{ task = "setup:browser", args = ["webkit"] }, "setup:lint-tools"]

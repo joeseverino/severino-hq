@@ -3,7 +3,7 @@
 #MISE hide=true
 #MISE extends="django"
 #MISE env={DJANGO_DEBUG=false}
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 
 # DJANGO_DEBUG unset: the settings take the defaults production takes (secure

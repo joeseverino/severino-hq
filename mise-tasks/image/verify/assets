@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="It carries its collected assets, their brotli copies alone and their manifest, readable by the account that serves them"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]

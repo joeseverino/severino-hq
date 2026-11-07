@@ -1,13 +1,23 @@
-"""Whether a run of manage.py test is narrow enough to go ahead without the
-machine's heavy turn (mise's task lock `heavy`), for every task that runs tests
-on labels: `python -m tools.gate.turn [manage.py test arguments...]` exits 0 for
-a narrow run and 1 for a heavy one. What narrow means: docs/Development.md,
-Heavy gates take turns.
+"""The machine's heavy turn (mise's task lock `heavy`): whether a run of
+manage.py test is narrow enough to go ahead without it, and the gate a landing
+closes in front of it.
+
+`python -m tools.gate.turn [manage.py test arguments...]` exits 0 for a narrow
+run and 1 for a heavy one, for every task that runs tests on labels.
+`python -m tools.gate.turn --landing <command...>` runs a landing's command
+(mise-tasks/landing). What narrow means, and how a landing goes first:
+docs/Development.md, Heavy gates take turns.
 """
 
+import fcntl
+import hashlib
 import importlib.util
+import json
 import os
+import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import django
@@ -21,6 +31,13 @@ from hq.platform.core.test_runner import drives_a_browser, tests_in
 # a task that weighs its own run (mise-tasks/turn).
 LOCK = "heavy"
 IN_TURN = ["mise", "run", "turn", "--"]
+# The lock every heavy task takes before the turn, which a landing holds for
+# its command's lifetime. It sorts before LOCK: mise takes a task's locks in
+# sorted order, so a task waiting here holds nothing, and a landing's own heavy
+# tasks, which inherit it, may still add LOCK after it.
+GATE = "gate"
+# How mise says which locks a task holds; a task that inherits one takes it as held.
+HELD = "MISE_TASK_LOCKS"
 
 
 def in_turn(bound: str) -> list[str]:
@@ -32,6 +49,49 @@ def in_turn(bound: str) -> list[str]:
 
     parse = [f"{name}={value}" for name, value in os.environ.items() if name.startswith("usage_")]
     return ["env", f"HQ_TURN_BOUND={bound}", *IN_TURN, "env", *parse]
+
+
+def lock_file(name: str) -> Path:
+    """The file mise flocks for the task lock ``name``: under its state directory,
+    named for the lock's hash (src/task/task_lock.rs, ``LockKey::path``)."""
+
+    state = os.environ.get("MISE_STATE_DIR") or Path(
+        os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state", "mise"
+    )
+    return Path(state, "task-locks", hashlib.sha256(name.encode()).hexdigest()[:16] + ".lock")
+
+
+def land(command: list[str]) -> int:
+    """Run ``command`` with the gate closed to every heavy task outside it, and return its status.
+
+    The command starts at once, its tasks told they hold the gate, and a thread
+    takes it beside them. mise polls a busy lock every second at most; this
+    blocks in flock(2), which the kernel wakes as the holder lets go, so the
+    landing waits behind only the heavy run already in the turn. Its own heavy
+    tasks still take turns among themselves on LOCK."""
+
+    path = lock_file(GATE)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    gate = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    record = path.with_suffix(".json")
+    threading.Thread(target=hold, args=(gate, record), daemon=True).start()
+    held = {*filter(None, os.environ.get(HELD, "").split(",")), GATE}
+    try:
+        return subprocess.run(command, env=os.environ | {HELD: ",".join(sorted(held))}, check=False).returncode
+    except KeyboardInterrupt:
+        return 130
+    finally:
+        # The record goes first, while the lock still keeps the next holder from writing its own.
+        record.unlink(missing_ok=True)
+        os.close(gate)
+
+
+def hold(gate: int, record: Path) -> None:
+    """Take the gate, then say who holds it the way mise's holders do, for the line its waiters print."""
+
+    fcntl.flock(gate, fcntl.LOCK_EX)
+    held_by = {"pid": os.getpid(), "task": "landing", "root": str(Path.cwd()), "started_at": int(time.time())}
+    record.write_text(json.dumps(held_by))
 
 
 def inside() -> bool:
@@ -75,4 +135,6 @@ def narrow(argv: list[str]) -> bool:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--landing"]:
+        sys.exit(land(sys.argv[2:]))
     sys.exit(0 if narrow(sys.argv[1:]) else 1)

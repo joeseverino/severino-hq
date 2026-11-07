@@ -26,7 +26,7 @@ from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
 from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs, takes_the_turn
 from tools.gate.turn import in_turn
-from tools.gate.verdict import Gate, Step, run
+from tools.gate.verdict import ESCAPE, PREFIX, TAIL_SHOWN, TASK, Gate, Step, run
 from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -67,6 +67,8 @@ TASKS: dict[str, tuple[str, ...]] = {
         "tools/pipeline/toolchain_lock.py",
     ),
     "lint:lockfile": ("pyproject.toml", "uv.lock"),
+    # The checks are those built into the Trivy that mise.toml pins.
+    "lint:trivy-config": ("*Dockerfile", "mise.toml", "tools/lint/trivy/*", "mise-tasks/lint/trivy-config"),
     "lint:deploycheck": PYTHON,
     "lint:openapi": (
         "hq/platform/api/hq-api.openapi.json",
@@ -96,8 +98,10 @@ SHELL_READS = (".github/workflows/*", ".github/actions/*")
 # test_fast.py fails on.
 UNSELECTED: dict[str, str] = {
     "lint:audit": "queries the advisory services (uv audit, osv-scanner); left to `mise run check`",
+    "lint:govulncheck": "queries vuln.go.dev for the advisories the controller reaches; left to `mise run check`",
     "lint:codeql-bundle": "fetches the pinned CodeQL action's defaults from GitHub; left to `mise run check`",
     "lint:scorecard": "its Vulnerabilities check queries OSV over an export of the tree; left to `mise run check`",
+    "lint:units": "systemd-analyze is Linux's, so CI's lint job scores the units",
     "lint:patch": "fast's own patch integrity step runs `git diff --check` over the change",
     "lint:source": "fast runs the source-tagged tests among its labels, since a labeled run leaves no tag out",
     "lint:shell:suites": "runs within lint:shell, which fast selects as SHELL",
@@ -240,10 +244,12 @@ def list_shell(root: Path, paths: list[str]) -> list[str]:
 def tasks_command(tasks: tuple[str, ...], parallel: str, *, summary: bool = False) -> list[str]:
     """One run of every task, side by side unless parallelism is ruled out.
 
-    `-c` names every task that failed. The configured keep-order output prints
-    each one whole under its own name; ``summary`` prints a task that passed as
-    one line and one that failed whole. It holds every task of the run until it
-    ends, a heavy one's wait for the turn too, so it is for the light gates.
+    `-c` names every task that failed, once the run ends. The configured
+    keep-order output prints each one whole under its own name; ``summary``
+    prints a task that passed as one line and one that failed whole as it
+    ends, which ``Failing`` tells at once. It holds each task's output until
+    that task ends, a heavy one's wait for the turn too, so it is for the
+    light gates.
     """
 
     jobs = ["--jobs", "1"] if parallel == "1" else []
@@ -527,16 +533,69 @@ def test_command(labels: list[str], parallel: str) -> list[str]:
     return [*in_turn("30m"), sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]
 
 
+# A line mise's summary output prints under a task that did not fail: it
+# passed, or its outputs were up to date. Any other is a failed one's
+# (docs/Development.md, What `fast` runs).
+SETTLED = re.compile(r"^\[[^\]\s]+\] (?:passed in \S+|sources up-to-date, skipping)\s*$")
+
+
+class Failing:
+    """Tells each light gate that failed beside the tests as it fails, with its
+    rerun, so it is fixed while the tests go on. Called as the step's output
+    pauses, on the thread that writes ``held``."""
+
+    def __init__(self, held: BinaryIO) -> None:
+        self.held = held
+        self.read_to = 0
+        self.pending = b""
+        self.said: dict[str, list[str]] = {}
+        self.told: set[str] = set()
+
+    def read_from(self, offset: int) -> None:
+        """Read the step's output from ``offset`` on, past the label it is held under."""
+
+        self.read_to = offset
+
+    def __call__(self) -> None:
+        end = self.held.tell()
+        self.held.seek(self.read_to)
+        *lines, self.pending = (self.pending + self.held.read(end - self.read_to)).split(b"\n")
+        self.held.seek(end)
+        self.read_to = end
+        for raw in lines:
+            line = ESCAPE.sub("", raw.decode(errors="replace"))
+            if (named := PREFIX.match(line)) and not SETTLED.match(line):
+                said = self.said.setdefault(named[1], [])
+                if not TASK.match(line):
+                    said.append(line[named.end() :])
+        for task, said in self.said.items():
+            if task not in self.told:
+                self.told.add(task)
+                self.tell(task, said)
+
+    @staticmethod
+    def tell(task: str, said: list[str]) -> None:
+        ended = [" It ended on:", *(f"\n[fast]   {line}" for line in said[-TAIL_SHOWN:])] if said else []
+        # One write, so a line of the tests' output never lands inside it.
+        sys.stdout.write(
+            f"[fast] {task} failed beside the tests, which go on.{''.join(ended)}\n"
+            f"[fast] rerun it now: mise run {task}\n"
+        )
+        sys.stdout.flush()
+
+
 # Each step running beside the main thread, by the thread it runs on.
 BESIDE: dict[int, Beside] = {}
 
 
 class Beside:
     """A step started on a thread of its own so the steps after it run while it
-    does, its output held and printed whole, under its label, once collected."""
+    does, its output held and printed whole, under its label, once collected,
+    and each failure in it told by ``failing`` as it happens."""
 
-    def __init__(self, label: str, cmd: list[str], output: BinaryIO) -> None:
+    def __init__(self, label: str, cmd: list[str], output: BinaryIO, failing: Failing | None = None) -> None:
         self.output = output
+        self.failing = failing
         self.called = threading.Event()
         self.result: Step | None = None
         self.error: BaseException | None = None
@@ -564,7 +623,8 @@ class Beside:
         sys.stdout.flush()
         if self.error:
             raise self.error
-        assert self.result
+        if self.result is None:
+            raise RuntimeError("the step ended with neither a result nor an error")
         return self.result
 
 
@@ -572,7 +632,9 @@ def step(label: str, cmd: list[str]) -> Step:
     if beside := BESIDE.get(threading.get_ident()):
         beside.called.set()
         beside.output.write(f"[fast] {label}\n".encode())
-        return run(label, cmd, to=beside.output)
+        if beside.failing:
+            beside.failing.read_from(beside.output.tell())
+        return run(label, cmd, to=beside.output, paused=beside.failing)
     print(f"[fast] {label}", flush=True)
     return run(label, cmd)
 
@@ -661,10 +723,11 @@ def main(asked: Usage) -> int:
         print(f"[fast] the quick gates that read what changed: {' '.join(tasks)}")
     else:
         print("[fast] no quick gate reads what changed")
-    # The light gates run beside the tests, their output shown after the tests'.
+    # The light gates run beside the tests, their output shown after the tests'
+    # and each failure told as it happens.
     with tempfile.TemporaryFile() as held:
         quick = tasks_command(light, parallel, summary=True)
-        beside = Beside("quick gates, beside the tests", quick, held) if light else None
+        beside = Beside("quick gates, beside the tests", quick, held, Failing(held)) if light else None
         tests = step("tests", test_command(labels, parallel))
         steps = [beside.collect(), tests] if beside else [tests]
     if after:

@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Build the production image as CI builds it, from this checkout's working tree as it stands (a base is measured with perf --base); with IMAGE handing one over, only a daemon for its checks"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends_post=["image:docker stop"]

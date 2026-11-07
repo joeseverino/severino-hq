@@ -16,13 +16,14 @@ import contextlib
 import json
 import os
 import re
+import select
 import shlex
 import subprocess
 import sys
 import tempfile
 import time
 from collections import deque
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import BinaryIO
@@ -78,6 +79,10 @@ ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 UNIMPORTED = re.compile(r"^ImportError: Failed to import test module: (\S+)")
 # A traceback kept in the file stops here.
 KEPT_LINES = 60
+# How long a command's output stays quiet before it counts as paused, for a
+# reader told of each pause: mise writes a failed task's held output a line at
+# a time, so a shorter quiet can fall between two of its lines.
+PAUSE = 0.2
 # A failed task's last lines kept in the file, and shown above the verdict, so
 # why it failed is read there rather than by running it again.
 TAIL_KEPT = 20
@@ -263,8 +268,9 @@ def hand_on(tests: list[FailedTest]) -> None:
             json.dump([asdict(failed) for failed in tests], record)
 
 
-def pass_through(output: int, step: Step, to: BinaryIO | None = None) -> None:
-    """Copy the command's output to ``to``, ours by default, byte for byte, each line read on the way past."""
+def pass_through(output: int, step: Step, to: BinaryIO | None = None, paused: Callable[[], None] | None = None) -> None:
+    """Copy the command's output to ``to``, ours by default, byte for byte, each line read on the way past,
+    and call ``paused`` each time the output pauses for PAUSE and once it ends."""
 
     to = to or sys.stdout.buffer
     pending = b""
@@ -275,11 +281,19 @@ def pass_through(output: int, step: Step, to: BinaryIO | None = None) -> None:
         *lines, pending = (pending + chunk).split(b"\n")
         for line in lines:
             step.read(line.decode(errors="replace"))
+        if paused and not select.select([output], [], [], PAUSE)[0]:
+            paused()
     step.read(pending.decode(errors="replace"))
+    if paused:
+        paused()
 
 
-def run(label: str, cmd: list[str], cwd: Path = ROOT, to: BinaryIO | None = None) -> Step:
-    """Run a command, its output passed through to ``to`` (ours by default), and gather what failed in it."""
+def run(
+    label: str, cmd: list[str], cwd: Path = ROOT, to: BinaryIO | None = None, paused: Callable[[], None] | None = None
+) -> Step:
+    """Run a command, its output passed through to ``to`` (ours by default), and gather what failed in it.
+
+    ``paused`` is called whenever the output pauses, and once it ends (``pass_through``)."""
 
     step = Step(label, command=cmd)
     started = time.monotonic()
@@ -288,9 +302,10 @@ def run(label: str, cmd: list[str], cwd: Path = ROOT, to: BinaryIO | None = None
         # inside a task prints it only when asked.
         env = {**os.environ, "PYTHONUNBUFFERED": "1", REPORTS: reports, "MISE_TASK_TIMINGS": "1"}
         with subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
-            assert proc.stdout
+            if proc.stdout is None:
+                raise RuntimeError("the gate was started without a pipe from its output")
             try:
-                pass_through(proc.stdout.fileno(), step, to)
+                pass_through(proc.stdout.fileno(), step, to, paused)
             except KeyboardInterrupt:
                 # The terminal's interrupt reached the command too.
                 proc.wait()

@@ -11,10 +11,8 @@ import subprocess
 import sys
 import tempfile
 from collections.abc import Callable
-from contextlib import ExitStack
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 from django.test import tag
@@ -28,6 +26,7 @@ from hq.platform.core.tests.task import RefError, Usage, names, trusted_mise
 from tests.mise_tasks import mise_tasks, takes_the_turn
 from tools.gate import fast as fast_gate, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase
+from tools.gate.tests.fast_runs import run_main
 from tools.gate.turn import IN_TURN
 from tools.gate.verdict import FailedTest
 
@@ -57,32 +56,6 @@ class Recorder:
         self.calls.append((label, cmd))
         print("step output", flush=True)
         return gate_verdict.Step(label)
-
-
-def run_main(
-    changed: tuple[str, ...] = (), selected: tuple[str, ...] = (), step: Any = None, **fakes: Any
-) -> tuple[int, list[str]]:
-    """fast's run on a change to ``changed``, its quick gates ``selected``, each step through ``step``
-    when given: its exit code and printed lines. The gate judged no one tree unless ``judged`` is faked,
-    so no run records a pass in this repository."""
-
-    fakes = {
-        "merge_base": "0" * 40,
-        "changed_paths": (list(changed), []),
-        "selected_tasks": selected,
-        **fakes,
-    }
-    judged = fakes.pop("judged", None)
-    out = io.TextIOWrapper(io.BytesIO(), write_through=True)
-    with ExitStack() as stack:
-        for name, value in fakes.items():
-            stack.enter_context(patch.object(fast_gate, name, return_value=value))
-        stack.enter_context(patch.object(fast_gate.Gate, "judged", return_value=judged))
-        if step is not None:
-            stack.enter_context(patch.object(fast_gate, "step", side_effect=step))
-        stack.enter_context(patch("sys.stdout", new=out))
-        code = fast_gate.main(Usage({}))
-    return code, out.buffer.getvalue().decode().splitlines()
 
 
 @tag("source", "tree")
@@ -809,75 +782,6 @@ class FastGateExtensionSuiteTests(GateTestCase):
         said = [line for line in out.splitlines() if "skipped" in line]
         self.assertEqual(len(said), 1)
         self.assertIn("mise run setup:extensions", said[0])
-
-
-# Each side opens the pipe the other holds: opening a FIFO waits until both
-# ends are open, so neither finishes unless the two run at once. The alarm
-# bounds a run where they never meet.
-MEETS = """
-import signal, sys
-signal.alarm(20)
-side, pipe, exit_code = sys.argv[1:]
-print(f"{side} starts", flush=True)
-if side == "tests":
-    with open(pipe, "w") as end:
-        end.write("met")
-else:
-    with open(pipe) as end:
-        end.read()
-print(f"{side} ends", flush=True)
-sys.exit(int(exit_code))
-"""
-
-
-@tag("source", "tree")
-class FastOverlapTests(GateTestCase):
-    """fast runs its light quick gates beside the tests."""
-
-    def run_fast(self, quick_exit: int = 0, tests_exit: int = 0) -> tuple[int, list[str]]:
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        script = Path(folder.name, "meet.py")
-        script.write_text(MEETS)
-        os.mkfifo(script.with_name("pipe"))
-
-        def meets(side: str, exit_code: int) -> list[str]:
-            return [sys.executable, str(script), side, str(script.with_name("pipe")), str(exit_code)]
-
-        # The patch integrity step runs for real, against a base that resolves.
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True)
-        return run_main(
-            selected=("example:quick",),
-            merge_base=head.stdout.strip(),
-            affected=(set(), set()),
-            test_labels=([], 0),
-            turn_takers=(),
-            tasks_command=meets("quick", quick_exit),
-            test_command=meets("tests", tests_exit),
-        )
-
-    def test_the_light_quick_gates_run_while_the_tests_do_each_output_whole_under_its_label(self):
-        # Each side ends only once the other has opened its end.
-        _, printed = self.run_fast()
-        labels = set()
-        for side in ("tests", "quick"):
-            with self.subTest(side=side):
-                starts = printed.index(f"{side} starts")
-                self.assertEqual(printed[starts + 1], f"{side} ends", "\n".join(printed))
-                self.assertTrue(printed[starts - 1].startswith("[fast] "), printed[starts - 1])
-                labels.add(printed[starts - 1])
-        self.assertEqual(len(labels), 2)
-
-    def test_the_verdict_names_every_failed_step_and_its_rerun(self):
-        code, printed = self.run_fast(quick_exit=1, tests_exit=1)
-        self.assertEqual(code, 1)
-        named, _, rerun = printed[-1].partition("; rerun: ")
-        self.assertIn("FAILED", named)
-        for side in ("tests", "quick"):
-            with self.subTest(side=side):
-                label = printed[printed.index(f"{side} starts") - 1].removeprefix("[fast] ")
-                self.assertIn(label, named)
-                self.assertIn(f"meet.py {side}", rerun)
 
 
 @tag("source")

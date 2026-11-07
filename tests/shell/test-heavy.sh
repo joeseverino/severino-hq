@@ -304,7 +304,7 @@ rm -f "${RAN}" "${STARTS}"
 MISE_TASK_LOCK_TIMEOUT=5s mise -C "${main}" run weighed "two words" >"${work}/out" 2>&1 ||
     fail "a heavy run of a task that weighs its own failed after $(cat "${STARTS}") starts"
 one_line "${work}/out" "a heavy run of a task that weighs its own"
-[ "$(cat "${RAN}")" = heavy ] || fail "a heavy run's body ran outside the turn, or not once: $(cat "${RAN}")"
+[ "$(cat "${RAN}")" = gate,heavy ] || fail "a heavy run's body ran outside the turn, or not once: $(cat "${RAN}")"
 [ "$(cat "${WORD}")" = "two words" ] || fail "a heavy run's body lost the arguments it was given: '$(cat "${WORD}")'"
 # The heavy run is stopped at the bound its task sets, not the turn task's;
 # the whole run's own limit only ends a run that bound did not stop.

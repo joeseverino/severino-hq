@@ -1,0 +1,16 @@
+#!/bin/sh
+#MISE description="Run a landing's gate ahead of every other checkout's heavy runs: mise run landing -- <command>"
+#MISE output="interleave"
+#MISE quiet=true
+#MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
+#USAGE arg "<command>..." var=#true double_dash="required" help="The command and its arguments, such as mise run fast"
+
+# Every heavy task takes the gate lock before the heavy turn; this holds the
+# gate for the command's lifetime, so no other checkout starts a heavy run
+# until the landing ends, and the landing waits behind at most the run already
+# in the turn. The command's own heavy tasks inherit the gate and take turns
+# on `heavy` among themselves (tools/gate/turn.py, land).
+set -eu
+# mise hands the words over shell-quoted, one word each.
+eval "set -- ${usage_command:?}"
+exec uv run --locked python -m tools.gate.turn --landing "$@"
