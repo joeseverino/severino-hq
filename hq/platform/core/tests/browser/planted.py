@@ -68,6 +68,11 @@ PLANTS = {
         '<div style="position: relative"><p style="position: absolute; inset: 0; margin: 0">Example one</p>'
         '<p style="margin: 0">Example two</p></div>'
     ),
+    # A heading and its status as items of a flex row, the space between them dropped.
+    "touching text": Plant('<div style="display: flex"><h2>Example</h2> <span>Example status</span></div>'),
+    "chips off their paint": Plant(
+        '<p><code style="display: inline-block; inline-size: 4ch; block-size: 1lh; background: #eee">Example overrun</code></p>'
+    ),
     "tables": Plant(_TABLE.format("Example").replace('style="', 'style="display: block; ', 1)),
     "tables fit": Plant(
         '<div class="table-scroll" style="inline-size: 10rem"><table class="data-table" style="min-inline-size: 20rem">'
@@ -93,6 +98,11 @@ PLANTS = {
     "small targets": Plant(
         '<div><a href="#" style="display: inline-block; font-size: 8px; line-height: 8px">x</a>'
         '<a href="#" style="display: inline-block; font-size: 8px; line-height: 8px">y</a></div>'
+    ),
+    # A control flush with the edge of a box that clips, its ring drawn outside it.
+    "cut rings": Plant(
+        '<div style="overflow: clip"><a href="#" style="display: block; outline: 2px solid; outline-offset: 2px">'
+        "Example</a></div>"
     ),
     # A clamp the box's display leaves inert.
     "past the clamp": Plant(f'<p style="display: block; -webkit-line-clamp: 1; inline-size: 8rem">{_LINES}</p>'),
@@ -155,6 +165,21 @@ PLANTS = {
         '<div><p style="margin: 0">Example</p><div class="section-head" style="margin-block-start: 0">'
         "<h2>Example</h2></div><p>Example</p></div>"
     ),
+    # What sits beside a short heading held narrower than its one line.
+    "section asides": Plant(
+        '<header class="section-head"><h2>Example</h2>'
+        '<div style="flex: none; inline-size: 4rem">Example aside words</div></header>'
+    ),
+    # A filled block in a section's frame, held in the frame's padding.
+    "inset in the frame": Plant('{% section "Example" %}<div style="background: #eee">Example</div>{% endsection %}'),
+    # Two sections side by side, one head held taller by what stands beside
+    # its heading than any control is.
+    "frames in a row": Plant(
+        '<div style="display: flex; gap: 1rem">'
+        '{% section "Example one" %}<p>Example</p>{% aside %}<span style="display: inline-block; block-size: 4rem">'
+        "Example</span>{% endsection %}"
+        '{% section "Example two" %}<p>Example</p>{% endsection %}</div>'
+    ),
     # A select left to the browser's own arrow.
     "select arrows": Plant(
         '<select aria-label="Example" style="appearance: auto; background-image: none"><option>Example</option></select>'
@@ -165,6 +190,8 @@ PLANTS = {
     ),
     # A link alone on its line, underlined at rest.
     "links at rest": Plant('<div><a href="#" style="text-decoration: underline">Example</a></div>'),
+    # A link whose line runs under the comma after its name.
+    "lined past the name": Plant('<p>Runs on <a href="#">example-host,</a> container example.</p>'),
     "dialogs": Plant('{% include "partials/_modal.html" with id="orphan" title="Orphan" %}'),
     # A list of names wrapping beside another pair of a four-column list.
     "lists of facts": Plant(
@@ -175,6 +202,14 @@ PLANTS = {
     # A folded section whose steps sit bare on the page, closed as most are.
     "bare folds": Plant(
         '<details class="section-fold"><summary><h2>Example</h2></summary><p>Example step</p></details>'
+    ),
+    # A card's heading dressed as a kicker.
+    "headings in capitals": Plant('<div class="card"><h2 style="text-transform: uppercase">Example</h2></div>'),
+    # A cell's Change link set in the line of the name before it.
+    "quiet links in the line": Plant(
+        _TABLE.format(
+            '<a href="/example/">Example</a> <a class="subtle-link" href="/example/" style="display: inline">Change</a>'
+        )
     ),
     "gutter": Plant('<div style="inline-size: calc(100% + 2rem)">Example</div>'),
     # A box cut to four lines that scrolls the rest, with no cap that says so.
@@ -212,6 +247,17 @@ PLANTS = {
 
 _BARE = "planted/bare"
 
+# A style a page a test puts together writes, against a rule of HQ's that
+# names its element more closely, and against one of HQ's !important ones:
+# the open row's lift of every cut.
+_LIFTED = "planted/lifted"
+_OUTRANKED = (
+    '<div class="table-scroll"><table class="data-table"><tbody><tr class="is-expanded">'
+    '<td id="example-specific" style="text-align: right; padding: 7px">'
+    '<span id="example-important" style="display: block; overflow: hidden !important">Example</span>'
+    "</td></tr></tbody></table></div>"
+)
+
 
 def _said(finding):
     """A finding as a value a set holds: the audit's are dicts."""
@@ -231,7 +277,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
     @override
     def render(cls):
         pages = {page_of(check): probe(plant.markup, **plant.values) for check, plant in PLANTS.items()}
-        return {**pages, _BARE: probe("")}
+        return {**pages, _BARE: probe(""), _LIFTED: probe(_OUTRANKED)}
 
     def found(self, name, plant):
         self.open(name, WIDE)
@@ -266,3 +312,16 @@ class PlantedBrowserTests(LayoutBrowserTests):
     @with_script
     def test_each_check_finds_its_plant_with_script_on(self):
         self.assert_each_found(scripted=True)
+
+    def test_a_style_a_test_writes_outranks_hq_s_rules_as_written_inline(self):
+        """The gate serves a test's styles from a sheet, the only kind the
+        policy admits, and they still win where an inline style would."""
+
+        self.open(_LIFTED, WIDE)
+        drawn = self.page.evaluate(
+            """() => {
+              const [cell, span] = ['example-specific', 'example-important'].map((id) => getComputedStyle(document.getElementById(id)));
+              return [cell.textAlign, cell.paddingTop, span.overflow];
+            }"""
+        )
+        self.assertEqual(drawn, ["right", "7px", "hidden"])

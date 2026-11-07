@@ -44,7 +44,7 @@
 .notice-page { max-width: 44ch; margin: 12vh auto 0; text-align: center; }
 .notice-code {
   margin: 0 0 var(--space-3); font-size: var(--text-xs); font-weight: 650; letter-spacing: .1em;
-  text-transform: uppercase; color: var(--muted-2); font-feature-settings: "tnum";
+  color: var(--muted-2); font-feature-settings: "tnum";
 }
 .notice-page h1 { margin: 0 0 var(--space-5); font-size: var(--text-4xl); letter-spacing: -.02em; }
 .notice-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
@@ -136,7 +136,6 @@
    tabs for free. Each radio sits in its tab, hidden from sight but not from
    the accessibility tree, which is what keeps it focusable; the tab draws its
    state through `:has()`. */
-.chart-tabs { padding-top: var(--space-6); }
 .chart-tablist { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-5); }
 .chart-tab-input { position: absolute; inset: 0; margin: 0; opacity: 0; pointer-events: none; }
 .chart-tab {
@@ -156,7 +155,7 @@
   border-color: var(--ink-2);
   color: var(--ink);
 }
-.chart-tab:has(> .chart-tab-input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chart-tab:has(> .chart-tab-input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
 .chart-panel { display: none; }
 /* The nth panel belongs to the nth tab. Written out rather than generated:
    the tab count is small, and numbered classes say exactly which panel is
@@ -165,17 +164,15 @@
 .chart-tabs:has(.chart-tab:nth-child(2) > .chart-tab-input:checked) .chart-panel-2,
 .chart-tabs:has(.chart-tab:nth-child(3) > .chart-tab-input:checked) .chart-panel-3,
 .chart-tabs:has(.chart-tab:nth-child(4) > .chart-tab-input:checked) .chart-panel-4 { display: block; }
-/* A chart inside a tab panel already sits in a card, so it must not draw a
-   second border and a second block of padding inside the first. */
-.chart-panel .chart-card { border: 0; padding: 0; margin: 0; box-shadow: none; background: none; }
 
-/* What a reading was worth, in the outcome's own units. Colored by whether it
-   helped, with the sign and the number carrying the meaning: the color is
-   never the only thing saying which way it went. */
-.worth { font-variant-numeric: tabular-nums; }
-.worth-good { color: var(--ok); }
-.worth-attention { color: var(--warn); }
-.worth-neutral { color: var(--ink-2); }
+/* A status drawn as its words alone (`{% status ... pill=False %}`): a figure
+   colored by which way it went, with the sign and the number carrying the
+   meaning, so the color is never the only thing saying it. */
+.toned { font-variant-numeric: tabular-nums; }
+.toned-good { color: var(--ok); }
+.toned-attention { color: var(--warn); }
+.toned-serious { color: var(--danger); }
+.toned-neutral { color: var(--ink-2); }
 
 /* A finding stated once, with its arithmetic underneath. The claim is what
    gets read; the numbers are what make it checkable. */
@@ -211,48 +208,53 @@
 /* Work that outlives its request, reporting where it has got to. */
 .job-progress { margin: 0 0 var(--stack-gap); }
 .job-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-6); }
-.job-state { color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: .05em; }
-/* The track. `overflow: hidden` so the fill's corners are the track's. */
+.job-state { color: var(--muted); font-size: var(--text-xs); }
+/* A `<progress>`: the browser draws the fill from its value, which the poller
+   moves, so no width is written. The fill takes `color`, so a state recolors
+   one property. `overflow: hidden` so the fill's corners are the track's. */
 .job-bar {
-  position: relative;
+  appearance: none;
+  display: block;
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the track's corners clip its fill, which holds no text */
   overflow: hidden;
+  inline-size: 100%;
   block-size: 6px;
   margin: var(--space-5) 0 var(--space-4);
+  border: 0;
   border-radius: 999px;
+  color: var(--accent);
   background: var(--surface-2);
 }
-/* Filled to `--at`, set by the poller. Transitioned so a jump from 10% to
-   60% between polls reads as progress rather than a glitch. */
-.job-bar i {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  inline-size: var(--at, 0%);
-  border-radius: inherit;
-  background: var(--accent);
-  transition: inline-size .4s ease;
-}
-/* Work that cannot say how far along it is: a travelling band rather than a
-   bar sitting at a number nobody computed. */
-.job-bar-unknown i {
-  inline-size: 30%;
+.job-bar::-webkit-progress-bar { background: transparent; }
+/* Transitioned so a jump from 10% to 60% between polls reads as progress
+   rather than a glitch. */
+.job-bar::-webkit-progress-value { border-radius: inherit; background: currentcolor; transition: inline-size .4s ease; }
+.job-bar::-moz-progress-bar { border-radius: inherit; background: currentcolor; }
+/* Work that cannot say how far along it is has no value: a travelling band
+   rather than a bar sitting at a number nobody computed. The band is the
+   track's own background, so no engine's indeterminate drawing shows. */
+.job-bar:indeterminate {
+  background: linear-gradient(currentcolor, currentcolor) no-repeat var(--surface-2);
+  background-size: 30% 100%;
   animation: job-sweep 1.4s ease-in-out infinite;
 }
+.job-bar:indeterminate::-webkit-progress-value { background: transparent; }
+.job-bar:indeterminate::-moz-progress-bar { background: transparent; }
+/* The band is 30% of the track, so -43% and 143% start and end it just
+   outside each edge. */
 @keyframes job-sweep {
-  0% { inset-inline-start: -30%; }
-  100% { inset-inline-start: 100%; }
+  0% { background-position: -43% 0; }
+  100% { background-position: 143% 0; }
 }
 /* Its line is held while the work has nothing to say, so the panel keeps its
    height as the note comes and goes. */
 .job-note { min-block-size: 1lh; margin: 0; color: var(--muted); font-size: var(--text-sm); }
-.job-progress[data-state="failed"] .job-bar i,
-.job-progress[data-state="lost"] .job-bar i { background: var(--danger); }
-.job-progress[data-state="succeeded"] .job-bar i { background: var(--ok, var(--accent)); }
+.job-progress:is([data-state="failed"], [data-state="lost"]) .job-bar { color: var(--danger); }
+.job-progress[data-state="succeeded"] .job-bar { color: var(--ok, var(--accent)); }
 /* Reduced motion: the sweep is decoration. The bar still fills. */
 @media (prefers-reduced-motion: reduce) {
-  .job-bar-unknown i { animation: none; inline-size: 100%; opacity: .35; }
-  .job-bar i { transition: none; }
+  .job-bar:indeterminate { animation: none; background: color-mix(in srgb, currentcolor 35%, var(--surface-2)); }
+  .job-bar::-webkit-progress-value { transition: none; }
   .page-nav-list a { transition: none; }
 }
 
@@ -277,7 +279,7 @@
      search box cannot be typed into, buttons cannot be pressed. */
   .site-header, .primary-nav, .global-search, .user-menu, .user-menu-panel,
   .page-nav,
-  .table-filter-menu, .table-selection, .section-foot,
+  .table-filter-menu, .table-selection,
   .btn, button, .job-progress, .page-actions, form,
   /* `.pill` in a page head is a link ("Markdown", "Care →"). Status pills
      inside a table are content and are kept. */
@@ -287,7 +289,7 @@
 
   /* Cards become ruled sections: backgrounds are dropped, so the separation
      has to be drawn in ink rather than in a tint. */
-  .card, figure.chart-card, .two-col > section, .two-col > div {
+  .card, .two-col > section:not(.section), .two-col > div {
     background: none;
     border: 1px solid var(--print-ink);
     box-shadow: none;
@@ -300,34 +302,14 @@
      avoid breaking: nested elements that each refuse to split are how a card
      starts on one page, its table jumps to the next, and the card's opening
      border is left behind as an empty rectangle. Rows still hold together. */
-  .card, figure.chart-card, .section-head, tr { break-inside: avoid; }
+  .card, .section-head, tr { break-inside: avoid; }
   h1, h2, h3 { break-after: avoid; }
 
-  /* Two across on paper, where the screen fits three: A4 gives about 186mm
-     between the margins, so a pair is ~90mm each: close to the width these
-     are legible at, and six measures in three rows rather than six pages. */
-  /* Charts only. Two five-column tables at half width lose their last
-     columns off the edge of the paper. Selected by what the row contains, so
-     it cannot be applied to a row of tables by accident. */
-  /* Inline-block columns, not a grid: Chromium fragments grid items across
-     page breaks badly, printing the card as an empty box with no chart in it.
-     49% rather than 50% because inline-block boxes are separated by the
-     whitespace between the tags. */
-  .two-col:has(> .chart-card) { display: block; font-size: 0; }
-  .two-col:has(> .chart-card) > .chart-card {
-    display: inline-block;
-    width: 49%;
-    vertical-align: top;
-    font-size: 10.5pt;
-    margin: 0 0 8pt;
-  }
-  .two-col:has(> .chart-card) > .chart-card:nth-child(odd) { margin-right: 1.5%; }
-  /* Everything else stacks and keeps full width, which is how a wide table
+  /* A pair stacks and keeps full width on paper, which is how a wide table
      survives the margins. */
-  .two-col:not(:has(> .chart-card)) { display: block; }
-  .two-col:not(:has(> .chart-card)) > * { margin-bottom: 8pt; }
+  .two-col { display: block; }
+  .two-col > * { margin-bottom: 8pt; }
   .chart-frame, .line-chart, .bar-chart { max-width: none !important; }
-  .chart-card { margin-bottom: 0; }
 
   /* These charts use color to separate a declared measure from context; on
      paper that distinction lives in the caption instead and every line is
@@ -352,7 +334,7 @@
   /* Secondary grays (dates, reading counts, chart captions) recede on a
      backlit display and disappear on paper. On paper it is all one ink. */
   .muted, .lede, p, td, th, li, span, small, figcaption, .count,
-  .page-lede, .chart-card figcaption p,
+  .page-lede,
   /* Headings too: a muted gray reads as hierarchy on screen and as faded
      toner on paper. */
   h1, h2, h3, .section-head h2, .page-head h1 { color: var(--print-ink) !important; }

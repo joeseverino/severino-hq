@@ -677,7 +677,7 @@ class HoldingFilterTests(SimpleTestCase):
     def test_a_mark_ends_the_last_words_innermost_box(self):
         printed = breakable("example-connection-with-a-long-name", ".")
 
-        self.assertRegex(printed, r'name<span class="mark" aria-hidden="true">\.</span></span>(</span>)*$')
+        self.assertRegex(printed, r'name<span class="mark"[^>]*>\.</span></span>(</span>)*$')
 
     def test_a_link_is_named_without_its_mark(self):
         link = EntityLink(kind_label="Service", label="example.com", url="/services/example.com/")

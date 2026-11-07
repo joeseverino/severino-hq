@@ -169,6 +169,59 @@ SELECT_ARROWS = """([dropdowns, vendored]) => {
     });
 }"""
 
+# A link's underline runs under its name alone. What a link draws in its
+# line (its shown text and the content of every pseudo-element laid out in
+# it) never ends in a sentence's mark (`breakable`'s, or a comma, semicolon or
+# colon, or a period after a one-word name) nor begins or ends with a
+# separator, which belong to the sentence or list around it; and a tag (a
+# status pill) is never set inside a link it is not itself, since a link laid
+# out as a box draws its line under every box within it. Every link whether or
+# not it is underlined at rest, since hover underlines it, but a card: a link
+# holding a block of its own, stacked rather than in its row, lays out
+# paragraphs, whose own sentences end it.
+LINED_PAST_THE_NAME = """([links, vendored, tag, mark]) => {
+  const MARK = /[,;:]$|^\\S+\\.$/u;
+  const BLOCK = /^(block|flex|grid|table|list-item|flow-root)$/;
+  // A box laid out in a row with its siblings (a flex item of a row) is still
+  // a part of the link's one line.
+  const inRow = (el) => {
+    const style = getComputedStyle(el.parentElement);
+    return /flex/.test(style.display) && style.flexDirection.startsWith('row');
+  };
+  const SEPARATOR = /^[·•|]|[·•|]$/u;
+  const quoted = (content) => (content.match(/^"((?:[^"\\\\]|\\\\.)*)"/) || [null, ''])[1];
+  const inFlow = (style) => style.display !== 'none' && style.visibility === 'visible'
+    && !['absolute', 'fixed'].includes(style.position) && style.float === 'none';
+  const pseudo = (el, which) => {
+    const style = getComputedStyle(el, which);
+    return inFlow(style) ? quoted(style.content) : '';
+  };
+  const drawn = (el) => {
+    if (getComputedStyle(el).display === 'none') return '';
+    let text = pseudo(el, '::before');
+    for (const node of el.childNodes) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        if (getComputedStyle(node.parentElement).visibility === 'visible') text += node.textContent;
+      } else if (node.nodeType === Node.ELEMENT_NODE) text += drawn(node);
+    }
+    return text + pseudo(el, '::after');
+  };
+  const found = [];
+  for (const link of document.querySelectorAll(links)) {
+    if ((vendored && link.closest(vendored)) || !link.getClientRects().length) continue;
+    if ([...link.querySelectorAll('*')].some((el) => BLOCK.test(getComputedStyle(el).display) && !inRow(el))) continue;
+    const line = drawn(link).replace(/[\\s\\u200b\\u2060]+/gu, ' ').trim();
+    if (!line) continue;
+    const name = line.slice(0, 60);
+    const shown = [...link.querySelectorAll(mark)].some((el) => getComputedStyle(el).visibility === 'visible');
+    if (shown || MARK.test(line)) found.push(`link "${name}" draws its sentence's mark in its line`);
+    if (SEPARATOR.test(line)) found.push(`link "${name}" draws a separator in its line`);
+    const inner = [...link.querySelectorAll(tag)].find((el) => el.getClientRects().length);
+    if (inner) found.push(`link "${name}" holds the tag "${inner.textContent.trim().slice(0, 30)}"`);
+  }
+  return found;
+}"""
+
 # A link that draws an underline draws it under all of its words. A line a
 # link draws never reaches into a box of its own inside it (an inline-block
 # part of a name), so each word set in one is read from the nearest such box

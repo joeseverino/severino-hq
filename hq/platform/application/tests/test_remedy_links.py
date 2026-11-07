@@ -211,7 +211,7 @@ class EveryEmittedRemedyOpensReadyTests(TestCase):
 
         # The fixture is only worth something while it raises these.
         self.assertIn("Change the internal record", labels)
-        self.assertIn("Put an access list in front of example-shop-proxy", labels)
+        self.assertIn("Add an access list", labels)
         self.assertIn("Keep the live version", labels)
         self.assertIn("Remove empty groups", labels)
         self.assertIn(capability_words(UPDATE_CAPABILITY), labels)

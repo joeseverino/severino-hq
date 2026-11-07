@@ -1,0 +1,29 @@
+# What a remedy or a command's link says it does (`intent=`) is a fixed
+# phrase. The row it stands in already names the thing, and a value spliced
+# into the label (a hostname, a resource's key) stretches a button that keeps
+# its label on one line (page.css) past a phone's width.
+id: action-intent-names-no-value
+language: python
+severity: error
+message: An action's intent splices a value into its label.
+note: Say the fixed phrase ("Change where it points"); the row's title names the thing.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+ignores:
+  - "**/tests/**"
+  - "**/test*.py"
+  - "**/*_tests.py"
+rule:
+  kind: keyword_argument
+  all:
+    - has:
+        field: name
+        regex: ^intent$
+    - has:
+        field: value
+        any:
+          - kind: binary_operator
+          - kind: call
+          - has:
+              kind: interpolation
