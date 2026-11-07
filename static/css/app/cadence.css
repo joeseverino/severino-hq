@@ -106,7 +106,7 @@
    part of it draws a box past the one pixel that clips it. A mark hidden from
    the reader (a dot between parts) is then neither seen nor heard, so it is
    not drawn at all. */
-.visually-hidden :is(.token, .whole, .part) { display: contents; }
+.visually-hidden *:not([aria-hidden="true"]) { display: contents; }
 .visually-hidden [aria-hidden="true"] { display: none; }
 
 /* Cadence matrix: the same marks as a single strip, aligned in columns so the
