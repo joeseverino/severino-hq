@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/api"
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/providers/githubapi"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
@@ -57,21 +58,15 @@ var (
 	githubActionsRead = githubapi.AppPermissions{Actions: githubapi.AppPermissionsActionsRead}
 )
 
-// githubRenovate is what a dependency update run's token holds: branches and
-// their commits, the pull requests, the Dependency Dashboard issue, the
-// stability status, the workflow files it pins, and the alerts a security fix
-// answers. Renovate's GitHub App guide
-// (docs.renovatebot.com/modules/platform/github/, "Running as a GitHub App")
-// also lists administration read, checks and merge queues write, and an
-// organization's members read; a run is given none of them.
-var githubRenovate = githubapi.AppPermissions{
-	Contents:            githubapi.AppPermissionsContentsWrite,
-	PullRequests:        githubapi.AppPermissionsPullRequestsWrite,
-	Issues:              githubapi.AppPermissionsIssuesWrite,
-	Statuses:            githubapi.AppPermissionsStatusesWrite,
-	Workflows:           githubapi.AppPermissionsWorkflowsWrite,
-	VulnerabilityAlerts: githubapi.AppPermissionsVulnerabilityAlertsRead,
-}
+// githubRenovate is what a dependency update run's token holds, as its
+// grant declares it.
+var githubRenovate = func() githubapi.AppPermissions {
+	permissions, err := grantPermissions(host.DependencyUpdates.Permissions)
+	if err != nil {
+		panic("host.DependencyUpdates names a permission GitHub does not")
+	}
+	return permissions
+}()
 
 // Composition is what the running image was composed from: the repository
 // that delivers it, the image, and each admitted extension.

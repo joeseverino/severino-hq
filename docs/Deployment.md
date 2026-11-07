@@ -157,7 +157,8 @@ prints: they move between steps as files.
 
 One app, registered with no webhook and the permissions in
 [`deploy/github-apps.json`](../deploy/github-apps.json) (a test holds them to
-what HQ asks for), installed on the host repository and every extension. Each
+what HQ asks for), installed on the host repository, every extension and each
+repository a host grant names ([Tokens on the host](#tokens-on-the-host)). Each
 use mints an hour-long token for only what it does:
 
 | Who | Holds the key as | Asks for |
@@ -187,6 +188,63 @@ To rotate: generate a second key on the app, replace the SSH Key item's key,
 run the script again, wait for the connection probe to show the new
 fingerprint, then delete the old key on GitHub.
 
+### Tokens on the host
+
+A program on the host that needs to reach GitHub, such as a timer that clones
+a private repository, is given an installation token of HQ's app by a grant
+(`Grant` in `controller/host/grant.go`). A grant names the repositories, all
+under one account, the permissions, and the file the token goes to. HQ has one
+grant of its own, the dependency update run's (`DependencyUpdates`). HQ's plan
+names that grant's repositories and says when a run is due, and root spools its
+hand-off for `severino-hq-renovate.service`. A host adds its own grants to
+`grants` in `/etc/severino-hq/host.json`, one entry each:
+
+```json
+"grants": [{"name": "example-pull", "repositories": ["example/notes"], "permissions": {"contents": "read", "metadata": "read"}, "path": "/run/example-pull/github_token"}]
+```
+
+`hq-host controller` reads the grants on every pass, so a grant added there
+takes effect on the next pass with no other step. Install the app on each
+repository a grant names. Until then, each applying pass reports
+`github.grant:<name>` on the app's connection as work it could not finish:
+"the GitHub App is not installed on <owner>/<repository>".
+
+What a program reading a grant's file can rely on:
+
+- The file holds the token alone, with no newline. It is root's, mode 0400, in
+  a directory only root enters (made 0700 if absent, and set to 0700 if it
+  is not). It lies under `/run`, which systemd mounts as tmpfs, so a token
+  never reaches a disk.
+- It is replaced whole, by a rename: a reader sees the old token or the new
+  one, never part of one.
+- A token lives an hour, and a pass mints a new one once the file is half an
+  hour old. A pass runs at least every 15 minutes, so the token in the file
+  always has at least about 15 minutes left. A program that runs longer than
+  that reads the file again rather than keeping the token.
+
+The security properties:
+
+- The controller's container writes only to its own out directory. It is told
+  which grants are due (their names, repositories and permissions), never
+  where a grant's token goes.
+- Root reads `<name>.json` from the out directory only for a grant its own
+  copy declares. It opens the file without following a link, refuses one with
+  a second name or one larger than a hand-off can be, and holds it to the
+  exact hand-off shape. It takes a token only if it expires within the hour,
+  and for a host's grant only one token covering exactly the declared
+  repositories. Anything else in the directory is logged as refused, naming
+  no token, and removed.
+- A grant's path must be a file in a directory of its own under `/run`,
+  outside HQ's own directories (`/run/severino-hq`, its secrets, the
+  dependency run's spool, the unit socket's directory), and no two grants
+  share a name or a path. `hq-host` refuses a configuration that breaks this.
+- The token reaches exactly the declared repositories with exactly the
+  declared permissions, which cannot exceed what the app is registered with
+  (`deploy/github-apps.json`): GitHub refuses a token that asks for more. It
+  is written to that file only, never to a record, a log line or an error.
+- HQ's web, which plans the dependency run, cannot add or widen a host's
+  grant: only root's configuration declares those.
+
 ## The host
 
 | Path | Holds | Written by |
@@ -201,6 +259,7 @@ fingerprint, then delete the old key on GitHub.
 | `/run/severino-hq-secrets/` | rendered credentials, on a root-only `noswap` tmpfs (`run-severino\x2dhq\x2dsecrets.mount`) | `hq-secrets` |
 | `/run/severino-hq/` | the doorbells HQ rings: `controller-doorbell` when it queues controller work, `glance-doorbell` when someone asks for a dashboard reading | `deploy/tmpfiles/severino-hq.conf` |
 | `/run/severino-hq-unit/` | the unit socket, in a directory only the controller's account and root may enter, mounted into the controller's container alone | `deploy/tmpfiles/severino-hq.conf`, `severino-hq-unit.socket` |
+| each grant's `path` under `/run` | a host grant's installation token, root's, mode 0400 ([Tokens on the host](#tokens-on-the-host)) | `hq-host controller` |
 | `/run/severino-hq-renovate/` | root-only: a validated dependency handoff waiting to run, and each run's environment files, removed when it ends | `hq-host controller`, `hq-host renovate` |
 | `/var/lib/severino-hq/renovate/dependency-run.json` | the last dependency run's outcome, given read-only to the next controller pass | `hq-host renovate` |
 | `/opt/apps/severino-hq/secrets/` | the renderer's lock, the controller's ACME state, and in `seal/` the controller's sealing seed, its account's, mode 0400, lent to a pass read-only ([Secrets](Secrets.md#sealing-to-the-controller)) | `hq-secrets`, the controller, `hq-host controller` and `hq-host release` |
@@ -216,7 +275,7 @@ from the tree, and every unit and the deploy call it.
 | Command | Does |
 | :--- | :--- |
 | `run-web` | runs the web container (`severino-hq-web.service`); waits for the rendered environment, notifies systemd once HQ is healthy |
-| `controller [--apply \| --glance]` | one controller pass: plan, claim and apply queued work, or (`--glance`) read only the dashboard panels HQ is waiting on. A glance's container is given the Portainer and SSH connections from the connections document and their identities, the host's roots and the bridge, and nothing else a controller pass is given. It gets no certificate state, unit socket, host reading or out directory. An applying pass may leave a dependency handoff in its own out directory. Root opens it without following links, validates it (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key) and moves it to `/run/severino-hq-renovate/`, or logs and drops it |
+| `controller [--apply \| --glance]` | one controller pass: plan, claim and apply queued work, or (`--glance`) read only the dashboard panels HQ is waiting on. A glance's container is given the Portainer and SSH connections from the connections document and their identities, the host's roots and the bridge, and nothing else a controller pass is given. It gets no certificate state, unit socket, host reading or out directory. A pass is told which of the host's grants are due, and an applying pass may leave a hand-off for each, and for a due dependency run, in its own out directory. Root opens each one without following links and validates it against its grant (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key). It moves a dependency run's hand-off to `/run/severino-hq-renovate/` and writes a host grant's token to the grant's path ([Tokens on the host](#tokens-on-the-host)), or logs and drops the hand-off |
 | `renovate` | runs the spooled handoff: Renovate once per owner, in a container with no capability, a read-only root, no host path but `deploy/renovate/config.json`, and the token in an environment file; records each owner's outcome for the next pass. The container reaches public IPv4 addresses and nothing else: not the host, the LAN, the tailnet, link-local, multicast or another container. It runs on its own bridge, `severino-hq-renovate` (10.231.0.0/24, interface `hq-renovate0`, no IPv6), made if absent and refused unless it is exactly that, with public resolvers. Before each run root loads the nftables table `inet severino_hq_renovate` (`controller/host/egress.go`) in one transaction. The table drops everything the bridge sends to a private, reserved or IPv6 destination and everything it sends to the host itself. A run that cannot load the table never starts |
 | `deploy IMAGE` | verifies the signature, refuses an image that drops an extension production runs, pulls, and hands over to the image's own `hq-host release` |
 | `release IMAGE` | syncs the tree, installs the web unit, restarts HQ on the image, then `install`; rolls back on any failure, the database with it when the release migrated it. Once the release stands it runs `severino-hq-script-drift.service`, so the release is verified at once. Drift fails the deploy without rolling it back, since what verify finds is the host's, and `journalctl -u severino-hq-script-drift.service` there names it |

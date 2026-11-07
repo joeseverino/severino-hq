@@ -13,6 +13,21 @@ import (
 
 const exampleToken = "ghs_exampletokenvalue"
 
+// dependencyHandoff is the file a pass leaves when a dependency run is due.
+var dependencyHandoff = DependencyUpdates.HandoffName()
+
+// relocated is grant with its path under root, as a test's host has it.
+func relocated(grant Grant, root string) Grant {
+	grant.Path = filepath.Join(root, grant.Path)
+	return grant
+}
+
+// spool is where the launch's dependency run grant spools its hand-off.
+func (l *launch) spool() string {
+	grant, _ := l.controller.grantFor(dependencyHandoff)
+	return grant.Path
+}
+
 func handoffDocument(t *testing.T, edit func(run map[string]any, top map[string]any)) []byte {
 	t.Helper()
 	run := map[string]any{
@@ -74,7 +89,7 @@ func TestAValidHandoffIsSpooledForRootAlone(t *testing.T) {
 	l := newLaunch(t)
 	var original string
 	l.container = func(out string) {
-		original = filepath.Join(out, DependencyHandoff)
+		original = filepath.Join(out, dependencyHandoff)
 		if err := os.WriteFile(original, handoffDocument(t, nil), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -82,7 +97,7 @@ func TestAValidHandoffIsSpooledForRootAlone(t *testing.T) {
 
 	l.run(t, Apply)
 
-	data, err := os.ReadFile(filepath.Join(l.controller.Spool, SpoolName))
+	data, err := os.ReadFile(filepath.Join(l.spool(), SpoolName))
 	if err != nil {
 		t.Fatal("the handoff was not spooled")
 	}
@@ -90,7 +105,7 @@ func TestAValidHandoffIsSpooledForRootAlone(t *testing.T) {
 	if err != nil || len(handoff.Runs) != 1 || handoff.Runs[0].Token != exampleToken || !slices.Equal(handoff.Runs[0].Repositories, []string{"example/app", "example/site"}) {
 		t.Errorf("spooled %s (%v)", data, err)
 	}
-	for path, want := range map[string]os.FileMode{l.controller.Spool: 0o700, filepath.Join(l.controller.Spool, SpoolName): 0o600} {
+	for path, want := range map[string]os.FileMode{l.spool(): 0o700, filepath.Join(l.spool(), SpoolName): 0o600} {
 		if info, _ := os.Lstat(path); info.Mode().Perm() != want {
 			t.Errorf("%s is %v", path, info.Mode())
 		}
@@ -104,7 +119,7 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 	for name, write := range map[string]func(t *testing.T, out string){
 		"a link to a file it may not read": func(t *testing.T, out string) {
 			target := filepath.Join(filepath.Dir(out), "connections.json")
-			if err := os.Symlink(target, filepath.Join(out, DependencyHandoff)); err != nil {
+			if err := os.Symlink(target, filepath.Join(out, dependencyHandoff)); err != nil {
 				t.Fatal(err)
 			}
 		},
@@ -113,12 +128,12 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 			if err := os.WriteFile(other, handoffDocument(t, nil), 0o600); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.Link(other, filepath.Join(out, DependencyHandoff)); err != nil {
+			if err := os.Link(other, filepath.Join(out, dependencyHandoff)); err != nil {
 				t.Fatal(err)
 			}
 		},
 		"a directory": func(t *testing.T, out string) {
-			if err := os.MkdirAll(filepath.Join(out, DependencyHandoff, "inside"), 0o700); err != nil {
+			if err := os.MkdirAll(filepath.Join(out, dependencyHandoff, "inside"), 0o700); err != nil {
 				t.Fatal(err)
 			}
 		},
@@ -153,7 +168,7 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 		"more than a handoff can be": func(t *testing.T, out string) {
 			data := handoffDocument(t, nil)
 			padded := append(bytes.TrimSuffix(data, []byte("}")), []byte(`,"pad":"`+strings.Repeat("x", handoffLimit)+`"}`)...)
-			if err := os.WriteFile(filepath.Join(out, DependencyHandoff), padded, 0o600); err != nil {
+			if err := os.WriteFile(filepath.Join(out, dependencyHandoff), padded, 0o600); err != nil {
 				t.Fatal(err)
 			}
 		},
@@ -167,10 +182,10 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 
 			l.run(t, Apply)
 
-			if _, err := os.Lstat(filepath.Join(l.controller.Spool, SpoolName)); err == nil {
+			if _, err := os.Lstat(filepath.Join(l.spool(), SpoolName)); err == nil {
 				t.Error("an invalid handoff was spooled")
 			}
-			if _, err := os.Lstat(filepath.Join(out, DependencyHandoff)); err == nil {
+			if _, err := os.Lstat(filepath.Join(out, dependencyHandoff)); err == nil {
 				t.Error("the original was left")
 			}
 			if !strings.Contains(stderr.String(), "refused") || strings.Contains(stderr.String(), exampleToken) {
@@ -182,7 +197,7 @@ func TestAnInvalidHandoffIsDroppedAndNeverSpooled(t *testing.T) {
 
 func writeHandoff(t *testing.T, out string, edit func(run, top map[string]any)) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(out, DependencyHandoff), handoffDocument(t, edit), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(out, dependencyHandoff), handoffDocument(t, edit), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -194,7 +209,7 @@ func TestAPassThatLeavesNoHandoffSpoolsNothing(t *testing.T) {
 
 	l.run(t, Apply)
 
-	if _, err := os.Lstat(l.controller.Spool); err == nil || stderr.Len() != 0 {
+	if _, err := os.Lstat(l.spool()); err == nil || stderr.Len() != 0 {
 		t.Errorf("spooled or said %q with nothing handed off", stderr.String())
 	}
 }

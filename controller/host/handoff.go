@@ -25,16 +25,20 @@ import (
 const (
 	controllerOut    = "/run/severino-hq/out"
 	controllerOutEnv = "HQ_CONTROLLER_OUT"
-	// DependencyHandoff is the file a pass leaves in its out directory when
-	// a dependency run is due: one token per owner it minted.
-	DependencyHandoff = "dependency-updates.json"
 	// handoffLimit is far more than any real handoff: a token and a list of
 	// repository names per owner.
 	handoffLimit = 64 << 10
 	// TokenLife is how long an installation token lives. A handoff whose
 	// token outlives it by more than clock skew was not minted for this run.
 	TokenLife = time.Hour
-	clockSkew = 2 * time.Minute
+	// TokenRefresh is the age at which a placed token is minted again: half
+	// its life, so a pass that fails still leaves the next one time to.
+	TokenRefresh = TokenLife / 2
+	clockSkew    = 2 * time.Minute
+	// grantsTarget is where a pass finds the placed grants due this pass, and
+	// grantsEnv the variable that names it.
+	grantsTarget = hostcore.RunDir + "/grants.json"
+	grantsEnv    = "HQ_CONTROLLER_GRANTS"
 	// SpoolName is the handoff in root's spool, which the path unit watches.
 	SpoolName  = "handoff.json"
 	handoffV1  = 1
@@ -224,10 +228,11 @@ func (c *Controller) prepareOut(run string) error {
 	return c.Owner(root, "out")
 }
 
-// takeHandoff moves a valid handoff the pass left into root's spool, where
-// its unit starts the dependency run. The original is removed whatever it
-// was; one that is not valid is said so and never run.
-func (c *Controller) takeHandoff(run string) {
+// takeHandoffs delivers each valid hand-off the pass left to where its
+// grant says, and removes everything the pass left there, whatever it was.
+// A file that is no declared grant's hand-off, or a hand-off its grant does
+// not admit, is said so and never delivered.
+func (c *Controller) takeHandoffs(run string) {
 	runRoot, err := os.OpenRoot(run)
 	if err != nil {
 		return
@@ -238,25 +243,61 @@ func (c *Controller) takeHandoff(run string) {
 		return
 	}
 	defer out.Close()
-	defer func() { _ = out.RemoveAll(DependencyHandoff) }()
+	entries, _ := fs.ReadDir(out.FS(), ".")
+	for _, entry := range entries {
+		name := entry.Name()
+		grant, declared := c.grantFor(name)
+		err := errors.New("it is no declared grant's hand-off")
+		if declared {
+			err = c.deliver(out, grant)
+		}
+		_ = out.RemoveAll(name)
+		if err != nil {
+			fmt.Fprintf(c.Stderr, "The hand-off %q was refused and dropped: %v\n", name, err)
+		}
+	}
+}
 
-	data, err := readUntrusted(out, DependencyHandoff, handoffLimit)
-	if errors.Is(err, fs.ErrNotExist) {
-		return
+// grantFor is the grant whose hand-off file is name.
+func (c *Controller) grantFor(name string) (Grant, bool) {
+	for _, grant := range c.Grants {
+		if grant.HandoffName() == name {
+			return grant, true
+		}
 	}
-	var handoff Handoff
-	if err == nil {
-		handoff, err = ParseHandoff(data)
-	}
-	if err == nil {
-		err = handoff.Fresh(c.Now())
-	}
-	if err == nil {
-		err = spool(c.Spool, handoff)
-	}
+	return Grant{}, false
+}
+
+// deliver reads grant's hand-off from out and, when it is one the grant
+// admits, puts it where the grant says.
+func (c *Controller) deliver(out *os.Root, grant Grant) error {
+	data, err := readUntrusted(out, grant.HandoffName(), handoffLimit)
 	if err != nil {
-		fmt.Fprintf(c.Stderr, "The dependency run handoff was refused and dropped: %v\n", err)
+		return err
 	}
+	handoff, err := ParseHandoff(data)
+	if err != nil {
+		return err
+	}
+	if err := handoff.Fresh(c.Now()); err != nil {
+		return err
+	}
+	if err := grant.admits(handoff); err != nil {
+		return err
+	}
+	if grant.Planned {
+		return spool(grant.Path, handoff)
+	}
+	return place(grant.Path, handoff.Runs[0].Token)
+}
+
+// place writes token alone to path, root's to read and nobody's to write, all
+// at once: a reader never sees half a token.
+func place(path, token string) error {
+	if err := ownDirectory(filepath.Dir(path)); err != nil {
+		return err
+	}
+	return atomicfile.WriteFile(path, []byte(token), 0o400)
 }
 
 // spool writes handoff, as root re-encodes it, where only root can read it.

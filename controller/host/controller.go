@@ -46,10 +46,12 @@ type Controller struct {
 	// UnitSocket is root's socket for a container's unit (UnitSocket on a
 	// host); its directory is lent to the pass when it is there.
 	UnitSocket string
-	// Spool is root's own directory a valid dependency handoff is moved to
-	// (RenovateSpool on a host), and DependencyRun the outcome of the last
-	// run (DependencyRunFile), given to the next pass.
-	Spool, DependencyRun string
+	// Grants is every token a pass may hand root, and where each goes
+	// (Grants of the host configuration on a host).
+	Grants []Grant
+	// DependencyRun is the outcome of the last dependency run
+	// (DependencyRunFile), given to the next pass.
+	DependencyRun string
 	// Connections checks the connections document before it is read.
 	Connections func() error
 	// Lock holds the renderer's identity lock shared until the returned
@@ -161,6 +163,11 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 			return err
 		}
 		args = append(args, readings...)
+		grants, err := c.dueGrants(run)
+		if err != nil {
+			return err
+		}
+		args = append(args, grants...)
 		args = append(args, c.unitSocket()...)
 	}
 	// The bridge, from the declaration the web container is given it by.
@@ -179,7 +186,7 @@ func (c *Controller) Run(ctx context.Context, pass Pass) error {
 	err = command.Run()
 	if pass != Glance {
 		// A pass that failed after minting still leaves tokens worth running.
-		c.takeHandoff(run)
+		c.takeHandoffs(run)
 	}
 	return err
 }

@@ -2,7 +2,6 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -10,27 +9,25 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/api"
-	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
+	"github.com/joeseverino/severino-hq/controller/host"
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
 // HQ's dependency update run. HQ plans it (which repositories, by owner, and
-// whether a run is due); this controller holds the App's key, so it mints one
-// installation token per owner, scoped to exactly that owner's planned
-// repositories and githubRenovate, and hands the tokens to root in one file.
-// Root runs Renovate outside this container and gives the next pass the
-// result, which is the github.dependency_run reading. A token is written only
-// to the hand-off file: never a record, a log line or an error.
+// whether a run is due); this controller hands it to root as the grant
+// host.DependencyUpdates (github_grant.go). Root runs Renovate outside this
+// container and gives the next pass the result, which is the
+// github.dependency_run reading.
+
+// DependencyHandoffName is the file root takes from HQ_CONTROLLER_OUT.
+var DependencyHandoffName = host.DependencyUpdates.HandoffName()
 
 const (
-	// DependencyHandoffName is the file root takes from HQ_CONTROLLER_OUT.
-	DependencyHandoffName = "dependency-updates.json"
-	dependencyRunVersion  = 1
+	dependencyRunVersion = 1
 	// dependencyRunMaxBytes bounds the result root gives: a run per owner,
 	// each naming repositories, is far smaller.
 	dependencyRunMaxBytes = 1 << 20
@@ -53,20 +50,6 @@ type GitHubDependencyRunRecord struct {
 	ExitCode     *int     `json:"exit_code"`
 	StartedAt    string   `json:"started_at"`
 	FinishedAt   string   `json:"finished_at"`
-}
-
-// DependencyHandoff is the file the controller writes for root: one run per
-// owner, each with the token that run uses and when GitHub expires it.
-type DependencyHandoff struct {
-	Version int                    `json:"version"`
-	Runs    []DependencyHandoffRun `json:"runs"`
-}
-
-type DependencyHandoffRun struct {
-	Owner        string   `json:"owner"`
-	Repositories []string `json:"repositories"`
-	Token        string   `json:"token"`
-	ExpiresAt    string   `json:"expires_at"`
 }
 
 // DependencyRunResult is what root reports of the last run.
@@ -165,11 +148,11 @@ func checkRunRepositories(owner string, repositories []string) error {
 	return nil
 }
 
-// handOffDependencyRuns mints each owner's token and writes the hand-off,
-// answering a record per run handed off. Without HQ_CONTROLLER_OUT root has
-// given this pass nowhere to hand to, so nothing is minted. An owner the App
-// is not installed on, or whose token GitHub refuses, is refused alone; when
-// every owner is, the read fails.
+// handOffDependencyRuns hands off the planned run, answering a record per
+// owner handed off. Without HQ_CONTROLLER_OUT root has given this pass
+// nowhere to hand to, so nothing is minted. An owner the App is not installed
+// on, or whose token GitHub refuses, is refused alone; when every owner is,
+// the read fails.
 func (r *Registry) handOffDependencyRuns(ctx context.Context, plan runtime.DependencyUpdatesPlan) ([]GitHubDependencyRunRecord, error) {
 	if r.Env.Out == "" {
 		r.commands().logger().Warn("a dependency update run is due, but this pass was given no HQ_CONTROLLER_OUT to hand it to root through",
@@ -180,80 +163,18 @@ func (r *Registry) handOffDependencyRuns(ctx context.Context, plan runtime.Depen
 	if err != nil {
 		return nil, err
 	}
-	app, err := r.githubApp(c)
-	if err != nil {
-		return nil, err
-	}
-	installations, err := r.githubInstallations(ctx, c)
-	if err != nil {
-		return nil, err
-	}
-	covering := map[string]int{}
-	for _, installation := range installations {
-		if account, err := installation.Account.AsSimpleUser(); err == nil && account.Login != "" {
-			covering[strings.ToLower(account.Login)] = installation.ID
-		}
-	}
-	handoff := DependencyHandoff{Version: dependencyRunVersion, Runs: []DependencyHandoffRun{}}
-	records := []GitHubDependencyRunRecord{}
 	started := r.Now().UTC().Format(time.RFC3339)
-	var refused error
-	for _, owner := range plan.Owners {
-		run, err := r.mintDependencyRun(ctx, app, covering, owner)
-		if err != nil {
-			refuse(ctx, runtime.PartWhole, c.ref, owner.Owner, err)
-			refused = err
-			continue
-		}
-		handoff.Runs = append(handoff.Runs, run)
-		records = append(records, GitHubDependencyRunRecord{
-			Owner: owner.Owner, Repositories: owner.Repositories, Outcome: dependencyHandedOff, StartedAt: started,
-		})
-	}
-	if len(handoff.Runs) == 0 {
-		return nil, refused
-	}
-	if err := writeDependencyHandoff(r.Env.Out, handoff); err != nil {
+	handed, err := r.handOffGrant(ctx, c, host.DependencyUpdates.Name, plan.Owners, githubRenovate, func(owner string, err error) {
+		refuse(ctx, runtime.PartWhole, c.ref, owner, err)
+	})
+	if err != nil {
 		return nil, err
+	}
+	records := make([]GitHubDependencyRunRecord, len(handed))
+	for i, owner := range handed {
+		records[i] = GitHubDependencyRunRecord{Owner: owner.Owner, Repositories: owner.Repositories, Outcome: dependencyHandedOff, StartedAt: started}
 	}
 	return records, nil
-}
-
-// mintDependencyRun is one owner's run: a token for exactly its repositories
-// and githubRenovate, from the installation on that account.
-func (r *Registry) mintDependencyRun(ctx context.Context, app GitHubApp, covering map[string]int, owner runtime.DependencyUpdatesOwner) (DependencyHandoffRun, error) {
-	installation, ok := covering[owner.Owner]
-	if !ok {
-		return DependencyHandoffRun{}, &ProviderError{Message: "the GitHub App is not installed on " + owner.Owner}
-	}
-	names := make([]string, len(owner.Repositories))
-	for i, repository := range owner.Repositories {
-		names[i] = strings.TrimPrefix(repository, owner.Owner+"/")
-	}
-	minted, err := MintGitHubToken(ctx, r.HTTP, r.Now(), app, installation, names, githubRenovate)
-	if err != nil {
-		return DependencyHandoffRun{}, err
-	}
-	expires, err := time.Parse(time.RFC3339, minted.ExpiresAt)
-	if err != nil {
-		return DependencyHandoffRun{}, &ProviderError{Message: "GitHub did not say when the token for " + owner.Owner + " expires"}
-	}
-	return DependencyHandoffRun{
-		Owner: owner.Owner, Repositories: owner.Repositories, Token: minted.Token, ExpiresAt: expires.UTC().Format(time.RFC3339),
-	}, nil
-}
-
-// writeDependencyHandoff puts the hand-off in dir, readable by its owner
-// alone, all at once: root never sees half a file.
-func writeDependencyHandoff(dir string, handoff DependencyHandoff) error {
-	data, err := json.Marshal(handoff)
-	if err != nil {
-		return err
-	}
-	if err := atomicfile.WriteFile(filepath.Join(dir, DependencyHandoffName), data, 0o600); err != nil {
-		return &ProviderError{Message: "the dependency update hand-off could not be written", Err: err}
-	}
-	return nil
 }
 
 // errDependencyResult is a result file that is not root's account of a run.

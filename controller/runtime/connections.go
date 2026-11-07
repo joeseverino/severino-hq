@@ -63,6 +63,9 @@ type Environment struct {
 	// Out is the directory this run may hand files to root through; root
 	// reads it after the run exits.
 	Out string `env:"HQ_CONTROLLER_OUT"`
+	// Grants is root's list of the grants due this pass (host.GrantRequests),
+	// given read-only.
+	Grants string `env:"HQ_CONTROLLER_GRANTS"`
 	// PortainerInspectConcurrency bounds container inspections in flight.
 	PortainerInspectConcurrency string `env:"HQ_PORTAINER_INSPECT_CONCURRENCY"`
 	// inherited is what a child process may inherit (childEnvironment).

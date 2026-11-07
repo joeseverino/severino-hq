@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -257,7 +258,7 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		CertStore:     "/usr/local/share/ca-certificates",
 		Tailscaled:    host.TailscaledSocket,
 		UnitSocket:    host.UnitSocket,
-		Spool:         host.RenovateSpool,
+		Grants:        hostGrants(stderr),
 		DependencyRun: host.DependencyRunFile,
 		Connections:   requireConnections,
 		Lock:          host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
@@ -265,6 +266,22 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		Now:           time.Now,
 		Stdout:        stdout, Stderr: stderr,
 	}
+}
+
+// hostGrants is HQ's own grants and those the host's configuration adds. A
+// configuration that cannot be read adds none, and says why.
+func hostGrants(stderr io.Writer) []host.Grant {
+	data, err := os.ReadFile(hostConfig)
+	if err == nil {
+		var config host.Config
+		if config, err = host.ReadConfig(data); err == nil {
+			return host.Grants(config)
+		}
+	}
+	if !errors.Is(err, fs.ErrNotExist) {
+		fmt.Fprintf(stderr, "The host's own grants were not read: %v\n", err)
+	}
+	return host.Grants(host.Config{})
 }
 
 func renovator(stdout io.Writer) *host.Renovator {

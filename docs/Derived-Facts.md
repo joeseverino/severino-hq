@@ -737,8 +737,8 @@ by Renovate once a day and when somebody asks (`project.dependency_updates.run`)
 opted-in repositories, grouped by owner, whether a run is due, and
 `last_started_at`, the latest run HQ holds. When one is due the controller
 mints one installation token per owner, naming exactly that owner's
-repositories and exactly the Renovate grant (`githubRenovate` in
-`controller/providers/github_delivery.go`, held to `deploy/github-apps.json`),
+repositories and exactly the Renovate grant (`DependencyUpdates` in
+`controller/host/grant.go`, held to `deploy/github-apps.json`),
 and writes them, mode 0600, to `dependency-updates.json` in the directory root
 gives the pass as `HQ_CONTROLLER_OUT`:
 

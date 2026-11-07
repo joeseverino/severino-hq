@@ -9,5 +9,13 @@
   "runner": {
     "unit": "actions.runner.example-owner-severino-hq.example-host.service",
     "user": "hqrunner"
-  }
+  },
+  "grants": [
+    {
+      "name": "example-pull",
+      "repositories": ["example/notes"],
+      "permissions": {"contents": "read", "metadata": "read"},
+      "path": "/run/example-pull/github_token"
+    }
+  ]
 }

@@ -23,6 +23,9 @@ type Config struct {
 	EnvItem string        `json:"env_item"`
 	Connect ConnectConfig `json:"connect"`
 	Runner  RunnerConfig  `json:"runner"`
+	// Grants are the GitHub App tokens the controller keeps on this host
+	// beside HQ's own (Grant).
+	Grants []Grant `json:"grants,omitempty"`
 }
 
 // ConnectConfig is the local 1Password Connect server the renderer reads.
@@ -75,6 +78,9 @@ func ReadConfig(data []byte) (Config, error) {
 	if err != nil || address.Scheme != "http" || address.Hostname() != "127.0.0.1" || address.Port() == "" ||
 		address.Path != "" || address.User != nil || address.RawQuery != "" {
 		return Config{}, errors.New("connect.url must be http://127.0.0.1:PORT")
+	}
+	if err := checkGrants(config.Grants); err != nil {
+		return Config{}, err
 	}
 	return config, nil
 }

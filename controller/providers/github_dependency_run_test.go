@@ -65,9 +65,9 @@ func owner(name string, repositories ...string) runtime.DependencyUpdatesOwner {
 	return runtime.DependencyUpdatesOwner{Owner: name, Repositories: repositories}
 }
 
-func readHandoff(t *testing.T, dir string) (map[string]any, os.FileMode) {
+func readHandoff(t *testing.T, dir, name string) (map[string]any, os.FileMode) {
 	t.Helper()
-	path := filepath.Join(dir, DependencyHandoffName)
+	path := filepath.Join(dir, name)
 	info, err := os.Lstat(path)
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +97,7 @@ func TestADueRunHandsEachOwnerOneScopedToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handoff, mode := readHandoff(t, out)
+	handoff, mode := readHandoff(t, out, DependencyHandoffName)
 	if mode != 0o600 || !mode.IsRegular() {
 		t.Fatalf("mode %v", mode)
 	}
@@ -175,7 +175,7 @@ func TestAnOwnerWithoutAnInstallationIsRefusedAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handoff, _ := readHandoff(t, out)
+	handoff, _ := readHandoff(t, out, DependencyHandoffName)
 	if runs := handoff["runs"].([]any); len(runs) != 1 || runs[0].(map[string]any)["owner"] != "example" || len(records) != 1 {
 		t.Fatalf("runs %v records %v", runs, records)
 	}

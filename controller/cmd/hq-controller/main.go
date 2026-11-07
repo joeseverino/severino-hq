@@ -204,6 +204,11 @@ func run(ctx context.Context, args []string, env runtime.Environment, supplied r
 	if *glance {
 		code, err = worker.Glances(ctx)
 	} else {
+		if *apply {
+			// Before the queue and the sweep, so a token root is waiting on is
+			// not held up by them; a grant that fails is a step of this pass.
+			registry.HandOffGrants(ctx)
+		}
 		code, err = worker.Run(ctx, *apply)
 	}
 	if err != nil {
