@@ -1,9 +1,9 @@
 {% extends "page.html" %}
 {% block page %}
-{% card id="example-items" heading="example-items-heading" %}
-  {% section_head id="example-items-heading" %}Items{% aside %}<span class="count">{{ items|length }}</span>{% endsection_head %}
+{% card id="example-notes" heading="example-notes-heading" %}
+  {% section_head id="example-notes-heading" %}Notes{% aside %}<span class="count">{{ notes|length }}</span>{% endsection_head %}
   <ul>
-    {% for item in items %}<li>{{ item|breakable }}</li>{% endfor %}
+    {% for note in notes %}<li><a href="{% url 'example_extension:note' note.slug %}">{{ note.title|breakable }}</a></li>{% endfor %}
   </ul>
 {% endcard %}
 {% endblock %}

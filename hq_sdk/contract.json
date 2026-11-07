@@ -1,5 +1,5 @@
 {
-  "api_version": 9,
+  "api_version": 10,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -181,7 +181,16 @@
           "redact=",
           "observation=",
           "connection=",
-          "redact_for="
+          "redact_for=",
+          "subject="
+        ]
+      },
+      "seeded_by_hand": {
+        "kind": "function",
+        "parameters": [
+          "path",
+          "*",
+          "at"
         ]
       }
     },
@@ -1073,7 +1082,9 @@
           "search=",
           "health=",
           "calendars=",
-          "outbound="
+          "outbound=",
+          "demo_seed=",
+          "demo_pages="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1847,6 +1858,30 @@
           }
         }
       },
+      "AllocationBar": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "parts"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "FLOOR": {
+            "kind": "attribute",
+            "type": "float"
+          },
+          "drawn": {
+            "kind": "property"
+          },
+          "legend": {
+            "kind": "property"
+          },
+          "spoken": {
+            "kind": "property"
+          }
+        }
+      },
       "Cadence": {
         "bases": [],
         "constructor": [
@@ -2137,6 +2172,66 @@
           }
         }
       },
+      "SectionPart": {
+        "bases": [],
+        "constructor": [
+          "heading=",
+          "count=",
+          "lede=",
+          "aside=",
+          "empty=",
+          "id=",
+          "fold=",
+          "open=",
+          "level=",
+          "css=",
+          "template=",
+          "context=",
+          "data=",
+          "remedy_label=",
+          "remedy_url=",
+          "moment=",
+          "when=",
+          "head=",
+          "foot=",
+          "more_label=",
+          "more_url=",
+          "figure="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "drawn": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "*",
+              "body=",
+              "aside=",
+              "empty=",
+              "foot=",
+              "heading_id="
+            ]
+          },
+          "heading_id": {
+            "kind": "property"
+          }
+        }
+      },
+      "Share": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "value",
+          "slot",
+          "url=",
+          "detail=",
+          "tone="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
       "StackedBarChart": {
         "bases": [
           "Chart"
@@ -2290,6 +2385,19 @@
           "*",
           "unit",
           "maximum="
+        ]
+      },
+      "status_pill": {
+        "kind": "function",
+        "parameters": [
+          "*parts",
+          "tone=",
+          "css=",
+          "href=",
+          "title=",
+          "tip=",
+          "pill=",
+          "**data"
         ]
       },
       "when": {
@@ -2647,16 +2755,10 @@
       "narrow-more",
       "notice",
       "notice-attention",
-      "num-col",
       "optional-col",
       "page-lede",
       "pie-chart",
       "pie-row",
-      "pill",
-      "pill-attention",
-      "pill-good",
-      "pill-neutral",
-      "pill-serious",
       "primary",
       "print-footer",
       "print-only",
@@ -2691,11 +2793,7 @@
       "table-scroll",
       "tight-col",
       "two-col",
-      "visually-hidden",
-      "worth",
-      "worth-attention",
-      "worth-good",
-      "worth-neutral"
+      "visually-hidden"
     ],
     "django": {
       "filters": [
@@ -2815,9 +2913,6 @@
       "readout": {
         "argument": "none"
       },
-      "sortable": {
-        "argument": "none"
-      },
       "span": {
         "argument": "none"
       },
@@ -2870,7 +2965,9 @@
           }
         },
         "reads": [
-          "page"
+          "built_from",
+          "page",
+          "page_visit"
         ]
       }
     },
@@ -2890,6 +2987,16 @@
         ],
         "required": [
           "calendar"
+        ]
+      },
+      "partials/_allocation.html": {
+        "about": "Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`.",
+        "optional": [
+          "legend",
+          "stacked"
+        ],
+        "required": [
+          "allocation"
         ]
       },
       "partials/_ask.html": {
@@ -2956,6 +3063,40 @@
           "message"
         ]
       },
+      "partials/_form.html": {
+        "about": "A form that writes: its token, its errors, its fields or its table, and its closing row.",
+        "optional": [
+          "action",
+          "fields",
+          "in_place",
+          "next",
+          "table_body"
+        ],
+        "required": [
+          "bar",
+          "cancel_url",
+          "choice_field",
+          "choices",
+          "form",
+          "note",
+          "verb"
+        ]
+      },
+      "partials/_form_actions.html": {
+        "about": "A form's closing row: its one verb, Cancel, and what saving does.",
+        "optional": [
+          "bar",
+          "cancel_url",
+          "choices",
+          "in_place",
+          "live",
+          "note"
+        ],
+        "required": [
+          "choice_field",
+          "verb"
+        ]
+      },
       "partials/_form_errors.html": {
         "about": "What was wrong with a submitted form as a whole, above its fields.",
         "optional": [
@@ -3004,6 +3145,13 @@
         ],
         "required": [
           "rows"
+        ]
+      },
+      "partials/_row_field.html": {
+        "about": "One field of a form whose fields stand one to a row of a table, in its row.",
+        "optional": [],
+        "required": [
+          "field"
         ]
       },
       "partials/_stacked_bar_chart.html": {
@@ -3121,6 +3269,19 @@
         ],
         "parts": []
       },
+      "row_editor": {
+        "classes": [],
+        "parameters": [
+          "form",
+          "key",
+          "*",
+          "label",
+          "action",
+          "verb",
+          "**initial"
+        ],
+        "parts": []
+      },
       "row_group": {
         "classes": [],
         "parameters": [
@@ -3137,6 +3298,35 @@
         "parameters": [],
         "parts": []
       },
+      "section": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "heading=",
+          "*",
+          "count=",
+          "lede=",
+          "id=",
+          "fold=",
+          "open=",
+          "css=",
+          "remedy_label=",
+          "remedy_url=",
+          "more_label=",
+          "more_url=",
+          "figure=",
+          "moment=",
+          "when=",
+          "head=",
+          "**data"
+        ],
+        "parts": [
+          "aside",
+          "empty",
+          "foot"
+        ]
+      },
       "section_head": {
         "classes": [],
         "parameters": [
@@ -3147,6 +3337,22 @@
         "parts": [
           "aside"
         ]
+      },
+      "status": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*parts",
+          "tone=",
+          "css=",
+          "href=",
+          "title=",
+          "tip=",
+          "pill=",
+          "**data"
+        ],
+        "parts": []
       },
       "table_heading": {
         "classes": [

@@ -13,21 +13,31 @@
      no second inset. Nothing downstream has to remember that rule.
 
      A grid that draws its dividers with a colored background behind 1px gaps
-     keeps that background; the frame around it is still this one. */
+     keeps that background; the frame around it is still this one. A section
+     part ({% section %}, `.section`) is framed whole, head and body, and its
+     body draws no second frame inside. One whose body is a table region and
+     nothing else, or one written head="above", is framed by its body instead,
+     its head above the frame, so the table reaches the frame's edges (the
+     same selector in cards.css draws the head). Beside a section whose body
+     is anything else in a pair's row (.two-col), or in a section flow, where
+     the parts of a thing's page are cards alike, it is framed whole, so the
+     frames in a row start together. A section inside a section
+     is part of the outer frame. */
   :where(
-  .table-scroll:has(> .data-table), .card, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section), .control-card,
+  .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section), .control-card,
   .control-metric, .control-summary, .service-band, .fact-band,
   .filter-bar, .table-toolbar, .kpi-grid, .insight-grid,
   .kv, .form,
-  .auth-card, .mail-stage, .mail-editor,
-  .topology-workspace, .github-list, .account-facts,
+  .auth-card, .mail-stage,
+  .topology-workspace, .github-list,
   .boxed-facts, .relation-list,
-  .posture-gaps, .posture-repos, .machine-telemetry, .machine-telemetry-metrics, .route,
-  .dashboard-counts, .dash-links) {
+  .posture-gaps, .posture-repos, .machine-telemetry-metrics, .route,
+  .dashboard-counts) {
     border: var(--surface-border, 1px solid var(--line));
     border-radius: var(--surface-radius, var(--radius));
     background: var(--surface-bg, var(--surface));
     box-shadow: var(--surface-shadow, var(--shadow-sm));
+    --ground: var(--surface);
 
     & > * {
       --surface-border: 0 none;
@@ -39,7 +49,7 @@
   }
   /* Stats inside a card are the card's content: an even grid with real gaps,
      no tile padding doubling the card's own. */
-  :is(.card, .highlight-card) > .kpi-grid {
+  :is(.card, .highlight-card > .section-body) > .kpi-grid {
     display: grid;
     /* Exactly the card's --kpi-columns, which the card sets from how many
        stats it holds and how wide it is (4 or 2+2, 6 or 3+3, never 3+1). A
@@ -54,10 +64,9 @@
   /* A row of stats shares its lines. Each stat takes the row's three tracks
      (label, value, note), so the labels start level and the values stand
      level, however many lines one label wraps to. */
-  :is(.card, .highlight-card) > .kpi-grid > .kpi {
+  :is(.card, .highlight-card > .section-body) > .kpi-grid > .kpi {
     padding: 0;
     background: none;
-    box-shadow: none;
     display: grid;
     grid-row: span 3;
     grid-template-rows: subgrid;
@@ -65,8 +74,9 @@
   }
   /* What a figure looks like, beside it: dots for a part of a whole, a line
      for a direction. A filled dot is solid and an empty one is a ring, so the
-     count does not rest on color. The line takes the room the value leaves
-     and is drawn only in a card wide enough to give it some. */
+     count does not rest on color. The line takes the room the value leaves,
+     or the line under the value where less is left than a direction reads in,
+     so it is drawn at any width. */
   /* The gap keeps a short value's hit area and the first dot's apart
      (page.css), beside it or under it. Dots that do not fit beside the value
      take the line under it, so they never reach past the figure's column, and
@@ -88,18 +98,15 @@
   /* A dot that leads somewhere is hit through a square around it (page.css),
      so dots that lead somewhere are set a square apart. */
   .kpi-dots:has(> a) { gap: calc(var(--target-min) - 10px); }
-  a.kpi-dot:hover, a.kpi-dot:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  a.kpi-dot:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
   .kpi a.value { color: inherit; text-decoration: none; }
   .kpi a.value:hover { text-decoration: underline; }
-  .kpi-trend { display: none; flex: 1 1 0; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
+  .kpi-trend { flex: 1 1 6rem; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
   .kpi-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   .kpi-trend-hit { fill: transparent; }
   .kpi-trend-dot { stroke: var(--accent); stroke-width: 7; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: 0; pointer-events: none; }
   .kpi-trend-dot.is-latest, .kpi-trend-hit:hover + .kpi-trend-dot { opacity: 1; }
   .kpi-grid.is-featured > :first-child .kpi-trend { height: 40px; }
-  @container kpi (min-width: 340px) {
-    .kpi-trend { display: block; }
-  }
 
   /* The contributor's first of four figures leads the overview. The same
      values and links appear once; supporting facts form a compact second row. */
@@ -114,6 +121,12 @@
     grid-column: 1 / -1;
     padding-bottom: var(--space-8);
     border-bottom: 1px solid var(--line-2);
+  }
+  /* In a section's frame the lead's rule is a divider of the frame, so it
+     reaches the frame's sides, as the head's rule above it does. */
+  .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child {
+    margin-inline: calc(-1 * var(--section-side));
+    padding-inline: var(--section-side);
   }
   .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child .value {
     font-size: var(--text-display);
@@ -131,14 +144,15 @@
   @container featured (min-width: 46rem) {
     .kpi-grid.is-featured:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
     .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { grid-column: auto; padding-bottom: 0; border-bottom: 0; }
+    .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { margin-inline: 0; padding-inline: 0; }
   }
 
   /* The last thing in a card ends the card: its own bottom margin would be
      dead space inside the card's padding. */
   /* A frame's own padding is its edge: the first and last thing in it keep no
      margin of their own, or a heading's top margin doubles the padding above it. */
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section)) > :last-child { margin-bottom: 0; }
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > :is(section, .page-section)) > :first-child { margin-top: 0; }
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > section) > :last-child { margin-bottom: 0; }
+  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > section) > :first-child { margin-top: 0; }
 
 
   /* ── Disclosure: one marker for everything that opens in place ─────────
@@ -207,14 +221,18 @@
     white-space: normal !important;
     max-height: none !important;
   }
-  /* The row's own caps go with them; the line beneath and a panel keep what holds a value to their line. */
-  .data-table tr.is-expanded :is(td, th),
-  .data-table tr.is-expanded :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover] *) {
-    max-width: none !important;
-  }
-  /* An uncut value breaks inside its held column (tables.js) rather than under the next: `anywhere` breaks count toward min-content, so a box sized to its content (a part, a code chip) does not hold out for its longest word, wider than the column. */
-  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
+  /* The row's own caps go with them. Nothing in it or in the line beneath asks for more than its cell, whatever a page's own rule says: no box holds out for a width of its own or grows wider than what holds it, and a chip is a box, its padding inside that width, set on its first line, so a lifted value wraps inside its held column (tables.js). */
+  .data-table tr.is-expanded :is(td, th) { max-width: none !important; }
   .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *) {
+    min-width: auto !important;
+    max-width: 100% !important;
+  }
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) code:not(:has(> .token[data-sole]):not(.cell-whole), [popover] *) { display: inline-block !important; vertical-align: baseline !important; baseline-source: first !important; }
+  /* An uncut value breaks inside its held column (tables.js) rather than under the next: `anywhere` breaks count toward min-content, so a box sized to its content (a part, a code chip, the unseen strut a name's column holds out with) does not hold out for its longest word, wider than the column. */
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *),
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *)::before,
+  .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, [popover], [popover] *)::after {
     overflow-wrap: anywhere !important;
   }
   /* A panel is as wide as it is drawn, so what it holds is held to its line and wraps there. */

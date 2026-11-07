@@ -22,7 +22,7 @@ from hq.platform.application.infrastructure import (
 from hq.platform.application.integration_specs import requested as requested_note
 from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
-from hq.platform.application.pages import PageAction, PageMixin, page_context
+from hq.platform.application.pages import PageAction, PageMixin, PageVisit, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.relationships import relationships_for
@@ -196,7 +196,7 @@ class ResourceRemoveView(View):
                 "forget": forget,
                 "holds_records": bool(PROVIDERS[resource.kind].contains),
                 "confirm": {
-                    "url": reverse("control_plane:remove", args=[resource.key]),
+                    "url": request.path,
                     "label": capabilities.removal_words,
                     "cancel_url": resource.get_absolute_url(),
                 },
@@ -423,15 +423,13 @@ class InfrastructureDetailView(PageMixin, DetailView):
         )
         if console:
             actions.insert(0, PageAction(provider.console_label, console, primary=not drifted))
-        actions.append(
-            PageAction(
-                capability_words("infrastructure.resource.update"),
-                returning_to(
-                    reverse("control_plane:edit", args=[key]),
-                    self.request.get_full_path(),
-                ),
+        if capabilities.offered.edit_url:
+            actions.append(
+                PageAction(
+                    capability_words("infrastructure.resource.update"),
+                    returning_to(capabilities.offered.edit_url, self.request.get_full_path()),
+                )
             )
-        )
         if PROVIDERS[self.object.kind].material_form:
             actions.append(
                 PageAction(
@@ -440,11 +438,11 @@ class InfrastructureDetailView(PageMixin, DetailView):
                     primary=True,
                 )
             )
-        if capabilities.removal != "unavailable":
+        if capabilities.offered.remove_url:
             actions.append(
                 PageAction(
                     capabilities.removal_words,
-                    reverse("control_plane:remove", args=[key]),
+                    capabilities.offered.remove_url,
                     danger=True,
                 )
             )
@@ -455,6 +453,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         context = super().get_context_data(**kwargs)
         capabilities = self.capabilities
         context["capabilities"] = capabilities
+        context["page_visit"] = PageVisit("resource", self.object.key)
         context["controller"] = controller_summary(capabilities.actions, verb_words)
         derived = self.derived
         context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))

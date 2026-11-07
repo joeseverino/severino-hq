@@ -28,6 +28,7 @@ from hq.platform.application.tables import (
 )
 from hq.platform.application.web_writes import execute_posted, refused
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+from hq.platform.core.templatetags.status_tags import status_pill
 from hq.platform.core.templatetags.value_tags import breakable
 
 from .forms import DocumentationRecordForm, ManifestImportForm
@@ -97,7 +98,7 @@ class DocsListView(PageMixin, TableListMixin, ListView):
     def get_page_actions(self):
         return (
             PageAction("Import manifest", reverse("docs_index:import")),
-            PageAction("New document", reverse("docs_index:create"), primary=True),
+            PageAction(capability_words("documentation.create"), reverse("docs_index:create"), primary=True),
         )
 
     @override
@@ -164,8 +165,8 @@ class DocsDetailView(PageMixin, DetailView):
             format_html("<code>{}</code>", breakable(record.doc_id)),
             record.get_doc_type_display(),
             record.get_environment_display(),
-            format_html('<span class="pill pill-{}">{}</span>', record.status, record.get_status_display()),
-            format_html('<span class="pill pill-{}">{}</span>', record.sensitivity, record.get_sensitivity_display()),
+            status_pill(record.get_status_display(), tone=record.status),
+            status_pill(record.get_sensitivity_display(), tone=record.sensitivity),
         )
 
     @override

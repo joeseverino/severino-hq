@@ -1,10 +1,10 @@
 {% comment %}
 A project's repository as the GitHub App reads it (application.github_estate):
-what is at the head, whether it passes, what production runs, what is open.
-The page reads a stored reading; nothing here calls GitHub.
+what is at the head, whether it passes, what production runs, then what is
+open, each list a section of its own after it. The page reads a stored
+reading; nothing here calls GitHub.
 {% endcomment %}
-<section class="github-panel" aria-labelledby="github-heading">
-  <h2 id="github-heading">GitHub <span class="heading-aside">{% entity repo.url|outside label=repo.name %}{% if repo.private %}{% dot %}private{% endif %}{% dot %}{% include "partials/_reading_age.html" with reading=repo.reading only %}</span></h2>
+{% section "GitHub" %}
   <div class="fact-band">
     {% band_fact icon="commit" label="Latest commit on "|add:repo.default_branch %}
       <strong>{% entity repo.head.url|outside code=True label=repo.head.sha|slice:":7" %}</strong>
@@ -41,7 +41,7 @@ The page reads a stored reading; nothing here calls GitHub.
           {% include "projects/_updates_run.html" with run=updates_run asked=run_asked %}
         </dd></div>
         {% if posture.measured %}
-          <div><dt>Repository settings</dt><dd><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules){% if posture.unmet %}<br><span class="github-gap">{% for result in posture.unmet %}{{ result.check.unmet|breakable:"." }}{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</dd></div>
+          <div><dt>Repository settings</dt><dd class="prose"><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules){% if posture.unmet %}<br><span class="github-gap">{% for result in posture.unmet %}{{ result.check.unmet|breakable:"." }}{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</dd></div>
         {% endif %}
         {% if rules %}
           <div><dt>Changes to {{ repo.default_branch|breakable }}</dt><dd>
@@ -61,7 +61,8 @@ The page reads a stored reading; nothing here calls GitHub.
       </dl>
     {% endwith %}
   </div>
-
+{% aside %}<span class="count prose">{% entity repo.url|outside label=repo.name %}{% if repo.private %}{% dot %}private{% endif %}{% dot %}{% include "partials/_reading_age.html" with reading=repo.reading only %}</span>
+{% endsection %}
 
   {% comment %}
   Rows that read left to right, the detail beside the name: a four-column
@@ -71,27 +72,28 @@ The page reads a stored reading; nothing here calls GitHub.
 
   {% with pulls=repo.other_pulls %}
   {% if pulls %}
-    <h3 class="section-heading">Open pull requests <span class="heading-aside">{{ pulls|length }}</span></h3>
+    {% section "Open pull requests" count=pulls|length %}
     <ul class="github-list">
       {% for pull in pulls %}
         <li>
           <span class="github-mark">{% include "partials/_icon.html" with name="pull" %}</span>
           {% entity pull.url|outside label=pull.title %}
           <span class="muted">#{{ pull.number|breakable }}{% dot %}{{ pull.author|breakable }}{% dot %}{{ pull.updated_at|ago_short }}</span>
-          {% if pull.draft %}<span class="pill">Draft</span>{% endif %}
+          {% if pull.draft %}{% status "Draft" %}{% endif %}
         </li>
       {% endfor %}
     </ul>
+    {% endsection %}
   {% endif %}
   {% endwith %}
 
   {% if repo.workflow_runs %}
-    <h3 class="section-heading">Workflows</h3>
+    {% section "Workflows" %}
     {% comment %}Chips that wrap, not cells: a grid strands a last row. Detail on hover.{% endcomment %}
     <p class="workflow-chips">
       {% for run in repo.workflow_runs %}
         {% outside_link url=run.url css="workflow-chip" tone=run.tone tip=run.tip %}{% include "partials/_icon.html" with name="check-circle" %}{{ run.name|breakable }}<span class="visually-hidden">: {{ run.said|breakable }}</span>{% endoutside_link %}
       {% endfor %}
     </p>
+    {% endsection %}
   {% endif %}
-</section>

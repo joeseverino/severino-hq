@@ -134,25 +134,29 @@ def _report(parameters: Parameters, payload: Any) -> Any:
 
 @dataclass(frozen=True, slots=True)
 class Action:
+    """One thing the controller may ask, and what a person calls its asking:
+    the title of every audit row written while it runs (``audit_words.title_of``)."""
+
     name: str
+    title: str
     run: Run
 
 
 ACTIONS: tuple[Action, ...] = (
-    Action("claim", _claim),
-    Action("peek", _peek),
-    Action("export", _export),
-    Action("schedule", _schedule),
-    Action("material", _material),
-    Action(READINGS_ACTION, _recorded(record_sweep)),
-    Action("connections", _recorded(record_connections)),
-    Action("steps", _recorded(record_step_failures)),
-    Action("analytics", _recorded(record_analytics)),
-    Action("analytics-plan", _analytics_plan),
-    Action("sweep-due", _sweep_due),
-    Action("glance-plan", _glance_plan),
-    Action("glance", _recorded(record_dashboard_observations)),
-    Action("report", _report),
-    Action("registry", _registry),
-    Action("job", _job),
+    Action("claim", "The controller took the next queued work", _claim),
+    Action("peek", "The controller looked for queued work", _peek),
+    Action("export", "The controller read what a record declares", _export),
+    Action("schedule", "The controller queued the automatic work", _schedule),
+    Action("material", "The controller fetched a certificate's key", _material),
+    Action(READINGS_ACTION, "The controller read what exists", _recorded(record_sweep)),
+    Action("connections", "The controller said what it can reach", _recorded(record_connections)),
+    Action("steps", "The controller said what it could not finish", _recorded(record_step_failures)),
+    Action("analytics", "The controller sent site analytics", _recorded(record_analytics)),
+    Action("analytics-plan", "The controller asked which analytics to read", _analytics_plan),
+    Action("sweep-due", "The controller asked which readings are due", _sweep_due),
+    Action("glance-plan", "The controller asked which panels to refresh", _glance_plan),
+    Action("glance", "The controller refreshed the dashboard", _recorded(record_dashboard_observations)),
+    Action("report", "The controller said how queued work ended", _report),
+    Action("registry", "The controller read what each provider declares", _registry),
+    Action("job", "The controller ran scheduled work", _job),
 )

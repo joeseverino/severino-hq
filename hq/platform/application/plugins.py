@@ -33,7 +33,7 @@ lazy from .security import host_capabilities
 
 logger = logging.getLogger("severino.composition")
 
-PLUGIN_API_VERSION = 9
+PLUGIN_API_VERSION = 10
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -170,6 +170,8 @@ class PluginIntegration:
     # is one: the queue's heading for the domain links there.
     attention_url: Callable[[], str] | None = None
     search: Callable[[], Iterable[Any]] | None = None
+    # Whether the extension can serve at all; readiness ANDs every answer. A
+    # missing secret or setting is shown through ``attention``, never as false.
     health: Callable[[], bool] | None = None
     # Calendar sources: each a ``CalendarSource`` naming what the domain
     # already knows the date of.
@@ -177,6 +179,15 @@ class PluginIntegration:
     # Work that reaches outside the process: each an ``OutboundWork``. HQ
     # derives its job, capability, route, control and audit entries.
     outbound: Callable[[], Iterable[Any]] | None = None
+    # The extension's demo records, written for the user it is given into a
+    # database the example estate was just written to, by the showcase and
+    # standard data sets alone (``hq.platform.core.seeds``). Its dates sit
+    # relative to today and its keys are fixed, so every database it writes
+    # holds the same pages.
+    demo_seed: Callable[[Any], object] | None = None
+    # A record's page of each kind ``demo_seed`` writes, by address, which the
+    # layout gate and dev:look's ``all`` read beside the host's own.
+    demo_pages: Callable[[], Iterable[str]] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -383,21 +394,11 @@ def installed_integrations() -> tuple[tuple[PluginManifest, PluginIntegration], 
         integration = provider()
         if not isinstance(integration, PluginIntegration):
             raise ImproperlyConfigured(f"Plugin {plugin.id!r} integration provider must return PluginIntegration.")
+        # Every field is a provider, so each one is held to being callable.
         invalid = [
-            field
-            for field in (
-                "capabilities",
-                "resources",
-                "connections",
-                "dashboard",
-                "overview",
-                "attention",
-                "search",
-                "health",
-                "calendars",
-                "outbound",
-            )
-            if (value := getattr(integration, field)) is not None and not callable(value)
+            field.name
+            for field in fields(integration)
+            if (value := getattr(integration, field.name)) is not None and not callable(value)
         ]
         if invalid:
             raise ImproperlyConfigured(

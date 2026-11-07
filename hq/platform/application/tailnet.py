@@ -9,7 +9,7 @@ sweep cannot answer says so rather than guessing.
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from ipaddress import ip_address
 from typing import Any
@@ -29,11 +29,14 @@ lazy from .facts import inventory_records
 lazy from .hq_self import scoped_served_port, site_label
 lazy from .infrastructure import enabled_resources
 lazy from .locate import host_of, points_at_host, split_endpoint
+lazy from .tailnet_loopback import GRANT_REACHES_ONLY_LOOPBACK, loopback_grants
 
 # The settings row naming the tailnet's resolvers, by address.
 RESOLVES_THROUGH = "Resolves through"
 # The setting row that says whether a new device waits for approval.
 NEW_DEVICES = "New devices"
+# The setting row that says which nodes may publish to the internet.
+FUNNEL = "Funnel"
 
 
 @dataclass(frozen=True, slots=True)
@@ -336,6 +339,12 @@ class Policy:
     services: tuple[dict, ...] = ()
     app_connectors: tuple[dict, ...] = ()
     ssh_rules: tuple[dict, ...] = ()
+    # The grants as the document writes them, every key kept: what a fix
+    # quotes back, where ``grants`` holds only what the reading extracted.
+    written_grants: tuple[dict, ...] = ()
+    # The node attribute targets holding funnel, which Funnel needs; None
+    # where the reading does not say.
+    funnel: tuple[str, ...] | None = None
     # Access rules in the older ``acls`` form, which a policy may still use
     # instead of grants or beside them.
     acls: tuple[dict, ...] = ()
@@ -383,6 +392,15 @@ class Policy:
                 "Outside Tailscale" if self.settings.get("aclsExternallyManagedOn") else "Tailscale",
             )
         )
+        if self.funnel is not None:
+            rows.append(
+                (
+                    FUNNEL,
+                    f"Allowed for {', '.join(self.funnel)}"
+                    if self.funnel
+                    else "Off: no node holds the funnel attribute",
+                )
+            )
         # Only when the reading exists. A tailnet whose daemon never answered
         # should say nothing here rather than report lock as off, which is a
         # claim about the tailnet rather than about the reading.
@@ -482,6 +500,10 @@ def policy() -> Policy:
                 services=tuple(record.get("services") or ()),
                 app_connectors=tuple(record.get("app_connectors") or ()),
                 ssh_rules=tuple(record.get("ssh_rules") or ()),
+                written_grants=tuple(grant for grant in document.get("grants") or () if isinstance(grant, dict)),
+                funnel=tuple(str(target) for target in funnel)
+                if isinstance(funnel := record.get("funnel"), list)
+                else None,
                 observed_at=snapshot.observed_at,
             )
     return Policy(lock=lock)
@@ -610,11 +632,7 @@ def grant_ports(grants, known: dict[str, Device] | None = None, machines=None) -
 
 def _grant_ports(grants, known, machines) -> tuple[dict, ...]:
     known = devices() if known is None else known
-    machines = connections.machines_once() if machines is None else machines
-    by_name: dict[str, object] = {}
-    for item in machines:
-        for name in (item.name, *item.aliases):
-            by_name.setdefault(str(name).lower(), item)
+    by_name = _by_name(connections.machines_once() if machines is None else machines)
     namer = _PortNamer(_ssh_ports(), _service_ports())
     shown = []
     for grant in grants:
@@ -625,6 +643,16 @@ def _grant_ports(grants, known, machines) -> tuple[dict, ...]:
             ports.append((entry, namer.name(int(match.group(1)), targets) if match else ""))
         shown.append({**grant, "ports": tuple(sorted(ports, key=lambda port: _port_order(port[0])))})
     return tuple(shown)
+
+
+def _by_name(machines) -> dict[str, object]:
+    """Each machine under every name it answers to, lowercased."""
+
+    by_name: dict[str, object] = {}
+    for item in machines:
+        for name in (item.name, *item.aliases):
+            by_name.setdefault(str(name).lower(), item)
+    return by_name
 
 
 def _ssh_ports() -> dict[str, set[int]]:
@@ -698,19 +726,19 @@ class _PortNamer:
     def name(self, port: int, targets) -> str:
         if port == self.hq_port and any(target.runs_hq for target in targets):
             return site_label()
-        if any(self._opens(target, port) for target in targets):
+        if any(self.opens(target, port) for target in targets):
             return CONNECTION_LABELS["ssh"]
         for target in targets:
             for running in sorted(target.containers, key=lambda item: item.name):
                 if port in running.ports:
                     return running.name
         for target in targets:
-            label = self._service(target, port)
+            label = self.service(target, port)
             if label:
                 return label
         return WELL_KNOWN_PORTS.get(port, "")
 
-    def _service(self, target, port: int) -> str:
+    def service(self, target, port: int) -> str:
         """The service a connection reads on this port of this machine."""
 
         refs = {*target.reached_by, *target.opened_by}
@@ -724,7 +752,7 @@ class _PortNamer:
                 return item.label
         return ""
 
-    def _opens(self, target, port: int) -> bool:
+    def opens(self, target, port: int) -> bool:
         refs = {*target.reached_by, *target.opened_by}
         return any(port in self.ssh_ports.get(ref, ()) for ref in refs)
 
@@ -782,6 +810,7 @@ def posture_facts() -> tuple[tuple[str, str], ...]:
         if not group.get("members") and group.get("name") in named
     )
     entries.extend(("tag-granted-to-nobody", tag) for tag in unworn_tags(named))
+    entries.extend((GRANT_REACHES_ONLY_LOOPBACK, json.dumps(asdict(item))) for item in loopback_grants())
     return tuple(entries)
 
 

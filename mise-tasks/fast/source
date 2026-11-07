@@ -1,0 +1,20 @@
+#!/bin/sh
+#MISE description="fast's source checks that read the browser gate's modules, which its test run waits on: mise run fast"
+#MISE hide=true
+#MISE extends="django"
+#MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
+#USAGE arg "[labels]..." var=#true help="The source checks fast selected"
+
+# They start no browser and finish in seconds, so a refusal stops fast's run
+# before its tests take the heavy turn (tools/gate/fast.py, source_first).
+set -eu
+# mise hands the words over shell-quoted, one word each.
+eval "set -- ${usage_labels:-}"
+[ "$#" -gt 0 ] || exit 0
+# One process, which tools/gate/turn.py finds narrow.
+test_arguments="--noinput --parallel 1 ${usage_labels:-}"
+turn_bound=30m
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+# The tests' own mise runs read the checkout's config alone.
+exec env -u MISE_ENV uv run python manage.py test --noinput --parallel 1 "$@"

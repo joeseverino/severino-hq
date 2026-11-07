@@ -217,7 +217,7 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 # TC: lazy imports already keep import cost off the start path, without type-only blocks.
 # T201: commands and tools print to their terminal by design.
 # PLR0913: a keyword-only signature is how a use case states its inputs.
-select = ["E4", "E7", "E9", "W605", "F", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE", "TID251", "PLC", "PLE", "PLW", "PLR1714", "DTZ", "A", "TRY", "ARG", "SLF001", "ISC004", "PIE", "RET", "ERA", "FBT", "S110", "S112"]
+select = ["E4", "E7", "E9", "W605", "F", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE", "TID251", "PLC", "PLE", "PLW", "PLR1714", "DTZ", "A", "TRY", "ARG", "SLF001", "ISC004", "PIE", "RET", "ERA", "FBT", "S"]
 ignore = [
     # En dashes, multiplication signs and curly quotes are deliberate typography in user-facing copy.
     "RUF001",
@@ -228,7 +228,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.flake8-bandit]
-# S110 and S112 hold every except, typed or bare, whose whole body is pass or
+# The whole S family runs: a finding is fixed by the safe form its rule names,
+# or carries a line-level noqa saying why the form it flags is safe there. S110
+# and S112 hold every except, typed or bare, whose whole body is pass or
 # continue: one that drops an error reports it, or says on its line why
 # skipping is the point.
 check-typed-exception = true
@@ -253,8 +255,22 @@ check-typed-exception = true
 # the test; converting the suite to lazy imports is its own pass. A fake takes
 # the arguments of what it stands in for, whether or not it reads them, a
 # test reaches into what it tests, and a case a test cannot set up is one its
-# assertions do not cover.
-"**/tests/**" = ["RUF012", "PLC0415", "ARG", "SLF001", "S110", "S112"]
+# assertions do not cover. A test's credentials, addresses, temporary paths
+# and seeded randomness are synthetic fixtures; it writes raw SQL against a
+# model's own table to prove what the database refuses, round-trips its own
+# values through pickle as the parallel runner does, runs the repository's own
+# commands by name, and its assert is a check the suite runs, never under -O.
+"**/tests/**" = [
+    "RUF012", "PLC0415", "ARG", "SLF001",
+    "S101", "S104", "S105", "S106", "S107", "S108", "S110", "S112", "S301", "S311", "S603", "S607", "S608",
+]
+# Development and CI code runs the toolchain mise puts on PATH (git, uv, mise,
+# ssh), each as an argument list, and execs a known command in its own place.
+# A shell string (S602, S604, S605) stays refused here too.
+"tools/**" = ["S603", "S606", "S607"]
+# Lint and build steps that run one tool of the toolchain by name, as an argument list.
+"hq/platform/core/plain_words.py" = ["S603", "S607"]
+"demo/build.py" = ["S607"]
 "demo/check.py" = ["PLC0415"]
 # Django's AppConfig.create reads every name an apps module binds
 # (inspect.getmembers), which reifies a lazy import before the app registry is
@@ -263,7 +279,8 @@ check-typed-exception = true
 # Pydantic copies a field default for each instance.
 "hq/domains/control_plane/observations/*.py" = ["RUF012"]
 # Runs on the 3.6 interpreter shared hosting ships; newer idioms would not run there.
-"deploy/targets/severino-hq-cpanel-controller" = ["UP", "SIM", "PTH", "PERF", "FURB", "B", "RUF", "C4"]
+# It runs cPanel's uapi by name, as an argument list.
+"deploy/targets/severino-hq-cpanel-controller" = ["UP", "SIM", "PTH", "PERF", "FURB", "B", "RUF", "C4", "S603"]
 # Django's execute_wrapper calls a wrapper with (execute, sql, params, many, context), positionally.
 "hq/platform/application/derivations.py" = ["FBT001"]
 "hq/platform/core/ahead.py" = ["FBT001"]

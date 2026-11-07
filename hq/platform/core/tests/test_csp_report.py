@@ -44,6 +44,29 @@ class PolicyReportTests(TestCase):
 
         self.assertEqual(_reports().count(), 1)
 
+    def test_one_report_not_in_a_list_is_read_too(self):
+        # As WebKit sends it to report-uri: a single Reporting API report,
+        # under the legacy content type.
+        self.report(
+            json.dumps(
+                {
+                    "type": "csp-violation",
+                    "url": "https://hq.example.test/",
+                    "body": {
+                        "documentURL": "https://hq.example.test/",
+                        "disposition": "enforce",
+                        "referrer": "",
+                        "effectiveDirective": "style-src-elem",
+                        "blockedURL": "inline",
+                        "statusCode": 200,
+                        "sample": "",
+                    },
+                }
+            )
+        )
+
+        self.assertEqual(_reports().get().metadata["directive"], "style-src-elem")
+
     def test_a_directive_the_policy_governs_only_by_fallback_is_recorded(self):
         self.violations({"effectiveDirective": "script-src-elem", "blockedURL": "inline"})
 

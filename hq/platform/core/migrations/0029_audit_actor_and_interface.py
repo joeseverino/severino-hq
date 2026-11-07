@@ -19,7 +19,7 @@ def _name_the_user(apps, schema_editor):
     quote = schema_editor.quote_name
     username = users._meta.get_field(get_user_model().USERNAME_FIELD).column
     schema_editor.execute(
-        f"UPDATE {quote(audit._meta.db_table)} "
+        f"UPDATE {quote(audit._meta.db_table)} "  # noqa: S608 - models' own identifiers, quoted
         f"SET metadata = json_set(metadata, '$.actor', "
         f"(SELECT {quote(username)} FROM {quote(users._meta.db_table)} WHERE id = user_id)) "
         "WHERE user_id IS NOT NULL AND json_type(metadata) = 'object' "

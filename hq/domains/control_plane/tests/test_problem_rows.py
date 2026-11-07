@@ -21,7 +21,7 @@ def _in_card(element: Element) -> Element | None:
     return next((ancestor for ancestor in reversed(element.ancestors) if "card" in ancestor.classes), None)
 
 
-class ProblemLineTests(TestCase):
+class ProblemRowTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         with throwaway_media(), seeds.built("standard") as owner:
@@ -30,18 +30,18 @@ class ProblemLineTests(TestCase):
     def setUp(self):
         self.client.force_login(self.owner)
 
-    def test_a_line_about_a_container_sits_in_the_machines_containers_card(self):
+    def test_a_row_about_a_container_sits_in_the_machines_containers_card(self):
         page = all_elements(self.client.get(reverse("control_plane:machine", kwargs={"name": MACHINE})))
 
         marks = [element for element in page if _ABOUT_A_CONTAINER in element.attrs.get("data-origin", "")]
         self.assertTrue(marks)
         for mark in marks:
-            line = next(ancestor for ancestor in mark.ancestors if "problem-line" in ancestor.classes)
-            card = _in_card(line)
-            self.assertIsNotNone(card)
-            self.assertEqual(card.attrs.get("aria-labelledby"), "machine-containers-heading")
+            row = next(ancestor for ancestor in mark.ancestors if "data-attention-item" in ancestor.attrs)
+            self.assertIsNotNone(_in_card(row))
+            section = next(ancestor for ancestor in reversed(row.ancestors) if "aria-labelledby" in ancestor.attrs)
+            self.assertEqual(section.attrs["aria-labelledby"], "containers-heading")
 
-    def test_no_line_on_a_things_page_sits_loose_between_its_cards(self):
+    def test_no_row_on_a_things_page_sits_loose_between_its_cards(self):
         with projection_scope():
             pages = sorted(problem_counts(cli_principal()))
         self.assertIn(reverse("control_plane:machine", kwargs={"name": MACHINE}), pages)
@@ -52,5 +52,5 @@ class ProblemLineTests(TestCase):
                 cards = [at for at, element in enumerate(page) if "card" in element.classes]
                 first = min((at for at in cards if page[at].attrs.get("id") != "problems-here"), default=len(page))
                 for at, element in enumerate(page):
-                    if "problem-line" in element.classes and _in_card(element) is None:
+                    if "data-attention-item" in element.attrs and _in_card(element) is None:
                         self.assertLess(at, first, f"{element.words[:80]} sits outside a card, below one")

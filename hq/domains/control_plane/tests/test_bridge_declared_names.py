@@ -2,12 +2,13 @@
 while a member the contract leaves open is still struck by a secret name."""
 
 import json
+from dataclasses import replace
 from typing import Any
 
 from django.test import TestCase
 
 from hq.domains.control_plane import bridge_application
-from hq.domains.control_plane.bridge_actions import ACTIONS, Action
+from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.bridge_contract import contract, operations
 from hq.domains.control_plane.observations import OBSERVATIONS
 
@@ -38,7 +39,7 @@ def _recording(ran: list[tuple[str, Any]]):
     def noted(name: str):
         return lambda parameters, payload: ran.append((name, payload)) or {"ok": True}
 
-    return bridge_application.bridge(tuple(Action(action.name, noted(action.name)) for action in ACTIONS))
+    return bridge_application.bridge(tuple(replace(action, run=noted(action.name)) for action in ACTIONS))
 
 
 def _send(action: str, payload: Any, ran: list[tuple[str, Any]]):

@@ -4,7 +4,7 @@ from datetime import timedelta
 from unittest import mock
 
 from django.db import connection as database_connection
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -146,6 +146,9 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
             {(edge.source, edge.target, edge.kind) for edge in topology.edges},
         )
 
+    # With public DNS changes off a domain is not offered for edit; that is
+    # what the panel shares with its page, held in test_topology_offers.
+    @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=True)
     def test_actions_are_existing_use_cases_and_follow_authorization(self):
         reader = next(node for node in self.project().nodes if node.id == "resource:example-zone")
         operator = next(node for node in self.project(MANAGE).nodes if node.id == "resource:example-zone")

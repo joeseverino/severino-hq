@@ -26,16 +26,10 @@ from hq.platform.application.entity_links import (
 )
 from hq.platform.application.labels import DOT, DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
+    WHEN_FORMS as _WORDS_FORMS,
     ago as _ago,
-    ahead as _ahead,
     elapsed as _elapsed,
-    length as _length,
-    month as _month,
-    numeral as _numeral,
     span as said,
-    weekday as _weekday,
-    weekday_initials as _weekday_initials,
-    when as _when,
     when_day as _when_day,
     when_exact as _when_exact,
 )
@@ -48,7 +42,7 @@ lazy from hq.platform.application import references, request_identity, security
 lazy from hq.platform.application.derivations import this_year
 lazy from hq.platform.application.problems import problems_about as _problems_about
 lazy from hq.platform.application.references import reference_of
-lazy from hq.platform.application.where_it_runs import named_links as _named_links, where_it_runs as _where_it_runs
+lazy from hq.platform.application.where_it_runs import named_links as _named_links
 lazy from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY
 
 register = template.Library()
@@ -86,7 +80,7 @@ def dot():
     may break only after it, so no line starts with a dot or holds one alone;
     a reader hears the two parts. A run of whole parts that is a list of its
     own is a ``.dot-list``; Python joins text as ``labels.dotted`` does."""
-    return mark_safe(DOT_MARKUP)
+    return mark_safe(DOT_MARKUP)  # noqa: S308 - HQ's own literal markup
 
 
 @register.simple_tag
@@ -173,20 +167,9 @@ def _dated_mark(value: date):
     )
 
 
-# What ``when`` can be asked for, and the words each one shows.
-_WHEN_FORMS = {
-    "": _when,  # "Oct 3, 9:29 AM"; a date reads "Oct 3"
-    "ago": lambda value: _ago(value) if isinstance(value, datetime) else _when_day(value),  # "5 days ago"
-    "day": _when_day,  # the day a moment fell on
-    "exact": _when_exact,  # "Oct 3, 2026, 9:29:15 AM CDT"
-    "mark": _dated_mark,
-    "weekday": _weekday,  # "Monday"
-    "initials": _weekday_initials,  # "Mo", where a column is narrow
-    "month": _month,  # "October 2026", the month a calendar shows
-    "numeral": _numeral,  # "3", the day of the month in a calendar's cell
-    "length": _length,  # "5 minutes", how far it lies from now either way
-    "ahead": _ahead,  # "in 3 days", or "5 days ago" once it has passed
-}
+# What ``when`` can be asked for: the words ``application.moments`` declares,
+# and the one form that is markup, a dated row's mark.
+_WHEN_FORMS = {**_WORDS_FORMS, "mark": _dated_mark}
 
 
 @register.filter
@@ -329,6 +312,10 @@ _SEAM = '<span class="seam"></span>'
 # a browser breaks after a hyphen, and a name split there reads as two. A flag
 # ("-a") has nothing before its hyphen to break from.
 _INNER_HYPHEN = re.compile(r"[^-\s]-")
+# A run longer than any word of a sentence (a digest, a key, a subject) has no
+# seam to wrap at, so it is held on one line as a hyphenated part is: a cell
+# cuts it at its edge rather than widening its column to fit it.
+_UNBROKEN = 24
 # A seam inside a word, between two of its letters or digits: an address, a
 # path, a host name. A dot after a bracket ("(.zip)") is punctuation.
 _INNER_SEAM = re.compile(r"\w(?:/|:+|\.)\w")
@@ -408,8 +395,15 @@ def _held(group: list[str], *, first: bool, last: bool) -> str:
     return group[0][:-1] + _joined("-" + "".join(group[1:]))
 
 
+def _kept(part: str) -> bool:
+    """Whether a part is held on one line: a hyphen inside it, or a run too
+    long to be a word."""
+
+    return bool(_INNER_HYPHEN.search(part)) or len(unescape(part)) > _UNBROKEN
+
+
 def _whole(part: str, *, boxed: bool = False) -> str:
-    """A part, kept on one line when a hyphen is inside it. Where it must break
+    """A part, kept on one line when it is ``_kept``. Where it must break
     after a hyphen all the same, a scrap at either end stays with its
     neighbor; one inside it has words on both sides to share its line.
 
@@ -417,7 +411,7 @@ def _whole(part: str, *, boxed: bool = False) -> str:
     cell cuts at the cell's edge while the part around it asks for its whole
     length and holds out for none of it (figures.css)."""
 
-    if not _INNER_HYPHEN.search(part):
+    if not _kept(part):
         return part
     groups = _glued(_AFTER_HYPHEN.split(part))
     last = len(groups) - 1
@@ -430,15 +424,15 @@ def _whole(part: str, *, boxed: bool = False) -> str:
 
 
 def _token(word: str, *, sole: bool) -> str:
-    """A word with a seam or a hyphen inside it, as a token. A word with
-    neither reads as a word, and stays plain text. A token that is the whole
-    value (a name, never a word of a sentence) is marked ``data-sole``, so a
-    table cell may cut it rather than break it. A figure among words reads
-    as one of them."""
+    """A word with a seam or a hyphen inside it, or too long to be a word, as
+    a token. Any other word reads as a word, and stays plain text. A token
+    that is the whole value (a name, never a word of a sentence) is marked
+    ``data-sole``, so a table cell may cut it rather than break it. A figure
+    among words reads as one of them."""
 
-    if not (_INNER_SEAM.search(word) or _INNER_HYPHEN.search(word)):
+    if not (_INNER_SEAM.search(word) or _kept(word)):
         return word
-    if not sole and _FIGURE.fullmatch(unescape(word)):
+    if not sole and len(unescape(word)) <= _UNBROKEN and _FIGURE.fullmatch(unescape(word)):
         # A browser breaks after a dash, so a range is a part of its own:
         # it moves to the next line whole and breaks at its dash only when it
         # alone is longer than its line.
@@ -454,10 +448,10 @@ def _token(word: str, *, sole: bool) -> str:
         # A word of a phrase: each part is cut on its own, at its cell's edge.
         return f'<span class="token">{_SEAM.join(_whole(part, boxed=True) for part in parts)}</span>'
     inside = _SEAM.join(_whole(part) for part in parts)
-    # A name a cell cuts inside a hyphenated part is cut by a box within the
+    # A name a cell cuts inside a part it keeps is cut by a box within the
     # token, so the token can ask for the name's whole length around it
     # (figures.css).
-    if any(_INNER_HYPHEN.search(part) for part in parts):
+    if any(_kept(part) for part in parts):
         inside = f'<span class="cut">{inside}</span>'
     # The name again, unseen and with nothing to copy, broken only where the
     # name breaks once a row opens it: a table cell that cuts the name sizes
@@ -513,11 +507,13 @@ def breakable(value, mark=""):
         last = drawn[-1]
         at = _CLOSING.search(last).start()
         # Hidden from the accessibility tree: in a link it would be heard as
-        # part of the link's name.
-        drawn[-1] = f'{last[:at]}<span class="mark" aria-hidden="true">{conditional_escape(mark)}</span>{last[at:]}'
+        # part of the link's name. ``data-mark`` is what a link draws in its
+        # place, clear of its underline (base.css).
+        shown = conditional_escape(mark)
+        drawn[-1] = f'{last[:at]}<span class="mark" data-mark="{shown}" aria-hidden="true">{shown}</span>{last[at:]}'
     # A dot ``labels.dotted`` joined parts with is drawn as {% dot %} draws it,
     # hidden from a reader.
-    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))
+    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))  # noqa: S308 - each word is escaped as it is drawn
 
 
 def _words(value, *, sole: bool | None = None) -> list[str]:
@@ -558,7 +554,7 @@ def code_spans(value):
         # A word of a sentence, never a name standing alone, inside a span too.
         words = "".join(_words(piece, sole=False))
         drawn.append(f"<code>{words}</code>" if index % 2 else words)
-    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))
+    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))  # noqa: S308 - each word is escaped as it is drawn
 
 
 def _mark(mark) -> str:
@@ -631,7 +627,7 @@ def entity(context, link, code=False, label="", mark=""):
     if link.url and not link.external and _is_this_page(context, link.url):
         return format_html('<span data-entity="{}">{}</span>', link.kind_label, label)
     if link.url and link.external:
-        return mark_safe(
+        return mark_safe(  # noqa: S308 - the template's own escaped output
             render_to_string(
                 OUTSIDE_LINK,
                 {"url": link.url, "arrow": True, "entity": link.kind_label, "content": label},
@@ -785,13 +781,6 @@ def web_url(value):
 
 
 @register.filter
-def where_it_runs(public_url):
-    """The service, machine and container behind a published address, for
-    ``partials/_runs_on.html``; nothing when no service answers there."""
-    return _where_it_runs(public_url)
-
-
-@register.filter
 def named_links(text):
     """Free text as plain stretches and the links of the names HQ knows in
     it, for ``partials/_linked_text.html``."""
@@ -845,7 +834,7 @@ class SlotsNode(template.Node):
         for attribute in self.child_nodelists:
             # Rendered by the page's own template, so escaped already. A part
             # left empty leaves an option of its name as it is.
-            part = mark_safe(getattr(self, attribute).render(context).strip())
+            part = mark_safe(getattr(self, attribute).render(context).strip())  # noqa: S308 - the template's own escaped output
             name = attribute.removeprefix("nodelist_")
             if part or name not in values:
                 values[name] = part
@@ -929,7 +918,7 @@ def _drawn(value) -> bool:
     return value is not None and value is not False and value != ""
 
 
-def _card(name: str, given: dict) -> dict:
+def card_frame(name: str, given: dict) -> dict:
     """A card's opening and closing tags. Built here rather than in its
     partial, since the element is a choice and every attribute but the class
     is drawn only when it has a value: True draws a bare attribute."""
@@ -949,8 +938,12 @@ def _card(name: str, given: dict) -> dict:
     drawn = [(key, value) for key, value in named.items() if _drawn(value)]
     valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
     bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
-    # The element is one of CARD_ELEMENTS and the attributes are escaped above.
-    return {"opening": mark_safe(f"<{element}{valued}{bare}>"), "closing": mark_safe(f"</{element}>")}
+    # The element is one of CARD_ELEMENTS, a tag name and never text, and the
+    # attributes are escaped above.
+    return {
+        "opening": mark_safe(f"<{element}{valued}{bare}>"),  # noqa: S308 - see above
+        "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
+    }
 
 
 slotted("section_head", "partials/_section_head.html", ("heading", "aside"), frozenset(("id", "lede")))
@@ -966,5 +959,5 @@ slotted(
     "partials/_card.html",
     ("content",),
     frozenset(("element", "id", "css", "heading", "label", "busy", "open")),
-    shape=_card,
+    shape=card_frame,
 )

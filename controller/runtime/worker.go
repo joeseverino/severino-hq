@@ -66,7 +66,7 @@ func (w *Worker) Run(ctx context.Context, apply bool) (int, error) {
 		w.post("steps", w.Bridge.Steps(ctx, w.ID, failures))
 	}()
 	w.Glance(ctx)
-	applied, failed, queueErr := w.applyQueued(ctx)
+	applied, stopped, failed, queueErr := w.applyQueued(ctx)
 	sweepErr := w.sweep(ctx)
 	if sweepErr == nil {
 		sweepErr = w.Bridge.Schedule(ctx, w.ID)
@@ -77,16 +77,16 @@ func (w *Worker) Run(ctx context.Context, apply bool) (int, error) {
 	if sweepErr != nil {
 		return 1, sweepErr
 	}
-	if !failed {
+	if !stopped {
 		var next int
 		var err error
-		next, failed, err = w.applyQueued(ctx)
+		next, stopped, failed, err = w.applyQueued(ctx)
 		applied += next
 		if err != nil {
 			return 1, err
 		}
 	}
-	if applied == 0 && !failed {
+	if applied == 0 && !stopped {
 		if err := w.emit(IdlePassOutput{OK: true, Mode: PassModeApply}); err != nil {
 			return 1, err
 		}
@@ -208,37 +208,42 @@ func (w *Worker) retryNetwork(ctx context.Context, connections []ConnectionRecor
 	return connections, nil
 }
 
-func (w *Worker) applyQueued(ctx context.Context) (int, bool, error) {
-	applied := 0
+// applyQueued applies up to ApplyLimit operations; how many applied, whether
+// a refused one stopped the queue, and whether that refusal is a failure. A
+// refusal for an allowance spent stops the queue without failing the pass:
+// HQ is told the operation did not apply and the next pass tries again.
+func (w *Worker) applyQueued(ctx context.Context) (applied int, stopped, failed bool, err error) {
 	for range ApplyLimit {
-		claimed, success, err := w.applyOne(ctx)
+		claimed, refusal, err := w.applyOne(ctx)
 		if err != nil {
-			return applied, false, err
+			return applied, false, false, err
 		}
 		if !claimed {
-			return applied, false, nil
+			return applied, false, false, nil
 		}
-		if !success {
-			return applied, true, nil
+		if refusal != nil {
+			return applied, true, !refusal.Limited, nil
 		}
 		applied++
 	}
-	return applied, false, nil
+	return applied, false, false, nil
 }
 
-func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
+// applyOne claims and applies one operation: whether one was claimed, and the
+// provider's refusal of it, which HQ has been told.
+func (w *Worker) applyOne(ctx context.Context) (bool, *ProviderError, error) {
 	pending, err := w.Bridge.Claim(ctx, w.ID, w.claimable())
 	if err != nil {
-		return false, false, err
+		return false, nil, err
 	}
 	if pending.Operation == nil {
-		return false, true, nil
+		return false, nil, nil
 	}
 	resource := pending.Resource
 	result, err := w.execute(ctx, pending, &resource)
 	var refusal *ProviderError
 	if err != nil && !errors.As(err, &refusal) {
-		return true, false, err
+		return true, nil, err
 	}
 	if refusal != nil {
 		message := ReportText(err.Error())
@@ -260,13 +265,13 @@ func (w *Worker) applyOne(ctx context.Context) (bool, bool, error) {
 		Message:            result.Message,
 	}
 	if err := w.Bridge.Report(ctx, w.ID, pending.Operation.ID, report); err != nil {
-		return true, false, err
+		return true, nil, err
 	}
 	var output any = AppliedOperationOutput{OK: true, Operation: pending.Operation.ID, Resource: resource.Key, Changed: result.Changed}
 	if refusal != nil {
 		output = RefusedOperationOutput{OK: false, Operation: pending.Operation.ID, Resource: resource.Key, Message: ReportText(err.Error())}
 	}
-	return true, refusal == nil, w.emit(output)
+	return true, refusal, w.emit(output)
 }
 
 // execute applies a claimed action, first opening the material its kind
@@ -299,7 +304,7 @@ func (w *Worker) open(resourceKey string, material Material) (OpenedMaterial, er
 	for _, slot := range slices.Sorted(maps.Keys(material.Slots)) {
 		plaintext, err := opener.Open(material.Slots[slot], resourceKey, slot)
 		if err != nil {
-			return OpenedMaterial{}, &ProviderError{Message: "HQ's sealed " + slot + " does not open on this controller", Err: err}
+			return OpenedMaterial{}, &ProviderError{Message: "HQ's sealed " + slot + " does not open on this machine", Err: err}
 		}
 		opened.Secrets[slot] = string(plaintext)
 	}

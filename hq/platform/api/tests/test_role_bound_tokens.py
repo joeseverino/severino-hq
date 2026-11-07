@@ -107,15 +107,15 @@ class RoleBoundTokenTests(TestCase):
 
         self.assertEqual(response.status_code, 403, response.content)
 
-    def test_the_agents_person_is_recorded_and_a_change_is_audited(self):
+    def test_the_agents_person_is_recorded_and_its_machine_token_is_a_row_of_its_own(self):
         self._hold(roles.Role.OPERATOR)
         observe(self._principal("read"))
         self.assertEqual(AgentIdentity.objects.get(client_id=AGENT).person, self.person)
 
         observe(self._principal("read", sub=f"client-{AGENT}"))
-        self.assertIsNone(AgentIdentity.objects.get(client_id=AGENT).person)
-        changed = AuditLog.objects.get(action=AuditLog.Action.UPDATED, metadata__actor=AGENT)
-        self.assertEqual((changed.metadata["person"], changed.metadata["was"]), ("", self.person.get_username()))
+        rows = AgentIdentity.objects.filter(client_id=AGENT).order_by("person_key")
+        self.assertEqual([row.person for row in rows], [None, self.person])
+        self.assertFalse(AuditLog.objects.filter(action=AuditLog.Action.UPDATED, metadata__actor=AGENT).exists())
 
     def test_one_admission_reads_a_bounded_number_of_rows_whatever_the_role_holds(self):
         self._hold(roles.Role.OPERATOR)

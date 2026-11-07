@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection
 
+from ..entity_links import entity_link
 from ..freshness import (
     CURRENT,
     DASHBOARD_GLANCE,
@@ -130,8 +131,9 @@ class OldestReadingTests(TestCase):
     def test_the_oldest_reading_is_named_and_linked(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertIn("Oldest reading example-old", text(response))
-        self.assertTrue(any(name == "example-old" and href.startswith("#") for name, href in links(response)))
+        oldest = entity_link("connection", "example-old").label
+        self.assertIn(f"Oldest reading {oldest}", text(response))
+        self.assertTrue(any(name == oldest and href.startswith("#") for name, href in links(response)))
         self.assertTrue(select(response, "data-reading-age", "read"))
 
 

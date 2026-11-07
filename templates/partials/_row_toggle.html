@@ -1,1 +1,1 @@
-<button type="button" class="row-expand" data-row-toggle aria-expanded="false" aria-label="Show all of this row">{% include "partials/_icon.html" with name="chevron" only %}</button>
+<button type="button" class="row-expand" data-row-toggle aria-expanded="{% if open %}true{% else %}false{% endif %}" aria-label="{% if open %}Show less of this row{% else %}Show all of this row{% endif %}">{% include "partials/_icon.html" with name="chevron" only %}</button>

@@ -2,9 +2,9 @@
 
    The viewer reads its look from `--scalar-*` custom properties and keeps its
    own rules in cascade layers it declares after HQ's, so they outrank
-   every layered HQ rule. This sheet is unlayered, which outranks both (but
-   for one rule in HQ's own layers, which takes HQ's controls back out), and
-   is loaded by this page only. It holds no color, size or face of its own:
+   every layered HQ rule; HQ's own rules stop at its mount (`data-vendored`,
+   tokens.css). This sheet is unlayered, which outranks both, and is loaded
+   by this page only. It holds no color, size or face of its own:
    every value is an HQ token, and each color token already carries its
    light and dark halves, so the reference follows `color-scheme` with the
    rest of the page and needs no second palette. */
@@ -19,9 +19,9 @@
    header, which is one row of one height at every width. */
 .api-reference {
   --scalar-custom-header-height: var(--site-header-height);
-  /* The longest path the document serves, set by the page from the paths it
-     serves (hq/platform/api/reference.py); without it a list is as wide as
-     its own paths. */
+  /* The longest path the document serves, set by api-reference.js from what
+     the page counts (hq/platform/api/reference.py); without it a list is as
+     wide as its own paths. */
   --longest-path: auto;
 }
 
@@ -153,20 +153,6 @@
   --scalar-sidebar-search-color: var(--muted);
 }
 
-/* HQ draws its controls with element rules (a link's ink, a field's box in
-   base.css, a button's raised box in page.css), so each reaches the controls
-   the viewer draws and gives them whatever the viewer's own rules leave
-   unsaid: a raised shadow and a control's height on a dotted "Example", a box
-   round each status tab. The viewer's controls are its own, so each of HQ's
-   layers gives way there to the layers before it, and the viewer draws them
-   alone. */
-@layer base {
-  .api-reference :is(button, input, select, textarea, a) { all: revert-layer; }
-}
-@layer components {
-  .api-reference :is(button, input, select, textarea, a) { all: revert-layer; }
-}
-
 /* The viewer's own utilities are unlayered and scoped two classes deep, so a
    rule that takes something away names one class more. */
 
@@ -200,8 +186,8 @@
 }
 
 /* Every list's path column is as wide as the longest path the document
-   holds (`--longest-path`, in characters of the path's own face, set by the
-   page from the paths it serves), so every list is one width and its edges
+   holds (`--longest-path`, in characters of the path's own face, from the
+   paths the page serves), so every list is one width and its edges
    line up from section to section; narrower than that, a list stacks under
    its description and a path wraps only where the row itself is narrower. */
 .api-reference .scalar-app .endpoints .endpoint-path {

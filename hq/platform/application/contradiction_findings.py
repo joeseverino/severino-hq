@@ -46,7 +46,7 @@ FACT = "contradiction"
 UPDATE_CAPABILITY = "infrastructure.resource.update"
 
 
-def _update(key: str, intent: str) -> FindingRemedy:
+def _update(key: str, *, intent: str) -> FindingRemedy:
     return FindingRemedy(
         capability=UPDATE_CAPABILITY, target=key, intent=intent, url=command_url(UPDATE_CAPABILITY, key)
     )
@@ -113,7 +113,7 @@ def _answered_by_nothing() -> tuple[Finding, ...]:
                         "route that should serve it is missing."
                     ),
                     evidence=(("Name", name), ("Path", route.line), ("Machine", last.name)),
-                    remedies=tuple(_update(key, f"Change where {name} points") for key in keys),
+                    remedies=tuple(_update(key, intent="Change where it points") for key in keys),
                     steps=(
                         OperatorStep(
                             label=f"Remove the public record for {name} if nothing should answer "
@@ -175,7 +175,7 @@ def _routed_to_stopped() -> tuple[Finding, ...]:
                             "the proxy route points at what replaced it."
                         ),
                         evidence=(("Name", name), ("Path", route.line), ("Container", _said(state))),
-                        remedies=tuple(_update(key, f"Change where {name} points") for key in proxies),
+                        remedies=tuple(_update(key, intent="Change where it points") for key in proxies),
                         steps=(
                             OperatorStep(
                                 label=f"Start {container} on {machine}",
@@ -274,8 +274,8 @@ def _split_horizon_finding(name: str, routes: tuple[Route, ...], public: set[str
         ),
         evidence=tuple(("Path", route.line) for route in routes),
         remedies=(
-            *(_update(key, "Change the internal record") for key in _declared(name, _dns_kinds(public=False))),
-            *(_update(key, "Change the public record") for key in _declared(name, _dns_kinds(public=True))),
+            *(_update(key, intent="Change the internal record") for key in _declared(name, _dns_kinds(public=False))),
+            *(_update(key, intent="Change the public record") for key in _declared(name, _dns_kinds(public=True))),
         ),
         steps=(
             OperatorStep(
@@ -372,7 +372,7 @@ def _served_not_held() -> tuple[Finding, ...]:
                     FindingRemedy(
                         capability="infrastructure.resource.reconcile",
                         target=resource.key,
-                        intent=f"Install {resource.key} again",
+                        intent="Install it again",
                     ),
                 ),
             )

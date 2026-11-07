@@ -34,9 +34,9 @@ _REF_LENGTH = 160
 # The request a provider's reason names ("GitHub 403 for /repos/a/b/..."): the
 # scope already says which, and without it equal reasons group.
 _REQUEST = re.compile(r"\s+for\s+(?:/|https?://)\S+$")
-# A reason that is only the status a provider answered ("GitHub 404", "provider
+# A reason that is only the status a service answered ("GitHub 404", "the service
 # answered 403"), after whatever led to it.
-_STATUS = re.compile(r"(?P<lead>.*:\s+)?(?:provider answered|[A-Z][\w.-]*)\s+(?P<code>[1-5]\d\d)")
+_STATUS = re.compile(r"(?P<lead>.*:\s+)?(?:(?:the service|provider) answered|[A-Z][\w.-]*)\s+(?P<code>[1-5]\d\d)")
 # What each status means to the owner, by code or by its hundred.
 _STATUS_MEANS = {
     401: "{who}'s credential was refused",

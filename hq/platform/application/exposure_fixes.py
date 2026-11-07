@@ -23,7 +23,7 @@ def gate_links(service) -> tuple[ActionLink, ...]:
                     UPDATE_CAPABILITY,
                     command_url(UPDATE_CAPABILITY, claim.resource_key),
                     target=claim.resource_key,
-                    intent=f"Put an access list in front of {claim.resource_key}",
+                    intent="Add an access list",
                     reason="Set its access list, so the proxy admits only whom the list allows.",
                 )
             )

@@ -19,7 +19,7 @@ from .agent_access import AgentRefusal
 from .agent_limits import Limited, Slot
 from .agent_registry import observe
 from .denials import record_denial, record_limited, settle
-from .security import AuthorizationError, Capability, Principal
+from .security import AuthorizationError, Capability, Principal, agent_subject
 from .tokens import TokenError, token_principal, verify
 
 
@@ -40,20 +40,22 @@ class Unadmitted:
 
 
 @dataclass(frozen=True, slots=True)
-class Throttled:
-    """A good token whose agent is calling faster than its rate: who it is, and its refusal."""
+class Stopped:
+    """A good token whose call is stopped before any brake is read: who it is,
+    and its refusal, for calling faster than its rate or from nowhere the
+    tailnet could place it."""
 
     principal: Principal
-    refusal: Limited
+    refusal: Limited | AgentRefusal
 
 
 MISSING = Unadmitted(TokenError.code, "An access token is required.", verified=False)
 
-# The rate refusal an MCP request carries from its door to each tool call in it.
-_carried: ContextVar[Limited | None] = ContextVar("hq_agent_throttled", default=None)
+# The refusal an MCP request carries from its door to each tool call in it.
+_carried: ContextVar[Limited | AgentRefusal | None] = ContextVar("hq_agent_stopped", default=None)
 
 
-def admit(bearer: str, *, interface: str, source: str) -> Principal | Throttled | Unadmitted:
+def admit(bearer: str, *, interface: str, source: str) -> Principal | Stopped | Unadmitted:
     """The principal ``bearer`` names on ``interface``, or why there is none.
 
     A refused token is recorded against ``source``, the peer that sent it,
@@ -61,7 +63,9 @@ def admit(bearer: str, *, interface: str, source: str) -> Principal | Throttled 
     rate before anything is written, so a flood costs no write past its
     refusal's; within its rate it is placed on the tailnet device at
     ``source`` and observed, before any brake, so a paused agent and a device
-    awaiting approval are still registered.
+    awaiting approval are still registered. A call the tailnet could not
+    place is stopped here, where the two doors meet, so neither door can let
+    it through as the client alone.
     """
 
     if not bearer:
@@ -75,49 +79,53 @@ def admit(bearer: str, *, interface: str, source: str) -> Principal | Throttled 
             # RFC 6750's word for a good token that grants too little, on both doors.
             unadmitted = Unadmitted("insufficient_scope", exc.reason, verified=True)
         else:
-            limited = agent_limits.LIMITS.take(principal.actor)
+            limited = agent_limits.LIMITS.take(agent_subject(principal))
             if limited is not None:
-                return Throttled(principal, limited)
+                return Stopped(principal, limited)
             settle(principal.actor)
             placed = agent_devices.place(source)
             principal = replace(principal, device=placed.node_id)
             observe(principal, placed.device)
+            if placed.refused is not None:
+                return Stopped(principal, agent_access.unplaced(placed.refused, placed.detail))
             return principal
     record_denial(interface=interface, reason=unadmitted.code, source=source, authenticated=False)
     return unadmitted
 
 
 @contextlib.contextmanager
-def carrying(admitted: Principal | Throttled) -> Iterator[Principal]:
-    """The caller ``admitted`` names, with its rate refusal carried for the block to ``refused``."""
+def carrying(admitted: Principal | Stopped) -> Iterator[Principal]:
+    """The caller ``admitted`` names, with the refusal that stopped it carried for the block to ``refused``."""
 
-    if not isinstance(admitted, Throttled):
+    if not isinstance(admitted, Stopped):
         yield admitted
         return
     with _carried.set(admitted.refusal):
         yield admitted.principal
 
 
-def refused(caller: Principal | Throttled, *, source: str = "") -> AgentRefusal | Limited | None:
+def refused(caller: Principal | Stopped, *, source: str = "") -> AgentRefusal | Limited | None:
     """The refusal that applies to ``caller`` now, recorded by its name; None lets it act.
 
-    Asked only after authentication, so only a valid caller learns of it. A
-    rate refusal comes first, from ``caller`` or the request carrying it, and
-    is counted rather than written each time.
+    Asked only after authentication, so only a valid caller learns of it. What
+    stopped the call at admission comes first, from ``caller`` or the request
+    carrying it: a rate refusal is counted rather than written each time, and
+    an unplaced call is recorded against the address it came from, which is
+    all HQ knows of where it was.
     """
 
-    principal = caller.principal if isinstance(caller, Throttled) else caller
-    limited = caller.refusal if isinstance(caller, Throttled) else _carried.get()
-    if limited is not None:
+    principal = caller.principal if isinstance(caller, Stopped) else caller
+    stopped = caller.refusal if isinstance(caller, Stopped) else _carried.get()
+    if isinstance(stopped, Limited):
         record_limited(
             interface=principal.interface,
-            reason=limited.code,
+            reason=stopped.code,
             actor=principal.actor,
             source=source,
             device=principal.device,
         )
-        return limited
-    applies = agent_access.refusal(principal, source=source)
+        return stopped
+    applies = stopped or agent_access.refusal(principal)
     if applies is not None:
         record_denial(
             interface=principal.interface,
@@ -134,7 +142,7 @@ def at_once(principal: Principal, *, source: str = "") -> Iterator[Limited | Non
     """One of ``principal``'s calls at once, held for the block; the block is given the
     refusal instead when the agent, or every agent together, has all of them in flight."""
 
-    held = agent_limits.LIMITS.occupy(principal.actor)
+    held = agent_limits.LIMITS.occupy(agent_subject(principal))
     if isinstance(held, Limited):
         record_limited(
             interface=principal.interface,
@@ -153,7 +161,7 @@ def stream_opened(principal: Principal, *, source: str = "") -> Slot | Limited:
     """One of ``principal``'s listen streams, held until the slot is given back,
     or the refusal, recorded, when the agent has all of them open."""
 
-    held = agent_limits.LIMITS.listen(principal.actor)
+    held = agent_limits.LIMITS.listen(agent_subject(principal))
     if isinstance(held, Limited):
         record_limited(
             interface=principal.interface,

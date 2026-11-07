@@ -50,7 +50,7 @@ class ExpenseListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction("New expense", reverse("expenses:create"), primary=True),)
+        return (PageAction(capability_words("expense.create"), reverse("expenses:create"), primary=True),)
 
     @override
     def get_table_filters(self):

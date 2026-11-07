@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Its Django is the parts HQ loads: they import whole, pass the system checks, and nothing else of Django's apps, backends or catalogs ships"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]

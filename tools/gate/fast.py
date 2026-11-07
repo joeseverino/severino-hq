@@ -16,29 +16,22 @@ import re
 import subprocess
 import sys
 import tempfile
-import threading
 import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import BinaryIO
 
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
-from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs, takes_the_turn
-from tools.gate.turn import in_turn
+from tests.mise_tasks import HEAVY_LOCK, ROOT as TASKS_ROOT, body, locks, mise_tasks, run_files, runs
 from tools.gate.verdict import Gate, Step, run
 from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[2]
-# The test run waits for the machine's heavy turn (tools.gate.turn.in_turn):
-# its parallel workers hold a suite's memory for most of fast's time. A quick
-# gate that takes the turn of its own (the shell gate's suites) runs after the
-# tests; the rest are one short process each and run beside them, and the
-# composed suites take the turn as their own task decides.
 # The quick gates, each with the paths a change must touch for it to run, as
 # fnmatch patterns, where `*` crosses directories. Those selected run side by
-# side; each Django gate opens a database of its own (the django task
-# template). A drift gate's paths are its sources and the file it derives.
+# side with the tests, in one mise run; each Django gate opens a database of
+# its own (the django task template). A drift gate's paths are its sources and
+# the file it derives.
 PYTHON = ("*.py",)
 TASKS: dict[str, tuple[str, ...]] = {
     "lint:ruff": PYTHON,
@@ -67,6 +60,8 @@ TASKS: dict[str, tuple[str, ...]] = {
         "tools/pipeline/toolchain_lock.py",
     ),
     "lint:lockfile": ("pyproject.toml", "uv.lock"),
+    # The checks are those built into the Trivy that mise.toml pins.
+    "lint:trivy-config": ("*Dockerfile", "mise.toml", "tools/lint/trivy/*", "mise-tasks/lint/trivy-config"),
     "lint:deploycheck": PYTHON,
     "lint:openapi": (
         "hq/platform/api/hq-api.openapi.json",
@@ -96,8 +91,10 @@ SHELL_READS = (".github/workflows/*", ".github/actions/*")
 # test_fast.py fails on.
 UNSELECTED: dict[str, str] = {
     "lint:audit": "queries the advisory services (uv audit, osv-scanner); left to `mise run check`",
+    "lint:govulncheck": "queries vuln.go.dev for the advisories the controller reaches; left to `mise run check`",
     "lint:codeql-bundle": "fetches the pinned CodeQL action's defaults from GitHub; left to `mise run check`",
     "lint:scorecard": "its Vulnerabilities check queries OSV over an export of the tree; left to `mise run check`",
+    "lint:units": "systemd-analyze is Linux's, so CI's lint job scores the units",
     "lint:patch": "fast's own patch integrity step runs `git diff --check` over the change",
     "lint:source": "fast runs the source-tagged tests among its labels, since a labeled run leaves no tag out",
     "lint:shell:suites": "runs within lint:shell, which fast selects as SHELL",
@@ -237,35 +234,50 @@ def list_shell(root: Path, paths: list[str]) -> list[str]:
     return listed.stdout.splitlines()
 
 
-def tasks_command(tasks: tuple[str, ...], parallel: str, *, summary: bool = False) -> list[str]:
-    """One run of every task, side by side unless parallelism is ruled out.
-
-    `-c` names every task that failed. The configured keep-order output prints
-    each one whole under its own name; ``summary`` prints a task that passed as
-    one line and one that failed whole. It holds every task of the run until it
-    ends, a heavy one's wait for the turn too, so it is for the light gates.
-    """
-
-    jobs = ["--jobs", "1"] if parallel == "1" else []
-    output = ["--output", "summary"] if summary else []
-    separated = [word for task in tasks for word in (":::", task)][1:]
-    return ["mise", "run", "-c", *jobs, *output, *separated]
-
-
 def merge_base(base: str | None) -> str:
-    """The merge base with the named base, or with the first default that exists.
+    """The merge base with the named base, or else with the branch HEAD lands
+    on, or else with the first default that exists.
 
     A base that was asked for and does not resolve fails: falling back would
     quietly test a different change.
     """
 
-    for candidate in (base,) if base else ("origin/main", "main"):
+    for candidate in (base,) if base else (*landing(), "origin/main", "main"):
         try:
             return git("merge-base", "HEAD", candidate)[0]
         except RefError, IndexError:
             if base:
                 sys.exit(f"fast: {base} has no merge base with HEAD; pass a ref that exists")
     sys.exit("fast: no base found; pass one (mise run fast <ref>)")
+
+
+def landing(root: Path = ROOT) -> list[str]:
+    """The branch HEAD lands on: its own branch's upstream, or else the local
+    branch tracking a remote one whose history HEAD left most recently. A
+    worktree's branch tracks nothing and is made from the branch it lands on,
+    which may be far ahead of main, so main would select most of the suite."""
+
+    if upstream := answered("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}", root=root):
+        return upstream
+    current = git("branch", "--show-current", root=root)
+    own = f"refs/heads/{current[0]}" if current else ""
+    listed = git("for-each-ref", "--format=%(refname) %(upstream)", "refs/heads", root=root)
+    tracking = [ref for ref, _, upstream in (line.partition(" ") for line in listed) if upstream and ref != own]
+    left = {
+        ref: int(git("rev-list", "--count", f"{fork[0]}..HEAD", root=root)[0])
+        for ref in tracking
+        if (fork := answered("merge-base", "HEAD", ref, root=root))
+    }
+    return sorted(left, key=left.__getitem__)[:1]
+
+
+def answered(*args: str, root: Path = ROOT) -> list[str]:
+    """What a git command prints, or nothing where git refuses (no upstream, no history in common)."""
+
+    try:
+        return git(*args, root=root)
+    except RefError:
+        return []
 
 
 def module_name(path: Path) -> str:
@@ -519,69 +531,75 @@ def with_tree(labels: list[str], paths: list[str]) -> list[str]:
     return [*labels, *tagged(ROOT, "tree")] if reaches_tree(paths) else labels
 
 
-def test_command(labels: list[str], parallel: str) -> list[str]:
-    """One run of the selected tests, in the machine's heavy turn: a test both
-    selected and tagged tree runs once, since Django's runner drops a
-    repeated test."""
+# The module every test that reads each of the browser gate's modules goes
+# through. Such a test is a source check that starts no browser (the selector
+# guard among them), so those selected run ahead of the rest, in fast:source,
+# and a refusal there ends the run before the suite starts.
+BROWSER_MODULES = "hq.platform.core.tests.browser_modules"
+# fast's test run, the task that runs it once fast:source passes
+# (mise-tasks/fast/), and the config environment of the one run of mise it shares
+# with the quick gates (mise.fast.toml), whose output is mise's summary.
+TESTS = "fast:tests"
+ENVIRONMENT = "fast"
+# The variable fast:tests reads the labels of fast:source from, its dependency.
+SOURCE = "HQ_FAST_SOURCE"
 
-    return [*in_turn("30m"), sys.executable, "manage.py", "test", "--noinput", "--parallel", parallel, *labels]
+
+def source_first(labels: list[str], files: list[Path]) -> tuple[list[str], list[str]]:
+    """(the labels of the tests that read each browser module, the rest)."""
+
+    readers = importers(files).get(BROWSER_MODULES, set())
+    first = [label for label in labels if any(label == m or label.startswith(m + ".") for m in readers)]
+    return first, [label for label in labels if label not in first]
 
 
-# Each step running beside the main thread, by the thread it runs on.
-BESIDE: dict[int, Beside] = {}
+def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str) -> list[str]:
+    """One run of mise for the quick gates and the tests, side by side, which mise
+    stops at the first failure. A test both selected and tagged tree runs once,
+    since Django's runner drops a repeated test.
+
+    A task's own output setting outranks the config's but not ``--output``, so
+    the summary is the environment's: the tests' task prints as it runs, its
+    wait for the heavy turn included, beside each gate's line as it ends."""
+
+    jobs = ["--jobs", "1"] if parallel == "1" else []
+    gates = [word for task in tasks for word in (task, ":::")]
+    tests = [TESTS, "--parallel", parallel, *labels]
+    return ["env", f"{SOURCE}={' '.join(source)}", "mise", "--env", ENVIRONMENT, "run", *jobs, *gates, *tests]
 
 
-class Beside:
-    """A step started on a thread of its own so the steps after it run while it
-    does, its output held and printed whole, under its label, once collected."""
+def lock_takers(tasks: tuple[str, ...]) -> tuple[str, ...]:
+    """Those of the quick gates that take the heavy lock themselves (the shell
+    gate). mise stops no task still waiting for a lock when another fails, so
+    one beside the others would hold the run open until it got the turn and
+    ran; they run after, in a run of their own, once the rest has passed."""
 
-    def __init__(self, label: str, cmd: list[str], output: BinaryIO) -> None:
-        self.output = output
-        self.called = threading.Event()
-        self.result: Step | None = None
-        self.error: BaseException | None = None
-        self.thread = threading.Thread(target=self.run, args=(label, cmd), daemon=True)
-        self.thread.start()
-        # The next step starts once this one has, so the steps start in the order asked.
-        self.called.wait()
+    return tuple(task for task in tasks if HEAVY_LOCK in locks(task))
 
-    def run(self, label: str, cmd: list[str]) -> None:
-        BESIDE[threading.get_ident()] = self
-        try:
-            self.result = step(label, cmd)
-        # SystemExit would otherwise end this thread in silence; KeyboardInterrupt is
-        # only ever raised on the main thread.
-        except (Exception, SystemExit) as error:  # noqa: BLE001 - raised again on the main thread, in collect
-            self.error = error
-        finally:
-            del BESIDE[threading.get_ident()]
-            self.called.set()
 
-    def collect(self) -> Step:
-        self.thread.join()
-        self.output.seek(0)
-        sys.stdout.write(self.output.read().decode(errors="replace"))
-        sys.stdout.flush()
-        if self.error:
-            raise self.error
-        assert self.result
-        return self.result
+def gates_and_tests(tasks: tuple[str, ...], labels: list[str], files: list[Path], parallel: str) -> list[Step]:
+    """The run of the quick gates and the tests, then the gates that take the heavy lock once it passed."""
+
+    if tasks:
+        print(f"[fast] the quick gates that read what changed: {' '.join(tasks)}")
+    else:
+        print("[fast] no quick gate reads what changed")
+    source, rest = source_first(labels, files)
+    if source:
+        print(f"[fast] first, the source checks that read the browser gate's modules: {' '.join(source)}")
+    after = lock_takers(tasks)
+    beside = tuple(task for task in tasks if task not in after)
+    steps = [step("quick gates and tests", run_command(beside, source, rest, parallel))]
+    if after and steps[0].ok:
+        jobs = ["--jobs", "1"] if parallel == "1" else []
+        separated = [word for task in after for word in (":::", task)][1:]
+        steps.append(step("quick gates that take the heavy turn", ["mise", "run", *jobs, *separated]))
+    return steps
 
 
 def step(label: str, cmd: list[str]) -> Step:
-    if beside := BESIDE.get(threading.get_ident()):
-        beside.called.set()
-        beside.output.write(f"[fast] {label}\n".encode())
-        return run(label, cmd, to=beside.output)
     print(f"[fast] {label}", flush=True)
     return run(label, cmd)
-
-
-def turn_takers(tasks: tuple[str, ...]) -> tuple[str, ...]:
-    """Those of the quick gates that take the machine's heavy turn, which the test run holds."""
-
-    declared = mise_tasks()
-    return tuple(task for task in tasks if takes_the_turn(declared[task]))
 
 
 def extension_suites(parallel: str) -> list[Step]:
@@ -655,20 +673,7 @@ def main(asked: Usage) -> int:
         return 0
 
     tasks = (*selected_tasks([*changed, *deleted], base), *group_tasks(files, reached, touched, read))
-    after = turn_takers(tasks) if tasks else ()
-    light = tuple(task for task in tasks if task not in after)
-    if tasks:
-        print(f"[fast] the quick gates that read what changed: {' '.join(tasks)}")
-    else:
-        print("[fast] no quick gate reads what changed")
-    # The light gates run beside the tests, their output shown after the tests'.
-    with tempfile.TemporaryFile() as held:
-        quick = tasks_command(light, parallel, summary=True)
-        beside = Beside("quick gates, beside the tests", quick, held) if light else None
-        tests = step("tests", test_command(labels, parallel))
-        steps = [beside.collect(), tests] if beside else [tests]
-    if after:
-        steps.append(step("quick gates that take the heavy turn", tasks_command(after, parallel)))
+    steps = gates_and_tests(tasks, labels, files, parallel)
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))

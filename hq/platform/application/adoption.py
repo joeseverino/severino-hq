@@ -13,6 +13,7 @@ from functools import cached_property
 from typing import Annotated, Any, Literal, TypedDict
 
 from django.db import transaction
+from pydantic import Field
 lazy from django.core.exceptions import ValidationError
 lazy from django.utils import timezone
 
@@ -387,7 +388,7 @@ def adopt_service(
 
 @dataclass(frozen=True, slots=True)
 class AdoptCommand:
-    kind: Annotated[str, Describe("The type of record to bring under HQ's management.")]
+    kind: Annotated[str, Field(title="Type"), Describe("The type of record to bring under HQ's management.")]
     hostname: Annotated[str, Describe("The hostname whose record to adopt.")] = ""
     key: Annotated[str, Describe("The key the managed record is stored under; blank derives one.")] = ""
     # Set when adopting one specific record rather than everything a hostname

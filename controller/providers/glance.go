@@ -366,7 +366,7 @@ func (r *Registry) portainerGlance(ctx context.Context, wanted map[string]bool) 
 		return nil, &ProviderError{Message: "no Portainer connection was supplied"}
 	}
 	if r.Portainer == nil {
-		return nil, &ProviderError{Message: "Portainer is not available to this controller"}
+		return nil, &ProviderError{Message: "Portainer is not connected to HQ on this host"}
 	}
 	var mu sync.Mutex
 	machines := []GlanceMachine{}
@@ -627,15 +627,15 @@ func orDefault(value, fallback string) string {
 func weatherPoint(raw string) (string, error) {
 	parts := strings.Split(strings.TrimSpace(raw), ",")
 	if len(parts) != 2 {
-		return "", &ProviderError{Message: "SEVERINO_NWS_POINT must be latitude,longitude"}
+		return "", &ProviderError{Message: "the weather location must be latitude,longitude"}
 	}
 	latitude, errLat := strconv.ParseFloat(strings.TrimSpace(parts[0]), 64)
 	longitude, errLon := strconv.ParseFloat(strings.TrimSpace(parts[1]), 64)
 	if errLat != nil || errLon != nil {
-		return "", &ProviderError{Message: "SEVERINO_NWS_POINT is not numeric"}
+		return "", &ProviderError{Message: "the weather location is not numeric"}
 	}
 	if !(latitude >= -90 && latitude <= 90) || !(longitude >= -180 && longitude <= 180) {
-		return "", &ProviderError{Message: "SEVERINO_NWS_POINT is outside valid coordinates"}
+		return "", &ProviderError{Message: "the weather location is outside valid coordinates"}
 	}
 	return fmt.Sprintf("%.4f,%.4f", latitude, longitude), nil
 }

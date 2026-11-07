@@ -2,7 +2,7 @@
   <header class="topology-detail-head">
     <h2>{% entity item.link %}</h2>
     <span class="muted">{{ item.node.subtitle|breakable }}{% dot %}{{ item.degree|counted:"link" }}</span>
-    {% if item.node.status_label %}<span class="pill pill-{{ item.node.status }}">{{ item.node.status_label|breakable }}</span>{% endif %}
+    {% if item.node.status_label %}{% status item.node.status_label tone=item.node.status %}{% endif %}
   </header>
   {% if item.node.detail %}<p class="muted">{{ item.node.detail|breakable }}</p>{% endif %}
 
@@ -32,11 +32,11 @@
         <dt>Settings</dt>
         <dd>
           {% if not item.node.observed_revision %}
-            <span class="pill pill-attention">Applied, not yet checked</span>
+            {% status "Applied, not yet checked" tone="attention" %}
           {% elif item.node.observed_revision == item.node.declared_revision %}
-            <span class="pill pill-good">Applied and checked</span>
+            {% status "Applied and checked" tone="good" %}
           {% else %}
-            <span class="pill pill-attention">Your last change is not applied yet</span>
+            {% status "Your last change is not applied yet" tone="attention" %}
           {% endif %}
         </dd>
       </div>
@@ -85,7 +85,7 @@
                 <span class="topology-relation-other">{{ row.other.label|breakable }}</span>
                 <span class="topology-relation-kind">{{ row.other_link.kind_label|breakable }}</span>
               </a>
-              {% if row.status and row.status != "neutral" %}<span class="pill pill-{{ row.status }}">{{ row.status|title|breakable }}</span>{% endif %}
+              {% if row.status and row.status != "neutral" %}{% status row.status tone=row.status %}{% endif %}
               {% if row.entities %}
                 <ul class="topology-relation-values">
                   {% for link in row.entities %}

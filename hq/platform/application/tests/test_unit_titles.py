@@ -1,5 +1,5 @@
-"""A unit is named for a person by its unit file's title, with its name kept as
-the identifier systemctl takes, wherever HQ shows one."""
+"""A unit is named for a person by its unit file's title, with its name kept
+beneath it, wherever HQ shows one; systemctl is given the name systemd has."""
 
 import re
 from pathlib import Path
@@ -11,11 +11,14 @@ from django.urls import reverse
 from ..findings import derive_findings
 from ..projection import projection_scope
 from ..topology import derive_topology
+from .markup import texts
 from .test_tailnet_posture import EVERYTHING
 from .test_unit_findings import SERVICE, SPEC, failed, service, sweep, timer
 
 ROOT = Path(__file__).resolve().parents[4]
 MOUNT = r"run-example\x2dsecrets.mount"
+# The mount's name as systemd-escape --unescape gives it.
+MOUNT_READ = "run-example-secrets.mount"
 MOUNT_TITLE = "Example credential tmpfs, kept out of swap"
 TIMER = "severino-hq-example.timer"
 TIMER_TITLE = "Run the example job nightly"
@@ -37,8 +40,16 @@ class PageTests(TestCase):
 
         for title in (MOUNT_TITLE, TIMER_TITLE, SERVICE_TITLE):
             self.assertIn(title, page)
-        # The name stays, as the identifier systemctl takes.
+        # The name stays beneath its title.
         self.assertIn("run-example", page)
+
+    def test_a_unit_name_reads_with_its_escapes_decoded(self):
+        sweep(service(MOUNT, file_state="enabled", active="active", sub="mounted"), timer(activates=MOUNT))
+
+        names = texts(self.client.get(reverse("hq_self")), "code")
+
+        self.assertIn(MOUNT_READ, names)
+        self.assertFalse([name for name in names if "\\x" in name], names)
 
     def test_a_unit_with_no_title_is_named_by_its_name(self):
         sweep(service())
@@ -62,6 +73,23 @@ class FindingTests(TestCase):
         self.assertIn(SERVICE_TITLE, finding.title)
         self.assertNotIn(SERVICE, finding.title)
         self.assertTrue(all(SERVICE in step.command for step in finding.steps), finding.steps)
+
+    def test_a_finding_reads_a_unit_name_decoded_and_runs_systemctl_on_it_as_systemd_has_it(self):
+        sweep(failed(MOUNT))
+
+        with projection_scope():
+            (finding,) = [
+                found
+                for found in derive_findings(derive_topology(principal=EVERYTHING), principal=EVERYTHING)
+                if found.rule == "unit-failed"
+            ]
+
+        self.assertIn(MOUNT_READ, finding.title)
+        # The command keeps the escape: the remote shell's quoting doubles its
+        # backslash, and systemctl is given the name systemd has.
+        self.assertTrue(
+            all(MOUNT_READ in step.label and r"\x2dsecrets" in step.command for step in finding.steps), finding.steps
+        )
 
 
 class RecordTests(SimpleTestCase):

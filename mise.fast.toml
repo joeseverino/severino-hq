@@ -1,0 +1,6 @@
+# The config environment of fast's one mise run (`mise --env fast`, from
+# tools/gate/fast.py). Each quick gate prints one line as it passes, and all it
+# printed, labeled, as it fails. A task's own output setting outranks this one
+# (`--output` and MISE_TASK_OUTPUT outrank both), so fast:tests prints as it runs.
+[settings.task]
+output = "summary"

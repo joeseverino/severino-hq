@@ -8,8 +8,10 @@ read as one (`burst`, history.RUN), its moments folded beneath it. An event that
 things heads them (`data-folds`): its gutter holds the fold rather than the
 row's own toggle, so opening the fold opens what its columns that left hold
 too (tables.js). A fold carries at most history.SHOWN of what the event
-changed, a run at most as many moments; a last row (`rest`) counts the others
-and, for an event, links to its page, which lists every one. What a row names reads as an identifier where it is one
+changed, a run at most as many moments; a last row (`rest`), one cell across
+the row, counts the others and links to the list of them all: an event's page,
+a run's shared page. A run with no such page has no last row. Every title links
+where `row.url` says, and only a moment or run with nowhere to go has none. What a row names reads as an identifier where it is one
 (`readout`, cut at the region's cap); what a row says is text that breaks
 wherever it must (`cell-data`).
 On a phone only What and When stay, so there What's second line says how it
@@ -19,30 +21,26 @@ says it.
 {% block row_attributes %}{% if row.under %} data-folded="{{ row.under }}"{% elif row.grouped %} id="{{ row.fold }}" data-folds{% endif %}{% endblock %}
 {% block row %}
   {% if row.rest %}
-    <td class="row-gutter">{% if row.rest.burst %}<strong>{{ row.rest.more_words|breakable }}</strong>{% else %}<a href="{% url 'core:audit_detail' row.rest.page.pk %}"><strong>{{ row.rest.more_words|breakable }}</strong></a>{% endif %}{% row_toggle %}</td>
-    <td></td>
-    <td></td>
-    <td></td>
-    <td></td>
+    <td colspan="5" class="row-gutter"><a href="{{ row.url }}"><strong>{{ row.rest.more_words|breakable }}</strong></a></td>
   {% elif row.burst %}
     {% with first=row.burst.0 %}
-    <td class="cell-data row-gutter">{% include "partials/_row_fold.html" with label=row.title only %}<strong>{{ row.title|breakable }}</strong></td>
-    <td class="muted date-col">{{ row.at|when }}</td>
+    <td class="cell-data">{% include "partials/_row_fold.html" with label=row.title only %}<strong>{% if row.url %}<a href="{{ row.url }}">{{ row.title|breakable }}</a>{% else %}{{ row.title|breakable }}{% endif %}</strong></td>
+    <td class="muted date-col">{{ row.at|when:"clock" }}</td>
     <td>{{ first.actor|breakable }}</td>
-    <td><span class="pill">{{ first.source|breakable }}</span></td>
+    <td>{% status first.source %}</td>
     <td class="muted cell-data">{{ first.detail|breakable }}</td>
     {% endwith %}
   {% elif row.moment %}
-    <td class="cell-data row-gutter">{% if row.moment.external %}<strong>{% entity row.moment.url|outside label=row.moment.title %}</strong>{% else %}<strong>{{ row.moment.title|breakable }}</strong>{% endif %}{% row_toggle %}</td>
-    <td class="muted date-col">{{ row.at|when }}</td>
+    <td class="cell-data"><strong>{% if row.moment.external %}{% entity row.moment.url|outside label=row.moment.title %}{% elif row.url %}<a href="{{ row.url }}">{{ row.moment.title|breakable }}</a>{% else %}{{ row.moment.title|breakable }}{% endif %}</strong></td>
+    <td class="muted date-col">{{ row.at|when:"clock" }}</td>
     <td>{{ row.moment.actor|breakable }}</td>
-    <td><span class="pill">{{ row.moment.source|breakable }}</span></td>
+    <td>{% status row.moment.source %}</td>
     <td class="muted cell-data">{{ row.moment.detail|breakable }}</td>
   {% else %}
-    <td class="row-gutter">{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}{% if row.head %}<a href="{% url 'core:audit_detail' row.head.pk %}"><strong>{{ row.title|readout }}</strong></a>{% else %}<strong>{{ row.named.0|readout }}{{ row.named.1|breakable }}</strong>{% endif %}{% if row.grouped %} <span class="count">{{ row.total|breakable }}</span>{% else %}{% row_toggle %}{% endif %}{% if row.type_label %}<br><span class="muted">{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ row.action_label|breakable }}</span></span>{% endif %}</td>
-    <td class="muted date-col">{{ row.at|when }}</td>
-    <td>{{ row.actor|breakable }}</td>
-    <td><span class="pill pill-{{ row.action }}">{{ row.action_label|breakable }}</span></td>
+    <td>{% if row.grouped %}{% include "partials/_row_fold.html" with label=row.title only %}{% endif %}<a href="{{ row.url }}"><strong>{% if row.head %}{{ row.title|readout }}{% else %}{{ row.named.0|readout }}{{ row.named.1|breakable }}{% endif %}</strong></a>{% if row.grouped %} <span class="count">{{ row.total|breakable }}</span>{% endif %}{% if row.type_label %}<br><span class="muted">{{ row.type_label|breakable }}<span class="narrow-only">{% dot %}{{ row.action_label|breakable }}</span></span>{% else %}<span class="narrow-only"><br><span class="muted">{{ row.action_label|breakable }}</span></span>{% endif %}</td>
+    <td class="muted date-col">{{ row.at|when:"clock" }}</td>
+    <td>{{ row.who|breakable }}</td>
+    <td>{% status row.action_label tone=row.action %}</td>
     <td class="muted cell-data">{% if row.message %}{{ row.message|breakable }}{% endif %}</td>
   {% endif %}
 {% endblock %}

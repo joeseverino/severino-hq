@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Its Python packages are the ones HQ loads: HQ imports whole, a password hashes and an HTTPS client starts without what the build deletes, and nothing else ships"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]

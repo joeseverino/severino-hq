@@ -159,7 +159,7 @@ class ExampleEstateTests(TestCase):
         self.assertEqual(drawn, {f"rule-{state}" for state in ("default", *RULE_LABELS)})
         self.assertTrue(with_class(page, "policy-unavailable"), "a cell past an agent's grant")
         # An agent a viewer signed in: what of its grant is in force, and what is beyond their role.
-        row = " ".join(element.words for element in within(page, "data-agent", "example-reader"))
+        row = " ".join(element.words for element in within(page, "data-client", "example-reader"))
         self.assertTrue(within(page, "data-role", "viewer"))
         self.assertIn("Permissions: read", row)
         self.assertIn("beyond riley's role: write_calendar", row)

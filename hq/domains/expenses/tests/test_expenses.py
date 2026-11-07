@@ -9,6 +9,7 @@ from django.urls import reverse
 from hq.domains.assets.models import Asset
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.tests.markup import elements, links, select, text
 
 
@@ -22,7 +23,7 @@ class ExpenseListTests(_Signed):
         response = self.client.get(reverse("expenses:list"))
 
         self.assertIn("No expenses yet.", text(response))
-        self.assertIn(("New expense", reverse("expenses:create")), links(response))
+        self.assertIn((capability_words("expense.create"), reverse("expenses:create")), links(response))
         self.assertNotContains(response, "Filtered")
         self.assertNotContains(response, "$0.00")
         # A year to filter by once an expense has one.
@@ -127,6 +128,15 @@ class ExpenseListTests(_Signed):
 
         (link,) = select(response, "title", "rb-example-renewal")
         self.assertEqual(link.text.strip(), "Renew the example domain")
+
+    def test_an_expense_with_no_receipt_offers_to_upload_one_for_it(self):
+        expense = Expense.objects.create(date="2030-01-02", vendor="Example Host", item="Hosting")
+
+        response = self.client.get(expense.get_absolute_url())
+
+        (line,) = select(response, "data-empty-state")
+        (upload,) = [link for link in elements(response, "a") if line in link.ancestors]
+        self.assertEqual(upload.attrs["href"], f"{reverse('receipts:create')}?related_expense={expense.pk}")
 
 
 class AssetPageTests(_Signed):

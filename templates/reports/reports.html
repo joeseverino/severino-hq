@@ -9,23 +9,23 @@
   <button class="btn" type="submit">Filter</button>
 </form></search>
 
-<section class="kpi-grid">
+<div class="kpi-grid">
   <div class="kpi"><span class="label">Expenses {{ year|breakable }}</span><span class="value">{{ expenses_total|money }}</span><span class="muted">{% if expenses_count %}<a class="subtle-link" href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>
   <div class="kpi"><span class="label">Deductible (est.) {{ year|breakable }}</span><span class="value">{{ expenses_deductible|money }}</span><span class="muted">Estimate, not tax advice</span></div>
   <div class="kpi"><span class="label">Assets purchased {{ year|breakable }}</span><span class="value">{{ assets_count|breakable }}</span><span class="muted">{{ assets_total|money }} total</span></div>
   <div class="kpi"><span class="label">Docs due for review</span><span class="value">{% if docs_needing_review_count %}<a href="{{ docs_needing_review_url }}">{{ docs_needing_review_count|breakable }}</a>{% else %}0{% endif %}</span></div>
-</section>
+</div>
 
 {% comment %}
 A year with no expenses is said by the count above; its breakdowns do not draw.
 {% endcomment %}
 {% if expenses_by_category %}
+{% with shown_year=year|stringformat:"s" %}
 <div class="two-col">
-  <section>
-    <h2>Expenses by category, {{ year|breakable }}</h2>
+  {% section "Expenses by category, "|add:shown_year %}
     {% table_region "Expenses by category" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Category" local_sort=expenses_by_category|sortable %}{% table_heading "Total" "numeric" local_sort=expenses_by_category|sortable %}{% table_heading "Deductible (est.)" "numeric" local_sort=expenses_by_category|sortable %}</tr></thead>
+      <thead><tr>{% table_heading "Category" local_sort=True %}{% table_heading "Total" "numeric" local_sort=True %}{% table_heading "Deductible (est.)" "numeric" local_sort=True %}</tr></thead>
       <tbody>
         {% for row in expenses_by_category %}
           <tr><td><a href="{{ row.url }}">{{ row.label|breakable }}</a></td><td>{{ row.total|money }}</td><td>{{ row.deductible|money }}</td></tr>
@@ -33,17 +33,17 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
       </tbody>
     </table>
     {% endtable_region %}
-  </section>
+  {% endsection %}
 
-  <section>
-    <h2>Largest expenses, {{ year|breakable }}</h2>
+  {% section "Largest expenses, "|add:shown_year %}
     <ul class="list-rows">
       {% for e in largest_expenses %}
         <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }}{% dot %}{{ e.get_category_display|breakable }}{% dot %}<strong>{{ e.total_cost|money }}</strong></span></li>
       {% endfor %}
     </ul>
-  </section>
+  {% endsection %}
 </div>
+{% endwith %}
 {% endif %}
 
 {% comment %}
@@ -53,36 +53,33 @@ mostly empty card. A reading with nothing in it is not drawn.
 {% if status_groups or assets_by_category or docs_needing_review %}
 <div class="two-col">
   {% if status_groups %}
-  <section>
-    <h2>By status</h2>
+  {% section "By status" %}
     <ul class="list-rows">
       {% for group in status_groups %}
         <li><span class="row-main"><strong>{{ group.label|breakable }}</strong></span><span class="row-meta">{% for status in group.counts %}<a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</span></li>
       {% endfor %}
     </ul>
-  </section>
+  {% endsection %}
   {% endif %}
 
   {% if assets_by_category %}
-  <section>
-    <h2>Assets by category</h2>
+  {% section "Assets by category" %}
     <ul class="list-rows">
       {% for row in assets_by_category %}
         <li><span class="row-main"><a href="{{ row.url }}">{{ row.label|breakable }}</a> <span class="muted">{{ row.n|breakable }}</span></span><span class="row-meta">{% if row.total %}<strong>{{ row.total|money }}</strong>{% endif %}</span></li>
       {% endfor %}
     </ul>
-  </section>
+  {% endsection %}
   {% endif %}
 
   {% if docs_needing_review %}
-  <section>
-    {% section_head %}Documents due for review{% aside %}<a class="subtle-link" href="{{ docs_needing_review_url }}">All{% arrow %}</a>{% endsection_head %}
+  {% section "Documents due for review" more_label="All" more_url=docs_needing_review_url %}
     <ul class="list-rows">
       {% for link, reviewed in docs_needing_review %}
         <li><span class="row-main">{% entity link %}</span><span class="row-meta">{% if reviewed %}last reviewed {{ reviewed|when:"day" }}{% else %}never reviewed{% endif %}</span></li>
       {% endfor %}
     </ul>
-  </section>
+  {% endsection %}
   {% endif %}
 </div>
 {% endif %}
@@ -91,8 +88,7 @@ mostly empty card. A reading with nothing in it is not drawn.
 Each export once, by what it holds, its files beside it: a list on a card,
 not a wall of buttons.
 {% endcomment %}
-{% card heading="exports-heading" %}
-  {% section_head id="exports-heading" %}Exports{% aside %}<span class="count">Without secrets, sensitive documents' text or receipt files</span>{% endsection_head %}
+{% section "Exports" lede="Without secrets, sensitive documents' text or receipt files." %}
   <dl class="kv">
     <dt>Expenses</dt><dd class="dot-list"><span><a href="{% url 'reports:expenses_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:expenses_csv' %}">All years CSV</a></span></dd>
     <dt>Assets</dt><dd class="dot-list"><span><a href="{% url 'reports:assets_csv' %}?year={{ year }}">{{ year|breakable }} CSV</a></span><span><a href="{% url 'reports:assets_csv' %}">All years CSV</a></span></dd>
@@ -101,5 +97,5 @@ not a wall of buttons.
     <dt>Projects</dt><dd><span><a href="{% url 'reports:projects_csv' %}">CSV</a></span></dd>
     <dt>Documents</dt><dd><span><a href="{% url 'reports:documentation_csv' %}">CSV</a></span></dd>
   </dl>
-{% endcard %}
+{% endsection %}
 {% endblock %}

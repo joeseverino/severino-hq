@@ -60,7 +60,9 @@ def node_id(device):
 
 
 def tailnet_v4(device):
-    return f"100.101.102.{DEVICES[device]}"
+    """Its IPv4 address; ``None`` is the one address of the range no device holds."""
+
+    return f"100.101.102.{DEVICES.get(device, 99)}"
 
 
 def tailnet_v6(device):

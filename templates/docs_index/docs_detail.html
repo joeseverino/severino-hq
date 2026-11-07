@@ -9,7 +9,7 @@
   <dt>Safe for AI export</dt><dd>{% if record.is_safe_for_ai_export %}Yes (public or internal){% else %}<strong>No</strong> (sensitive or restricted){% endif %}</dd>
 </dl>
 
-{% if record.notes %}<h2>Index notes</h2><p>{{ record.notes|breakable|linebreaksbr }}</p>{% endif %}
+{% if record.notes %}{% section "Index notes" %}<p>{{ record.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
 <div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
 {% endblock %}

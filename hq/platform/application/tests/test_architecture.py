@@ -165,6 +165,7 @@ class RequestNeverWaitsTests(SimpleTestCase):
     ENTERED = {
         "oidc": {"hq/platform/core/oidc.py"},
         "lookup": {"hq/platform/application/lookup.py"},
+        "tailscaled": {"hq/platform/application/tailscaled.py"},
     }
 
     def sources(self):

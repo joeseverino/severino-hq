@@ -17,10 +17,11 @@ from django.forms import ModelForm
 from hq.platform.core.audit import audit_operation
 
 from .deletion import DeleteCommand, RecordDeleted, delete_record
+from .describe import meanings
 from .domains import Records, host_records, load, records_of
 from .integration_specs import TARGET_KINDS, CapabilitySpec
 from .json_schemas import choices
-from .labels import lower_first, one
+from .labels import adding, lower_first, one
 from .security import Principal
 from .ui import ended
 
@@ -30,6 +31,8 @@ _TARGET_NAMES = {"slug": "slug", "integer": "ID", "doc_id": "ID", "key": "key"}
 _VERBS = frozenset({"create", "upsert", "update", "delete"})
 # What an update says of a field its caller leaves out (``record_saves.written``).
 KEPT = "A field left out keeps its value."
+# What opens every record's form, and so what its update is called: "Edit an asset".
+EDIT = "Edit"
 
 
 def deleter(resource: str) -> Callable[..., RecordDeleted]:
@@ -71,6 +74,19 @@ def records_for(model: type) -> Records:
         if load(records.model) is model:
             return records
     raise LookupError(f"No host domain declares records for {model.__name__}.")
+
+
+def described[F: ModelForm[Any]](form: F, command: type) -> F:
+    """``form`` with the meaning ``command`` declares as each field's help, so
+    a record's form says what that command's own page says (``meanings``).
+    Help the form writes itself stays: it is for what only that form asks."""
+
+    own = {*(form._meta.help_texts or {})}
+    own |= {name for name, field in form.declared_fields.items() if field.help_text}
+    for name, meaning in meanings(command).items():
+        if name in form.fields and name not in own:
+            form.fields[name].help_text = meaning
+    return form
 
 
 def as_its_model_declares(command_type: type, schema: dict[str, Any]) -> dict[str, Any]:
@@ -198,7 +214,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             command,
             records.save,
             ended(f"Add a new {title}"),
-            f"Create {one(title)}",
+            adding(title),
             False,
         ),
         (
@@ -209,7 +225,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             command,
             records.upsert,
             f"Add a new {title}, or update it if it already exists. On one that exists, {lower_first(KEPT)}",
-            f"Create or update {one(title)}",
+            f"Add or update {one(title)}",
             False,
         ),
         (
@@ -220,7 +236,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             command,
             records.save,
             ended(f"Change one {title}"),
-            f"Update {one(title)}",
+            f"{EDIT} {one(title)}",
             True,
         ),
         (
@@ -250,8 +266,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
             target_label=target_label if targeted else "",
             target_help=ended(f"The {title} to {verb}") if targeted else "",
             label=wording.get(verb, ("", ""))[1] or label,
-            # Every record's form is opened by the same word.
-            verb="Edit" if verb == "update" else "",
+            verb=EDIT if verb == "update" else "",
         )
         for verb, declared, effect, permission, command_type, handler, summary, label, targeted in verbs
         if declared

@@ -31,7 +31,6 @@ class DocumentationRecordForm(forms.ModelForm):
             "related_expenses": forms.SelectMultiple(attrs={"size": 6}),
         }
         help_texts = {
-            "doc_id": "Stable identifier, e.g. 'rb-adguard-001'.",
             "notes": "Index notes only. No runbook text or secrets.",
         }
 

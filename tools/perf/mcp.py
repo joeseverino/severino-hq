@@ -4,7 +4,8 @@ For the host alone and for the extension set dev:scratch composes, each measured
 tools.perf.mcp_probe in a process of its own, served as production serves it: the tools/list
 answer's bytes and approximate tokens, each tool's part of it, the bytes of the prompt, resource and
 resource template lists, of a describe_resources answer and of the action queue's page through
-list_resource on the standard data set, and what loading the server and
+list_resource on the standard data set, each listed tool's answer there, its bytes and the share of
+them that is empty values and long text said again, and what loading the server and
 answering its first requests added to the process, the API document's build and the SDK's modules
 named apart, and what as many slow calls at once as the agent limits let in cost against the same
 calls one after another. With ``--base``, the same of the ref beside this tree's, measured in a throwaway
@@ -31,6 +32,7 @@ from hq.platform.core.tests import task
 from tools.perf import runs
 from tools.perf.mcp_probe import (
     ANSWERED,
+    ANSWERS,
     AT_ONCE,
     CATALOG,
     DEFER_BUILD,
@@ -38,6 +40,7 @@ from tools.perf.mcp_probe import (
     LOADED,
     QUEUE,
     QUEUE_ITEMS,
+    REPEATED_AT,
     SERIAL,
     is_sdk,
 )
@@ -215,6 +218,7 @@ def render(kept: dict[str, Any]) -> str:
         for name, parts in sorted(measured["tools"].items(), key=lambda item: -sum(item[1].values())):
             rows.append([name, *(str(parts.get(part, 0)) for part in PARTS), str(sum(parts.values()))])
         lines += ["", f"Each tool's bytes, composed, {kept[side]['commit']}:", *_indented(rows)]
+    lines += answer_lines(kept)
     modules = kept["here"]["sets"]["composed"]["result"]["modules"]
     sdk = {name: size for name, size in by_package(modules, by=str).items() if is_sdk(name)}
     lines += [
@@ -226,6 +230,59 @@ def render(kept: dict[str, Any]) -> str:
         *_indented(_ranked(sdk), frozenset({1})),
     ]
     return "\n".join(lines)
+
+
+def _share(part: int, whole: int) -> str:
+    return f"{100 * part / whole:.0f}%" if whole else "-"
+
+
+def answer_lines(kept: dict[str, Any]) -> list[str]:
+    """Each tool's answer on the standard data set, composed: on each side its bytes, about tokens,
+    and the share that is a member holding an empty or false value or a long string said again;
+    beside a base, what each tool's answer was and is."""
+
+    # A run kept before the answers were measured has none to show.
+    answers = {
+        side: found
+        for side in ("base", "here")
+        if side in kept and (found := kept[side]["sets"]["composed"]["result"].get(ANSWERS))
+    }
+    sides = list(answers)
+    if not sides:
+        return []
+    lines = [
+        "",
+        (
+            "Each tool's answer, composed, on the standard data set, as the agent holding every grant: its "
+            f"text's bytes, at {BYTES_PER_TOKEN} a token, and the share of them that is a member holding an "
+            f"empty or false value, or a string of {REPEATED_AT} characters or more said again:"
+        ),
+    ]
+    for side in sides:
+        rows = [["tool", "bytes", "tokens", "empty", "repeated", "refused"]]
+        weights = sorted(answers[side].items(), key=lambda item: -item[1]["bytes"])
+        for name, weight in weights:
+            rows.append(
+                [
+                    name,
+                    str(weight["bytes"]),
+                    str(tokens(weight["bytes"])),
+                    _share(weight["empty"], weight["bytes"]),
+                    _share(weight["repeated"], weight["bytes"]),
+                    "yes" if weight["refused"] else "",
+                ]
+            )
+        whole = sum(weight["bytes"] for _, weight in weights)
+        rows.append(["every tool", str(whole), str(tokens(whole)), "", "", ""])
+        lines += ["", f"  {kept[side]['commit']}:", *_indented(rows)]
+    if len(sides) == 2:
+        base, here = answers["base"], answers["here"]
+        rows = [["tool", "base bytes", "bytes", "change"]]
+        for name in sorted(base.keys() | here.keys(), key=lambda name: -base.get(name, {}).get("bytes", 0)):
+            before, after = base.get(name, {}).get("bytes", 0), here.get(name, {}).get("bytes", 0)
+            rows.append([name, str(before), str(after), _share(after - before, before)])
+        lines += ["", "  Each tool's answer, base and here:", *_indented(rows)]
+    return lines
 
 
 def measured(tree: Path, commit: str, extra: dict[str, str] | None = None) -> dict[str, Any]:

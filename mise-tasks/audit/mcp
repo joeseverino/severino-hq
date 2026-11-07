@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="What the MCP list answers cost a client, bytes and approximate tokens for tools/list, what an agent's first request costs a served process, the API document and the SDK named apart, and what slow agent calls at once cost against the same calls one after another, for the host alone and composed; kept as var/perf/mcp-*.json"
+#MISE description="What the MCP list answers cost a client, bytes and approximate tokens for tools/list and for each tool's answer on the standard data set, with the share that is empty values and repeated text, what an agent's first request costs a served process, the API document and the SDK named apart, and what slow agent calls at once cost against the same calls one after another, for the host alone and composed; kept as var/perf/mcp-*.json"
 #MISE hide=true
 #MISE extends="django"
 #USAGE flag "--base <ref>" help="Also measure this ref, in a throwaway worktree, for the numbers before a change"

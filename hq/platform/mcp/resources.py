@@ -10,7 +10,7 @@ the URIs.
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
-from typing import Any
+from typing import Any, cast
 
 from mcp import types
 from mcp.shared.exceptions import MCPError
@@ -18,6 +18,8 @@ from mcp.shared.uri_template import UriTemplate
 
 from hq.platform.application import approvals, resources as registry
 from hq.platform.application.access import Access, holding
+from hq.platform.application.integration_specs import PAGE_FIELD
+from hq.platform.application.projection import complete
 from hq.platform.application.resources import ResourceCollection, ResourceSpec
 from hq.platform.application.security import Capability, Principal
 
@@ -65,9 +67,15 @@ class View:
 
 
 def action_queue(principal: Principal) -> ResourceCollection:
-    """The queue as its kind's list_fields keep each item: what a person reads it by, and its page in HQ."""
+    """The whole queue, page after page, as its kind's list_fields keep each
+    item: what a person reads it by, and its page in HQ."""
 
-    return registry.list_resource("action_items", None, principal=principal)
+    page = registry.list_resource("action_items", None, principal=principal)
+    items = list(page["items"])
+    while after := page.get("next"):
+        page = registry.list_resource("action_items", {PAGE_FIELD: after["cursor"]}, principal=principal)
+        items += page["items"]
+    return cast(ResourceCollection, complete(items))
 
 
 def hq_itself(principal: Principal) -> ResourceCollection:

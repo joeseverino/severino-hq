@@ -485,7 +485,7 @@ class UnreadTests(TestCase):
 
         (finding,) = raised("render-status-unread")
 
-        self.assertIn({"label": "Report", "value": "The controller could not read it"}, finding["evidence"])
+        self.assertIn({"label": "Report", "value": "HQ could not read it"}, finding["evidence"])
 
 
 class SubjectTests(TestCase):

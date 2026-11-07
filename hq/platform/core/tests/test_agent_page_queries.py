@@ -9,7 +9,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import CapabilityRule, ProviderInventory
+from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.application import denials, roles
 from hq.platform.application.capability_policy import Rule
 from hq.platform.application.linked_accounts import bind_sign_in
@@ -25,8 +25,6 @@ class AgentPageQueryBudgetTests(TestCase):
         self.owner = get_user_model().objects.create_superuser("owner", "owner@example.test", "pw")
         self.client.force_login(self.owner)
         self.agents = 0
-        # A reading that holds none of the addresses an agent is refused from as unseen.
-        ProviderInventory.objects.create(kind="tailscale.device", observed_at=timezone.now(), records=[])
 
     def add_agents(self, upto: int) -> None:
         """Agents up to ``upto``, each with everything its row and its column draw."""
@@ -71,10 +69,9 @@ class AgentPageQueryBudgetTests(TestCase):
                 AuditLog.objects.create(
                     action=AuditLog.Action.UPDATED, metadata={"actor": client, "interface": "mcp", "device": node_id}
                 )
+            # And a call from an address the tailnet could not place, refused there.
             with operation_context(interface="mcp", actor=client, operation="example"):
-                denials.record_denial(
-                    interface="mcp", reason="device_awaiting_approval", actor=client, source=f"100.64.1.{index}"
-                )
+                denials.record_denial(interface="mcp", reason="device_unknown", actor=client, source=f"10.0.0.{index}")
 
     def queries(self, **headers) -> int:
         with CaptureQueriesContext(connection) as captured:

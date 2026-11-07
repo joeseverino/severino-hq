@@ -24,7 +24,7 @@ POWERFUL_CAPABILITIES = frozenset(
     {"ALL", "SYS_ADMIN", "SYS_MODULE", "SYS_PTRACE", "SYS_RAWIO", "DAC_READ_SEARCH", "NET_ADMIN", "BPF"}
 )
 ROOT_USERS = frozenset({"", "0", "root", "0:0", "root:root"})
-_ANY_ADDRESS = frozenset({"", "0.0.0.0", "::"})
+_ANY_ADDRESS = frozenset({"", "0.0.0.0", "::"})  # noqa: S104 - addresses a binding is held against, never bound
 
 
 def _runtime(container: Any) -> Mapping[str, Any] | None:
@@ -42,7 +42,7 @@ def _on(test):
 
 
 # Emptied by every boot: state for this run of something, never kept.
-RUNTIME_ROOTS = ("/run", "/var/run", "/tmp", "/dev/shm")
+RUNTIME_ROOTS = ("/run", "/var/run", "/tmp", "/dev/shm")  # noqa: S108 - paths a mount is classified by, never opened
 
 
 def runtime_path(source: str) -> bool:

@@ -3,7 +3,8 @@ table shows a reader (`--rule tables`), and each column's widths as drawn and
 at its intrinsic sizes (`--columns`), with the line a table's columns are
 printed on."""
 
-# A heading's words as a reader hears them, without the marks beside them.
+# A heading's words as a reader hears them, without the marks beside them,
+# and what a table is called.
 NAME = r"""
   const name = (el) => {
     if (!el) return '';
@@ -11,6 +12,11 @@ NAME = r"""
     copy.querySelectorAll('[aria-hidden=true]').forEach((mark) => mark.remove());
     return copy.textContent.trim().replace(/\s+/g, ' ');
   };
+  // What a table is called: its region's name, which only a region that
+  // scrolls has, else its caption, else the heading of the part it is in.
+  const labelOf = (table) => table.closest('.table-scroll')?.getAttribute('aria-label')
+    || table.caption?.textContent.trim()
+    || name(document.getElementById(table.closest('[aria-labelledby]')?.getAttribute('aria-labelledby') || ''));
 """
 
 # Each table as a reader finds it: which columns show, which are gone and
@@ -33,7 +39,7 @@ TABLES = (
   document.querySelectorAll('main table').forEach((table, index) => {
     if (!seen(table)) return;
     const region = table.closest('.table-scroll');
-    const label = region?.getAttribute('aria-label') || table.caption?.textContent.trim() || '';
+    const label = labelOf(table);
     const rows = [...table.querySelectorAll(':scope > tbody > tr:not([data-row-detail])')].filter(seen);
     const records = rows.filter((row) => !row.classList.contains('row-group'));
     const headings = [...(table.tHead?.rows[table.tHead.rows.length - 1]?.cells || [])];
@@ -111,7 +117,7 @@ COLUMNS = (
     const most = laidOut(table, 'max-content');
     return {
       index: index + 1,
-      label: region?.getAttribute('aria-label') || table.caption?.textContent.trim() || '',
+      label: labelOf(table),
       region: region ? width(region) : null,
       drawn: width(table),
       // An open row holds the columns at the widths they had (tables.js).

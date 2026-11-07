@@ -15,7 +15,7 @@
     {% include "partials/_discovery_catalog.html" with title="Pages" items=discovered_resources plain=True %}
     {% include "partials/_discovery_catalog.html" with title="Commands" items=discovered_commands %}
     {% include "partials/_discovery_catalog.html" with title="Connections" items=discovered_connections %}
-    {% include "partials/_discovery_catalog.html" with title="Topology views" items=discovered_views %}
+    {% include "partials/_discovery_catalog.html" with title="Map views" items=discovered_views %}
     {% include "partials/_discovery_catalog.html" with title="Checks" items=discovered_checks %}
   </div>
   {% endif %}
@@ -33,8 +33,7 @@
   {% endif %}
 
   {% for group in groups %}{% if group.count %}
-  {% card css="search-group" id="scope-"|add:group.scope %}
-    <h2>{{ group.label|breakable }} <span class="count">{{ group.count|breakable }}</span></h2>
+  {% section group.label count=group.count id="scope-"|add:group.scope css="search-group" %}
     <ul class="search-hits">
       {% for item in group.items %}
       <li class="search-hit">
@@ -55,12 +54,11 @@
       </li>
       {% endfor %}
     </ul>
-  {% endcard %}
+  {% endsection %}
   {% endif %}{% endfor %}
 
   {% if contacts %}
-  {% card css="search-group" id="scope-contacts" %}
-    <h2>Messages <span class="count">{{ contacts|length }}</span></h2>
+  {% section "Messages" count=contacts|length id="scope-contacts" css="search-group" %}
     <ul class="search-hits">
       {% for item in contacts %}
       <li class="search-hit">
@@ -74,7 +72,7 @@
       {% endfor %}
     </ul>
     <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search inside the messages{% arrow %}</a></p>
-  {% endcard %}
+  {% endsection %}
   {% endif %}
 
   {% if not total and not discovery_total %}

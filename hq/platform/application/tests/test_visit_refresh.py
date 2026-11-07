@@ -4,6 +4,7 @@ import os
 import re
 import tempfile
 from datetime import timedelta
+from html.parser import HTMLParser
 from pathlib import Path
 from unittest.mock import patch
 
@@ -578,6 +579,51 @@ class VisitRefreshViewTests(TestCase):
         self.assertContains(response, "data-ask-auto")
         self.assertContains(response, 'name="subject" value="service"')
         self.assertContains(response, 'name="name" value="example.test"')
+
+    def test_the_note_is_swapped_with_the_content_and_the_ask_is_not(self):
+        """The ask is a quiet child of the content, which its refresh
+        (everything but the quiet ones) never replaces, and the note is a
+        child the refresh draws again: the new note finds its form by the id
+        it names."""
+
+        self.client.force_login(self.user)
+
+        found = _Placement(self.client.get(reverse("control_plane:service", args=["example.test"])).content.decode())
+
+        form = found.places.get("form", [])
+        self.assertEqual(form[:1], [("main", "content", "")])
+        self.assertIn("ask-quiet", form[1][2])
+        self.assertEqual(found.places.get("note"), [("main", "content", "")])
+
+
+class _Placement(HTMLParser):
+    """Where the visit's form and the note naming it stand: the chain of
+    (tag, id, class) from the content down to each."""
+
+    VOID = frozenset({"input", "br", "img", "meta", "link", "hr", "source", "wbr", "col", "area", "base"})
+
+    def __init__(self, html: str) -> None:
+        super().__init__()
+        self.stack: list[tuple[str, str, str]] = []
+        self.places: dict[str, list[tuple[str, str, str]]] = {}
+        self.feed(html)
+
+    def handle_starttag(self, tag, attrs):
+        given = dict(attrs)
+        if tag == "form" and given.get("id") == "page-visit":
+            self.places["form"] = self._from_content()
+        if "data-ask-note" in given and given.get("form") == "page-visit":
+            self.places["note"] = self._from_content()
+        if tag not in self.VOID:
+            self.stack.append((tag, given.get("id") or "", given.get("class") or ""))
+
+    def handle_endtag(self, tag):
+        while self.stack and self.stack.pop()[0] != tag:
+            pass
+
+    def _from_content(self) -> list[tuple[str, str, str]]:
+        at = next(index for index, (_tag, ident, _css) in enumerate(self.stack) if ident == "content")
+        return [(tag, ident, "" if ident == "content" else css) for tag, ident, css in self.stack[at:]]
 
 
 class ReadStandingWordsTests(TestCase):

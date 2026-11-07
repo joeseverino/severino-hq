@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Every shell file parses and passes shellcheck; the shell suites pass"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 set -eu

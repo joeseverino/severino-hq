@@ -51,6 +51,17 @@ func Shipped(dir string) ([]string, error) {
 	return shipped, nil
 }
 
+// WithDropIns is shipped's drop-ins and the named units, to install together.
+// A drop-in reaches every unit its directory's name covers, a prefix
+// directory (severino-hq-.service.d) every unit under it, so a unit installed
+// before them would start under its new file and the last release's sandbox,
+// where the new file leaves that sandbox to a drop-in.
+func WithDropIns(shipped []string, units ...string) []string {
+	return slices.DeleteFunc(slices.Clone(shipped), func(name string) bool {
+		return !strings.Contains(name, "/") && !slices.Contains(units, name)
+	})
+}
+
 // Retired is every unit in installed that carries this repository's prefix
 // and is not shipped: what an earlier release installed and this one dropped.
 // Drop-ins beside a shipped unit are the host's to own and are not listed.

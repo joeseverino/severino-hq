@@ -16,7 +16,7 @@ from hq.domains.receipts.models import Receipt
 from hq.domains.receipts.validation import MAX_RECEIPT_BYTES, validate_receipt_file
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import InputError
-from hq.platform.application.tests.markup import links, text
+from hq.platform.application.tests.markup import elements, links, select, text
 
 
 def _receipt(**fields):
@@ -60,6 +60,15 @@ class ReceiptLinkTests(TestCase):
         self.assertContains(response, "Already linked to")
         # Said on its own, the expense names who was paid as well as for what.
         self.assertIn((f"{self.expense.vendor} {self.expense.item}", self.expense.get_absolute_url()), links(response))
+
+    def test_with_no_expense_to_link_it_offers_to_add_one_from_the_receipt(self):
+        receipt = _receipt(vendor="Example Registrar", amount=Decimal("8.00"))
+
+        response = self.client.get(reverse("receipts:match", args=[receipt.pk]))
+
+        (line,) = select(response, "data-empty-state")
+        (add,) = [link for link in elements(response, "a") if line in link.ancestors]
+        self.assertEqual(add.attrs["href"], response.context["new_expense"])
 
     def test_the_page_says_the_file_type_as_a_word(self):
         receipt = _receipt(vendor="Example Host")

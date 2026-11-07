@@ -179,6 +179,13 @@ class Tailnet(TypedDict):
     tags: Annotated[list[TagPart], Describe("The policy's tags.")]
     services: Annotated[list[AsRead], Describe("The tailnet's services, as read.")]
     app_connectors: Annotated[list[AsRead], Describe("The tailnet's app connectors, as read.")]
+    funnel: Annotated[
+        list[str] | None,
+        Describe(
+            "Each node attribute target holding funnel, which a node needs to publish to the internet; "
+            "empty when none does, null when the reading does not say."
+        ),
+    ]
     tests: Annotated[list[AsRead], Describe("The policy's tests, as written.")]
     locked_out: Annotated[list[str], Describe("The machines tailnet lock keeps off the tailnet.")]
     findings: Annotated[

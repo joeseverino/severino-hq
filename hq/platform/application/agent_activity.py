@@ -20,8 +20,8 @@ from django.utils import timezone
 
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 
-from . import agent_devices, agent_limits, agent_registry, denials, roles, tailnet
-from .agent_access import DEVICE_AWAITING_APPROVAL
+from . import agent_devices, agent_limits, agent_registry, denials, roles
+from .agent_access import UNPLACED_CODES
 from .agent_devices import DeviceStanding
 from .agent_limits import RATE_LIMITED, TOO_MANY_CALLS
 from .security import (
@@ -31,6 +31,7 @@ from .security import (
     agent_grant,
     agent_grantable,
     could_ever_hold,
+    subject_of,
     web_principal,
 )
 
@@ -61,10 +62,10 @@ def agent_name(identity: AgentIdentity) -> str:
 
 # What each standing is called on the page, and its pill's tone.
 _STANDING_WORDS = {
-    DeviceStanding.APPROVED: ("Approved", "pill-good"),
-    DeviceStanding.AWAITING: ("Needs approval", "pill-attention"),
-    DeviceStanding.BLOCKED: ("Blocked", "pill-serious"),
-    DeviceStanding.UNSEEN: ("Unknown", ""),
+    DeviceStanding.APPROVED: ("Approved", "good"),
+    DeviceStanding.AWAITING: ("Needs approval", "attention"),
+    DeviceStanding.BLOCKED: ("Blocked", "serious"),
+    DeviceStanding.UNPLACEABLE: ("Refused", "attention"),
 }
 
 
@@ -73,8 +74,8 @@ class DeviceRow:
     """One device an agent called from, as its row on the Agents page shows it.
 
     A device HQ has a record of (``record``) stands as that record says. A call
-    from a tailnet address the last reading did not hold has none, so nothing
-    can be approved yet: it is ``UNSEEN``, named by its ``address``.
+    the tailnet could not place has none, so nothing can be approved: it is
+    ``UNPLACEABLE``, named by the ``address`` it was refused from.
     """
 
     standing: DeviceStanding
@@ -96,7 +97,7 @@ class DeviceRow:
 
     @property
     def tone(self) -> str:
-        """The pill it is drawn with."""
+        """The tone its status is drawn in."""
 
         return _STANDING_WORDS[self.standing][1]
 
@@ -115,7 +116,7 @@ class DeviceRow:
 
         if self.record is not None:
             return agent_devices.device_anchor(self.record.pk)
-        return agent_devices.device_anchor(f"unseen-{self.address.replace(':', '-').replace('.', '-')}")
+        return agent_devices.device_anchor(f"unplaced-{self.address.replace(':', '-').replace('.', '-')}")
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,11 +165,19 @@ class Streams:
 
 @dataclass(frozen=True, slots=True)
 class AgentStanding:
-    """One agent: who it is and acts for, what of its grant is in force here, and what it did lately."""
+    """One agent: who it is and acts for, what of its grant is in force here, and what it did lately.
+
+    ``activity`` is its client's over the window, the same on each row of a
+    client two people signed in, since an audit row names the client.
+    """
 
     identity: AgentIdentity
     in_force: tuple[str, ...]
     activity: Activity
+    # The unit HQ answers for (``security.agent_subject``): what a block names.
+    subject: str = ""
+    # The row as a person reads it: its client, and the person it acts for.
+    label: str = ""
     # Granted, but beyond what its person's role holds.
     beyond_role: tuple[str, ...] = ()
     # What HQ offers an agent within its person's role that their last sign-in
@@ -203,18 +212,23 @@ def standings(viewer=None) -> list[AgentStanding]:
     """
 
     identities = list(AgentIdentity.objects.select_related("person__person_role", "blocked_by"))
-    clients = [identity.client_id for identity in identities]
+    clients = sorted({identity.client_id for identity in identities})
     activity = recent_activity(clients)
     devices = device_rows(identities, viewer)
     cap = settings.SEVERINO_AGENT_STREAMS_AT_ONCE
-    return [
-        replace(
-            _standing(identity, activity.get(identity.client_id, Activity())),
-            devices=devices.get(identity.client_id, ()),
-            streams=Streams(agent_limits.LIMITS.listening(identity.client_id), cap),
+    found = []
+    for identity in identities:
+        subject = subject_of(identity.client_id, identity.person_key)
+        found.append(
+            replace(
+                _standing(identity, activity.get(identity.client_id, Activity())),
+                subject=subject,
+                label=str(identity),
+                devices=devices.get(identity.pk, ()),
+                streams=Streams(agent_limits.LIMITS.listening(subject), cap),
+            )
         )
-        for identity in identities
-    ]
+    return found
 
 
 def prompts(found: list[AgentStanding]) -> list[DevicePrompt]:
@@ -228,23 +242,25 @@ def prompts(found: list[AgentStanding]) -> list[DevicePrompt]:
     ]
 
 
-def device_rows(identities: list[AgentIdentity], viewer=None) -> dict[str, tuple[DeviceRow, ...]]:
-    """Each of ``identities``' devices, by client id: its records, then the tailnet
-    addresses it was refused from as unseen, each with its calls over the window."""
+def device_rows(identities: list[AgentIdentity], viewer=None) -> dict[int, tuple[DeviceRow, ...]]:
+    """Each of ``identities``' devices, by the identity's key: its records, then
+    the addresses its client was refused from as unplaceable, each with its calls
+    over the window. A refused address names the client alone, so it is listed
+    once, under the client's first row."""
 
     if not identities:
         return {}
     clients = {identity.pk: identity.client_id for identity in identities}
     governs = viewer is not None and web_principal(viewer).permits(Capability.GOVERN_AGENTS)
-    calls = _device_calls(list(clients.values()))
-    found: dict[str, list[DeviceRow]] = {}
+    calls = _device_calls(sorted(set(clients.values())))
+    found: dict[int, list[DeviceRow]] = {}
     for record in AgentDevice.objects.filter(identity_id__in=clients).select_related(
         "person", "approved_by", "blocked_by"
     ):
         client = clients[record.identity_id]
         counted = calls.get((client, record.node_id), (0, 0))
         yours = governs and (record.person_id is None or (viewer is not None and record.person_id == viewer.pk))
-        found.setdefault(client, []).append(
+        found.setdefault(record.identity_id, []).append(
             DeviceRow(
                 _record_standing(record),
                 record.name or record.node_id,
@@ -257,9 +273,12 @@ def device_rows(identities: list[AgentIdentity], viewer=None) -> dict[str, tuple
                 yours=yours,
             )
         )
-    for client, rows in _unseen(list(clients.values())).items():
-        found.setdefault(client, []).extend(rows)
-    return {client: tuple(rows) for client, rows in found.items()}
+    first_row = {}
+    for identity in identities:
+        first_row.setdefault(identity.client_id, identity.pk)
+    for client, rows in _unplaced(sorted(first_row)).items():
+        found.setdefault(first_row[client], []).extend(rows)
+    return {key: tuple(rows) for key, rows in found.items()}
 
 
 def _record_standing(record: AgentDevice) -> DeviceStanding:
@@ -280,31 +299,25 @@ def _device_calls(clients: list[str]) -> dict[tuple[str, str], tuple[int, int]]:
     return {(row["actor"], row["device"]): (row["calls"] or 0, row["refused"] or 0) for row in rows}
 
 
-def _unseen(clients: list[str]) -> dict[str, list[DeviceRow]]:
-    """The tailnet addresses each client was refused from as unseen, while the
-    reading still holds no device there; a device it holds since has its own record."""
+def _unplaced(clients: list[str]) -> dict[str, list[DeviceRow]]:
+    """The addresses each client was refused from because the tailnet could
+    not place the call there: no device sent it, or tailscaled did not answer."""
 
-    rows = list(
+    rows = (
         _calls_of(clients)
         .filter(DENIED, device="")
         .annotate(reason=_text("reason"), address=_text("source"))
-        .filter(reason=DEVICE_AWAITING_APPROVAL.code)
+        .filter(reason__in=UNPLACED_CODES)
         .exclude(address="")
         .values("actor", "address")
         .annotate(calls=_counted(), first=Min("created_at"), last=Max("created_at"))
         .order_by("actor", "address")
     )
-    if not rows:
-        return {}
-    known = tailnet.devices()
     found: dict[str, list[DeviceRow]] = {}
     for row in rows:
-        held = tailnet.device_at(row["address"], known)
-        if held is not None and held.node_id:
-            continue
         found.setdefault(row["actor"], []).append(
             DeviceRow(
-                DeviceStanding.UNSEEN,
+                DeviceStanding.UNPLACEABLE,
                 row["address"],
                 row["first"],
                 row["last"],

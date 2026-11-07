@@ -17,6 +17,10 @@ from hq.platform.core.audit import (
 from hq.platform.core.facets import Counts, Failure, Source, Steps, Timing
 from hq.platform.core.models import AuditLog
 
+# An extension's demo writes each audited record inside one, so its event reads
+# as the person it stands for made it, when they did (``PluginIntegration.demo_seed``).
+from hq.platform.core.seeds import seeded_by_hand
+
 AuditAction = AuditLog.Action
 
 
@@ -56,4 +60,5 @@ __all__ = [
     "record_event",
     "record_operation",
     "register_audit",
+    "seeded_by_hand",
 ]

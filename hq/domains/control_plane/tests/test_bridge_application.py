@@ -2,6 +2,7 @@
 
 import json
 import re
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 
@@ -26,7 +27,7 @@ def recording(ran: list[str]):
     def noted(name: str):
         return lambda parameters, payload: ran.append(name)
 
-    return bridge_application.bridge(tuple(Action(action.name, noted(action.name)) for action in ACTIONS))
+    return bridge_application.bridge(tuple(replace(action, run=noted(action.name)) for action in ACTIONS))
 
 
 class RefusalTests(TestCase):
@@ -305,7 +306,10 @@ class ContractBindingTests(SimpleTestCase):
             self.assertEqual(route.methods, {"POST"})
 
     def test_actions_and_paths_that_differ_stop_the_import(self):
-        extra = (*ACTIONS, Action("undeclared", lambda parameters, payload: None))
+        extra = (
+            *ACTIONS,
+            Action("undeclared", "The controller asked for something undeclared", lambda parameters, payload: None),
+        )
         for actions in (extra, ACTIONS[1:], (*ACTIONS, ACTIONS[0])):
             with (
                 self.subTest(count=len(actions)),

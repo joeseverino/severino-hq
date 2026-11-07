@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, ManagedResource
+from hq.domains.control_plane.providers import PROVIDERS
 from hq.domains.projects.models import Project
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.markup import text
@@ -17,8 +18,11 @@ from ..approvals import APPROVE, DELETING_FLAGS, ApproveCommand, approve
 from ..capabilities import capability_registry, execute_capability, validate_command
 from ..capability_policy import RULE_LABELS, Rule, decide, field_name, matrix, set_rule
 from ..certificates import UPLOAD
+from ..default_hold import needs_approval
+from ..doors import interface_label
+from ..entity_links import kind_label
 from ..integration_specs import capability_schema
-from ..labels import human_label
+from ..labels import dotted, human_label, lower_first
 from ..security import Capability, Principal, cli_principal, web_principal
 from .test_approvals import POLICY_KEY, declare_policy, policy_document, update_payload
 from .writers import keyed
@@ -437,7 +441,7 @@ class PageTests(PolicyTestCase):
         projects = next(group for group in groups if group.label == "Projects")
         actions = [row.label for row in projects.rows]
 
-        self.assertIn("Create a project", actions)
+        self.assertIn("Add a project", actions)
         self.assertIn("Delete a project", actions)
         self.assertEqual(
             [row.effect for row in projects.rows],
@@ -473,6 +477,26 @@ class PageTests(PolicyTestCase):
         named = f"{RULE_LABELS[Rule.APPROVE]} for "
         self.assertTrue(rows["infrastructure.resource.update"].default.startswith(named))
         self.assertLessEqual({row.default for row in rows.values() if not row.default.startswith(named)}, choices)
+
+    def test_a_type_waiting_for_approval_is_named_as_its_page_names_it(self):
+        _, groups = matrix()
+        default = {row.name: row.default for group in groups for row in group.rows}["infrastructure.resource.update"]
+        held = [
+            kind
+            for kind, provider in PROVIDERS.items()
+            if needs_approval(provider, spec("infrastructure.resource.update"))
+        ]
+
+        self.assertTrue(held)
+        for kind in held:
+            with self.subTest(kind):
+                self.assertIn(lower_first(kind_label(kind)), default)
+
+    def test_a_column_says_how_its_agent_comes_in_and_for_whom_as_written(self):
+        AgentIdentity.objects.create(client_id="example-agent", person=self.user, person_key="op", interfaces=["mcp"])
+        details = {column.label: column.detail for column in matrix()[0] if column.identity.person}
+
+        self.assertEqual(details["example-agent"], dotted(interface_label("mcp"), "for op"))
 
     def test_only_acronyms_are_capitalized(self):
         self.assertEqual(human_label("example.pace.set"), "Example Pace Set")

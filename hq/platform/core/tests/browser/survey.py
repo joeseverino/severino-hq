@@ -7,19 +7,29 @@ from typing import Any, override
 
 from hq.platform.core.tests.browser.probes.axe import contrast_read, rules_read
 from hq.platform.core.tests.browser.probes.boxes import (
+    ASIDES_WRAPPED_WITH_ROOM,
     CRAMPED_HEADS,
+    CUT_RINGS,
+    FRAMES_OUT_OF_ROW,
+    FRAMES_SHORT_OF_THEIR_COLUMN,
     HEAD_CONTROLS,
+    INSET_IN_THE_FRAME,
     INTO_A_NEIGHBOR,
     OVERLAPS,
+    PAGE_FRAMES,
     SHORT_OF_ITS_BUTTONS,
     SIDEWAYS,
     SMALL_TARGETS,
+    TITLES_OFF_THEIR_START,
 )
+from hq.platform.core.tests.browser.probes.controls import CONTROL_HEIGHTS, WRAPPED_CONTROLS
+from hq.platform.core.tests.browser.probes.headings import HEADINGS_IN_CAPITALS, QUIET_LINKS_IN_THE_LINE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES, FIELD_CONTRAST, FIELD_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
     BARE_FOLDS,
     DIALOGS_WITHOUT_OPENERS,
     HIDDEN_IN_SUMMARIES,
+    LINED_PAST_THE_NAME,
     LINKS_AT_REST,
     PARTS_NOT_UNDERLINED,
     READINGS,
@@ -33,6 +43,7 @@ from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFT
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
     CUT_AND_CLOSED,
+    CUT_BESIDE_ROOM,
     CUT_WHEN_OPEN,
     CUT_WITH_ROOM,
     PAST_THE_GUTTER,
@@ -46,10 +57,12 @@ from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS_IN_TEXT,
     CHANGES_OFF_THEIR_LINE,
     CHIPS_OFF_THEIR_LINE,
+    CHIPS_PAST_THEIR_PAINT,
     CUT_DECISIONS,
     OVERLAPPING_TEXT,
     PAST_THE_CLAMP,
     RAISED_TEXT,
+    TOUCHING_TEXT,
 )
 from hq.platform.core.tests.browser.reading import _probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -149,23 +162,27 @@ _READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(select
 _GEOMETRY = {
     "sideways": _SIDEWAYS_READ,
     "cells": CELLS,
-    "broken words": BROKEN_WORDS,
+    "broken words": (BROKEN_WORDS, SELECTORS["identifier"]),
     "words broken in text": (BROKEN_WORDS_IN_TEXT, _IDENTIFIER),
     "broken identifiers": (BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]),
     "overlaps": OVERLAPS,
     "into a neighbor": INTO_A_NEIGHBOR,
     "overlapping text": (OVERLAPPING_TEXT, SELECTORS["floating"]),
+    "touching text": (TOUCHING_TEXT, [SELECTORS["floating"], SELECTORS["identifier"]]),
+    "chips off their paint": (CHIPS_PAST_THEIR_PAINT, [SELECTORS["chip"], SELECTORS["unseen"]]),
     "tables": TABLES,
     "tables fit": (TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]),
     "unseen columns": (UNSEEN_COLUMNS, SELECTORS["table_scroll"]),
     "control labels": _SPILLED_CONTROLS,
     "cell labels": _SPILLED_CELLS,
     "small targets": _SMALL_TARGETS_READ,
+    "cut rings": (CUT_RINGS, SELECTORS["target"]),
     "past the clamp": PAST_THE_CLAMP,
     "cut decisions": (CUT_DECISIONS, [SELECTORS["decision_detail"], "*", SELECTORS["unseen"]]),
     "short of its buttons": (SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]),
     "cut code in text": (CUT_DECISIONS, [SELECTORS["running_text"], SELECTORS["code"], SELECTORS["unseen"]]),
     "cut with room": (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]),
+    "cut beside room": (CUT_BESIDE_ROOM, SELECTORS["unseen"]),
     "cut and closed": (CUT_AND_CLOSED, SELECTORS["unseen"]),
     "cut when open": (CUT_WHEN_OPEN, SELECTORS["unseen"]),
     "changes": CHANGES_READ,
@@ -173,12 +190,31 @@ _GEOMETRY = {
     "raised text": (RAISED_TEXT, SELECTORS["unseen"]),
     "heads": HEADS_READ,
     "section heads": (CRAMPED_HEADS, SELECTORS["section_head"]),
+    "section asides": (ASIDES_WRAPPED_WITH_ROOM, SELECTORS["section_head"]),
+    "inset in the frame": (INSET_IN_THE_FRAME, SELECTORS["section_body"]),
+    "frames in a row": (FRAMES_OUT_OF_ROW, [SELECTORS["section_head"], SELECTORS["section_body"]]),
+    "frames span their column": (FRAMES_SHORT_OF_THEIR_COLUMN, [PAGE_FRAMES, SELECTORS["floating"]]),
+    "titles at the head's start": (TITLES_OFF_THEIR_START, SELECTORS["section_head"]),
+    "control words on one line": (
+        WRAPPED_CONTROLS,
+        [SELECTORS["pressed"], SELECTORS["choice"], SELECTORS["unseen"], SELECTORS["vendored"]],
+    ),
+    "one height to a row of controls": (
+        CONTROL_HEIGHTS,
+        [SELECTORS["pressed"], SELECTORS["fillable"], SELECTORS["vendored"]],
+    ),
     "dialogs": (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
     "select arrows": (SELECT_ARROWS, [SELECTORS["dropdown"], SELECTORS["vendored"]]),
     "link underlines": (PARTS_NOT_UNDERLINED, [SELECTORS["link"], SELECTORS["vendored"]]),
     "links at rest": (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
+    "lined past the name": (
+        LINED_PAST_THE_NAME,
+        [SELECTORS["link"], SELECTORS["vendored"], SELECTORS["tag"], SELECTORS["mark"]],
+    ),
     "lists of facts": (WRAPPED_BESIDE_A_PAIR, SELECTORS["fact_list"]),
     "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
+    "headings in capitals": (HEADINGS_IN_CAPITALS, SELECTORS["kicker"]),
+    "quiet links in the line": (QUIET_LINKS_IN_THE_LINE, SELECTORS["quiet_link"]),
     # Every box and every line of text, not only a card's or code's.
     "gutter": (PAST_THE_GUTTER, ["*", True]),
     # How far the page moved by itself since it began to load, scored from the
@@ -197,6 +233,30 @@ def geometry_probes(path, width):
     if path == "/":
         reads["readings"] = partial(_probe, (_READINGS_OF, SELECTORS["readings"]))
     return Probes(reads)
+
+
+# The checks of what a table draws and holds, which the sweep of every width
+# (`BrowserGate.table_defects_at_every_width`) reads at each shape of the
+# layout with the rows a reader can open opened.
+TABLE_CHECKS = (
+    "cells",
+    "broken words",
+    "broken identifiers",
+    "tables",
+    "tables fit",
+    "unseen columns",
+    "cell labels",
+    "cut with room",
+    "cut beside room",
+    "cut and closed",
+    "cut when open",
+)
+
+
+def table_probes():
+    """The table checks' probes, as ``(source, arg)`` by check."""
+
+    return {check: _probe(_GEOMETRY[check]) for check in TABLE_CHECKS}
 
 
 def survey_checks(path, width):

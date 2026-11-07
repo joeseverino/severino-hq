@@ -44,7 +44,7 @@ class _Said:
 
 
 _SAID = {
-    Lifecycle.CONFIGURED: _Said("Set up"),
+    Lifecycle.CONFIGURED: _Said("Added"),
     Lifecycle.UNPROBED: _Said("Not tested"),
     Lifecycle.REACHABLE: _Said("Working"),
     Lifecycle.READY: _Said("Working"),

@@ -305,7 +305,7 @@ def socket_holder_link(item: Container) -> ActionLink:
         UPDATE_CAPABILITY,
         command_url(UPDATE_CAPABILITY, key),
         target=key,
-        intent=f"Mark {item.running.name} as meant to control Docker",
+        intent="Mark as meant to control Docker",
         reason="This container is meant to control Docker. Stop warning about it.",
     )
 

@@ -77,7 +77,7 @@ class AnalyticsCoverage(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.site_id} covered {self.date}"
+        return f"{self.site} read for {self.date}"
 
 
 class RumDaily(models.Model):
@@ -189,4 +189,4 @@ class VitalsDaily(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.site_id} vitals {self.date}"
+        return f"Web vitals of {self.site} on {self.date}"

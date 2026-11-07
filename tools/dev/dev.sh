@@ -163,5 +163,7 @@ fi
 # would stay on as a parent process holding memory of its own.
 python=$(uv run python -c 'import sys; print(sys.executable)')
 # --no-proxy-headers, as the image's: the application reads its proxy's
-# forwarded headers itself, after recording the peer they replace.
-exec "$python" -m uvicorn hq.config.asgi:application --host "$host" --port "$port" --no-proxy-headers "$@"
+# forwarded headers itself, after recording the peer they replace. The
+# migration above made the database file before any server opens it; the
+# factory applies what a reload brings before the new worker serves.
+exec "$python" -m uvicorn --factory hq.config.dev_asgi:migrated_application --host "$host" --port "$port" --no-proxy-headers "$@"

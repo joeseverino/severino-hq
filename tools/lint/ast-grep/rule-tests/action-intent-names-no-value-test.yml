@@ -1,0 +1,10 @@
+id: action-intent-names-no-value
+valid:
+  - 'FindingRemedy(capability=UPDATE, target=key, intent="Change where it points")'
+  - 'command_action("gate", UPDATE, url, target=key, intent="Add an access list")'
+  - 'FindingRemedy(capability=UPDATE, intent=remedy.intent)'
+  - 'Finding(title=f"{name} points nowhere")'
+invalid:
+  - 'FindingRemedy(capability=UPDATE, target=key, intent=f"Change where {name} points")'
+  - 'command_action("gate", UPDATE, url, target=key, intent="Install " + key)'
+  - 'command_action("gate", UPDATE, url, intent="Mark {} as kept".format(name))'

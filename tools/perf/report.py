@@ -96,6 +96,10 @@ class Unservable(Exception):
     """A page or data set asked for that perf cannot serve."""
 
 
+class NothingServed(Exception):
+    """Every page asked was left out as one perf cannot serve: a run that measures nothing."""
+
+
 class SetRefused(Exception):
     """A tree's server refused the extension set for the plugin API it supports."""
 
@@ -138,6 +142,27 @@ def landed(seed: str, every: list[str], chosen: list[str]) -> tuple[list[str], l
     return [*dict.fromkeys(lands[page] for page in every)], [*dict.fromkeys(lands[page] for page in chosen)]
 
 
+def served(names: tuple[str, ...], every: list[str], *, leave_out: bool) -> list[str]:
+    """The addresses of the pages ``names`` asks that perf serves. A name it cannot serve refuses
+    the run, or with ``leave_out`` is named and left out, so a caller asking pages of every kind
+    (dev:look's) measures those it can."""
+
+    try:
+        return task.pages(names, every)
+    except PageRefused as refused:
+        if not leave_out:
+            raise Unservable(f"{refused} perf serves the {ESTATE}'s pages alone.") from None
+    chosen = []
+    for name in names:
+        try:
+            chosen += task.pages([name], every)
+        except PageRefused:
+            print(f"perf leaves out {name}: it serves the {ESTATE}'s pages by path or route name alone", flush=True)
+    if not chosen:
+        raise NothingServed("perf: no page asked is one it serves, so nothing is measured")
+    return list(dict.fromkeys(chosen))
+
+
 def plan() -> Plan:
     """The pages asked, the phone's and the wide desktop's viewports, and the task's flags."""
 
@@ -152,10 +177,7 @@ def plan() -> Plan:
     # The pages the set's navigation reaches, and those asked, under the settings it is shown with.
     with override_settings(**seeds.get(seed).settings):
         every = navigation()
-        try:
-            chosen = task.pages(asked.repeated("pages"), every)
-        except PageRefused as refused:
-            raise Unservable(f"{refused} perf serves the {ESTATE}'s pages alone.") from None
+        chosen = served(asked.repeated("pages"), every, leave_out=asked.switch("skip_unservable"))
         # Seeded in this process rather than through manage.py, so its door binds here.
         with from_the_shell("perf.report.plan"):
             every, chosen = landed(seed, every, chosen)
@@ -523,8 +545,9 @@ def measure_run(base_commit: str | None, here_commit: str, asked: Plan, kept: ru
 
 
 def main() -> int:
-    """0 when every measurement finished; 1 when one failed or a page answered
-    anything but 200; 2 for a ref that names no commit, or a page or set it cannot serve."""
+    """0 when every measurement finished, or --skip-unservable left out every page asked; 1 when
+    one failed or a page answered anything but 200; 2 for a ref that names no commit, or a page or
+    set it cannot serve."""
 
     signal.signal(signal.SIGTERM, stop)
     ref = usage().text("base")
@@ -533,6 +556,9 @@ def main() -> int:
     except Unservable as error:
         print(f"perf: {error}", file=sys.stderr)
         return 2
+    except NothingServed as said:
+        print(said, flush=True)
+        return 0
     here_commit = commit_of(ROOT)
     try:
         base_commit = task.commit_of(ref) if ref else None

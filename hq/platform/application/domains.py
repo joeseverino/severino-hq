@@ -429,7 +429,6 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
             lookup="pk",
             command="hq.platform.application.expenses:ExpenseCommand",
             save="hq.platform.application.expenses:save_expense",
-            wording=(("create", "", "Record an expense"),),
         ),
     ),
     DomainDescriptor(
@@ -506,7 +505,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     ),
     DomainDescriptor(
         id="hq.topology",
-        label="Topology",
+        label="Map",
         description="The infrastructure as one graph: what depends on what, and the questions it answers.",
         # The relational map leads the Infrastructure group because it is the
         # entry point that explains how every narrower workspace fits together.

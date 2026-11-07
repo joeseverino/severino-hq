@@ -12,11 +12,8 @@
 </dl>
 
 {% if traffic.path and traffic.measured %}
-  {% card heading="traffic" %}
-    <div class="card-head">
-      <h2 id="traffic">Traffic</h2>
-      <a class="section-foot" href="{% url 'analytics:overview' %}?days={{ traffic.days }}">All analytics{% arrow %}</a>
-    </div>
+  {% url 'analytics:overview' as analytics_url %}{% with days=traffic.days|stringformat:"s" %}
+  {% section "Traffic" more_label="All analytics" more_url=analytics_url|add:"?days="|add:days %}
     <dl class="vitals-strip">
       <div class="vital">
         <dt>Page views ({{ traffic.days|counted:"day" }})</dt>
@@ -27,10 +24,10 @@
         <dd><span class="vital-rate">{{ traffic.visits|breakable }}</span></dd>
       </div>
     </dl>
-  {% endcard %}
+  {% endsection %}{% endwith %}
 {% endif %}
 
-{% if item.notes %}<h2>Notes</h2><p>{{ item.notes|breakable|linebreaksbr }}</p>{% endif %}
+{% if item.notes %}{% section "Notes" %}<p>{{ item.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
 <div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
 {% endblock %}

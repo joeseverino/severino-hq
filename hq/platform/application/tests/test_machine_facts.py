@@ -11,6 +11,7 @@ from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 
 from ..connections import connection_readings
+from ..entity_links import entity_link
 from ..machines import machine, machine_catalog
 from ..relationships import relationships_for
 from ..security import Capability, Principal
@@ -117,8 +118,9 @@ class ReachedThroughTests(TestCase):
         listing = self.client.get(reverse("control_plane:machines"))
         page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-host"}))
 
-        self.assertIn(TAILNET_REF, texts(listing, "code"))
-        self.assertIn(TAILNET_REF, texts(page, "code"))
+        named = entity_link("connection", TAILNET_REF).label
+        self.assertIn(named, texts(listing, "code"))
+        self.assertIn(named, text(page))
         self.assertNotIn("no connection reads it", text(page))
         self.assertNotIn("not monitored", text(page))
 

@@ -29,10 +29,13 @@ from hq.platform.application.references import ReferencePickerMixin, reference_o
 from hq.platform.application.security import Capability, safe_next, web_principal
 from hq.platform.application.ui import ListRow
 from hq.platform.application.web_writes import execute_posted, refusal_response
-from hq.platform.application.writes import ServiceCreateMixin, ServiceDeleteMixin, ServiceUpdateMixin
+from hq.platform.application.writes import CommandFormPage, ServiceCreateMixin, ServiceDeleteMixin, ServiceUpdateMixin
 
 from .forms import EntryForm
 from .models import Entry
+
+# What makes a new event, its form and its command.
+CREATE = "calendar.entry.create"
 
 CALENDAR_TRAIL = (("Calendar", reverse_lazy("calendar:month")),)
 
@@ -58,7 +61,7 @@ class CalendarView(PageMixin, TemplateView):
         day = self._selected() or timezone.localdate()
         return (
             PageAction(
-                capability_words("calendar.entry.create"),
+                capability_words(CREATE),
                 new_entry_url(day),
                 primary=True,
             ),
@@ -203,6 +206,13 @@ class EntryWrite:
     identity_kwarg = "current_key"
 
 
+class EntryFormPage(CommandFormPage):
+    """An event's form, said as its command's page says it."""
+
+    creates = CREATE
+    listed_route = "calendar:month"
+
+
 class EntryDetailView(RedirectView):
     """An entry's own address opens it on the calendar."""
 
@@ -213,7 +223,7 @@ class EntryDetailView(RedirectView):
         return get_object_or_404(Entry, uid=uid).get_absolute_url()
 
 
-class EntryCreateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceCreateMixin, CreateView):
+class EntryCreateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin, ServiceCreateMixin, CreateView):
     form_class = EntryForm
     template_name = "calendars/entry_form.html"
     service = staticmethod(save_entry)
@@ -221,7 +231,7 @@ class EntryCreateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceCreate
 
     @override
     def get_page_title(self):
-        return capability_title("calendar.entry.create")
+        return capability_title(CREATE)
 
     @override
     def get_initial(self):
@@ -229,7 +239,7 @@ class EntryCreateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceCreate
         return {"starts_on": on or timezone.localdate()}
 
 
-class EntryUpdateView(EntryWrite, EntryPage, ReferencePickerMixin, ServiceUpdateMixin, UpdateView):
+class EntryUpdateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin, ServiceUpdateMixin, UpdateView):
     page_title = "Edit event"
     form_class = EntryForm
     template_name = "calendars/entry_form.html"

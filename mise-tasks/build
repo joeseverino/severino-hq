@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="To check the production image: build it as CI builds it, then every image:verify:* check; with IMAGE set, check that image without a build"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="1h"
 #MISE depends_post=["image:docker stop"]
 #USAGE flag "--tag <tag>" help="The name to build it as; severino-hq:ci-local by default"

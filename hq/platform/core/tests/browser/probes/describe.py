@@ -34,9 +34,11 @@ const inFlow = (parent) => {
 # `clip-path` cuts all a box paints. A `display: contents` box has no box to
 # clip with. A box that skips its content (`content-visibility: hidden`, a
 # part hidden until found) draws none of what it holds, though a layout query
-# still places it, so nothing in it or under it is seen.
+# still places it, so nothing in it or under it is seen. A rect `el` draws
+# around itself (`own`, a ring) is past its own overflow, which clips only
+# what it holds.
 PAINTED_PART = r"""
-const painted = (el, rect) => {
+const painted = (el, rect, own = false) => {
   let shown = el;
   while (shown.parentElement && getComputedStyle(shown).display === 'contents') shown = shown.parentElement;
   if (!shown.checkVisibility({opacityProperty: true, visibilityProperty: true})) return null;
@@ -58,7 +60,7 @@ const painted = (el, rect) => {
       || (placed === 'fixed' && transformed);
     if (holds) placed = null;
     // Overflow clips what a box holds, and a run of inline text holds nothing.
-    if (holds && style.display !== 'inline') {
+    if (holds && style.display !== 'inline' && !(own && up === el)) {
       const inner = {left: b.left + up.clientLeft, top: b.top + up.clientTop};
       if (style.overflowX !== 'visible') cut({left: inner.left, right: inner.left + up.clientWidth, top: -Infinity, bottom: Infinity});
       if (style.overflowY !== 'visible') cut({top: inner.top, bottom: inner.top + up.clientHeight, left: -Infinity, right: Infinity});

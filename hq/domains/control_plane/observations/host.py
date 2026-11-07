@@ -131,6 +131,17 @@ UNIT_TEXT = r"^[ -.0-<>-{}~]+$"
 UNIT_TEXT_LENGTH = 120
 
 
+_ESCAPE = re.compile(rb"\\x([0-9a-f]{2})")
+
+
+def unescaped(unit: str) -> str:
+    """A unit's name as a person reads it, as ``systemd-escape --unescape``
+    gives it: each ``\\xNN`` its byte. Only words take it; whatever
+    addresses the unit keeps the name systemd has."""
+
+    return _ESCAPE.sub(lambda escape: bytes([int(escape[1], 16)]), unit.encode()).decode(errors="replace")
+
+
 def _or_blank(pattern: str) -> str:
     """``pattern``, or nothing: a property systemd leaves unset."""
 

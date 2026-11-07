@@ -2,11 +2,14 @@
 or the slow calls, names the SDK's part, and sets the slow calls at once beside the same calls one
 after another on each side."""
 
+import json
+
 from django.test import SimpleTestCase
 
 from tools.perf import mcp
 from tools.perf.mcp_probe import (
     ANSWERED,
+    ANSWERS,
     AT_ONCE,
     BOOT,
     CALLED,
@@ -15,6 +18,7 @@ from tools.perf.mcp_probe import (
     LISTS,
     LOADED,
     SERIAL,
+    weighed,
 )
 
 MB = 1_000_000
@@ -91,3 +95,38 @@ class ProbeTests(SimpleTestCase):
 
         self.assertEqual(per_item(3000, 3), 1000)
         self.assertEqual(per_item(40, 0), 40, "an empty queue is its envelope")
+
+    def test_an_answer_is_weighed_by_its_empty_members_and_the_long_text_it_says_again(self) -> None:
+        said = "Why HQ cannot do this for you"
+        items = [
+            {"label": said, "notice": False, "facts": [], "count": 0},
+            {"label": said, "since": "", "subject": None},
+        ]
+        text = json.dumps({"items": items}, separators=(",", ":"))
+
+        weight = weighed(text)
+
+        self.assertEqual(weight["bytes"], len(text))
+        # A zero is a figure, not an empty value.
+        self.assertEqual(weight["empty"], len('"notice":false,"facts":[],"since":"","subject":null,'))
+        self.assertEqual(weight["repeated"], len(f'"{said}"'), "the second saying alone")
+
+    def test_each_tools_answer_is_set_beside_its_base(self) -> None:
+        def side(commit, size):
+            return {
+                "commit": commit,
+                "sets": {
+                    "composed": {
+                        "result": {
+                            ANSWERS: {
+                                "example_tool": {"bytes": size, "empty": size // 2, "repeated": 0, "refused": False}
+                            }
+                        }
+                    }
+                },
+            }
+
+        said = mcp.answer_lines({"base": side("example-base", 4000), "here": side("example-here", 1000)})
+
+        (row,) = [line.split() for line in said if line.split()[:1] == ["example_tool"] and len(line.split()) == 4]
+        self.assertEqual(row, ["example_tool", "4000", "1000", "-75%"])

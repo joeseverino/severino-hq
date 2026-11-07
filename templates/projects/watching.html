@@ -12,7 +12,7 @@ would be a page about anybody.
 {% elif not profile %}
   {% include "partials/_empty_state.html" with message="Not read from GitHub yet." only %}
 {% else %}
-  <section class="gh-profile" aria-label="Your GitHub profile">
+  <div class="gh-profile">
     {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}
     <div class="gh-identity">
       <p class="gh-name">{{ profile.name|default:profile.login|breakable }}<span class="gh-verified" tabindex="0" data-tip="This is your GitHub account, according to your sign-in.{% if app_repositories %}&#10;HQ's GitHub App is installed on it.{% endif %}">{% include "partials/_icon.html" with name="check-circle" %}<span class="visually-hidden">This is your GitHub account, according to your sign-in.</span></span></p>
@@ -25,24 +25,23 @@ would be a page about anybody.
       <div><dt>Public repos</dt><dd>{% entity profile.url|add:"?tab=repositories"|outside label=profile.public_repos %}</dd></div>
       <div><dt>Starred</dt><dd>{% entity profile.url|add:"?tab=stars"|outside label=profile.starred %}</dd></div>
     </dl>
-  </section>
+  </div>
 
-  <h2>Starred <span class="heading-aside">newest first{% dot %}{% include "partials/_reading_age.html" with at=profile.observed_at only %}</span></h2>
+  {% section "Starred" count=profile.watched|length %}
   {% table_region "Starred" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "Repository" local_sort=profile.watched|sortable gutter=True %}{% table_heading "Latest release" "identifier" local_sort=profile.watched|sortable drop=2 %}{% table_heading "Advisories" local_sort=profile.watched|sortable drop=1 %}{% table_heading "Starred" "status" local_sort=profile.watched|sortable %}</tr></thead>
+      <thead><tr>{% table_heading "Repository" local_sort=True gutter=True %}{% table_heading "Latest release" "identifier" local_sort=True drop=2 %}{% table_heading "Advisories" local_sort=True drop=1 %}{% table_heading "Starred" "status" local_sort=True %}</tr></thead>
       <tbody>
         {% for repo in profile.watched %}
           <tr>
-            <td class="row-gutter">
+            <td>
               <strong>{% entity repo.url|outside label=repo.name %}</strong>
               {% if repo.description %}<div class="muted">{{ repo.description|truncatechars:110|breakable }}</div>{% endif %}
-              {% row_toggle %}
             </td>
             <td class="prose">{% if repo.release %}{% entity repo.release.url|outside label=repo.release.tag %}{% if repo.release.published %} <span class="muted nowrap">{{ repo.release.published|ago_short }}</span>{% endif %}{% else %}{% empty_value %}{% endif %}</td>
             <td>
               {% for item in repo.advisories|slice:":2" %}
-                <div class="prose"><span class="pill{% if item.severity == 'critical' or item.severity == 'high' %} pill-serious{% elif item.severity == 'medium' %} pill-attention{% endif %}">{{ item.severity|default:"advisory"|breakable }}</span> {% entity item.url|outside label=item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|ago_short }}</span>{% endif %}</div>
+                <div class="prose">{% status item.severity|default:"advisory" tone=item.severity|severity_tone %} {% entity item.url|outside label=item.id %}{% if item.summary %} {{ item.summary|truncatechars:90|breakable }}{% endif %}{% if item.published %} <span class="muted nowrap">{{ item.published|ago_short }}</span>{% endif %}</div>
               {% empty %}{% empty_value %}{% endfor %}
               {% if repo.advisories|length > 2 %}<span class="muted">and {% entity repo.url|add:"/security/advisories"|outside label=repo.advisories|length|add:"-2"|stringformat:"s"|add:" more" %}</span>{% endif %}
             </td>
@@ -52,8 +51,10 @@ would be a page about anybody.
       </tbody>
     </table>
   {% endtable_region %}
+  {% aside %}<span class="count">Newest first{% dot %}{% include "partials/_reading_age.html" with at=profile.observed_at only %}</span>
+  {% endsection %}
 
-  <h2>Your GitHub account</h2>
+  {% section "Your GitHub account" %}
   <dl class="github-facts account-facts">
     {% if profile.since %}<div><dt>On GitHub since</dt><dd>{{ profile.since|when:"day" }}</dd></div>{% endif %}
     {% if profile.company %}<div><dt>Company</dt><dd>{{ profile.company|breakable }}</dd></div>{% endif %}
@@ -71,6 +72,7 @@ would be a page about anybody.
       {% endif %}
     </dd></div>
   </dl>
+  {% endsection %}
 {% endif %}
 </div>
 {% endblock %}

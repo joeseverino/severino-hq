@@ -3,7 +3,6 @@ from typing import override
 from django.db.models import Count
 from django.urls import reverse, reverse_lazy
 from django.utils.functional import cached_property
-from django.utils.html import format_html
 from django.views.generic import (
     CreateView,
     DeleteView,
@@ -17,10 +16,11 @@ from hq.platform.application.analytics import CONTENT_TRAFFIC_DAYS, attach_traff
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.content import published_on
 from hq.platform.application.documentation import related_documents
-from hq.platform.application.labels import dotted_html
+from hq.platform.application.labels import adding, dotted_html
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableToggle
 from hq.platform.application.writes import RecordDeleteMixin, RecordFormMixin
+from hq.platform.core.templatetags.status_tags import status_pill
 
 from .forms import ContentItemForm
 from .models import PAGE_TYPES, WRITEUP_TYPES, ContentItem
@@ -43,7 +43,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
     heading = ""
     # What the head's button and the empty list call a new item here, and
     # the type its form opens on.
-    new_label = "New writeup or page"
+    new_label = adding("writeup or page")
     new_type = ""
     table_empty = "No writeups or pages yet."
     table_filters = (TableFilter("status", "Status", "status", ContentItem.Status.choices),)
@@ -90,7 +90,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
             *typed,
             TableColumn("Status", "status", css="key-col"),
             TableColumn("Description", drop=1),
-            TableColumn(f"Views ({CONTENT_TRAFFIC_DAYS} days)", css="num-col", drop=5),
+            TableColumn(f"Views ({CONTENT_TRAFFIC_DAYS} days)", kind="numeric", drop=5),
             TableColumn("Published", "published_at", "Oldest published", "Recently published", drop=3),
             TableColumn("Updated", "updated_at", "Least recently updated", "Recently updated", drop=2),
             TableColumn("Live page", css="actions-col", drop=4),
@@ -141,7 +141,7 @@ class _ContentSectionView(PageMixin, TableListMixin, ListView):
 class WriteupListView(_ContentSectionView):
     content_types = WRITEUP_TYPES
     heading = "Writeups"
-    new_label = "New writeup"
+    new_label = adding("writeup")
     new_type = ContentItem.Type.ARTICLE.value
     table_empty = "No writeups yet."
 
@@ -149,7 +149,7 @@ class WriteupListView(_ContentSectionView):
 class PageListView(_ContentSectionView):
     content_types = PAGE_TYPES
     heading = "Pages"
-    new_label = "New page"
+    new_label = adding("page")
     new_type = ContentItem.Type.PAGE.value
     table_empty = "No pages yet."
 
@@ -219,7 +219,7 @@ class ContentDetailView(PageMixin, DetailView):
     def get_page_lede(self):
         return dotted_html(
             self.object.get_content_type_display(),
-            format_html('<span class="pill pill-{}">{}</span>', self.object.status, self.object.get_status_display()),
+            status_pill(self.object.get_status_display(), tone=self.object.status),
         )
 
     @override
@@ -264,10 +264,8 @@ class ContentCreateView(ContentPage, RecordFormMixin, CreateView):
         return f"New {noun_of(self.chosen_type)}" if self.chosen_type else "New writeup or page"
 
     @override
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
-        context["noun"] = noun_of(self.chosen_type) if self.chosen_type else "writeup or page"
-        return context
+    def get_form_verb(self, form):
+        return adding(noun_of(self.chosen_type) if self.chosen_type else "writeup or page")
 
 
 class ContentUpdateView(ContentPage, RecordFormMixin, UpdateView):

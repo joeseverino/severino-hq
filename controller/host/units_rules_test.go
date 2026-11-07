@@ -2,6 +2,7 @@ package host
 
 import (
 	"bufio"
+	"cmp"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -182,7 +183,8 @@ var execsSudo = map[string]string{
 // sudoUnitBreaks is each shipped unit that runs a subcommand which execs
 // sudo, under a setting that keeps sudo from starting: sudo-rs refuses to run
 // with the no-new-privileges flag set, which NoNewPrivileges= sets and
-// DynamicUser= implies (systemd.exec(5)). A drop-in's setting counts too.
+// DynamicUser= implies (systemd.exec(5)). The setting is the one systemd
+// ends with, across the unit's file and every drop-in that reaches it.
 func sudoUnitBreaks(t *testing.T, dir string) []string {
 	t.Helper()
 	shipped, err := Shipped(dir)
@@ -198,20 +200,83 @@ func sudoUnitBreaks(t *testing.T, dir string) []string {
 		if !slices.Contains(slices.Collect(maps.Values(execsSudo)), subcommand) {
 			continue
 		}
-		kind := unit[strings.LastIndex(unit, "."):]
-		for _, name := range shipped {
-			owner, _, _ := strings.Cut(name, ".d/")
-			if name != unit && owner != unit && owner != "severino-hq-"+kind {
-				continue
-			}
-			for _, key := range []string{"NoNewPrivileges", "DynamicUser"} {
-				if value := unitValue(t, filepath.Join(dir, name), key); systemdTrue(value) {
-					breaks = append(breaks, fmt.Sprintf("%s sets %s=%s, but %s runs hq-host %s, which runs sudo, and sudo-rs refuses to start under no-new-privileges", name, key, value, unit, subcommand))
+		for _, key := range []string{"NoNewPrivileges", "DynamicUser"} {
+			value, from := "", ""
+			for _, name := range append([]string{unit}, dropInsOf(unit, shipped)...) {
+				if v := unitValue(t, filepath.Join(dir, name), key); v != "" {
+					value, from = v, name
 				}
+			}
+			if systemdTrue(value) {
+				breaks = append(breaks, fmt.Sprintf("%s sets %s=%s, but %s runs hq-host %s, which runs sudo, and sudo-rs refuses to start under no-new-privileges", from, key, value, unit, subcommand))
 			}
 		}
 	}
 	return breaks
+}
+
+// dropInsOf is every shipped drop-in systemd reads for unit, in the order it
+// reads them (systemd.unit(5)): from the directory of each name made by
+// truncating unit's after a dash, a template's, and unit's own, a file in a
+// later one replacing one of the same name in an earlier, all sorted by name.
+func dropInsOf(unit string, shipped []string) []string {
+	base, suffix := unit[:strings.LastIndex(unit, ".")], unit[strings.LastIndex(unit, "."):]
+	var dirs []string
+	for i := range len(base) {
+		if base[i] == '-' {
+			dirs = append(dirs, base[:i+1]+suffix+".d")
+		}
+	}
+	if template, _, instance := strings.Cut(base, "@"); instance {
+		dirs = append(dirs, template+"@"+suffix+".d")
+	}
+	dirs = append(dirs, unit+".d")
+	byName := map[string]string{}
+	for _, dir := range dirs {
+		for _, name := range shipped {
+			if file, ok := strings.CutPrefix(name, dir+"/"); ok {
+				byName[file] = name
+			}
+		}
+	}
+	files := slices.Sorted(maps.Keys(byName))
+	for i, file := range files {
+		files[i] = byName[file]
+	}
+	return files
+}
+
+// effective is what systemd ends with for key of a shipped unit in dir, read
+// across its file and every drop-in that reaches it: the last value, and the
+// words of every value since the last empty one, which is what a list setting
+// (a capability set, address families) holds.
+func effective(t *testing.T, dir, unit, key string) (last string, list []string) {
+	t.Helper()
+	shipped, err := Shipped(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range append([]string{unit}, dropInsOf(unit, shipped)...) {
+		f, err := os.Open(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lines := bufio.NewScanner(f)
+		for lines.Scan() {
+			if value, ok := strings.CutPrefix(lines.Text(), key+"="); ok {
+				last = value
+				if value == "" {
+					list = nil
+				}
+				list = append(list, strings.Fields(value)...)
+			}
+		}
+		f.Close()
+		if err := lines.Err(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return last, list
 }
 
 // hqHostSubcommand is the subcommand an ExecStart line gives hq-host, or ""
@@ -270,21 +335,24 @@ func TestOnlyTheseFilesRunSudo(t *testing.T) {
 }
 
 func TestAUnitThatKeepsSudoFromStartingIsNamed(t *testing.T) {
-	for name, body := range map[string]string{
-		"severino-hq-script-drift.service.d/20-harden.conf":  "[Service]\nNoNewPrivileges=yes\n",
-		"severino-hq-.service.d/20-harden.conf":              "[Service]\nNoNewPrivileges=true\n",
-		"severino-hq-script-drift.service.d/20-dynamic.conf": "[Service]\nDynamicUser=on\n",
+	for _, c := range []struct{ write, body, named string }{
+		{"severino-hq-script-drift.service.d/40-harden.conf", "[Service]\nNoNewPrivileges=yes\n", ""},
+		{"severino-hq-.service.d/40-harden.conf", "[Service]\nNoNewPrivileges=true\n", ""},
+		{"severino-hq-script-drift.service.d/20-dynamic.conf", "[Service]\nDynamicUser=on\n", ""},
+		// Emptied, the unit's own widening leaves the shared sandbox's flag.
+		{"severino-hq-script-drift.service.d/30-sandbox.conf", "", "severino-hq-.service.d/20-sandbox.conf"},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(c.write, func(t *testing.T) {
 			dir := copyUnits(t)
-			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, name)), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, c.write)), 0o755); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(dir, c.write), []byte(c.body), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if breaks := sudoUnitBreaks(t, dir); len(breaks) != 1 || !strings.Contains(breaks[0], name) {
-				t.Errorf("named %v, want %s alone", breaks, name)
+			named := cmp.Or(c.named, c.write)
+			if breaks := sudoUnitBreaks(t, dir); len(breaks) != 1 || !strings.HasPrefix(breaks[0], named+" ") {
+				t.Errorf("named %v, want %s alone", breaks, named)
 			}
 		})
 	}

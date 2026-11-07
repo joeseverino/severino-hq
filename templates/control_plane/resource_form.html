@@ -4,7 +4,8 @@
 Every field below is generated from the provider's pydantic model, and that same
 model validates the submission. Nothing here knows what kind of resource this is.
 {% endcomment %}
-<form method="post" class="form">
+{% card css="form-card" %}
+<form method="post" class="form" data-submit-busy data-submit-label="Working…">
   {% write_token %}
   {% if not resource %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
   {% include "partials/_form_errors.html" with form=identity %}
@@ -64,20 +65,13 @@ model validates the submission. Nothing here knows what kind of resource this is
     </details>
   {% endif %}
 
-  <div class="form-actions">
-    <button type="submit" class="primary">{% if resource %}Save changes{% else %}Add{% endif %}</button>
-    {% comment %}
-    Back where the operator started: cancelling out of "add a record" returns
-    to the page they were looking at, not the resource registry.
-    {% endcomment %}
-    <a class="btn" href="{{ cancel_url }}">Cancel</a>
-    {% comment %}
-    What saving does, said beside the button that does it, by the capability
-    registry rather than by this page: a flat promise here would be false for
-    every kind whose actions are locked, which is the one case where an
-    operator most needs to know that saving changes nothing.
-    {% endcomment %}
-    <span class="muted form-actions-note">{{ apply_note|breakable }}</span>
-  </div>
+  {% comment %}
+  Cancel goes back where the operator started (`_cancel_url`). What saving
+  does is the capability registry's to say (`_apply_note`): a flat promise
+  here would be false for every kind whose actions are locked, the one case
+  where an operator most needs to know that saving changes nothing.
+  {% endcomment %}
+  {% include "partials/_form_actions.html" with verb=form_verb cancel_url=cancel_url note=apply_note only %}
 </form>
+{% endcard %}
 {% endblock %}

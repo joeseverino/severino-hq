@@ -35,12 +35,12 @@ type HTTPClient struct {
 func NewHTTPClient(caFile string) (*HTTPClient, error) {
 	roots, err := x509.SystemCertPool()
 	if err != nil {
-		return nil, &ProviderError{Message: "controller CA bundle could not be loaded"}
+		return nil, &ProviderError{Message: "HQ's CA bundle could not be loaded"}
 	}
 	if caFile != "" {
 		data, err := os.ReadFile(caFile)
 		if err != nil || !roots.AppendCertsFromPEM(data) {
-			return nil, &ProviderError{Message: "controller CA bundle could not be loaded"}
+			return nil, &ProviderError{Message: "HQ's CA bundle could not be loaded"}
 		}
 	}
 	transport := http.DefaultTransport.(*http.Transport).Clone()
@@ -107,9 +107,9 @@ func learnCredential(name, value string) {
 func requestFailure(err error) *ProviderError {
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
-		return &ProviderError{Message: "provider request timed out", Failure: FailureClassNetwork}
+		return &ProviderError{Message: "the request timed out", Failure: FailureClassNetwork}
 	}
-	return &ProviderError{Message: "provider unreachable", Failure: FailureClassNetwork}
+	return &ProviderError{Message: "the service is unreachable", Failure: FailureClassNetwork}
 }
 
 func origin(u *url.URL) string {
@@ -163,7 +163,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 			var err error
 			body, contentType, err = p.encode()
 			if err != nil {
-				return nil, nil, &ProviderError{Message: "provider request could not be encoded"}
+				return nil, nil, &ProviderError{Message: "the request could not be encoded"}
 			}
 		case url.Values:
 			body = []byte(p.Encode())
@@ -176,7 +176,7 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 			var err error
 			body, err = json.Marshal(payload)
 			if err != nil {
-				return nil, nil, &ProviderError{Message: "provider request could not be encoded"}
+				return nil, nil, &ProviderError{Message: "the request could not be encoded"}
 			}
 		}
 	}
@@ -201,13 +201,13 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	}
 	client := &http.Client{Transport: h.Transport, Timeout: timeout, CheckRedirect: func(next *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
-			return &ProviderError{Message: "provider redirected too many times", Failure: FailureClassAddress}
+			return &ProviderError{Message: "the service redirected too many times", Failure: FailureClassAddress}
 		}
 		if method != "GET" && method != "HEAD" {
-			return &ProviderError{Message: "provider redirected a write request, which is not followed; use its direct API address", Failure: FailureClassAddress}
+			return &ProviderError{Message: "the service redirected a write request, which is not followed; use its direct API address", Failure: FailureClassAddress}
 		}
 		if origin(next.URL) != origin(request.URL) {
-			return &ProviderError{Message: "provider redirected outside its API origin; use its direct API address", Failure: FailureClassAddress}
+			return &ProviderError{Message: "the service redirected outside its API origin; use its direct API address", Failure: FailureClassAddress}
 		}
 		for name := range next.Header {
 			if !strings.EqualFold(name, "Accept") && !strings.EqualFold(name, "Content-Type") {
@@ -231,25 +231,25 @@ func (h *HTTPClient) send(ctx context.Context, address, method string, headers m
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, MaxResponseBytes+1))
 	if err != nil {
-		return nil, nil, &ProviderError{Message: "provider response could not be read", Failure: FailureClassNetwork}
+		return nil, nil, &ProviderError{Message: "the service's answer could not be read", Failure: FailureClassNetwork}
 	}
 	if len(data) > MaxResponseBytes {
-		return nil, nil, &ProviderError{Message: "provider answered with more than 32 MB"}
+		return nil, nil, &ProviderError{Message: "the service answered with more than 32 MB"}
 	}
 	if len(data) == 0 {
 		return nil, response.Header, nil
 	}
 	responseContentType := strings.ToLower(response.Header.Get("Content-Type"))
 	if strings.Contains(responseContentType, "text/html") || strings.Contains(responseContentType, "application/xhtml+xml") || bytes.HasPrefix(bytes.TrimSpace(data), []byte("<")) {
-		return nil, response.Header, &ProviderError{Message: "address answered with a web page, not the API; use the provider's direct API address", Failure: FailureClassAddress}
+		return nil, response.Header, &ProviderError{Message: "address answered with a web page, not the API; use the service's direct API address", Failure: FailureClassAddress}
 	}
 	var result json.RawMessage
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&result); err != nil {
-		return nil, response.Header, &ProviderError{Message: "provider returned invalid JSON"}
+		return nil, response.Header, &ProviderError{Message: "the service returned invalid JSON"}
 	}
 	if err := decoder.Decode(new(json.RawMessage)); err != io.EOF {
-		return nil, response.Header, &ProviderError{Message: "provider returned invalid JSON"}
+		return nil, response.Header, &ProviderError{Message: "the service returned invalid JSON"}
 	}
 	return result, response.Header, nil
 }

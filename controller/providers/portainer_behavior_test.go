@@ -167,7 +167,7 @@ func TestPortainerRefusalsClassify(t *testing.T) {
 	}{
 		{401, runtime.RefusalCredential, "environment list: credential refused"},
 		{403, runtime.RefusalPermission, "environment list needs environment access"},
-		{500, runtime.RefusalUnclassified, "environment list: provider answered 500"},
+		{500, runtime.RefusalUnclassified, "environment list: the service answered 500"},
 	}
 	for _, c := range cases {
 		api, server := newPortainerAPI(t, map[string]string{})
@@ -393,7 +393,7 @@ func TestPortainerEachRefusesPerMachine(t *testing.T) {
 
 	api.status[containersPath] = 403
 	r = portainerRegistry(t, server.URL, runtime.Environment{})
-	if _, err := r.readers[string(runtime.ResourceKindPortainerNetwork)](t.Context()); err == nil || err.Error() != "network list needs environment access: provider answered 403" {
+	if _, err := r.readers[string(runtime.ResourceKindPortainerNetwork)](t.Context()); err == nil || err.Error() != "network list needs environment access: the service answered 403" {
 		t.Fatalf("every machine refusing refuses the reading: %v", err)
 	}
 }

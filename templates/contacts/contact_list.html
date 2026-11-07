@@ -35,26 +35,26 @@
 <table class="data-table">
   <thead>
     <tr>
-      {% table_heading "#" "identifier" local_sort=submissions|sortable gutter=True %}
-      {% table_heading "Received" "status" local_sort=submissions|sortable %}
-      {% table_heading "From" local_sort=submissions|sortable %}
-      {% table_heading "Message" local_sort=submissions|sortable drop=4 %}
-      {% table_heading "Status" "status" local_sort=submissions|sortable drop=3 %}
-      {% table_heading "Country" local_sort=submissions|sortable drop=2 %}
+      {% table_heading "#" "identifier" local_sort=True gutter=True %}
+      {% table_heading "Received" "status" local_sort=True %}
+      {% table_heading "From" local_sort=True %}
+      {% table_heading "Message" local_sort=True drop=4 %}
+      {% table_heading "Status" "status" local_sort=True drop=3 %}
+      {% table_heading "Country" local_sort=True drop=2 %}
       {% table_heading "Actions" css="actions-col" hidden=True drop=1 %}
     </tr>
   </thead>
   <tbody>
     {% for s in submissions %}
       <tr {% if s.status == "unread" %}class="row-unread"{% endif %}>
-        <td class="row-gutter">{{ s.id|breakable }}{% row_toggle %}</td>
+        <td>{{ s.id|breakable }}</td>
         <td class="muted">{{ s.created_at|when }}</td>
         <td>
           <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name|breakable }}</strong></a>
           <div class="muted">{% cell_line s.email %}</div>
         </td>
         <td class="msg-preview">{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
-        <td><span class="pill pill-{{ s.status }}">{{ s.status|capfirst|breakable }}</span>{% if s.pending %} <span class="pill pill-attention">Waiting</span>{% endif %}</td>
+        <td>{% status s.status tone=s.status %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
         <td class="muted">{{ s.country|or_empty }}</td>
         <td class="actions-col row-actions">
           {% url 'contacts:set_status' s.id as status_url %}

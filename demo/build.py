@@ -323,6 +323,21 @@ class _Offered:
             self.words.update(word for word in _WORD.findall(name.lower()) if word not in _FILLER)
 
 
+def _unsaved_copies(offered: _Offered, tried: dict[str, int]) -> list[str]:
+    """The offered addresses with a query still to copy: each within
+    _COPY_DEPTH of a page and nearer one than when it was last asked for,
+    nearest first."""
+
+    return sorted(
+        (
+            address
+            for address, depth in offered.variants.items()
+            if depth <= _COPY_DEPTH and depth < tried.get(address, _COPY_DEPTH + 1)
+        ),
+        key=lambda address: (offered.variants[address], address),
+    )
+
+
 class DemoBuild(TestCase):
     """A test only so it gets its own database."""
 
@@ -452,23 +467,18 @@ class DemoBuild(TestCase):
         # found nearer later (a page reached from a copy links it) is read again.
         tried: dict[str, int] = {}
         palette: list[str] = []
-        while pending := sorted(
-            (
-                address
-                for address, depth in offered.variants.items()
-                if depth <= _COPY_DEPTH and depth < tried.get(address, _COPY_DEPTH + 1)
-            ),
-            key=lambda address: (offered.variants[address], address),
-        ):
-            tried.update((address, offered.variants[address]) for address in pending)
-            copies = self._save_copies(client, pending, variants, fragments, offered)
-            if not palette:
-                palette = [self._save_palette(client, word, fragments, offered) for word in [*searches, _NOTHING]]
-                copies += palette
+        read: set[str] = set()
+        while True:
+            if pending := _unsaved_copies(offered, tried):
+                tried.update((address, offered.variants[address]) for address in pending)
+                copies = self._save_copies(client, pending, variants, fragments, offered)
+                if not palette:
+                    palette = [self._save_palette(client, word, fragments, offered) for word in [*searches, _NOTHING]]
+                    copies += palette
+            elif not (copies := self._save_reads(client, offered, read, fragments)):
+                break
             links = [unescape(href) for copy in copies for href in _HREF.findall(copy)]
             self._walk(client, links, seen, fragments, offered)
-        for address in sorted(offered.reads):
-            self._save_answer(client, address, "", fragments)
         return {
             "variants": variants,
             "searches": searches,
@@ -476,6 +486,15 @@ class DemoBuild(TestCase):
             "sorts": offered.sorts,
             "refused": offered.refused,
         }
+
+    def _save_reads(self, client: Client, offered: _Offered, read: set[str], fragments: dict[str, str]) -> list[str]:
+        """Each answer a script reads with a query not read yet, added to
+        ``read``. It is drawn on its page, so its links are followed as a
+        page's are."""
+
+        unread = sorted(offered.reads - read)
+        read.update(unread)
+        return [answer for address in unread if (answer := self._save_answer(client, address, "", fragments))]
 
     def _save_palette(self, client: Client, word: str, fragments: dict[str, str], offered: _Offered) -> str:
         """The command center's answer for ``word``, a copy's worth from a page."""

@@ -11,6 +11,7 @@ from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.core.models import AuditLog
+from hq.platform.mcp.capability_answer import agent_capabilities
 from hq_sdk.capabilities import StrictCommand
 
 from ..capabilities import CapabilitySpec, describe_capabilities, execute_capability
@@ -387,7 +388,7 @@ class CapabilityTests(TestCase):
     def test_the_operator_reaches_every_tool_the_cli_uses_without_a_token(self):
         """The CLI's contract is the MCP tool surface, over the host shell."""
 
-        catalog = describe_capabilities(principal=cli_principal())
+        catalog = agent_capabilities(principal=cli_principal())
         self.assertEqual(self.call_as_operator({"tool": "describe_capabilities"}), catalog)
         created = self.call_as_operator(
             {

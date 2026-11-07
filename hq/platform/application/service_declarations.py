@@ -11,7 +11,6 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import LEADS_TO, names_a_host, normalized_hostname
 from hq.domains.control_plane.provider_spec import origin_is_authoritative
 from hq.domains.control_plane.providers import PROVIDERS, read_spec
-from hq.platform.application.routes import reverse
 
 from .entity_links import EntityLink, entity_link
 from .infrastructure import (
@@ -22,6 +21,7 @@ from .infrastructure import (
 )
 from .projection import read_once
 from .whereabouts import Origin
+lazy from .resource_capabilities import Offered, offered_changes
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,6 +67,8 @@ class Claim:
     # What tells this claim from another of its kind that would not replace it
     # (the provider's ``slot``): a DNS record's type.
     slot: str = ""
+    # Blank where its declaration is not offered for edit (``Offered``).
+    edit_url: str = ""
 
     @property
     def url(self) -> str:
@@ -84,10 +86,6 @@ class Claim:
         link = self.link
         _name, arrow, leads_to = link.label.partition(LEADS_TO)
         return replace(link, label=leads_to) if arrow else link
-
-    @property
-    def edit_url(self) -> str:
-        return reverse("control_plane:edit", kwargs={"key": self.resource_key})
 
     @property
     def drifted(self) -> bool:
@@ -196,7 +194,9 @@ def _read_declarations() -> Declarations:
 
     machines, targets = context_for_resolution()
     ledger = _Ledger()
-    for resource in enabled_resources():
+    resources = enabled_resources()
+    offered = _offered()
+    for resource in resources:
         provider = PROVIDERS.get(resource.kind)
         if provider is None or not provider.facet or provider.hostnames is None:
             continue
@@ -210,6 +210,7 @@ def _read_declarations() -> Declarations:
             _readings(provider, resource),
             fronted=_fronted(provider, resource),
             slot=_slot(provider, resource),
+            edit_url=offered[resource.key].edit_url,
         )
         ledger.file(provider, claim, reading)
 
@@ -286,7 +287,15 @@ def runtime_claim(origin: Origin | None, containers: dict[tuple[str, str], Any])
         resource_health(resource),
         _readings(provider, resource),
         fronted=_fronted(provider, resource),
+        # A switched-off container is not among the enabled ones read together.
+        edit_url=(_offered().get(resource.key) or offered_changes([resource])[resource.key]).edit_url,
     )
+
+
+def _offered() -> dict[str, Offered]:
+    """What every enabled declaration offers, read once per projection."""
+
+    return read_once("services.offered", lambda: offered_changes(enabled_resources()))
 
 
 def _slot(provider: Any, resource: ManagedResource) -> str:

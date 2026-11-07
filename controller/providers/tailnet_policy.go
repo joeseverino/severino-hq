@@ -55,7 +55,9 @@ type tailnetPolicyView struct {
 	Grants    []tailnetPolicyGrant `json:"grants"`
 	SSH       []tailnetPolicySSH   `json:"ssh"`
 	NodeAttrs []struct {
-		App struct {
+		Target []string `json:"target"`
+		Attr   []string `json:"attr"`
+		App    struct {
 			Connectors []struct {
 				Name       string   `json:"name"`
 				Connectors []string `json:"connectors"`
@@ -186,7 +188,7 @@ func refuseWeakerTests(live, document tailnetPolicyView) error {
 	wanted := policyTests(document)
 	held := policyTests(live)
 	if len(wanted) == 0 {
-		return &ProviderError{Message: "the declared policy carries no tests, so tailscale's check would pass it whatever it grants; not applied"}
+		return &ProviderError{Message: "the tailnet policy carries no tests, so tailscale's check would pass it whatever it grants; not applied"}
 	}
 	for _, pair := range sortedTestKeys(held) {
 		if _, ok := wanted[pair]; !ok {
@@ -194,7 +196,7 @@ func refuseWeakerTests(live, document tailnetPolicyView) error {
 			if pair.proto != "" {
 				overProto = " over " + pair.proto
 			}
-			return &ProviderError{Message: fmt.Sprintf("the declared policy drops the tests for %q%s, which removes the check they made; not applied", pair.src, overProto)}
+			return &ProviderError{Message: fmt.Sprintf("the tailnet policy drops the tests for %q%s, which removes the check they made; not applied", pair.src, overProto)}
 		}
 	}
 	for _, pair := range sortedTestKeys(held) {
@@ -206,7 +208,7 @@ func refuseWeakerTests(live, document tailnetPolicyView) error {
 		}
 		if len(dropped) > 0 {
 			slices.Sort(dropped)
-			return &ProviderError{Message: fmt.Sprintf("the declared policy no longer tests that %q is denied %q; a live deny is kept, so not applied", pair.src, dropped[0])}
+			return &ProviderError{Message: fmt.Sprintf("the tailnet policy no longer tests that %q is denied %q; a live deny is kept, so not applied", pair.src, dropped[0])}
 		}
 	}
 	return nil
@@ -236,7 +238,7 @@ func (c tailnetClient) policyPassesItsTests(ctx context.Context, document tailne
 	for _, data := range verdict.Data {
 		said = append(said, data.User+": "+strings.Join(data.Errors, ", "))
 	}
-	return &ProviderError{Message: "the declared policy does not pass its own tests; not applied: " + runtime.Clip(strings.Join(said, "; "), runtime.VerdictLimit)}
+	return &ProviderError{Message: "the tailnet policy does not pass its own tests; not applied: " + runtime.Clip(strings.Join(said, "; "), runtime.VerdictLimit)}
 }
 
 // writeTailnetPolicy writes the policy, conditional on the version the checks
@@ -290,11 +292,11 @@ func (r *Registry) tailnetPolicyReconcile(ctx context.Context, spec TailnetPolic
 	}
 	document, err := policyDocument([]byte(wanted))
 	if err != nil {
-		return Result{}, fmt.Errorf("declared policy: %w", err)
+		return Result{}, fmt.Errorf("the tailnet policy: %w", err)
 	}
 	declared, err := document.view()
 	if err != nil {
-		return Result{}, fmt.Errorf("declared policy: %w", err)
+		return Result{}, fmt.Errorf("the tailnet policy: %w", err)
 	}
 	client, err := r.tailnetClient(ctx, spec.ConnectionRef)
 	if err != nil {
@@ -381,6 +383,8 @@ type TailscalePolicyRecord struct {
 	Services      []TailnetService      `json:"services"`
 	AppConnectors []TailnetAppConnector `json:"app_connectors"`
 	SSHRules      []TailnetSSHRule      `json:"ssh_rules"`
+	// Funnel is each node attribute target holding funnel; [] when none does.
+	Funnel []string `json:"funnel"`
 }
 
 type tailnetServices struct {
@@ -413,6 +417,24 @@ func appConnectors(policy tailnetPolicyView) []TailnetAppConnector {
 		}
 	}
 	return found
+}
+
+// funnelAttr is the node attribute Funnel requires: a node without it cannot
+// publish a port to the internet, whatever it runs (Tailscale KB 1223).
+const funnelAttr = "funnel"
+
+// funnelTargets is every target a nodeAttrs entry gives the funnel attribute,
+// sorted. None is the answer that keeps the tailnet off the internet.
+func funnelTargets(policy tailnetPolicyView) []string {
+	found := map[string]bool{}
+	for _, attr := range policy.NodeAttrs {
+		if slices.Contains(attr.Attr, funnelAttr) {
+			for _, target := range attr.Target {
+				found[target] = true
+			}
+		}
+	}
+	return sortedKeys(found)
 }
 
 func sortedKeys[V any](m map[string]V) []string {
@@ -501,6 +523,7 @@ func (r *Registry) tailnetPolicyInventory(ctx context.Context) ([]any, error) {
 		Services:      serviceRecords,
 		AppConnectors: appConnectors(policy),
 		SSHRules:      sshRules,
+		Funnel:        funnelTargets(policy),
 	}}, nil
 }
 

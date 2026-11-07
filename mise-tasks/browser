@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="After a template or CSS change: every browser gate in WebKit, layout, navigation and the demo, one at a time, or the legs named"
+#MISE description="After a template or CSS change: every browser gate in WebKit, layout, navigation, table fit and the demo, one at a time, or the legs named"
 #MISE depends_post=["image:docker stop"]
 #MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
 #USAGE arg "[target]..." var=#true double_dash="automatic" help="Legs by name (layout-1, navigation, demo), each the gate browser:<leg>; every leg but the Chromium ones by default. With --linux, a leg or test labels then any options for Django's test command, as mise run test takes them"

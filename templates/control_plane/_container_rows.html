@@ -8,19 +8,19 @@ cannot go missing from the other.
 <table class="data-table">
   <thead>
     <tr>
-      {% table_heading "Container" "identifier" gutter=True local_sort=containers|sortable %}
-      {% table_heading "Image" "identifier" drop=4 local_sort=containers|sortable %}
-      {% table_heading "Vulnerabilities" "status" drop=3 local_sort=containers|sortable %}
-      {% table_heading "Update" "status" drop=2 local_sort=containers|sortable %}
-      {% table_heading "Ports" "identifier" css="optional-col" drop=1 local_sort=containers|sortable %}
-      {% table_heading "Status" "status" css="key-col" local_sort=containers|sortable %}
+      {% table_heading "Container" "identifier" gutter=True local_sort=True %}
+      {% table_heading "Image" "identifier" drop=4 local_sort=True %}
+      {% table_heading "Vulnerabilities" "status" drop=3 local_sort=True %}
+      {% table_heading "Update" "status" drop=2 local_sort=True %}
+      {% table_heading "Ports" "identifier" css="optional-col" drop=1 local_sort=True %}
+      {% table_heading "Status" "status" css="key-col" local_sort=True %}
     </tr>
   </thead>
       <tbody>
         {% for container in containers %}
           {% comment %}Addressed by name, so a moment in the history links to its row (application.history).{% endcomment %}
           <tr id="container-{{ container.name|slugify }}">
-            <td class="row-gutter">
+            <td>
               {% comment %}
               The name is the link. A container HQ watches leads to its own
               page. One it only sees has no page, so its name is plain text.
@@ -36,12 +36,11 @@ cannot go missing from the other.
               printing both says one thing twice.
               {% endcomment %}
               {% if container.stack and container.stack != container.name %}<br><span class="muted">{{ container.stack|breakable }}</span>{% endif %}
-              {% row_toggle %}
             </td>
             {% with standing=standings|dictkey:container.name %}<td>{% if standing %}<code class="cell-whole" tabindex="0" data-tip="{{ container.image }}">{{ standing.label|breakable }}</code>{% else %}<code class="cell-whole">{{ container.image_label|breakable }}</code>{% endif %}</td>{% endwith %}
             {% with standing=standings|dictkey:container.name %}{% if standing %}{% include "control_plane/_container_standing.html" %}{% else %}<td>{% empty_value %}</td><td>{% empty_value %}</td>{% endif %}{% endwith %}
             <td class="optional-col">{{ container.published|breakable }}</td>
-            <td>{% if not container.healthy %}<span class="pill pill-unreachable">{{ container.state|default:"unknown"|breakable }}</span> {% endif %}{% with up=uptimes|dictkey:container.name %}<span class="cell-part">{{ up|default:container.uptime|default:container.status|breakable }}{% if container.health %}<span class="muted">,</span>{% endif %}</span>{% endwith %}{% if container.health %} <span class="cell-part muted" title="{{ container.check|capfirst }}">{{ container.health|breakable }}</span>{% endif %}</td>
+            <td>{% if not container.healthy %}{% status container.state|default:"unknown" tone="unreachable" %} {% endif %}{% with up=uptimes|dictkey:container.name %}<span class="cell-part">{{ up|default:container.uptime|default:container.status|breakable }}{% if container.health %}<span class="muted">,</span>{% endif %}</span>{% endwith %}{% if container.health %} <span class="cell-part muted" title="{{ container.check|capfirst }}">{{ container.health|breakable }}</span>{% endif %}</td>
           </tr>
         {% endfor %}
       </tbody>

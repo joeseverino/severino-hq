@@ -46,10 +46,25 @@ class PagesTests(SimpleTestCase):
 
         self.assertEqual(task.pages(asked, self.EVERY), [containers, "/contacts/?kind=x", "/"])
 
-    def test_all_is_every_page_the_navigation_lists_and_every_page_known_by_name(self):
+    def test_all_is_every_page_of_the_estate_and_every_page_known_by_name(self):
         self.assertEqual(task.pages(["estate/all"], self.EVERY, ["example"]), self.EVERY)
         self.assertEqual(task.pages(["all"], self.EVERY, ["example"]), ["example", *self.EVERY])
         self.assertEqual(task.pages(["example"], self.EVERY, ["example"]), ["example"])
+
+    def test_all_leaves_out_a_record_page_the_estate_drawn_does_not_hold(self):
+        held, missing = reverse("contacts:detail", args=[1]), reverse("contacts:detail", args=[2])
+
+        class Estate:
+            def linked(self):
+                return [held]
+
+            def at(self, address):
+                return task.Drawn() if address == held else None
+
+        every = [*self.EVERY, held, missing]
+        for asked in ("all", "estate/all"):
+            with self.subTest(asked=asked):
+                self.assertEqual(task.pages([asked], every, records=Estate()), [*self.EVERY, held])
 
     def test_every_name_that_is_no_page_is_refused_together_with_the_nearest_routes(self):
         with self.assertRaises(PageRefused) as refused:

@@ -23,8 +23,8 @@ from hq.domains.control_plane.provider_adapters.cloudflare import (
     DNS_RECORD_TYPES_BY_ID,
     ZONE_KIND,
 )
-from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.providers import PROVIDERS, read_record, record_spec
+lazy from hq.platform.application.resource_capabilities import offered_changes
 
 from .adoption import AdoptCommand, unmanaged
 from .command_fields import Describe
@@ -93,6 +93,9 @@ class ZoneRecord:
     # name and type, so a row that has lost its Value column still says
     # which one it is (``told_apart``).
     summary: str = ""
+    # Blank where its declaration does not offer them (``Offered``).
+    edit_url: str = ""
+    remove_url: str = ""
 
     @property
     def managed(self) -> bool:
@@ -139,14 +142,6 @@ class ZoneRecord:
     @property
     def url(self) -> str:
         return entity_link("resource", self.resource_key).url
-
-    @property
-    def edit_url(self) -> str:
-        return reverse("control_plane:edit", kwargs={"key": self.resource_key}) if self.resource_key else ""
-
-    @property
-    def remove_url(self) -> str:
-        return reverse("control_plane:remove", kwargs={"key": self.resource_key}) if self.resource_key else ""
 
     @property
     def service_url(self) -> str:
@@ -445,10 +440,18 @@ def _records_by_zone(pending: list[Any]) -> dict[str, list[ZoneRecord]]:
     one still holds its record."""
 
     by_zone: dict[str, list[ZoneRecord]] = {}
-    for resource in ManagedResource.objects.filter(kind=RECORD_KIND):
+    resources = list(ManagedResource.objects.filter(kind=RECORD_KIND))
+    offered = offered_changes(resources)
+    for resource in resources:
         if zone := _zone_of(resource.spec):
             by_zone.setdefault(zone, []).append(
-                _record_of(resource.spec, resource_key=resource.key, health=resource_health(resource))
+                _record_of(
+                    resource.spec,
+                    resource_key=resource.key,
+                    health=resource_health(resource),
+                    edit_url=offered[resource.key].edit_url,
+                    remove_url=offered[resource.key].remove_url,
+                )
             )
     for item in pending:
         if item.kind == RECORD_KIND and (zone := _zone_of(item.spec)):

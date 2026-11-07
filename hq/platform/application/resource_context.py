@@ -126,14 +126,14 @@ def _left_behind(read_at: datetime | None, newest: datetime | None) -> bool:
 
 @dataclass(frozen=True, slots=True)
 class RecordStatus:
-    """One record's state as one line: what it is, since when, what happens next.
+    """One record's state as one line: what it is, since when, what it means.
 
     The only status a record page or a list row shows, so two statuses can
     never disagree side by side.
     """
 
     state: str
-    # The ``control-*`` tone the label is drawn in.
+    # The ``{% status %}`` tone the label and its ``detail`` are drawn in.
     tone: str
     label: str
     detail: str = ""
@@ -155,7 +155,7 @@ def _fault_status(resource, health: dict[str, str]) -> RecordStatus | None:
 
     read_at = resource.last_observed_at
     if not resource.enabled:
-        return RecordStatus("off", "declared", "Switched off in HQ", "HQ does not apply or check it.", None, read_at)
+        return RecordStatus("off", "neutral", "Switched off in HQ", "HQ does not apply or check it.", None, read_at)
     if health["state"] == "drifted":
         return RecordStatus(
             "drifted",
@@ -225,7 +225,7 @@ def record_status(resource, *, health: dict[str, str] | None = None, newest: dat
         )
     if not applies:
         return RecordStatus(
-            "recorded", "declared", "Recorded only", "HQ only records this. Nothing is applied.", None, read_at
+            "recorded", "neutral", "Recorded only", "HQ only records this. Nothing is applied.", None, read_at
         )
     return RecordStatus("unread", "unknown", health["label"], health["message"], None, read_at)
 

@@ -20,7 +20,7 @@ from ..drawings import Dot, Dots
 from ..hq_context import hq_context
 from ..inventory_testing import store
 from .host_only import host_only
-from .markup import all_elements, links, select, text, with_class
+from .markup import all_elements, links, select, text
 
 # The package exports a function named work, so the module is named by its path.
 work_module = importlib.import_module("hq.platform.application.hq_context.work_part")
@@ -158,9 +158,8 @@ class ProjectionTests(TestCase):
         )
         (timer,) = (job for job in found.work.jobs if job.unit.endswith(".timer"))
         self.assertEqual((timer.runs, timer.result), ("Delete old routine log entries", "Done"))
-        # What HQ has no words for is named by its unit, an identifier.
         (web,) = (job for job in found.work.jobs if job.unit.endswith("-web.service"))
-        self.assertEqual([(job.runs, job.runs_unit) for job in (timer, web)], [(timer.runs, False), (web.unit, True)])
+        self.assertEqual((web.runs, web.runs_unit), ("", False))
         self.assertEqual([job.unit for job in found.work.services], ["severino-hq-example-web.service"])
         self.assertEqual([item.result for item in found.work.renderers], ["Already current"])
         self.assertEqual([item["label"] for item in found.problems], [])
@@ -184,8 +183,26 @@ class ProjectionTests(TestCase):
 
         self.assertEqual(
             [(jobs[unit].runs, jobs[unit].result) for unit in ("severino-hq-example.socket", "run-example.mount")],
-            [("severino-hq-example.socket", "Listening"), ("run-example.mount", "Mounted")],
+            [("", "Listening"), ("", "Mounted")],
         )
+
+    def test_a_trigger_names_what_it_starts_and_only_in_words_the_cell_beside_it_lacks(self):
+        estate()
+        base = {"load": "loaded", "file_state": "enabled", "read_at": stamp()}
+        store(
+            UNIT_KIND,
+            {**base, "unit": "same.service", "title": "Same words", "active": "active", "sub": "running"},
+            {**base, "unit": "same.socket", "title": "Same words", "active": "active", "sub": "listening",
+             "activates": "same.service"},
+            {**base, "unit": "other.service", "title": "The other work", "active": "active", "sub": "running"},
+            {**base, "unit": "other.path", "title": "Watches", "active": "active", "sub": "waiting",
+             "activates": "other.service"},
+        )  # fmt: skip
+
+        jobs = {job.unit: job for job in self.context().work.jobs}
+
+        self.assertEqual((jobs["same.socket"].runs, jobs["same.socket"].runs_unit), ("same.service", True))
+        self.assertEqual((jobs["other.path"].runs, jobs["other.path"].runs_unit), ("The other work", False))
 
     def test_a_branch_ahead_of_production_is_said(self):
         estate(deployed="e" * 40)
@@ -338,14 +355,14 @@ class PageTests(TestCase):
         response = self.client.get(reverse("hq_self"))
 
         self.assertIn(("1 needs attention", "#hq-where-heading"), links(response))
-        # Not urgent, so a line under its part and nothing framed above the page.
+        # Not urgent, so the queue's row under its part and nothing framed above the page.
         self.assertEqual(select(response, "id", "problems-here"), [])
         page = all_elements(response)
         where = next(index for index, element in enumerate(page) if element.attrs.get("id") == "hq-where-heading")
-        line = next(index for index, element in enumerate(page) if "problem-line" in element.classes)
+        row = next(index for index, element in enumerate(page) if "data-attention-item" in element.attrs)
         work = next(index for index, element in enumerate(page) if element.attrs.get("id") == "hq-work-heading")
-        self.assertLess(where, line)
-        self.assertLess(line, work)
+        self.assertLess(where, row)
+        self.assertLess(row, work)
 
     def test_an_urgent_problem_is_framed_above_the_page(self):
         estate()
@@ -359,7 +376,10 @@ class PageTests(TestCase):
         framed = next(index for index, element in enumerate(page) if element.attrs.get("id") == "problems-here")
         facts = next(index for index, element in enumerate(page) if "fact-band" in element.classes)
         self.assertLess(framed, facts)
-        self.assertEqual(with_class(response, "problem-line"), [])
+        rows = [element for element in page if "data-attention-item" in element.attrs]
+        self.assertTrue(rows)
+        for row in rows:
+            self.assertTrue(any(ancestor.attrs.get("id") == "problems-here" for ancestor in row.ancestors))
 
     def test_unreadable_units_render_as_a_sentence(self):
         estate()
@@ -367,7 +387,7 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("hq_self"))
 
-        self.assertContains(response, "The controller could not read HQ&#x27;s background jobs.")
+        self.assertContains(response, "HQ could not read HQ&#x27;s background jobs.")
 
     def test_the_machine_page_says_hq_is_up_to_date(self):
         estate()

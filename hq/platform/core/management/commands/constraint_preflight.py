@@ -49,11 +49,11 @@ class ConstraintCheck:
     def counting(self) -> str:
         # A check passes when it is true or unknown, so a row is refused only
         # where the condition is false.
-        return f'SELECT COUNT(*) FROM "{self.table}" WHERE NOT ({self.condition})'
+        return f'SELECT COUNT(*) FROM "{self.table}" WHERE NOT ({self.condition})'  # noqa: S608 - a model's own identifiers and its migration's CHECK, which no parameter can carry
 
     @property
     def sampling(self) -> str:
-        return f'SELECT "{self.key}" FROM "{self.table}" WHERE NOT ({self.condition}) LIMIT 5'
+        return f'SELECT "{self.key}" FROM "{self.table}" WHERE NOT ({self.condition}) LIMIT 5'  # noqa: S608 - a model's own identifiers and its migration's CHECK, which no parameter can carry
 
 
 def _check(app: str, migration: str, position: int, operation: AddConstraint, model, editor) -> ConstraintCheck:
@@ -183,7 +183,7 @@ def _informational() -> Iterator[tuple[str, str]]:
         table = apps.get_model(label)._meta.db_table
         yield (
             f"{table}.{column} below zero",
-            f'SELECT COUNT(*) FROM "{table}" WHERE "{column}" < 0',
+            f'SELECT COUNT(*) FROM "{table}" WHERE "{column}" < 0',  # noqa: S608 - a model's own identifiers
         )
 
 

@@ -21,17 +21,17 @@ four domains behind a click and then need a second one to go anywhere.
 {% problems_about as problems %}{% include "partials/_problems.html" %}
 
 {% if not public_dns_enabled %}
-  <section class="msg msg-info">
+  <div class="msg msg-info">
     <p>
       <strong>Public DNS changes are off.</strong>
       These records are read-only. Set
       <code>SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS</code> to allow changes.
     </p>
-  </section>
+  </div>
 {% endif %}
 
 {% if not zone.managed %}
-  <section class="msg msg-warning">
+  <div class="msg msg-warning">
     <p>
       <strong>{{ zone.zone|breakable }} is not managed.</strong>
       HQ shows its records but will not change them.
@@ -42,7 +42,7 @@ four domains behind a click and then need a second one to go anywhere.
     {% elif zone.observed_only %}
       <p class="muted">HQ can read this domain, but the credential it reads with cannot change it.</p>
     {% endif %}
-  </section>
+  </div>
 {% endif %}
 
 <div class="control-summary">
@@ -68,7 +68,7 @@ four domains behind a click and then need a second one to go anywhere.
           <a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="{{ insight.modal_id }}"{% endif %}>{{ insight.value|breakable }}</a>
         {% else %}{{ insight.value|breakable }}{% endif %}
       </strong>
-      {% if insight.concern %}<span class="readout"><span class="pill pill-attention">Needs attention</span></span>{% endif %}
+      {% if insight.concern %}<span class="readout">{% status "Needs attention" tone="attention" %}</span>{% endif %}
       {% if insight.detail %}<span>{{ insight.detail|breakable }}</span>{% endif %}
       {% for label, links in insight.links %}
         <span class="readout"><span class="readout-label">{{ label|breakable }}</span> {% for link in links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</span>
@@ -83,20 +83,10 @@ four domains behind a click and then need a second one to go anywhere.
 </div>
 
 {% for notice in zone.notices %}
-  <section class="msg msg-warning">
+  <div class="msg msg-warning">
     <p><strong>{{ notice.label|breakable:":" }} {{ notice.value|breakable:"." }}</strong> {{ notice.detail|breakable }}</p>
-  </section>
+  </div>
 {% endfor %}
-
-{% section_head %}Records <span class="heading-aside">{{ records_lede|breakable }}{% include "partials/_sweep_freshness.html" with inventory=inventory only_kind=record_kind inline=True %}</span>{% aside %}
-  {% comment %}
-  No "adopt" button: the sweep adopts records in a managed domain
-  (``zones.adopt_discovered_records``).
-  {% endcomment %}
-  {% if zone.managed and public_dns_enabled %}
-    <a class="btn primary" href="{{ create_url }}?kind={{ record_kind }}&amp;zone={{ zone.zone|urlencode }}">Add record</a>
-  {% endif %}
-{% endsection_head %}
 
 {% comment %}
 Verification strings and issuance rules are folded away last. A domain apex
@@ -104,7 +94,19 @@ answers "where does traffic go" underneath CAA records and ownership proofs,
 and sorted with the rest they would come first: the least interesting rows in
 the zone at the top of the page.
 {% endcomment %}
-{% include "control_plane/_zone_records.html" with routing=zone.routing policy=zone.policy zone=zone public_dns_enabled=public_dns_enabled %}
+{% section "Records" lede=records_lede %}
+  {% include "control_plane/_zone_records.html" with routing=zone.routing policy=zone.policy zone=zone public_dns_enabled=public_dns_enabled %}
+{% aside %}
+  {% comment %}How old the records' reading is, beside the one way to add one.{% endcomment %}
+  {% for snapshot in inventory %}{% if snapshot.kind == record_kind %}<span class="muted">{% if snapshot.reachable %}{% include "partials/_reading_age.html" with at=snapshot.observed_at only %}{% else %}<span title="{{ snapshot.error }}">{{ snapshot.state_label|breakable }}</span>{% endif %}</span>{% endif %}{% endfor %}
+  {% comment %}
+  No "adopt" button: the sweep adopts records in a managed domain
+  (``zones.adopt_discovered_records``).
+  {% endcomment %}
+  {% if zone.managed and public_dns_enabled %}
+    <a class="btn primary" href="{{ create_url }}?kind={{ record_kind }}&amp;zone={{ zone.zone|urlencode }}">Add record</a>
+  {% endif %}
+{% endsection %}
 
 {% comment %}
 What the domain relates to, each thing once (`zone_views._page_relationships`).

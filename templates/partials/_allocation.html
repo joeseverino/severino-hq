@@ -1,0 +1,22 @@
+{% comment %}
+Parts of one whole as one bar, and with `legend=True` the legend under it.
+
+  {% include "partials/_allocation.html" with allocation=my_allocation legend=True stacked=True %}
+
+`allocation` is hq_sdk.ui.AllocationBar. Each part is a rect placed in percent
+in a drawing with no viewBox, so the page writes no width; its color is its
+slot's, the same as in a chart and a legend's `chart-series-N` swatch.
+
+The legend gives each part with a value a row: its swatch, its `detail` (in
+its `tone`), its label and its share, linked to its `url`. Every row carries
+a swatch, so a column of figures lines up; `stacked` sets them one under
+another for a narrow column.
+{% endcomment %}
+<svg class="allocation" role="img" aria-label="{{ allocation.spoken }}">{% for part in allocation.drawn %}<rect class="chart-series-{{ part.slot }}" x="{{ part.at }}%" width="{{ part.width }}%" height="100%"></rect>{% endfor %}</svg>
+{% if legend %}
+  <div class="allocation-legend{% if stacked %} stacked{% endif %}" data-allocation-legend>
+    {% for part, percent in allocation.legend %}
+      {% if part.url %}<a href="{{ part.url }}">{% else %}<span>{% endif %}<i class="chart-series-{{ part.slot }}"></i>{% if part.detail %}<b>{% if part.tone %}{% status part.detail tone=part.tone pill=False %}{% else %}{{ part.detail|breakable }}{% endif %}</b> {% endif %}<span>{{ part.label|breakable }}{% dot %}{{ percent|breakable }}</span>{% if part.url %}</a>{% else %}</span>{% endif %}
+    {% endfor %}
+  </div>
+{% endif %}

@@ -14,24 +14,20 @@ which shares the "Runs on" column with the origin it would duplicate.
   read through a connection that only observes, in a domain HQ does not
   manage, kept out by an operator, or a spec HQ could not validate.
   {% endcomment %}
-  <details class="unmanaged">
-    <summary>{{ unmanaged|length|counted:"name HQ found but does not manage,names HQ found but does not manage" }}</summary>
-    <p class="muted">
-      Each came through a read-only connection, is in a domain HQ does not manage, or has settings HQ could not read.
-    </p>
+  {% section "Names HQ does not manage" count=unmanaged|length fold=True lede="Each came through a read-only connection, is in a domain HQ does not manage, or has settings HQ could not read." %}
     {% table_region "Names HQ does not manage" %}
       <table class="data-table">
         <thead>
           <tr>
-            {% table_heading "Name" "identifier" gutter=True local_sort=unmanaged|sortable %}
-            {% for id, label, value in unmanaged.0.facets %}{% table_heading label "identifier" drop=forloop.revcounter|add:1 local_sort=unmanaged|sortable %}{% endfor %}
+            {% table_heading "Name" "identifier" gutter=True local_sort=True %}
+            {% for id, label, value in unmanaged.0.facets %}{% table_heading label "identifier" drop=forloop.revcounter|add:1 local_sort=True %}{% endfor %}
             {% table_heading "Actions" "control" drop=1 hidden=True %}
           </tr>
         </thead>
         <tbody>
           {% for service in unmanaged %}
             <tr>
-              <td class="row-gutter"><strong>{{ service.hostname|breakable }}</strong>{% row_toggle %}</td>
+              <td><strong>{{ service.hostname|breakable }}</strong></td>
               {% for id, label, value in service.facets %}
                 <td>{% if value %}<code>{{ value|breakable }}</code>{% else %}{% empty_value %}{% endif %}</td>
               {% endfor %}
@@ -48,7 +44,7 @@ which shares the "Runs on" column with the origin it would duplicate.
         </tbody>
       </table>
     {% endtable_region %}
-  </details>
+  {% endsection %}
 {% endif %}
 
 {% include "partials/_sweep_freshness.html" with inventory=inventory inline=False %}

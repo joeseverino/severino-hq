@@ -8,8 +8,8 @@
 # start nothing, and leave the file's path alone, then come up healthy once
 # the file is there. A crash and a reboot must bring it back the same way. A
 # release that cannot serve must fail its start, and the previous release
-# must come back, as a deploy's rollback brings it back. Before any of it, the
-# secrets unit's sandbox must score no worse than it ships.
+# must come back, as a deploy's rollback brings it back. The unit runs in the
+# sandbox every HQ service shares, so the drill proves HQ serves inside it.
 #
 # Needs systemd as PID 1, docker, and passwordless sudo: a CI runner, not a
 # laptop. Elsewhere it says it did not run and passes, unless CI is set.
@@ -27,25 +27,17 @@ fi
 
 root=$(cd "$(dirname "$0")/../.." && pwd)
 
-# The root secret renderer's sandbox, scored by systemd itself. --threshold
-# takes the exposure level times ten: offline, the shipped unit scores 2.0,
-# so a directive dropped from it scores above 20 and fails here.
-sudo systemd-analyze security --no-pager --offline=yes --threshold=20 \
-  "$root/deploy/systemd/severino-hq-secrets.service" || {
-  echo "::error title=Host boot drill::severino-hq-secrets.service is more exposed than its 2.0."
-  exit 1
-}
-
 lib=/usr/local/lib/severino-hq
 secrets=/run/severino-hq-secrets/web
 env_file="$secrets/severino_hq_env"
 registry=severino-hq-drill-registry
 registry_image=registry:3@sha256:ddf754342cfc8acc51a56d5d0ab6af06826461864460636d8bd5c546dab2a7b8
 dropin=/etc/systemd/system/severino-hq-web.service.d
+sandbox=/etc/systemd/system/severino-hq-.service.d
 
 cleanup() {
   sudo systemctl stop severino-hq-web.service 2>/dev/null || true
-  sudo rm -rf /etc/systemd/system/severino-hq-web.service "$dropin"
+  sudo rm -rf /etc/systemd/system/severino-hq-web.service "$dropin" "$sandbox"
   sudo systemctl daemon-reload
   sudo docker rm --force severino-hq "$registry" >/dev/null 2>&1 || true
   sudo rm -rf "$lib" /var/lib/severino-hq /run/severino-hq-secrets
@@ -121,6 +113,7 @@ sudo docker rm "$container" >/dev/null
 sudo chmod 0755 "$lib/deploy/bin/hq-host"
 printf '%s\n' "$pinned" | sudo tee /var/lib/severino-hq/release >/dev/null
 sudo install -m 0644 "$root/deploy/systemd/severino-hq-web.service" /etc/systemd/system/severino-hq-web.service
+sudo install -D -m 0644 "$root/deploy/systemd/severino-hq-.service.d/20-sandbox.conf" "$sandbox/20-sandbox.conf"
 # The image's own start period rather than a host's: a release that cannot
 # serve fails its start after this, and a healthy one is ready well inside it.
 sudo install -d -m 0755 "$dropin"

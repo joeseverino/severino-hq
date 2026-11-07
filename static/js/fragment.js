@@ -31,6 +31,10 @@
 //                             answer belongs in; empty for the region it is
 //                             inside
 //
+// A button that posts a form from outside it (`post_button`) needs none of
+// these: it is answered in the region it sits in, and a page's content is one
+// (base.html's `main`), so every such press keeps the page.
+//
 // Every link and form above works without this file: it only removes the
 // page load.
 
@@ -203,6 +207,20 @@ const hqFragment = (() => {
     }
     region.replaceChildren(line);
   };
+  // A line among the page's messages, where the server says how a post went.
+  const say = (region, text) => {
+    let list = region.querySelector(":scope > .messages");
+    if (!list) {
+      list = document.createElement("ul");
+      list.className = "messages";
+      region.prepend(list);
+    }
+    const line = document.createElement("li");
+    line.className = "msg msg-error";
+    line.setAttribute("role", "status");
+    line.textContent = text;
+    list.append(line);
+  };
 
   // A region says why it is empty: the session ended, or its own failure
   // line. One that declares neither keeps what it held.
@@ -264,6 +282,13 @@ const hqFragment = (() => {
 
   const focusKey = (element) => {
     if (element.id) return `#${CSS.escape(element.id)}`;
+    // A button that posts on its own (`post_button`) is told apart by where
+    // it posts and what it says there, which no other button on the page shares.
+    const posts = element.getAttribute("formaction");
+    if (posts) {
+      const value = element.getAttribute("value");
+      return `button[formaction="${CSS.escape(posts)}"]${value ? `[value="${CSS.escape(value)}"]` : ""}`;
+    }
     if (element.name) return `[name="${CSS.escape(element.name)}"]`;
     if (element.getAttribute("rel")) return `a[rel="${CSS.escape(element.getAttribute("rel"))}"]`;
     const href = element.getAttribute("href");
@@ -272,28 +297,46 @@ const hqFragment = (() => {
     return action ? `form[action="${CSS.escape(action)}"] button` : "";
   };
 
-  const focusOf = (regions) => {
-    const active = document.activeElement;
+  // Where the keyboard goes when its control is gone or can no longer be
+  // pressed (a row moved to the top, a row deleted): the rest of its row,
+  // then the row after it, then the one before.
+  const CONTROLS = "a[href], button, input, select, textarea";
+  const neighbors = (element) => {
+    const row = element.closest("tr, li");
+    if (!row) return [];
+    const own = [...row.querySelectorAll(CONTROLS)];
+    const at = own.indexOf(element);
+    const of = (other) => (other ? [...other.querySelectorAll(CONTROLS)] : []);
+    return [
+      ...own.slice(at + 1),
+      ...own.slice(0, Math.max(at, 0)).reverse(),
+      ...of(row.nextElementSibling),
+      ...of(row.previousElementSibling),
+    ];
+  };
+
+  const focusOf = (regions, pressed) => {
+    const active = pressed || document.activeElement;
     if (!active || !regions.some((region) => region.contains(active))) return null;
     const text = active.matches("input[type=search], input[type=text], input:not([type]), textarea");
     return {
-      key: focusKey(active),
+      keys: [active, ...neighbors(active)].map(focusKey).filter(Boolean),
       // What was typed may be past what this answer's render reflects.
       text: text ? { value: active.value, start: active.selectionStart, end: active.selectionEnd } : null,
     };
   };
 
   const refocus = (memo, roots) => {
-    if (!memo?.key) return;
-    for (const root of roots) {
-      const revived = root.isConnected ? within(root, memo.key)[0] : null;
-      if (!revived) continue;
-      if (memo.text) revived.value = memo.text.value;
-      revived.focus({ preventScroll: true });
-      if (memo.text && typeof memo.text.start === "number") {
-        revived.setSelectionRange(memo.text.start, memo.text.end);
+    for (const [index, key] of (memo?.keys || []).entries()) {
+      for (const root of roots) {
+        const revived = root.isConnected ? within(root, key).find((found) => !found.matches(":disabled")) : null;
+        if (!revived) continue;
+        const text = index === 0 ? memo.text : null;
+        if (text) revived.value = text.value;
+        revived.focus({ preventScroll: true });
+        if (text && typeof text.start === "number") revived.setSelectionRange(text.start, text.end);
+        return;
       }
-      return;
     }
   };
 
@@ -393,6 +436,10 @@ const hqFragment = (() => {
   //   busy               the element marked busy; the regions by default
   //   before(page)       sees the answer before anything is placed
   //   history, title     "replace" the address; take the answer's title
+  //   focus              the element whose place keeps the keyboard; the
+  //                      focused one by default
+  //   page               the answer is the page, the region found in it by
+  //                      its id; anything else is shown as the page
   //
   // Resolves true when the answer was placed, false when it was unchanged.
   // Rejects when it could not be had, with nothing on the page touched.
@@ -421,16 +468,36 @@ const hqFragment = (() => {
         validator: held && held.url === String(url) ? held.validator : "",
       });
       if (!page) return false;
-      const answers = options.inner ? [[...page.body.childNodes]] : pair(target, page);
-      // Matches that differ in number are not the page this one was: nothing
-      // is touched.
-      if (!single && options.strict !== false) {
-        groups.forEach((group, index) => {
-          if (!group.length || answers[index].length !== group.length) throw new Error("no region");
-        });
+      const landed = response.redirected ? response.url : url;
+      let answers;
+      try {
+        // A post sent on to another page is shown that page.
+        const path = (address) => new URL(address, window.location.href).pathname;
+        const homes = [window.location.href, single?.dataset.fragment].filter(Boolean).map(path);
+        if (options.method && response.redirected && !homes.includes(path(landed))) {
+          throw new Error("another page");
+        }
+        // A press is answered with the page it was made on, never a bare part.
+        if (options.page && !(single?.id && page.getElementById(single.id))) throw new Error("not this page");
+        answers = options.inner ? [[...page.body.childNodes]] : pair(target, page);
+        // Matches that differ in number are not the page this one was: nothing
+        // is touched.
+        if (!single && options.strict !== false) {
+          groups.forEach((group, index) => {
+            if (!group.length || answers[index].length !== group.length) throw new Error("no region");
+          });
+        }
+      } catch (error) {
+        // A post that was answered has done its work, so an answer that
+        // cannot be placed is read as the page: the one it was sent on to,
+        // or for a press this one.
+        if (options.method && (response.redirected || options.page)) {
+          error.landed = response.redirected ? response.url : window.location.href;
+        }
+        throw error;
       }
       options.before?.(page);
-      const memo = focusOf(regions);
+      const memo = focusOf(regions, options.focus);
       const at = [window.scrollX, window.scrollY];
       let roots = [];
       if (options.inner) {
@@ -450,7 +517,6 @@ const hqFragment = (() => {
       const validator = response.headers.get("ETag");
       if (validator && roots.length === 1) shown.set(roots[0], { url: String(url), validator });
       if (options.title && page.title) document.title = page.title;
-      const landed = response.redirected ? response.url : url;
       if (options.history === "replace") window.history.replaceState({}, "", landed);
       refocus(memo, roots);
       if (window.scrollX !== at[0] || window.scrollY !== at[1]) window.scrollTo(at[0], at[1]);
@@ -546,11 +612,11 @@ const hqFragment = (() => {
   };
   // A region whose history is anything but "replace" is asked the ordinary
   // way, since Back would show its entry's address over another answer.
-  const regionFor = (control) => {
-    const region = declaredRegion(control);
+  const answerable = (region) => {
     const history = region?.dataset.fragmentHistory;
     return history === undefined || history === "replace" ? region : null;
   };
+  const regionFor = (control) => answerable(declaredRegion(control));
 
   // A region's answer replaces its history entry, which a navigate listener
   // can do for a link only from a precommit handler, not in Safari yet; until
@@ -574,14 +640,25 @@ const hqFragment = (() => {
   // A form answered in place. A question (GET) that cannot be answered here
   // is asked the ordinary way. A post is never sent twice: what went wrong is
   // said beside the form, in its `[data-fragment-status]` or in the region.
+  // A post answered with another page, or one that is not this page's, shows
+  // that page, as the post would have without this file.
+  //
+  // A button that names its form from outside it (`post_button`, which posts
+  // the one form base.html draws) is answered in the region it sits in, and
+  // the keyboard stays where it pressed.
   const submit = async (form, submitter, region) => {
     // Busy, not disabled: a disabled button drops the focus it holds. A
     // second press while the first is out is ignored.
     if (form.getAttribute("aria-busy") === "true") return;
     const body = new FormData(form, submitter);
-    const posting = form.method === "post";
-    const url = posting ? form.action : `${form.action.split("?")[0]}?${new URLSearchParams(body)}`;
-    const status = form.querySelector("[data-fragment-status]") || region.querySelector("[data-fragment-status]");
+    // What the button says of where and how it sends overrides its form's.
+    const posting = (submitter?.hasAttribute("formmethod") ? submitter.formMethod : form.method) === "post";
+    const action = submitter?.hasAttribute("formaction") ? submitter.formAction : form.action;
+    const url = posting ? action : `${action.split("?")[0]}?${new URLSearchParams(body)}`;
+    const pressed = submitter && !form.contains(submitter) ? submitter : null;
+    // A press's region is the page's, whose status lines are other forms'.
+    const status =
+      form.querySelector("[data-fragment-status]") || (pressed ? null : region.querySelector("[data-fragment-status]"));
     // `elements`, so a button that names the form from outside it counts.
     const controls = [...form.elements].filter((control) => control instanceof HTMLButtonElement);
     form.setAttribute("aria-busy", "true");
@@ -596,18 +673,27 @@ const hqFragment = (() => {
         method: posting ? "POST" : undefined,
         body: posting ? body : undefined,
         history: region.dataset.fragmentHistory,
+        // A press is marked busy on its form, which nobody sees: the region
+        // stays as it was drawn until the answer replaces it.
+        busy: pressed ? form : undefined,
+        focus: pressed,
+        page: Boolean(pressed),
       });
       if (status) status.textContent = "";
       // A form that saved from inside a dialog has nothing more to say there.
       done?.close();
     } catch (error) {
       if (error.name === "AbortError") return;
-      if (!posting || error.signIn) {
-        window.location.assign(posting ? error.signIn : url);
+      if (!posting || error.signIn || error.landed) {
+        window.location.assign(posting ? error.signIn || error.landed : url);
         return;
       }
       const said = form.dataset.fragmentFailure || region.dataset.fragmentFailure || "That could not be sent.";
       if (status?.isConnected) status.textContent = said;
+      // A press's region is the page's content, which keeps what it shows:
+      // the line is said where the server says how a post went, among the
+      // page's messages.
+      else if (pressed) say(region, said);
       else explain(region, said);
     } finally {
       form.removeAttribute("aria-busy");
@@ -615,11 +701,20 @@ const hqFragment = (() => {
     }
   };
 
-  document.addEventListener("submit", (event) => {
+  // The region a press is answered in: the form's own, when the form names
+  // one; else, for a button outside its form, the region the button sits in.
+  const submittedTo = (form, submitter) => {
+    if (form.dataset.fragmentTarget !== undefined || form.closest("[data-fragment-links]")) return regionFor(form);
+    if (!submitter || form.contains(submitter)) return null;
+    return answerable(submitter.closest("[data-fragment]"));
+  };
+
+  // On the window, so it hears a submit after every listener on the
+  // document: a script that answers a press of its own (ask.js) has it first.
+  window.addEventListener("submit", (event) => {
     const form = event.target;
     if (event.defaultPrevented || !(form instanceof HTMLFormElement)) return;
-    if (form.dataset.fragmentTarget === undefined && !form.closest("[data-fragment-links]")) return;
-    const region = regionFor(form);
+    const region = submittedTo(form, event.submitter);
     if (!region) return;
     event.preventDefault();
     submit(form, event.submitter, region);

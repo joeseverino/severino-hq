@@ -1,10 +1,6 @@
 {% load nav_tags %}
 <div class="lookup-grid">
-  {% card %}
-    <div class="tool-intro">
-      <h2>Name lookup</h2>
-      <p class="help">Every public record for a name.</p>
-    </div>
+  {% section "Name lookup" lede="Every public record for a name." %}
     <form method="get" class="lookup-form">
       <input type="hidden" name="tab" value="dns">
       <div class="field compact">
@@ -47,13 +43,9 @@
     </div>
       {% endif %}
     {% endwith %}
-  {% endcard %}
+  {% endsection %}
 
-  {% card %}
-    <div class="tool-intro">
-      <h2>Address lookup</h2>
-      <p class="help">The name for an address, and who owns it.</p>
-    </div>
+  {% section "Address lookup" lede="The name for an address, and who owns it." %}
     <form method="get" class="lookup-form">
       <input type="hidden" name="tab" value="dns">
       <div class="field compact">
@@ -114,5 +106,5 @@
     </div>
       {% endif %}
     {% endwith %}
-  {% endcard %}
+  {% endsection %}
 </div>

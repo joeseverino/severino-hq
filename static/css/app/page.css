@@ -82,7 +82,10 @@
    margins collapse, so a section that already declares its own bottom margin
    keeps whichever is larger rather than adding to this. `dialog` is excluded:
    an open modal centers itself with `margin: auto`, which a margin-top here would quietly override.
-   A list's results are one part to swap, and stack as the page does. */ .content > * + *:not(dialog), .content > .table-results > * + * { margin-top: var(--stack-gap); }
+   A div with no class of its own is a region (a list's results a script
+   swaps, a record a refresh redraws), never a layout, so what it holds
+   stacks as the page does. */
+.content > * + *:not(dialog), .content > :is(div:not([class]), .table-results) > * + *:not(dialog) { margin-top: var(--stack-gap); }
 
 h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.012em; font-weight: 650; }
 /* A section heading reads as a heading: ink, sentence case, a step above body,
@@ -113,6 +116,10 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* Full width so it always takes its own row; the reading measure is kept by
    padding rather than a width cap, which would let it fit beside the title. */
 .page-head .page-lede { flex: 1 1 100%; order: 3; max-width: none; margin-bottom: 0; padding-inline-end: max(0px, 100% - var(--measure)); margin-top: calc(-1 * var(--space-1)); }
+/* A line of facts is short things side by side, which read best on as few
+   lines as fit, so it takes the head's width where the prose above keeps
+   the measure. */
+.page-head .page-facts { flex: 1 1 100%; order: 3; color: var(--muted); font-size: var(--text-sm); margin-top: calc(-1 * var(--space-1)); }
 .page-head h1 { margin: 0; }
 .page-head p { margin: 0; }
 .page-trail { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--text-xs); }
@@ -161,7 +168,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   cursor: pointer;
 }
 .glance-panel-head:hover, .glance-panel-head:has(+ :popover-open) { background: var(--bg-tint); }
-.glance-panel-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .glance-symbol { grid-row: 1 / span 3; align-self: center; color: var(--muted-2); }
 .glance-symbol .icon { width: 22px; height: 22px; }
 .glance-lead { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
@@ -229,7 +235,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   gap: var(--space-6);
   min-inline-size: 0;
   padding-block: var(--space-4);
-  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  background: color-mix(in srgb, var(--ground) 92%, transparent);
   border-block-end: 1px solid var(--line);
   backdrop-filter: saturate(160%) blur(8px);
 }
@@ -271,7 +277,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 }
 /* One row of links, padded and ruled: the inset a part below it sits under. */
 :root:has(.page-nav) { --page-nav-height: calc(var(--page-nav-link-size) + 2 * var(--space-4) + 1px); }
-.page-section { scroll-margin-block-start: var(--page-nav-height); }
+/* Whatever a link lands on stops under the row, whatever draws it. */
+:where(.content [id]) { scroll-margin-block-start: var(--page-nav-height); }
 /* Most heads wrap their controls in .page-actions; list pages hang a single
    control straight off the head. Both should sit at the far edge, otherwise
    the same button lands beside the title on one page and against the right
@@ -302,6 +309,10 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
      side. */
   line-height: 1.45;
   min-height: var(--control-size);
+  /* A control's label is one unit and keeps its line; a label too long for
+     the narrowest screen is shortened where it is declared. Only a tight
+     table lets it wrap (tables.css). */
+  white-space: nowrap;
   text-decoration: none;
   transition: border-color .12s ease, background .12s ease, box-shadow .12s ease;
   box-shadow: var(--shadow-sm);
@@ -377,7 +388,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   box-shadow: none;
   color: var(--muted);
   line-height: inherit;
-  white-space: nowrap;
   user-select: none;
   transition: background .12s ease, color .12s ease;
 }
@@ -402,7 +412,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    on none that does not, all of it or none of it, without a width being named. */
 /* Its track is as wide as the bar allows: a short name keeps the control to
    its own width at the bar's end, and a long one is cut to the track. */
-.user-menu { position: relative; grid-area: user; justify-self: stretch; max-width: 100%; }
+.user-menu { position: relative; grid-area: user; justify-self: stretch; max-width: 100%; anchor-name: --account; }
 /* The badge is one size whatever it counts, so the count arriving after the
    page (a fragment on every page but the two that count it) moves nothing in
    the bar: it is pinned to the corner, outside the flow. */
@@ -423,7 +433,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .menu-identity-when { color: var(--muted); font-size: var(--text-2xs); }
 /* What an account may do, said once beside its name. Not a status: it has no
    tone, only the accent, and it never changes while you watch. */
-.role-mark { flex: none; padding: 0 var(--space-3); border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: var(--text-2xs); font-weight: 600; letter-spacing: .04em; line-height: 1.5; text-transform: uppercase; }
+.role-mark { flex: none; padding: 0 var(--space-3); border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: var(--text-2xs); font-weight: 600; line-height: 1.5; }
 /* The person's own picture as the control's mark. Its margins make it as tall
    as the control's one line, like everything else in it. */
 .user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }

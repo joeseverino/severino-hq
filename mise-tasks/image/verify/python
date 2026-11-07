@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="It runs the oldest Python the toolchain declares, without package managers"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]

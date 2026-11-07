@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,6 +38,30 @@ func TestTheRenderGoesFirstAndHQIsEnabledLast(t *testing.T) {
 	}
 	if !f.called("systemd-tmpfiles --create " + filepath.Join(f.machine.Tmpfiles, "severino-hq.conf")) {
 		t.Error("the doorbell directory's rule was not applied")
+	}
+}
+
+// A prefix drop-in reaches every unit under it, so the drop-ins go in with
+// the renderer's unit: no unit starts under its new file and the last
+// release's sandbox, and the other units wait for the render.
+func TestEveryDropInGoesInWithTheRenderersUnit(t *testing.T) {
+	f := newFakeHost(t)
+	f.active = []string{hostcore.WebUnit}
+	sandbox, widened := "severino-hq-.service.d/20-sandbox.conf", ControllerUnit+".d/30-sandbox.conf"
+	f.ship(sandbox, "[Service]\nNoNewPrivileges=yes\n")
+	f.ship(widened, "[Service]\nPrivateNetwork=no\n")
+	var atRender map[string]bool
+	f.on = map[string]func(){"systemctl start " + SecretsUnit: func() {
+		atRender = f.installed(SecretsUnit, sandbox, widened, ControllerUnit)
+	}}
+
+	if err := f.machine.Install(context.Background(), connected); err != nil {
+		t.Fatalf("%v\n%s", err, f.out.String())
+	}
+
+	want := map[string]bool{SecretsUnit: true, sandbox: true, widened: true, ControllerUnit: false}
+	if !maps.Equal(atRender, want) {
+		t.Errorf("installed when the render started: %v, want %v", atRender, want)
 	}
 }
 

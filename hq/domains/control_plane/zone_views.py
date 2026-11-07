@@ -33,7 +33,7 @@ from hq.platform.application.mail_policy import (
     parse_spf,
 )
 from hq.platform.application.pages import PageAction, page_context
-from hq.platform.application.pins import DOMAIN, PIN, pinned
+from hq.platform.application.pins import DOMAIN, FAVORITE, FAVORITES, PIN, pinned
 from hq.platform.application.relationships import relationships_for
 from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY, public_dns_enabled, resource_capabilities
 from hq.platform.application.routes import reverse
@@ -60,7 +60,7 @@ def _records_lede(zone) -> str:
     """
 
     return _records_standing(zone) + (
-        f", {len(zone.policy)} of them under Policy and verification below" if zone.policy else ""
+        f", {len(zone.policy)} of them policy and verification records" if zone.policy else ""
     )
 
 
@@ -255,10 +255,14 @@ def _pin_action(zone) -> PageAction:
     """
 
     return PageAction(
-        "★ Opens first" if zone.pinned else "☆ Open this one first",
+        f"★ {FAVORITE}" if zone.pinned else f"☆ Add to {FAVORITES}",
         reverse("zones:pin", args=[zone.zone]),
         method="post",
-        title=("Domains opens on this one. Press to undo." if zone.pinned else "Make Domains open on this one."),
+        title=(
+            f"Domains opens on your first {FAVORITE}. Press to remove this one from {FAVORITES}."
+            if zone.pinned
+            else f"Domains opens on your first {FAVORITE}."
+        ),
     )
 
 
@@ -315,14 +319,13 @@ def _declaration_actions(zone) -> tuple[PageAction, ...]:
     if resource is None:
         return ()
     capabilities = resource_capabilities(resource)
-    if capabilities.removal_pending:
-        return ()
-    actions = [PageAction(capability_words(UPDATE_CAPABILITY), reverse("control_plane:edit", args=[resource.key]))]
-    if capabilities.removal != "unavailable":
+    offered = capabilities.offered
+    actions = [PageAction(capability_words(UPDATE_CAPABILITY), offered.edit_url)] if offered.edit_url else []
+    if offered.remove_url:
         actions.append(
             PageAction(
                 capabilities.removal_words,
-                reverse("control_plane:remove", args=[resource.key]),
+                offered.remove_url,
                 danger=True,
                 title=(
                     "HQ stops changing this domain. Its records stay live." if capabilities.removal == "forget" else ""

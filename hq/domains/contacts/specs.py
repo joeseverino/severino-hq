@@ -85,7 +85,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             target_help="The message to review.",
             execution_notes=(
                 "Read the selected submission and validate its new review state.",
-                "Queue the review fields for the controller, which writes them through the Cloudflare API connection.",
+                "Queue the review fields for HQ to write through the Cloudflare API connection.",
                 "Record the attributed change in HQ's audit log.",
             ),
             label="Review a message",
@@ -103,7 +103,7 @@ def capabilities() -> tuple[CapabilitySpec, ...]:
             target_help="The message to delete.",
             execution_notes=(
                 "Require confirmation that exactly matches the selected submission ID.",
-                "Queue the deletion for the controller, which applies it through the Cloudflare API connection.",
+                "Queue the deletion for HQ to apply through the Cloudflare API connection.",
                 "Treat an already-absent or already-queued record as a successful retry and audit the change.",
             ),
             label="Delete a message",

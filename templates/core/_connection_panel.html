@@ -1,8 +1,8 @@
 {% comment %}
 The body of the connection panel, shared by the dialog in the header and the
-page it falls back to. Nothing here knows which one it is in, so each card's
-heading is an h2: the next level under the page's h1, and beside the dialog's
-own h2 title.
+page it falls back to. Nothing here knows which one it is in, so each
+section's heading is an h2: the next level under the page's h1, and beside the
+dialog's own h2 title.
 
 It is a region answered from the connection page, so the readings it asks for
 when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
@@ -11,17 +11,17 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% if ask_readings %}{% include "partials/_visit_refresh.html" with subject="page" name="connection" refresh="[data-connection-panel]" %}{% endif %}
   {% include "partials/_example_connection.html" with notice=True %}
   {% if request_path.findings %}
-    <section class="conn-findings" aria-label="Where this request disagrees with what HQ read">
+    <div class="conn-findings">
       {% for hop in request_path.findings %}
         <p class="conn-agree conn-agree-no"><strong>{{ hop.label|breakable:":" }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>
       {% endfor %}
-    </section>
+    </div>
   {% endif %}
 
   {% comment %}
   The two ends and the link between them, with the verdict on the link.
   {% endcomment %}
-  <section class="conn-peering conn-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}">
+  <div class="conn-peering conn-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}">
     <div class="conn-peer">
       <span class="conn-peer-role">You</span>
       {% if connection.machine_url %}
@@ -53,19 +53,11 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% if connection.serves %}<code>{{ connection.serves.addresses.0|breakable }}</code>{% endif %}
       <span class="conn-row-note">{{ connection.host|breakable }}</span>
     </div>
-  </section>
+  </div>
 
   {% comment %}Each posture check HQ could not judge, with why: folded, since the line above already counts them.{% endcomment %}
   {% if posture.unread_count %}
-    <details class="conn-protocol conn-unread">
-      <summary>
-        <span>
-          <strong>Not read</strong>
-          <small>Posture checks HQ could not judge, and why</small>
-        </span>
-        <span class="count">{{ posture.unread_count|breakable }}</span>
-      </summary>
-      <div class="conn-protocol-body">
+    {% section "Not read" count=posture.unread_count fold=True lede="Checks HQ could not read, and why" %}
         <div class="conn-rows">
           {% for standing in posture.standings %}{% if standing.reading.met is None %}
             <div class="conn-row" data-posture-unread="{{ standing.check.id }}">
@@ -74,12 +66,10 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
             </div>
           {% endif %}{% endfor %}
         </div>
-      </div>
-    </details>
+    {% endsection %}
   {% endif %}
 
-  {% card %}
-    <h2>You</h2>
+  {% section "You" %}
     <dl class="kv">
       <dt>Signed in</dt>
       <dd>
@@ -130,11 +120,11 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     </dl>
     {% if connection.identity.corroborated %}
       <p class="conn-agree conn-agree-yes">
-        Your tailnet account and your sign-in name the same person.
+        Your tailnet account and your sign-in belong to the same person.
       </p>
     {% elif connection.identity.conflicted %}
       <p class="conn-agree conn-agree-no">
-        Your tailnet account and your sign-in name different people.
+        Your tailnet account and your sign-in belong to different people.
       </p>
     {% elif connection.identity.tailnet_user %}
       <p class="conn-agree conn-agree-no">
@@ -145,10 +135,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         Only your sign-in says who you are. No tailnet account is known for this request.
       </p>
     {% endif %}
-  {% endcard %}
+  {% endsection %}
 
-  {% card %}
-    <h2>The link</h2>
+  {% section "The link" %}
     {% comment %}A reading older than the panel asks again for is what HQ last saw: every row below is said as of then, never as now.{% endcomment %}
     {% if connection.tailnet_observed_at and not connection.tailnet_current %}
       <p class="conn-note" data-last-seen>As last seen when HQ read the tailnet {{ connection.tailnet_observed_at|when }}.</p>
@@ -234,13 +223,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         </dd>
       {% endif %}
     </dl>
-  {% endcard %}
+  {% endsection %}
 
-  {% card css="conn-path" label="Path to HQ" data_connection_layers=True %}
-    <div class="conn-path-head">
-      <h2>Path to HQ</h2>
-      <span>{{ request_path.proof|breakable }}</span>
-    </div>
+  {% section "Path to HQ" css="conn-path" data_connection_layers=True %}
     <ol class="conn-layers">
       {% for hop in request_path.hops %}
         <li class="conn-layer conn-layer-{{ hop.check.layer_state|default:'unknown' }}">
@@ -298,20 +283,12 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         </li>
       {% endfor %}
     </ol>
-  {% endcard %}
+  {% aside %}<span class="count">{{ request_path.proof|breakable }}</span>
+  {% endsection %}
 
   <div class="conn-aside">
-  <details class="conn-protocol conn-addresses" open>
-    <summary>
-      <span>
-        <strong>Addresses</strong>
-        <small>Yours and HQ's</small>
-      </span>
-      <span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %}{% dot %}HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
-    </summary>
-    <div class="conn-protocol-body">
-      <section>
-        <h2>Your addresses</h2>
+  {% section "Addresses" fold=True open=True lede="Yours and HQ's" %}
+      {% section "Your addresses" %}
         <div class="conn-rows">
           {% for address in request_path.addresses %}
             <div class="conn-row{% if address.current %} conn-current{% endif %}">
@@ -324,11 +301,10 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% if connection.tailnet_observed_at %}
           <p class="conn-note conn-note-after">Tailnet read {{ connection.tailnet_observed_at|when }}.</p>
         {% endif %}
-      </section>
+      {% endsection %}
 
       {% if request_path.hq_addresses %}
-        <section>
-          <h2>HQ answers at</h2>
+        {% section "HQ answers at" %}
           <div class="conn-rows">
             {% for address in request_path.hq_addresses %}
               <div class="conn-row">
@@ -338,24 +314,14 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
               </div>
             {% endfor %}
           </div>
-        </section>
+        {% endsection %}
       {% endif %}
-    </div>
-  </details>
+  {% aside %}<span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %}{% dot %}HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
+  {% endsection %}
 
   {% comment %}Folded: the response is read back only once somebody opens it.{% endcomment %}
-  <details class="conn-protocol" data-connection-protocol>
-    <summary>
-      <span>
-        <strong>Headers</strong>
-        <small>Sent by your browser and by HQ</small>
-      </span>
-      <span class="count">Yours {{ request_path.headers|length }}</span>
-    </summary>
-    <div class="conn-protocol-body">
-      <section>
-        <h2>What this request carried</h2>
-        <p class="conn-note">Every header this request carried, and what HQ reads it for.</p>
+  {% section "Headers" fold=True lede="Sent by your browser and by HQ" data_connection_protocol=True %}
+      {% section "What this request carried" lede="Every header this request carried, and what HQ reads it for." %}
         <div class="conn-rows">
           {% for header in request_path.headers %}{% if header.used %}
             <div class="conn-row conn-row-used">
@@ -379,17 +345,15 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
             </div>
           </details>
         {% endif %}
-      </section>
+      {% endsection %}
 
-      <section>
-        <h2>What HQ sent back</h2>
-        <p class="conn-note">Read from the response this browser received.</p>
+      {% section "What HQ sent back" lede="Read from the response this browser received." %}
         <div class="conn-rows" data-response-headers>
           <div class="conn-row"><span class="conn-row-note">Open Headers to read the response.</span></div>
         </div>
-      </section>
-    </div>
-  </details>
+      {% endsection %}
+  {% aside %}<span class="count">Yours {{ request_path.headers|length }}</span>
+  {% endsection %}
   </div>
 
 </div>

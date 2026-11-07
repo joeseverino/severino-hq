@@ -177,6 +177,17 @@ class BreakableTests(SimpleTestCase):
         self.assertGreater(len(pieces), 1)
         self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "strut"), [])
 
+    def test_a_run_too_long_to_be_a_word_is_held_as_a_name(self):
+        """A digest has no seam to wrap at, so a cell cuts it as it cuts a
+        hyphenated name: in a phrase a box of its own, alone a name with a
+        box to cut it, never plain text that widens its column."""
+
+        digest = "697a431011ba77cec8b221767743484b20217b9786894fea67f222af655f40a7"
+        self.assertEqual(boxed(breakable(f"{digest} on example-oidc")), [digest, "example-oidc"])
+        self.assertIn('<span class="token" data-sole><span class="cut">', breakable(digest))
+        self.assertEqual(boxed(breakable(f"sha256:{digest} pulled")), [digest])
+        self.assertEqual(breakable("Example Finance"), "Example Finance")
+
     def test_a_word_that_breaks_nowhere_stays_text(self):
         self.assertEqual(breakable("Example Finance"), "Example Finance")
         self.assertEqual(breakable("Import a Health export (.zip)"), "Import a Health export (.zip)")

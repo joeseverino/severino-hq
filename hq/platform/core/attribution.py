@@ -26,7 +26,10 @@ class OperationContext:
     An empty ``actor`` is a request's binding before it knows who is asking:
     each row names whoever the request has signed in when it is written.
     ``device`` is the tailnet device an agent's call came from
-    (``Principal.device``), empty where HQ could not place it.
+    (``Principal.device``), empty where HQ could not place it. ``cause`` is
+    the operation that started this one, empty for one that started itself.
+    ``approved_by`` is who agreed to the act where one had to
+    (``Principal.approved_by``), so each row of it says who allowed it.
     """
 
     interface: str
@@ -34,6 +37,8 @@ class OperationContext:
     operation: str
     operation_id: str = ""
     device: str = ""
+    cause: str = ""
+    approved_by: str = ""
 
 
 _operation_context: ContextVar[OperationContext | None] = ContextVar("hq_operation_context", default=None)
@@ -51,7 +56,15 @@ class Rebound(RuntimeError):
 
 @contextmanager
 def operation_context(
-    *, interface: str, actor: str, operation: str, operation_id: str = "", device: str = "", rebinds: bool = False
+    *,
+    interface: str,
+    actor: str,
+    operation: str,
+    operation_id: str = "",
+    device: str = "",
+    cause: str = "",
+    approved_by: str = "",
+    rebinds: bool = False,
 ) -> Iterator[None]:
     """Attach adapter-neutral attribution to audit events in this operation.
 
@@ -78,9 +91,17 @@ def operation_context(
             f"which {outer.interface}/{outer.actor} started. An operation's rows are its starter's: "
             "run the inner work under the binding in force."
         )
-    operation_id = operation_id or (outer.operation_id if outer is not None else "") or str(uuid7())
-    # A nested binding of the same caller keeps the device the outer one placed.
-    device = device or (outer.device if outer is not None and outer.actor == actor else "")
+    within = outer.operation_id if outer is not None else ""
+    if operation_id and operation_id != within:
+        cause = cause or within
+    elif not cause and outer is not None:
+        cause = outer.cause
+    operation_id = operation_id or within or str(uuid7())
+    # A nested binding of the same caller keeps the device the outer one
+    # placed, and the consent the outer one carried.
+    same_caller = outer is not None and outer.actor == actor
+    device = device or (outer.device if same_caller else "")
+    approved_by = approved_by or (outer.approved_by if same_caller else "")
     with _operation_context.set(
         OperationContext(
             interface=interface,
@@ -88,6 +109,8 @@ def operation_context(
             operation=operation,
             operation_id=operation_id,
             device=device,
+            cause=cause,
+            approved_by=approved_by,
         )
     ):
         yield
@@ -107,6 +130,19 @@ def door_of_its_own(*, interface: str, actor: str, operation: str, operation_id:
         _operation_context.set(None),
         operation_context(interface=interface, actor=actor, operation=operation, operation_id=operation_id),
     ):
+        yield
+
+
+@contextmanager
+def outside_every_door() -> Iterator[None]:
+    """Nothing bound in the block, whatever is bound around it, so a row
+    written there is refused unless the code that writes it binds its own door.
+
+    For an extension's demo (``seeds``), which says how each of its events was
+    made, so none takes the door of whatever runs the seed.
+    """
+
+    with _operation_context.set(None):
         yield
 
 

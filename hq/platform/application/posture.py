@@ -199,7 +199,7 @@ def _not_read(kinds: tuple[str, ...], *, held: str = "") -> CheckOutcome:
     if not cadence.controller_standing(present()).known:
         return CheckOutcome(
             met=None,
-            evidence="No controller has read it",
+            evidence="HQ has not read it",
             remedy="run the controller",
             remedy_url=reverse("control_plane:controller"),
         )

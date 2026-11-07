@@ -61,7 +61,7 @@ class HeldBackTests(TestCase):
         async def steps(streams, heard):
             with set_principal(OTHER):
                 close = streams.subscribe(others.append)
-            with mock.patch(BLOCKED, side_effect=lambda client_id: client_id == AGENT.actor):
+            with mock.patch(BLOCKED, side_effect=lambda principal: principal.actor == AGENT.actor):
                 await streams.publish(ToolsListChanged())
                 await streams.settle_owed()
             close()

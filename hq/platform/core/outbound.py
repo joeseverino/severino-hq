@@ -36,6 +36,13 @@ ALLOWED = frozendict(
             "operator or a program asked for by name and waits for; it is "
             "bounded by SEVERINO_LOOKUP_TIMEOUT_SECONDS and carries no credential."
         ),
+        "tailscaled": (
+            "An agent's call is placed on the tailnet device that sent it by "
+            "asking tailscaled on this host, over its Unix socket, who holds "
+            "the address now: no network, no name lookup, no credential, "
+            "bounded by tailscaled.TIMEOUT. A stored answer would be the stale "
+            "reading the question replaces."
+        ),
     }
 )
 

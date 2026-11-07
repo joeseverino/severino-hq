@@ -69,10 +69,6 @@ class ServiceSection:
     label: str
     columns: tuple[str, ...]
     records: tuple[tuple[Cell, ...], ...]
-    # ``(label, url)`` for the one thing worth doing about this section. Held as
-    # data so a section that gains an action (redeploy, open the run) needs
-    # no template change.
-    actions: tuple[tuple[str, str], ...] = ()
     # ``(label, text)`` shown read-only under a disclosure, for raw readouts.
     readouts: tuple[tuple[str, str], ...] = ()
     # Rendered as a compact table.
@@ -116,7 +112,7 @@ def sections_for(service) -> tuple[ServiceSection, ...]:
     found = []
     for resolve in SECTIONS:
         section = resolve(service, project)
-        if section is not None and (section.records or section.actions):
+        if section is not None and section.records:
             found.append(section)
     return tuple(found)
 
@@ -377,7 +373,7 @@ class PartRow:
     consequence: str = ""
     # The declaration behind the certificate this hop serves, when HQ holds one.
     certificate_claim: Any = None
-    # ``(label, pill class)`` from whatever reading covers a hop no declaration
+    # ``(label, tone)`` from whatever reading covers a hop no declaration
     # supplies: a machine's presence, the tailnet link, a container's state.
     observed_health: tuple[str, str] | None = None
     # Where the hop's value was read, when the hop itself carries none: the
@@ -394,7 +390,7 @@ class PartRow:
 
     @property
     def health(self) -> tuple[str, str] | None:
-        """``(label, pill class)``; read from an out-of-date reading, what it
+        """``(label, tone)``; read from an out-of-date reading, what it
         was when last read, in no tone of its own."""
 
         found: tuple[str, str] | None
@@ -408,13 +404,13 @@ class PartRow:
         return found
 
 
-# A tone as the pill that draws it, so a declared part and a read one that
+# A health tone as the status a part is drawn in, so a declared part and a read one that
 # are both fine look the same.
 _PILL_TONES = {
-    "good": "pill-reachable",
-    "attention": "pill-attention",
-    "serious": "pill-unreachable",
-    "neutral": "pill-unprobed",
+    "good": "reachable",
+    "attention": "attention",
+    "serious": "unreachable",
+    "neutral": "unprobed",
 }
 
 
@@ -499,7 +495,7 @@ def _machine_health(hops, index: int) -> tuple[str, str] | None:
     """A machine's own state pill."""
 
     found = machines.machine(hops[index].name)
-    return (found.state[0].capitalize(), f"pill-{found.state[1]}") if found else None
+    return (found.state[0].capitalize(), found.state[1]) if found else None
 
 
 def _link_health(hops, index: int) -> tuple[str, str] | None:
@@ -510,7 +506,7 @@ def _link_health(hops, index: int) -> tuple[str, str] | None:
     found = machines.machine(after.name) if after else None
     if found is None or found.presence is None:
         return None
-    return ("Connected", "pill-reachable") if found.presence.online else ("Disconnected", "pill-unreachable")
+    return ("Connected", "reachable") if found.presence.online else ("Disconnected", "unreachable")
 
 
 def _container_health(hops, index: int) -> tuple[str, str] | None:
@@ -526,7 +522,7 @@ def _container_health(hops, index: int) -> tuple[str, str] | None:
     running = next((item for item in found.containers if item.name == container.name), None)
     if running is None:
         return None
-    return (running.state.capitalize(), "pill-reachable" if running.healthy else "pill-unreachable")
+    return (running.state.capitalize(), "reachable" if running.healthy else "unreachable")
 
 
 # The step each reading covers, and how its health is read.

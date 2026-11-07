@@ -318,11 +318,11 @@ class PartRowTests(TestCase):
         broken = PartRow(
             claim=SimpleNamespace(health={"state": "degraded", "label": "Needs attention"}, kind="npm.proxy_host")
         )
-        read = PartRow(observed_health=("Online", "pill-reachable"))
+        read = PartRow(observed_health=("Online", "reachable"))
 
-        self.assertEqual(declared.health, ("Healthy", "pill-reachable"))
-        self.assertEqual(broken.health, ("Needs attention", "pill-unreachable"))
-        self.assertEqual(read.health, ("Online", "pill-reachable"))
+        self.assertEqual(declared.health, ("Healthy", "reachable"))
+        self.assertEqual(broken.health, ("Needs attention", "unreachable"))
+        self.assertEqual(read.health, ("Online", "reachable"))
 
 
 class StepsTests(SimpleTestCase):
@@ -370,9 +370,7 @@ class ObservedHealthTests(SimpleTestCase):
         return Machine(name="example-box", presence=Presence(online=online), containers=containers)
 
     def test_a_machine_shows_its_own_state(self):
-        self.assertEqual(
-            self.health((("machine", "example-box"),), self.box(), "machine"), ("Online", "pill-reachable")
-        )
+        self.assertEqual(self.health((("machine", "example-box"),), self.box(), "machine"), ("Online", "reachable"))
 
     def test_a_machine_hq_does_not_know_shows_nothing(self):
         self.assertIsNone(self.health((("machine", "example-box"),), None, "machine"))
@@ -380,8 +378,8 @@ class ObservedHealthTests(SimpleTestCase):
     def test_the_link_to_a_machine_is_its_tailnet_presence(self):
         steps = (("network", "100.64.0.1"), ("machine", "example-box"))
 
-        self.assertEqual(self.health(steps, self.box(), "network"), ("Connected", "pill-reachable"))
-        self.assertEqual(self.health(steps, self.box(online=False), "network"), ("Disconnected", "pill-unreachable"))
+        self.assertEqual(self.health(steps, self.box(), "network"), ("Connected", "reachable"))
+        self.assertEqual(self.health(steps, self.box(online=False), "network"), ("Disconnected", "unreachable"))
 
     def test_a_link_with_no_presence_shows_nothing(self):
         from ..machines import Machine
@@ -398,10 +396,8 @@ class ObservedHealthTests(SimpleTestCase):
         sick = SimpleNamespace(name="app", state="restarting", healthy=False)
         steps = (("machine", "example-box"), ("upstream", "app:80"), ("container", "app"))
 
-        self.assertEqual(self.health(steps, self.box(containers=(app,)), "upstream"), ("Running", "pill-reachable"))
-        self.assertEqual(
-            self.health(steps, self.box(containers=(sick,)), "container"), ("Restarting", "pill-unreachable")
-        )
+        self.assertEqual(self.health(steps, self.box(containers=(app,)), "upstream"), ("Running", "reachable"))
+        self.assertEqual(self.health(steps, self.box(containers=(sick,)), "container"), ("Restarting", "unreachable"))
 
     def test_a_container_the_machine_is_not_running_shows_nothing(self):
         steps = (("machine", "example-box"), ("container", "app"))

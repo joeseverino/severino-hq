@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Trivy over an image, as Compose scans the composed one: its CycloneDX SBOM is written, and a fixable HIGH or CRITICAL vulnerability in that SBOM, or a HIGH or CRITICAL secret in the image, fails"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends_post=["image:docker stop"]

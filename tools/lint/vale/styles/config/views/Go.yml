@@ -1,0 +1,34 @@
+# The words of the host's Go that reach a page, for Plain: a ProviderError's
+# Message, which a finding, a connection's state and a refused change show,
+# and the message decodeAs words such an error with. Comments, logs and every
+# other string are for whoever writes the code; HQ's rules read the raw file.
+#
+# A message is a literal, a literal joined with values, or a format's first
+# argument. Tree-sitter has no "anywhere inside", so a join is matched to the
+# depth the controller writes one.
+engine: tree-sitter
+scopes:
+  - name: shown
+    expr: |
+      ((composite_literal
+         type: [(type_identifier) @_t (qualified_type name: (type_identifier) @_t)]
+         body: (literal_value
+           (keyed_element
+             (literal_element (identifier) @_k)
+             (literal_element [
+               [(interpreted_string_literal) (raw_string_literal)] @prose
+               (binary_expression [(interpreted_string_literal) @prose (binary_expression [(interpreted_string_literal) @prose (binary_expression [(interpreted_string_literal) @prose (binary_expression [(interpreted_string_literal) @prose (binary_expression (interpreted_string_literal) @prose)])])])])
+               (call_expression arguments: (argument_list . (interpreted_string_literal) @prose))
+             ]))))
+       (#eq? @_t "ProviderError")
+       (#eq? @_k "Message"))
+
+  - name: shown
+    expr: |
+      ((call_expression
+         function: (identifier) @_f
+         arguments: (argument_list [
+           (interpreted_string_literal) @prose
+           (binary_expression [(interpreted_string_literal) @prose (binary_expression (interpreted_string_literal) @prose)])
+         ]))
+       (#eq? @_f "decodeAs"))

@@ -8,7 +8,7 @@ A check met everywhere is a word in one closing line.
 {% block page %}
 {% if repositories %}
   {% if unmet %}
-    <h2>Failing <span class="heading-aside">{{ unmet|length|counted:"check" }}</span></h2>
+    {% section "Failing" count=unmet|length %}
     <ul class="posture-gaps">
       {% for gap in unmet %}
         <li class="{% if gap.check.serious %}is-serious{% endif %}">
@@ -24,9 +24,10 @@ A check met everywhere is a word in one closing line.
         </li>
       {% endfor %}
     </ul>
+    {% endsection %}
   {% endif %}
 
-  <h2>By repository <span class="heading-aside">{{ repositories|length|counted:"repository,repositories" }}</span></h2>
+  {% section "By repository" count=repositories|length %}
   <ul class="posture-repos">
     {% for row in repositories %}{% with posture=row.posture %}
       <li>
@@ -45,12 +46,12 @@ A check met everywhere is a word in one closing line.
       </li>
     {% endwith %}{% endfor %}
   </ul>
+  {% endsection %}
 
   {% if everywhere %}
-    <details class="posture-everywhere">
-      <summary>{{ everywhere|length|counted:"check passes,checks pass" }} on every repository</summary>
+    {% section "Checks every repository passes" count=everywhere|length fold=True %}
       <ul>{% for check in everywhere %}<li>{{ check.label|breakable }}</li>{% endfor %}</ul>
-    </details>
+    {% endsection %}
   {% endif %}
 {% else %}
   {% include "partials/_empty_state.html" with message="No repository read yet." remedy=page.remedy %}

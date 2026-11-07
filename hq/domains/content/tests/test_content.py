@@ -11,6 +11,7 @@ from hq.domains.content.content_sync import (
 )
 from hq.domains.content.models import ContentItem
 from hq.domains.projects.models import Project
+from hq.platform.application.labels import adding
 from hq.platform.application.tests import network
 from hq.platform.application.tests.markup import elements, links, select, text
 
@@ -319,13 +320,13 @@ class ContentPageTests(TestCase):
         pages = self.client.get(reverse("content:pages"))
         everything = self.client.get(reverse("content:list"))
 
-        self.assertContains(writeups, "New writeup")
+        self.assertContains(writeups, adding("writeup"))
         # One type on the list: the column and its filter say nothing.
         self.assertNotIn("Type", [column.label for column in writeups.context["table"]["columns"]])
         self.assertIn("No pages yet.", text(pages))
-        self.assertIn(("New page", f"{reverse('content:create')}?content_type=page"), links(pages))
+        self.assertIn((adding("page"), f"{reverse('content:create')}?content_type=page"), links(pages))
         self.assertEqual(everything.context["page"].title, "Content")
-        self.assertContains(everything, "New writeup or page")
+        self.assertContains(everything, adding("writeup or page"))
         self.assertContains(everything, "No source document")
         for gone in ("Content pipeline", "New content item", "Missing documentation", "reverse"):
             self.assertNotIn(gone, text(everything))
@@ -336,6 +337,6 @@ class ContentPageTests(TestCase):
         response = self.client.get(reverse("content:create"), {"content_type": "page"})
 
         self.assertEqual(response.context["page"].title, "New page")
-        self.assertContains(response, "Save page")
+        self.assertContains(response, adding("page"))
         self.assertEqual(response.context["form"].initial["content_type"], "page")
         self.assertTrue(response["Content-Type"].startswith("text/html"))

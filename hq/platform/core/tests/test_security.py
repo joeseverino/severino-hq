@@ -833,7 +833,7 @@ FORM_ACTION_PROBE = "; ".join(
     [
         "import json",
         "from hq.config import settings as s",
-        "print(json.dumps([s.SECURE_CSP['form-action'], s.SEVERINO_API_REFERENCE_CSP['form-action']]))",
+        "print(json.dumps([s.SECURE_CSP['form-action']]))",
     ]
 )
 

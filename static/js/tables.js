@@ -122,8 +122,8 @@
       open.forEach((row) => row.classList.add("is-expanded"));
     }
     // A table that arrives, changes or comes into sight is measured for cuts
-    // as it is fitted: a fragment's, or one in a disclosure just opened. A
-    // window resized measures them once it settles (`markTablesSoon`), and
+    // as it is fitted, a fragment's for one; one in a disclosure just opened
+    // is measured as it opens (`toggle`, below). A window resized measures them once it settles (`markTablesSoon`), and
     // what the parser draws is measured once the page has loaded.
     if (document.readyState !== "loading" && (changed || !before)) markCut(table);
   };
@@ -146,17 +146,33 @@
   // same frame, which the browser raises as an error: a region the observer
   // fitted is let go until the next frame, whose first report of it is the
   // width it was just fitted at.
-  // eslint-disable-next-line no-restricted-syntax -- a region's width changed by nothing the page saw, which only a layout knows
-  const fitted = new ResizeObserver((entries) => entries.forEach(({ target: region }) => {
-    if (!region.isConnected) {
-      fitted.unobserve(region);
+  // A region's table is observed too: one whose own content widens after its
+  // fit (a face settling, a style arriving) with its region's width unchanged
+  // gives way again while it overflows. Its fit can make its region taller,
+  // and the browser delivers nothing shallower than what it last delivered
+  // in the same frame, so the table and its region are both let go until the
+  // next frame.
+  // eslint-disable-next-line no-restricted-syntax -- a width changed by nothing the page saw, which only a layout knows
+  const fitted = new ResizeObserver((entries) => entries.forEach(({ target }) => {
+    if (!target.isConnected) {
+      fitted.unobserve(target);
       return;
     }
-    const was = regionWidths.get(region);
-    fitIn(region);
-    if (regionWidths.get(region) === was) return;
-    fitted.unobserve(region);
-    requestAnimationFrame(() => fitted.observe(region));
+    let letGo = [target];
+    if (target.matches(REGION)) {
+      const was = regionWidths.get(target);
+      fitIn(target);
+      if (regionWidths.get(target) === was) return;
+    } else {
+      if ("rowsHeld" in target.dataset || !target.parentElement?.matches(REGION) || !overflows(target)) return;
+      fit(target, false);
+      markCut(target);
+      letGo = [target, target.parentElement];
+    }
+    letGo.forEach((box) => {
+      fitted.unobserve(box);
+      requestAnimationFrame(() => fitted.observe(box));
+    });
   }));
   // The browser's find reaches what a closed row holds back: the line beneath
   // it is hidden until found, so find searches it and a match opens the row
@@ -185,11 +201,20 @@
       watched.add(region);
       fitted.observe(region);
     }
+    const table = tableIn(region);
+    if (table && !watched.has(table)) {
+      watched.add(table);
+      fitted.observe(table);
+    }
     fitIn(region, changed.has(region));
   });
+  // The column group a table's open rows hold it by is the fit's own, no
+  // change to what the table holds, so it asks for no fit of its own.
+  const held = (node) => node.nodeType === Node.ELEMENT_NODE && node.matches("colgroup[data-held]");
   new MutationObserver((changes) => {
     if (findable) changes.forEach(({ addedNodes }) => addedNodes.forEach(holdBackIn));
-    fitEvery(new Set(changes.map(({ target }) => target.closest?.(REGION))));
+    const changed = changes.filter(({ addedNodes, removedNodes }) => ![...addedNodes, ...removedNodes].every(held));
+    fitEvery(new Set(changed.map(({ target }) => target.closest?.(REGION))));
   }).observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("resize", () => fitEvery());
 
@@ -305,8 +330,7 @@
     const said = el.closest(`[title]:not([${CUT_TITLE}]), [data-tip]`);
     return said ? (said.getAttribute("title") ?? said.dataset.tip) : "";
   };
-  const titleCuts = (row, cut) => {
-    const opens = [...row.querySelectorAll("[data-row-toggle]")].some((toggle) => toggle.checkVisibility());
+  const titleCuts = (row, cut, opens) => {
     const outermost = cut.filter((el) => !cut.some((outer) => outer !== el && outer.contains(el)));
     const titled = new Set(opens ? [] : outermost.filter((el) => !hoverText(el).includes(plainText(el))));
     row.querySelectorAll(`[${CUT_TITLE}]`).forEach((el) => {
@@ -319,29 +343,59 @@
       el.setAttribute(CUT_TITLE, "");
     });
   };
-  const markCut = (table) => {
-    if (!marksCuts(table)) return;
-    table.querySelectorAll(":scope > tbody > tr:not(.row-detail)").forEach((row) => {
-      // A run is titled on the outermost box that cuts it.
-      const cut = row.classList.contains("is-expanded") ? [] : [...new Set([...row.querySelectorAll(":scope > :is(td, th)")].flatMap(cutsIn).map((boxes) => boxes.at(-1)))];
-      if (!row.classList.contains("is-expanded")) row.toggleAttribute("data-cut", cut.length > 0);
-      titleCuts(row, cut);
+  // Every row is read before any is marked, and every toggle before any
+  // title is set: a mark changes what the stylesheet draws, so a read after
+  // one would lay the table out again, once for every row.
+  const measureCuts = (table) => {
+    if (!table.isConnected || !marksCuts(table)) return;
+    const rows = [...table.querySelectorAll(":scope > tbody > tr:not(.row-detail)")];
+    const closed = rows.map((row) => !row.classList.contains("is-expanded"));
+    // A run is titled on the outermost box that cuts it.
+    const cuts = rows.map((row, at) => (closed[at] ? [...new Set([...row.querySelectorAll(":scope > :is(td, th)")].flatMap(cutsIn).map((boxes) => boxes.at(-1)))] : []));
+    rows.forEach((row, at) => {
+      if (closed[at]) row.toggleAttribute("data-cut", cuts[at].length > 0);
     });
+    const opens = rows.map((row) => [...row.querySelectorAll("[data-row-toggle]")].some((toggle) => toggle.checkVisibility()));
+    rows.forEach((row, at) => titleCuts(row, cuts[at], opens[at]));
+  };
+  // A table is let go of what its open rows held and fitted again, then
+  // measured for its cuts, once a frame however often either is asked in it
+  // (rows opened or closed together, folds, a fit, the faces arriving), in the
+  // frame's callbacks before it is drawn: done at each ask, a table of many
+  // rows is laid out again for every one. Its fit goes first, since what is
+  // cut depends on it, and a fit asks for its own measure in the same pass.
+  const unsettled = new Set();
+  const unmeasured = new Set();
+  let asked = false;
+  const settleNow = () => {
+    const settling = [...unsettled];
+    unsettled.clear();
+    // A table outside a region is never fitted, so it keeps what its open
+    // rows hold until the last of them closes.
+    settling.filter((table) => table.parentElement?.matches(REGION)
+      || !table.querySelector(":scope > tbody > tr.is-expanded")).forEach((table) => {
+      releaseColumns(table);
+      refit(table);
+    });
+    const tables = [...unmeasured];
+    unmeasured.clear();
+    asked = false;
+    tables.forEach(measureCuts);
+  };
+  const inTheFrame = () => {
+    if (asked) return;
+    asked = true;
+    requestAnimationFrame(settleNow);
+  };
+  const markCut = (table) => {
+    unmeasured.add(table);
+    inTheFrame();
+  };
+  const settleSoon = (table) => {
+    unsettled.add(table);
+    inTheFrame();
   };
   const markCuts = () => document.querySelectorAll(`${REGION} > .data-table`).forEach(markCut);
-  // Rows opened or closed together (a reader's taps, a find's matches) are
-  // measured for their cuts once, in the next frame: measured after each, a
-  // table of many rows is laid out again for every one.
-  const unmeasured = new Set();
-  const markCutSoon = (table) => {
-    if (!unmeasured.size) {
-      requestAnimationFrame(() => {
-        unmeasured.forEach(markCut);
-        unmeasured.clear();
-      });
-    }
-    unmeasured.add(table);
-  };
 
   // Opening a row must not move the table. Left to itself the browser sizes
   // every column again around what the open row now shows whole, and each
@@ -398,13 +452,10 @@
     if (expanding) holdColumns(table);
     row.classList.toggle("is-expanded", expanding);
     holdBack(row.nextElementSibling);
-    if (!table.querySelector(":scope > tbody > tr.is-expanded")) {
-      releaseColumns(table);
-      refit(table);
-    }
+    if (!table.querySelector(":scope > tbody > tr.is-expanded")) settleSoon(table);
     // An open row shows its values whole, so it keeps no title for a cut;
     // closed again, it is measured for them.
-    markCutSoon(table);
+    markCut(table);
     button?.setAttribute("aria-expanded", String(expanding));
     button?.setAttribute("aria-label", expanding ? "Show less of this row" : "Show all of this row");
     // Open what was folded, and on the way back close only what this opened.
@@ -449,8 +500,9 @@
       if (!opening && row.classList.contains("is-expanded")) row.querySelector(".row-expand")?.click();
       row.toggleAttribute("data-open", opening);
     });
-    refit(head.closest("table"));
-    // Measured at once, so each row it shows offers its toggle as it appears.
+    // Fitted and measured before the frame that draws them, so each row it
+    // shows offers its toggle as it appears.
+    settleSoon(head.closest("table"));
     markTables();
   };
   document.addEventListener("click", (event) => {
@@ -479,6 +531,8 @@
     else markTables();
     const toggle = row.querySelector(".row-expand");
     if (toggle && toggle.getAttribute("aria-expanded") !== "true") toggle.click();
+    // Laid out as it will be drawn before it is scrolled to.
+    settleNow();
     row.scrollIntoView({ block: "start" });
   };
   window.addEventListener("hashchange", landOnRow);
@@ -521,12 +575,7 @@
 
   // A table held while its rows are open is let go and fitted again at the
   // width the window now gives it, which holds it again (`fitIn`).
-  const settleOpenRows = () => {
-    document.querySelectorAll(".data-table[data-rows-held]").forEach((table) => {
-      releaseColumns(table);
-      refit(table);
-    });
-  };
+  const settleOpenRows = () => document.querySelectorAll(".data-table[data-rows-held]").forEach(settleSoon);
 
   const markTables = () => {
     settleOpenRows();
@@ -539,11 +588,20 @@
   };
 
   window.addEventListener("resize", markTablesSoon);
+  // A closed disclosure or popover keeps its content laid out but undrawn, so
+  // opening it widens no region and the observer never hears of it; what it
+  // shows is measured for cuts as it opens. `toggle` does not bubble.
+  document.addEventListener("toggle", (event) => {
+    if (event.newState !== "open" || !(event.target instanceof Element)) return;
+    event.target.querySelectorAll(`${REGION} > .data-table`).forEach(markCut);
+  }, true);
   // Whether a value is cut depends on the face it is drawn in, and so does
   // how wide a table is in a region whose width did not change, so both are
-  // asked again when the faces are in.
+  // asked again when the faces are in. Every region is watched from here
+  // too, so a page whose parser finished before this script ran is fitted
+  // as one it watched being parsed.
   document.fonts?.ready.then(() => {
-    document.querySelectorAll(REGION).forEach((region) => fitIn(region, true));
+    fitEvery(new Set(document.querySelectorAll(REGION)));
     markTables();
   });
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="Compose a built host image with this checkout's extension set, as Compose builds a pull request's candidate"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends_post=["image:docker stop"]

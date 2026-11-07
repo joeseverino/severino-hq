@@ -5,14 +5,12 @@ asked of the server only when opened."""
 import re
 from pathlib import Path
 from unittest import mock
-from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase, tag
+from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
@@ -69,11 +67,11 @@ class AgentRowTests(TestCase):
         return self.client.get(reverse("agent_policy"))
 
     def test_an_agents_block_blocks_it_and_then_allows_it(self):
-        _submit(self.client, self.page(), "data-agent", AGENT)
+        _submit(self.client, self.page(), "data-agent", AGENT, pressing="blocked")
         self.assertIsNotNone(AgentIdentity.objects.get(client_id=AGENT).blocked_at)
         self.assertTrue(select(self.page(), "data-blocked"))
 
-        _submit(self.client, self.page(), "data-agent", AGENT)
+        _submit(self.client, self.page(), "data-agent", AGENT, pressing="blocked")
         self.assertIsNone(AgentIdentity.objects.get(client_id=AGENT).blocked_at)
 
     def test_a_refusal_for_calling_too_much_is_on_its_row(self):
@@ -230,8 +228,8 @@ class DeviceTests(TestCase):
 # Written out, so the module imports at a base without them.
 WAITING = "wants to act for you from"
 LAPTOP, LAPTOP_ID, LAPTOP_OWNER = "example-laptop", "nLAPTOP7CNTRL", "op@example.com"
-# On the tailnet, and in no reading.
-UNSEEN_AT = "100.64.0.99"
+# HQ's own loopback: nowhere the tailnet places a call.
+UNPLACED_AT = "127.0.0.1"
 
 
 class AgentDeviceTests(TestCase):
@@ -242,7 +240,9 @@ class AgentDeviceTests(TestCase):
         self.person = get_user_model().objects.create_user("op", password="x" * 20)
         LinkedAccount.objects.create(user=self.person, provider=SIGN_IN, login="example-key")
         self.client.force_login(self.person)
-        self.identity = AgentIdentity.objects.create(client_id=AGENT, interfaces=["mcp"], person=self.person)
+        self.identity = AgentIdentity.objects.create(
+            client_id=AGENT, person_key="example-key", interfaces=["mcp"], person=self.person
+        )
 
     def device(self, person="mine", **state):
         owner = self.person if person == "mine" else person
@@ -315,38 +315,29 @@ class AgentDeviceTests(TestCase):
 
         self.assertIn("example-machine wants to act from example-server", said)
 
-    def unseen_row(self):
-        """The row of a call from an address the last tailnet reading did not hold, and what is in it."""
-
-        ProviderInventory.objects.create(
-            kind="tailscale.device",
-            observed_at=timezone.now(),
-            records=[{"name": LAPTOP, "node_id": LAPTOP_ID, "addresses": ["100.64.0.7"]}],
-        )
+    def test_an_address_no_device_sent_is_on_the_page_as_refused_with_nothing_to_press(self):
         with operation_context(interface="mcp", actor=AGENT, operation="example"):
-            denials.record_denial(interface="mcp", reason="device_awaiting_approval", actor=AGENT, source=UNSEEN_AT)
+            denials.record_denial(interface="mcp", reason="device_unknown", actor=AGENT, source=UNPLACED_AT)
+
         page = self.page()
-        (row,) = select(page, "data-device-standing", "unseen")
-        return row, within(page, "id", row.attrs["id"])
 
-    def test_an_address_the_tailnet_reading_does_not_hold_says_so_and_offers_a_read_of_the_tailnet(self):
-        row, inside = self.unseen_row()
-
-        self.assertIn(UNSEEN_AT, row.words)
-        self.assertTrue([element for element in inside if "data-unseen" in element.attrs], "why its call was refused")
-        (pressed,) = [element for element in inside if element.attrs.get("type") == "submit"]
-        asked = urlsplit(pressed.attrs["formaction"])
-        self.assertEqual(asked.path, reverse("control_plane:read_now"))
-        self.assertEqual(parse_qs(asked.query), {"kind": ["tailscale.device"]})
-
-    def test_a_reader_who_may_not_read_the_tailnet_is_offered_nothing_to_press(self):
-        roles.assign(self.person, roles.Role.VIEWER)
-
-        _row, inside = self.unseen_row()
-
+        (row,) = select(page, "data-device-standing", "unplaceable")
+        self.assertIn(UNPLACED_AT, row.words)
+        inside = within(page, "id", row.attrs["id"])
+        self.assertTrue([element for element in inside if "data-unplaced" in element.attrs], "why it was refused")
         self.assertFalse(
-            [element for element in inside if element.attrs.get("type") == "submit" or element.tag == "form"]
+            [element for element in inside if element.attrs.get("type") == "submit" or element.tag == "form"],
+            "nothing can be approved",
         )
+
+    def test_the_page_says_where_calls_are_placed(self):
+        (none,) = select(self.page(), "data-placement")
+        with override_settings(SEVERINO_TAILSCALED_SOCKET="/run/tailscale/tailscaled.sock"):
+            (placed,) = select(self.page(), "data-placement")
+
+        self.assertEqual(none.attrs["data-placement"], "none")
+        self.assertEqual(placed.attrs["data-placement"], "tailscaled")
+        self.assertIn("/run/tailscale/tailscaled.sock", placed.words)
 
     def test_a_devices_calls_are_counted_on_its_row(self):
         device = self.device(approved_at=timezone.now(), approved_by=self.person)

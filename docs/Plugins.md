@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=9,
+    api_version=10,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -167,7 +167,13 @@ as `record_event` is. Every door binds who acted where it starts, so a row nobod
 defect and fails where it runs. Once an actor is bound, a binding opened inside
 it that names another actor is refused: a job's work runs under its job's
 binding, a command under the shell's, and a step that needs a principal is
-handed the requester's. The same actor may name another interface.
+handed the requester's. The same actor may name another interface. A
+binding given an id of its own inside another operation records that
+operation as its row's `cause`, so a chain of operations is followed from
+either end. A model whose rows are about another record (an operation on a
+declaration, a decision on one) passes `register_audit(..., subject=...)`, a
+function returning that record's key, so one indexed read of the log's
+`subject` is the record's whole story.
 
 Every extension's `.github/workflows/admit-plugin.yml` is the same, because it
 names nothing about the extension:
@@ -483,7 +489,7 @@ stay in their package even when the host would be their only consumer.
 An integration provider returns one frozen `PluginIntegration` of lazy, typed
 callables for every runtime contribution: capabilities, resources,
 connections, dashboard cards, overview, attention, search, calendars, outbound
-work and health. HQ calls only the one a surface needs. The manifest carries
+work, health and [demo data](#demo-data). HQ calls only the one a surface needs. The manifest carries
 static install, routing, navigation and authority metadata plus exactly one
 executable entry point; an extension never registers a surface on its own. How
 the host compiles these into one graph is in
@@ -514,6 +520,15 @@ again on the next read, since nothing that holds a stand-in is stored.
 read a failing sibling the same way (`read_source` in
 `hq/platform/application/plugins.py`), and `providers_derived_again` names
 each refused answer, so the extension's own suite fails on it.
+
+**Health.** `PluginIntegration.health` answers whether the extension can
+serve: its tables exist, its registry reads. HQ ANDs every extension's answer
+into `/health/ready/`, which gates the deploy, so one false there fails the
+whole host. A configuration gap (a secret or setting this process lacks, rows
+it holds no key to read) is shown instead: an `attention` item and a notice on
+the extension's own pages, saying which setting is missing and where the guide
+to it is. It is never a readiness failure, so an install without production's
+secrets, such as a development one, still answers ready.
 
 Supply the help the shared card shows ([Design](Design.md), "A card says what
 is wrong and holds what fixes it"):
@@ -740,7 +755,9 @@ under a `templates` directory and refuses anything else:
 - an include named at render time;
 - a parameter a partial does not read, or a required one left to whatever the
   page has in scope;
-- a host tag, filter, class or `data-` hook not listed.
+- a host tag, filter, class or `data-` hook not listed;
+- a style attribute, which HQ's policy refuses: a value drawn to scale goes
+  through a public partial (`partials/_allocation.html`, the charts).
 
 The record is the `templates` section of `hq_sdk/contract.json`, derived from
 the host's own templates by `manage.py sdk_contract`, which writes these tables
@@ -771,8 +788,8 @@ A block a frame does not list is the host's. An override of it is refused,
 rather than silently ignored the day the frame stops rendering it.
 
 A data table is declared through the table tags, so its shape is in the HTML on
-first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in its
-labeled region. The region derives the width its columns leave at, by rank,
+first paint. `{% table_region "Label" %}…{% endtable_region %}` wraps it in the box it
+fits, which takes the label as its name only when it scrolls. The region derives the width its columns leave at, by rank,
 from what each column holds ([Design](Design.md)). It draws the empty state in
 place of tables with no row beneath their heads; an `{% if %}` around the
 region says what is missing in the page's own words.
@@ -781,15 +798,35 @@ Each column heading is `{% table_heading "Name" "identifier" %}`:
 
 | Argument | What it says |
 | --- | --- |
-| The kind | `prose`, `identifier`, `numeric`, `status` or `control`, following from `num-col`, `date-col` or `actions-col` when left out |
+| The kind | `prose`, `identifier`, `numeric`, `status` or `control`, following from `date-col` or `actions-col` when left out; a `numeric` column's cells align under it with nothing written on them |
 | `drop=` | the order a narrow table lets it go in, never on the column that names the row or a `key-col` |
 | `sort=` | a list sorted on the server |
-| `local_sort=True` | a list sorted on the page |
+| `local_sort=True` | a list sorted on the page, its control drawn only where the table holds two rows to sort |
+| `gutter=True` | the column whose cell in each row stands in the gutter and holds the row's toggle |
 
-A row that holds more than it shows ends its naming cell with
-`{% row_toggle %}`. That cell in every row, and its heading (`gutter=True`),
-carry `row-gutter`. The stylesheet shows the toggle only where the row holds
-something back.
+The region draws each row's toggle, last in its cell under the `gutter=True`
+heading, and refuses one written there by hand; only a table with no
+headings ends its naming cell with `{% row_toggle %}`. The stylesheet shows
+the toggle only where the row holds something back.
+
+A row edited on the page holds `{% row_editor form row.pk label="Correct
+distance" action=url verb="Save distance" distance_miles=row.miles %}` in its
+cell. It draws a link to the page with that row's editor open (`?edit=<key>`),
+and on that page the form, which the region moves into the line beneath the
+row and opens the row on, with no script as with it. `form` is the one form
+the view declares for the table, drawn for the open row alone with the values
+given by field name, or as it was sent when it is bound; its ids carry the
+row's key. With script the link, the form and its Cancel are answered in the
+table's region. The form posts `next`, the page with the editor closed, for
+the view to return to.
+
+A state is `{% status label tone=... %}`, a pill said in sentence case; with
+`pill=False` it is the label in its tone alone, as a figure that says which
+way it went (`{% status change tone="good" pill=False %}`). Neither is written
+by hand: the pill and tone classes are not public.
+
+`PLUGIN_API_VERSION` 10 retires the `|sortable` filter and the `num-col`,
+`pill*` and `worth*` classes, each derived or drawn by the host.
 
 A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
 ranks derived from the columns unless one says `drop=`, and its region's
@@ -799,6 +836,12 @@ A form renders as `{{ form }}`, and one field as `{{ field.as_field_group }}`.
 HQ's form renderer draws every field in its own markup, with the help text and
 errors the control's `aria-describedby` names, and a checkbox inside its label.
 The page draws `form.non_field_errors` where it says them.
+
+A form whose fields stand one to a row of a table is
+`{% include "partials/_form.html" with form=form table_body="example/_rows.html" verb="Save" %}`:
+the form declares a field for each row, named by the row, and the template
+draws the table, each row's cell drawing its field with
+`{% include "partials/_row_field.html" with field=row.field only %}`.
 
 A form that posts carries `{% write_token %}` where Django's own form carries
 `{% csrf_token %}`: the CSRF field and a retry key drawn for that drawing of
@@ -831,6 +874,7 @@ A test that posts a form without opening its page first sends
 | Partial | Required | Optional | What it is |
 | --- | --- | --- | --- |
 | `partials/_activity_calendar.html` | `calendar` | `calendar_id` | One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`. |
+| `partials/_allocation.html` | `allocation` | `legend`, `stacked` | Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`. |
 | `partials/_ask.html` | `ask` | `extra` | A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`. |
 | `partials/_attention_list.html` | `empty`, `entries` | nothing | Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries. |
 | `partials/_cadence.html` | `cadence` | nothing | Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`. |
@@ -838,19 +882,22 @@ A test that posts a form without opening its page first sends
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
+| `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `in_place`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
+| `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
 | `partials/_insight_grid.html` | `items` | `label` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_kpi_grid.html` | `items` | `featured`, `label` | Responsive linked or static figures. |
 | `partials/_line_chart.html` | `chart` | nothing | A measure over time on an axis fitted to it. |
 | `partials/_record_list.html` | `rows` | `empty`, `label` | A compact list of records, from `hq_sdk.ui.ListRow`. |
+| `partials/_row_field.html` | `field` | nothing | One field of a form whose fields stand one to a row of a table, in its row. |
 | `partials/_stacked_bar_chart.html` | `chart` | nothing | Quantities that add up, from `hq_sdk.ui.StackedBarChart`. |
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section_head %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|sortable`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% section_head %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `num-col`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `pill`, `pill-attention`, `pill-good`, `pill-neutral`, `pill-serious`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `worth`, `worth-attention`, `worth-good`, `worth-neutral`.
+Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`.
 
 Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`.
 
@@ -891,9 +938,10 @@ magnitude in its own units (`lambda drop: f"{drop} bpm"`), and the host puts
 the sign before it by the rule an amount follows. So a value that writes as
 zero is never negative.
 
-An overview says what it is built from with
+An overview says what it is built from by putting
 `hq_sdk.pages.built_from(plugin.id)`, a link to the project that names the
-extension's repository. An extension's suite checks its templates for a
+extension's repository, in its context as `built_from`; `page.html` draws the
+line after the page. An extension's suite checks its templates for a
 `{# #}` comment left open with `hq_sdk.testing.unclosed_template_comments`.
 
 A list extends `list_page.html` and declares its empty state on the view, never
@@ -1212,3 +1260,57 @@ The calendar page is the host's. An extension may place a host page in its own
 navigation group by naming its route, `NavigationItem("Calendar",
 "calendar:month", "calendar", 11, "Notes")`; where none does, the host lists it
 in its own place.
+
+## Demo data
+
+An extension's pages are worth looking at only with records in them, so it
+ships a demo the host's showcase and standard data sets write beside the
+example estate (`hq/platform/core/seeds.py`). A composed `mise run dev:scratch
+--seed showcase`, `mise run dev:look --composed` and the layout gate then draw
+its pages with data, its record pages included.
+
+```python
+from hq_sdk.plugin import PluginIntegration
+
+
+def integration():
+    from . import demo
+
+    return PluginIntegration(demo_seed=demo.plant, demo_pages=demo.pages)
+```
+
+`demo_seed(owner)` writes the records, owned by the operator the set signs
+up. `demo_pages()` names, by address, a record's page of each kind it writes:
+the layout gate and dev:look's `all` read them beside the host's own, and
+`DemoPageTests` in the host's `test_plugins`, which an extension's CI runs,
+holds each to answering. They are declared because which records stand for a
+kind (two kinds of record may share one page) is the domain's to say.
+`examples/extension` is a small one.
+
+A demo is code, not a Django fixture (`loaddata` and an app's `fixtures/`):
+
+- **Dates sit relative to today.** A fixture's dates are fixed and go stale,
+  and a page that reads the last weeks shows nothing a month later.
+- **Keys are fixed.** The gate and dev:look each write the set into a
+  database of their own and must meet the same pages, so a record a page names
+  is keyed by a constant (a slug, a `uuid5`), never `uuid4` or an
+  autoincrement.
+- **It writes through the domain's own models,** so a page reads the demo as
+  it reads an import, and a migration that breaks it fails the extension's own
+  suite.
+- **Its events read as use did.** A demo runs outside every door, so a record
+  its extension audits is refused unless it is written inside
+  `hq_sdk.audit.seeded_by_hand(path, at=...)`: the event is the set's owner's,
+  in the browser, one request for the page at `path`, at the moment `at`, as
+  each of the example estate's events is. Anywhere but a demo being written it
+  is refused, since writing an event as somebody at a moment past is a seed's
+  power alone.
+
+Two rules keep a demo out of real data, both in `seeds.plant`, which every set
+is written through:
+
+- A set is written only into a database that holds no record of the host's
+  domains, so it never merges into one in use.
+- An extension's demo is written only by a development process (`DEBUG` on) or
+  a test run or gate's own database. A production process refuses it, before
+  anything is written, even on a new database.

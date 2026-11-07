@@ -236,7 +236,7 @@ def _ports(_container, runtime, unmet):
     lines = []
     for binding in runtime.get("port_bindings") or ():
         address = str(binding.get("host_ip", "") or "")
-        address = "127.0.0.1" if address in ("", "0.0.0.0", "::") else address
+        address = "127.0.0.1" if address in ("", "0.0.0.0", "::") else address  # noqa: S104 - read from a binding to narrow it, never bound
         line = f"{address}:{binding.get('host_port', '')}:{_port(binding)}"
         if line not in lines:
             lines.append(line)

@@ -458,7 +458,7 @@ class PresencePart(TypedDict):
 class MachineRecord(MachineRow):
     """One machine whole: how it is reached, what it serves and what runs on it."""
 
-    node: Annotated[str, Describe("The machine's id in the topology: `machine:` and its name.")]
+    node: Annotated[str, Describe("The machine's id on the map: `machine:` and its name.")]
     declaration: Annotated[str, Describe("The key of HQ's record of the machine; empty when HQ keeps none.")]
     aliases: Annotated[list[str], Describe("Other names the same machine is known by.")]
     header_addresses: Annotated[
@@ -680,7 +680,7 @@ class Registration(TypedDict):
 
 class DomainRow(TypedDict):
     name: Annotated[str, Describe("The domain's name, which a read of one names it by.")]
-    node: Annotated[str, Describe("The domain's id in the topology: `zone:` and its name.")]
+    node: Annotated[str, Describe("The domain's id on the map: `zone:` and its name.")]
     url: Annotated[str, Describe("The domain's page in HQ.")]
     declaration: Annotated[str, Describe("The key of HQ's record of the domain's DNS zone; empty when HQ keeps none.")]
     services: Annotated[list[ZoneMemberPart], Describe("The services under the domain, HQ's own among them.")]
@@ -740,7 +740,7 @@ class RelationshipsRecord(TypedDict):
     """One node's edges, grouped by what each says from it, and the readings that hold it."""
 
     node: Annotated[str, Describe("The id of the node asked about, such as `machine:<name>` or `zone:<domain>`.")]
-    focus_url: Annotated[str, Describe("The topology page centered on the node.")]
+    focus_url: Annotated[str, Describe("The map centered on the node.")]
     groups: Annotated[list[RelationGroupPart], Describe("Its relationships, grouped by what each says from the node.")]
     readings: Annotated[list[JoinedReadingPart], Describe("The readings joined to the node.")]
     unreadable: Annotated[list[str], Describe("The readings about the node that could not be read, in words.")]

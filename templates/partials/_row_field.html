@@ -1,0 +1,17 @@
+{% comment %}
+One field of a form whose fields stand one to a row of a table
+(partials/_form.html with `table`), drawn in that row's cell:
+
+  <td>{% include "partials/_row_field.html" with field=row.group_field only %}</td>
+
+`field` is the bound field, one the form declares for each row, so each row's
+control has a name and an id of its own. Its label names it for a screen
+reader alone, since the column's heading names it on the page; its help is
+kept for the control to name, and its errors stand under it.
+{% endcomment %}
+<div class="field compact{% if field.errors %} has-errors{% endif %}">
+  <label class="visually-hidden" for="{{ field.id_for_label }}">{{ field.label|breakable }}</label>
+  {{ field }}
+  {% if field.help_text %}<p class="visually-hidden"{% if field.auto_id %} id="{{ field.auto_id }}_helptext"{% endif %}>{{ field.help_text|breakable }}</p>{% endif %}
+  {% if field.errors %}<ul class="errors"{% if field.auto_id %} id="{{ field.auto_id }}_error"{% endif %}>{% for e in field.errors %}<li>{{ e|breakable }}</li>{% endfor %}</ul>{% endif %}
+</div>

@@ -5,7 +5,7 @@
 {% if active_lens %}<p class="topology-lens-note muted">{{ active_lens.summary|breakable }}</p>{% endif %}
 
 {% if topology_trace %}
-  <section class="topology-trace-bar" id="trace" tabindex="-1" aria-label="What is shown">
+  <div class="topology-trace-bar" id="trace" tabindex="-1" role="group" aria-label="What is shown">
     <div>
       <span class="eyebrow">Showing</span>
       <strong>{{ topology_trace_focus.label|breakable }}</strong>
@@ -19,11 +19,11 @@
       {% for item in trace_depth_links %}<a class="scope-chip" href="{{ item.url }}"{% if topology_trace.depth == item.depth %} aria-current="page"{% endif %}>{{ item.depth|breakable }}</a>{% endfor %}
     </nav>
     <a class="btn ghost compact" href="{{ trace_reset_url }}">Clear</a>
-  </section>
+  </div>
 {% endif %}
 
-<section class="topology-workspace" data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}" data-topology-total="{{ topology_total }}">
-  <div class="topology-toolbar" role="group" aria-label="Topology controls">
+<div class="topology-workspace" data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}" data-topology-total="{{ topology_total }}">
+  <div class="topology-toolbar" role="group" aria-label="Map controls">
     {% comment %}
     One bar, in the order a reader narrows: a name, then which view (the
     server's question, so a form with its Filter button), then the kinds.
@@ -60,9 +60,9 @@
     {% if topology_left_out %}<a href="{% url 'control_plane:topology' %}?all=1#map">Show {{ topology_left_out|breakable }} more</a>{% elif topology_everything %}<a href="{% url 'control_plane:topology' %}#map">Show fewer</a>{% endif %}</p>
 
   <div class="topology-stage">
-  <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Topology lanes">
+  <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Map lanes">
     {% for group in topology_groups %}{% if group.items %}
-      <section class="topology-lane" data-topology-lane="{{ group.kind }}" aria-labelledby="topology-{{ group.kind }}">
+      <div class="topology-lane" data-topology-lane="{{ group.kind }}">
         <header>
           <span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
           <h2 id="topology-{{ group.kind }}">{{ group.label|breakable }} <span class="count" data-topology-count title="{{ group.count }}" aria-label="{{ group.count }}">{{ group.items|length }}</span></h2>
@@ -90,7 +90,7 @@
             </article>
           {% endfor %}
         </div>
-      </section>
+      </div>
     {% endif %}{% empty %}
       {% if active_lens %}
         {% include "partials/_empty_state.html" with message="Nothing matches." %}
@@ -103,30 +103,26 @@
     {% if topology_detail %}{% include "control_plane/_topology_node_body.html" with item=topology_detail %}{% endif %}
   </section>
   </div>
-</section>
+</div>
 
 {% if topology_edges %}
-{% card css="topology-relations" id="topology-relations" heading="topology-relations-heading" %}
-  <header class="topology-relations-head">
-    <h2 id="topology-relations-heading">Links shown</h2>
-    <span class="muted">{{ topology_edges|length|counted:"link" }}</span>
-  </header>
+{% section "Links shown" count=topology_edges|length id="topology-relations" css="topology-relations" %}
   {% table_region "Links shown" pane=True %}
     <table class="data-table">
-      <thead><tr>{% table_heading "From" "identifier" gutter=True local_sort=topology_edges|sortable %}{% table_heading "Link" drop=3 local_sort=topology_edges|sortable %}{% table_heading "To" "identifier" drop=2 local_sort=topology_edges|sortable %}{% table_heading "State" "status" drop=1 local_sort=topology_edges|sortable %}</tr></thead>
+      <thead><tr>{% table_heading "From" "identifier" gutter=True local_sort=True %}{% table_heading "Link" drop=3 local_sort=True %}{% table_heading "To" "identifier" drop=2 local_sort=True %}{% table_heading "State" "status" drop=1 local_sort=True %}</tr></thead>
       <tbody>
         {% for item in topology_edges %}
           <tr data-topology-edge="{{ item.edge.source }} {{ item.edge.target }}">
-            <td class="row-gutter">{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label|breakable }}</span>{% row_toggle %}</td>
+            <td>{% entity item.source_link %}<br><span class="muted">{{ item.source_link.kind_label|breakable }}</span></td>
             <td>{{ item.edge.label|breakable }}</td>
             <td>{% entity item.target_link %}<br><span class="muted">{{ item.target_link.kind_label|breakable }}</span></td>
-            <td><span class="pill pill-{{ item.edge.status }}">{{ item.edge.status|title|breakable }}</span></td>
+            <td>{% status item.edge.status tone=item.edge.status %}</td>
           </tr>
         {% endfor %}
       </tbody>
     </table>
   {% endtable_region %}
-{% endcard %}
+{% endsection %}
 {% endif %}
 {% endblock %}
 {% block scripts_extra %}<script src="{% static 'js/topology.js' %}" {% csp_nonce_attr %} defer></script>{% endblock %}

@@ -79,7 +79,7 @@ docstring is the rule.
 | Rule | What it holds |
 | --- | --- |
 | `lint:css` | Stylelint under `tools/lint/stylelint.config.mjs`: tokens, spacing, color |
-| `StyleContractTests`, `SharedPrimitiveStyleTests` | CSS, layers |
+| `StyleContractTests`, `TemplateClassStyleTests` | CSS, layers |
 | `TemplateCommentTests` | what a `{# #}` comment left open is |
 | `lint:complexity` | complexipy's cognitive complexity, 20 per function |
 | `FileSizeTests` | no source or test file past `SEVERINO_FILE_LINE_LIMIT` |

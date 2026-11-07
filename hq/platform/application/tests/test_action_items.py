@@ -314,7 +314,7 @@ class PageTests(TestCase):
         page = self.client.get(reverse("action_items"))
 
         self.assertEqual([group["id"] for group in page.context["action_groups"]], ["example"])
-        self.assertContains(page, "data-queue-count", count=1)
+        self.assertEqual(len(select(page, "data-queue")), 1)
 
 
 class RouteTests(TestCase):

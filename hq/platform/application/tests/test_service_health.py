@@ -135,7 +135,7 @@ class ServiceHealthTests(TestCase):
 
         self.assertEqual((health.state, health.label), ("attention", "Out of date"))
         self.assertTrue(health.detail.startswith("Health check passing when last read"), health.detail)
-        self.assertEqual(steps["Container"], ("Running when last read", "pill-unprobed"))
+        self.assertEqual(steps["Container"], ("Running when last read", "unprobed"))
 
     def test_no_state_reads_as_healthy(self):
         self.proxy(8080)

@@ -236,7 +236,12 @@
     {% endif %}
   </header>
 
-  <main class="content" id="content" tabindex="-1">
+  {% comment %}
+  The page's content is a region (static/js/fragment.js), so a post_button
+  pressed in it is answered in place from the page the post returns to,
+  messages included. It answers no link or form of its own.
+  {% endcomment %}
+  <main class="content" id="content" tabindex="-1" data-fragment>
     {% if messages %}
       <ul class="messages">
         {% for message in messages %}

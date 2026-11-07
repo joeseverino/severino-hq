@@ -153,7 +153,7 @@ func TestReadFailuresBecomeReportFields(t *testing.T) {
 		text    string
 	}{
 		{"credential refusal says the provider's reason", fmt.Errorf("list zones: %w", &ProviderError{Message: "token refused", Failure: runtime.FailureClassCredential, Reason: "Invalid API Token"}), runtime.RefusalCredential, "Invalid API Token"},
-		{"permission refusal keeps the chain", fmt.Errorf("list zones: %w", runtime.HTTPRefusal(403)), runtime.RefusalPermission, "list zones: provider answered 403"},
+		{"permission refusal keeps the chain", fmt.Errorf("list zones: %w", runtime.HTTPRefusal(403)), runtime.RefusalPermission, "list zones: the service answered 403"},
 		{"unclassified failure", errors.New("boom"), runtime.RefusalUnclassified, "boom"},
 		{"text is clipped by characters", errors.New(long), runtime.RefusalUnclassified, string([]rune(long)[:runtime.ReportTextLimit])},
 	}

@@ -11,15 +11,15 @@ favorites, where the order is something the operator chose; among the rest,
 alphabetical is the order and there is nothing to move.
 {% endcomment %}
 {% table_region "Services" room="snug" %}
-  <table class="data-table service-table">
+  <table class="data-table">
     <thead>
       <tr>
-        {% table_heading "Service" "identifier" gutter=True local_sort=row_count|sortable %}
-        {% table_heading "Open to" "status" drop=facets|length|add:3 local_sort=row_count|sortable %}
-        {% for id, label in facets %}{% table_heading label drop=forloop.revcounter|add:2 local_sort=row_count|sortable %}{% endfor %}
-        {% table_heading "Runs on" drop=2 local_sort=row_count|sortable %}
-        {% if show_service_projects %}{% table_heading "Project" drop=1 local_sort=row_count|sortable %}{% endif %}
-        {% table_heading "State" "status" css="key-col" local_sort=row_count|sortable %}
+        {% table_heading "Service" "identifier" gutter=True local_sort=True %}
+        {% table_heading "Open to" "status" drop=facets|length|add:3 local_sort=True %}
+        {% for id, label in facets %}{% table_heading label drop=forloop.revcounter|add:2 local_sort=True %}{% endfor %}
+        {% table_heading "Runs on" drop=2 local_sort=True %}
+        {% if show_service_projects %}{% table_heading "Project" drop=1 local_sort=True %}{% endif %}
+        {% table_heading "State" "status" css="key-col" local_sort=True %}
       </tr>
     </thead>
     {% for group_label, rows, reorderable in groups %}
@@ -27,8 +27,8 @@ alphabetical is the order and there is nothing to move.
       {% if forloop.length > 1 %}{% row_group group_label %}{% endif %}
       {% for service in rows %}
         <tr>
-          <td class="row-gutter">
-            <div class="service-name">
+          <td>
+            <div class="service-name name-line">
               {% url 'control_plane:service_pin' service.hostname as pin_url %}
               {% if service.pinned %}
                 {% post_button "★" pin_url css="pin-toggle pinned" title="Remove "|add:service.hostname|add:" from favorites" %}
@@ -48,7 +48,6 @@ alphabetical is the order and there is nothing to move.
                 </span>
               {% endif %}
             </div>
-            {% row_toggle %}
           </td>
           {% with exposure=service.exposure %}
             <td><span class="exposure exposure-{{ exposure.level }}" title="{{ exposure.sentence }}">{{ exposure.short|breakable }}</span></td>
@@ -103,7 +102,7 @@ alphabetical is the order and there is nothing to move.
             {% endif %}
           </td>
           {% if show_service_projects %}<td>{% if service.project %}{% entity "project"|entity_of:service.project.slug label=service.project.name %}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
-          <td><span class="pill pill-{{ service.status }}"{% if service.health.detail %} title="{{ service.health.detail }}"{% endif %}>{{ service.status_label|breakable }}</span></td>
+          <td>{% status service.status_label tone=service.status title=service.health.detail %}</td>
         </tr>
       {% endfor %}
     </tbody>

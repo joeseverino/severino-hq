@@ -18,6 +18,7 @@ from hq.domains.control_plane.models import (
 )
 from hq.platform.core.audit import record_event
 lazy from hq.platform.application.routes import reverse
+lazy from hq.platform.application.ui import STATUS_VALUES
 lazy from hq.platform.core.models import AuditLog
 
 from . import readings
@@ -734,7 +735,7 @@ def record_dashboard_observations(
 
 def _clean_panel(item: dict[str, Any]) -> dict[str, Any]:
     status = str(item.get("status", "neutral")).strip()
-    if status not in {"good", "attention", "serious", "neutral"}:
+    if status not in STATUS_VALUES:
         raise ValueError(f"Unknown dashboard status {status!r}.")
     cleaned = {
         "status": status,

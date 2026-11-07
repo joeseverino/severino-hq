@@ -5,8 +5,7 @@ connections. A row is the name a person knows it by, one line of what it is
 A group with nothing in it is not drawn.
 {% endcomment %}
 {% if items %}
-{% card css="discovery-group" %}
-  <h2>{{ title|breakable }} <span class="count">{{ items|length }}</span></h2>
+{% section title count=items|length %}
   <ul class="discovery-list">
     {% for item in items %}
     <li>
@@ -24,5 +23,5 @@ A group with nothing in it is not drawn.
     </li>
     {% endfor %}
   </ul>
-{% endcard %}
+{% endsection %}
 {% endif %}

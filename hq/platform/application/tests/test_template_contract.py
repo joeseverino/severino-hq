@@ -39,7 +39,8 @@ OUTSIDE = {
         '{% post_button "Go" url color="red" %}'
     ),
     "templates/example/markup.html": (
-        '<div class="kv invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p></div>'
+        '<div class="kv invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p></div>\n'
+        '<span class="muted" style="--part: {{ width }}">x</span>'
     ),
     "templates/example/parts.html": (
         "{% card %}{% section_head %}A{% aside %}B{% endsection_head %}{% aside %}C{% endcard %}\n"
@@ -79,6 +80,7 @@ class TemplateValidationTests(SimpleTestCase):
             "tags.html:5": "color",
             "markup.html:1": "invented",
             "markup.html:2": "data-secret",
+            "markup.html:3": "style attribute",
             "parts.html:1": "aside",
             "parts.html:2": "aside",
             "parts.html:3": "invented-card",

@@ -15,6 +15,7 @@ from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.primitives import hashes, serialization
 from django.db import transaction
 from django.utils import timezone
+from pydantic import Field
 
 from hq.domains.control_plane.desired_state import desired_fingerprint
 from hq.domains.control_plane.models import CertificateMaterial, ManagedResource
@@ -37,7 +38,7 @@ PRIVATE_KEY_SLOT = "certificate:private_key"
 
 @dataclass(frozen=True, slots=True)
 class UploadCertificateCommand:
-    fullchain: Annotated[str, Describe("The certificate and its chain, PEM-encoded.")]
+    fullchain: Annotated[str, Field(title="Certificate chain"), Describe("The certificate and its chain, PEM-encoded.")]
     private_key: Annotated[str, Describe("The certificate's private key, PEM-encoded.")]
 
 

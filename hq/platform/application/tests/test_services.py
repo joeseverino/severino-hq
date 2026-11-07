@@ -324,7 +324,7 @@ class ServiceSurfaceTests(TestCase):
 
         def sorted_headings():
             html = self.client.get(reverse("control_plane:services")).content.decode()
-            return [heading for heading in within(html, "aria-label", "Services") if "aria-sort" in heading.attrs]
+            return [heading for heading in within(html, "class", "table-scroll") if "aria-sort" in heading.attrs]
 
         self.assertEqual(sorted_headings(), [])
         ManagedResource.objects.create(

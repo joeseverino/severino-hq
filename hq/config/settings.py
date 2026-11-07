@@ -241,8 +241,9 @@ SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 # https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Content-Security-Policy/script-src
 # https://web.dev/articles/strict-csp
 # Objects and framing are disabled outright.
-# Inline styles remain allowed so a chart can place a mark with a per-datum
-# custom property; application templates keep styles in the static bundle.
+# A style element comes only from HQ's own sheets. Attributes stay allowed
+# while WebKit reports one for every <select> (playwright#43617, the canary in
+# browser/reports.py); test_rendered and the template contract keep HQ's out.
 #
 # `require-trusted-types-for` is the one directive here that is not about where
 # content may come from. Every other line describes an origin; this one removes
@@ -261,7 +262,8 @@ SEVERINO_OUTBOUND_IN_REQUEST = "refuse"
 SECURE_CSP = {
     "default-src": [CSP.SELF],
     "script-src": [CSP.NONCE, CSP.STRICT_DYNAMIC, CSP.SELF],
-    "style-src": [CSP.SELF, CSP.UNSAFE_INLINE],
+    "style-src-elem": [CSP.SELF],
+    "style-src-attr": [CSP.UNSAFE_INLINE],
     "img-src": [CSP.SELF, "data:"],
     "font-src": [CSP.SELF],
     "connect-src": [CSP.SELF],
@@ -424,6 +426,8 @@ TEMPLATES = [
                 "hq.platform.core.templatetags.action_tags",
                 "hq.platform.core.templatetags.table_tags",
                 "hq.platform.core.templatetags.write_tags",
+                "hq.platform.core.templatetags.status_tags",
+                "hq.platform.core.templatetags.part_tags",
             ],
         },
     },
@@ -644,15 +648,6 @@ _sign_in = urlsplit(OIDC_OP_AUTHORIZATION_ENDPOINT)
 if _sign_in.scheme in {"http", "https"} and _sign_in.netloc:
     SECURE_CSP["form-action"] = [CSP.SELF, f"{_sign_in.scheme}://{_sign_in.netloc}"]
 
-# The API reference at /api/docs/ is the one page served without the Trusted
-# Types directives: the vendored Scalar bundle (static/vendor/scalar) writes
-# strings into innerHTML through Vue and its markdown renderer, and no
-# configuration of it creates only the `hq-fragment` policy. Spelled as a
-# derivation rather than a second literal policy, so tightening the real one
-# cannot leave a stale copy behind. Its sources are the real policy's, the
-# nonce and 'strict-dynamic' included; it needs no inline script and,
-# configured jitless, no eval.
-SEVERINO_API_REFERENCE_CSP = without_trusted_types(SECURE_CSP)
 OIDC_CREATE_USER = env_bool("SEVERINO_OIDC_CREATE_USER", default=True)
 # Where a sign-in that did not finish lands: the login page, told to stop and
 # say why rather than going straight back to the provider in a loop.
@@ -775,6 +770,15 @@ SEVERINO_ACTIVITY_MARKER = env_str("SEVERINO_ACTIVITY_MARKER")
 # account can enter. Unset, the process serves no bridge; set, it serves one or
 # does not start.
 SEVERINO_BRIDGE_SOCKET = env_str("SEVERINO_BRIDGE_SOCKET")
+# tailscaled's LocalAPI socket, which places each agent call on the tailnet
+# device that sent it (hq.platform.application.tailscaled). Its presence is
+# what says the deployment has a tailnet: absent, as on a developer's machine,
+# a call is placed on no device and its client is the finest unit HQ answers
+# for. Empty turns the read off.
+# Set by the host that runs HQ (hq-host run-web, on a host with tailscale);
+# empty is a deployment with no tailnet, which is what dev and the test
+# command are, whatever the machine running them has.
+SEVERINO_TAILSCALED_SOCKET = env_str("SEVERINO_TAILSCALED_SOCKET", "")
 
 # Extra dashboard links, as a JSON list of {label, sub, href}. One deployment's
 # status page is a fact about that deployment; the consoles HQ can reach are

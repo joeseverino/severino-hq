@@ -50,7 +50,7 @@ def reply_mailto(address: str, subject: str = "Re: your message") -> str:
 
 def _waiting_note(current: inbox.Inbox) -> str:
     if current.refused:
-        return f"The controller could not apply the last change: {current.refused}"
+        return f"HQ could not apply the last change: {current.refused}"
     if current.waiting:
         return f"{counted(current.waiting, 'change')}: {WAITING}"
     return ""

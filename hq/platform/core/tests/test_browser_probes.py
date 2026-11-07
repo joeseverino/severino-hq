@@ -22,19 +22,23 @@ from hq.platform.core.tests.browser import (
     planted,
     reading,
     reference,
+    reports,
     selectors,
     serving,
     shots,
     stress,
     survey,
     sweeps,
+    table_fit,
     uncaught,
     widths,
 )
 from hq.platform.core.tests.browser.probes import (
     axe,
     boxes,
+    controls,
     describe,
+    headings,
     palette,
     parts,
     settle,
@@ -67,17 +71,21 @@ MODULES = (
     planted,
     reading,
     reference,
+    reports,
     selectors,
     serving,
     shots,
     stress,
     survey,
     sweeps,
+    table_fit,
     uncaught,
     widths,
     axe,
     boxes,
+    controls,
     describe,
+    headings,
     palette,
     parts,
     settle,
@@ -161,6 +169,7 @@ class PlantTests(SimpleTestCase):
         self.assertIn("sideways", checks)
         self.assertEqual(sorted(set(checks) - set(planted.PLANTS)), [], "a check with no plant in planted.PLANTS")
         self.assertEqual(sorted(set(planted.PLANTS) - set(checks)), [], "a plant for no check the survey runs")
+        self.assertEqual(sorted(set(planted.PASSES) - set(checks)), [], "a near miss for no check the survey runs")
 
 
 class LostFillTests(SimpleTestCase):

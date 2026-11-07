@@ -297,6 +297,12 @@ class ConnectionsContext:
         return self.estate_posture.connection_count
 
     @property
+    def oldest_name(self) -> str:
+        """What the page calls ``oldest``, as its row names it."""
+
+        return entity_link("connection", self.oldest.label).label if self.oldest else ""
+
+    @property
     def attention_count(self) -> int:
         return self.estate_posture.attention_count
 

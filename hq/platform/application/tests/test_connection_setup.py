@@ -76,7 +76,7 @@ class PageTests(TestCase):
         with override_settings(SEVERINO_HQ_SOURCE="https://github.com/example/hq"):
             response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Connect a service")
+        self.assertContains(response, "Add a connection")
         for kind in CONNECTION_KINDS.values():
             self.assertIn(kind.create, text(response))
         self.assertIn("https://github.com/example/hq/blob/main/docs/Secrets.md#connections", hrefs(response))
@@ -116,7 +116,7 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertContains(response, "Connect another account")
+        self.assertContains(response, "Add another account")
         self.assertContains(response, escape(CONNECTION_KINDS["portainer"].create))
         self.assertIn("/infrastructure/connections/#connection-setup-heading", hrefs(response))
 

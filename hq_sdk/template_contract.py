@@ -22,6 +22,8 @@ lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
 lazy from hq.platform.core.stylesheets import stylesheet
+lazy from hq.platform.core.templatetags.part_tags import SectionTakes
+lazy from hq.platform.core.templatetags.table_tags import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.value_tags import Takes
 
 lazy from .contract import _parameters
@@ -47,6 +49,7 @@ FRAME_ABOUT = {
 # The shared partials, each with the one line the docs say about it.
 PARTIALS: dict[str, str] = {
     "partials/_activity_calendar.html": "One month of plan against execution, from `hq_sdk.ui.ActivityCalendar`.",
+    "partials/_allocation.html": "Parts of one whole as one bar, from `hq_sdk.ui.AllocationBar`.",
     "partials/_ask.html": "A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`.",
     "partials/_attention_list.html": "Decisions waiting on the operator, from `hq_sdk.ui.Insight` entries.",
     "partials/_cadence.html": "Whether a thing happened, period by period, from `hq_sdk.ui.Cadence`.",
@@ -54,12 +57,15 @@ PARTIALS: dict[str, str] = {
     "partials/_chart_tabs.html": "Up to four charts of one thing in the space of one.",
     "partials/_dropzone.html": "A file field that also accepts a drop.",
     "partials/_empty_state.html": "The one empty state: what is missing, then what would fill it.",
+    "partials/_form.html": "A form that writes: its token, its errors, its fields or its table, and its closing row.",
+    "partials/_form_actions.html": "A form's closing row: its one verb, Cancel, and what saving does.",
     "partials/_form_errors.html": "What was wrong with a submitted form as a whole, above its fields.",
     "partials/_insight_grid.html": "Readings that need interpreting, each with its next step.",
     "partials/_job_progress.html": "A running job and what it is doing.",
     "partials/_kpi_grid.html": "Responsive linked or static figures.",
     "partials/_line_chart.html": "A measure over time on an axis fitted to it.",
     "partials/_record_list.html": "A compact list of records, from `hq_sdk.ui.ListRow`.",
+    "partials/_row_field.html": "One field of a form whose fields stand one to a row of a table, in its row.",
     "partials/_stacked_bar_chart.html": "Quantities that add up, from `hq_sdk.ui.StackedBarChart`.",
     "partials/_timeline.html": "Chronological linked events, from `hq_sdk.ui.Timeline`.",
     "partials/_week_plan.html": "Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`.",
@@ -77,9 +83,12 @@ TAGS = (
     "post_button",
     "reference",
     "referenced_by",
+    "row_editor",
     "row_group",
     "row_toggle",
+    "section",
     "section_head",
+    "status",
     "table_heading",
     "table_region",
     "words",
@@ -94,7 +103,6 @@ FILTERS = (
     "or_empty",
     "outside",
     "readout",
-    "sortable",
     "span",
     "when",
     "web_url",
@@ -152,16 +160,10 @@ CLASSES = (
     "narrow-more",
     "notice",
     "notice-attention",
-    "num-col",
     "optional-col",
     "page-lede",
     "pie-chart",
     "pie-row",
-    "pill",
-    "pill-attention",
-    "pill-good",
-    "pill-neutral",
-    "pill-serious",
     "primary",
     "print-footer",
     "print-only",
@@ -197,10 +199,6 @@ CLASSES = (
     "tight-col",
     "two-col",
     "visually-hidden",
-    "worth",
-    "worth-attention",
-    "worth-good",
-    "worth-neutral",
 )
 
 # ``data-`` attributes the host's scripts act on that an extension may write.
@@ -401,7 +399,7 @@ def _tag_parts(compile_function: Any) -> list[str]:
     a page writes only inside that tag. The first part follows the opening tag."""
 
     target = getattr(compile_function, "__wrapped__", None)
-    return list(target.parts[1:]) if isinstance(target, Takes) else []
+    return list(target.parts[1:]) if isinstance(target, (Takes, SectionTakes)) else []
 
 
 def _class_options(parameters: list[str]) -> list[str]:
@@ -454,7 +452,9 @@ def _django(engine: Any) -> dict[str, Any]:
 
 
 def _defined_classes() -> set[str]:
-    return set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet()))
+    # A class that declares a part's role in a table is read by the region,
+    # which marks the part for the stylesheet (table_tags.mark_cells).
+    return set(re.findall(r"\.([a-z][a-z0-9-]*)", stylesheet())) | set(ROLE_CLASSES)
 
 
 def _scripts() -> str:

@@ -522,7 +522,8 @@ const apiDevices = `{"devices": [
 	 "expires": "2027-01-01T00:00:00Z", "keyExpiryDisabled": false, "addresses": ["192.0.2.2"], "os": "linux",
 	 "authorized": true, "user": "ops@example.com", "tags": ["tag:server", "tag:edge"],
 	 "advertisedRoutes": ["0.0.0.0/0", "::/0"], "enabledRoutes": ["0.0.0.0/0"],
-	 "clientConnectivity": {"endpoints": ["192.0.2.10:41641"]}, "sshEnabled": true},
+	 "clientConnectivity": {"endpoints": ["192.0.2.10:41641"]}, "sshEnabled": true,
+	 "tailnetLockKey": "tlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7"},
 	{"hostname": "a-laptop", "name": "a-laptop.example.ts.net.", "lastSeen": "2026-09-01T00:00:00Z",
 	 "expires": "2027-01-01T00:00:00Z", "keyExpiryDisabled": true, "authorized": false}]}`
 
@@ -535,6 +536,13 @@ func TestDeviceInventoryFromTheAPI(t *testing.T) {
 	edge, laptop := records[0].(TailscaleDeviceRecord), records[1].(TailscaleDeviceRecord)
 	if edge.NodeID != "nEDGE1CNTRL" {
 		t.Fatalf("a device is keyed by the API's stable nodeId, never its legacy id: %q", edge.NodeID)
+	}
+	raw, _ := json.Marshal(edge)
+	var carried struct {
+		LockKey string `json:"lock_key"`
+	}
+	if json.Unmarshal(raw, &carried) != nil || carried.LockKey != "tlpub:0f4e1c9a2b7d3e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7" {
+		t.Fatalf("each device carries its tailnet lock key, which the signers are matched by: %s", raw)
 	}
 	if edge.Name != "an-edge" || !edge.Online || edge.KeyExpires != "2027-01-01T00:00:00Z" || !edge.Authorized ||
 		!reflect.DeepEqual(edge.Tags, []string{"tag:edge", "tag:server"}) || !edge.OffersExitNode || !edge.ExitNodeApproved ||
@@ -608,6 +616,39 @@ func TestTailnetPolicyInventoryKeepsWhatWasReadBeforeARefusal(t *testing.T) {
 	}
 	if len(ledger.entries) != 1 || ledger.entries[0].Part != "dns" || ledger.entries[0].Refusal != runtime.FailureClassPermission {
 		t.Fatalf("%#v", ledger.entries)
+	}
+}
+
+// The reading names every node attribute target holding funnel, without
+// which no node can publish to the internet; none is an empty list, not an
+// absent one.
+func TestTailnetPolicyNamesEachNodeHoldingFunnel(t *testing.T) {
+	for name, tc := range map[string]struct {
+		attrs string
+		want  []string
+	}{
+		"granted": {`[{"target": ["tag:web", "autogroup:member"], "attr": ["funnel", "mullvad"]}, {"target": ["tag:db"], "attr": ["mullvad"]}]`, []string{"autogroup:member", "tag:web"}},
+		"none":    {`[{"target": ["tag:db"], "attr": ["mullvad"]}]`, []string{}},
+		"absent":  {`[]`, []string{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			api := newTailnetAPI(t, map[string]tailnetAnswer{
+				"GET /tailnet/-/acl": {body: `{"nodeAttrs": ` + tc.attrs + `, "grants": [{"src": ["*"], "dst": ["*"], "ip": ["*"]}]}`},
+			})
+			ctx, _ := withLedger()
+			records, err := tailnetRegistry(t, api).tailnetPolicyInventory(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			record := records[0].(TailscalePolicyRecord)
+			raw, _ := json.Marshal(record)
+			var said struct {
+				Funnel []string `json:"funnel"`
+			}
+			if json.Unmarshal(raw, &said) != nil || said.Funnel == nil || !reflect.DeepEqual(said.Funnel, tc.want) {
+				t.Fatalf("funnel %s, want %v", raw, tc.want)
+			}
+		})
 	}
 }
 

@@ -8,7 +8,7 @@ from typing import Any
 from django.utils import timezone
 lazy from django.db.models import Max, Q
 
-from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND
+from hq.domains.control_plane.observations.host import RENDER_STATUS_KIND, UNIT_KIND, unescaped
 lazy from hq.domains.jobs.models import Job as JobRow
 
 from ..drawings import Dot, Dots
@@ -28,12 +28,15 @@ class WorkUnit:
     """One unit HQ ships, as its own work: what it runs, when and how it last
     ran, and when it runs next."""
 
+    # The unit's name as systemd addresses it, escapes and all.
     unit: str
     runs: str
     last_run: datetime | None
     result: str
     tone: str
     next_run: datetime | None = None
+    # The unit's name as a person reads it: ``unit`` with its escapes decoded.
+    name: str = ""
     # Whether ``runs`` is a unit's name, an identifier, rather than words.
     runs_unit: bool = False
     # What the unit is, in its unit file's words; "" when systemd gave none.
@@ -120,7 +123,7 @@ def _unread(snapshot: Any, noun: str) -> str:
         return f"The controller on HQ's machine is not given {noun} to read."
     if not snapshot.reachable:
         reason = f": {snapshot.error}" if snapshot.error else "."
-        return f"The controller could not read {noun}{reason}"
+        return f"HQ could not read {noun}{reason}"
     if snapshot.error and not snapshot.records:
         return f"The controller's answer about {noun} could not be understood."
     return ""
@@ -141,15 +144,21 @@ def _jobs(snapshot: Any) -> tuple[tuple[WorkUnit, ...], str]:
     return tuple(sorted(jobs, key=lambda job: job.unit)), ""
 
 
-def _runs(unit: str, title: str = "") -> tuple[str, bool]:
-    """What a unit runs, in the words HQ has for it: the scheduled work an
-    instance of the job template names, else its unit file's title, else the
-    unit's own name; and whether it is that name."""
+def _scheduled_label(unit: str) -> str:
+    """The scheduled work an instance of the job template runs, or ""."""
 
     instance = unit.partition("@")[2].rpartition(".")[0]
-    label = next((work.label for work in scheduled_work.SCHEDULED if instance and work.name == instance), "")
-    label = label or title
-    return (label, False) if label else (unit, True)
+    return next((work.label for work in scheduled_work.SCHEDULED if instance and work.name == instance), "")
+
+
+def _runs(unit: str, title: str = "", shown: str = "") -> tuple[str, bool]:
+    """What a unit a trigger starts is, in the words HQ has for it: the
+    scheduled work an instance of the job template names, else its unit file's
+    title unless that repeats the ``shown`` words already beside it, else the
+    unit's own name; and whether it is that name."""
+
+    label = _scheduled_label(unit) or (title if title != shown else "")
+    return (label, False) if label else (unescaped(unit), True)
 
 
 def _scheduled(starter: Any, target: Any) -> WorkUnit:
@@ -157,12 +166,13 @@ def _scheduled(starter: Any, target: Any) -> WorkUnit:
 
     result, tone = _result(starter) if target is None or starter.absent else _result(target)
     runs, runs_unit = (
-        _runs(starter.activates, target.title if target is not None else "")
+        _runs(starter.activates, target.title if target is not None else "", starter.title)
         if starter.activates
         else ("Nothing", False)
     )
     return WorkUnit(
         unit=starter.unit,
+        name=unescaped(starter.unit),
         title=starter.title,
         runs=runs,
         runs_unit=runs_unit,
@@ -174,13 +184,15 @@ def _scheduled(starter: Any, target: Any) -> WorkUnit:
 
 
 def _standing(unit: Any) -> WorkUnit:
+    """A service, mount or other unit that is the work itself: it starts no
+    other unit, so its Runs is empty beyond the scheduled work its name says."""
+
     result, tone = _result(unit)
-    runs, runs_unit = _runs(unit.unit, unit.title)
     return WorkUnit(
         unit=unit.unit,
+        name=unescaped(unit.unit),
         title=unit.title,
-        runs=runs,
-        runs_unit=runs_unit,
+        runs=_scheduled_label(unit.unit),
         last_run=moment(unit.started_at),
         result=result,
         tone=tone,

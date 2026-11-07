@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
+from hq.platform.application.capabilities import capability_words
 from hq.platform.application.tests.markup import links
 
 
@@ -25,7 +26,7 @@ class EmptyListTests(TestCase):
         response = self.client.get(reverse("assets:list"))
 
         self.assertContains(response, "No assets yet.")
-        self.assertTrue(offers(response, "New asset", reverse("assets:create")))
+        self.assertTrue(offers(response, capability_words("asset.create"), reverse("assets:create")))
         self.assertNotContains(response, "Nothing matches.")
 
     def test_a_list_emptied_by_its_search_offers_the_way_back(self):

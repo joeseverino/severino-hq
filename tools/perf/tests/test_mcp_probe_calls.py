@@ -20,11 +20,14 @@ class ProbeCallTests(TestCase):
     def test_each_call_the_probe_makes_of_the_served_list_is_answered(self) -> None:
         # The probe stops with SystemExit on a refused call, naming it.
         with set_principal(mcp_principal()):
-            listed, counted = async_to_sync(answered)(mcp, lambda: None)
+            listed, counted, answers = async_to_sync(answered)(mcp, lambda: None)
 
         self.assertTrue(listed["tools"], LIST)
         for name in (CATALOG, QUEUE):
             self.assertGreater(counted[name], 0, name)
+        # Every listed tool is called and weighed, on this empty database too.
+        self.assertEqual(set(answers), {tool["name"] for tool in listed["tools"]})
+        self.assertTrue(all(weight["bytes"] > 0 for weight in answers.values()))
 
     def test_the_slow_tool_is_a_tool_the_server_runs(self) -> None:
         slow = Slow()

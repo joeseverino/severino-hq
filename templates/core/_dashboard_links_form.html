@@ -12,9 +12,6 @@
       </li>
     {% endfor %}
   </ul>
-  <div class="ext-chooser-actions">
-    <button type="submit" class="btn primary">Save</button>
-    <a class="btn" href="{% url 'dashboard' %}" data-live-cancel>Cancel</a>
-    <span class="ext-chooser-status muted" data-fragment-status role="status"></span>
-  </div>
+  {% url 'dashboard' as dashboard %}
+  {% include "partials/_form_actions.html" with verb="Save" cancel_url=dashboard live=True only %}
 </form>

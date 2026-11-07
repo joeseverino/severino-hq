@@ -475,7 +475,7 @@ func (r *Registry) githubProbe(ctx context.Context, ref string) (ProbeResult, er
 	}
 	public, err := os.ReadFile(path)
 	if err != nil {
-		return ProbeResult{}, &ProviderError{Message: "no signing key was rendered for " + c.ref, Err: err}
+		return ProbeResult{}, &ProviderError{Message: "no signing key was written for " + c.ref, Err: err}
 	}
 	fingerprint, err := sshKeyFingerprint(string(public))
 	if err != nil {

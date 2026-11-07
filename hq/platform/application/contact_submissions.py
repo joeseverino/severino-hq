@@ -133,7 +133,7 @@ def _change(current: inbox.Inbox, change: dict[str, Any]) -> dict[str, Any]:
     else:
         reviews.append(change)
     if len(reviews) > CONTACT_CHANGES_LIMIT or len(deletions) > CONTACT_CHANGES_LIMIT:
-        raise PolicyError("Too many changes are waiting for the controller. Try again once it has run.")
+        raise PolicyError("Too many changes are waiting to be applied. Try again once HQ has applied them.")
     return {
         "connection_ref": database.connection_ref,
         "account_id": database.account_id,

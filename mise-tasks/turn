@@ -1,7 +1,7 @@
 #!/bin/sh
 #MISE description="A command in the machine's heavy turn, for a task that weighs its run before it starts: mise run turn -- <command>"
 #MISE hide=true
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="{{ env.HQ_TURN_BOUND | default(value='30m') }}"
 #MISE output="interleave"
 #MISE quiet=true

@@ -8,37 +8,24 @@ them in two tags:
 is given. Under the thing's own name a problem does not say where it came
 from, and its title is not a link back to the page it is on.
 
-Only an urgent problem is framed: the queue's own row, in a box above the
-page. Anything less is a line: how urgent, what is wrong, what it means and
-what can be pressed, with its steps under it when it has any. A page made of
-parts draws a part's lines in that part's card, as `rest`:
+Each is the queue's own row (`_work_queue.html`); an urgent one is in a box
+above the page. The page's
+other problems share a card under that box; a page made of parts draws a
+part's problems in that part's card, as `rest`:
 
-    {% include "partials/_problems.html#lines" with rest=part_problems %}
+    {% include "partials/_problems.html#rest" with rest=part_problems %}
 
 Nothing is drawn when nothing is open.
 {% endcomment %}
-{% partialdef lines %}
-{% if rest %}
-<ul class="problem-lines">
-  {% for entry in rest %}{% with item=entry|decision %}
-  <li class="problem-line">
-    {% include "partials/_urgency_pill.html" with item=item only %}
-    <p>
-      <strong>{{ item.label|breakable }}</strong>{% if item.detail %} {{ item.detail|breakable }}{% endif %}{% if item.advice %} <span class="muted">{{ item.advice|breakable }}</span>{% endif %}{% if item.reason %} <span class="muted">{{ item.reason|breakable }}</span>{% endif %}
-    </p>
-    {% remedies item.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}
-    {% include "partials/_resolution_workflow.html" with steps=item.steps fold=item.steps_fold label=item.label only %}
-  </li>
-  {% endwith %}{% endfor %}
-</ul>
-{% endif %}
-{% endpartialdef %}
+{% partialdef rest %}{% if rest %}{% include "partials/_work_queue.html" with items=rest grouped=True here=True only %}{% endif %}{% endpartialdef %}
 {% with urgent=problems|urgent rest=problems|not_urgent %}
 {% if urgent %}
-{% card css="problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
+{% card css="problems problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
   <h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
   {% include "partials/_work_queue.html" with items=urgent grouped=True here=True only %}
 {% endcard %}
 {% endif %}
-{% partial lines %}
+{% if rest %}
+{% card css="problems" label=rest|length|counted:"open problem,open problems" %}{% partial rest %}{% endcard %}
+{% endif %}
 {% endwith %}

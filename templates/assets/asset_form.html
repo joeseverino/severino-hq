@@ -1,13 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<form method="post" class="form">
-  {% write_token %}
-  {% include "partials/_form_errors.html" %}
-  {{ form }}
-  <p class="muted">Deductible estimate = cost × business use. Updated when you save.</p>
-  <div class="form-actions">
-    <button type="submit" class="primary">{% if object %}Save changes{% else %}Save asset{% endif %}</button>
-    <a class="btn" href="{% if object %}{{ object.get_absolute_url }}{% else %}{% url 'assets:list' %}{% endif %}">Cancel</a>
-  </div>
-</form>
+{% card css="form-card" %}
+{% include "partials/_form.html" with verb=form_verb cancel_url=cancel_url note="Deductible estimate = cost × business use. Updated when you save." %}
+{% endcard %}
 {% endblock %}

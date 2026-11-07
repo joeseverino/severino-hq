@@ -36,7 +36,16 @@ type WebRunner struct {
 	StartPeriod time.Duration
 	// SealPublic is where a controller pass writes the public sealing key
 	// (SealPublicKey on a host), given to HQ when it is there.
-	SealPublic     string
+	SealPublic string
+	// TailscaledUnit is the link systemd keeps for an enabled tailscaled
+	// (TailscaledEnabledUnit on a host): the durable sign that this host has
+	// a tailnet, whether or not the daemon is up at this moment. On such a
+	// host HQ is always given TailscaleRun, so a daemon that is away makes
+	// a call wait rather than run unplaced.
+	TailscaledUnit string
+	// TailscaleRun is the daemon's runtime directory (TailscaleRunDir on a
+	// host), given to HQ on a host with a tailnet.
+	TailscaleRun   string
 	Stdout, Stderr io.Writer
 	Log            *slog.Logger
 }
@@ -68,6 +77,9 @@ func (r *WebRunner) Run(ctx context.Context) error {
 	web := Web{Image: image, StartPeriod: r.StartPeriod}
 	if r.sealPublic() {
 		web.SealPublic = r.SealPublic
+	}
+	if r.tailnet() {
+		web.TailscaleRun = r.TailscaleRun
 	}
 	container := r.Docker(context.WithoutCancel(ctx), web.Args()...)
 	container.Stdout, container.Stderr = r.Stdout, r.Stderr
@@ -136,6 +148,17 @@ func (r *WebRunner) sealPublic() bool {
 	}
 	info, err := os.Lstat(r.SealPublic)
 	return err == nil && info.Mode().IsRegular()
+}
+
+// tailnet is whether this host has one: tailscaled is enabled here. Read
+// from the unit's link rather than the socket, which is gone while the
+// daemon restarts; on a host with a tailnet HQ must never run unplaced.
+func (r *WebRunner) tailnet() bool {
+	if r.TailscaledUnit == "" || r.TailscaleRun == "" {
+		return false
+	}
+	_, err := os.Lstat(r.TailscaledUnit)
+	return err == nil
 }
 
 func (r *WebRunner) image() (string, error) {

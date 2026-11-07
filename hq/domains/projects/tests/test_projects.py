@@ -12,8 +12,11 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.plugin_testing import ComposedPluginTestCase, sibling
 from hq.platform.application.plugins import NavigationItem
+from hq.platform.application.projection import projection_scope
 from hq.platform.application.projects import hq_sections, refresh_summary
-from hq.platform.application.tests.markup import elements, links, select, text, texts
+from hq.platform.application.tests.markup import elements, hrefs, links, select, text, texts, with_class
+from hq.platform.application.tests.test_relationships import estate
+from hq.platform.application.where_it_runs import where_it_runs
 
 
 def _document(doc_id, title, doc_type="runbook", status="active"):
@@ -83,15 +86,45 @@ class ProjectPageTests(TestCase):
         # The dot between who was paid and for what is drawn, never read.
         self.assertIn(("Example Host Hosting", expense.get_absolute_url()), links(response))
 
-    def test_the_description_is_the_heads_own_line_and_not_a_section(self):
+    def test_the_description_is_the_heads_lede_and_its_facts_a_line_of_their_own(self):
         self.project.description = "One place for every example."
         self.project.save()
 
         response = self.page()
 
-        (description,) = select(response, "data-project-description")
-        self.assertIn("page-lede", {cls for ancestor in description.ancestors for cls in ancestor.classes})
+        self.assertEqual(text(response.context["page"].lede), "One place for every example.")
+        # The lede is prose at the reading measure; the facts take the head's width.
+        self.assertNotIn("One place", text(response.context["page_facts"]))
+        self.assertIn("Edited", text(response.context["page_facts"]))
         self.assertNotIn("Description", [heading.words for heading in elements(response, "h2")])
+
+    def test_the_head_says_where_it_runs_and_names_each_place_once(self):
+        estate(1)
+        self.project.public_url = "https://s0.example.com/"
+        self.project.save()
+        with projection_scope():
+            runs = where_it_runs(self.project.public_url)
+
+        response = self.page()
+        head = response.context["page_facts"]
+
+        self.assertIn((runs.machine.label, runs.machine.url), links(head))
+        self.assertIn(("Service page", runs.service.url), links(head))
+        self.assertIn("https://s0.example.com/", hrefs(head))
+        # Said once on the whole page: the head is where it is said.
+        page = response.content.decode()
+        self.assertEqual(hrefs(page).count(runs.service.url), 1)
+        self.assertEqual(hrefs(page).count(runs.machine.url), 1)
+        self.assertEqual(text(page).count("s0.example.com"), 1)
+
+    def test_an_address_no_service_answers_at_is_only_the_address(self):
+        self.project.public_url = "https://elsewhere.example.org/"
+        self.project.save()
+
+        head = self.page().context["page_facts"]
+
+        self.assertEqual([href for href in hrefs(head) if href.startswith("/infrastructure/")], [])
+        self.assertIn("https://elsewhere.example.org/", hrefs(head))
 
     def test_a_project_with_nothing_linked_draws_no_related_card(self):
         self.assertEqual(self.page().context["related"], ())
@@ -105,6 +138,16 @@ class ProjectPageTests(TestCase):
         self.assertContains(response, 'href="https://github.com/example/tool"')
         self.assertIn(("github.com/example/tool", "https://github.com/example/tool"), links(response))
         self.assertContains(response, "Edited ")
+
+
+class ProjectFormTests(TestCase):
+    def test_the_edit_form_names_each_address_as_a_url(self):
+        self.client.force_login(get_user_model().objects.create_user("project-editor", is_superuser=True))
+        project = Project.objects.create(name="Example Tool", slug="example-tool")
+
+        labels = texts(self.client.get(reverse("projects:edit", args=[project.slug])), "label")
+
+        self.assertLessEqual({"Repository URL", "Public URL"}, set(labels), labels)
 
 
 class ProjectSectionTests(ComposedPluginTestCase, TestCase):
@@ -150,6 +193,25 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
 
         self.assertEqual((link.label, link.url), ("Example Alpha", built.get_absolute_url()))
         self.assertIsNone(built_from("example.missing"))
+
+    def test_the_page_frame_says_what_a_page_is_built_from(self):
+        from django.template.loader import render_to_string
+
+        from hq.platform.application.pages import Page
+        from hq_sdk.pages import built_from
+
+        built = Project.objects.create(
+            name="Example Alpha", slug="example-alpha", repository_url="https://github.com/example/example-alpha"
+        )
+
+        named = render_to_string("page.html", {"page": Page("Alpha"), "built_from": built_from("example.alpha")})
+        unnamed = render_to_string("page.html", {"page": Page("Alpha"), "built_from": built_from("example.missing")})
+
+        (line,) = with_class(named, "page-foot")
+        self.assertTrue(line.words.startswith("Built from"))
+        self.assertIn(("Example Alpha", built.get_absolute_url()), links(named))
+        self.assertEqual(with_class(unnamed, "page-foot"), [])
+        self.assertNotIn("Built from", text(unnamed))
 
 
 class ProjectListTests(TestCase):

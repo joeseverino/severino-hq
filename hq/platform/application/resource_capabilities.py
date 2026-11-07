@@ -6,9 +6,10 @@ the resource list read this instead of testing kinds.
 """
 
 import shlex
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from typing import NamedTuple
 
 lazy from django.conf import settings
 
@@ -19,7 +20,8 @@ from hq.domains.control_plane.providers import (
     resource_home,
 )
 
-from .adoption import OBSERVES_ONLY, observes_only as observes_through
+from .adoption import OBSERVES_ONLY, manages_through, observes_only as observes_through
+from .routes import reverse
 lazy from . import resource_operations
 lazy from .capabilities import capability_words
 lazy from .connections import connection_rows
@@ -47,6 +49,17 @@ class Allowed:
     automatic: bool = False
 
 
+class Offered(NamedTuple):
+    """A declaration's edit and removal links, each blank where it is not offered.
+
+    The one place either link is built, so every page a declaration is shown
+    on (its own, a domain's, a service's, the map's panel) offers the same.
+    """
+
+    edit_url: str = ""
+    remove_url: str = ""
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceCapabilities:
     # Every verb the controller implements for this kind, except delete.
@@ -57,6 +70,7 @@ class ResourceCapabilities:
     observed_at: datetime | None
     unobserved_reason: str
     home: str
+    offered: Offered
     removal_pending: bool = False
 
     @property
@@ -69,6 +83,43 @@ class ResourceCapabilities:
     @property
     def page_actions(self) -> tuple[tuple[str, Allowed], ...]:
         return tuple((verb, self.actions[verb]) for verb in PAGE_VERBS if verb in self.actions)
+
+
+def _offered(resource: ManagedResource, provider, removal: str, *, removal_pending: bool) -> Offered:
+    # With public DNS changes off, nothing that would change what the public
+    # internet sees is offered; forgetting a declaration leaves it live, so stays.
+    held = provider is not None and provider.public_effect and not public_dns_enabled()
+    # A withheld kind's form would print its spec; the domain that owns it changes it.
+    editable = not removal_pending and not held and not (provider is not None and provider.withheld)
+    removable = removal == "forget" or (removal != "unavailable" and not held)
+    return Offered(
+        reverse("control_plane:edit", kwargs={"key": resource.key}) if editable else "",
+        reverse("control_plane:remove", kwargs={"key": resource.key}) if removable else "",
+    )
+
+
+def offered_changes(resources: Iterable[ManagedResource]) -> dict[str, Offered]:
+    """What each declaration offers, by key, in one query however many there are."""
+
+    resources = list(resources)
+    if not resources:
+        return {}
+    pending = removals_pending([resource.pk for resource in resources])
+    manages = manages_through()
+    registry = controller_capability_registry().capabilities
+    offered = {}
+    for resource in resources:
+        provider = PROVIDERS.get(resource.kind)
+        capability = registry.get(resource.kind)
+        removal_pending = resource.key in pending
+        removal, _reason = _removal(
+            provider,
+            dict(capability.actions) if capability else {},
+            removal_pending,
+            observes_through(resource.kind, resource.spec, manages),
+        )
+        offered[resource.key] = _offered(resource, provider, removal, removal_pending=removal_pending)
+    return offered
 
 
 def kind_converges(kind: str) -> bool:
@@ -121,6 +172,7 @@ def resource_capabilities(
         unobserved_reason=provider.unobserved_reason if provider is not None else "",
         home=resource_home(resource),
         removal_pending=removal_pending,
+        offered=_offered(resource, provider, removal, removal_pending=removal_pending),
     )
 
 
@@ -165,7 +217,7 @@ def _removal(provider, policies, removal_pending, observes_only) -> tuple[str, s
     return "unavailable", (
         (provider.removal_gap if provider is not None else "")
         or (delete.reason if delete else "")
-        or "The controller cannot remove this."
+        or "HQ cannot remove this."
     )
 
 

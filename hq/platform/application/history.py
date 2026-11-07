@@ -36,17 +36,17 @@ from hq.domains.control_plane.observations.github import REPOSITORY_KIND
 from hq.domains.control_plane.observations.portainer import RUNTIME_KIND
 lazy from hq.domains.control_plane.models import ReadRequest
 lazy from hq.platform.core.audit import ROUTINE_EVENTS, audited_labels
+lazy from hq.platform.core.audit_words import words_of
 lazy from hq.platform.core.models import AuditLog, object_type_label, object_type_plural
 
 from .entity_links import container_link
 from .facts import inventory_records
 from .labels import lower_first, plural
+from .routes import reverse
 from .timestamps import moment
 from .ui import counted
-lazy from .capabilities import capability_registry, capability_title
 lazy from .glance import AUDIT_LABEL as DASHBOARD_AUDIT_TYPE
 lazy from .inventory import READING_AUDIT_TYPE
-lazy from .security import API_INTERFACE, WEB_INTERFACE
 
 # How far either side of a moment counts as near it.
 NEAR = timedelta(hours=6)
@@ -65,6 +65,10 @@ SHOWN = 5
 # a quarter of an hour holds a slow host's whole start, while starts an hour
 # apart (two deploys, a crash and its restart) stay two events.
 RUN = timedelta(minutes=15)
+
+# The id of the list on an event's page that holds every other row of its
+# operation, which the row counting what a fold leaves out opens.
+OPERATION_LIST = "rest-of-operation"
 
 # Where an entry was recorded, as the audit page filters by it.
 THROUGH_HQ = "hq"
@@ -127,6 +131,12 @@ class Moment:
     @property
     def external(self) -> bool:
         return self.url.startswith("https://")
+
+    @property
+    def page(self) -> str:
+        """The page in HQ the moment is shown on, without the place on it, or nothing."""
+
+        return "" if self.external else self.url.partition("#")[0]
 
 
 @dataclass(frozen=True, slots=True)
@@ -236,6 +246,33 @@ class HistoryLine:
         return bool(self.burst or self.items)
 
     @property
+    def url(self) -> str:
+        """Where the line's title opens, or nothing when it has nowhere to go.
+
+        An event opens its own row's page, else its newest row's, which lists
+        every other row of the operation; the row counting what a fold leaves
+        out opens that list. A moment opens what it names; a run of them the
+        one page all its moments are shown on, when they share one.
+        """
+
+        if self.rest is not None:
+            return self.rest.rest_url
+        if self.burst:
+            pages = {item.page for item in self.burst}
+            return pages.pop() if len(pages) == 1 else ""
+        if self.moment is not None:
+            return self.moment.url
+        return reverse("core:audit_detail", args=[self.page.pk]) if self.events else ""
+
+    @property
+    def rest_url(self) -> str:
+        """The list of everything this line's fold leaves out, or nothing when no page lists it."""
+
+        if self.burst:
+            return self.url
+        return f"{reverse('core:audit_detail', args=[self.page.pk])}#{OPERATION_LIST}"
+
+    @property
     def pk(self) -> int | None:
         """The row's id for selection; an event no one row stands for, or a moment, has none."""
 
@@ -255,7 +292,9 @@ class HistoryLine:
     def lines(self) -> tuple[HistoryLine, ...]:
         """This line, then a line of each item beneath it, and one counting the rest."""
 
-        rest = (HistoryLine(self.at, under=self.fold, rest=self),) if self.more else ()
+        # A run whose moments share no page has no list of the rest to open,
+        # so its title's count says how many it holds and no row counts them.
+        rest = (HistoryLine(self.at, under=self.fold, rest=self),) if self.more and self.rest_url else ()
         return (self, *self.shown, *rest)
 
     @property
@@ -277,7 +316,7 @@ class HistoryLine:
         if head is not None:
             return head.object_repr or head.type_label, ""
         newest = self.events[0]
-        named = operation_title(str((newest.metadata or {}).get("operation") or ""), newest.interface)
+        named = words_of(newest).title
         if named:
             return named, ""
         # Nothing declared its words, so the event is named by what it changed.
@@ -293,6 +332,23 @@ class HistoryLine:
         """Whoever started it: the actor of its first row."""
 
         return self.events[-1].actor_label
+
+    @property
+    def approved_by(self) -> str:
+        """Who allowed it, when someone other than its actor did (``metadata.approved_by``)."""
+
+        for event in self.events:
+            approver = str((event.metadata or {}).get("approved_by") or "")
+            if approver:
+                return "" if approver == self.actor else approver
+        return ""
+
+    @property
+    def who(self) -> str:
+        """Its actor, and who decided it where that was someone else: "claude-code, approved by joe"."""
+
+        approver = self.approved_by
+        return f"{self.actor}, approved by {approver}" if approver else self.actor
 
     @property
     def action(self) -> str:
@@ -321,20 +377,6 @@ class HistoryLine:
             else counted(count, "event")
             for kind, count in self.counts
         )
-
-
-def operation_title(operation: str, interface: str) -> str:
-    """What a person calls ``operation``, in the words of whatever declared it,
-    or nothing when nothing did.
-
-    A capability declares its title. A request through the web or the API is
-    named by its route, which is a name for code and declares no words, so a
-    request is told by what it changed instead.
-    """
-
-    if not operation or (interface in {WEB_INTERFACE, API_INTERFACE} and operation not in capability_registry()):
-        return ""
-    return capability_title(operation)
 
 
 def moments(*, since: datetime, until: datetime | None = None, limit: int = 200) -> tuple[Moment, ...]:

@@ -38,6 +38,20 @@ class ShowcaseReadTests(TestCase):
             answered = [path for path in reads if self.client.get(path, **headers).status_code == 200]
 
         self.assertIn("/api/v2/resources/hq/", answered)
+        # And a record of each listed resource by its identifier, so a record's
+        # example is a set-up HQ's, never a test's bare rows.
+        with _serving(), host_only():
+            index = self.client.get("/api/v2/resources/", **headers).json()["data"]["resources"]
+            for spec in index:
+                found = (spec["operations"].get("get") or {}).get("identifier")
+                listed = f"/api/v2/resources/{spec['name']}/"
+                if not found or not spec["permitted"] or listed not in answered:
+                    continue
+                items = self.client.get(listed, **headers).json()["data"]["items"]
+                if items:
+                    with self.subTest(resource=spec["name"]):
+                        detail = self.client.get(f"{listed}{items[0][found]}/", **headers)
+                        self.assertEqual(detail.status_code, 200)
         if os.environ.get("HQ_API_RECORD_EXAMPLES") == "1":
             # This run writes the examples the assertion below reads.
             return

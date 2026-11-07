@@ -7,6 +7,7 @@ to use it is in docs/Development.md, under "Browser layout".
 """
 
 import functools
+import importlib
 import inspect
 import json
 import os
@@ -34,7 +35,8 @@ from hq.platform.core import append_only, seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.test_runner import stall_watch
 from hq.platform.core.tests import task
-from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, navigation
+from hq.platform.core.tests.browser import probes
+from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.reference import (
@@ -91,6 +93,9 @@ REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
 # What the console errors, uncaught errors and policy refusals a page had are
 # reported as: judged as a rule's findings are, so only a new one fails against a base.
 _ERRORS = "the error check"
+# A probe's source, as a module of probes/ holds it: a function, its one
+# argument a selector or a list of them.
+_A_PROBE = re.compile(r"\s*(?:async\s*)?\(")
 # A run's verdict when a file changed while it ran.
 TREE_CHANGED = "the tree changed while dev:look ran; its shots and verdict mix two trees"
 
@@ -126,9 +131,6 @@ _ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => re
 _FOLD_TOGGLES = "main button[data-fold-toggle]"
 ROW_TOGGLES = "main button[data-row-toggle]:not([data-fold-toggle])"
 _PRESS_SHOWN = "(toggles) => document.querySelectorAll(toggles).forEach((t) => t.checkVisibility() && t.click())"
-# A key that changes nothing, pressed before a batch the look opens, so the
-# browser takes what the batch moves as the reader's own doing (`as_a_reader`).
-_NO_OP_KEY = "Shift"
 # Rounds of opening, each after what the last one brought in has arrived.
 _OPEN_ROUNDS = 10
 # The page's extent once it has held still for three polls running: a shot
@@ -252,6 +254,54 @@ def _script(given: str) -> str:
     if not path.is_file():
         raise AssertionError(f"--eval {given!r} names no file ({path})")
     return path.read_text(encoding="utf-8")
+
+
+def _probe(given: str) -> tuple[str, str]:
+    """``--probe`` as its name and the source it names, ``<module>:<NAME>`` of
+    a probe module (``boxes:ASIDES_WRAPPED_WITH_ROOM``); a name that is none
+    is refused with those its module offers."""
+
+    if not given:
+        return "", ""
+    module, _, name = given.partition(":")
+    folder = Path(probes.__file__).parent
+    modules = sorted(path.stem for path in folder.glob("*.py") if not path.stem.startswith("_"))
+    if module not in modules or not name:
+        raise AssertionError(f"--probe takes <module>:<NAME>, a module of {_shown(folder)}/: {', '.join(modules)}")
+    held = vars(importlib.import_module(f"{probes.__name__}.{module}"))
+    offered = sorted(
+        key for key, value in held.items() if key.isupper() and isinstance(value, str) and _A_PROBE.match(value)
+    )
+    if name not in offered:
+        raise AssertionError(f"--probe {given!r} is no probe of {module}; it offers {', '.join(offered)}")
+    return name, held[name]
+
+
+def _argument(given: str):
+    """``--arg`` as the value it writes in JSON; none is null."""
+
+    if not given:
+        return None
+    try:
+        return json.loads(given)
+    except json.JSONDecodeError as broken:
+        raise AssertionError(f"--arg {given!r} is no JSON ({broken}); a selector is a quoted string") from None
+
+
+def _probed(where: str, width: int, probe: str, outcome) -> str:
+    """What ``--probe`` found on one shot: each finding on a line of its own
+    under the page, the width and the probe, anything else it returns as
+    ``--eval``'s value reads, or what it threw."""
+
+    returned, value = outcome
+    head = f"{where} at {width}, {probe}"
+    if not returned:
+        return f"{head} threw ({(str(value).splitlines() or [''])[0]})"
+    if isinstance(value, list) and all(isinstance(line, str) for line in value):
+        said = [f"{head}: {len(value) or 'nothing'} found", *value]
+    else:
+        said = [f"{head} returned:", *json.dumps(value, indent=2, ensure_ascii=False).splitlines()]
+    return "\n".join([said[0], *(f"  {line}" for line in said[1:])])
 
 
 def _evaluated(page: str, width: int, value) -> str:
@@ -452,7 +502,8 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
     (`LENS`) laid over it as `test --at` lays them, so a base older than a test
     file still looks and both are judged alike. Its environment is this run's, but for a
     database of its own, this run's clock, and the CSS already read and the
-    script's absolute path, since a relative path names this checkout."""
+    script's absolute path, since a relative path names this checkout, and
+    without ``--css``'s sheet."""
 
     checkout = Path(settings.BASE_DIR).resolve()
     try:
@@ -472,7 +523,8 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
             PREFIX + _CLOCK: str(clock_at),
             "SEVERINO_DATABASE_PATH": str(tree.parent / "look.sqlite3"),
             f"{PREFIX}rule": rule,
-            f"{PREFIX}css": _css(_asked().text("css")),
+            # Drawn as its tree draws, so a sheet laid over this side reads as what it fixes and breaks.
+            f"{PREFIX}css": "",
             PREFIX + _SHOTS: str(this_run() / BASE_OUT),
         }
         if script := _asked().text("eval"):
@@ -607,7 +659,7 @@ def _pages(asked: tuple[str, ...]) -> list[str]:
     gate = [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES]
     try:
         with EstatePages(_asked().text("seed")) as records:
-            found = task.pages(asked, navigation(), gate, records)
+            found = task.pages(asked, estate_pages(), gate, records)
     except task.PageRefused as refused:
         raise AssertionError(str(refused)) from None
     return [page if page in gate else estate_name(page) for page in found]
@@ -620,6 +672,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     # Whether the page open is the API reference with its viewer drawn, as
     # ``open`` finds it.
     on_reference = False
+    # Whether the run takes its screenshots, as ``asked_for`` decides.
+    shooting = True
+    # A look's record is its findings and shots; a trace would snapshot the
+    # page at every step of every page the look reads.
+    traced = False
 
     # What the run was asked and the base it is held to, set once by `setUpClass`.
     tree: str
@@ -628,6 +685,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     base: Found | None
     base_measured: Measured
     base_errors: Found
+    # The probe --probe names, its source, and the argument --arg gives it.
+    probe = probe_source = ""
+    probe_arg: object = None
     # Each estate page asked for by its address, the pages followed added.
     addresses: dict[str, str]
     estate_client: Client | None
@@ -649,6 +709,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         cls.asked = _pages(_asked().repeated("pages"))
         if (rule := cls.rule_asked()) and rule not in _rules():
             raise AssertionError(no_rule(rule))
+        cls.probe, cls.probe_source = _probe(_asked().text("probe"))
+        cls.probe_arg = _argument(_asked().text("arg"))
+        if _asked().text("arg") and not cls.probe:
+            raise AssertionError("--arg is what --probe's function takes: name the probe")
         if _asked().text("operation") and not set(cls.asked) & set(REFERENCE_PAGES):
             raise AssertionError(
                 f"--operation opens an operation of the API reference: name {' or '.join(REFERENCE_PAGES)}"
@@ -779,11 +843,15 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if self.on_reference:
             wait_for_reference(self.page)
             draw_whole_reference(self.page)
+        # On every load, so each state shot again from a fresh page (a tag of
+        # the reference opened) draws under it too.
+        if self.css:
+            add_css(self.page, self.css)
+            self.settle()
 
     def test_look(self):
         widths, rule = self.asked_for()
-        # A page's own policy refuses a stylesheet it did not name; `--css` is one.
-        self.start(java_script_enabled=not _asked().switch("no_script"), bypass_csp=bool(self.css))
+        self.start(java_script_enabled=not _asked().switch("no_script"))
         if _asked().switch("dark"):
             self.page.emulate_media(color_scheme="dark")
         self.errors: Found = {}
@@ -817,6 +885,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         unanswered = [f"{name} answered {status}, not 200" for name, status in self.unanswered_pages.items()]
         base = f", the base's in {_shown(this_run() / BASE_OUT)}/" if self.base is not None else ""
         shots = f"Screenshots in {_shown(this_run())}/{base}"
+        if not self.shooting:
+            shots = f"Findings in {_shown(this_run())}/, no screenshots: --shots takes them"
         # Last, as it voids every verdict before it.
         changed = [moved] if (moved := changed_since(self.tree, Path(settings.BASE_DIR))) else []
         print(*printed, *unanswered, shots, *changed, sep="\n", flush=True)
@@ -868,6 +938,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         rule = self.rule_asked()
         self.css = _css(_asked().text("css"))
         self.script = _script(_asked().text("eval"))
+        # A run that judges is read by its findings, and a shot and its bands
+        # cost more than the rule that reads the page, so it shoots only when
+        # asked or when what it was asked reads the shots: a base's are kept
+        # beside this run's, and --eval and --operation name the band that
+        # shows what they point at.
+        asked = _asked()
+        self.shooting = not rule or asked.switch("shots") or any(map(asked.text, ("base", "eval", "operation", _SHOTS)))
         self.dialogs = _listed("dialog")
         unnamed = [dialog for dialog in self.dialogs if not re.fullmatch(r"[\w-]+", dialog)]
         self.assertFalse(unnamed, f"--dialog takes dialog ids (connection) or all, not {unnamed}")
@@ -1071,10 +1148,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         return ""
 
     def draw_as_asked(self, name, width):
-        """The page with ``--css`` added, and ``--open`` and ``--expand`` done."""
+        """The page with ``--open`` and ``--expand`` done; ``open`` laid ``--css`` over it."""
 
-        if self.css:
-            add_css(self.page, self.css)
         if _asked().switch("open"):
             self.open_everything(name, width)
         if _asked().switch("expand"):
@@ -1115,17 +1190,6 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.settle()
         self.as_a_reader(_PRESS_SHOWN, ROW_TOGGLES)
         self.settle()
-
-    def as_a_reader(self, script, arg):
-        """``script`` run as a reader's press: a script's click is no input
-        to the browser, so Chromium would score what the batch pushes down
-        as the page moving by itself. A trusted key first, which changes
-        nothing, lets its rule for the half second after an input excuse
-        the batch, as it excuses each of a reader's taps; a shift that lands
-        later is still the page's."""
-
-        self.page.keyboard.press(_NO_OP_KEY)
-        return self.page.evaluate(script, arg)
 
     def open_everything(self, name, width):
         """Every disclosure open, round after round until none is
@@ -1227,23 +1291,42 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         it, the band where the shot is cut in bands (``take`` says what each
         holds, from the top of ``frame``'s scrolled content, or the page's).
         The page is settled after the script, so the shot draws what it
-        changed. One that throws says so and the look goes on. What ``take``
-        said each file holds."""
+        changed. One that throws says so and the look goes on. ``--probe``
+        reads the page the shot drew. What ``take`` said each file holds; a
+        run that takes no shots (``shooting``) runs only ``--probe``."""
 
-        if not self.script:
-            return take()
         where = f"{name} {shows}" if shows else name
-        threw, returned = self.evaluate_script(where, width)
-        self.settle()
+        if not self.shooting:
+            if self.probe:
+                self.probe_beside(name, width, state, where)
+            return []
+        threw, returned = self.evaluate_script(where, width) if self.script else ("", None)
+        if self.script:
+            self.settle()
         bands = take()
-        boxes = functools.cache(lambda: self.page.evaluate(_RETURNED_BOXES, frame))
-        said = threw or _evaluated(where, width, _placed(returned, boxes, bands))
+        if self.script:
+            boxes = functools.cache(lambda: self.page.evaluate(_RETURNED_BOXES, frame))
+            said = threw or _evaluated(where, width, _placed(returned, boxes, bands))
+            self.keep_beside(name, width, state, "eval", said)
+        if self.probe:
+            self.probe_beside(name, width, state, where)
+        return bands
+
+    def probe_beside(self, name, width, state, where):
+        """``--probe`` run on the page as it stands, and what it said kept beside the shot."""
+
+        [outcome] = self.outcomes([(self.probe_source, self.probe_arg)])
+        self.keep_beside(name, width, state, "probe", _probed(where, width, self.probe, outcome))
+
+    def keep_beside(self, name, width, state, kind, said):
+        """What ``--eval`` or ``--probe`` said of one shot, printed with the
+        base's beside it and kept beside the shot (``.eval.txt``, ``.probe.txt``)."""
+
         shot = _shot(name, width, state)
-        shot.with_name(shot.stem + ".eval.txt").write_text(said + "\n", encoding="utf-8")
-        kind = f"eval {state}" if state else "eval"
+        shot.with_name(f"{shot.stem}.{kind}.txt").write_text(said + "\n", encoding="utf-8")
+        kind = f"{kind} {state}" if state else kind
         self.measured.setdefault((name, width), {})[kind] = said
         print(self.beside_base(name, width, kind, said), flush=True)
-        return bands
 
     def tables(self, name):
         """What each table shows here, printed and kept beside the screenshot

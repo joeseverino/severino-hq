@@ -1,0 +1,7 @@
+{% extends "page.html" %}
+{% block page %}
+{% card id="example-note" heading="example-note-heading" %}
+  {% section_head id="example-note-heading" %}Written{% endsection_head %}
+  <p>{{ note.written_on|day }}</p>
+{% endcard %}
+{% endblock %}

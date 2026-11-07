@@ -21,7 +21,7 @@ from ..calendar_specs import CHOOSE_SOURCE
 from ..capabilities import capability_registry, describe_capabilities, execute_capability
 from ..linked_accounts import bind_sign_in, sign_in_subject
 from ..pins import CHOOSE, MOVE, PIN, SERVICE, ordered
-from ..security import web_principal
+from ..security import agent_subject, web_principal
 from ..tokens import token_principal
 
 AGENT = "example-agent"
@@ -109,7 +109,9 @@ class PersonBoundAgentTests(TestCase):
         self.assertEqual(list(ordered(self.person, SERVICE)), [])
 
     def test_a_held_pin_once_approved_lands_as_its_person(self):
-        CapabilityRule.objects.create(subject=AGENT, capability=PIN, rule=CapabilityRule.Rule.APPROVE)
+        CapabilityRule.objects.create(
+            subject=agent_subject(_signed_in()), capability=PIN, rule=CapabilityRule.Rule.APPROVE
+        )
         approver = get_user_model().objects.create_user("example-approver")
 
         held = _run(PIN, {"kind": SERVICE, "key": ONE}, _signed_in())

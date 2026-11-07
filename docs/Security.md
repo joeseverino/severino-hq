@@ -163,6 +163,11 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   source test over every template; a script a nonced one adds is trusted
   through it. Application JavaScript is external. A regression test rejects
   inline scripts and event handlers before they can weaken the policy.
+- Style elements come only from HQ's own sheets: `style-src-elem` is
+  `'self'`, so a `<style>` injected into a page, whose selectors could read
+  it, draws nothing. `style-src-attr` admits inline attributes only while
+  WebKit reports a violation for every `<select>`; HQ writes none
+  ([Design](Design.md), "No page writes a style").
 - The policy also requires Trusted Types. Assigning a string to `innerHTML`,
   `outerHTML`, `srcdoc` or a script URL throws instead of parsing, so a
   DOM-based XSS sink cannot execute even if one is introduced.
@@ -172,9 +177,11 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
 - The API reference at `/api/docs/` is the one exception. The vendored Scalar
   bundle (`static/vendor/scalar`, version and SHA-256 in `UPSTREAM`, checked by
   a test) renders through `innerHTML`. Its policy is derived from the main one
-  (`SEVERINO_API_REFERENCE_CSP`). It keeps scripts to the nonce and
-  `'strict-dynamic'` with no inline code or `eval`, and fetches nothing
-  off-origin.
+  beside its view (`hq/platform/api/reference.py`). It keeps scripts to the
+  nonce and `'strict-dynamic'` with no inline code or `eval`, and fetches
+  nothing off-origin. It admits inline style elements, with no nonce:
+  the bundle's CodeMirror writes a `<style>` that cannot take one, and the
+  page shows only HQ's own registry.
 - Violations are reported back. The policy carries `report-to` and `report-uri`
   pointing at `/csp-report/`, which records the directive, what was blocked and
   the reporting address to the audit log. A directive is recorded only when
@@ -356,6 +363,17 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   person's role, so an agent acting for a viewer reads and does nothing else.
   A token naming a person who holds no role is refused. The person is recorded
   on the agent (`AgentIdentity.person`), and a change audited.
+- The unit HQ answers for is one client as one person, or a machine's client
+  alone (`security.agent_subject`: the client id and the person's sign-in
+  key). It is the key of the agent's row (`AgentIdentity`, one per client and
+  person), of its rules (`CapabilityRule.subject`), its block, its retry keys
+  (`IdempotencyRecord.actor`), its rate and calls at once, and the held ask
+  it is answered as a repeat of (`requested_person_key`). So one person's
+  "on" never consents for another who signed the same client in, nobody
+  replays another's keyed answer, one person's flood leaves another's
+  allowance whole, and the Agents page shows a row per person
+  (`test_agent_subject.py`). An audit row names the client, so a client's
+  recent activity is the same on each of its rows.
 - The identity provider's grant is the one declaration of what an agent may
   do: each permission is ticked per client on HQ's Pocket ID API resource, and
   HQ keeps no second list of its own. Removing one there fails that client's
@@ -453,9 +471,11 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   public contract in `hq-api.openapi.json`, and reads and changes nothing.
 - Until agents resume, a paused agent's held requests cannot be approved, and
   work it queued is not handed to the controller.
-- A person can block one client from the Agents page (`agent.block.set`,
-  held only by a person, as the pause is). The block is read on that client's
-  every call at both doors, a person's own device included, and fails closed.
+- A person can block one agent from the Agents page (`agent.block.set`,
+  held only by a person, as the pause is): one client as one person, or a
+  machine's client. The block is read on that agent's every call at both
+  doors, a person's own device included, and fails closed; a client one
+  person blocked still runs for another who signed it in.
   On `/api/v2/` it is a 403 `agent_blocked`, and on `/api/mcp/` a tool result
   naming it, so the client stays connected and its first call after it is
   allowed again runs. Who set the block and when is kept on the client's
@@ -463,15 +483,45 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   for, as the pause does: its held requests can be declined but not approved,
   and its queued work is not handed to the controller until the block is
   lifted.
+- A person can remove an agent HQ no longer needs to list, such as a client
+  deleted in the sign-in service (`agent.remove`, held as the block is). Its
+  record, its devices and its own rules go; the audit log and the changes it
+  asked for stay. Removal grants nothing: a client that signs in again is a
+  new agent, its first call from each device waits for approval, and its
+  grant is what its next token carries. A blocked agent is not removed, so
+  only allowing it lifts a block.
 - Every agent call is placed on the tailnet device it came from
   (`agent_devices.place`), and does nothing from a device until that device
   is approved for that client and person. Its properties:
-  - The device is the one at the caller's address in the last tailnet
-    reading, keyed by Tailscale's stable id (the API's `nodeId`, the daemon's
-    `StableID`), never by a name or the node key a re-authentication rotates.
-    The address is the caller as `ForwardedCaller` resolved it: through a
-    proxy HQ does not trust it is the peer that opened the socket, so a
-    forwarded header never moves a call off the device that sent it.
+  - The device is the one tailscaled names for the caller's address, asked
+    per request over the daemon's local API socket
+    (`hq.platform.application.tailscaled`, `GET /localapi/v0/whois?addr=`),
+    keyed by Tailscale's stable id (`Node.StableID`), never by a name or the
+    node key a re-authentication rotates. The answer is the daemon's own
+    netmap at that moment, so no polled reading stands between the WireGuard
+    peer that opened the connection and the device HQ records: the token is
+    bound to a key HQ verifies on every call, which is the sender constraint
+    RFC 9700 section 2.2.1 asks of a resource server whose provider cannot
+    bind the token itself. The address is the caller as `ForwardedCaller`
+    resolved it: through a proxy HQ does not trust it is the peer that opened
+    the socket, so a forwarded header never moves a call off the device that
+    sent it.
+  - Only an agent's admission asks the daemon; a page never does
+    (`test_a_page_never_asks_tailscaled`). The polled tailnet reading keeps
+    its jobs, the inventory and the Agents page's names, and decides nothing
+    about admission.
+  - The socket is `SEVERINO_TAILSCALED_SOCKET`, set by `hq-host run-web` on a
+    host where tailscaled is enabled (the unit's link, read whether or not
+    the daemon is up at that moment), which binds `/var/run/tailscale`
+    read-only at the same path (`controller/host/web.go`): the directory,
+    since the daemon makes its socket anew on every restart.
+    tailscaled answers `whois` to any connection on its socket and keeps the
+    socket world-readable where peer credentials exist, so the image's
+    unprivileged account reads it: at tailscale v1.104.2,
+    `ipn/localapi/localapi.go:557` asks only `PermitRead`,
+    `ipn/ipnserver/server.go:351-352` grants read to every Unix-socket actor
+    and write only to root or the operator, and `safesocket/unixsocket.go:85-87`
+    makes the socket 0666 on such platforms.
   - `agent_access.refusal`, which both doors ask, refuses a device nobody
     approved with `device_awaiting_approval` and a blocked one with
     `device_blocked` (a 403 on `/api/v2/`, a tool result on `/api/mcp/`), and
@@ -495,14 +545,24 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
     is what links their HQ person to the device's tailnet owner, which HQ
     never infers. A machine agent's device is approved by whoever governs
     agents.
-  - Where HQ cannot place a call (an address outside Tailscale's ranges, such
-    as loopback or the LAN, or a deployment with no tailnet reading), the
-    client is the finest unit and the client's rules alone apply. A tailnet
-    address the reading does not hold, or holds without a stable id, is never
-    approved: it is refused `device_awaiting_approval`, whose message says
-    when the next tailnet reading comes and names the command that reads it
-    now (`infrastructure.controller.refresh`). The refusal itself writes
-    nothing, since a GET has no effect.
+  - The deployment has a tailnet when the host named the socket
+    (`tailscaled.socket_path`), never when the socket happens to be there, so
+    a daemon away for a restart makes a call wait as `tailnet_unavailable`
+    rather than run unplaced. Then admission fails closed: a call the daemon
+    holds no device for (HQ's own loopback, the LAN, a tailnet address no
+    peer has) is refused `device_unknown` at both doors, and one the daemon
+    did not answer for is refused `tailnet_unavailable` with the daemon's
+    words and a retry, both stopped where the two doors meet
+    (`agent_admission.admit`) so neither door can admit it as the client
+    alone. A token copied off a device and presented from a process on HQ's
+    host therefore runs nothing, and a fresh database before its first tailnet
+    reading places and holds a device like any other. Each refused address
+    shows on the Agents page under its agent as refused, with nothing to
+    approve. The refusal itself writes nothing past its denial.
+  - Only a deployment with no tailnet (no socket: a developer's machine, a
+    host without Tailscale) places nothing, and there the client is the finest
+    unit and the client's rules alone apply. The Agents page says which of the
+    two the deployment is (`data-placement`), naming the socket path.
   - A person's own client (`OwnDevice`, the `device` interface) needs no
     device approval: its registration is already the person's own act.
   - A device block refuses that client from that device alone, at once, while

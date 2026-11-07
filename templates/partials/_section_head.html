@@ -1,9 +1,19 @@
 {% comment %}
-A section's heading and what sits beside it, drawn by {% section_head %}:
-{% section_head id="..." lede="..." %}heading{% aside %}a count, a link, a control{% endsection_head %}.
-A lede is the line under the heading that says what the section holds.
+A section's heading and what sits beside it: the head of {% section %}
+(partials/_part_section.html), and of {% section_head id="..." lede="..." %}heading{% aside %}a line, a link, a control{% endsection_head %}.
+`level` is the heading's (2 unless given), `count` the bare figure that
+stands in the heading after its words, and a lede the line under the heading
+that says what the section holds. `moment` is the moment the heading names,
+drawn as `{{ moment|when:when }}` draws it: after the heading's words, quieter
+than them, or with none, the heading itself. `toggle` draws it as a folded
+section's summary, whose head is its toggle, and `caption` as a figure's
+caption. The aside is one box of its own, so its parts (a count, a dot, a
+link) wrap as one line of text rather than as items of the head's row; in a
+summary it is a span, as a summary holds only phrasing content.
 {% endcomment %}
-<div class="section-head">
-  {% if lede %}<hgroup><h2{% if id %} id="{{ id }}"{% endif %}>{{ heading|safe }}</h2><p class="section-lede">{{ lede|breakable }}</p></hgroup>{% else %}<h2{% if id %} id="{{ id }}"{% endif %}>{{ heading|safe }}</h2>{% endif %}
-  {{ aside|safe }}
-</div>
+{% with level=level|default:2 %}
+{% if toggle %}<summary class="section-head">{% elif caption %}<figcaption class="section-head">{% else %}<header class="section-head">{% endif %}
+  {% if lede %}<hgroup>{% endif %}<h{{ level }}{% if id %} id="{{ id }}"{% endif %}>{{ heading|safe }}{% if moment %}{% if heading %} <span class="muted">{{ moment|when:when }}</span>{% else %}{{ moment|when:when }}{% endif %}{% endif %}{% if count is not None and count != "" %} <span class="count">{{ count|breakable }}</span>{% endif %}</h{{ level }}>{% if lede %}<p class="section-lede">{{ lede|breakable }}</p></hgroup>{% endif %}
+  {% if aside %}{% if toggle %}<span class="section-aside">{{ aside|safe }}</span>{% else %}<div class="section-aside">{{ aside|safe }}</div>{% endif %}{% endif %}
+{% if toggle %}</summary>{% elif caption %}</figcaption>{% else %}</header>{% endif %}
+{% endwith %}

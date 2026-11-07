@@ -2,7 +2,7 @@
 # The heavy turn for a file task, taken in one line before its work:
 #   . ./tools/lib/heavy-turn.sh
 # Every heavy file task sources it. One whose weight is fixed takes the lock in
-# its own header (#MISE lock="heavy"); one that weighs its own run has a heavy
+# its own header (#MISE lock=["gate", "heavy"]); one that weighs its own run has a heavy
 # run run the task again through `mise run turn`, which holds the lock while
 # it runs. Inside a task that holds the lock, MISE_TASK_LOCKS names it, and the
 # body goes ahead under tools/lib/measured, which ends the run with the line

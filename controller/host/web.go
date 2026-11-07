@@ -19,7 +19,22 @@ type Web struct {
 	// (SealPublicKey), when a controller pass has written it. Without it HQ
 	// holds no sealed secret.
 	SealPublic string
+	// TailscaleRun is tailscaled's runtime directory on the host
+	// (TailscaleRunDir), on a host that has a tailnet. HQ asks the daemon's
+	// socket in it which tailnet device sent each agent call; without it HQ
+	// has no tailnet to place a call on, and says so.
+	TailscaleRun string
 }
+
+// TailscaleRunDir is where tailscaled keeps its local API socket on a Linux
+// host, TailscaledSocket, and where the web container is given it: the same
+// path, so HQ's setting names the socket on both sides. The directory is
+// bound rather than the socket, which the daemon unlinks and makes anew on
+// every restart: a bind of the file would keep the old inode.
+const (
+	TailscaleRunDir  = "/var/run/tailscale"
+	TailscaledSocket = TailscaleRunDir + "/tailscaled.sock"
+)
 
 // Args are the `docker run` arguments, after "docker". The container is
 // removed when it stops and has no restart policy: the unit restarts it, so
@@ -70,6 +85,15 @@ func (w Web) Args() []string {
 		args = append(args,
 			"--mount", readOnly(w.SealPublic, sealPublic),
 			"--env", "SEVERINO_SEAL_PUBLIC_KEY_FILE="+sealPublic,
+		)
+	}
+	if w.TailscaleRun != "" {
+		// Read-only is enough: connecting to a Unix socket needs no write to
+		// its mount, and the daemon answers whois to any local caller while
+		// only a write to it needs root.
+		args = append(args,
+			"--mount", readOnly(w.TailscaleRun, TailscaleRunDir),
+			"--env", "SEVERINO_TAILSCALED_SOCKET="+TailscaledSocket,
 		)
 	}
 	// No certificate authority: HQ reads none. Provider HTTPS on the private

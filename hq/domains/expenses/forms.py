@@ -36,8 +36,3 @@ class ExpenseForm(forms.ModelForm):
             "paid_from": "Paid from",
             "about": "Also for",
         }
-        help_texts = {
-            "business_use_percentage": "0 to 100. Used to estimate the deductible amount.",
-            "paid_from": "The account that paid.",
-            "about": "Anything else HQ has a page for: a machine, a domain, a certificate.",
-        }

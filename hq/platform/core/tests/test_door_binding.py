@@ -6,6 +6,7 @@ door's interface and an id of its own.
 """
 
 import threading
+from dataclasses import replace
 from datetime import timedelta
 from unittest import mock
 
@@ -15,7 +16,7 @@ from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from hq.domains.control_plane import bridge_application
-from hq.domains.control_plane.bridge_actions import ACTIONS, Action
+from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.control_plane.tests import bridge_client
 from hq.domains.jobs.runner import start
 from hq.platform.api.tests.tokens import ISSUER, RESOURCE, _serving, _token
@@ -159,7 +160,7 @@ class BridgeDoorTests(TestCase):
             _example_row("through the bridge")
 
         app = bridge_application.bridge(
-            tuple(Action(action.name, writes if action.name == "registry" else action.run) for action in ACTIONS)
+            tuple(replace(action, run=writes) if action.name == "registry" else action for action in ACTIONS)
         )
 
         answer = bridge_client.request("/registry", app=app)

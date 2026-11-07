@@ -17,7 +17,8 @@ from hq.platform.application.exposure import OPEN
 from hq.platform.application.exposure_fixes import gate_links
 from hq.platform.application.hq_self import LABEL as HQ_LABEL, hq_service
 from hq.platform.application.inventory import inventory_state
-from hq.platform.application.pages import PageAction, PageMixin, page_context
+from hq.platform.application.labels import sentence
+from hq.platform.application.pages import PageAction, PageMixin, PageVisit, page_context
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     resource_capabilities,
@@ -38,7 +39,7 @@ from hq.platform.application.services import alias_target
 from hq.platform.application.ui import PageNavigation, PageSection
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.page_relations import for_service
-lazy from hq.platform.application.pins import MOVE, PIN, SERVICE, ordered
+lazy from hq.platform.application.pins import FAVORITES, MOVE, PIN, SERVICE, ordered
 
 from .models import ManagedResource
 from .names import normalized_hostname
@@ -78,7 +79,7 @@ class ServiceListView(PageMixin, TemplateView):
         pinned = [item for item in found if item.pinned]
         rest = [item for item in found if not item.pinned]
         context["service_groups"] = tuple(
-            group for group in (("Favorites", pinned, True), ("Other services", rest, False)) if group[1]
+            group for group in ((sentence(FAVORITES), pinned, True), ("Other services", rest, False)) if group[1]
         )
         # Both groups are one table, sorted on the page with two rows in all.
         context["service_count"] = len(found)
@@ -226,6 +227,7 @@ class ServiceDetailView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["service"] = self.service
+        context["page_visit"] = PageVisit("service", self.service.hostname)
         context["summary"] = service_summary(self.service)
         context["page_badges"] = service_badges(self.service, own=self.own is not None)
         context.update(page_parts(self.service, self.request))

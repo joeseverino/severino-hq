@@ -48,7 +48,7 @@ from hq.platform.core import strict_json
 from hq.platform.core.network import strict_host
 from hq.platform.core.outside_requests import thread_of_its_own
 from hq.platform.mcp.identity import set_principal
-lazy from hq.platform.application.agent_admission import Throttled, Unadmitted, carrying, challenge
+lazy from hq.platform.application.agent_admission import Stopped, Unadmitted, carrying, challenge
 lazy from hq.platform.application.security import MCP_INTERFACE, Principal, agent_grantable
 lazy from hq.platform.core.audit import audit_operation
 lazy from hq.platform.mcp import listen
@@ -213,7 +213,8 @@ class MCPBoundary:
         """HQ's admission of one bearer. Fails closed: an admission that
         cannot answer is an unauthenticated request."""
 
-        assert self.admit is not None
+        if self.admit is None:
+            return None
         try:
             return await self.admit(bearer, source)
         except Exception as exc:  # noqa: BLE001 - a boundary fails closed
@@ -281,7 +282,7 @@ class _Presented:
         self.outcome = await self._admitted(token, self.source)
         self.token = token
         # A throttled agent's token is good: the rate is answered in the protocol.
-        principal = self.outcome.principal if isinstance(self.outcome, Throttled) else self.outcome
+        principal = self.outcome.principal if isinstance(self.outcome, Stopped) else self.outcome
         if not isinstance(principal, Principal):
             return None
         # No expiry: the admission checked it, with the clock skew the

@@ -308,8 +308,7 @@ def resolve_permissions(lines: Sequence[str], groups: Sequence[Mapping[str, Any]
         raise Refused(f"Malformed permission lines: {', '.join(malformed)}")
     resolved: dict[str, list[str]] = {"account": [], "zone": []}
     missing = []
-    for line, match in asked:
-        assert match
+    for line, match in ((line, match) for line, match in asked if match):
         level = match["level"]
         ids = [
             group.get("id")

@@ -35,7 +35,7 @@ class ContentItem(TimestampedModel):
         blank=True,
         help_text="Comma-separated tags.",
     )
-    published_url = models.URLField(blank=True)
+    published_url = models.URLField("published URL", blank=True)
     published_at = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True)
 

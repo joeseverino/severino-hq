@@ -21,17 +21,21 @@ lazy from hq.domains.control_plane.providers import PROVIDERS
 from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive
 from .command_fields import Describe
 from .default_hold import held_by_default, may_be_held_by_default, needs_approval
-from .labels import dotted, effect_label
+from .doors import interface_label
+from .labels import dotted, effect_label, field_label, lower_first
 from .security import (
     AGENT_SURFACES,
     NEEDS_A_PERSON,
     Principal,
+    agent_subject,
     could_hold,
     is_agent,
     is_interactive,
     person,
+    subject_of,
 )
 lazy from . import capabilities
+lazy from .agent_registry import identity_of
 lazy from .entity_links import kind_label
 lazy from .integrations import integration_graph
 
@@ -70,7 +74,7 @@ def decide(spec, principal: Principal, command, target) -> Decision:
     # allowed what the rest still wait for, and how one is kept off what its
     # grant carries.
     rule = (
-        CapabilityRule.objects.filter(capability=spec.name, subject=principal.actor)
+        CapabilityRule.objects.filter(capability=spec.name, subject=agent_subject(principal))
         .values_list("rule", flat=True)
         .first()
     )
@@ -105,7 +109,7 @@ def set_rule(
     if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
         raise ValueError(f"{spec.title} only reads. It can be allowed or blocked, not held for approval.")
     if rule is not None:
-        identity = AgentIdentity.objects.filter(client_id=subject).first()
+        identity = identity_of(subject).first()
         if identity is None:
             raise ValueError(f"No agent named {subject} has connected yet.")
         if not _held_by_grant(spec, identity.granted):
@@ -266,8 +270,16 @@ def split_by_default(groups: tuple[Group, ...]) -> tuple[tuple[Group, ...], tupl
 
 def columns() -> tuple[Column, ...]:
     return tuple(
-        Column(identity.client_id, identity.client_id, dotted(*identity.interfaces).upper(), identity)
-        for identity in AgentIdentity.objects.all()
+        Column(
+            subject_of(identity.client_id, identity.person_key),
+            identity.client_id,
+            dotted(
+                *(interface_label(interface) for interface in identity.interfaces),
+                *(() if identity.person is None else (f"for {identity.person.get_username()}",)),
+            ),
+            identity,
+        )
+        for identity in AgentIdentity.objects.select_related("person")
     )
 
 
@@ -312,8 +324,7 @@ def _subject_label(subject: str) -> str:
     resource = integration_graph().resources.get(subject)
     if resource is not None:
         return resource.label
-    words = subject.replace(".", " ").replace("_", " ")
-    return words[:1].upper() + words[1:]
+    return field_label(subject)
 
 
 def _default_label(spec) -> str:
@@ -330,7 +341,9 @@ def _default_label(spec) -> str:
 def _approved_types(spec) -> str:
     """The types whose changes through ``spec`` wait for a person, by the names their pages use."""
 
-    names = sorted(kind_label(kind).lower() for kind, provider in PROVIDERS.items() if needs_approval(provider, spec))
+    names = sorted(
+        lower_first(kind_label(kind)) for kind, provider in PROVIDERS.items() if needs_approval(provider, spec)
+    )
     if not names:
         return "types that need approval"
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"

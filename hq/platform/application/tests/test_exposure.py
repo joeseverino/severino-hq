@@ -130,7 +130,7 @@ class ServiceReachTests(TestCase):
         body = self.service("app.example.com")
 
         self.assertIn("Tailnet or home network only", body)
-        self.assertNotIn("Put an access list in front", body)
+        self.assertNotIn("Add an access list", body)
 
     def test_an_open_name_behind_a_declared_proxy_offers_its_access_list(self):
         from hq.domains.control_plane.models import ManagedResource
@@ -149,7 +149,7 @@ class ServiceReachTests(TestCase):
 
         body = self.service("shop.example.com")
 
-        self.assertIn("Put an access list in front of example-shop-proxy", text(body))
+        self.assertIn("Add an access list", text(body))
         self.assertIn("infrastructure.resource.update/?target=example-shop-proxy", body)
 
     def test_it_asks_to_sign_in(self):

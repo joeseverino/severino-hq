@@ -24,6 +24,7 @@ ignores:
   - "hq/platform/application/tests/writers.py"
   - "hq/platform/application/tests/refusal_text.py"
   - "hq/platform/core/tests/django_printers.py"
+  - "hq/platform/core/tests/operation_bindings.py"
   - "hq/platform/core/tests/setting_overrides.py"
 utils:
   walks-a-tree:

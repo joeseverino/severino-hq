@@ -15,6 +15,8 @@ from hq.platform.application.labels import dotted
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+lazy from hq.platform.application.capabilities import capability_title
+lazy from hq.platform.application.security import subject_parts
 
 lazy from .providers import readout_rows, registry_label, resource_home
 
@@ -58,7 +60,7 @@ class ManagedResource(TimestampedModel):
     and does not.
     """
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField("ID", primary_key=True, default=uuid.uuid4, editable=False)
     key = models.SlugField(max_length=180, unique=True)
     kind = models.CharField(max_length=64)
     spec = models.JSONField(default=dict)
@@ -178,7 +180,7 @@ class ProviderInventory(TimestampedModel):
     # able to say how old that moment is: the last read that answered, or none
     # when no read has.
     observed_at = models.DateTimeField(null=True, blank=True)
-    controller_id = models.CharField(max_length=160, blank=True)
+    controller_id = models.CharField("controller ID", max_length=160, blank=True)
 
     class Meta:
         ordering = ("kind",)
@@ -186,7 +188,7 @@ class ProviderInventory(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        return f"{self.kind} ({len(self.records)} records)"
+        return f"{registry_label(self.kind)}, as its provider holds them"
 
 
 class ProviderConnection(TimestampedModel):
@@ -199,7 +201,7 @@ class ProviderConnection(TimestampedModel):
     """
 
     connection_ref = models.CharField(max_length=160)
-    controller_id = models.CharField(max_length=160, blank=True)
+    controller_id = models.CharField("controller ID", max_length=160, blank=True)
     provider = models.CharField(max_length=64, blank=True)
     endpoint = models.CharField(max_length=500, blank=True)
     # What the credential can act on (the machines behind a Portainer, the zones a
@@ -282,7 +284,7 @@ class NotManaged(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        return f"{self.kind} {self.label or self.token}"
+        return f"{registry_label(self.kind)} {self.label or self.token}"
 
 
 class RefusedReport(models.Model):
@@ -297,7 +299,7 @@ class RefusedReport(models.Model):
     """
 
     action = models.CharField(max_length=64)
-    controller_id = models.CharField(max_length=160, blank=True)
+    controller_id = models.CharField("controller ID", max_length=160, blank=True)
     status = models.PositiveSmallIntegerField()
     detail = models.CharField(max_length=500)
     refused_at = models.DateTimeField()
@@ -316,9 +318,13 @@ class RefusedReport(models.Model):
 class DashboardRefreshRequest(TimestampedModel):
     """A credential-free request the controller may claim by panel id."""
 
-    panel_id = models.SlugField(max_length=80, unique=True)
+    panel_id = models.SlugField("panel ID", max_length=80, unique=True)
     requested_at = models.DateTimeField(default=timezone.now)
     completed_at = models.DateTimeField(null=True, blank=True)
+
+    @override
+    def __str__(self) -> str:
+        return f"A fresh reading of the {self.panel_id} panel"
 
 
 class ReadRequest(TimestampedModel):
@@ -344,13 +350,17 @@ class ReadRequest(TimestampedModel):
 class DashboardConfiguration(TimestampedModel):
     """Operator-managed sources for the shared dashboard glance."""
 
-    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    id = models.PositiveSmallIntegerField("ID", primary_key=True, default=1, editable=False)
     infrastructure_label = models.CharField(max_length=40, default="Homelab")
     weather_point = models.CharField(max_length=64, blank=True)
     weather_label = models.CharField(max_length=40, default="Weather")
 
     class Meta:
         constraints = [singleton("dashboard_configuration_is_one_row")]
+
+    @override
+    def __str__(self) -> str:
+        return "Dashboard settings"
 
 
 class DashboardMachine(TimestampedModel):
@@ -366,6 +376,10 @@ class DashboardMachine(TimestampedModel):
     class Meta:
         ordering = ("position", "pk")
 
+    @override
+    def __str__(self) -> str:
+        return f"{self.machine.key} on the dashboard"
+
 
 class WeatherObservation(TimestampedModel):
     """The last explicitly refreshed NWS reading for one configured point."""
@@ -373,6 +387,10 @@ class WeatherObservation(TimestampedModel):
     point = models.CharField(max_length=64, unique=True)
     payload = models.JSONField(default=dict)
     observed_at = models.DateTimeField()
+
+    @override
+    def __str__(self) -> str:
+        return f"The weather at {self.point}"
 
 
 class CertificateMaterial(TimestampedModel):
@@ -401,7 +419,7 @@ class CertificateMaterial(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        return f"material for {self.resource_id}"
+        return f"The certificate for {self.resource.key}"
 
 
 class SealedSecret(models.Model):
@@ -428,7 +446,7 @@ class SealedSecret(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.slot} for {self.resource_id}"
+        return f"A secret for {self.resource.key}"
 
 
 class OperationState(models.TextChoices):
@@ -465,7 +483,7 @@ class OperationRequest(TimestampedModel):
     # Declared above the model so a rule in ``Meta`` can name its values.
     State = OperationState
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField("ID", primary_key=True, default=uuid.uuid4, editable=False)
     resource = models.ForeignKey(ManagedResource, on_delete=models.PROTECT, related_name="operations")
     action = models.CharField(max_length=20, choices=Action.choices)
     state = models.CharField(max_length=20, choices=State.choices, default=State.QUEUED)
@@ -530,7 +548,7 @@ class OperationRequest(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        return f"{self.resource.key}: {self.action} ({self.state})"
+        return f"{self.get_action_display()}: {self.resource.key}"
 
 
 class ApprovalState(models.TextChoices):
@@ -555,7 +573,7 @@ class ApprovalRequest(TimestampedModel):
     # Declared above the model so a rule in ``Meta`` can name its values.
     State = ApprovalState
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.UUIDField("ID", primary_key=True, default=uuid.uuid4, editable=False)
     capability = models.CharField(max_length=64)
     target = models.CharField(max_length=200, blank=True)
     payload = models.JSONField(default=dict, blank=True)
@@ -609,9 +627,17 @@ class ApprovalRequest(TimestampedModel):
             # request fifty times; it does not fill a person's queue with fifty
             # decisions that are all the same decision. The asker is in the key
             # because a request is its asker's: another caller asking the same
-            # change gets its own, approved as itself.
+            # change gets its own, approved as itself, and a client is one asker
+            # per person who signed it in.
             models.UniqueConstraint(
-                fields=("capability", "target", "content_fingerprint", "requested_actor", "requested_interface"),
+                fields=(
+                    "capability",
+                    "target",
+                    "content_fingerprint",
+                    "requested_actor",
+                    "requested_interface",
+                    "requested_person_key",
+                ),
                 condition=models.Q(state="pending"),
                 name="one_pending_approval_per_requested_change",
             ),
@@ -637,7 +663,8 @@ class ApprovalRequest(TimestampedModel):
     @override
     def __str__(self) -> str:
         subject = self.target or self.resource_key
-        return f"{self.capability}{f' on {subject}' if subject else ''} by {self.requested_actor}"
+        # Who asked and who decided are the row's Who, never its title.
+        return f"{capability_title(self.capability)}{f' on {subject}' if subject else ''}"
 
 
 class AddressReading(models.Model):
@@ -663,7 +690,7 @@ class AddressReading(models.Model):
 
 
 class CapabilityRule(models.Model):
-    """An operator's rule for one capability and one agent, named by its client id.
+    """An operator's rule for one capability and one agent, named by its subject.
 
     No row means the default.
     """
@@ -673,7 +700,8 @@ class CapabilityRule(models.Model):
         APPROVE = "approve", "Require approval"
         DENY = "deny", "Deny"
 
-    subject = models.CharField(max_length=160)
+    # An agent subject (``security.agent_subject``): a client id of up to 160 and its person's key.
+    subject = models.CharField(max_length=255)
     capability = models.CharField(max_length=64)
     rule = models.CharField(max_length=16, choices=Rule.choices)
     changed_by = models.ForeignKey(
@@ -691,4 +719,4 @@ class CapabilityRule(models.Model):
 
     @override
     def __str__(self) -> str:
-        return f"{self.subject}:{self.capability}={self.rule}"
+        return f"{self.get_rule_display()} “{capability_title(self.capability)}” for {subject_parts(self.subject)[0]}"

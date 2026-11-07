@@ -62,7 +62,10 @@ golangci-lint run ./...
 echo "==> ignored advisories still do not apply"
 # osv-scanner.toml ignores GO-2026-5932 because no x/crypto/openpgp package is
 # imported by the controller, its tests or its generator.
-if go list -deps -test ./... tool | grep -q '^golang.org/x/crypto/openpgp'; then
+# The tools' own tests are not the controller's, and their test dependencies
+# are not in go.sum. A failed listing stops here rather than reading as none.
+imported=$(go list -deps -test ./...; go list -deps tool)
+if printf '%s\n' "$imported" | grep -q '^golang.org/x/crypto/openpgp'; then
     echo "x/crypto/openpgp is imported; remove GO-2026-5932 from osv-scanner.toml." >&2
     exit 1
 fi

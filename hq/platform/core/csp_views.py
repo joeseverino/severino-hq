@@ -134,12 +134,12 @@ def _csp_violations(payload):
 
     `application/csp-report` sends one violation under a `csp-report` key;
     the Reporting API sends a list of report objects with the violation under
-    `body`. Both are read, because which one arrives depends on the browser
-    and neither is worth losing.
+    `body`, and WebKit sends report-uri one such object alone. All are read,
+    because which one arrives depends on the browser and none is worth losing.
     """
 
     if isinstance(payload, dict):
-        report = payload.get("csp-report")
+        report = payload.get("csp-report", payload.get("body"))
         return [report] if isinstance(report, dict) else []
     if isinstance(payload, list):
         return [item["body"] for item in payload if isinstance(item, dict) and isinstance(item.get("body"), dict)]

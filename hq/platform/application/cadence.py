@@ -21,6 +21,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Exists, F, OuterRef
 from django.utils import timezone
+from pydantic import Field
 
 from hq.domains.control_plane.models import (
     DashboardRefreshRequest,
@@ -59,11 +60,17 @@ class ControllerSweepCommand:
     """
 
     connection_ref: Annotated[
-        str, Names("connections"), Describe("The connection to read now, every type its credential reads.")
+        str,
+        Names("connections"),
+        Field(title="Connection"),
+        Describe("The connection to read now, every type its credential reads."),
     ] = ""
-    kind: Annotated[str, Names("readings"), Describe("The one type of reading to read now, from every connection.")] = (
-        ""
-    )
+    kind: Annotated[
+        str,
+        Names("readings"),
+        Field(title="Type of reading"),
+        Describe("The one type of reading to read now, from every connection."),
+    ] = ""
     every_connection: Annotated[bool, Describe("Read every connection now.")] = False
 
 

@@ -13,7 +13,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, attention, containers, tally
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
 from ..github_estate import Repository
-from .markup import text
+from .markup import elements, text
 
 
 def exposed(level):
@@ -395,6 +395,12 @@ class RefreshTests(TestCase):
         self.assertEqual(sorted(record["image"] for record in stored), sorted(read))
 
 
+def _needs(response) -> list[str]:
+    """Each image the page lists to act on, section by section."""
+
+    return [group["standing"].label for need in response.context["need_sections"] for group in need["groups"]]
+
+
 class PageTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_user("owner", password="unused-password"))
@@ -404,8 +410,7 @@ class PageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:containers"))
 
-        needs = [group["standing"].label for group in response.context["needs"]]
-        self.assertEqual(needs, ["ghcr.io/example/app:v1.2.0", "example/kuma:1"])
+        self.assertEqual(sorted(_needs(response)), ["example/kuma:1", "ghcr.io/example/app:v1.2.0"])
         self.assertContains(response, "GHSA-high")
         tally = response.context["tally"]
         self.assertEqual((tally.pinned, tally.checkable), (2, 1))
@@ -416,13 +421,28 @@ class PageTests(TestCase):
         with exposed(PRIVATE):
             response = self.client.get(reverse("control_plane:containers"))
 
-        needs = [group["standing"].label for group in response.context["needs"]]
-        self.assertNotIn("ghcr.io/example/app:v1.2.0", needs)
+        self.assertNotIn("ghcr.io/example/app:v1.2.0", _needs(response))
         # Still counted where the page says what is known.
         self.assertEqual(response.context["tally"].vulnerable, 1)
         with exposed(OPEN):
             response = self.client.get(reverse("control_plane:containers"))
-        self.assertIn("ghcr.io/example/app:v1.2.0", [group["standing"].label for group in response.context["needs"]])
+        self.assertIn("ghcr.io/example/app:v1.2.0", _needs(response))
+
+    def test_each_reason_to_act_is_a_section_headed_by_it(self):
+        estate(advisories=[HIGH], app_tags=("v1.2.0",))
+
+        with exposed(OPEN):
+            response = self.client.get(reverse("control_plane:containers"))
+
+        held = {}
+        for section in elements(response, "section"):
+            heading = next(h for h in elements(response, "h2") if h.attrs.get("id") == section.attrs["aria-labelledby"])
+            held[heading.words] = [code.words for code in elements(response, "code") if section in code.ancestors]
+        update = next(words for heading, words in held.items() if heading.startswith("Update now"))
+        no_update = next(words for heading, words in held.items() if heading.startswith("No update yet"))
+        self.assertTrue(any("example/kuma" in words for words in update))
+        self.assertTrue(any("example/app" in words for words in no_update))
+        self.assertFalse(any("example/app" in words for words in update))
 
     def test_nothing_is_called_current_before_a_registry_answers(self):
         inventory("portainer.container", [running("web", "example/web:1.0.0")])

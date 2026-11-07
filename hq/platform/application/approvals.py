@@ -9,11 +9,12 @@ and may not do is docs/Security.md#what-hq-enforces.
 
 import hashlib
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from datetime import timedelta
 from difflib import unified_diff
+from functools import wraps
 from typing import Annotated, Any, Final
 
 from django.conf import settings
@@ -32,7 +33,7 @@ from .derivations import holds_until
 from .held_answer import ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .payload_words import ChangeRow, changed_words, document, field_words, value_words
 from .record_errors import PolicyError, RecordNotFound
-from .refusal_status import refuse
+from .refusal_status import refusal_of, refuse
 from .security import (
     INTERNAL_INTERFACE,
     OPERATOR_INTERFACES,
@@ -91,6 +92,14 @@ AUDIT_LABELS = (AUDIT_LABEL, "Infrastructure approval")
 
 class ApprovalError(PolicyError):
     """A decision could not be taken, and this says what a person should know."""
+
+
+class Settled(ApprovalError):
+    """A refusal that first marked the request lapsed or stale (``_settle``).
+
+    A posted decision runs inside its retry key's transaction, which a raise
+    rolls back, mark and audit row with it; ``answered`` returns it instead.
+    """
 
 
 class RefusedHold(ApprovalError):
@@ -160,18 +169,20 @@ def fingerprint(capability: str, target: Any, payload: dict[str, Any], baseline:
 
 
 def _baseline_of(resource: ManagedResource) -> dict[str, Any]:
-    """The declaration as it stands, in the three terms a change moves.
+    """The declaration as it stands, in the three terms a change moves, and the
+    live record as the spec it reproduces, which an apply is compared against.
 
     The generation is in here deliberately. Two declarations can carry the same
     spec with different histories, and an approval of "apply what is declared"
-    is an approval of the revision that was declared when it was asked for.
+    is an approval of the revision that was declared when it was asked for. The
+    live record is its spec alone: every sweep rewrites the rest of what it read.
     """
 
     return {
         "spec": resource.spec,
         "enabled": resource.enabled,
         "generation": resource.generation,
-        "observed": resource.status or {},
+        "observed": (resource.status and record_spec(resource.kind, resource.status)) or {},
     }
 
 
@@ -218,6 +229,12 @@ def _record_subject(spec, target: Any) -> ApprovalSubject | None:
     except UnsupportedResourceOperation, InvalidResourceInput:
         # No canonical read: still holdable, but staleness cannot be detected.
         baseline = {}
+    if baseline and spec.effect != DESTRUCTIVE_EFFECT:
+        # A change shows the fields it sends, as they are now, and the record's
+        # name; the rest of a read (a last push, open pulls) moves with sweeps.
+        read = baseline.get("resource", baseline)
+        sent = {key: baseline[key] for key in capability_fields(spec) if key in baseline}
+        baseline = {"name": item_name(read) if isinstance(read, dict) else "", **sent}
     return ApprovalSubject(kind, str(target), baseline)
 
 
@@ -252,7 +269,9 @@ def hold_for_approval(
         # and creates nothing new.
         return _awaiting(existing, repeated=True)
     outstanding = ApprovalRequest.objects.filter(
-        requested_actor=principal.actor, state=ApprovalRequest.State.PENDING
+        requested_actor=principal.actor,
+        requested_person_key=principal.person_key,
+        state=ApprovalRequest.State.PENDING,
     ).count()
     if outstanding >= MAX_PENDING_PER_ACTOR:
         raise TooManyPendingApprovals(
@@ -308,6 +327,7 @@ def _asked_already(capability: str, target: Any, digest: str, principal: Princip
         content_fingerprint=digest,
         requested_actor=principal.actor,
         requested_interface=principal.interface,
+        requested_person_key=principal.person_key,
         state=ApprovalRequest.State.PENDING,
     ).first()
 
@@ -479,12 +499,12 @@ def _its_operation(
 def _settle(
     held: ApprovalRequest, state: str, note: str, *, operation: str, principal: Principal, rebinds: bool = False
 ) -> None:
-    """Record an outcome nobody chose, in its own transaction.
+    """Record an outcome nobody chose, in a savepoint of its own.
 
-    Its own, because the two callers below go on to raise. Written inside the
-    caller's transaction the mark would be rolled back by the very exception it
-    exists to explain, and the request would be found still pending, which
-    means the next reader is offered a decision that cannot be taken.
+    The two callers below go on to raise ``Settled``, which must not leave the
+    caller's transaction raised: rolled back, the mark the refusal explains is
+    gone and the request is found still pending, offering the next reader a
+    decision that cannot be taken.
     """
 
     with _its_operation(held, operation, principal, rebinds=rebinds), transaction.atomic():
@@ -503,7 +523,7 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
         raise ApprovalError(f"That request is already {held.get_state_display().lower()}.")
     if held.expires_at <= timezone.now():
         _settle(held, ApprovalRequest.State.EXPIRED, _LAPSED_NOTE, operation=LAPSE, principal=principal)
-        raise ApprovalError("That request expired before it was answered. Ask for it again if it is still wanted.")
+        raise Settled("That request expired before it was answered. Ask for it again if it is still wanted.")
     return held
 
 
@@ -559,8 +579,8 @@ def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied
 
     The replay runs under a principal that names whoever asked and who allowed
     it, so the audit trail keeps saying that a token asked and a person agreed.
-    Not one transaction end to end: a lapsed or superseded mark commits on its
-    own (``_settle``) before the refusal, and only the application is atomic.
+    Not one transaction end to end: a lapsed or superseded mark is written
+    before the refusal (``Settled``), and only the application is atomic.
     """
 
     held = _decidable(command.approval_id, principal)
@@ -588,7 +608,7 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
             operation=APPROVE,
             principal=principal,
         )
-        raise ApprovalError(
+        raise Settled(
             "This changed after the agent asked, so approving it would apply "
             "something other than what is shown. Ask the agent to request it again."
         )
@@ -629,6 +649,20 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
             )
         )
     return {"ok": True, "approved": str(locked.id), "result": result}
+
+
+def answered[**P, R](decide: Callable[P, R]) -> Callable[P, R | dict[str, Any]]:
+    """``decide`` as its capability runs: a ``Settled`` refusal is answered, so
+    the transaction it ran in commits the mark."""
+
+    @wraps(decide)
+    def run(*args: P.args, **kwargs: P.kwargs) -> R | dict[str, Any]:
+        try:
+            return decide(*args, **kwargs)
+        except Settled as settled:
+            return refusal_of(settled).answer()
+
+    return run
 
 
 def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:
@@ -754,11 +788,9 @@ def preview(held: ApprovalRequest) -> ChangePreview:
         # A start, stop or restart leaves the declaration as it is: what is
         # approved is the act its sentence names.
         return ChangePreview(label="", rows=(), lines=())
-    observed = held.baseline.get("observed") or {}
-    if isinstance(observed, Mapping) and observed:
-        live = record_spec(held.resource_kind, observed)
-        if live:
-            return compare(live, declared, label="The live record would change")
+    live = held.baseline.get("observed")
+    if isinstance(live, Mapping) and live:
+        return compare(dict(live), declared, label="The live record would change")
     return compare({}, declared, label="Would be applied")
 
 

@@ -12,20 +12,19 @@ anyway, and would go on meaning nothing after it stopped being.
   <table class="data-table">
     <thead>
       <tr>
-        {% table_heading "Machine" "identifier" gutter=True local_sort=machines|sortable %}
-        {% table_heading "Read through" "identifier" drop=3 local_sort=machines|sortable %}
-        {% table_heading "Containers" drop=2 local_sort=machines|sortable %}
-        {% table_heading "Serves" "identifier" drop=1 local_sort=machines|sortable %}
-        {% table_heading "State" "status" css="key-col" local_sort=machines|sortable %}
+        {% table_heading "Machine" "identifier" gutter=True local_sort=True %}
+        {% table_heading "Read through" "identifier" drop=3 local_sort=True %}
+        {% table_heading "Containers" drop=2 local_sort=True %}
+        {% table_heading "Serves" "identifier" drop=1 local_sort=True %}
+        {% table_heading "State" "status" css="key-col" local_sort=True %}
       </tr>
     </thead>
     <tbody>
       {% for machine in machines %}
         <tr>
-          <td class="row-gutter">
+          <td>
             <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} <span class="tag" title="{{ role.detail }}">{{ role.label|breakable }}</span>{% endfor %}
             {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role|breakable }}</span>{% endif %}
-            {% row_toggle %}
           </td>
           <td>
             {% for ref in machine.reached_by %}{% entity "connection"|entity_of:ref code=True %}{% if ref in machine.unanswered %} <span class="muted">not answering</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% empty %}{% empty_value %}{% endfor %}
@@ -48,7 +47,7 @@ anyway, and would go on meaning nothing after it stopped being.
             One state. Presence decides when the tailnet reports the machine;
             the connection that sees it is in "Read through".
             {% endcomment %}
-            <span class="pill pill-{{ machine.state.1 }}">{{ machine.state.0|breakable }}</span>{% if machine.state_since %}<br><span class="muted">since {{ machine.state_since|breakable }}</span>{% endif %}
+            {% status machine.state.0 tone=machine.state.1 %}{% if machine.state_since %}<br><span class="muted">since {{ machine.state_since|breakable }}</span>{% endif %}
           </td>
         </tr>
       {% empty %}

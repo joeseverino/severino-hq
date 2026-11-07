@@ -2,19 +2,11 @@
 Chronological planning horizon. Plugins emit application.ui.TimelineItem values;
 HQ owns the one visual and responsive implementation.
 
-Labeled with aria-label rather than aria-labelledby, matching _kpi_grid.html: a
-partial cannot own a document-unique id. Two timelines on one page (a domain's
-horizon beside the composed one) would both emit id="timeline-title", and a
-screen reader resolves a duplicate id to the first match, so the second section
-would announce the first one's name.
-
 A horizon with nothing on it draws nothing: an empty card that says so is a
 band of page spent on the absence of news.
 {% endcomment %}
 {% if timeline.items %}
-{% card css="timeline" label=timeline.title %}
-  {% section_head lede=timeline.description %}{{ timeline.title|breakable }}{% aside %}<span class="count">{{ timeline.items|length|counted:"event" }}</span>{% endsection_head %}
-  {% if timeline.items %}
+{% section timeline.title lede=timeline.description %}
     <ol class="timeline-list">
       {% for item in timeline.items %}
         <li class="timeline-item timeline-{{ item.status }}">
@@ -23,10 +15,10 @@ band of page spent on the absence of news.
             {% if item.url %}<a href="{{ item.url }}"><strong>{{ item.title|breakable }}</strong></a>{% else %}<strong>{{ item.title|breakable }}</strong>{% endif %}
             {% if item.detail %}<span class="muted">{{ item.detail|breakable }}</span>{% endif %}
           </span>
-          {% if item.badge %}<span class="pill pill-{{ item.status }}">{{ item.badge|breakable }}</span>{% endif %}
+          {% if item.badge %}{% status item.badge tone=item.status %}{% endif %}
         </li>
       {% endfor %}
     </ol>
-  {% endif %}
-{% endcard %}
+{% aside %}<span class="count">{{ timeline.items|length|counted:"event" }}</span>
+{% endsection %}
 {% endif %}

@@ -49,14 +49,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # modules of the apps that stay register with the admin, which is not
 # installed, so they go too. image:verify:django imports what stays and names
 # anything left that HQ does not load.
-RUN cd /install/lib/python*/site-packages/django \
-    && find contrib -mindepth 1 -maxdepth 1 -type d ! -name __pycache__ \
+RUN find /install/lib/python*/site-packages/django/contrib -mindepth 1 -maxdepth 1 \
+        -type d ! -name __pycache__ \
         ! -name auth ! -name contenttypes ! -name messages ! -name sessions \
         ! -name sites ! -name staticfiles -exec rm -rf {} + \
-    && find db/backends -mindepth 1 -maxdepth 1 -type d ! -name __pycache__ \
-        ! -name base ! -name sqlite3 -exec rm -rf {} + \
-    && find contrib -path '*/__pycache__/admin.*.pyc' -delete \
-    && find contrib -name admin.py -delete
+    && find /install/lib/python*/site-packages/django/db/backends -mindepth 1 -maxdepth 1 \
+        -type d ! -name __pycache__ ! -name base ! -name sqlite3 -exec rm -rf {} + \
+    && find /install/lib/python*/site-packages/django/contrib \
+        \( -path '*/__pycache__/admin.*.pyc' -o -name admin.py \) -delete
 # The same for the other packages: the tests and benchmarks they ship; cffi's
 # Python package, which builds bindings, where the bindings HQ runs (argon2's)
 # load only its compiled backend, _cffi_backend; python-multipart's old
@@ -64,9 +64,10 @@ RUN cd /install/lib/python*/site-packages/django \
 # API pydantic itself reaches only for a type defining __get_validators__,
 # which nothing installed defines. image:verify:packages holds each reason and
 # names any top-level module left that HQ does not load.
-RUN cd /install/lib/python*/site-packages \
-    && find . -mindepth 2 -maxdepth 2 -type d \( -name tests -o -name benchmarks \) -exec rm -rf {} + \
-    && rm -rf cffi multipart pydantic/v1 /install/bin/cffi-gen-src
+RUN find /install/lib/python*/site-packages -mindepth 2 -maxdepth 2 -type d \
+        \( -name tests -o -name benchmarks \) -exec rm -rf {} + \
+    && rm -rf /install/lib/python*/site-packages/cffi /install/lib/python*/site-packages/multipart \
+        /install/lib/python*/site-packages/pydantic/v1 /install/bin/cffi-gen-src
 
 
 # The controller, the root secret renderer and the edge receiver, one static

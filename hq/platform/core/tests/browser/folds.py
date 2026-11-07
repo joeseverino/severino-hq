@@ -13,7 +13,7 @@ EVENT = (
     '<tr id="example-event" data-folds><td class="row-gutter">'
     '{% include "partials/_row_fold.html" with label="Example event" only %}<strong>Example event</strong>'
     '</td><td>Nov 1</td><td>example-actor</td><td class="cell-data"><div style="min-width: 320px">{{ message }}</div></td></tr>'
-    '<tr data-folded="example-event"><td class="row-gutter">Example item{% row_toggle %}</td>'
+    '<tr data-folded="example-event"><td>Example item</td>'
     '<td>Nov 1</td><td>example-actor</td><td class="cell-data">Changed</td></tr>'
     "</tbody></table>{% endtable_region %}"
 )

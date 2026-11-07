@@ -50,14 +50,14 @@ def registry_label(kind: str) -> str:
         return provider.label
     if kind in OBSERVATIONS:
         return OBSERVATIONS[kind].label
-    return "Unregistered kind"
+    return "Unknown type"
 
 
 def _registry() -> dict[str, ProviderSpec]:
     registry: dict[str, ProviderSpec] = {}
     for definition in DECLARATIONS:
         if definition.kind in registry:
-            raise ValueError(f"Two provider modules declare {definition.kind!r}.")
+            raise ValueError(f"Two modules name {definition.kind!r}.")
         registry[definition.kind] = definition
     return registry
 
@@ -205,12 +205,12 @@ _unmodeled = sorted(
     - set(CONNECTION_CREDENTIALS)
 )
 if _unmodeled:
-    raise ValueError(f"Connection providers without a credential model: {', '.join(_unmodeled)}.")
+    raise ValueError(f"Connections without a credential model: {', '.join(_unmodeled)}.")
 
 
 if _unattributed := unattributed_kinds(OBSERVATIONS, PROVIDERS.values()):
     raise ValueError(
-        f"Kinds read through a per-connection provider must name connection_ref: {', '.join(_unattributed)}."
+        f"Types read through a connection of their own must name connection_ref: {', '.join(_unattributed)}."
     )
 
 
@@ -225,7 +225,7 @@ def controller_capability_registry() -> ControllerCapabilityRegistry:
 
     missing = sorted(kind for kind, provider in PROVIDERS.items() if not provider.actions)
     if missing:
-        raise ValueError("Every provider must declare what the controller may do to it. Missing: " + ", ".join(missing))
+        raise ValueError("Every connection type must say what HQ may do to it. Missing: " + ", ".join(missing))
     return ControllerCapabilityRegistry(
         schema_version=1,
         capabilities={
@@ -273,10 +273,10 @@ def controller_action_policy(kind: str, action: str) -> tuple[bool, Sentence]:
     capability = controller_capability_registry().capabilities.get(kind)
     policy = capability.actions.get(action) if capability else None
     if not policy:
-        return False, "The controller does not do that to this kind of record."
+        return False, "HQ does not do that to this type of record."
     if policy.mode != "apply":
         return False, policy.why_locked()
-    return True, "The controller can run this action."
+    return True, "HQ can run this action."
 
 
 def describe_providers() -> dict[str, Any]:
@@ -315,7 +315,7 @@ def validate_spec(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     try:
         provider = PROVIDERS[kind]
     except KeyError as exc:
-        raise ValueError(f"Unknown infrastructure resource kind {kind!r}.") from exc
+        raise ValueError(f"Unknown record type {kind!r}.") from exc
     validated = provider.validate(payload)
     dumped: dict[str, Any] = adapter(provider.spec_type).dump_python(validated, mode="json")
     return dumped

@@ -245,7 +245,7 @@ func (r *Registry) applyTLSReconcile(ctx context.Context, spec TLSCertificateSpe
 	}
 	caddy, ok := rollbackSource(spec)
 	if !ok {
-		return Result{}, &ProviderError{Message: "certificate reconciliation requires a rollback source"}
+		return Result{}, &ProviderError{Message: "applying the certificate again requires a rollback source"}
 	}
 	plan, err := r.planDeployment(ctx, spec)
 	if err != nil {
@@ -390,7 +390,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 	}
 	slices.Sort(elsewhere)
 	if len(elsewhere) > 0 {
-		return Result{}, &ProviderError{Message: "HQ can only remove this from Nginx Proxy Manager; take it off " + strings.Join(elsewhere, ", ") + " by hand first, then remove those targets from this resource"}
+		return Result{}, &ProviderError{Message: "HQ can only remove this from Nginx Proxy Manager; take it off " + strings.Join(elsewhere, ", ") + " by hand first, then remove those targets from this certificate"}
 	}
 	base, headers, err := r.npmSession(ctx, "")
 	if err != nil {

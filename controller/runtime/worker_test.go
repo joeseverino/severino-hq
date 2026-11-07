@@ -341,6 +341,47 @@ func TestWrappedProviderFailureIsReportedWithItsContext(t *testing.T) {
 		}
 	}
 }
+
+// An operation stopped for an allowance spent is reported to HQ as not
+// applied, in the provider's words, and stops the queue; the pass still
+// exits 0, since nothing failed. Any other refusal fails the pass.
+func TestAStopForAnAllowanceSpentDoesNotFailThePass(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err  error
+		code int
+	}{
+		"the controller's budget": {&ProviderError{Message: "the sweep's budget is spent, the last reading stands", Limited: true}, 0},
+		"wrapped":                 {fmt.Errorf("reconcile rewrite: %w", &ProviderError{Message: "rate limited until 17:47 UTC", Limited: true}), 0},
+		"a refusal":               {&ProviderError{Message: "provider answered 403", Failure: FailureClassPermission, HTTPStatus: 403}, 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			w, b, p := newWorker()
+			var out strings.Builder
+			w.Output = &out
+			b.Pending = []Pending{pending("first"), pending("second")}
+			p.ExecErr = tc.err
+
+			code, err := w.Run(t.Context(), true)
+
+			if err != nil || code != tc.code || len(p.Apply) != 1 {
+				t.Fatalf("exit %d (want %d), %v, applied %d", code, tc.code, err, len(p.Apply))
+			}
+			reports := 0
+			for _, call := range b.Calls {
+				if report, ok := call.Payload.(ControllerReport); ok && call.Action == "report" {
+					reports++
+					if report.Success || report.Message != tc.err.Error() {
+						t.Fatalf("HQ is told the operation did not apply, and why: %#v", report)
+					}
+				}
+			}
+			var line map[string]any
+			if reports != 1 || json.Unmarshal([]byte(out.String()), &line) != nil || line["ok"] != false || line["operation"] != "first" {
+				t.Fatalf("reports %d, printed %q", reports, out.String())
+			}
+		})
+	}
+}
 func TestFailedReportDoesNotPreventSweepOrBecomeSuccess(t *testing.T) {
 	w, b, _ := newWorker()
 	b.Pending = []Pending{pending("first")}
@@ -463,8 +504,8 @@ func TestMaterialIsOpenedForTheActionThatNeedsIt(t *testing.T) {
 	w, _, p, v := sealedPending(t)
 	w.Opener = vectorOpener(t)
 
-	if _, success, err := w.applyOne(t.Context()); err != nil || !success {
-		t.Fatalf("%v %v", success, err)
+	if _, refusal, err := w.applyOne(t.Context()); err != nil || refusal != nil {
+		t.Fatalf("%v %v", refusal, err)
 	}
 	opened, ok := p.Executed[0].Spec["material"].(OpenedMaterial)
 	if !ok || opened.Secrets[v.Slot] != v.Plaintext || opened.Fullchain != "example chain" || !slices.Equal(opened.Domains, []string{"a.example"}) {

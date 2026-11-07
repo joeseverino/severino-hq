@@ -223,7 +223,7 @@ func TestRenewalDeploysVerifiesAndRollsBack(t *testing.T) {
 		_ = os.RemoveAll(filepath.Join(env.ACMEDir, "config"))
 		h2.dialer.phases = []map[string]fakeServe{{"edge.example|a.example": {Cert: "old"}}}
 		_, err = h2.r.runAction(verified(t.Context()), runtime.ResourceKindTLSCertificate, "renew", spec, nil, true)
-		want := "certificate deployment failed, rollback succeeded: 1 of 1 TLS consumers did not activate the certificate within 30s: edge still serves the previous certificate at a.example"
+		want := "certificate deployment failed, rollback succeeded: 1 of 1 services did not start serving the certificate within 30s: edge still serves the previous certificate at a.example"
 		if err == nil || err.Error() != want {
 			t.Fatalf("rollback: %v", err)
 		}

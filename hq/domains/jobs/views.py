@@ -40,7 +40,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
         TableColumn("Job"),
         TableColumn("State", css="key-col", kind="status"),
         TableColumn("Started", "created_at", css="date-col"),
-        TableColumn("Duration", css="num-col"),
+        TableColumn("Duration", kind="numeric"),
         TableColumn("Result"),
         TableColumn("Requested by"),
     )

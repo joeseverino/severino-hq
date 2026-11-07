@@ -5,5 +5,5 @@ state column says it once for the connection.
 {% endcomment %}
 <li class="cell-part{% if not state.available %} is-unavailable{% endif %}"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
   <span>{{ state.ability.label|breakable }}</span>
-  {% if not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label|breakable }}</small>{% endif %}
+  {% if not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label|breakable }}</small>{% endif %}
 </li>

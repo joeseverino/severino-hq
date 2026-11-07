@@ -2,9 +2,12 @@
 
 from functools import cached_property
 from typing import override
+from urllib.parse import urlencode
 lazy from datetime import date, datetime, time, timedelta
 
+from django.core.exceptions import ValidationError
 from django.core.paginator import Page, Paginator
+from django.db.models import BooleanField, ExpressionWrapper, F, Q
 from django.urls import reverse, reverse_lazy
 from django.views.generic import DetailView, ListView
 lazy from django.utils import timezone
@@ -13,8 +16,9 @@ from hq.platform.application import approvals, history
 from hq.platform.application.doors import door_words
 from hq.platform.application.labels import dotted
 from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.payload_words import STEP, path_words, value_words
+from hq.platform.application.payload_words import path_words, value_words
 from hq.platform.application.projection import day_span, projection_scope
+from hq.platform.application.record_timeline import record_timeline
 from hq.platform.application.security import Capability
 from hq.platform.application.tables import (
     TableColumn,
@@ -25,12 +29,16 @@ from hq.platform.application.tables import (
 )
 lazy from hq.platform.application.approvals import AUDIT_LABELS, awaiting_ids
 
+from .audit import audited_labels, audited_subjects, subject_of
+from .audit_words import change_rows, words_of
 from .models import AuditLog
 
 # The toggles that bring the asks for a fresh reading, and the work HQ did on
 # its own that changed nothing, back into the log.
 READS = "reads"
 ROUTINE = "routine"
+# ``?about=<key>``: the log narrowed to every row about one record.
+ABOUT = "about"
 # How many of the rest of an operation an event's page lists at a time.
 OPERATION_PAGE = 50
 
@@ -75,7 +83,9 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         # The way to what waits is offered while something does, and on its
         # own view so there is a way back.
         actions: list[PageAction] = []
-        if waiting or awaiting:
+        if self._about():
+            actions.append(PageAction("All events", listing))
+        elif waiting or awaiting:
             actions.append(PageAction("All events", listing, primary=not awaiting))
             actions.append(
                 PageAction(
@@ -89,6 +99,11 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
         return tuple(actions)
 
     @override
+    def get_page_lede(self) -> str:
+        about = self._about()
+        return f"Everything that happened to {about}, and who or what did it." if about else self.page_lede
+
+    @override
     def get_queryset(self):
         rows = self._rows
         # Read as history, a page is a page of events, one line per operation.
@@ -98,7 +113,9 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     def _rows(self):
         """The rows this view of the log shows, before they are read as events."""
 
-        qs = AuditLog.objects.select_related("user").annotate(source=history.source_of_event())
+        about = self._about()
+        qs = record_timeline(about) if about else AuditLog.objects.all()
+        qs = qs.select_related("user").annotate(source=history.source_of_event())
         if not self.request.GET.get(READS):
             qs = qs.exclude(history.read_requests())
         if not self.request.GET.get(ROUTINE):
@@ -192,7 +209,14 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_table_empty(self) -> str:
+        if self._about():
+            return f"Nothing has been recorded about {self._about()}."
         return "Nothing is waiting for your approval." if self._awaiting() else "Nothing has been recorded yet."
+
+    def _about(self) -> str:
+        """``?about=<key>``: the record whose whole story the log is narrowed to."""
+
+        return self.request.GET.get(ABOUT, "").strip()
 
     def _awaiting(self) -> bool:
         """The log narrowed to requests still waiting for a person."""
@@ -202,36 +226,62 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
 
 # The metadata an event's page says in rows of their own rather than under
 # "Recorded with it": who acted and through which door are the Who row's.
-_STATED_ABOVE = frozenset({"changes", "operation", "actor", "interface"})
+# What started it and the record it is about are the Cause and About rows'.
+_STATED_ABOVE = frozenset({"changes", "operation", "actor", "interface", "approved_by", "cause", "subject"})
 
 
-def operation_words(operation: str, interface: str) -> str:
-    """How an event's page names its operation: in the words that declared it,
-    else, for a request, as a request through its door, never by its route."""
+def operation_words(event: AuditLog) -> str:
+    """How an event's page names the operation ``event`` was written in: in the
+    words that declared it, else as a request through its door, never by its route."""
 
-    if not operation:
+    if not (event.metadata or {}).get("operation"):
         return ""
-    return history.operation_title(operation, interface) or f"A request {door_words(interface)}"
+    return words_of(event).title or f"A request {door_words(event.interface)}"
 
 
-def _change_rows(changes: dict) -> list[dict]:
-    """Field-level changes, as rows rather than as a blob of JSON.
+def _subject(event: AuditLog) -> str:
+    """The key of the record ``event`` is about: the one it stored, else, for a
+    row written before rows named one, its object's while that object exists."""
 
-    A plain field is stored as its pair of values; a record or list as the
-    values in it that moved, each already in words, by where it is.
+    if event.subject or not event.object_id:
+        return event.subject
+    labels = audited_labels()
+    for model in audited_subjects():
+        if labels[model] == event.object_type:
+            try:
+                return subject_of(model._default_manager.filter(pk=event.object_id).first()) or ""
+            except ValueError, ValidationError:  # an id its model's key cannot hold
+                return ""
+    return ""
+
+
+def about_url(key: str) -> str:
+    """The log narrowed to one record's whole story (``?about=``)."""
+
+    return f"{reverse('core:audit_list')}?{urlencode({ABOUT: key})}"
+
+
+def _cause(event: AuditLog) -> tuple[str, str] | None:
+    """The operation that started this row's own, as its name and the page that reads it.
+
+    That page is the operation's own row's (a queued request's, an approval's),
+    else its newest row's, which lists the rest of it. A row written before
+    rows named their cause has none.
     """
 
-    rows = []
-    for field, change in changes.items():
-        named = path_words((field,))
-        if isinstance(change, dict):
-            rows.extend(
-                {"field": f"{named}{STEP}{inner}" if inner else named, "before": pair[0], "after": pair[1]}
-                for inner, pair in change.items()
-            )
-        elif isinstance(change, list) and len(change) == 2:
-            rows.append({"field": named, "before": value_words(change[0]), "after": value_words(change[1])})
-    return rows
+    if not event.cause:
+        return None
+    own = ExpressionWrapper(Q(object_id=F("operation_id")), output_field=BooleanField())
+    started = (
+        AuditLog.objects.filter(operation_id=event.cause)
+        .annotate(own_row=own)
+        .order_by("-own_row", "-created_at", "-pk")
+        .first()
+    )
+    if started is None:
+        return None
+    named = started.object_repr if started.own_row and started.object_repr else operation_words(started)
+    return named or started.summary, reverse("core:audit_detail", args=[started.pk])
 
 
 class AuditLogDetailView(PageMixin, DetailView):
@@ -271,15 +321,22 @@ class AuditLogDetailView(PageMixin, DetailView):
         event = self.object
 
         metadata = event.metadata or {}
-        context["changes"] = _change_rows(metadata.get("changes") or {})
+        # What happened, and to what kind of thing, as the event's heading.
+        context["event_heading"] = dotted(event.get_action_display(), event.object_type and event.type_label)
+        context["changes"] = change_rows(metadata.get("changes"))
         # The operation's name and id are one fact, stated in its own row.
-        context["operation"] = operation_words(str(metadata.get("operation") or ""), event.interface)
+        context["operation"] = operation_words(event)
         # A row about the operation itself has its id as its object's, already said there.
         context["operation_id"] = event.operation_id if event.operation_id != event.object_id else ""
         # Who acted is the Who row; the recorded actor is said beside it only where it differs.
         actor = str(metadata.get("actor") or "")
         context["acting_as"] = actor if actor != event.actor_label else ""
         context["door"] = door_words(event.interface)
+        approver = str(metadata.get("approved_by") or "")
+        context["approved_by"] = approver if approver != event.actor_label else ""
+        context["cause"] = _cause(event)
+        if subject := _subject(event):
+            context["about"] = (subject, about_url(subject))
         # Everything else in the metadata, minus what those rows already say.
         context["extra"] = {
             path_words((key,)): value_words(value)
@@ -292,6 +349,8 @@ class AuditLogDetailView(PageMixin, DetailView):
             context["approval"] = approval
         groups, page = self._other_events(event, with_operation=approval is None)
         context["other_events"] = groups
+        # The list a history line's count of the rest opens to.
+        context["operation_list"] = history.OPERATION_LIST
         context["other_rows"] = sum(len(rows) for _label, rows, _count, _folds in groups)
         # The rest of the operation is every row of it, a page at a time.
         context.update(

@@ -15,7 +15,7 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import agent_activity, agent_devices, capability_policy, fragments
-from hq.platform.application.agent_access import SET_AGENT_ACCESS, SET_AGENT_BLOCK
+from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS, SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
@@ -161,14 +161,19 @@ class AgentAccessView(View):
 
 
 class AgentBlockView(View):
-    """Block or allow one agent's client. The form sends a state, never a toggle."""
+    """Block, allow or remove one agent's client. The form sends a state, never a toggle."""
 
     def post(self, request):
-        requested = request.POST.get("blocked")
         client_id = request.POST.get("client_id", "")
-        if requested not in {"0", "1"} or not client_id:
-            return HttpResponseBadRequest("blocked must be 0 or 1, for a client_id")
-        result = execute_posted(request, SET_AGENT_BLOCK, {"blocked": requested == "1"}, target=client_id)
+        if "removed" in request.POST:
+            if request.POST["removed"] != "1" or "blocked" in request.POST or not client_id:
+                return HttpResponseBadRequest("removed must be 1, for a client_id")
+            result = execute_posted(request, REMOVE_AGENT, {}, target=client_id)
+        else:
+            requested = request.POST.get("blocked")
+            if requested not in {"0", "1"} or not client_id:
+                return HttpResponseBadRequest("blocked must be 0 or 1, for a client_id")
+            result = execute_posted(request, SET_AGENT_BLOCK, {"blocked": requested == "1"}, target=client_id)
         if not result["ok"]:
             return refusal_response(result)
         return redirect(safe_next(request, fallback=reverse("agent_policy")))
@@ -272,7 +277,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["recent_days"] = agent_activity.RECENT.days
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
-        context["read_tailnet"] = agent_devices.read_tailnet(web_principal(self.request.user))
+        context["placement"] = agent_devices.placement_posture()
         context["devices"] = devices_of(self.request.user)
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
@@ -337,7 +342,7 @@ class SearchView(PageMixin, TemplateView):
             ("commands", "Commands"),
             ("resources", "Pages"),
             ("connections", "Connections"),
-            ("views", "Topology views"),
+            ("views", "Map views"),
             ("checks", "Checks"),
         ):
             items = tuple(item for item in discovery[key] if item.url)[: min(self.palette_group_limit, remaining)]

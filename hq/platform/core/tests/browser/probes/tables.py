@@ -166,6 +166,80 @@ TABLE_LAYOUT = (
 }"""
 )
 
+# Each table region's showing columns' widths and its rows' heights, with
+# the rows themselves, for `MOVED` to compare within one trip.
+_PLACES = """([scroll, records]) => [...document.querySelectorAll('main ' + scroll + ' > table')]
+  .filter((table) => table.checkVisibility())
+  .map((table) => ({
+    table,
+    columns: [...table.querySelectorAll(':scope > thead > tr:last-child > th')]
+      .filter((heading) => heading.getClientRects().length)
+      .map((heading) => Math.round(heading.getBoundingClientRect().width)),
+    rows: [...table.querySelectorAll(records)]
+      .filter((row) => row.getClientRects().length)
+      .map((row) => [row, row.getBoundingClientRect().height]),
+  }))"""
+
+# What opening rows moved that the reader did not open: a column's width, or
+# the height of a row that stayed closed (the component tests' "moves
+# nothing", over every table).
+_MOVED = (
+    "([before, after, opened]) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  for (const {table, columns, rows} of before) {
+    const now = after.find((places) => places.table === table);
+    if (!now) continue;
+    if (now.columns.join() !== columns.join()) {
+      found.push(`${describe(table)}: opening its rows moved its columns from ${columns.join(' ')} to ${now.columns.join(' ')}px`);
+    }
+    const heights = new Map(now.rows);
+    const moved = rows.filter(([row, height]) => !opened.includes(row) && heights.has(row)
+      && Math.abs(heights.get(row) - height) > 1).length;
+    if (moved) found.push(`${describe(table)}: opening its rows moved ${moved} rows it did not open`);
+  }
+  return found;
+}"""
+)
+
+
+def opened_tables_read(trip):
+    """One width's whole read of the tables, in one trip: `TABLE_LAYOUT` as
+    the window left them, then, once tables.js has measured their cuts at it,
+    every row a reader can open opened (the folds first, then each row whose
+    toggle shows once their rows are marked), ``trip`` run on that one state,
+    and what opening them moved. The rows are closed again last, so the next
+    width is the page as a reader resized it.
+
+    tables.js measures a resized window's cuts on a timer the resize starts
+    (`markTablesSoon`); a timer at least as long started after it runs after
+    it (HTML's timer ordering), so ``marked`` is that timer's delay."""
+
+    return f"""async ([layout, marked, folds, rows, records, args]) => {{
+  const [shape, sizes, misfits] = await ({TABLE_LAYOUT})(layout);
+  if (!sizes) return [shape, sizes, misfits, [], []];
+  const frame = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  await new Promise((done) => setTimeout(done, marked));
+  await frame();
+  const press = (selector) => [...document.querySelectorAll(selector)]
+    .filter((toggle) => toggle.checkVisibility() && toggle.getAttribute('aria-expanded') !== 'true')
+    .map((toggle) => {{ toggle.click(); return toggle; }});
+  const places = {_PLACES};
+  const folded = press(folds);
+  await frame();
+  const before = places([layout[0], records]);
+  const opened = press(rows);
+  await frame();
+  const outcomes = await ({trip})(args);
+  const moved = ({_MOVED})([before, places([layout[0], records]), opened.map((toggle) => toggle.closest('tr'))]);
+  [...opened].reverse().forEach((toggle) => toggle.click());
+  [...folded].reverse().forEach((toggle) => toggle.click());
+  await frame();
+  return [shape, sizes, misfits, outcomes, moved];
+}}"""
+
+
 # A cell's identifier cut in a table whose columns still give way (no
 # `data-narrow`, tables.js): one no longer than its column's hold
 # (`--name-hold`, read off a box sized by it in the same cell) had the room to
@@ -208,6 +282,98 @@ CUT_WITH_ROOM = (
       const beside = holder.getBoundingClientRect().width - el.clientWidth;
       if (asks + beside <= hold + 1)
         found.push(`${describe(el)} "${el.textContent.trim().slice(0, 40)}" is cut to ${el.clientWidth}px of ${asks}px though its column holds ${Math.round(hold)}px`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A value cut in a closed row while the row leaves room that would show it
+# whole: room in its own cell past what shares its line (a box the value
+# fills keeps its padding), and the room each other column showing holds
+# past what its widest cell asks (each cell's table laid out again at its
+# max-content, unseen, beside it so its rules still reach it). A column
+# holding a cut gives none, and a fixed layout's columns none at all. A value
+# longer than its row's room is cut wherever it goes, so that room is none.
+CUT_BESIDE_ROOM = (
+    "(unseen) => {"
+    + DESCRIBE
+    + CUTS
+    + """
+  const found = [];
+  const inner = (cell) => {
+    const s = getComputedStyle(cell);
+    const left = cell.getBoundingClientRect().left + cell.clientLeft + parseFloat(s.paddingLeft);
+    return {left, right: left + cell.clientWidth - parseFloat(s.paddingLeft) - parseFloat(s.paddingRight)};
+  };
+  const records = ':scope > tbody > tr:not(.row-detail, [data-row-detail], .is-expanded)';
+  for (const table of document.querySelectorAll('main table')) {
+    if (!table.checkVisibility() || table.closest('details:not([open])')) continue;
+    const rows = [...table.querySelectorAll(records)].filter((row) => row.checkVisibility());
+    const cells = rows.flatMap((row) => [...row.querySelectorAll(':scope > :is(td, th)')])
+      .filter((cell) => cell.colSpan === 1 && cell.checkVisibility());
+    const cuts = cells.flatMap((cell) => cutsIn(cell, unseen).map((cut) => ({cell, ...cut})));
+    if (!cuts.length) continue;
+    // The same table at its max-content width, where each column is as wide
+    // as its widest cell asks.
+    const ruler = table.cloneNode(true);
+    ruler.setAttribute('aria-hidden', 'true');
+    ruler.querySelectorAll('colgroup[data-held]').forEach((group) => group.remove());
+    ruler.style.cssText += '; position: absolute; visibility: hidden; inset: 0 auto auto 0; inline-size: max-content; max-inline-size: none';
+    table.after(ruler);
+    const asks = new Map();
+    for (const cell of [...ruler.querySelectorAll(records)].flatMap((row) => [...row.querySelectorAll(':scope > :is(td, th)')])) {
+      if (cell.colSpan === 1 && cell.checkVisibility()) asks.set(cell.cellIndex, cell.getBoundingClientRect().width);
+    }
+    ruler.remove();
+    const slack = new Map();
+    for (const cell of cells) {
+      const place = cell.cellIndex;
+      const held = cuts.some((cut) => cut.cell.cellIndex === place) ? 0 : cell.getBoundingClientRect().width - (asks.get(place) ?? Infinity);
+      slack.set(place, Math.max(0, Math.min(slack.get(place) ?? Infinity, held)));
+    }
+    // A fixed layout's columns are set by its first row and never share.
+    if (getComputedStyle(table).tableLayout === 'fixed') slack.clear();
+    const range = document.createRange();
+    for (const {cell, node, boxes} of cuts) {
+      const by = boxes.at(-1);
+      const r = by.getBoundingClientRect();
+      // What shares the cut box's lines in its cell, which the box's growing would push.
+      let end = r.right;
+      // A box around it on the line (a link with its arrow, a tag's padding)
+      // grows with it; a box it fills gives it none of its own padding.
+      for (let up = by.parentElement; up && up !== cell; up = up.parentElement) {
+        const around = getComputedStyle(up);
+        if (/inline-/.test(around.display)) end = Math.max(end, up.getBoundingClientRect().right);
+        else if (!['inline', 'contents'].includes(around.display)) end += parseFloat(around.paddingRight) + parseFloat(around.borderRightWidth);
+      }
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+        if (!text.data.trim() || by.contains(text) || !textShown(text)) continue;
+        range.selectNodeContents(text);
+        for (const line of range.getClientRects()) {
+          if (line.width && Math.min(line.bottom, r.bottom) - Math.max(line.top, r.top) > line.height / 2) end = Math.max(end, line.right);
+        }
+      }
+      const own = Math.max(0, inner(cell).right - end);
+      const others = [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
+      const room = own + others;
+      if (room < 1) continue;
+      // Each box that cuts it given the room, to see whether it then shows
+      // the value whole; room it would still cut the value in cures nothing.
+      // A pixel less than the room, since a cut is read past a pixel's slack.
+      const kept = boxes.map((box) => [box, box.style.cssText, box.getBoundingClientRect().width]);
+      for (const [box, was, wide] of kept) {
+        box.style.cssText = `${was}; box-sizing: border-box !important; inline-size: ${wide + room - 1}px !important; `
+          + 'min-inline-size: 0 !important; max-inline-size: none !important';
+      }
+      const cured = !cutsIn(cell, unseen).some((cut) => cut.node === node);
+      for (const [box, was] of kept) box.style.cssText = was;
+      if (cured) {
+        found.push(`${describe(by)} "${node.data.trim().slice(0, 40)}" is cut beside ${Math.round(room)}px of room `
+          + `(${Math.round(own)}px in its cell, ${Math.round(others)}px in the other columns)`);
+      }
     }
   }
   return [...new Set(found)];
@@ -390,21 +556,31 @@ BLANK_TABLE = """{% table_region "Runbooks" %}<table class="data-table">
 </tbody></table>{% endtable_region %}"""
 
 # A row's two controls with labels of two words, beside a name and a status,
-# in a card: on the narrowest phone they stand one above the other and their
-# labels wrap. Beside it a table that nothing it gives can fit, a cell asking
-# more than a phone has, which scrolls in its region rather than run past its
-# card.
+# in a card: on the narrowest phone their column leaves for the line beneath
+# the row, each label whole. Beside it a table that nothing it gives can fit,
+# a cell asking more than a phone has, which scrolls in its region rather than
+# run past its card.
 ROW_ACTIONS_TABLES = """<section class="card">
 {% table_region "Devices" %}<table class="data-table" data-probe="actions"><thead><tr>
 {% table_heading "Device" "identifier" gutter=True %}{% table_heading "Approval" "status" %}
-{% table_heading "Calls" drop=1 %}{% table_heading "Approve or block" "control" hidden=True %}</tr></thead><tbody>
-<tr><th scope="row" class="row-gutter">example-host-01{% row_toggle %}</th><td><span class="pill">Needs approval</span></td><td>2 calls</td>
+{% table_heading "Calls" drop=1 %}{% table_heading "Approve or block" "control" hidden=True drop=2 %}</tr></thead><tbody>
+<tr><th scope="row">example-host-01</th><td><span class="pill">Needs approval</span></td><td>2 calls</td>
 <td class="row-actions"><form><button type="button" class="btn compact primary">Withdraw approval</button></form><form><button type="button" class="btn compact">Block device</button></form></td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Unfittable" %}<table class="data-table" data-probe="unfittable"><thead><tr>{% table_heading "Name" %}</tr></thead><tbody>
 <tr><td><span style="display: inline-block; inline-size: 40rem">Example wider than any phone</span></td></tr>
 </tbody></table>{% endtable_region %}
 </section>"""
+
+# How far a table's heading is drawn below the top of its row on a page with
+# a header: a heading that sticks inside a box that scrolls is pushed down by
+# the inset it keeps for the page's chrome, over the rows under it.
+HEADING_DROP = """async (probe) => {
+  document.documentElement.style.setProperty('--site-header-height', '3rem');
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const heading = document.querySelector(`[data-probe=${probe}]`).tHead.rows[0].cells[0];
+  return Math.round(heading.getBoundingClientRect().top - heading.parentElement.getBoundingClientRect().top);
+}"""
 
 COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
@@ -418,62 +594,67 @@ COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
-<tr data-probe="dropped"><td class="row-gutter">Dropped{% row_toggle %}</td><td>Short</td>
+<tr data-probe="dropped"><td>Dropped</td><td>Short</td>
 <td><span style="display: inline-block; inline-size: 30rem">Something too wide for a phone to keep</span></td></tr>
-<tr data-probe="dropped-blank"><td class="row-gutter">Blank{% row_toggle %}</td><td>Short</td><td>–</td></tr>
-<tr data-probe="screen-reader"><td class="row-gutter">Chest{% row_toggle %}</td>
+<tr data-probe="dropped-blank"><td>Blank</td><td>Short</td><td>–</td></tr>
+<tr data-probe="screen-reader"><td>Chest</td>
 <td><span class="cadence-mark is-hit" aria-hidden="true"></span>
 <span class="visually-hidden">One session in the week of Aug 10, said in full</span></td><td>–</td></tr>
-<tr data-probe="cut"><td class="row-gutter">Name{% row_toggle %}</td>
+<tr data-probe="cut"><td>Name</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td><td>–</td></tr>
 </tbody></table>{% endtable_region %}
 {% table_region "Folding" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
-<tr data-probe="folded"><td class="row-gutter">Folded{% row_toggle %}</td>
+<tr data-probe="folded"><td>Folded</td>
 <td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
-<tr data-probe="cut-in-a-kept-gutter"><td class="row-gutter">Name{% row_toggle %}</td>
+<tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
 # A table of cut values, each the word its row is probed by then more: one
 # with no title, one carrying its whole text as a title, one titled in a row
 # that opens, two past the line a clamp ends with an ellipsis (a block and a
-# link set in its line, as a cell's name is), and two cut
-# where no ellipsis can land: a box of words around a
-# box of its own, and a name's chip in the muted line under a row's name, as
-# a unit's page drew one. A note wider than a phone puts the table in a
-# narrow box there, which keeps the gutter of a table whose rows open, so the
-# third opens; a wide box shows each titled value whole on hover, and a cut
-# with no ellipsis tells no one to hover.
+# link set in its line, as a cell's name is), one cut where no ellipsis can
+# land, a box of words around a box of its own, and a name's chip in the muted
+# line under a row's name, as a unit's page drew one, which draws its own; the
+# third, titled too, stands in a table of its own whose rows open, since every
+# row under a gutter heading does. A note wider than a phone puts each table in
+# a narrow box there, which keeps the gutter of a table whose rows open, so the
+# third opens, and breaks the chip whole; a wide box shows each titled value
+# whole on hover, and a cut with no ellipsis tells no one to hover.
 _CUT = (
     '<div style="max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap"{}>'
     "{} value far too long to fit</div>"
 )
 _CHIP = "chip-" + "-".join(["example-unit-name-long-enough-to-be-cut"] * 4) + ".timer"
 _NOTE = '<td><span style="display: inline-block; inline-size: 30rem">A note wider than a phone</span></td>'
+_OPENS_TITLE = ' title="opens value far too long to fit"'
 CUT_TABLE = (
     '{% load value_tags %}{% table_region "Cuts" %}<table class="data-table"><thead><tr>'
-    '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    '{% table_heading "Name" %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
     + "".join(
-        f'<tr><td class="row-gutter">{name.title()}{toggle}</td><td>{_CUT.format(title.format(name), name)}</td>{_NOTE}</tr>'
-        for name, title, toggle in (
-            ("untitled", "", ""),
-            ("titled", ' title="{} value far too long to fit"', ""),
-            ("opens", ' title="{} value far too long to fit"', "{% row_toggle %}"),
-        )
+        f"<tr><td>{name.title()}</td><td>{_CUT.format(title.format(name), name)}</td>{_NOTE}</tr>"
+        for name, title in (("untitled", ""), ("titled", ' title="{} value far too long to fit"'))
     )
-    + '<tr><td class="row-gutter">Clamped</td><td><div style="display: -webkit-box; -webkit-box-orient: vertical; '
+    + '<tr><td>Clamped</td><td><div style="display: -webkit-box; -webkit-box-orient: vertical; '
     '-webkit-line-clamp: 1; overflow: hidden; max-width: 80px">clamped value far too long to fit on its one line'
     f"</div></td>{_NOTE}</tr>"
-    + '<tr><td class="row-gutter">Inline</td><td><a href="#" style="display: -webkit-inline-box; -webkit-box-orient: '
+    + '<tr><td>Inline</td><td><a href="#" style="display: -webkit-inline-box; -webkit-box-orient: '
     'vertical; -webkit-line-clamp: 1; overflow: hidden; max-width: 80px">inline value far too long to fit on its one '
-    f"line</a></td>{_NOTE}</tr>"
-    + '<tr><td class="row-gutter">Unmarked</td><td><div style="max-width: 40px; overflow: hidden; '
+    f"line</a></td>{_NOTE}</tr>" + '<tr><td>Unmarked</td><td><div style="max-width: 40px; overflow: hidden; '
     'text-overflow: ellipsis; white-space: nowrap"><span style="display: inline-block">unmarked value far too long '
     f"to fit</span></div></td>{_NOTE}</tr>"
-    + f'<tr><td class="row-gutter">Chip<br><span class="muted"><code>{{{{ "{_CHIP}"|breakable }}}}</code></span></td>'
-    f"<td>Short</td>{_NOTE}</tr>" + "</tbody></table>{% endtable_region %}"
+    + f'<tr><td>Chip<br><span class="muted"><code>{{{{ chip|breakable }}}}</code></span></td><td>Short</td>{_NOTE}</tr>'
+    + "</tbody></table>{% endtable_region %}"
+    + '{% table_region "Opening" %}<table class="data-table"><thead><tr>'
+    '{% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" %}</tr></thead><tbody>'
+    + f"<tr><td>Opens</td><td>{_CUT.format(_OPENS_TITLE, 'opens')}</td>{_NOTE}</tr>"
+    "</tbody></table>{% endtable_region %}"
 )
+
+# The chip's name is a value the page prints, as a template's is: a literal is
+# already safe, so `breakable` would pass it as plain words, which wrap.
+CUT_VALUES = {"chip": _CHIP}
 
 # Rows that open, as an event's log draws them: a host name in a column a
 # phone lets go, so an opened row shows it in the line beneath, and a value
@@ -481,9 +662,9 @@ CUT_TABLE = (
 OPEN_ROW_TABLE = """{% load value_tags %}
 {% table_region "Opened" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Object" drop=1 %}{% table_heading "Note" %}</tr></thead><tbody>
-<tr><td class="row-gutter">Updated{% row_toggle %}</td><td>{{ host|breakable }}</td>
+<tr><td>Updated</td><td>{{ host|breakable }}</td>
 <td><span style="display: inline-block; inline-size: 14rem">A note that keeps its line</span></td></tr>
-<tr><td class="row-gutter">Created{% row_toggle %}</td><td>{{ host|breakable }}</td>
+<tr><td>Created</td><td>{{ host|breakable }}</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
@@ -493,11 +674,14 @@ OPEN_ROW_VALUES = {"host": "example-hostname-with-a-long-descriptive-name-01.exa
 # cannot open, and one always cut in a row that can, whose toggle a wide box
 # does not show; tables.js titles each while it is cut and its row is closed.
 TITLED_CUTS = """{% table_region "Titled" %}<table class="data-table"><thead><tr>
-{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
-<tr data-probe="narrows"><td class="row-gutter">Narrows</td>
+{% table_heading "Name" %}{% table_heading "Value" %}</tr></thead><tbody>
+<tr data-probe="narrows"><td>Narrows</td>
 <td><div style="max-inline-size: 50vw; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">
 a value that is whole on a wide screen and cut at half of a phone's</div></td></tr>
-<tr data-probe="opens"><td class="row-gutter">Opens{% row_toggle %}</td>
+</tbody></table>{% endtable_region %}
+{% table_region "Opening" %}<table class="data-table"><thead><tr>
+{% table_heading "Name" gutter=True %}{% table_heading "Value" %}</tr></thead><tbody>
+<tr data-probe="opens"><td>Opens</td>
 <td><div style="max-inline-size: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
 </tbody></table>{% endtable_region %}"""
 

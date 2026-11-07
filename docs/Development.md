@@ -112,6 +112,12 @@ it. Nothing under `.claude/worktrees`, `.venv` or `var/` does, so another
 worktree's edits leave it running. The extension set is the one
 `mise.local.toml` names ([The extension set](#the-extension-set)).
 
+A server migrates its database before it starts, and each worker a reload
+starts applies the migrations it ships that the database has not recorded
+before it serves (`hq/config/dev_asgi.py`, the application factory Uvicorn
+loads), as the container migrates at boot. A landing that adds a migration
+needs no restart.
+
 Only `dev` reads `dev.local.toml`, and a new worktree does not copy it, so the
 others never take its bind or database. Each checkout has its own scratch
 database, so servers in different worktrees run side by side; a second server
@@ -198,7 +204,11 @@ On an 8 GB Apple silicon machine:
 | `mise run fast` | one to two minutes |
 
 `mise run fast [BASE]` maps the changed files against the merge base (`BASE`,
-`$CHECK_BASE`, then `origin/main`, `main`). `--list` prints the selection.
+`$CHECK_BASE`, then the branch HEAD lands on, then `origin/main`, `main`).
+The branch HEAD lands on is its own branch's upstream, or else the local
+branch tracking a remote one whose history HEAD left most recently: a
+worktree's branch tracks nothing and is made from the branch it lands on.
+`--list` prints the selection.
 The tests it selects are:
 
 - the test modules that import a changed file, directly or through one module
@@ -230,12 +240,21 @@ environment (`uv run --group fuzz`), which the tests' environment lacks, is
 never a label. When the selection above would reach it, its task runs as a
 quick gate instead, read from the task's own `run`.
 
-The quick gates run while the tests do. Their output is held and printed
-after the tests', under `quick gates, beside the tests`, in mise's summary
-output: a gate that passed is its `passed in` line, and one that failed prints
-whole. One that takes the heavy turn of its own (the shell gate, for its
-suites) runs after the tests instead, so it never waits on the turn they hold,
-and prints as it runs, its wait for the turn included.
+The quick gates and the tests run in one `mise run`, in the config
+environment `mise.fast.toml` sets: mise's summary output, where a gate that
+passed prints its `passed in` line as it ends and one that failed prints
+whole as it ends. The tests run as `fast:tests` (`mise-tasks/fast/`), whose
+own output setting outranks the environment's, so they print as they run,
+their wait for the heavy turn included; `--output` or `MISE_TASK_OUTPUT`
+would outrank both.
+
+mise stops the run at the first failure, and the verdict's last line names
+the rerun. mise stops no task still waiting for a lock, so a quick gate that
+takes the heavy lock itself (the shell gate, for its suites) runs after, in a
+run of its own, once the first has passed. The selected tests that read every
+browser gate module (each imports `browser_modules`: the selector guard among
+them) start no browser, and run first as `fast:source`; the tests start only
+once they pass, so a refusal there ends the run in seconds.
 
 A test run prints its failures, each with what the test printed, and nothing
 of a passing test or of its own progress: the runner sets Django's `--buffer`
@@ -415,7 +434,7 @@ so another checkout's stop leaves the VM up under it.
 
 The turn is mise's task lock `heavy`, a name every checkout and worktree on
 the machine shares. A TOML task takes it by extending the `heavy` template in
-`mise.toml` (`django-browser`), a file task with `#MISE lock="heavy"` in its
+`mise.toml` (`django-browser`), a file task with `#MISE lock=["gate", "heavy"]` in its
 header and the line `. ./tools/lib/heavy-turn.sh` before its work; either
 declares a `timeout`, which mise starts once the task holds the lock, so
 heavy tasks asked together (`mise run browser:layout-1 :::
@@ -424,6 +443,16 @@ is stopped. A heavy task started inside a turn runs at once, since mise hands
 the lock down (`MISE_TASK_LOCKS`), and a holder killed outright frees it.
 `HeavyTaskTests` (`tools/gate/tests/test_turn.py`) holds every task to its
 side of the line, and `tests/shell/test-heavy.sh` the turn's promises.
+
+A landing goes first. Every task that takes the turn passes the lock `gate`
+first, which mise takes in sorted order, so a task waiting there holds
+nothing. `mise run landing -- <command>` holds the gate for the command's
+lifetime: no other checkout starts a heavy run until the landing ends, and
+the landing waits behind only the run already in the turn, since it takes the
+gate with a blocking lock that the kernel hands over as the holder ends, where
+mise polls. The command's own heavy tasks inherit the gate
+(`MISE_TASK_LOCKS`) and take turns on `heavy` among themselves.
+`test_landing.py` (`tools/gate/tests/`) runs that order against mise.
 
 A run of tests is narrow, and goes ahead outside the turn, when it is serial
 (`--parallel 1`) or each label names a module or something in one, and no
@@ -512,7 +541,8 @@ JavaScript off and on.
 It checks what a reader would lose:
 
 - nothing escapes the page sideways;
-- a table fits its region at every width;
+- a table fits its region at every width, and keeps every table check there
+  with its rows open;
 - no text runs out of its box or over other text;
 - nothing is out of reach;
 - text and controls keep their contrast;
@@ -572,6 +602,15 @@ and `manage.py seed showcase` show) is read by
 It is read with script on and deferred parts loaded, at 402, 820, 1360 and
 1680 pixels and at `WIDE_TABLES`, in the light palette and the dark. A finding
 names its check, page, width and theme.
+
+Its tables are also read at every shape of the layout, in a leg of their own
+(`browser:table-fit`, `hq.platform.core.tests.browser.table_fit`): from 320
+pixels up, at each edge of the stylesheet's viewport queries and wherever a
+box around a table changes shape between two, every row a reader can open is
+opened and every table check is read, with what opening the rows moved. A
+finding names its check and the first width it was found at.
+`TableSweepPlantedTests` plants a defect of each kind in a span of widths no
+other gate reads, and requires the sweep to find it there.
 
 `WIDE_TABLES` is read from the stylesheet: the narrowest window where a
 table's region, on the page and in a card, has passed the breakpoint its wide
@@ -658,7 +697,9 @@ gating. `mise run dev:look --help` gives its pages, its flags and the commands
 to copy. What follows is how a look behaves, which the help does not say.
 
 A record's page is found in the estate the seed builds, and a record's address
-that seed does not hold is refused with the ones it does. An unknown page or
+that seed does not hold is refused with the ones it does. Composed, the
+showcase and standard seeds hold each extension's demo too, and `all` reads
+the record pages it names ([Plugins](Plugins.md#demo-data)). An unknown page or
 rule is refused before anything runs, and a page that answers anything but 200
 fails the run.
 
@@ -704,11 +745,14 @@ or reach out is refused and reported instead.
 
 `--rule survey` runs every check the gates hold (`BrowserGate.findings`), so
 what it finds on a page the gates read is what they fail on. Markup a vendored
-script draws (`SELECTORS["vendored"]`, the API reference's viewer) is held by
-its own tests instead.
+script draws (`data-vendored` on its mount, `SELECTORS["vendored"]`: the API
+reference's viewer) is styled by its own rules alone, and held by its own
+tests instead.
 
-What a rule finds is written beside each screenshot (`<page>-<width>.txt`) as
-the run goes, so a run stopped part way keeps it, and to `var/gate/look.txt`
+A run that judges takes no screenshots, since a shot and its bands cost more
+than the rule that reads the page: `--shots` takes them too, and `--base`,
+`--eval` and `--operation`, which read them, take them anyway. What a rule
+finds is written in the run's folder (`<page>-<width>.txt`) as the run goes, so a run stopped part way keeps it, and to `var/gate/look.txt`
 once the run ends. Console errors, uncaught script errors and policy refusals
 are judged as findings are: without a base any fails the run, against one only
 a new one does.
@@ -727,8 +771,22 @@ contrast is kept to its power of four. So a finding whose row number moved,
 whose overflow grew by a few pixels, or that names another record is neither
 new nor fixed, and one grown many times over is new.
 
-With `--columns` or `--eval`, each line the base measured otherwise is printed
-under this checkout's, marked with the ref.
+With `--columns`, `--eval` or `--probe`, each line the base measured otherwise
+is printed under this checkout's, marked with the ref.
+
+`--probe <module>:<NAME>` runs one probe of
+`hq/platform/core/tests/browser/probes/` on each shot, as the survey runs it,
+with `--arg`'s JSON as its argument (the selector the survey passes it, from
+`SELECTORS`). Its findings print a line each beside the shot and are kept as
+`.probe.txt`, so a probe is tried on a page before it is wired into the
+survey.
+
+`--css` lays a stylesheet over every page the look loads, before the shot,
+`--eval`, `--probe` and the rule. It is adopted as a constructed sheet, which
+the page's content security policy does not govern; lifting the policy
+instead would hide the refusals the run reports. The base is drawn without
+it, so `--base HEAD --css <file> --rule survey` reports what a candidate fix
+fixes and what it breaks before any sheet in `static/css` is edited.
 
 `--eval` takes a file holding a function, called with nothing, or one
 expression. What it returns prints under the page and width (as JSON unless

@@ -129,6 +129,7 @@ class TailnetContext:
             ],
             "services": [dict(service) for service in found.services],
             "app_connectors": [dict(connector) for connector in found.app_connectors],
+            "funnel": list(found.funnel) if found.funnel is not None else None,
             "tests": [dict(test) for test in found.tests],
             "locked_out": list(found.locked_out),
             "findings": [serialize_finding(finding) for finding in self.findings],

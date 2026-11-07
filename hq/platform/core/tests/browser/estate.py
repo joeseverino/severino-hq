@@ -35,13 +35,14 @@ from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, FON
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.survey import geometry_probes
-from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, WIDE, WIDE_TABLES, WIDEST, WIDTHS, viewport
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDE, WIDE_TABLES, WIDEST, WIDTHS, viewport
 lazy from hq.platform.application import fragments
 lazy from hq.platform.application.domains import domain_navigation
 lazy from hq.platform.core import seeds
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 lazy from hq.platform.core.example_estate.network import ZONE_KEY
+lazy from hq.platform.core.example_estate.records import RUNBOOKS, SERVER_ASSET, WRITEUPS
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
 # The gate's widths, a wide desktop and the laptop windows where a wide table
@@ -79,7 +80,7 @@ SHOW_POPOVER = """(place) => {
 HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePopover()"
 # The checks a shown popover's own boxes and lines are held to: its rows are
 # laid out by the same primitives as the page's, over whatever lies beneath.
-_IN_A_POPOVER = ("overlaps", "overlapping text")
+_IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
 
 
 def fragments_of(client, address, page, answers, ask):
@@ -155,7 +156,10 @@ def owner_client(seed: str = "showcase") -> Iterator[Client]:
 def records():
     """A record's page of each kind the navigation lists: the machine, the
     service with the longest name, its container (which has an upgrade to
-    make), the zone, and a message with the page that deletes it."""
+    make), the zone, a message with the page that deletes it, HQ's project
+    (the one every other kind is about), the server as an asset and its
+    expense and receipt, a runbook and a writeup; then each one an installed
+    extension's demo names (``seeds.demo_pages``)."""
 
     hostname, container, *_ = max(SERVICES, key=lambda service: len(service[0]))
     return [
@@ -165,7 +169,21 @@ def records():
         reverse("control_plane:detail", kwargs={"key": ZONE_KEY}),
         reverse("contacts:detail", args=[1]),
         reverse("contacts:delete", args=[1]),
+        reverse("projects:detail", kwargs={"slug": "hq"}),
+        reverse("assets:detail", kwargs={"slug": SERVER_ASSET}),
+        reverse("expenses:detail", args=[1]),
+        reverse("receipts:detail", args=[1]),
+        reverse("docs_index:detail", kwargs={"doc_id": RUNBOOKS[0][0]}),
+        reverse("content:detail", kwargs={"slug": WRITEUPS[0][0]}),
+        *seeds.demo_pages(),
     ]
+
+
+def estate_pages():
+    """Every page of the example estate the gate reads and dev:look's ``all``
+    stands for, by address: the navigation's, then a record's page of each kind."""
+
+    return [*navigation(), *records()]
 
 
 def render_estate():
@@ -178,7 +196,7 @@ def render_estate():
 
     answers = {}
     with owner_client() as client:
-        paths = landings(lambda address: ask_as_production(client, address), [*navigation(), *records()])
+        paths = landings(lambda address: ask_as_production(client, address), estate_pages())
         for path in paths:
             # Asked as listed, unfollowed: a page in the list is the page itself, never a redirect to one.
             response = ask_as_production(client, path)
@@ -304,23 +322,6 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     failed = {check: said for check, said in found.items() if said}
                     if failed:
                         self.fail(json.dumps(failed, indent=1))
-
-
-class ExampleEstateTableFitTests(ExampleEstateGate):
-    """Every table of the example estate fits its box at every width."""
-
-    def test_every_table_fits_its_box_at_every_width(self):
-        """From the narrowest phone up, with every disclosure open: a width the
-        layout sweep skips is where a table ran past its card unseen."""
-
-        for path in self.navigation:
-            with self.subTest(page=path):
-                self.visit(path, NARROWEST)
-                self.page.evaluate(
-                    "(disclosure) => document.querySelectorAll(disclosure).forEach((d) => { d.open = true; })",
-                    SELECTORS["disclosure"],
-                )
-                self.assertEqual(self.tables_that_do_not_fit_at_any_width(), {})
 
 
 # A list's toolbar boxes (a filter's options and its toggles), the sort its

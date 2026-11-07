@@ -74,6 +74,33 @@ class SectionHeadTests(SimpleTestCase):
         self.assertNotIn(heading, link.ancestors)
         self.assertIn(head, link.ancestors)
 
+    def test_what_sits_beside_the_heading_is_one_box_of_the_head(self):
+        """A count, a dot and a link beside the heading wrap as one line of
+        text, never as items of the head's row a dot is stranded between."""
+
+        aside = '<span>6 active</span>{% dot %}<a href="/example/">All</a>'
+        for source, box in (
+            (f"{{% section_head %}}Projects{{% aside %}}{aside}{{% endsection_head %}}", "div"),
+            (f'{{% section "Projects" fold=True %}}<p>Body</p>{{% aside %}}{aside}{{% endsection %}}', "span"),
+        ):
+            with self.subTest(box=box):
+                html = _render(source)
+                (head,) = with_class(html, "section-head")
+                beside = [
+                    el
+                    for el in elements(html, "span") + elements(html, "a") + elements(html, "div")
+                    if el.ancestors and el.ancestors[-1] == head
+                ]
+                self.assertEqual([(el.tag, el.classes) for el in beside], [(box, frozenset({"section-aside"}))])
+                (aside,) = beside
+                self.assertEqual({el.words for el in elements(html, "a")}, {"All"})
+                self.assertIn(aside, elements(html, "a")[0].ancestors)
+
+    def test_with_nothing_beside_the_heading_the_head_draws_no_aside(self):
+        self.assertEqual(
+            with_class(_render("{% section_head %}Load{% aside %} {% endsection_head %}"), "section-aside"), []
+        )
+
     def test_a_lede_is_grouped_with_its_heading(self):
         html = _render("{% section_head lede=lede %}Load{% endsection_head %}", lede="Read a minute ago")
 

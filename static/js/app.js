@@ -121,7 +121,7 @@ document.addEventListener("click", (event) => {
   event.preventDefault();
   const was = { action: button.getAttribute("formaction"), label: button.textContent };
   const other = button.dataset.other ? JSON.parse(button.dataset.other) : null;
-  const dismissing = !("dismissed" in row.dataset) && !row.closest(".action-items-aside");
+  const dismissing = !("dismissed" in row.dataset) && !row.closest("[data-set-aside]");
   const body = new FormData(form, button);
   button.disabled = true;
   hqFetch(was.action, { method: "POST", body, credentials: "same-origin" })
@@ -131,7 +131,7 @@ document.addEventListener("click", (event) => {
       const step = dismissing ? -1 : 1;
       const counts = new Set();
       for (let box = row.parentElement; box; box = box.parentElement) {
-        const count = box.querySelector(":scope > tr.row-group .count, :scope > .section-head [data-queue-count]");
+        const count = box.querySelector(":scope > tr.row-group .count, :scope[data-queue] > .section-head .count");
         if (count) counts.add(count);
       }
       const family = row.dataset.folded && document.getElementById(row.dataset.folded);
@@ -139,7 +139,7 @@ document.addEventListener("click", (event) => {
       if (familyCount) counts.add(familyCount);
       if (dismissing) row.querySelector(".row-expand[aria-expanded=true]")?.click();
       counts.forEach((count) => { count.textContent = String(Math.max(0, Number(count.textContent) + step)); });
-      if (!row.closest(".action-items-aside")) {
+      if (!row.closest("[data-set-aside]")) {
         document.querySelectorAll("[data-action-count]").forEach((badge) => {
           const next = Math.max(0, Number(badge.textContent || 0) + step);
           badge.textContent = String(next);
@@ -562,13 +562,12 @@ document.addEventListener("click", (event) => {
   }
 });
 
-// A pinned save bar offers to save only once there is something to save.
-document.querySelectorAll("form:has(.save-bar)").forEach((form) => {
-  form.dataset.clean = "";
-});
+// A long form's closing row is pinned to the screen once there is something
+// to save: the first edit marks the form, and a press that only posts
+// another form (a row's post_button) is no edit and marks nothing.
 document.addEventListener("input", (event) => {
   const form = event.target.form;
-  if (form) delete form.dataset.clean;
+  if (form?.querySelector(".save-bar")) form.dataset.changed = "";
 }, true);
 
 // A block meant to be pasted somewhere else: its button copies it. One

@@ -93,7 +93,7 @@ _PAINTED_BY = """
         if (rule.cssRules) walk(rule.cssRules, selector);
       }
     };
-    for (const sheet of document.styleSheets) {
+    for (const sheet of [...document.styleSheets, ...document.adoptedStyleSheets]) {
       if (vendored && sheet.ownerNode?.closest?.(vendored)) continue;
       let rules;
       try { rules = sheet.cssRules; } catch { continue; }
@@ -190,21 +190,23 @@ BUTTON_EDGES = (
     + DESCRIBE
     + """
   const found = [];
-  const fieldLine = new Map();
-  const resolved = (parent) => {
-    if (!fieldLine.has(parent)) {
-      const probe = document.createElement('span');
-      probe.style.cssText = 'position: absolute; border: 1px solid var(--field-line)';
-      parent.append(probe);
-      fieldLine.set(parent, getComputedStyle(probe).borderTopColor);
-      probe.remove();
-    }
-    return fieldLine.get(parent);
-  };
-  for (const control of document.querySelectorAll(pressed)) {
-    if (!control.parentElement || !control.checkVisibility()) continue;
+  const controls = [...document.querySelectorAll(pressed)].filter((control) => control.parentElement && control.checkVisibility());
+  // Every parent's probe is placed before any is read, so the page's style
+  // is worked out once, where a probe placed and read in turn has it worked
+  // out again for each parent.
+  const probes = new Map();
+  for (const control of controls) {
+    if (probes.has(control.parentElement)) continue;
+    const probe = document.createElement('span');
+    probe.style.cssText = 'position: absolute; border: 1px solid var(--field-line)';
+    control.parentElement.append(probe);
+    probes.set(control.parentElement, probe);
+  }
+  const fieldLine = new Map([...probes].map(([parent, probe]) => [parent, getComputedStyle(probe).borderTopColor]));
+  probes.forEach((probe) => probe.remove());
+  for (const control of controls) {
     const style = getComputedStyle(control);
-    const edge = resolved(control.parentElement);
+    const edge = fieldLine.get(control.parentElement);
     const sides = ['Top', 'Right', 'Bottom', 'Left'].filter((side) =>
       parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none' && style[`border${side}Color`] === edge);
     if (sides.length) found.push(`${describe(control)} wears a field's edge`);

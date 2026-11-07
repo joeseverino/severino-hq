@@ -86,6 +86,7 @@ class DocumentationRecord(TimestampedModel):
         RESTRICTED = "restricted", "Restricted"
 
     doc_id = models.SlugField(
+        "doc ID",
         max_length=80,
         unique=True,
         help_text=("Stable identifier, e.g. 'rb-adguard-001'. Never rename it."),
@@ -120,7 +121,7 @@ class DocumentationRecord(TimestampedModel):
         blank=True,
         help_text="Repo-relative path if this doc also lives in a Git repo.",
     )
-    external_url = models.URLField(blank=True)
+    external_url = models.URLField("external URL", blank=True)
 
     last_reviewed = models.DateField(null=True, blank=True)
     published_at = models.DateField(

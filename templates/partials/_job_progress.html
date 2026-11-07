@@ -17,15 +17,10 @@ would be wrong for every extension after the first.
   </div>
   {% comment %}
   A determinate bar where the work knows how far along it is and an
-  indeterminate one where it does not, rather than a bar that sits at a number
-  it made up. `aria-valuenow` is omitted in that case for the same reason.
+  indeterminate one, with no value, where it does not, rather than a bar that
+  sits at a number it made up.
   {% endcomment %}
-  <div class="job-bar {% if job.percent is None %}job-bar-unknown{% endif %}"
-       role="progressbar" aria-label="{{ job.label }}"
-       {% if job.percent is not None %}aria-valuenow="{{ job.percent }}"{% endif %}
-       aria-valuemin="0" aria-valuemax="100">
-    <i data-ask-bar {% if job.percent is not None %}style="--at: {{ job.percent }}%"{% endif %}></i>
-  </div>
+  <progress class="job-bar" aria-label="{{ job.label }}" max="100"{% if job.percent is not None %} value="{{ job.percent }}"{% endif %} data-ask-bar></progress>
   <p class="job-note" role="status" data-ask-note>{% if job.note %}{{ job.note|breakable }}{% else %}{% waiting %}{% endif %}</p>
 {% endpartialdef %}
 {% comment %}The status resource is given only while the work is live, which is when ask.js follows it; a job whose process stopped is not.{% endcomment %}

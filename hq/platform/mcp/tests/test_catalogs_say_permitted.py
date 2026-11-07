@@ -3,6 +3,7 @@
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 
+from hq.platform.application.capabilities import describe_capabilities
 from hq.platform.application.security import Capability, Principal
 
 from ..identity import set_principal
@@ -29,11 +30,16 @@ class CatalogsSayPermittedTests(TestCase):
         ):
             with self.subTest(tool):
                 entries = call(tool)[key]
+                # The capability index names no permission; the catalog it indexes does.
+                described = (
+                    describe_capabilities(principal=READER)["capabilities"] if key == "capabilities" else entries
+                )
+                required = {entry["name"]: set(entry["required_capabilities"]) for entry in described}
 
                 self.assertTrue(entries)
                 self.assertEqual(
                     {entry["name"]: entry["permitted"] for entry in entries},
-                    {entry["name"]: set(entry["required_capabilities"]) <= {"read"} for entry in entries},
+                    {entry["name"]: required[entry["name"]] <= {"read"} for entry in entries},
                 )
 
     def test_a_kind_a_test_serves_is_in_the_catalog_permitted_as_its_list_answers(self):

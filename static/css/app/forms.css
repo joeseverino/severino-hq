@@ -5,25 +5,24 @@
 
 /* ── Forms ──────────────────────────────────────────────────────── */
 
-/* A form is two columns where there is room and one where there is not, in
-   reading order, and a row's fields share its whole width: pairs sit side by
-   side, and the odd one of a run takes its row rather than leaving a hole.
-   Two, never three: a third column is where a run of four became three and a
-   stray. Anything that is not a single short field (a textarea, a group of
-   boxes, errors, the actions) takes the row. */
+/* A form's fields flow in reading order across as many columns as hold a
+   field of 18rem, so a wide frame gains columns rather than stretching each
+   input. Anything that is not a single short field (a textarea, a group of
+   boxes, a field marked wide, errors, the actions) takes the row. */
 .form {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
   gap: var(--space-7) var(--space-10);
-  align-items: flex-start;
+  align-items: start;
   padding: var(--surface-inset, var(--space-10));
 }
-/* More than a third of the row, so no more than two fit it. */
-.form .field { flex: 1 1 max(18rem, 34%); min-width: min(100%, 18rem); }
-.form > :not(.field) { flex-basis: 100%; }
-.form > .field:has(textarea) { flex-basis: 100%; }
-.form > .field:has(> div > * + *) { flex-basis: 100%; }
+.form > :not(.field), .form > .field:has(textarea), .form > .field:has(> div > * + *), .form .field.is-wide { grid-column: 1 / -1; }
 .form > .field { margin-bottom: 0; }
+/* A range's start and end (`field-range`) begin a row together, in the form's
+   own columns, so a third column never takes one and leaves the other; on a
+   phone they stack in order. */
+.form > .field-range { display: grid; grid-template-columns: subgrid; align-items: start; }
+.field-range > .field { margin-bottom: 0; }
 /* A lone checkbox sits beside its label, the help under both, rather than
    alone on a line under its own question. */
 .field:has(> input[type=checkbox]) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--space-4); }
@@ -46,14 +45,11 @@
 .field select:is([multiple], [size]) option { white-space: normal; overflow-wrap: anywhere; padding-block: var(--space-1); }
 /* Never shorter than a few lines, however little is in it (`field-sizing`). */
 .field textarea { resize: vertical; min-height: 80px; }
-/* A field that is the form's subject (a title, a note) takes the whole row. */
-.form .field.is-wide { flex-basis: 100%; }
-/* A field shown only when another's value calls for it (app.js). The wrapper
-   adds no box, so the fields inside keep their place in the grid. */
 /* A field shown only when another field's value calls for it: data-when names
    the field ("repeat", any value) or the values ("repeat=weekly"). The
-   stylesheet reads the chosen option, so the form is laid out once, from its
-   first frame, with or without script. */
+   wrapper adds no box, so the fields inside keep their place in the grid, and
+   the stylesheet reads the chosen option, so the form is laid out once, from
+   its first frame, with or without script. */
 .form [data-when] { display: contents; }
 .form:has([name="repeat"] option[value=""]:checked) [data-when="repeat"],
 .form:not(:has([name="repeat"] option[value="weekly"]:checked)) [data-when="repeat=weekly"] { display: none; }
@@ -85,8 +81,21 @@
   font-weight: 600;
 }
 .errors { color: var(--danger); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
+/* Every form a page is about sits in one card that spans its column, as every
+   frame in the page's flow does. */
+.form-card { margin: 0; }
 .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
 .form-actions-note { font-size: var(--text-xs); }
+/* A row's editor ({% row_editor %}), in the line beneath its row: one panel
+   on the name's edge, as the row's other parts are. The server draws its row
+   open, which with no script only this shows, since no toggle can open it;
+   a narrow part stays in its row then, so the line holds no copy of it. */
+.row-editor > .form { padding: var(--space-6); border-radius: var(--radius); background: var(--bg-tint); }
+@media (scripting: none) {
+  .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-editor) { display: table-row; }
+  .data-table > tbody > tr.is-expanded + tr.row-detail > td > .row-columns > [data-narrow],
+  .data-table > tbody > tr.is-expanded + tr.row-detail > td > .row-columns:not(:has(> dd[data-label])) { display: none; }
+}
 
 /* ── Dropzone ───────────────────────────────────────────────────────
    The real file input covers the zone, so the click target and the drop target
@@ -119,7 +128,7 @@
    the zone has to carry one. Without this a keyboard user tabbing onto the
    upload control gets no indication they are on it at all. */
 .field label.dropzone:focus-within, .dropzone:focus-within {
-  outline: 2px solid var(--accent); outline-offset: 2px;
+  outline: 2px solid var(--accent); outline-offset: -2px;
 }
 .field label.dropzone.is-dragging, .dropzone.is-dragging {
   border-color: var(--accent); background: var(--accent-tint);
@@ -147,7 +156,8 @@
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  background: var(--surface);
+  --ground: var(--surface);
+  background: var(--ground);
   color: var(--ink);
   width: min(520px, calc(100vw - 32px));
 }
@@ -162,7 +172,7 @@
 }
 .modal-close:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
 .modal-lede { margin: 0 0 var(--space-7); font-size: var(--text-sm); color: var(--muted); line-height: 1.5; }
-.modal .form { background: none; border: 0; padding: 0; box-shadow: none; max-width: none; }
+.modal .form { background: none; border: 0; padding: 0; box-shadow: none; }
 
 .command-center-modal {
   width: min(780px, calc(100vw - 28px));
@@ -170,7 +180,7 @@
 }
 .command-center-modal .modal-panel { padding: var(--space-9) var(--space-9) var(--space-6); }
 .command-center-modal .modal-head { margin-bottom: var(--space-1); }
-.command-center-modal .modal-head h2 { font-size: var(--text-2xl); letter-spacing: -.02em; text-transform: none; }
+.command-center-modal .modal-head h2 { font-size: var(--text-2xl); letter-spacing: -.02em; }
 .command-center-modal .modal-lede { margin-bottom: var(--space-6); }
 .command-center-palette { display: grid; min-height: 0; }
 .command-center-query {
@@ -185,7 +195,7 @@
 }
 .command-center-query:focus-within {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-tint);
+  outline: 2px solid var(--accent); outline-offset: -2px;
 }
 .command-center-query svg { fill: none; stroke: var(--muted); stroke-width: 1.8; }
 .command-center-query input[type=search] {
@@ -215,7 +225,7 @@
   top: 0;
   margin: 0;
   padding: var(--space-3) var(--space-4) var(--space-2);
-  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  background: color-mix(in srgb, var(--ground) 94%, transparent);
   color: var(--muted);
   font-size: var(--text-3xs);
   font-weight: 700;
@@ -290,7 +300,9 @@
    last, which a row aligned on baselines (an opened row's panel) would lift
    over the rows above, as base.css does for an identifier, and where an
    engine has no `baseline-source` it sits on its last line's baseline. */
-.tag { display: inline-block; padding: 1px var(--space-4); margin-right: var(--space-2); background: var(--bg-tint); border-radius: 999px; font-size: var(--text-2xs); color: var(--ink-2); baseline-source: first; }
+.tag { display: inline-block; padding: 1px var(--space-4); margin-inline-end: var(--space-2); background: var(--bg-tint); border-radius: 999px; font-size: var(--text-2xs); color: var(--ink-2); baseline-source: first; }
+/* The margin parts a chip from the next; the last has none to part, so it takes the whole of its line, and a value in it is cut only past its cell's edge. */
+.tag:last-child { margin-inline-end: 0; }
 
 .search-page-form input[type=search] { flex-basis: 420px; }
 .command-center-grid {
@@ -301,7 +313,6 @@
   margin: var(--layout-gap) 0;
 }
 .command-center-grid > * { margin: 0; min-width: 0; }
-.discovery-group > h2 { margin-bottom: var(--space-4); }
 .discovery-list { list-style: none; margin: 0; padding: 0; }
 .discovery-list li { border-top: 1px solid var(--line); }
 .discovery-list li:first-child { border-top: 0; }
@@ -330,14 +341,12 @@ a.discovery-link:hover strong { color: var(--accent); }
 .command-hint { margin: var(--space-2) 0 0; }
 /* A key to press is said only where there are keys: not on a touch screen. */
 @media (hover: none) { .keyboard-only { display: none; } }
-.command-runner { margin: 0; max-width: 56rem; }
 /* What a command acts on, when the page was opened for one thing, and where
    a switch stands for it: facts the form names, not fields to fill. */
 :is(.command-target, .command-state) p { margin: 0; }
 :is(.command-target, .command-state) .field-label { display: block; color: var(--muted); font-size: var(--text-xs); }
 /* The confirmation closes the form, a row of its own under the fields it confirms. */
 .command-form > .command-confirm { flex-basis: 100%; }
-.command-effect-note { margin: 0 0 var(--space-7); }
 .command-confirm {
   padding: var(--space-6) var(--space-7);
   /* A callout, like .notice: inside a surface its tint and its bar, not a frame. */
@@ -353,9 +362,8 @@ a.discovery-link:hover strong { color: var(--accent); }
   overflow-wrap: anywhere;
 }
 .command-result-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); }
-.command-result { margin-bottom: var(--layout-gap); border-left: 3px solid var(--ok); }
-.command-result .section-head { align-items: flex-start; }
-.command-result .section-head h2 { margin-bottom: 0; }
+.command-result { margin-bottom: var(--layout-gap); }
+.command-result > .section-body { border-left: 3px solid var(--ok); }
 /* The projected result: facts as a small grid, the list as a plain data table
    with its count in the caption, and the JSON behind a disclosure below both. */
 .command-result-facts {
@@ -386,17 +394,16 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* A line of its own size: inline after a <br>, its links would align to the
    cell's larger line and sit above the words beside them. */
 .connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
-/* Where a connection is reached from. Sized to nothing and stretched to the
-   cell, it never widens its column. With a machine, its words keep their
+/* Where a connection is reached from. Asking no width of its own (`contain`), it
+   never widens its column. With a machine, its words keep their
    length and the machine's name moves to a line of its own where the two do
    not fit, cut only where it alone is longer than the cell (figures.css);
    with none, the words are one line, cut as any context line's are. */
-.connection-reach { display: flex; flex-wrap: wrap; gap: 0 .3em; width: 0; min-width: 100%; white-space: nowrap; }
+.connection-reach { display: flex; flex-wrap: wrap; gap: 0 .3em; contain: inline-size; white-space: nowrap; }
 /* Its own section under the table, not a second compartment of a card around it. */
 /* How to connect each provider not yet connected: one row each, opened for its steps. */
-.connection-setup { margin-top: var(--stack-gap); }
 .setup-list { margin: var(--space-4) 0 0; padding: 0; list-style: none; }
-.setup-list > li { border-top: 1px solid var(--line-2); }
+.setup-list > li { padding-inline: var(--frame-inset, 0); border-top: 1px solid var(--line-2); }
 .setup-list summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; cursor: pointer; }
 .setup-list details[open] { padding-bottom: var(--space-6); }
 /* Names share one edge so what each gives reads down one column; narrow, it wraps under its name. */
@@ -404,7 +411,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .setup-list summary > .muted { flex: 1 1 18rem; }
 /* A family set up on its own: one line, its name under the services' names,
    past the width of their disclosure mark and its gaps. */
-.setup-list > .setup-other { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0 var(--space-4) calc(1.05em + var(--space-1) + var(--space-5)); }
+.setup-list > .setup-other { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) var(--frame-inset, 0) var(--space-4) calc(var(--frame-inset, 0px) + 1.05em + var(--space-1) + var(--space-5)); }
 .setup-permissions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin: var(--space-2) 0; padding: 0; list-style: none; font-size: var(--text-xs); }
 .setup-permissions code { white-space: nowrap; }
 .connection-more-scope { margin-top: var(--space-2); }
@@ -419,26 +426,24 @@ a.discovery-link:hover strong { color: var(--accent); }
 .row-detail :is(.connection-sight-list, .connection-read-list) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
 .row-detail :is(.connection-sight-list, .connection-read-list) > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
 /* Each reading carries its state's color, so what needs reading again shows. */
-.row-detail :is(.connection-sight-list, .connection-read-list) > li::before { content: ""; flex: none; align-self: center; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.row-detail :is(.connection-sight-list, .connection-read-list) > li::before { content: ""; align-self: center; block-size: 7px; aspect-ratio: 1; border-radius: 50%; background: var(--ok); }
 .row-detail .connection-read-list > li.connection-sight-partial::before { background: var(--warn); }
 .row-detail .connection-read-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
 .row-detail .connection-read-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
 /* The fix is the one thing to do, so it reads as a callout, its notes
-   numbered steps at a reading width. */
+   numbered steps, each number hung in the step's margin. */
 .row-detail .connection-credential-steps {
-  max-width: 72ch; padding: var(--space-3) var(--space-5); border-left: 3px solid var(--warn); border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-5); border-left: 3px solid var(--warn); border-radius: var(--radius-sm);
   background: var(--tone-caution-tint); counter-reset: fix-step;
 }
 .row-detail .connection-credential-steps .operator-step:first-child { margin-top: 0; }
-.row-detail .connection-credential-steps .operator-step p {
-  display: grid; grid-template-columns: 1.5em minmax(0, 1fr); margin-top: var(--space-2); color: var(--ink-2);
-}
-.row-detail .connection-credential-steps .operator-step p::before { counter-increment: fix-step; content: counter(fix-step) "."; color: var(--warn); font-weight: 650; }
+.row-detail .connection-credential-steps .operator-step p { margin-top: var(--space-2); padding-inline-start: 1.5em; color: var(--ink-2); }
+.row-detail .connection-credential-steps .operator-step p::before { float: inline-start; margin-inline-start: -1.5em; counter-increment: fix-step; content: counter(fix-step) "."; color: var(--warn); font-weight: 650; }
 /* What it lets HQ change, as chips. They sit on the opened row's tinted
    panel, which `--accent-tint` all but matches in light, so the chip is a
    wash of the accent over whatever is behind it: darker than the panel in
    light, lighter in dark. */
-.row-detail .connection-ability-all > li { grid-template-columns: minmax(0, 1fr); padding: 1px var(--space-4); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+.row-detail .connection-ability-all > li { display: block; padding: 1px var(--space-4); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
 .row-detail .connection-ability-all > li::before { content: none; }
 .connection-sight-state { font-weight: 600; }
 .connection-sight-refused .connection-sight-state,
@@ -471,32 +476,5 @@ a.discovery-link:hover strong { color: var(--accent); }
 }
 .connection-sight-never_swept .connection-sight-state,
 .connection-sight-not_connected .connection-sight-state { color: var(--muted); }
-/* stylelint-disable-next-line declaration-property-value-disallowed-list -- the panel's corners clip its summary's fill, not its text */
-.connection-security-advanced { margin-top: calc(var(--layout-gap) * 1.5); padding: 0; overflow: hidden; }
-.connection-security-advanced > summary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-9);
-  padding: var(--space-8) var(--space-9);
-}
-/* Closed, it is a status line: the disclosure's one mark (surfaces.css), the
-   title at the left, how the checks stand at the right. */
-.connection-security-advanced > summary > span:first-child { display: flex; flex: 1; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-6); }
-.connection-security-advanced > summary strong { font-size: var(--text-lg); }
-.connection-security-advanced > summary small { color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
-.connection-trust-path {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6) var(--space-12);
-  align-items: center;
-  padding: var(--space-9);
-  border-top: 1px solid var(--line);
-  background: var(--surface-2);
-}
-.connection-trust-path > :first-child { flex: 1 1 14rem; min-width: 0; }
-.connection-trust-path > :last-child { flex: 3 1 24rem; min-width: 0; }
-.connection-trust-path h3 { margin: var(--space-1) 0 var(--space-2); font-size: var(--text-lg); }
-.connection-trust-path p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 
 }

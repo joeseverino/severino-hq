@@ -383,6 +383,37 @@ def is_agent(interface: str) -> bool:
     return interface in AGENT_SURFACES
 
 
+# Between a client id and the sign-in key of its person in a subject. The key
+# is a hex digest, so the subject is read apart from its last separator; a
+# machine's client id holding one is told apart by its row
+# (``agent_registry.identity_of``).
+_SUBJECT_SEPARATOR = "@"
+
+
+def agent_subject(principal: Principal) -> str:
+    """The unit HQ answers for: one client as one person, or a machine's client alone.
+
+    What a rule, a block, a retry key, a rate and a held ask are kept against,
+    so one person's consent, answers and allowance are never another's who
+    signed the same client in.
+    """
+
+    return subject_of(principal.actor, principal.person_key)
+
+
+def subject_of(client_id: str, person_key: str) -> str:
+    """The subject of ``client_id`` as the person ``person_key`` names, or of the client alone."""
+
+    return client_id if not person_key else f"{client_id}{_SUBJECT_SEPARATOR}{person_key}"
+
+
+def subject_parts(subject: str) -> tuple[str, str]:
+    """A subject back to its client id and its person's sign-in key ("" for a machine's)."""
+
+    client_id, separator, key = subject.rpartition(_SUBJECT_SEPARATOR)
+    return (client_id, key) if separator else (subject, "")
+
+
 def agent_principal(actor: str, interface: str, granted: frozenset[str], *, person_key: str = "") -> Principal:
     """An agent holding its identity provider's grant, within that person's role
     for a token a person signed in.

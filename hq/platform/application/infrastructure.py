@@ -6,6 +6,7 @@ from typing import Annotated, Any
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
+from pydantic import Field
 lazy from django.utils.text import slugify
 
 from hq.domains.control_plane.desired_state import advance_dependents, desired_fingerprint
@@ -55,8 +56,8 @@ type ManagedResourceSpec = Annotated[dict[str, Any], Describe("What HQ expects o
 @dataclass(frozen=True, slots=True)
 class ManagedResourceCommand:
     key: ManagedResourceKey
-    kind: ManagedResourceKind
-    spec: ManagedResourceSpec
+    kind: Annotated[ManagedResourceKind, Field(title="Type")]
+    spec: Annotated[ManagedResourceSpec, Field(title="Config")]
     enabled: Annotated[bool, Describe("Whether HQ keeps the live record as it expects.")] = True
 
 
@@ -296,7 +297,7 @@ def resource_health(resource: ManagedResource) -> HealthPart:
         "state": "unknown",
         "label": "Not read yet",
         "reason": "",
-        "message": "The controller has not read it yet.",
+        "message": "HQ has not read it yet.",
     }
 
 

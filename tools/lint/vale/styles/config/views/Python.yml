@@ -5,13 +5,15 @@
 # bytes literal, not lower-case identifier text (a route, a path, a class
 # list), not a file name or a type written as a string, and not an argument of
 # a call whose words go to a log or to whoever is writing the code (a shared
-# value's description is the controller contract's, read by its author).
+# value's description is the controller contract's, read by its author, and a
+# setting's label is the vault item field the renderer looks up).
 # Tree-sitter has no "not inside", so a string counts by its parent: every
 # parent but a bare expression (a docstring) and a call's arguments, which
 # count only when the call is not one of those.
 #
 # One scope only: Vale joins captures on consecutive lines at one column into
-# one, under the first one's scope.
+# one, under the first one's scope. Vale reports a string once for each scope
+# that captures it, so a scope reads only what the others leave out.
 engine: tree-sitter
 scopes:
   # A string a parent shows.
@@ -87,7 +89,7 @@ scopes:
       ((call
          function: [(identifier) @_f (attribute attribute: (identifier) @_f)]
          arguments: (argument_list [[(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)] (keyword_argument value: [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])]))
-       (#not-match? @_f "^(debug|info|warning|error|exception|critical|log|getLogger|ImproperlyConfigured|RuntimeError|TypeError|AssertionError|NotImplementedError|KeyError|LookupError|compile|CheckMessage|Error|Warning|add_argument|CommandError|SuspiciousOperation|Http404|SharedValue)$")
+       (#not-match? @_f "^(debug|info|warning|error|exception|critical|log|getLogger|ImproperlyConfigured|RuntimeError|TypeError|AssertionError|NotImplementedError|KeyError|LookupError|compile|CheckMessage|Error|Warning|add_argument|CommandError|SuspiciousOperation|Http404|SharedValue|Setting)$")
 
        (#not-match? @_s "^[rR]?[bB]")
        (#match? @prose "(?s)\\S.* .*\\S")
@@ -101,8 +103,109 @@ scopes:
       ((call
          function: [(identifier) @_f (attribute attribute: (identifier) @_f)]
          arguments: (argument_list [[(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))] (keyword_argument value: [(concatenated_string (string (string_content) @prose) @_s) (parenthesized_expression (concatenated_string (string (string_content) @prose) @_s))])]))
-       (#not-match? @_f "^(debug|info|warning|error|exception|critical|log|getLogger|ImproperlyConfigured|RuntimeError|TypeError|AssertionError|NotImplementedError|KeyError|LookupError|compile|CheckMessage|Error|Warning|add_argument|CommandError|SuspiciousOperation|Http404|SharedValue)$")
+       (#not-match? @_f "^(debug|info|warning|error|exception|critical|log|getLogger|ImproperlyConfigured|RuntimeError|TypeError|AssertionError|NotImplementedError|KeyError|LookupError|compile|CheckMessage|Error|Warning|add_argument|CommandError|SuspiciousOperation|Http404|SharedValue|Setting)$")
 
        (#not-match? @_s "^[rR]?[bB]")
        (#match? @prose "(?s)\\S.* .*\\S")
        (#not-match? @prose "\\.(html|py|js|css)\\s*$"))
+
+  # A string whose place says it is shown is read whatever its letters, one
+  # word or lower case included: the value of a keyword, a field or a key named
+  # for shown text (label, title, summary and the rest), a value in a map named
+  # for its words (LABELS), a return of a function named for what it builds
+  # (leg_label), and a choice's label. Identifier text sits under other names,
+  # or in a place these leave out: an AppConfig's body (an app's label), a
+  # renderer entry holding "source" (a vault field's label), a constant named
+  # only LABEL or REMEDY (an enumeration's value, where AUDIT_LABEL is words),
+  # and a noun, which names a record's operations. A verb is words only as a
+  # keyword. These read only the strings the scopes above skip for their
+  # letters, since Vale reports a string once for each scope that captures it.
+  - name: shown
+    expr: |
+      ((call
+         function: [(identifier) @_f (attribute attribute: (identifier) @_f)]
+         arguments: (argument_list (keyword_argument
+           name: (identifier) @_k
+           value: [(string (string_content) @prose) @_s
+                   (parenthesized_expression (string (string_content) @prose) @_s)
+                   (conditional_expression (string (string_content) @prose) @_s)])))
+       (#not-match? @_f "^(debug|info|warning|error|exception|critical|log|getLogger|ImproperlyConfigured|RuntimeError|TypeError|AssertionError|NotImplementedError|KeyError|LookupError|compile|CheckMessage|Error|Warning|add_argument|CommandError|SuspiciousOperation|Http404|SharedValue|Setting)$")
+       (#match? @_k "^_?([a-z0-9]+_)*(label|title|lede|subtitle|eyebrow|heading|headline|summary|detail|remedy|help|help_text|description|verbose_name|verbose_name_plural|empty|placeholder|said|message|question|explanation|caption)$|^_?([A-Z0-9]+_)+(LABEL|TITLE|LEDE|SUBTITLE|EYEBROW|HEADING|HEADLINE|SUMMARY|DETAIL|REMEDY|HELP|HELP_TEXT|DESCRIPTION|VERBOSE_NAME|VERBOSE_NAME_PLURAL|EMPTY|PLACEHOLDER|SAID|MESSAGE|QUESTION|EXPLANATION|CAPTION)$|^(many|one|body|intent|gives|unmet|operator_action|removal_impact|shown_as|verb)$")
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))
+
+  - name: shown
+    expr: |
+      ([(module (expression_statement (assignment
+          left: [(identifier) @_k (attribute attribute: (identifier) @_k)]
+          right: [(string (string_content) @prose) @_s
+                  (parenthesized_expression (string (string_content) @prose) @_s)
+                  (conditional_expression (string (string_content) @prose) @_s)])))
+        (_ [body: (block (expression_statement (assignment
+               left: [(identifier) @_k (attribute attribute: (identifier) @_k)]
+               right: [(string (string_content) @prose) @_s
+                       (parenthesized_expression (string (string_content) @prose) @_s)
+                       (conditional_expression (string (string_content) @prose) @_s)])))
+            consequence: (block (expression_statement (assignment
+               left: [(identifier) @_k (attribute attribute: (identifier) @_k)]
+               right: [(string (string_content) @prose) @_s
+                       (parenthesized_expression (string (string_content) @prose) @_s)
+                       (conditional_expression (string (string_content) @prose) @_s)])))]) @_o
+        (default_parameter
+          name: (identifier) @_k
+          value: (string (string_content) @prose) @_s)
+        (typed_default_parameter
+          name: (identifier) @_k
+          value: (string (string_content) @prose) @_s)]
+       (#not-match? @_o "^class [^:]*\\bAppConfig\\b")
+       (#match? @_k "^_?([a-z0-9]+_)*(label|title|lede|subtitle|eyebrow|heading|headline|summary|detail|remedy|help|help_text|description|verbose_name|verbose_name_plural|empty|placeholder|said|message|question|explanation|caption)$|^_?([A-Z0-9]+_)+(LABEL|TITLE|LEDE|SUBTITLE|EYEBROW|HEADING|HEADLINE|SUMMARY|DETAIL|REMEDY|HELP|HELP_TEXT|DESCRIPTION|VERBOSE_NAME|VERBOSE_NAME_PLURAL|EMPTY|PLACEHOLDER|SAID|MESSAGE|QUESTION|EXPLANATION|CAPTION)$|^(many|one|body|intent|gives|unmet|operator_action|removal_impact|shown_as)$")
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))
+
+  - name: shown
+    expr: |
+      ((dictionary (pair
+         key: (string (string_content) @_k)
+         value: [(string (string_content) @prose) @_s
+                 (parenthesized_expression (string (string_content) @prose) @_s)
+                 (conditional_expression (string (string_content) @prose) @_s)])) @_d
+       (#not-match? @_d "\"source\": ")
+       (#match? @_k "^_?([a-z0-9]+_)*(label|title|lede|subtitle|eyebrow|heading|headline|summary|detail|remedy|help|help_text|description|verbose_name|verbose_name_plural|empty|placeholder|said|message|question|explanation|caption)$|^_?([A-Z0-9]+_)+(LABEL|TITLE|LEDE|SUBTITLE|EYEBROW|HEADING|HEADLINE|SUMMARY|DETAIL|REMEDY|HELP|HELP_TEXT|DESCRIPTION|VERBOSE_NAME|VERBOSE_NAME_PLURAL|EMPTY|PLACEHOLDER|SAID|MESSAGE|QUESTION|EXPLANATION|CAPTION)$|^(many|one|body|intent|gives|unmet|operator_action|removal_impact|shown_as)$")
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))
+
+  - name: shown
+    expr: |
+      ([(assignment
+          left: [(identifier) @_k (attribute attribute: (identifier) @_k)]
+          right: (dictionary (pair value: [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])))
+        (keyword_argument
+          name: (identifier) @_k
+          value: (dictionary (pair value: [(string (string_content) @prose) @_s (parenthesized_expression (string (string_content) @prose) @_s)])))]
+       (#match? @_k "(?i)(^|_)(labels|titles|headings|summaries|details|remedies|descriptions|explanations|messages|hints|questions|captions|words|phrases|nouns|verbs|answers|reasons|means|said|doors)$")
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))
+
+  - name: shown
+    expr: |
+      ((function_definition
+         name: (identifier) @_f
+         body: (block [(return_statement [(string (string_content) @prose) @_s (conditional_expression (string (string_content) @prose) @_s)])
+                       (_ [consequence: (block (return_statement [(string (string_content) @prose) @_s (conditional_expression (string (string_content) @prose) @_s)]))
+                           body: (block (return_statement [(string (string_content) @prose) @_s (conditional_expression (string (string_content) @prose) @_s)]))
+                           alternative: (else_clause body: (block (return_statement [(string (string_content) @prose) @_s (conditional_expression (string (string_content) @prose) @_s)])))
+                           alternative: (elif_clause consequence: (block (return_statement [(string (string_content) @prose) @_s (conditional_expression (string (string_content) @prose) @_s)])))])]))
+       (#match? @_f "(^|_)(label|title|lede|subtitle|heading|headline|summary|detail|remedy|description|explanation|said|message|question|caption|reason|phrase|sentence|words)$")
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))
+
+  - name: shown
+    expr: |
+      ((class_definition
+         superclasses: (argument_list [(identifier) @_b (attribute attribute: (identifier) @_b)])
+         body: (block (expression_statement (assignment
+           right: [(expression_list (_) (string (string_content) @prose) @_s)
+                   (tuple (_) (string (string_content) @prose) @_s)]))))
+       (#match? @_b "^(TextChoices|IntegerChoices|Choices)$")
+       (#not-match? @_s "^[rR]?[bB]")
+       (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))

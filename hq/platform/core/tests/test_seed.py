@@ -13,9 +13,9 @@ from django.test import TestCase
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
 from hq.platform.application import pins
+from hq.platform.core import seeds
 from hq.platform.core.example_estate import FAVORITES, names, records
 from hq.platform.core.example_estate.testing import throwaway_media
-from hq.platform.core.management.commands.seed import records_held
 
 
 def seed(name: str, **options) -> str:
@@ -36,20 +36,22 @@ class SeedTests(TestCase):
         operator = authenticate(username="operator", password="an-example-password")
         self.assertTrue(operator.is_superuser)
         self.assertEqual(pins.pinned(operator, pins.SERVICE), set(FAVORITES))
-        self.assertEqual(env_file.read_text(), "SEVERINO_POSTURE=advanced\n")
+        shown_under = dict(line.split("=", 1) for line in env_file.read_text().splitlines())
+        self.assertEqual(shown_under, dict(seeds.get("showcase").settings))
+        self.assertEqual(shown_under["SEVERINO_POSTURE"], "advanced")
 
     def test_the_empty_set_is_its_operator_and_nothing_else(self):
         seed("empty")
 
-        self.assertEqual(records_held(), {})
+        self.assertEqual(seeds.records_held(), {})
         self.assertEqual(list(get_user_model().objects.values_list("username", flat=True)), ["operator"])
 
     def test_a_database_that_holds_a_record_is_refused_and_left_as_it_was(self):
         Project.objects.create(name="Already here", slug="already-here", category="homelab", status="active")
-        before = records_held()
+        before = seeds.records_held()
 
         with self.assertRaisesMessage(CommandError, "projects.Project (1)"):
             seed("showcase")
 
-        self.assertEqual(records_held(), before)
+        self.assertEqual(seeds.records_held(), before)
         self.assertFalse(get_user_model().objects.exists())

@@ -22,8 +22,9 @@ from django.test import tag
 from hq.platform.core.tests.task import Usage
 from tools.gate import at, check, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase
+from tools.gate.tests.fast_runs import run_main
 from tools.gate.tests.test_at import PROBE, TestAtRefTests
-from tools.gate.tests.test_fast import RUNNER_FAILURES, VERDICT_IN, Recorder, run_main
+from tools.gate.tests.test_fast import RUNNER_FAILURES, VERDICT_IN, Recorder
 
 ROOT = Path(__file__).resolve().parents[3]
 # Past the read-back window of a failed command's output, so its last line is cut.

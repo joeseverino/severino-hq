@@ -44,8 +44,7 @@ or out of date.
     something looks wrong, not on every visit, and thirty rows of it push the
     page's own content off a phone.
     {% endcomment %}
-    {% card element="details" css="sweep section-fold" %}
-      <summary><h2>What was read, and when <span class="heading-aside">{{ inventory|length }}</span></h2></summary>
+    {% section "What was read, and when" count=inventory|length fold=True css="sweep" %}
       <div class="sweep-grid">
         {% for snapshot in inventory %}
           <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% elif snapshot.state == "stale" or snapshot.state == "partial" %} sweep-item-stale{% endif %}">
@@ -62,6 +61,6 @@ or out of date.
           </div>
         {% endfor %}
       </div>
-    {% endcard %}
+    {% endsection %}
   {% endif %}
 {% endif %}

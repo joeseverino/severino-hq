@@ -22,6 +22,7 @@ from ..security import (
     agent_principal,
     cli_principal,
     device_principal,
+    subject_of,
     web_principal,
 )
 
@@ -30,9 +31,13 @@ OTHER = "example-other-agent"
 READ = frozenset({"read"})
 
 
-def _seen(*clients: str) -> None:
+def _seen(*clients: str, person_key: str = "") -> None:
     for client in clients:
-        AgentIdentity.objects.create(client_id=client, interfaces=["mcp"], granted=["read"])
+        AgentIdentity.objects.create(client_id=client, person_key=person_key, interfaces=["mcp"], granted=["read"])
+
+
+def _blocked(client: str) -> bool:
+    return blocked(agent_principal(client, "mcp", READ))
 
 
 class RefusalTests(TestCase):
@@ -50,8 +55,16 @@ class RefusalTests(TestCase):
                 self.assertEqual(refusal(agent_principal(AGENT, interface, READ)), AGENT_BLOCKED)
                 self.assertIsNone(refusal(agent_principal(OTHER, interface, READ)))
 
-    def test_a_blocked_device_stops_with_its_client(self):
+    def test_a_blocked_device_stops_with_its_client_as_its_person(self):
         bind_sign_in(self.person, "example-key")
+        _seen(AGENT, person_key="example-key")
+        answer = execute_capability(
+            SET_AGENT_BLOCK,
+            keyed({"blocked": True}),
+            principal=web_principal(self.person),
+            target=subject_of(AGENT, "example-key"),
+        )
+        self.assertTrue(answer["ok"], answer)
         device = device_principal(AGENT, READ, READ, person_key="example-key")
 
         self.assertEqual(refusal(device), AGENT_BLOCKED)
@@ -72,7 +85,7 @@ class RefusalTests(TestCase):
 
     def test_an_unreadable_block_refuses(self):
         with mock.patch.object(AgentIdentity.objects, "filter", side_effect=DatabaseError("locked")):
-            self.assertTrue(blocked(OTHER))
+            self.assertTrue(_blocked(OTHER))
 
     def test_the_refusal_is_recorded_by_the_agents_name(self):
         from ..agent_admission import refused
@@ -122,7 +135,7 @@ class WhoMayBlockTests(TestCase):
                     )
 
                     self.assertEqual(result["error"]["code"], "forbidden")
-        self.assertFalse(blocked(AGENT))
+        self.assertFalse(_blocked(AGENT))
 
     def test_a_client_hq_has_never_seen_is_not_found(self):
         result = execute_capability(
@@ -163,7 +176,7 @@ class BlockControlTests(TestCase):
         self._set("1")
         self._set("0")
 
-        self.assertFalse(blocked(AGENT))
+        self.assertFalse(_blocked(AGENT))
         self.assertEqual(len(self._said()), 2)
         self.assertIsNone(AgentIdentity.objects.get(client_id=AGENT).blocked_by)
 
@@ -173,16 +186,16 @@ class BlockControlTests(TestCase):
             response = self._set("1")
 
         self.assertEqual(response.status_code, 403)
-        self.assertFalse(blocked(AGENT))
+        self.assertFalse(_blocked(AGENT))
 
     def test_an_unrecognized_state_or_client_changes_nothing(self):
         self.assertEqual(self._set("yes").status_code, 400)
         self.assertEqual(self._set("1", client_id="").status_code, 400)
         self.assertEqual(self._set("1", client_id="example-unseen").status_code, 404)
-        self.assertFalse(blocked(AGENT))
+        self.assertFalse(_blocked(AGENT))
 
     def test_a_get_cannot_block(self):
         response = self.client.get(reverse("agent_block"), {"client_id": AGENT, "blocked": "1"})
 
         self.assertEqual(response.status_code, 405)
-        self.assertFalse(blocked(AGENT))
+        self.assertFalse(_blocked(AGENT))

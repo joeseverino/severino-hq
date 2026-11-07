@@ -18,6 +18,7 @@ from mcp import types
 from hq.domains.control_plane.models import CapabilityRule
 from hq.platform.application import roles, tokens
 from hq.platform.application.linked_accounts import bind_sign_in, sign_in_subject
+from hq.platform.application.security import subject_of
 from hq.platform.core.test_runner import no_default_role
 from hq.platform.mcp.identity import set_principal
 from hq.platform.mcp.server import mcp
@@ -98,7 +99,11 @@ class ScopeRefusalTests(TestCase):
                 roles.assign(self.person, role)
                 CapabilityRule.objects.all().delete()
                 if code == "denied_by_policy":
-                    CapabilityRule.objects.create(subject=AGENT, capability=name, rule=CapabilityRule.Rule.DENY)
+                    CapabilityRule.objects.create(
+                        subject=subject_of(AGENT, sign_in_subject(ISSUER, PERSON)),
+                        capability=name,
+                        rule=CapabilityRule.Rule.DENY,
+                    )
 
                 api, over_mcp = self._both(name, payload, "read write_projects govern_agents")
 

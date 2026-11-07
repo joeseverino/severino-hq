@@ -129,7 +129,11 @@ class SearchPageTests(_AuthedTestCase):
 
         self.assertIn("Highlight", " ".join(mark.text for mark in elements(response, "mark")))
         # Empty scopes are omitted entirely, not rendered as empty cards.
-        shown = {each.attrs["id"] for each in select(response, "id") if each.attrs["id"].startswith("scope-")}
+        shown = {
+            each.attrs["id"]
+            for each in select(response, "aria-labelledby")
+            if each.attrs.get("id", "").startswith("scope-")
+        }
         self.assertEqual(shown, {f"scope-{group['scope']}" for group in response.context["groups"] if group["count"]})
 
 

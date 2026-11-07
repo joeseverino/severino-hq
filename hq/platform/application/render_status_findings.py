@@ -107,7 +107,7 @@ UNREAD_REASONS = {
     "unreadable": "Report could not be opened",
     "oversized": "Report is too large",
     "invalid": "Report is from a different version",
-    "unread": "The controller could not read it",
+    "unread": "HQ could not read it",
     "refused": "Report could not be understood",
 }
 

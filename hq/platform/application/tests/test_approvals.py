@@ -771,7 +771,7 @@ class SurfaceTests(TestCase):
 
         self.assertContains(entry, "Asked with")
         self.assertContains(entry, "Held project")
-        self.assertContains(entry, "wants to create a project")
+        self.assertContains(entry, "wants to add a project")
 
     def test_the_awaiting_view_is_the_queue(self):
         page = self.client.get(f"{reverse('core:audit_list')}?awaiting=1")

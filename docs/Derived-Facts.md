@@ -495,7 +495,7 @@ Findings from these readings:
   (`hq/platform/application/certificate_expiry.py`).
 
 The machine, service, domain and declaration pages render the section, with
-"See in topology" (`?focus=<node>`), one "Not readable" line linking to the
+"See on the map" (`?focus=<node>`), one "Not readable" line linking to the
 connections page, and each source's raw records under a disclosure.
 
 ## Links
@@ -737,8 +737,8 @@ by Renovate once a day and when somebody asks (`project.dependency_updates.run`)
 opted-in repositories, grouped by owner, whether a run is due, and
 `last_started_at`, the latest run HQ holds. When one is due the controller
 mints one installation token per owner, naming exactly that owner's
-repositories and exactly the Renovate grant (`githubRenovate` in
-`controller/providers/github_delivery.go`, held to `deploy/github-apps.json`),
+repositories and exactly the Renovate grant (`DependencyUpdates` in
+`controller/host/grant.go`, held to `deploy/github-apps.json`),
 and writes them, mode 0600, to `dependency-updates.json` in the directory root
 gives the pass as `HQ_CONTROLLER_OUT`:
 

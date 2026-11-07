@@ -175,17 +175,22 @@ class _Activity(TypedDict):
     unread: list[str]
 
 
-class _Snapshot(_Activity):
+class Glance(_Activity):
+    """The snapshot but its queue, which each reader carries in its own shape."""
+
     upstreams: Upstreams
     year: int
     kpis: Kpis
     cards: list[dict[str, Any]]
-    priority: list[QueueItem]
     priority_count: int
     active_projects: list[dict[str, Any]]
     draft_content: list[dict[str, Any]]
     recent_published: list[dict[str, Any]]
     docs_needing_review: list[dict[str, Any]]
+
+
+class _Snapshot(Glance):
+    priority: list[QueueItem]
 
 
 class OperatingSnapshot(_Snapshot):

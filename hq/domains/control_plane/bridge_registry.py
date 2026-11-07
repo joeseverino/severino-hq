@@ -27,7 +27,7 @@ REFERENCE = "#/components/schemas/"
 
 # How a word of a registry name is written in a controller constant, where
 # capitalizing its first letter is not it.
-_WORDS = {
+_CASING = {
     "acl": "ACL",
     "acme": "ACME",
     "adguard": "AdGuard",
@@ -54,12 +54,12 @@ def go_name(value: str) -> str:
     """A registry name as the controller spells it: ``npm.proxy_host`` is
     ``NPMProxyHost``.
 
-    A pure function of the name and ``_WORDS``, so a name the registry keeps
+    A pure function of the name and ``_CASING``, so a name the registry keeps
     keeps its constant. Changing a word here renames every constant that has
     it, and the controller then fails to build wherever it used the old one.
     """
 
-    return "".join(_WORDS.get(word, word[:1].upper() + word[1:]) for word in re.split(r"[._]", value.lower()) if word)
+    return "".join(_CASING.get(word, word[:1].upper() + word[1:]) for word in re.split(r"[._]", value.lower()) if word)
 
 
 def _enumeration(description: str, values: Iterable[str], prefix: str, *, blank: str = "") -> dict[str, Any]:
@@ -262,7 +262,7 @@ def _shape(shape: ConnectionShape) -> dict[str, Any]:
     for setting in shape.settings:
         tags = {"setting": setting.name}
         if setting.secret:
-            tags["secret"] = "true"
+            tags["secret"] = "true"  # noqa: S105 - a schema tag's value, no credential
         properties[setting_key(setting.name)] = {
             "type": "string",
             "x-go-name": go_name(setting.name),

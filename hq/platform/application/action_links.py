@@ -99,7 +99,7 @@ def command_action(
         name,
         # ``variant`` picks one of the words the command declares for its
         # modes; ``intent`` is a remedy's own words for what this press does
-        # ("Put an access list in front of x"), where the command's would not.
+        # ("Add an access list"), where the command's would not.
         intent or spec.words(variant),
         spec.effect,
         url,
@@ -235,7 +235,7 @@ class Investigation:
 INVESTIGATIONS = {
     investigation.name: investigation
     for investigation in (
-        Investigation("topology", "See it in the topology", "What this is connected to."),
+        Investigation("topology", "See it on the map", "What this is connected to."),
         Investigation(
             "impact",
             "See what depends on it",

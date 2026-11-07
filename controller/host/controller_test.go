@@ -31,7 +31,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
 	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
-	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET",
+	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET", "HQ_CONTROLLER_GRANTS",
 }
 
 type launch struct {
@@ -102,7 +102,7 @@ func newLaunch(t *testing.T) *launch {
 		CertStore:     filepath.Join(f.root, "certs"),
 		Tailscaled:    filepath.Join(f.root, "absent.sock"),
 		UnitSocket:    filepath.Join(f.root, "unit", "unit.sock"),
-		Spool:         filepath.Join(f.root, "spool"),
+		Grants:        []Grant{relocated(DependencyUpdates, f.root)},
 		DependencyRun: filepath.Join(f.root, "state", "renovate", "dependency-run.json"),
 		Connections:   func() error { return nil },
 		Lock: func(context.Context) (func(), error) {

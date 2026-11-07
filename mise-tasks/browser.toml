@@ -14,7 +14,7 @@ run = "uv run --group browser python -m unittest demo.check -v"
 # by side, the classes split so each leg holds about half their time in CI,
 # in WebKit and in Chromium.
 ["browser:layout-1"]
-description = "Real-browser layout invariants over the stress estate, leg 1 of 2"
+description = "Real-browser layout invariants over the stress estate, leg 1 of 2, in WebKit"
 hide = true
 extends = "django-browser"
 vars.classes = """\
@@ -26,7 +26,7 @@ vars.classes = """\
   hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests"""
 
 ["browser:layout-2"]
-description = "Real-browser layout invariants over the stress estate, leg 2 of 2"
+description = "Real-browser layout invariants over the stress estate, leg 2 of 2, in WebKit"
 hide = true
 extends = "django-browser"
 vars.classes = """\
@@ -67,15 +67,38 @@ run = [
 ]
 
 ["browser:navigation"]
-description = "Real-browser invariants over the example estate, the frame around a page and its fragments"
+description = "Real-browser invariants over the example estate, the frame around a page and its fragments, in WebKit, the reference also in Chromium"
 hide = true
 extends = "django-browser"
+# The template's, and Chromium, which the reference is also opened in.
+depends = [
+  { task = "setup:browser", args = [
+    "webkit",
+  ] },
+  { task = "setup:browser", args = [
+    "chromium",
+  ] },
+  "setup:lint-tools",
+]
 vars.classes = """\
   hq.platform.core.tests.browser.estate.ExampleEstateBrowserTests \
   hq.platform.core.tests.browser.estate.ExampleEstateControlTests \
-  hq.platform.core.tests.browser.estate.ExampleEstateTableFitTests \
+  hq.platform.core.tests.browser.reports.PolicyReportBrowserTests \
+  hq.platform.core.tests.browser.reports.WebKitSelectCanaryTests \
   hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
   hq.platform.core.tests.browser.fragments.FragmentBrowserTests \
   hq.platform.core.tests.browser.current_state.CurrentStateBrowserTests \
   hq.platform.core.tests.browser.command_forms.CommandFormBrowserTests \
   hq.platform.core.tests.browser.agent_devices.AgentDeviceBrowserTests"""
+
+# The sweep of every table at every shape of the layout with its rows open, a
+# leg of its own: it reads each page at every width a table's room changes.
+["browser:table-fit"]
+description = "Real-browser table checks over the example estate at every shape of the layout, rows open, in WebKit"
+hide = true
+extends = "django-browser"
+vars.classes = """\
+  hq.platform.core.tests.browser.table_fit.ExampleEstateTableFitFirstTests \
+  hq.platform.core.tests.browser.table_fit.ExampleEstateTableFitSecondTests \
+  hq.platform.core.tests.browser.table_fit.ExampleEstateTableFitThirdTests \
+  hq.platform.core.tests.browser.table_fit.TableSweepPlantedTests"""

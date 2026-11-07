@@ -41,26 +41,15 @@
    relates, what names it) are mostly short: each is a card holding its own
    heading, two to a row where both fit, the two at one height so the shorter
    leaves no hole beside the taller, and one that is wide (a table of four
-   columns or more, a folded section, a fold of raw readings) takes the whole
-   row. */
+   columns or more, a folded section) takes the whole row. */
 .section-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 /* Short sections collect at the end, so they pair with each other rather than
    each sitting beside the gap a wide one leaves. */
 .section-flow > * { min-width: 0; margin: 0; order: 1; }
-.section-flow > :not(section, .page-section),
-.section-flow > :is(section, .page-section):has(table > thead th:nth-child(4)),
-.section-flow > :is(section, .page-section):has(> details.section-fold) { grid-column: 1 / -1; order: 0; }
+.section-flow > :not(section, figure.section),
+.section-flow > section:has(table > thead th:nth-child(4)) { grid-column: 1 / -1; order: 0; }
 /* Sections stacked in one column of a pair, at the pair's own gap. */
 .stack { display: grid; gap: var(--layout-gap); align-content: start; min-width: 0; }
-/* Two charts are like with like and end together: each card is a column, its
-   drawing in the middle of whatever height the pair ends up being. */
-.two-col:has(> .chart-card) { align-items: stretch; }
-.two-col > .chart-card {
-  display: flex;
-  flex-direction: column;
-}
-.two-col > .chart-card > .chart-scroll,
-.two-col > .chart-card > .pie-row { margin-block: auto; }
 /* Panels that flow rather than pair. Assigning cards to a fixed left and right
    column means their heights are whatever the data made them, so one column
    ends early and the page carries the difference as a hole. Columns balance
@@ -86,14 +75,13 @@
    against, so the same count-aware columns hold in any card, not only the
    dashboard's. */
 .card:has(> .kpi-grid) { container: kpi / inline-size; }
-/* An overview card is that container too, under both names, since its own
+/* An overview's frame is that container too, under both names, since its own
    declaration replaces the one above. */
-.highlight-card.card { display: flex; flex-direction: column; padding: var(--space-8); container: featured kpi / inline-size; }
-.highlight-card > .kpi-grid { flex: 1; }
+.highlight-card > .section-body { display: flex; flex-direction: column; container: featured kpi / inline-size; }
+.highlight-card > .section-body > .kpi-grid { flex: 1; }
 .card > .kpi-grid {
   --kpi-columns: 3;
 }
-.highlight-card .section-head { margin-bottom: var(--space-8); padding-bottom: var(--space-6); border-bottom: 1px solid var(--line); }
 .highlight-card .kpi { flex: 1 1 calc(100% / var(--kpi-columns) - 1px); padding: var(--space-5); }
 /* Columns follow the cell count and the card's width (110px a cell), so rows
    stay even: four cells are 4 or 2+2, six are 6 or 3+3, never 3+1. */
@@ -122,48 +110,62 @@
 .dashboard-counts .kpi { display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding: 0; background: none; }
 .dashboard-counts .kpi .value { font-size: var(--text-md); order: -1; }
 .dashboard-counts .kpi .muted { font-size: var(--text-2xs); }
-.dashboard-patterns > .card { display: flex; flex-direction: column; margin: 0; padding: var(--space-6); }
-.dashboard-patterns .chart-card figcaption p { min-height: 0; }
+/* Sections side by side end their frames together: each frame takes what its
+   row leaves under its head. */
+:is(.dashboard-patterns, .dashboard-highlights) > .section { display: flex; flex-direction: column; }
+:is(.dashboard-patterns, .dashboard-highlights) > .section > .section-body { flex: 1; }
 /* A pair ends together, so a chart's data opens inside its card rather than
    growing it and stretching the card beside it: a pane of its own height. */
-.dashboard-patterns .chart-data > .table-scroll { max-height: 12rem; overflow: auto; }
-.dashboard-patterns .chart-data .data-table thead th { position: sticky; inset-block-start: 0; z-index: 1; background: var(--surface-2); }
-.dashboard-patterns .chart-legend { margin-top: var(--space-3); }
+.dashboard-patterns .table-scroll[data-chart] { max-height: 12rem; overflow: auto; }
+.dashboard-patterns .table-scroll[data-chart] .data-table thead th { position: sticky; inset-block-start: 0; z-index: 1; background: var(--surface-2); }
 .dashboard-patterns .calendar-day { height: 24px; padding: var(--space-1); border-radius: 5px; vertical-align: middle; }
 .dashboard-patterns .calendar-date { display: inline-block; }
 .dashboard-patterns .calendar-marks { display: inline-flex; margin: 0 0 0 var(--space-1); min-height: 6px; }
 .dashboard-patterns .calendar-dot { width: 5px; height: 5px; }
 .dashboard-patterns .calendar-legend { margin-block: var(--space-3); }
-.two-col > section, .two-col > div, .section-flow > :is(section, .page-section), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
+.two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section), .card { padding: var(--surface-inset, var(--space-8) var(--space-9)); }
 /* A card is as narrow as the column or track it is placed in, never as wide
    as its longest line, so on a phone its content wraps inside it rather than
    pushing it past the screen's edge. */
 .card { min-inline-size: 0; }
-/* A confirmation is as wide as what it says and the buttons under it, up to a
-   line's measure, never a frame stretched across the page around them. */
-.card.confirm { inline-size: fit-content; max-inline-size: min(100%, var(--measure)); }
 /* Inside a layout container the gap is the separation, so a section's own
    stacking margin is dead space. Declared after the section rules above so it
    wins on source order at equal specificity. */
 .two-col > *,
 .dashboard-patterns > * { margin-bottom: 0; }
 
-/* What sits beside the heading takes the next line when the two do not fit. */
-.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
+/* What sits beside the heading takes the next line when the two do not fit.
+   The row starts at the heading: a folded section's toggle mark is an item
+   of it too, and the aside reaches the row's end by growing. */
+.section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3) var(--space-6); margin-bottom: var(--space-6); }
 /* A heading after a form, a table or a list in the same container starts a
    section of its own, so it stands as far from what is above it as stacked
    sections do. Kept at the class's weight, so a container that spaces its
    parts by a gap still clears it. */
 .section-head:where(:not(:first-child)) { margin-block-start: var(--stack-gap); }
-.section-head h2 { margin: 0; flex: 1; }
+/* A heading takes the row's width its words need, before what sits beside
+   it does, and no more. */
+.section-head :is(h2, h3, h4, h5, h6) { margin: 0; flex: 0 1 auto; }
 /* A heading with a line under it holds what sits beside it to its first line. */
 .section-head:has(> hgroup) { align-items: flex-start; }
-.section-head > hgroup { flex: 1; min-width: 0; margin: 0; }
-.section-lede { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
+/* The heading's words size its group; the line under it takes no room of
+   its own and wraps in what the group is given, most of the row's spare
+   width. */
+.section-head > hgroup { flex: 9 1 auto; min-width: 0; margin: 0; }
+.section-lede { contain: inline-size; margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.45; }
 /* A line about the section at the head's end: a count with its unit, a
    window, a source. Wrapped, its lines are as even as its words allow, so
    none is left with one. */
 .section-head .count { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; text-wrap: balance; }
+/* What sits beside the heading is one box, so its parts (a count, a dot, a
+   link) wrap as one line of text. It sits at the row's end, and under the
+   heading at the end too, as a page head's actions do. It takes the row's
+   spare width, its words set at its end, because WebKit's max-content for a
+   line of inline boxes can fall a fraction of a pixel short of the width that
+   line lays out at, which would wrap it at its own width. */
+.section-head > .section-aside { flex: 1 1 auto; text-align: end; }
+/* A block in it (a nav of links) is as wide as what it holds, at the end. */
+:where(.section-aside > *) { inline-size: fit-content; margin-inline-start: auto; }
 /* A bare figure counting what a heading heads stands in that heading (a
    section's, a summary's, a group row's, a tab's), after the words it
    counts: a quiet figure, never louder than they are. */
@@ -190,7 +192,6 @@
   font-size: var(--text-2xl);
   font-weight: 650;
   letter-spacing: -.01em;
-  text-transform: none;
 }
 .domain-head-copy { min-width: 0; }
 .domain-head-copy .eyebrow { display: block; margin-bottom: var(--space-2); }
@@ -208,12 +209,8 @@
   margin: 0 0 var(--stack-gap);
 }
 .domain-charts > * { min-width: 0; margin: 0; }
-.domain-charts .chart-card figcaption p { max-width: 62ch; }
 
 /* Activity calendar: one month of plan against execution. */
-.calendar-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-6); }
-.calendar-head h2 { margin: 0; }
-.calendar-head-copy { min-width: 0; }
 /* The calendar. A source's color is one custom property, so a dot, a line, a
    bar and a swatch all read it the same way. */
 .series-1 { --source: var(--series-1); }
@@ -230,13 +227,10 @@
    never grows, wrapping under the month where both do not fit. */
 .calendar-layout > :first-child { flex: 999 1 36rem; }
 .calendar-layout > .calendar-aside { flex: 1 1 15rem; }
-.calendar-month { container: month / inline-size; padding: var(--space-6) var(--space-6) var(--space-4); }
-.calendar-month .section-head { align-items: center; margin-bottom: var(--space-5); }
-.calendar-month .section-head h2 a { color: inherit; text-decoration: none; }
-.calendar-month .section-head h2 a:hover { color: var(--accent); }
+.calendar-month { container: month / inline-size; }
 /* Seven equal columns: the one fixed grid here, because weeks must line up. */
 .month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
-.month-grid th { padding: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-2xs); font-weight: 600; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+.month-grid th { padding: 0 var(--space-2) var(--space-3); color: var(--muted); font-size: var(--text-2xs); font-weight: 600; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
 .month-day {
   height: 6.5rem;
   padding: var(--space-2);
@@ -308,13 +302,12 @@
    thousand to one. Wrapped under the month it is alone on its line and takes
    the width, its day and its list of calendars side by side. */
 .calendar-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); align-items: start; gap: var(--layout-gap); }
-.day-panel, .calendar-sources, .calendar-upcoming { padding: var(--space-5); }
-.day-panel .section-head, .calendar-upcoming .section-head { margin-bottom: var(--space-4); }
-.day-panel-entry { margin-bottom: var(--space-5); padding-bottom: var(--space-5); border-bottom: 1px solid var(--line-2); }
+.calendar-sources { padding: var(--space-5); }
+.day-panel-entry { margin-bottom: var(--space-5); padding: 0 var(--frame-inset, 0) var(--space-5); border-bottom: 1px solid var(--line-2); }
 .day-panel-entry h3 { margin: 0 0 var(--space-2); }
 .day-panel-entry p { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
 .day-panel-entry .page-actions { margin: var(--space-4) 0 0; }
-.day-panel-source, .calendar-sources h3 { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-2); color: var(--muted); font-size: var(--text-2xs); font-weight: 650; text-transform: uppercase; letter-spacing: .04em; }
+.day-panel-source, .calendar-sources h3 { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-2); color: var(--muted); font-size: var(--text-xs); font-weight: 650; }
 .calendar-sources h3:first-child { margin-top: 0; }
 .calendar-swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
 .calendar-sources ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
@@ -372,7 +365,6 @@
 }
 
 /* Week plan: the recurring shape of a week, in the calendar's own columns. */
-.week-plan-card { margin: 0; }
 .week-plan {
   list-style: none;
   margin: var(--space-2) 0 0;
@@ -429,16 +421,14 @@
 .calendar-nav a:hover { color: var(--accent); border-color: var(--accent); }
 /* The disabled end of the range keeps its box so the pair does not shift. */
 .calendar-nav [aria-disabled="true"] { opacity: .35; }
-.calendar-description { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
 .calendar-legend {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: var(--space-4);
-  margin: var(--space-6) 0 var(--space-3);
+  margin: 0 0 var(--space-5);
 }
-.calendar-card .chart-legend { margin-bottom: 0; }
 /* The count of planned days kept is one phrase: it keeps its line, beside the
    legend while both fit and under it once they do not. */
 .calendar-legend > .count { flex: none; white-space: nowrap; }
@@ -484,14 +474,16 @@
 
 .list-rows { list-style: none; padding: 0; margin: 0; }
 .list-rows li {
-  padding: var(--space-4) 0;
+  padding: var(--space-4) var(--frame-inset, 0);
   border-bottom: 1px solid var(--line-2);
   display: flex; gap: var(--space-5); align-items: center; flex-wrap: wrap;
   font-size: var(--text-sm);
 }
 .list-rows li:last-child { border-bottom: 0; }
 .list-rows li:first-child { padding-top: var(--space-2); }
-.list-rows .row-main { display: flex; align-items: center; gap: var(--space-4); min-width: 0; flex: 1; flex-wrap: wrap; }
+/* The name and its line keep a column of their own before the meta beside
+   them: a meta too wide to leave it drops under them instead. */
+.list-rows .row-main { display: flex; align-items: center; gap: var(--space-4); min-width: 0; flex: 1 1 8rem; flex-wrap: wrap; }
 .list-rows .row-main > a { min-width: 0; overflow-wrap: anywhere; }
 /* The title keeps the line its marker is on. Wrapping places a flex item by
    its full content width, so a long name would drop below its dot; a modest
@@ -521,25 +513,27 @@
   font-weight: 500;
 }
 .subtle-link:hover { color: var(--accent); }
-/* After a name in a cell it wraps under the name on a narrow screen, where
-   its hit area (page.css) would hang over the name: each line of the cell is a
-   target tall instead, the name's as well as its own. Alone in a cell it is
-   the cell's text, cut as the cell cuts it. */
+/* After a name in a cell it takes a line of its own at every width: set in
+   the line, it lands beside the value on one row and under it on the next,
+   where it reads as part of the value; a table box is a block as wide as its
+   words. Each line of the cell is a target tall, the name's as well as its
+   own, so its hit area (page.css) stays off the name above. Alone in a cell it is the cell's text, cut as the cell cuts it. */
 td:has(> .subtle-link:not(:only-child)) { line-height: var(--target-min); }
-td > .subtle-link:not(:only-child) { display: inline-block; }
+td > .subtle-link:not(:only-child) { display: table; }
 
-.section-foot { margin: var(--space-6) 0 0; font-size: var(--text-sm); }
-.section-foot a { color: var(--muted); font-weight: 500; }
-.section-foot a:hover { color: var(--accent); }
-.dashboard-patterns .section-foot { margin-top: auto; padding-top: var(--space-6); text-align: right; }
+/* The line under a section's body that says how to read it ({% foot %}), and
+   the page's own last line (what it is built from): quieter than the body,
+   one step after it. */
+:is(.section-foot, .page-foot) { margin: var(--space-6) 0 0; color: var(--muted); font-size: var(--text-sm); }
+:is(.section-foot, .page-foot) a { color: var(--muted); font-weight: 500; }
+:is(.section-foot, .page-foot) a:hover { color: var(--accent); }
 
 /* Empty state (partials/_empty_state.html): a card of one regular-weight line,
    what is missing and then what would fill it. Inside another frame the
-   surface rule clears the card's frame and its inset. The card is as wide as
-   its line: one sentence across a page-wide frame is a gulf. */
+   surface rule clears the card's frame and its inset. In the page's flow it
+   is a frame like the others and spans its column, so it never reads as cut
+   short beside them; its line keeps the reading measure. */
 .empty.card {
-  inline-size: fit-content;
-  max-inline-size: 100%;
   margin: 0 0 var(--stack-gap);
   padding: var(--surface-inset, var(--space-6) var(--space-8));
   color: var(--ink-2);
@@ -553,7 +547,6 @@ td > .subtle-link:not(:only-child) { display: inline-block; }
    script swaps, so the last word in it, the region last on the page, is the
    page's last word too. */
 :is(main, main > :is([data-table-results], [data-search-results]):not(:has(~ :not(dialog)))) > .empty.card:not(:has(~ :not(dialog))) {
-  inline-size: auto;
   padding-block: var(--space-12);
   font-size: var(--text-md);
   text-align: center;

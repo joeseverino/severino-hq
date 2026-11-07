@@ -1,5 +1,5 @@
 {% comment %}
-What a thing is related to, one card per group, for a page's `.section-flow`:
+What a thing is related to, one section per group, for a page's `.section-flow`:
 the one shape every page draws its related records in.
 
   {% include "partials/_related.html" with groups=related %}
@@ -11,8 +11,5 @@ related: nothing drawn.
 {% endcomment %}
 {% partialdef items %}<ul class="list-rows">{% for item in group.items %}<li><span class="row-main">{% entity item.link %}</span>{% if item.note %}<span class="row-meta">{{ item.note|breakable }}</span>{% endif %}</li>{% endfor %}</ul>{% endpartialdef %}
 {% for group in groups %}
-  {% card %}
-    <h2>{{ group.heading|breakable }} <span class="count">{{ group.items|length }}</span></h2>
-    {% partial items %}
-  {% endcard %}
+  {% section group.heading count=group.items|length %}{% partial items %}{% endsection %}
 {% endfor %}

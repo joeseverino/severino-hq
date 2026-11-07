@@ -88,7 +88,7 @@ var (
 // unchanged until the next issuance replaces it.
 func (r *Registry) lineagePath(spec TLSCertificateSpec) (string, error) {
 	if len([]rune(spec.CertificateName)) > certificateNameLength || !certificateName.MatchString(spec.CertificateName) {
-		return "", &ProviderError{Message: "the certificate name is not a lineage name"}
+		return "", &ProviderError{Message: "the certificate name is not a name HQ can keep a certificate under"}
 	}
 	acme, err := r.acmeDir()
 	if err != nil {
@@ -127,7 +127,7 @@ func (r *Registry) lineage(spec TLSCertificateSpec) ([]byte, []byte, error) {
 	}
 	fullchain, privateKey, err := readLineage(dir)
 	if err != nil {
-		return nil, nil, &ProviderError{Message: "the certificate lineage is unavailable for reconciliation"}
+		return nil, nil, &ProviderError{Message: "the saved certificate is unavailable to apply again"}
 	}
 	return fullchain, privateKey, nil
 }
@@ -162,7 +162,7 @@ func (r *Registry) resumableLineage(spec TLSCertificateSpec, deployedFingerprint
 	}
 	leaf, err := edge.FirstCertificate(fullchain)
 	if err != nil {
-		return nil, nil, false, &ProviderError{Message: "lineage certificate unreadable", Err: err}
+		return nil, nil, false, &ProviderError{Message: "the saved certificate is unreadable", Err: err}
 	}
 	minimum := r.Now().UTC().Add(time.Duration(spec.RenewalWindowDays) * 24 * time.Hour)
 	if !leaf.NotAfter.UTC().Truncate(time.Second).After(minimum) {
@@ -318,7 +318,7 @@ func (r *Registry) issueCertificate(ctx context.Context, spec TLSCertificateSpec
 		return nil, nil, &ProviderError{Message: "ACME state directory is not writable"}
 	}
 	if foreign := foreignACMEEntry(acme); foreign != "" {
-		return nil, nil, &ProviderError{Message: "ACME state is not wholly the controller's: " + foreign + ". A certificate would be issued that the controller cannot save, so nothing was requested."}
+		return nil, nil, &ProviderError{Message: "ACME state is not wholly HQ's: " + foreign + ". A certificate would be issued that HQ cannot save, so nothing was requested."}
 	}
 	if _, err := r.propagationDelay(); err != nil {
 		return nil, nil, err

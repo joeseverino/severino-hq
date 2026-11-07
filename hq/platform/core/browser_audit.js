@@ -59,7 +59,7 @@ async (page) => {
       const beside = shown(row).filter((k) => round(k.getBoundingClientRect().top) === top);
       return round(Math.max(...beside.map(filled)) - filled(card));
     };
-    const CARDS = '.card, figure.chart-card, .control-card, :is(' + PAIRS + ') > :is(section, .page-section)';
+    const CARDS = '.card, .control-card, :is(' + PAIRS + ') > :is(section, .page-section)';
     document.querySelectorAll(CARDS).forEach((card) => {
       const kids = shown(card);
       if (!kids.length) return;
@@ -114,19 +114,19 @@ async (page) => {
       let node;
       while ((node = walker.nextNode())) {
         if (!node.nodeValue.trim()) continue;
-        if (node.parentElement.closest('.section-head, figcaption')) continue;
+        if (node.parentElement.closest('.section-head')) continue;
         const range = document.createRange();
         range.selectNodeContents(node);
         for (const r of range.getClientRects()) if (r.width) max = Math.max(max, r.right);
       }
       root.querySelectorAll('svg, img, canvas, input, button, select, textarea').forEach((el) => {
-        if (el.closest('.section-head, figcaption')) return;
+        if (el.closest('.section-head')) return;
         const r = el.getBoundingClientRect();
         if (r.width) max = Math.max(max, r.right);
       });
       return max;
     };
-    document.querySelectorAll('.card, figure.chart-card').forEach((card) => {
+    document.querySelectorAll('.card').forEach((card) => {
       const rect = card.getBoundingClientRect();
       const style = getComputedStyle(card);
       const left = rect.left + parseFloat(style.paddingLeft);
@@ -143,25 +143,6 @@ async (page) => {
           fill: +fill.toFixed(2),
           used: round(used),
           available: round(right - left),
-        });
-      }
-    });
-
-    // A row of content far narrower than the box holding it.
-    const SLACK_RATIO = 0.6;
-    // Legends are excluded: a one-series chart has one legend item, and a
-    // short legend is not a layout fault.
-    document.querySelectorAll('.pie-row').forEach((box) => {
-      const width = box.getBoundingClientRect().width;
-      const kids = [...box.children];
-      if (!kids.length || !width) return;
-      const used = kids.reduce((a, k) => a + k.getBoundingClientRect().width, 0);
-      const ratio = used / width;
-      if (ratio < SLACK_RATIO) {
-        add('horizontal-slack', {
-          box: box.className,
-          ratio: +ratio.toFixed(2),
-          slack: round(width - used),
         });
       }
     });
@@ -218,11 +199,14 @@ async (page) => {
       // limiting the box, it simply came out a pixel smaller than its
       // contents.
       const overridden = (property, read) => {
+        // Put back through the CSSOM, which the policy does not govern, where
+        // a written style attribute is refused.
         const inline = el.getAttribute('style');
+        const declared = el.style.cssText;
         el.style.setProperty(property, 'visible', 'important');
         const value = read();
+        el.style.cssText = declared;
         if (inline === null) el.removeAttribute('style');
-        else el.setAttribute('style', inline);
         return value;
       };
       const scrollsTall = () =>
@@ -235,7 +219,7 @@ async (page) => {
         if (capped(axis)) return;
         add('unwanted-scrollbar', {
           box: el.className || el.tagName.toLowerCase(),
-          card: name(el.closest('.card, figure.chart-card') || el),
+          card: name(el.closest('.card') || el),
           axis,
           overflow,
           box_size: axis === 'x' ? el.clientWidth : el.clientHeight,
@@ -329,7 +313,7 @@ async (page) => {
     // Numbers in one column should share a right edge.
     document.querySelectorAll('table').forEach((table) => {
       const columns = new Map();
-      table.querySelectorAll('tbody td.num-col').forEach((cell) => {
+      table.querySelectorAll('tbody td[data-kind="numeric"]').forEach((cell) => {
         const rect = cell.getBoundingClientRect();
         // A cell inside a closed disclosure has no box. It is not ragged, it
         // is not on screen.

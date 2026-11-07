@@ -58,20 +58,23 @@ class ReferencePageTests(TestCase):
         self.assertIn(f"The reference did not load. The document itself is at {reverse('hq_api:openapi')}", status.text)
         self.assertEqual(mount.text.strip(), "")
 
-    def test_it_sends_hqs_policy_minus_only_trusted_types(self):
+    def test_it_sends_hqs_policy_relaxed_only_for_the_viewer(self):
         """The one exception to the policy, pinned.
 
         Scalar writes strings into innerHTML, so the two Trusted Types
-        directives go and nothing else: no inline script, no eval, no origin
-        but this one, and its scripts run through the page's nonce.
+        directives go; its CodeMirror writes a <style> it cannot nonce, so
+        style elements are admitted inline, under no nonce that would void
+        it. Nothing else: no inline script, no eval, no origin but this one,
+        and its scripts run through the page's nonce.
         """
 
         self._sign_in()
         application = self.client.get(reverse("dashboard"))["Content-Security-Policy"]
         page = self.client.get(self.url)["Content-Security-Policy"]
         removed = {d.split()[0] for d in _directives(application) - _directives(page)}
-        self.assertEqual(removed, {"require-trusted-types-for", "trusted-types"})
-        self.assertEqual(_directives(page) - _directives(application), set())
+        self.assertEqual(removed, {"require-trusted-types-for", "trusted-types", "style-src-elem"})
+        (styles,) = (d for d in _directives(application) if d.startswith("style-src-elem "))
+        self.assertEqual(_directives(page) - _directives(application), {f"{styles} 'unsafe-inline'"})
         self.assertIn("script-src 'nonce' 'strict-dynamic' 'self'", _directives(page))
         self.assertNotIn("unsafe-eval", page)
 

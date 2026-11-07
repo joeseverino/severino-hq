@@ -36,6 +36,7 @@ from hq.platform.core.outside_requests import connections_of_its_own
 from . import listen, prompts, resources, tasks
 from .binding import Tool, bind_tools
 from .contract import ResourceContract, served_resources
+from .declarations import CHANGES
 from .identity import authenticated, caller_address, current_principal
 
 # An answer is any value a tool returns, serialized by what it is.
@@ -52,7 +53,11 @@ INSTRUCTIONS = "\n\n".join(
             "list_resource and get_resource read; describe_capabilities, narrowed by name or resource, "
             "names what execute_capability runs."
         ),
-        "An answer is JSON. A refusal has ok: false and error.code; a held change is not one.",
+        (
+            "An answer is JSON. A refusal has ok: false and error.code; a held change is not one. A field "
+            "a success leaves out holds its default, as the tool's outputSchema states it: empty text, false, "
+            "null, or an empty list or object."
+        ),
         (
             'A change run through execute_capability may answer status: "awaiting_approval": nothing was '
             "written, a person decides it in HQ's web interface, and repeating the call returns the same "
@@ -107,22 +112,27 @@ CACHE_HINTS: dict[CacheableMethod, CacheHint] = {
 }
 
 
-def _answer(result: Any) -> types.CallToolResult:
+def _answer(result: Any, tool: Tool | None = None) -> types.CallToolResult:
     """An answer as a client reads it: the object, and the same as compact JSON text.
 
     A refusal (``ok`` false) is a tool error. A held change is ``ok`` with
     ``status: "awaiting_approval"``, and stays a success: its status, not
     ``isError``, is what a client keys on. A refusal is answered as the
     ``Refusal`` it stands for, so a code the contract does not hold reaches
-    the client as ``operation_failed``, as it does from every other door.
+    the client as ``operation_failed``, as it does from every other door. A
+    success leaves out each field that holds its default, as ``tool`` answers
+    it; a refusal is answered whole.
     """
 
     refusal = refusal_of(result) if isinstance(result, dict) and result.get("ok") is False else None
     if refusal is not None:
         result = refusal.answer()
+    value = _ANSWER.dump_python(result, mode="json", by_alias=True, fallback=str)
+    if refusal is None and tool is not None:
+        value = tool.answered(value)
     return types.CallToolResult(
-        content=[types.TextContent(type="text", text=_ANSWER.dump_json(result, by_alias=True, fallback=str).decode())],
-        structured_content=_ANSWER.dump_python(result, mode="json", by_alias=True, fallback=str),
+        content=[types.TextContent(type="text", text=_ANSWER.dump_json(value).decode())],
+        structured_content=value,
         is_error=refusal is not None,
         _meta=None if refusal is None else _wait(refusal),
     )
@@ -308,7 +318,7 @@ class ToolServer:
             # On a thread, since a denial is written to the audit log as it is mapped.
             refusal = await sync_to_async(adapter_refusal)(tool.name, error, principal=authenticated())
             return _answer(refusal)
-        return _answer(result)
+        return _answer(result, tool)
 
     async def _list_prompts(self, _context: Any, _params: Any) -> types.ListPromptsResult:
         return await _read("prompts/list", prompts.listed, braked=False)
@@ -366,7 +376,9 @@ class ToolServer:
         require_client_extension(context, tasks.IDENTIFIER)
         task, answer = await _read("tasks/get", lambda principal: tasks.state(params.task_id, principal))
         if answer is not None:
-            task["result"] = _answer(answer).model_dump(mode="json", by_alias=True, exclude_none=True)
+            # The held call's answer, as the one tool that changes anything answers it.
+            asked = next((self.tools.get(handler.__name__) for handler in CHANGES), None)
+            task["result"] = _answer(answer, asked).model_dump(mode="json", by_alias=True, exclude_none=True)
         return task
 
     async def _update_task(self, context: Any, params: tasks.UpdateTaskRequestParams) -> dict[str, Any]:

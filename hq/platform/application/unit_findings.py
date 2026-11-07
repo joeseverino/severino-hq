@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from hq.domains.control_plane.observations.host import UNIT_KIND
+from hq.domains.control_plane.observations.host import UNIT_KIND, unescaped
 
 from . import render_status_findings
 from .finding_model import (
@@ -57,7 +57,7 @@ STARTING_TOO_LONG = timedelta(hours=2)
 
 # Why the reading holds no state for a machine, as evidence says it.
 UNREAD_REASONS = {
-    "unread": "The controller could not read them",
+    "unread": "HQ could not read them",
     "refused": "The answer could not be understood",
 }
 
@@ -93,14 +93,14 @@ class UnitState(FactRow):
     def label(self) -> str:
         """The unit as a person reads it: its title, else its name."""
 
-        return self.title or self.unit
+        return self.title or unescaped(self.unit)
 
     @property
     def named(self) -> str:
         """The unit in a sentence: its title quoted, since a unit file's title
         reads as a phrase of its own, else its name."""
 
-        return f"“{self.title}”" if self.title else self.unit
+        return f"“{self.title}”" if self.title else unescaped(self.unit)
 
     @property
     def failed(self) -> bool:

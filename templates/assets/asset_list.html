@@ -1,12 +1,12 @@
 {% extends "list_page.html" %}
 {% block summary %}{% include "expenses/_cost_totals.html" %}{% endblock %}
 {% block row %}
-  <td class="row-gutter"><a href="{{ row.get_absolute_url }}"><strong>{{ row.item_name|breakable }}</strong></a>{% row_toggle %}</td>
+  <td><a href="{{ row.get_absolute_url }}"><strong>{{ row.item_name|breakable }}</strong></a></td>
   <td>{{ row.vendor|or_empty }}</td>
   <td>{{ row.get_category_display|breakable }}</td>
   <td class="muted">{{ row.purchase_date|when }}</td>
   <td>{% if row.total_cost %}{{ row.total_cost|money }}{% else %}{% empty_value %}{% endif %}</td>
   <td class="muted">{{ row.business_use_percentage|breakable }}%</td>
   <td>{% if row.total_cost %}{{ row.estimated_deductible_amount|money }}{% else %}{% empty_value %}{% endif %}</td>
-  <td><span class="pill pill-{{ row.status }}">{{ row.get_status_display|breakable }}</span></td>
+  <td>{% status row.get_status_display tone=row.status %}</td>
 {% endblock %}

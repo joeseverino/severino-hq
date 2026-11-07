@@ -6,11 +6,12 @@ and what it sees. So this module reads a cache, never a secret, and the page is
 a view of the vault with no second list to drift from it.
 """
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, NotRequired, TypedDict
 
-from hq.domains.control_plane.connection_kinds import connection_credential
+from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS, connection_credential
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS, observer_abilities, registry_label, resource_home
@@ -203,6 +204,28 @@ def connection_rows() -> tuple:
     return read_once("connections.rows", lambda: tuple(ProviderConnection.objects.all()))
 
 
+def connection_names() -> Mapping[str, str]:
+    """What a person calls each reported connection, by its ref.
+
+    The ref is the credential's own name, so a connection is called by the
+    service it reaches; the ref is added only where two share a service, the
+    one place it tells them apart.
+    """
+
+    def build() -> dict[str, str]:
+        refs: dict[str, set[str]] = {}
+        for row in connection_rows():
+            if row.provider in CONNECTION_LABELS:
+                refs.setdefault(row.provider, set()).add(row.connection_ref)
+        return {
+            ref: CONNECTION_LABELS[provider] if len(shared) == 1 else f"{CONNECTION_LABELS[provider]} ({ref})"
+            for provider, shared in refs.items()
+            for ref in shared
+        }
+
+    return read_once("connections.names", build)
+
+
 def connection_readings() -> tuple[ConnectionReading, ...]:
     """Every connection every controller last reported, and what ties to it."""
 
@@ -378,11 +401,11 @@ def _controller_connection_spec() -> ConnectionSpec:
     return ConnectionSpec(
         name=CONTROLLER_CONNECTIONS,
         label="Infrastructure",
-        summary="What the controller connects to.",
+        summary="What HQ connects to.",
         required_capability=Capability.READ,
         instance_provider=lambda: _controller_instances(ability_names),
         abilities=abilities,
-        secret_store="1Password",
+        secret_store="1Password",  # noqa: S106 - the store's name, no credential
         # The one family fed by sweeps rather than by its own configuration,
         # so the one whose emptiness means a report has not arrived.
         empty_message="Each is a vault item the controller is given; it appears here once the controller reports.",

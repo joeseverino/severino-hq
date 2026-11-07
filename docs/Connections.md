@@ -1,7 +1,7 @@
 # Connections
 
 What to create for each service HQ connects to, in the order to connect them,
-and the 1Password item the controller reads it from. Written by `manage.py
+and the 1Password item HQ reads it from. Written by `manage.py
 connections_reference` from what HQ expects of each service; the Connections
 page shows the same, for each one not yet connected. A test fails when this
 file falls behind.
@@ -24,7 +24,7 @@ Store it as an API Credential item:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `cloudflare-dns` | Any name; how HQ refers to this connection. |
-| `projection` | `api_token` | The shape the controller reads the item as. |
+| `projection` | `api_token` | The shape HQ reads the item as. |
 | `env_prefix` | `CLOUDFLARE_DNS` | Says which service it is for. |
 | `credential` | the secret | The item's own credential field. |
 | `website` | yours | A field labeled website. |
@@ -43,7 +43,7 @@ Store it as an API Credential item:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `portainer` | Any name; how HQ refers to this connection. |
-| `projection` | `api_token` | The shape the controller reads the item as. |
+| `projection` | `api_token` | The shape HQ reads the item as. |
 | `env_prefix` | `PORTAINER` | Says which service it is for. |
 | `credential` | the secret | The item's own credential field. |
 | `website` | yours | A field labeled website. |
@@ -73,7 +73,7 @@ Store it as an API Credential item:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `tailscale` | Any name; how HQ refers to this connection. |
-| `projection` | `oauth_client` | The shape the controller reads the item as. |
+| `projection` | `oauth_client` | The shape HQ reads the item as. |
 | `env_prefix` | `TAILSCALE` | Says which service it is for. |
 | `username` | yours | The item's own username field. |
 | `credential` | the secret | The item's own credential field. |
@@ -92,7 +92,7 @@ Store it as a Login item:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `npm` | Any name; how HQ refers to this connection. |
-| `projection` | `login` | The shape the controller reads the item as. |
+| `projection` | `login` | The shape HQ reads the item as. |
 | `env_prefix` | `NPM` | Says which service it is for. |
 | `password` | the secret | The item's own password field. |
 | `website` | yours | The item's website: the service's address. |
@@ -130,7 +130,7 @@ Store it as an API Credential item:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `cloudflare-api` | Any name; how HQ refers to this connection. |
-| `projection` | `api_token` | The shape the controller reads the item as. |
+| `projection` | `api_token` | The shape HQ reads the item as. |
 | `env_prefix` | `CLOUDFLARE_API` | Says which service it is for. |
 | `credential` | the secret | The item's own credential field. |
 | `website` | yours | A field labeled website. |
@@ -149,7 +149,7 @@ Store it as a Login item:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `adguard` | Any name; how HQ refers to this connection. |
-| `projection` | `login` | The shape the controller reads the item as. |
+| `projection` | `login` | The shape HQ reads the item as. |
 | `env_prefix` | `ADGUARD` | Says which service it is for. |
 | `password` | the secret | The item's own password field. |
 | `website` | yours | The item's website: the service's address. |
@@ -187,7 +187,7 @@ Store it as an item of any type:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `github-app` | Any name; how HQ refers to this connection. |
-| `projection` | `github_app` | The shape the controller reads the item as. |
+| `projection` | `github_app` | The shape HQ reads the item as. |
 | `env_prefix` | `GITHUB_APP` | Says which service it is for. |
 | `app_id` | yours | A field labeled app_id. |
 | `signing_key` | yours | A field labeled signing_key. |
@@ -206,7 +206,7 @@ Store it as an item of any type:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `ssh` | Any name; how HQ refers to this connection. |
-| `projection` | `ssh_transport` | The shape the controller reads the item as. |
+| `projection` | `ssh_transport` | The shape HQ reads the item as. |
 | `env_prefix` | `SSH` | Says which service it is for. |
 | `host` | yours | A field labeled host. |
 | `host_key` | yours | A field labeled host_key. |
@@ -227,7 +227,7 @@ Store it as an API Credential item:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `onepassword` | Any name; how HQ refers to this connection. |
-| `projection` | `service_account` | The shape the controller reads the item as. |
+| `projection` | `service_account` | The shape HQ reads the item as. |
 | `env_prefix` | `ONEPASSWORD` | Says which service it is for. |
 | `credential` | the secret | The item's own credential field. |
 | `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |
@@ -245,7 +245,7 @@ Store it as an item of any type:
 | Field | Value | What it is |
 | --- | --- | --- |
 | `connection_ref` | `acme` | Any name; how HQ refers to this connection. |
-| `projection` | `acme` | The shape the controller reads the item as. |
+| `projection` | `acme` | The shape HQ reads the item as. |
 | `env_prefix` | `ACME` | Says which service it is for. |
 | `website` | yours | A field labeled website. |
 | `email` | yours | A field labeled email. |

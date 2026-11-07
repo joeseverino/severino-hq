@@ -38,6 +38,7 @@ from hq.platform.application.security import web_principal
 from hq.platform.application.tables import TableColumn, TableListMixin, TableToggle
 from hq.platform.application.ui import ended
 from hq.platform.application.web_writes import execute_posted, refused
+from hq.platform.application.writes import CommandFormPage
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 from hq.platform.core.templatetags.value_tags import breakable
@@ -77,7 +78,7 @@ class ReceiptListView(PageMixin, TableListMixin, ListView):
 
     @override
     def get_page_actions(self):
-        return (PageAction("Upload receipt", reverse("receipts:create"), primary=True),)
+        return (PageAction(capability_words(UPLOAD), reverse("receipts:create"), primary=True),)
 
     @override
     def get_queryset(self):
@@ -209,8 +210,15 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         return redirect(receipt.get_absolute_url())
 
 
-class ReceiptCreateView(ReceiptPage, CreateView):
-    page_title = "Upload receipt"
+class ReceiptFormPage(CommandFormPage, ReceiptPage):
+    """A receipt's form, said as the upload command's page says it."""
+
+    creates = UPLOAD
+    listed_route = "receipts:list"
+
+
+class ReceiptCreateView(ReceiptFormPage, CreateView):
+    page_title = "New receipt"
     model = Receipt
     form_class = ReceiptUploadForm
     template_name = "receipts/receipt_form.html"
@@ -237,7 +245,7 @@ class ReceiptCreateView(ReceiptPage, CreateView):
         return redirect(self.object.get_absolute_url())
 
 
-class ReceiptUpdateView(ReceiptPage, UpdateView):
+class ReceiptUpdateView(ReceiptFormPage, UpdateView):
     page_title = "Edit receipt"
     model = Receipt
     form_class = ReceiptUploadForm

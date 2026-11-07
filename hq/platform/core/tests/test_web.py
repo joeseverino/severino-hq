@@ -145,18 +145,18 @@ class AuthGateTests(TestCase):
         with self.assertNoLogs("severino.request", "INFO"):
             self.client.get("/health/live/")
 
-    def test_inline_styles_are_the_only_relaxation_in_the_policy(self):
+    def test_style_attributes_are_the_only_relaxation_in_the_policy(self):
         """Pin the one exception so it stays one exception.
 
-        ``style-src`` allows ``'unsafe-inline'`` because charts position their
-        marks with a per-datum custom property (``style="--at: 62%"``) which
-        no class can express and no nonce can cover, because nonces apply to
-        style *elements* and not to style *attributes*.
+        A style element comes only from a sheet of HQ's own origin, as a
+        script comes only from a tag HQ rendered. ``style-src-attr`` admits
+        ``'unsafe-inline'`` only while WebKit reports a violation for every
+        ``<select>`` (WebKitSelectCanaryTests says when it stops); HQ writes
+        no style attribute (test_rendered, the template contract).
 
-        That is a deliberate, bounded exception. It is asserted here rather
-        than merely documented, because the failure mode of a documented rule
-        is that a second directive quietly joins the first and the policy is
-        weaker than the prose claims. Anything relaxed beyond this fails.
+        Asserted rather than merely documented, because the failure mode of a
+        documented rule is that a second relaxation quietly joins the first
+        and the policy is weaker than the prose claims.
         """
 
         response = self.client.get("/accounts/login/")
@@ -169,6 +169,7 @@ class AuthGateTests(TestCase):
         nonce, *scripts = directives["script-src"]
         self.assertRegex(nonce, r"^'nonce-[^']+'$")
         self.assertEqual(scripts, ["'strict-dynamic'", "'self'"])
+        self.assertEqual(directives["style-src-elem"], ["'self'"])
         self.assertEqual(directives["object-src"], ["'none'"])
         self.assertEqual(directives["frame-ancestors"], ["'none'"])
         relaxed = sorted(
@@ -176,7 +177,7 @@ class AuthGateTests(TestCase):
             for directive in policy.split(";")
             if "'unsafe-inline'" in directive or "'unsafe-eval'" in directive
         )
-        self.assertEqual(relaxed, ["style-src"])
+        self.assertEqual(relaxed, ["style-src-attr"])
 
     def test_application_shell_names_every_asset_by_its_content(self):
         """Production's storage, collected: no static URL on the shell is plain."""

@@ -631,7 +631,7 @@ class SuggestedRemedy(TypedDict):
     ]
     auto: Annotated[
         bool,
-        Describe("Whether the controller runs it unattended. A problem only proposes, so it reads false."),
+        Describe("Whether HQ runs it unattended. A problem only proposes, so it reads false."),
     ]
 
 
@@ -645,7 +645,7 @@ class SerializedFinding(TypedDict):
     rule: Annotated[str, Describe("The rule that found it, as the `rule` filter takes it.")]
     subject: Annotated[
         str | None,
-        Describe("The id of the topology node it is about; null when it is about a type or a check as a whole."),
+        Describe("The id of the map node it is about; null when it is about a type or a check as a whole."),
     ]
     scope: Annotated[
         str | None,
@@ -663,7 +663,7 @@ class SerializedFinding(TypedDict):
     offers: Annotated[list[WrittenAction], Describe("Reads of its subject this reader may run before acting.")]
     investigations: Annotated[
         list[WrittenAction],
-        Describe("Where in the topology to look around its subject: its neighborhood and what it affects."),
+        Describe("Where on the map to look around its subject: its neighborhood and what it affects."),
     ]
     workflow: Annotated[
         WrittenWorkflow | None,

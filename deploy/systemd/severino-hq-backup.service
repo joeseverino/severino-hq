@@ -17,24 +17,7 @@ ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host backup
 # that hangs keeps its timer from ever firing again.
 TimeoutStartSec=30min
 
-NoNewPrivileges=yes
-PrivateDevices=yes
-PrivateTmp=yes
-ProtectClock=yes
-ProtectControlGroups=yes
-ProtectHome=yes
-ProtectHostname=yes
-ProtectKernelLogs=yes
-ProtectKernelModules=yes
-ProtectKernelTunables=yes
-ProtectSystem=strict
 # The archives, and the database's directory: SQLite writes its shared-memory
 # file beside a WAL database it only reads. A docker with another data root
 # has no such path, and the snapshot then fails rather than being skipped.
 ReadWritePaths=/srv/severino-hq/backups -/var/lib/docker/volumes/severino-hq_severino_data/_data
-RestrictAddressFamilies=AF_UNIX
-RestrictNamespaces=yes
-RestrictRealtime=yes
-RestrictSUIDSGID=yes
-LockPersonality=yes
-MemoryDenyWriteExecute=yes

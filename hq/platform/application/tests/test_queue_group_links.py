@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from ..action_items import by_source
-from .markup import links
+from .markup import elements, links
 
 HELD = {
     "key": "hq.approvals:approval:example",
@@ -55,10 +55,14 @@ class PageTests(TestCase):
         self.assertIn((HELD["source"], approval_queue()), shown)
         self.assertNotIn(OTHER["source"], [words for words, _href in shown])
 
-    def test_held_changes_alone_are_titled_by_a_link_to_the_approval_queue(self):
-        shown = links(self.page(HELD).content.decode())
+    def test_held_changes_alone_link_the_approval_queue_beside_their_heading(self):
+        beside = [
+            link.attrs.get("href")
+            for link in elements(self.page(HELD).content.decode(), "a")
+            if any("section-aside" in ancestor.classes for ancestor in link.ancestors)
+        ]
 
-        self.assertIn((HELD["source"], approval_queue()), shown)
+        self.assertIn(approval_queue(), beside)
 
     def test_the_approval_queue_is_the_log_narrowed_to_what_waits(self):
         page = self.client.get(approval_queue())

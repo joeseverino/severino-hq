@@ -187,6 +187,34 @@ func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	}
 }
 
+// The web unit restarts under every drop-in of the release, the prefix
+// directory's sandbox among them, not under the last release's.
+func TestHQRestartsUnderTheReleasesDropIns(t *testing.T) {
+	f := newFakeHost(t)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
+	sandbox := "severino-hq-.service.d/20-sandbox.conf"
+	path := filepath.Join(f.image, "deploy", "systemd", sandbox)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("[Service]\nNoNewPrivileges=yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var atRestart map[string]bool
+	f.boot = func() { atRestart = f.installed(hostcore.WebUnit, sandbox) }
+	d, _ := newDeployer(f)
+
+	if err := d.Release(context.Background(), next); err != nil {
+		t.Fatalf("%v\n%s", err, f.out.String())
+	}
+
+	if !atRestart[hostcore.WebUnit] || !atRestart[sandbox] {
+		t.Errorf("installed when HQ restarted: %v", atRestart)
+	}
+}
+
 // Drift found after a healthy release fails the deploy and leaves the release
 // standing: rolling back would not mend the host.
 // A deploy waits out a glance pass as it does a controller pass: each is a

@@ -1,6 +1,6 @@
 #!/bin/sh
 #MISE description="It carries the controller, and no OpenSSH or Kerberos package, since the controller speaks SSH in process"
-#MISE lock="heavy"
+#MISE lock=["gate", "heavy"]
 #MISE timeout="30m"
 #MISE hide=true
 #MISE depends=["image:build"]
