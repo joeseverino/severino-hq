@@ -20,6 +20,7 @@ ignores:
   - "**/test*.py"
   - "hq/platform/core/oidc.py"
   - "hq/platform/application/lookup.py"
+  - "hq/platform/application/tailscaled.py"
 rule:
   kind: call
   has:

@@ -4,8 +4,8 @@ operator blocked it from, and asked to answer the photos library's name with
 the server's tailnet address, which waits because the operator asks to see the
 records it changes first, and holds one update stream open. Beside it, the agents of the last week (``lately``):
 one calling from the owner's laptop, a device that waits for the owner's
-approval, and from an address the tailnet reading does not hold yet, holding
-every update stream it may; and one a
+approval, and once from the server's own loopback, which no tailnet device
+sent and so was refused, holding every update stream it may; and one a
 viewer signed in, calling from the owner's phone, which the owner blocked.
 
 Each step runs the way a verified token's call does in production, so the
@@ -21,6 +21,7 @@ from django.db.models import F
 
 from hq.domains.control_plane.models import CapabilityRule, ManagedResource
 from hq.platform.application import (
+    agent_access,
     agent_admission,
     agent_devices,
     agent_limits,
@@ -28,6 +29,7 @@ from hq.platform.application import (
     denials,
     linked_accounts,
     roles,
+    tailnet,
 )
 from hq.platform.application.agent_access import SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
@@ -42,6 +44,7 @@ from hq.platform.application.security import (
     Capability,
     PolicyDenied,
     agent_grantable,
+    agent_subject,
     web_principal,
 )
 from hq.platform.application.tokens import token_principal
@@ -75,10 +78,14 @@ ASSISTANT = "example-assistant"
 NOT_CARRIED = Capability.LOOK_UP_PUBLIC_RECORDS
 # How many of its calls one minute refused for calling too fast.
 RATE_LIMITED_TIMES = 14
-# A tailnet address no device in the reading holds, which the assistant called from.
-UNSEEN_AT = "100.101.102.140"
+# A tailnet address no device of the estate holds, which the assistant's token
+# was once presented from: tailscaled placed that call on no device, so it was
+# refused.
+UNPLACED_AT = tailnet_v4(None)
 # A reader a viewer signed in, whose token carries more than a viewer holds:
-# the calendar writes are granted, and beyond its person's role.
+# the calendar writes are granted, and beyond its person's role. The viewer
+# signed the assistant in too, from their phone: the same client as another
+# person is a row of its own, with its own rules, block and devices.
 VIEWER_USERNAME = "riley"
 VIEWER_PERSON = "example-viewer-subject"
 READER = "example-reader"
@@ -128,7 +135,7 @@ def lately(owner=None):
 
     An assistant the owner signed in through their own sign-in, carrying every
     permission HQ offers but one, calling over MCP faster than HQ lets it, and
-    once from a device the tailnet reading did not hold; a reader a viewer
+    once from the server's loopback, which no tailnet device sent; a reader a viewer
     signed in, granted more than their role, calling from the owner's phone,
     which the owner blocked there; a build runner calling as itself, which the
     owner blocked; and the owner's phone, registered as their own device.
@@ -158,8 +165,12 @@ def lately(owner=None):
         _viewer(joined)
         with _on(joined), _first_call(MCP_INTERFACE):
             _observe_from(token_principal(READER_CLAIMS, MCP_INTERFACE), PHONE_NAME)
-        AgentIdentity.objects.filter(client_id=READER).update(first_seen=joined)
+            _observe_from(token_principal(_assistant_claims(VIEWER_PERSON), MCP_INTERFACE), PHONE_NAME)
+        AgentIdentity.objects.filter(person__username=VIEWER_USERNAME).update(first_seen=joined)
         AgentDevice.objects.filter(identity__client_id=READER).update(
+            first_seen=joined, last_seen=now() - timedelta(hours=3)
+        )
+        AgentDevice.objects.filter(identity__client_id=ASSISTANT, identity__person__username=VIEWER_USERNAME).update(
             first_seen=joined, last_seen=now() - timedelta(hours=3)
         )
     AgentIdentity.objects.filter(client_id=READER).update(last_seen=now() - timedelta(hours=3))
@@ -170,10 +181,12 @@ def lately(owner=None):
     with stamped(lambda _obj, _action, _type: counted), doors.mcp():
         denials.record_denial(interface=MCP_INTERFACE, reason=RATE_LIMITED, actor=ASSISTANT)
     if owner is not None:
-        # Refused at its admission, which placed it on no device.
+        # Stopped at its admission: the tailnet placed it on no device.
+        unplaced = agent_access.unplaced(agent_devices.Unplaced.NO_DEVICE)
+        stopped = agent_admission.Stopped(token_principal(_assistant_claims(), MCP_INTERFACE), unplaced)
         with _on(now() - timedelta(minutes=30)), doors.mcp():
-            unseen = agent_admission.refused(token_principal(_assistant_claims(), MCP_INTERFACE), source=UNSEEN_AT)
-        _expect(unseen, unseen is not None, "refused")
+            refused = agent_admission.refused(stopped, source=UNPLACED_AT)
+        _expect(refused, refused is not None, "refused")
         _listen(token_principal(_assistant_claims(), MCP_INTERFACE), settings.SEVERINO_AGENT_STREAMS_AT_ONCE)
     if owner is not None:
         # Pressed in the browser, whose form sends a retry key.
@@ -203,12 +216,12 @@ def lately(owner=None):
     OwnDevice.objects.filter(client_id=PHONE).update(registered_at=registered_at)
 
 
-def _assistant_claims():
-    """The assistant's token: every permission HQ offers an agent, as a sign-in
-    asks for them all, but ``NOT_CARRIED``."""
+def _assistant_claims(person=PERSON):
+    """The assistant's token as ``person`` signed it in: every permission HQ
+    offers an agent, as a sign-in asks for them all, but ``NOT_CARRIED``."""
 
     granted = sorted(agent_grantable() - {NOT_CARRIED})
-    return {"client_id": ASSISTANT, "sub": PERSON, "scope": " ".join(granted)}
+    return {"client_id": ASSISTANT, "sub": person, "scope": " ".join(granted)}
 
 
 def _listen(principal, streams):
@@ -223,7 +236,7 @@ def _listen(principal, streams):
     """
 
     with doors.mcp():
-        for _ in range(streams - agent_limits.LIMITS.listening(principal.actor)):
+        for _ in range(streams - agent_limits.LIMITS.listening(agent_subject(principal))):
             held = agent_admission.stream_opened(principal)
             _expect(held, isinstance(held, Slot), "opened")
 
@@ -231,12 +244,21 @@ def _listen(principal, streams):
 def _from(principal, device_name):
     """``principal``'s call placed on the tailnet device ``device_name``, as its admission places one."""
 
-    return replace(principal, device=agent_devices.place(tailnet_v4(device_name)).node_id)
+    return replace(principal, device=_device(device_name).node_id)
 
 
 def _observe_from(principal, device_name):
-    placed = agent_devices.place(tailnet_v4(device_name))
-    agent_registry.observe(replace(principal, device=placed.node_id), placed.device)
+    device = _device(device_name)
+    agent_registry.observe(replace(principal, device=device.node_id), device)
+
+
+def _device(device_name):
+    """The estate's device ``device_name``, as tailscaled would place a call from it: the reading's record of it."""
+
+    device = tailnet.device_at(tailnet_v4(device_name))
+    if device is None:
+        raise LookupError(f"the estate's tailnet reading names no device {device_name}")
+    return device
 
 
 def _decide_device(owner, client_id, capability, field):

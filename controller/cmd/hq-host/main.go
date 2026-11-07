@@ -171,10 +171,12 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 		Poll:   2 * time.Second,
 		// The renderer's own bound on a run, so a slow boot render is waited
 		// out and a failed one retried when the unit restarts.
-		Await:       host.RenderBound,
-		StartPeriod: period,
-		SealPublic:  host.SealPublicKey,
-		Stdout:      stdout, Stderr: stderr, Log: log,
+		Await:          host.RenderBound,
+		StartPeriod:    period,
+		SealPublic:     host.SealPublicKey,
+		TailscaledUnit: host.TailscaledEnabledUnit,
+		TailscaleRun:   host.TailscaleRunDir,
+		Stdout:         stdout, Stderr: stderr, Log: log,
 	}
 	return runner.Run(ctx)
 }
@@ -253,7 +255,7 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		SecretDir:     hostcore.SecretDir,
 		ACME:          host.ACMEDir,
 		CertStore:     "/usr/local/share/ca-certificates",
-		Tailscaled:    "/var/run/tailscale/tailscaled.sock",
+		Tailscaled:    host.TailscaledSocket,
 		UnitSocket:    host.UnitSocket,
 		Spool:         host.RenovateSpool,
 		DependencyRun: host.DependencyRunFile,

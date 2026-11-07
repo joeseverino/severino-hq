@@ -64,6 +64,24 @@ func TestEveryVolumeIsMountedAndNoBindIsCreated(t *testing.T) {
 	}
 }
 
+func TestTailscaledIsGivenReadOnlyAtItsOwnPathOnlyWhenTheHostHasIt(t *testing.T) {
+	without := strings.Join(Web{Image: "ghcr.io/example/hq@" + digest}.Args(), " ")
+	if strings.Contains(without, "tailscaled") {
+		t.Errorf("a host without the daemon's socket mounts one: %s", without)
+	}
+
+	with := strings.Join(Web{Image: "ghcr.io/example/hq@" + digest, TailscaleRun: TailscaleRunDir}.Args(), " ")
+	for _, want := range []string{
+		// The directory, so a socket the daemon makes anew on a restart is seen.
+		"--mount type=bind,source=" + TailscaleRunDir + ",target=" + TailscaleRunDir + ",readonly",
+		"--env SEVERINO_TAILSCALED_SOCKET=" + TailscaledSocket,
+	} {
+		if !strings.Contains(with, want) {
+			t.Errorf("args lack %q: %s", want, with)
+		}
+	}
+}
+
 func TestOnlyADigestPinnedImageIsRun(t *testing.T) {
 	for _, ref := range []string{
 		"ghcr.io/example/hq@" + digest,

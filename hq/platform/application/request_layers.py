@@ -497,15 +497,15 @@ _AGENT_DEVICE = {
         "Nobody has approved {agent} from this device yet. The person it acts for approves it on HQ's Agents page.",
     ),
     "blocked": (False, True, "{agent} is blocked on this device. It is allowed again on HQ's Agents page."),
-    "unseen": (
+    "unplaceable": (
         False,
-        False,
-        "Nobody has approved {agent} from this address: HQ's last reading of the tailnet holds no device there.",
+        True,
+        "The tailnet could not place {agent}'s call on a device, so it was refused.",
     ),
     "unplaced": (
         False,
         False,
-        "HQ cannot place this call on a tailnet device, so {agent}'s own rules are the finest it answers for.",
+        "This deployment has no tailnet to place a call on, so {agent}'s own rules are the finest it answers for.",
     ),
 }
 

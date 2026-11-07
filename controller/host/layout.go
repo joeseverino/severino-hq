@@ -84,6 +84,10 @@ const (
 	// SealPublicKey is the public half the web seals with, root's, so the
 	// account the web and the controller share cannot replace it.
 	SealPublicKey = StateDir + "/seal/public.key"
+	// TailscaledEnabledUnit is the link systemctl enable keeps for tailscaled:
+	// the durable sign that this host has a tailnet, there while the daemon
+	// restarts and after a reboot.
+	TailscaledEnabledUnit = "/etc/systemd/system/multi-user.target.wants/tailscaled.service"
 
 	// RenovateSpool is root's directory on /run's tmpfs that a valid
 	// dependency handoff waits in, and each run stages its environment files

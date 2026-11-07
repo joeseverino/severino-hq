@@ -2,40 +2,34 @@
 
 A token proves the client and, for a delegated grant, the person; the tailnet
 proves the device, since its address is one only that device's WireGuard key
-answers for. So an agent's call is placed on the device at its address in the
-last tailnet reading, and does nothing from a device until it is approved for
-that client and person. The approval is the person's own act in HQ, and the
-link between their HQ person and the device's tailnet owner: HQ never infers
-one namespace from the other.
+answers for. So an agent's call is placed on the device tailscaled says sent
+it, asked per request (``tailscaled.whois``), and does nothing from a device
+until it is approved for that client and person. The approval is the person's
+own act in HQ, and the link between their HQ person and the device's tailnet
+owner: HQ never infers one namespace from the other. Where the deployment has
+a tailnet, a call it cannot place is refused; only a deployment with none
+answers for the client alone.
 """
 
 import logging
 from dataclasses import dataclass
 from datetime import timedelta
 from enum import StrEnum
-from ipaddress import ip_address
 from typing import Annotated, Literal, TypedDict
 
 from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Exists, OuterRef, Q, QuerySet
 from django.utils import timezone
 
-from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog
 
-from . import tailnet
+from . import tailnet, tailscaled
 from .command_fields import Describe
-from .linked_accounts import SIGN_IN
-from .reach import network_of
 from .record_errors import RecordNotFound
 from .security import AGENT_SURFACES, AuthorizationError, Principal, person
-lazy from .action_links import READ_NOW_CAPABILITY, read_now_link
-lazy from .cadence import sweep_interval
 lazy from .hq_self import site_url
-lazy from .moments import duration
 lazy from .routes import reverse
-lazy from .workflow_contracts import ActionLink
 
 logger = logging.getLogger("severino.agents")
 
@@ -48,13 +42,24 @@ BLOCK_AGENT_DEVICE = "agent.device_block.set"
 TOUCH_INTERVAL = timedelta(minutes=10)
 
 
+class Unplaced(StrEnum):
+    """Why the tailnet could not place a call: the refusal code each door answers."""
+
+    # tailscaled holds no device at the address: loopback, the LAN, or an address no peer has.
+    NO_DEVICE = "device_unknown"
+    # tailscaled did not answer, so HQ cannot say who sent the call.
+    UNANSWERED = "tailnet_unavailable"
+
+
 @dataclass(frozen=True, slots=True)
 class Placement:
-    """Where HQ places one call: on a device, on a tailnet address the reading
-    does not hold (``unseen``), or nowhere HQ can prove (neither)."""
+    """Where HQ places one call: on a device; nowhere, in a deployment with no
+    tailnet; or refused, where the tailnet could not place it (``refused``
+    says why, ``detail`` the daemon's own words)."""
 
     device: tailnet.Device | None = None
-    unseen: bool = False
+    refused: Unplaced | None = None
+    detail: str = ""
 
     @property
     def node_id(self) -> str:
@@ -62,36 +67,30 @@ class Placement:
 
 
 NOWHERE = Placement()
-UNSEEN = Placement(unseen=True)
 
 
 def place(address: str) -> Placement:
-    """The device the call from ``address`` came from, as the last tailnet reading has it.
+    """The device the call from ``address`` came from, as tailscaled knows it now.
 
     ``address`` is the caller as ``ForwardedCaller`` resolved it: through a
     proxy HQ trusts it is the caller's own, and through any other it is the
     peer that opened the socket, the one hop HQ can prove. So a forwarded
-    header never moves a call off the device that sent it. An address outside
-    Tailscale's ranges, or a deployment with no tailnet reading, places
-    nothing, and the client is the finest unit there. A tailnet address the
-    reading does not hold, or holds without a stable id, is unseen, never
-    a device someone approved. Fails closed: an unreadable reading is unseen.
+    header never moves a call off the device that sent it. The deployment has
+    a tailnet when the host named tailscaled's socket (``tailscaled.socket_path``); then
+    every call is placed by the daemon, and one it holds no device for, or
+    cannot answer for, is refused, never let through as the client alone.
+    Without the socket nothing is placed, and the client is the finest unit.
     """
 
-    if network_of(address) != "tailnet":
+    if not tailscaled.socket_path():
         return NOWHERE
     try:
-        known = tailnet.devices()
-    except DatabaseError:
-        # Logged as the address it parsed as, so the line holds nothing else the caller sent.
-        caller = ip_address(address.strip())
-        logger.warning("Tailnet reading unreadable; %s is unseen.", caller, extra={"event": "agents.device.unread"})
-        return UNSEEN
-    if not known:
-        return NOWHERE
-    found = tailnet.device_at(address, known)
+        found = tailscaled.whois(address)
+    except tailscaled.Unavailable as exc:
+        logger.warning("tailscaled did not place a call: %s", exc, extra={"event": "agents.device.unanswered"})
+        return Placement(refused=Unplaced.UNANSWERED, detail=str(exc))
     if found is None or not found.node_id:
-        return UNSEEN
+        return Placement(refused=Unplaced.NO_DEVICE)
     return Placement(found)
 
 
@@ -146,31 +145,28 @@ def observe(identity: AgentIdentity, person, device: tailnet.Device, *, interfac
 class DeviceStanding(StrEnum):
     """What a device's record says of an agent's call from it."""
 
-    # Not placed on a device: the client's own rules alone apply.
+    # Not placed on a device, in a deployment with no tailnet: the client's own rules alone apply.
     UNPLACED = "unplaced"
     APPROVED = "approved"
     AWAITING = "awaiting"
-    # A tailnet address the reading does not hold yet.
-    UNSEEN = "unseen"
+    # Refused at admission: the tailnet could not place the call (``Unplaced``).
+    UNPLACEABLE = "unplaceable"
     BLOCKED = "blocked"
 
 
-def standing(principal: Principal, *, source: str = "") -> DeviceStanding:
+def standing(principal: Principal) -> DeviceStanding:
     """Whether ``principal``'s call may run from the device it came from. Fails closed.
 
     Asked of an agent's call alone: a person's own client is their own act in
-    HQ already (``OwnDevice``). An admitted call carries its device; one that
-    carries none is placed again from ``source``, so a tailnet address the
-    reading did not hold is held unseen until a reading holds it. A read:
-    nothing here writes or asks for a reading, since a GET is refused here too.
+    HQ already (``OwnDevice``). An admitted call carries the device its
+    admission placed it on; one that carries none was admitted where there is
+    no tailnet, since a call the tailnet could not place is stopped at
+    admission (``agent_admission.Stopped``) and never asked here. A read:
+    nothing here asks tailscaled or writes, since a GET is refused here too.
     """
 
-    if principal.interface not in AGENT_SURFACES:
+    if principal.interface not in AGENT_SURFACES or not principal.device:
         return DeviceStanding.UNPLACED
-    if not principal.device:
-        if not place(source).unseen:
-            return DeviceStanding.UNPLACED
-        return DeviceStanding.UNSEEN
     try:
         row = _rows_of(principal).only("approved_at", "blocked_at").first()
     except DatabaseError:
@@ -196,10 +192,9 @@ def record_of(principal: Principal) -> AgentDevice | None:
 def _rows_of(principal: Principal) -> QuerySet[AgentDevice]:
     """The record of ``principal``'s device, for its client and the person its token names."""
 
-    rows = AgentDevice.objects.filter(identity__client_id=principal.actor, node_id=principal.device)
-    if not principal.person_key:
-        return rows.filter(person__isnull=True)
-    return rows.filter(person__linked_accounts__provider=SIGN_IN, person__linked_accounts__login=principal.person_key)
+    return AgentDevice.objects.filter(
+        identity__client_id=principal.actor, identity__person_key=principal.person_key, node_id=principal.device
+    )
 
 
 def device_anchor(key: int | str) -> str:
@@ -220,23 +215,10 @@ def where(principal: Principal) -> str:
     return site_url(f"{reverse('agent_policy')}#{device_anchor(key)}")
 
 
-def unseen_reason() -> str:
-    """What a call from a device the tailnet reading does not hold is told:
-    when the next reading comes, and the command that reads the tailnet now."""
+def placement_posture() -> str:
+    """Where the deployment places agent calls, as the Agents page states it: the socket's path, or "" for no tailnet."""
 
-    return (
-        "No device in HQ's last Tailscale reading has this address, so nobody has approved it for this client. "
-        f"HQ reads the tailnet within {duration(sweep_interval())}, or at once through "
-        f"{READ_NOW_CAPABILITY} for {TAILNET_KIND}; then the person it acts for approves "
-        "the device under Needs approval on HQ's Agents page."
-    )
-
-
-def read_tailnet(principal: Principal) -> ActionLink | None:
-    """The read of the tailnet an address it did not hold waits on, offered
-    beside that address when ``principal`` may ask for it."""
-
-    return read_now_link(principal, kind=TAILNET_KIND)
+    return tailscaled.socket_path()
 
 
 def blocked_askers() -> Q:

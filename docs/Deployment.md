@@ -259,6 +259,27 @@ an empty drop-in of that name, so that no failure can ring the doorbell that
 starts it again. `controller/host/units_rules_test.go`
 holds the shipped units to those rules.
 
+Every service runs in one sandbox,
+`deploy/systemd/severino-hq-.service.d/20-sandbox.conf`, which reaches each by
+the same name rule: root with no capability and no way to gain one, a
+read-only system, a private network namespace, Unix sockets only and a system
+call allow list. A unit that needs more widens it in its own
+`30-sandbox.conf`, which says why:
+
+| Unit | Widened to |
+| :--- | :--- |
+| controller | host network and netlink for its nftables reading (`CAP_NET_ADMIN`); the web account's files (`CAP_CHOWN`, `CAP_DAC_OVERRIDE`) |
+| glance | the same files, with no network |
+| renovate | host network and netlink to load the egress table (`CAP_NET_ADMIN`) |
+| backup | the volumes (`CAP_DAC_OVERRIDE`) and SQLite's files (`CAP_CHOWN`) |
+| secrets | IPv4 loopback for Connect (`CAP_CHOWN`, `CAP_FOWNER`, `CAP_DAC_OVERRIDE`) |
+| script-drift | sudo-rs, with no-new-privileges off |
+
+`lint:units` scores each service with `systemd-analyze security --offline`
+over this directory and fails one above the bar `mise-tasks/lint/units` gives
+it. An install and a deploy put every drop-in in place with the first unit
+they install.
+
 ### Reading one dashboard refresh
 
 A glance pass logs a line for each stage it reads (the whole glance, each
@@ -428,6 +449,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `SEVERINO_HQ_PLUGIN_POLICY_SHA256` | platform | the digest of the admission policy the lock was made under |
 | `SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION` | platform | whether extensions must be admitted; on unless `DJANGO_DEBUG` when unset |
 | `SEVERINO_BRIDGE_SOCKET` | platform | the Unix socket the controller bridge is served on; unset serves none |
+| `SEVERINO_TAILSCALED_SOCKET` | platform | tailscaled's local API socket, which places each agent call on the tailnet device that sent it. Set by `hq-host run-web` to `/var/run/tailscale/tailscaled.sock` on a host where tailscaled is enabled, which binds `/var/run/tailscale` read-only at the same path; a socket missing or unanswering there makes a call wait (503). Empty, the default, is a deployment with no tailnet: a call is placed on no device and the client is the finest unit |
 | `SEVERINO_CONTROLLER_DOORBELL` | platform | the file HQ touches when it queues controller work |
 | `SEVERINO_SCHEMA_SNAPSHOT` | platform | where boot keeps a copy of the database before migrating it |
 | `SEVERINO_LOG_LEVEL` | development | a standard Python log level; `INFO` by default |
