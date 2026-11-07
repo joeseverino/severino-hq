@@ -50,6 +50,10 @@ from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDTHS
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
+# A key that changes nothing, pressed before a batch a gate opens, so the
+# browser takes what the batch moves as the reader's own doing (`as_a_reader`).
+_NO_OP_KEY = "Shift"
+
 # What runs past the page's edge, wherever a box that scrolls does not hold it.
 _ESCAPES_READ = (SIDEWAYS, ANY_SCROLLER)
 
@@ -220,7 +224,7 @@ class LayoutBrowserTests(BrowserGate):
         # modal, covers the page by design and is held by the dialog checks.
         # An auto popover closes the others as it opens, so each is held
         # manual to stay shown beside the rest.
-        self.page.evaluate("""() => {
+        self.as_a_reader("""() => {
           document.querySelectorAll('details').forEach((d) => { d.open = true; });
           document.querySelectorAll('[popover]:not(:popover-open)').forEach((p) => {
             if (['auto', 'none', 'normal', undefined].includes(getComputedStyle(p).positionAnchor)) return;
@@ -228,6 +232,17 @@ class LayoutBrowserTests(BrowserGate):
             p.showPopover();
           });
         }""")
+
+    def as_a_reader(self, script, arg=None):
+        """``script`` run as a reader's press: a script's click is no input
+        to the browser, so Chromium would score what the batch pushes down
+        as the page moving by itself. A trusted key first, which changes
+        nothing, lets its rule for the half second after an input (Layout
+        Instability, `hadRecentInput`) excuse the batch, as it excuses each
+        of a reader's taps; a shift that lands later is still the page's."""
+
+        self.page.keyboard.press(_NO_OP_KEY)
+        return self.page.evaluate(script, arg)
 
     @reads(_ESCAPES_READ)
     def nothing_escapes_the_page_sideways_with_every_disclosure_open(self, _name, found):

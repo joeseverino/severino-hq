@@ -131,9 +131,6 @@ _ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => re
 _FOLD_TOGGLES = "main button[data-fold-toggle]"
 ROW_TOGGLES = "main button[data-row-toggle]:not([data-fold-toggle])"
 _PRESS_SHOWN = "(toggles) => document.querySelectorAll(toggles).forEach((t) => t.checkVisibility() && t.click())"
-# A key that changes nothing, pressed before a batch the look opens, so the
-# browser takes what the batch moves as the reader's own doing (`as_a_reader`).
-_NO_OP_KEY = "Shift"
 # Rounds of opening, each after what the last one brought in has arrived.
 _OPEN_ROUNDS = 10
 # The page's extent once it has held still for three polls running: a shot
@@ -1193,17 +1190,6 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.settle()
         self.as_a_reader(_PRESS_SHOWN, ROW_TOGGLES)
         self.settle()
-
-    def as_a_reader(self, script, arg):
-        """``script`` run as a reader's press: a script's click is no input
-        to the browser, so Chromium would score what the batch pushes down
-        as the page moving by itself. A trusted key first, which changes
-        nothing, lets its rule for the half second after an input excuse
-        the batch, as it excuses each of a reader's taps; a shift that lands
-        later is still the page's."""
-
-        self.page.keyboard.press(_NO_OP_KEY)
-        return self.page.evaluate(script, arg)
 
     def open_everything(self, name, width):
         """Every disclosure open, round after round until none is
