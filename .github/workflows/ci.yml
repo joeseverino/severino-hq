@@ -87,8 +87,6 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      # Dependency review comments on a pull request only when it fails.
-      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -107,9 +105,9 @@ jobs:
       - name: Dependency review
         if: github.event_name == 'pull_request'
         uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        # The review is read in the job summary, so the job needs no write.
         with:
           fail-on-severity: high
-          comment-summary-in-pr: on-failure
 
   test:
     name: Test
@@ -163,7 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gate: [layout-1, layout-2, layout-chromium-1, layout-chromium-2, navigation, demo]
+        gate: [layout-1, layout-2, layout-chromium-1, layout-chromium-2, navigation, table-fit, demo]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

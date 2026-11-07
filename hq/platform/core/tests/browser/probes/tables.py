@@ -166,6 +166,80 @@ TABLE_LAYOUT = (
 }"""
 )
 
+# Each table region's showing columns' widths and its rows' heights, with
+# the rows themselves, for `MOVED` to compare within one trip.
+_PLACES = """([scroll, records]) => [...document.querySelectorAll('main ' + scroll + ' > table')]
+  .filter((table) => table.checkVisibility())
+  .map((table) => ({
+    table,
+    columns: [...table.querySelectorAll(':scope > thead > tr:last-child > th')]
+      .filter((heading) => heading.getClientRects().length)
+      .map((heading) => Math.round(heading.getBoundingClientRect().width)),
+    rows: [...table.querySelectorAll(records)]
+      .filter((row) => row.getClientRects().length)
+      .map((row) => [row, row.getBoundingClientRect().height]),
+  }))"""
+
+# What opening rows moved that the reader did not open: a column's width, or
+# the height of a row that stayed closed (the component tests' "moves
+# nothing", over every table).
+_MOVED = (
+    "([before, after, opened]) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  for (const {table, columns, rows} of before) {
+    const now = after.find((places) => places.table === table);
+    if (!now) continue;
+    if (now.columns.join() !== columns.join()) {
+      found.push(`${describe(table)}: opening its rows moved its columns from ${columns.join(' ')} to ${now.columns.join(' ')}px`);
+    }
+    const heights = new Map(now.rows);
+    const moved = rows.filter(([row, height]) => !opened.includes(row) && heights.has(row)
+      && Math.abs(heights.get(row) - height) > 1).length;
+    if (moved) found.push(`${describe(table)}: opening its rows moved ${moved} rows it did not open`);
+  }
+  return found;
+}"""
+)
+
+
+def opened_tables_read(trip):
+    """One width's whole read of the tables, in one trip: `TABLE_LAYOUT` as
+    the window left them, then, once tables.js has measured their cuts at it,
+    every row a reader can open opened (the folds first, then each row whose
+    toggle shows once their rows are marked), ``trip`` run on that one state,
+    and what opening them moved. The rows are closed again last, so the next
+    width is the page as a reader resized it.
+
+    tables.js measures a resized window's cuts on a timer the resize starts
+    (`markTablesSoon`); a timer at least as long started after it runs after
+    it (HTML's timer ordering), so ``marked`` is that timer's delay."""
+
+    return f"""async ([layout, marked, folds, rows, records, args]) => {{
+  const [shape, sizes, misfits] = await ({TABLE_LAYOUT})(layout);
+  if (!sizes) return [shape, sizes, misfits, [], []];
+  const frame = () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  await new Promise((done) => setTimeout(done, marked));
+  await frame();
+  const press = (selector) => [...document.querySelectorAll(selector)]
+    .filter((toggle) => toggle.checkVisibility() && toggle.getAttribute('aria-expanded') !== 'true')
+    .map((toggle) => {{ toggle.click(); return toggle; }});
+  const places = {_PLACES};
+  const folded = press(folds);
+  await frame();
+  const before = places([layout[0], records]);
+  const opened = press(rows);
+  await frame();
+  const outcomes = await ({trip})(args);
+  const moved = ({_MOVED})([before, places([layout[0], records]), opened.map((toggle) => toggle.closest('tr'))]);
+  [...opened].reverse().forEach((toggle) => toggle.click());
+  [...folded].reverse().forEach((toggle) => toggle.click());
+  await frame();
+  return [shape, sizes, misfits, outcomes, moved];
+}}"""
+
+
 # A cell's identifier cut in a table whose columns still give way (no
 # `data-narrow`, tables.js): one no longer than its column's hold
 # (`--name-hold`, read off a box sized by it in the same cell) had the room to
@@ -405,6 +479,16 @@ ROW_ACTIONS_TABLES = """<section class="card">
 <tr><td><span style="display: inline-block; inline-size: 40rem">Example wider than any phone</span></td></tr>
 </tbody></table>{% endtable_region %}
 </section>"""
+
+# How far a table's heading is drawn below the top of its row on a page with
+# a header: a heading that sticks inside a box that scrolls is pushed down by
+# the inset it keeps for the page's chrome, over the rows under it.
+HEADING_DROP = """async (probe) => {
+  document.documentElement.style.setProperty('--site-header-height', '3rem');
+  await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+  const heading = document.querySelector(`[data-probe=${probe}]`).tHead.rows[0].cells[0];
+  return Math.round(heading.getBoundingClientRect().top - heading.parentElement.getBoundingClientRect().top);
+}"""
 
 COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
   .filter((th) => getComputedStyle(th).display !== 'none').map((th) => th.textContent.replace(/[^A-Za-z ]/g, '').trim())"""
