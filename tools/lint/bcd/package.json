@@ -2,6 +2,6 @@
   "name": "hq-browser-compat-data",
   "private": true,
   "devDependencies": {
-    "@mdn/browser-compat-data": "8.1.7"
+    "@mdn/browser-compat-data": "8.1.8"
   }
 }
