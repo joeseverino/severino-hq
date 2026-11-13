@@ -112,6 +112,19 @@ forbidden_modules = ["hq.**"]
 ignore_imports = ["hq.platform.application.answer_fields -> hq.platform.application.describe"]
 
 [[tool.importlinter.contracts]]
+name = "The operation manifest is a leaf: it imports nothing of HQ but two validators"
+type = "forbidden"
+source_modules = ["hq.platform.application.automation_manifest"]
+forbidden_modules = ["hq.**"]
+# HQ's one spelling of a dotted name (contracts.DOTTED_NAME) and of a host
+# name (names.is_hostname), which the manifest holds its ids, kinds and hosts
+# to rather than restating them.
+ignore_imports = [
+  "hq.platform.application.automation_manifest -> hq.platform.application.contracts",
+  "hq.platform.application.automation_manifest -> hq.domains.control_plane.names",
+]
+
+[[tool.importlinter.contracts]]
 name = "The UI primitives never reach the workflow engine"
 type = "forbidden"
 source_modules = ["hq.platform.application.ui"]

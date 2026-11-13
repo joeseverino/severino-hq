@@ -33,6 +33,11 @@ class AddressEvidenceTests(TestCase):
 
         self.assertEqual(rows["10.0.0.50:41641"].label, "Home network")
         self.assertEqual(rows["198.51.100.8:41641"].label, "Internet")
+        # The tailnet reads as good, the exposed way in as serious, the home
+        # network as neither.
+        self.assertEqual(rows[A_TAILNET_ADDRESS].tone, "good")
+        self.assertEqual(rows["198.51.100.8:41641"].tone, "serious")
+        self.assertEqual(rows["10.0.0.50:41641"].tone, "neutral")
 
     def test_path_endpoints_are_timestamped_snapshots_not_current_claims(self):
         a_tailnet(
@@ -71,6 +76,33 @@ class AddressEvidenceTests(TestCase):
 
         self.assertEqual([row.value for row in rows], ["100.64.0.9"])
 
+    def test_yours_and_hq_s_addresses_are_two_tables_side_by_side_in_one_flow(self):
+        """Each list is a table in a section of its own, and the two sections share one flow."""
+
+        from .markup import select
+
+        a_tailnet(
+            a_device("a-laptop", A_TAILNET_ADDRESS, user="someone@example.test"),
+            a_device("hq-host", "100.64.0.9", observer=True),
+        )
+        self.client.force_login(someone())
+        with mock.patch("hq.platform.application.hq_self.host_addresses", return_value=frozenset({"100.64.0.9"})):
+            page = self.client.get(reverse("connection"), **arrived(REMOTE_ADDR=A_TAILNET_ADDRESS)).content.decode()
+
+        tables = {table.attrs["data-addresses"]: table for table in select(page, "data-addresses")}
+        self.assertEqual(set(tables), {"yours", "hq"})
+        for table in tables.values():
+            self.assertEqual(table.tag, "table")
+            self.assertIn(A_TAILNET_ADDRESS if table is tables["yours"] else "100.64.0.9", table.words)
+
+        def flowed_section(table):
+            index = max(i for i, up in enumerate(table.ancestors) if "section-flow" in up.classes)
+            return table.ancestors[index], table.ancestors[index + 1]
+
+        (flow_yours, section_yours), (flow_hq, section_hq) = map(flowed_section, tables.values())
+        self.assertIs(flow_yours, flow_hq)
+        self.assertIsNot(section_yours, section_hq)
+
 
 @override_settings(
     ALLOWED_HOSTS=["hq.example.test", "testserver"],
@@ -105,6 +137,8 @@ class HopTests(TestCase):
 
         self.assertEqual(found[0].role, "ignored")
         self.assertEqual(found[0].value, "203.0.113.9")
+        # The address HQ judges by stands out; one it ignores reads as a warning.
+        self.assertEqual([hop.tone for hop in found], ["serious", "good", "neutral"])
 
     def test_a_chain_of_only_proxies_says_nothing_identified_the_caller(self):
         """The shape a proxy that drops the client address produces."""
@@ -143,6 +177,13 @@ class HeaderTests(TestCase):
         found = self.headers(HTTP_X_FORWARDED_FOR="100.64.0.5")
 
         self.assertTrue(found["X-Forwarded-For"].used)
+
+    def test_a_header_s_state_takes_the_tone_of_what_hq_did_with_it(self):
+        from ..request_headers import Header
+
+        self.assertEqual(Header("Host", "hq.example.test", purpose="Checked.").tone, "good")
+        self.assertEqual(Header("X-Real-Ip", "192.0.2.1", declined="HQ reads X-Forwarded-For.").tone, "attention")
+        self.assertEqual(Header("Accept", "*/*").tone, "neutral")
 
     def test_a_header_nothing_reads_is_listed_as_unread(self):
         """A proxy sending something nothing looks at is otherwise invisible."""

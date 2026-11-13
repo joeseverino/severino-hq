@@ -23,17 +23,20 @@ from hq.platform.application.adoption import ONLY_READS, WriteGap
 from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
 from hq.platform.application.cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
-from hq.platform.application.card_items import Insight, Kpi, ListRow
+from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.forms import ChoiceCards, SuffixedInput
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit
+from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
 from hq.platform.application.tables import TableSort
 from hq.platform.application.ui import (
     ActivityCalendar,
     CalendarDay,
     ChartSeries,
+    PageNavigation,
+    PageSection,
     PlannedDay,
     PlanNote,
     WeekPlan,
@@ -1497,6 +1500,118 @@ CATALOG = {
     "part/visit-refresh-region": Entry(
         '{% card element="div" data_example_region=True %}{% include "partials/_visit_refresh.html" with '
         'subject="page" name="example" refresh="[data-example-region]" %}<p>An example line.</p>{% endcard %}'
+    ),
+    # A horizon of dated events, more than one column holds on a wide
+    # screen: a link, one with a line under it and a badge, each tone.
+    "part/timeline": Entry(
+        '{% include "partials/_timeline.html" %}',
+        {
+            "timeline": Timeline(
+                "Example horizon",
+                "What is coming up for the example records.",
+                (
+                    TimelineItem(date(2026, 1, 5), "Example renewal", url="/example/renewal/"),
+                    TimelineItem(
+                        date(2026, 1, 19),
+                        "Example certificate with a name long enough to wrap",
+                        detail="example-host-01.example.com",
+                        status="attention",
+                        badge="Due soon",
+                    ),
+                    TimelineItem(date(2026, 2, 2), "Example review", detail="Every quarter", status="good"),
+                    TimelineItem(date(2026, 3, 16), "Example payment", status="serious", badge="Overdue"),
+                ),
+            )
+        },
+    ),
+    # What a record is related to: a group whose ends each say who read them
+    # and when, one a single source read, and one of names alone.
+    "part/relationships": Entry(
+        '{% include "partials/_relationships.html" %}',
+        {
+            "relationships": Relationships(
+                "example-host-01",
+                groups=(
+                    RelationGroup(
+                        "Reached through",
+                        1,
+                        (
+                            Relationship(
+                                EntityLink("example-proxy-01", "/example/proxy/", kind="machine"),
+                                source=EntityLink("Example provider", "/example/provider/"),
+                                observed_at=_NOW - timedelta(hours=3),
+                            ),
+                            Relationship(
+                                EntityLink("example-proxy-02", "/example/proxy-2/", detail="an example record"),
+                                source=EntityLink("Another example provider", "/example/provider-2/"),
+                                observed_at=_NOW - timedelta(days=2),
+                                stale=True,
+                            ),
+                        ),
+                    ),
+                    RelationGroup(
+                        "Runs",
+                        2,
+                        tuple(
+                            Relationship(
+                                EntityLink(f"example-service-{number}", f"/example/service-{number}/"),
+                                source=EntityLink("Example provider", "/example/provider/"),
+                                observed_at=_NOW - timedelta(minutes=20),
+                            )
+                            for number in range(1, 6)
+                        ),
+                    ),
+                    RelationGroup(
+                        "Names",
+                        3,
+                        (Relationship(EntityLink("example.com")), Relationship(EntityLink("www.example.com"))),
+                    ),
+                ),
+                focus_url="/example/topology/",
+            )
+        },
+    ),
+    # A dense page's map, more links than a phone's row holds, over the
+    # sections it opens.
+    "part/page-navigation": Entry(
+        '{% include "partials/_page_head.html" %}{% include "partials/_page_navigation.html" with '
+        "navigation=page.navigation %}{% for item in page.navigation.items %}"
+        "{% section item.label id=item.id %}<p>An example line.</p>{% endsection %}{% endfor %}",
+        {
+            "page": Page(
+                title="Example host",
+                navigation=PageNavigation(
+                    tuple(
+                        PageSection(f"example-{number}", label)
+                        for number, label in enumerate(
+                            (
+                                "Overview",
+                                "Example readings",
+                                "Example containers",
+                                "Example certificates",
+                                "Relationships",
+                                "Example history",
+                            )
+                        )
+                    )
+                ),
+            )
+        },
+        heads_the_page=True,
+    ),
+    # A value and the one that replaces it: as words, and as a cell's own
+    # identifiers, one pair linking outside HQ and one too long to share a
+    # line with its old value beside a note that asks for its whole length.
+    "part/change": Entry(
+        '{% section "Example versions" %}<p>{% include "partials/_change.html" with from="1.2" to="1.4" %}</p>'
+        '{% table_region "Example images" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Name" "identifier" %}{% table_heading "Image" %}{% table_heading "Note" %}</tr></thead>'
+        '<tbody><tr><td>example-01</td><td>{% include "partials/_change.html" with from="example:1.2" '
+        'to="example:1.4" url="https://example.com/releases/" code=True %}</td><td>An example release</td></tr>'
+        '<tr><td>example-02</td><td>{% include "partials/_change.html" with from=old to=new code=True %}'
+        "</td><td>Restarted once the example update was pulled from the example registry</td></tr></tbody>"
+        "</table>{% endtable_region %}{% endsection %}",
+        {"old": "example:2026.1.0", "new": "example:2026.3.0"},
     ),
 }
 

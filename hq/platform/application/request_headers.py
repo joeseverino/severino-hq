@@ -2,6 +2,9 @@
 
 from dataclasses import dataclass
 
+# What HQ did with a header, as the tone its pill takes.
+_STATE_TONES = {"read": "good", "declined": "attention", "ignored": "neutral"}
+
 
 @dataclass(frozen=True, slots=True)
 class Header:
@@ -24,6 +27,12 @@ class Header:
         if self.purpose:
             return "read"
         return "declined" if self.declined else "ignored"
+
+    @property
+    def tone(self) -> str:
+        """Read reads as good, declined as a choice to look at, ignored as neither."""
+
+        return _STATE_TONES[self.state]
 
 
 # What each header HQ reads is read *for*. Written here rather than inferred,
@@ -57,6 +66,43 @@ HEADERS_DECLINED = {
     "X-Forwarded-Scheme": "HQ reads X-Forwarded-Proto.",
     "X-Forwarded-Host": "HQ reads Host.",
 }
+
+
+@dataclass(frozen=True, slots=True)
+class ResponseCheck:
+    """One thing the browser reads back from HQ's own response: a header, or a
+    directive of the content security policy, and what it is for."""
+
+    name: str
+    purpose: str
+    directive: bool = False
+
+
+# What HQ sends back, read by the browser from a real response rather than
+# from the settings meant to produce one: a same-origin fetch exposes every
+# response header. The directives are the policy's parts worth naming, since
+# the policy is one long header whose most consequential parts a reader would
+# never spot in it; a directive dropped in configuration shows as absent.
+RESPONSE_CHECKS = (
+    ResponseCheck("x-served-by", "Which reverse-proxy hostname actually served this response"),
+    ResponseCheck("x-request-id", "Joins this browser response to HQ's structured request log"),
+    ResponseCheck("content-security-policy", "Which origins may load script, style and frames"),
+    ResponseCheck("strict-transport-security", "Refuses plain HTTP for this host from now on"),
+    ResponseCheck("x-content-type-options", "Stops the browser guessing a type it was not sent"),
+    ResponseCheck("x-frame-options", "Refuses to be framed by another site"),
+    ResponseCheck("referrer-policy", "How much of this URL travels to anywhere you click"),
+    ResponseCheck("cross-origin-opener-policy", "Keeps other origins out of this browsing context"),
+    ResponseCheck("cross-origin-resource-policy", "Refuses to be loaded as a subresource elsewhere"),
+    ResponseCheck("permissions-policy", "Which device features this page may ask for"),
+    ResponseCheck("reporting-endpoints", "Where the browser sends a policy it refused to follow"),
+    ResponseCheck(
+        "require-trusted-types-for", "Assigning a string to a DOM sink throws instead of parsing", directive=True
+    ),
+    ResponseCheck("frame-ancestors 'none'", "Nothing may frame this page", directive=True),
+    ResponseCheck("object-src 'none'", "No plugins or embedded objects", directive=True),
+    ResponseCheck("base-uri 'self'", "Injected markup cannot re-point every relative URL", directive=True),
+    ResponseCheck("form-action 'self'", "A form cannot be made to submit somewhere else", directive=True),
+)
 
 
 def headers_of(request) -> tuple[Header, ...]:

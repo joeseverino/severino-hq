@@ -377,16 +377,20 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
 /* A form in the body that lays out no fields of its own (not .form) adds no
    box, and neither does a region (`data-fragment`), which only says where its
    parts come from: what either holds reaches the sides as the body's own part
-   would. */
+   would. A flow of sections in the body reaches them too. */
 :is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .github-list, .posture-repos,
   .insight-grid, .sweep-grid,
-  .month-grid, .list-rows, .search-hits, .conn-rows) {
+  .month-grid, .list-rows, .search-hits, .section-flow, .timeline-list) {
   --frame-inset: var(--section-side);
   margin-inline: calc(-1 * var(--section-side));
   max-inline-size: calc(100% + 2 * var(--section-side));
   /* A table is as wide as it is told, never as wide as its block's room. */
   &:where(table) { inline-size: calc(100% + 2 * var(--section-side)); }
 }
+/* A section in that flow stands beside others: its words keep the frame's
+   inset, and what reaches the sides reaches its own, so two tables side by
+   side meet only across the flow's gap. */
+.section-body > .section-flow > .section > :is(.section-head, .section-body) { padding-inline: var(--section-side); }
 /* What also draws its first and last rows reaches the frame's top and foot
    when it starts or ends the frame, its corners the frame's. A list of rows
    or a month, whose outer rows draw no edge there, keeps the frame's padding

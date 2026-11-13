@@ -148,7 +148,6 @@ textarea.code {
 .conn > :last-child { margin-block-end: 0; }
 .conn-pending { padding: var(--space-10) 0; }
 .conn-note { color: var(--muted); font-size: var(--text-xs); margin: calc(var(--space-2) * -1) 0 var(--space-5); }
-.conn-note-after { margin: var(--space-3) 0 0; }
 
 .conn-peering.conn-tailnet { border-left: 3px solid var(--ok); }
 .conn-peering:is(.conn-network, .conn-loopback) { border-left: 3px solid var(--warn); }
@@ -197,62 +196,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 .conn-agree-yes { color: var(--ok); }
 .conn-agree-no { color: var(--warn); }
 
-/* Rows of like things (addresses, headers, the chain HQ walked to judge your
-   address): a value, what kind it is, and a note. One grid for the whole list,
-   each row a row of it, so values, kinds and notes each start at one edge down
-   the list and a kind sits just after the longest value rather than at a fixed
-   distance. A value breaks only where `|breakable` lets it. */
-.conn-rows {
-  display: grid; grid-template-columns: fit-content(60%) max-content minmax(0, 1fr);
-  margin: 0; padding: 0; list-style: none; container: conn-rows / inline-size;
-}
-.conn-row {
-  display: grid; grid-column: 1 / -1; grid-template-columns: subgrid;
-  column-gap: var(--space-6); row-gap: var(--space-1); align-items: baseline; padding: var(--space-3) var(--frame-inset, 0);
-  border-bottom: 1px solid var(--line-2);
-}
-/* The lists of one section (Addresses' "Your addresses" and "HQ answers at")
-   share those columns: the outer body holds the tracks, between two of the
-   frame's inset so a list's rows still reach the frame's sides, and each
-   section inside it passes them down to its list as a subgrid, so a kind
-   starts at one edge down every list. The container moves to the body,
-   since a size container cannot be a subgrid. */
-.section-body:has(> .section > .section-body > .conn-rows) {
-  display: grid; padding-inline: 0; container: conn-rows / inline-size;
-  grid-template-columns: var(--section-side) fit-content(60%) max-content minmax(0, 1fr) var(--section-side);
-  & > *, & > .section > *, & > .section > .section-body > * { grid-column: 2 / 5; }
-  & > .section, & > .section > .section-body, & > .section > .section-body > .conn-rows { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; }
-  /* A list folded inside a section (the headers received but not read)
-     keeps its own three columns, and still reaches the frame's sides as the
-     lists beside it do, its words at the frame's inset. */
-  & > .section > .section-body > .conn-more {
-    grid-column: 1 / -1;
-    & > summary { padding-inline: var(--section-side); }
-    & > .conn-rows { --frame-inset: var(--section-side); }
-  }
-  /* Only the lists that take the tracks. */
-  & > .section > .section-body > .conn-rows {
-    margin-inline: 0; max-inline-size: none; container-type: normal; --frame-inset: 0;
-    & > .conn-row > :first-child { grid-column-start: 2; }
-    & > .conn-row > .conn-row-note { grid-column: 4; }
-    & > .conn-row > :only-child, & > :not(.conn-row) { grid-column: 2 / 5; }
-  }
-}
-.conn-row:last-child { border-bottom: 0; }
-.conn-row code { font-size: var(--text-xs); overflow-wrap: break-word; }
-.conn-row > .conn-kind { justify-self: start; }
 .conn-row-note { color: var(--muted); font-size: var(--text-xs); }
-.conn-row > .conn-row-note { grid-column: 3; }
-.conn-row > :only-child, .conn-rows > :not(.conn-row) { grid-column: 1 / -1; }
-.conn-current code { font-weight: 650; }
-.conn-kind {
-  font-size: var(--text-3xs); letter-spacing: .04em; padding: var(--space-1) var(--space-4); border-radius: 20px;
-  background: var(--bg-tint); color: var(--muted); white-space: nowrap;
-}
-.conn-kind-tailnet { background: var(--tone-tint); color: var(--ok); }
-.conn-kind-elsewhere, .conn-kind-public { background: var(--tone-tint); color: var(--danger); }
-.conn-kind-hop-judged { background: var(--accent); color: var(--accent-ink); }
-.conn-kind-hop-ignored { background: var(--tone-tint); color: var(--danger); }
 
 .conn-layers { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .conn-layer { border: 1px solid var(--line); border-radius: var(--radius); }
@@ -345,16 +289,6 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
   .conn-verdict { flex-wrap: wrap; }
   .conn-layer-body { margin-left: var(--space-6); }
 }
-/* A list too narrow for three columns that can each hold an IPv6 address
-   (a narrow panel, a fact's value) flows each row instead: the kind beside
-   its value and the note beside both while they fit, each wrapping under only
-   what it cannot sit beside. */
-@container conn-rows (width < 32rem) {
-  .conn-row { display: flex; flex-wrap: wrap; }
-  .section-body:has(> .section > .section-body > .conn-rows) .conn-row { padding-inline: var(--section-side); }
-  .conn-row > .conn-row-note { flex: 1 1 12rem; }
-}
-
 /* The two ends and the link between them. */
 .conn-peering {
   display: grid; grid-template-columns: minmax(min-content, 1fr) auto minmax(min-content, 1fr); gap: var(--space-7); align-items: center;
@@ -405,8 +339,6 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
   }
 }
 
-.conn-kind-read { background: var(--accent-tint); color: var(--accent); }
-.conn-row-used code { color: var(--ink); }
 .conn-more > summary {
   cursor: pointer; font-size: var(--text-xs); color: var(--muted); padding: var(--space-4) 0 var(--space-2);
 }
@@ -417,16 +349,13 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 .conn-rules code { font-size: var(--text-2xs); }
 
 .conn-peer-name { font-size: var(--text-md); font-weight: 600; }
-.conn-kind-declined { background: var(--tone-tint); color: var(--warn); }
 
 /* Which network the link rides over, with Why and About on the same line.
    Each disclosure lends its parts to the line, so opening one leaves its
    summary where it was pressed and what it holds takes the line below. Words
    wrap whole: the cell would otherwise inherit `overflow-wrap: anywhere` and
-   fit-content would shrink to a letter. Its rows hang from a disclosure the
-   line sizes to their content, so the value is the width they measure. */
-.conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; container: conn-rows / inline-size; }
-.conn-carriage .conn-rows { container-type: normal; }
+   fit-content would shrink to a letter. */
+.conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; }
 /* A disclosure in a fact is a target of the least size on its own, so one
    wrapped under another keeps it whatever the column's width. */
 .conn .facts-list .conn-more > summary { padding: calc((var(--target-min) - 1lh) / 2) 0; }

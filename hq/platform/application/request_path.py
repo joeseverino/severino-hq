@@ -25,7 +25,7 @@ from .reach import NETWORKS, network_of
 from .request_addresses import Address, addresses_of, addresses_of_hq
 from .request_channel import forwarded_chain
 from .request_connection import Connection, connection
-from .request_headers import Header, headers_of
+from .request_headers import RESPONSE_CHECKS, Header, ResponseCheck, headers_of
 from .ui import ended
 lazy from . import connections
 lazy from .card_items import Insight
@@ -100,6 +100,10 @@ class HopCheck:
         return _CHECK_STATES[self.state]
 
 
+# A forwarded hop's role as the tone its pill takes.
+_ROLE_TONES = {"judged": "good", "ignored": "serious"}
+
+
 @dataclass(frozen=True, slots=True)
 class Evidence:
     """One thing the request itself carried, at the hop it belongs to."""
@@ -109,6 +113,12 @@ class Evidence:
     detail: str = ""
     # For an address in the forwarded chain: judged, proxy or ignored.
     role: str = ""
+
+    @property
+    def tone(self) -> str:
+        """The address HQ judges by stands out, one it ignores reads as a warning."""
+
+        return _ROLE_TONES.get(self.role, "neutral")
 
 
 # ----- The forwarded chain ----------------------------------------------------
@@ -663,6 +673,12 @@ class RequestPath:
         """The headers HQ declined or ignored, declined first."""
 
         return tuple(header for header in self.headers if not header.used)
+
+    @property
+    def response_checks(self) -> tuple[ResponseCheck, ...]:
+        """What the browser reads back from HQ's response to it."""
+
+        return RESPONSE_CHECKS
 
     @property
     def chain(self) -> tuple[Evidence, ...]:

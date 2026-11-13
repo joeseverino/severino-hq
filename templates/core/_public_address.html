@@ -3,50 +3,28 @@ What HQ holds of a public address, and the button that looks it up again. The
 button posts the page's one form (post_button) and is answered in this
 region, found in the answer by its id.
 {% endcomment %}
-<div class="conn-rows" id="public-address" data-public-address data-fragment="{% url 'tool_public_address' %}" data-fragment-failure="The lookup could not be reached.">
+<div id="public-address" data-public-address data-fragment="{% url 'tool_public_address' %}" data-fragment-failure="The lookup could not be reached.">
 {% if reading %}
-  <div class="conn-row">
-    <code>{{ reading.address|breakable }}</code>
-    <span class="conn-kind">IPv{{ reading.version|breakable }}</span>
-    <span class="conn-row-note">
-      {% if reading.note %}{{ reading.note|breakable }}{% endif %}
-    </span>
-  </div>
-  {% for hostname in reading.hostnames %}
-    <div class="conn-row">
-      <code>{{ hostname|breakable }}</code>
-      <span class="conn-kind conn-kind-read">reverse DNS</span>
-      <span class="conn-row-note"></span>
-    </div>
-  {% endfor %}
-  {% if reading.allocation.organization or reading.allocation.name %}
-    <div class="conn-row">
-      <code>{{ reading.allocation.organization|default:reading.allocation.name|breakable }}</code>
-      <span class="conn-kind conn-kind-read">allocation</span>
-      <span class="conn-row-note"></span>
-    </div>
-    {% if reading.allocation.prefixes %}
-      <div class="conn-row">
-        <code>{% for prefix in reading.allocation.prefixes %}{{ prefix|breakable }} {% endfor %}</code>
-        <span class="conn-kind">block</span>
-        <span class="conn-row-note">{% if reading.allocation.country %}{{ reading.allocation.country|breakable }}{% endif %}</span>
-      </div>
+  {% facts %}
+    {% fact "Address" %}<code>{{ reading.address|breakable }}</code> <span class="muted">IPv{{ reading.version|breakable }}{% if reading.note %}{% dot %}{{ reading.note|breakable }}{% endif %}</span>{% endfact %}
+    {% if reading.hostnames %}{% fact "Reverse DNS" %}{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}{% endfact %}{% endif %}
+    {% if reading.allocation.organization or reading.allocation.name %}
+      {% fact "Allocation" %}{{ reading.allocation.organization|default:reading.allocation.name|breakable }}{% endfact %}
+      {% if reading.allocation.prefixes %}
+        {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}{% if reading.allocation.country %}<span class="muted">{{ reading.allocation.country|breakable }}</span>{% endif %}{% endfact %}
+      {% endif %}
     {% endif %}
-  {% endif %}
+  {% endfacts %}
 {% elif failure %}
-  <div class="conn-row">
-    <span class="conn-row-note">{{ failure|breakable }}</span>
-  </div>
+  <p class="muted">{{ failure|breakable }}</p>
 {% else %}
-  <div class="conn-row">
-    <span class="conn-row-note">Not looked up yet. Looking it up asks reverse DNS and the address registry.</span>
-  </div>
+  <p class="muted">Not looked up yet. Looking it up asks reverse DNS and the address registry.</p>
 {% endif %}
 {% if not failure and not reading or reading.observed_at %}
-  <div class="conn-row">
+  <p>
     {% url 'tool_public_address' as lookup_url %}
     {% if reading %}{% post_button "Look up again" lookup_url name="address" value=address %}{% else %}{% post_button "Look up" lookup_url name="address" value=address %}{% endif %}
-    {% if reading.observed_at %}<span class="conn-row-note">{% include "partials/_reading_age.html" with at=reading.observed_at only %}</span>{% endif %}
-  </div>
+    {% if reading.observed_at %}<span class="muted">{% include "partials/_reading_age.html" with at=reading.observed_at only %}</span>{% endif %}
+  </p>
 {% endif %}
 </div>

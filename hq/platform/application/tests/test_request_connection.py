@@ -514,6 +514,23 @@ class ConnectionPageTests(TestCase):
         (protocol,) = select(response, "data-connection-protocol")
         self.assertNotIn("open", protocol.attrs)
 
+    def test_each_response_check_is_a_row_the_browser_fills_with_both_answers_ready(self):
+        """The server draws every row the browser reads back, each holding
+        both states it can show, so the script only chooses one."""
+
+        from ..request_headers import RESPONSE_CHECKS
+
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("connection"))
+
+        rows = {row.attrs["data-response-check"]: row for row in select(response, "data-response-check")}
+        self.assertEqual(list(rows), [check.name for check in RESPONSE_CHECKS])
+        states = {element.attrs["data-response-state"] for element in select(response, "data-response-state")}
+        self.assertEqual(states, {"waiting", "present", "absent"})
+        directives = {name for name, row in rows.items() if "data-response-directive" in row.attrs}
+        self.assertEqual(directives, {check.name for check in RESPONSE_CHECKS if check.directive})
+
     def test_identity_dates_use_hqs_normal_date_format(self):
         self.client.force_login(self.user)
         self.user.last_login = datetime(2026, 8, 23, 21, 12, tzinfo=UTC)

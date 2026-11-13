@@ -1,0 +1,10 @@
+#!/bin/sh
+#MISE description="The page-class check's count: the classes host templates hand-roll instead of drawing a shared part, as totals, per template, and any difference from HAND_ROLLED; the number a UI report gives before and after"
+#MISE hide=true
+#MISE extends="audit"
+
+# tools/audit_hand_rolled.py calls the check's own reader, so this is the
+# number lint:source reads.
+set -eu
+
+exec uv run python -m tools.audit_hand_rolled

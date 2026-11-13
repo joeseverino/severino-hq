@@ -6,7 +6,10 @@
 /* ── Planning timeline ─────────────────────────────────────────────
    One chronological primitive for every domain. A two-column horizon uses the
    desktop canvas without turning eight dates into a full page of vertical rail;
-   source order remains chronological and collapses to one column on phones. */
+   source order remains chronological and collapses to one column on phones.
+   The list reaches its frame's sides (cards.css) and each item keeps the
+   frame's inset, so two columns' dividers meet as one rule across the frame
+   and the inset on either side of their seam is the columns' gap. */
 .timeline-list {
   list-style: none;
   margin: var(--space-2) 0 0;
@@ -14,7 +17,6 @@
   display: grid;
   /* stylelint-disable-next-line hq/flow-grid -- a timeline's entries, in reading order down and across */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  column-gap: var(--space-14);
   /* Each item draws the rule above it and the list clips the first row's, so
      the dividers are right in one column or two without counting items. */
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the list clips its first row's divider, not text */
@@ -26,7 +28,7 @@
   align-items: center;
   column-gap: var(--space-6);
   min-height: 62px;
-  padding: var(--space-3) 0;
+  padding: var(--space-3) var(--frame-inset, 0);
   box-shadow: 0 -1px 0 var(--line-2);
 }
 .timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }

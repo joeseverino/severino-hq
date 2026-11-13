@@ -148,9 +148,11 @@ SELECTORS = {
     "gutter_bound": "pre, .card",
     # The box built to scroll a table sideways.
     "table_scroll": ".table-scroll",
-    # The boxes allowed to scroll sideways: a table's, and a block of code,
-    # whose lines are as written.
-    "sideways": ".table-scroll, pre",
+    # The boxes allowed to scroll sideways: a table's, a block of code, whose
+    # lines are as written, and a page's map of its sections, one row of
+    # links at every width as a row of tabs is, so a section added never
+    # makes the page taller before its content begins.
+    "sideways": ".table-scroll, pre, .page-nav-list",
     # A table whose rows can be chosen, which the table script wires up last.
     "selectable_table": "[data-selectable-table]",
     # What a parser leaves where a <p> was closed early by a block inside it.

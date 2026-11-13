@@ -15,7 +15,7 @@
    contract, not restating the colors. */
 
 .pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public, .pill-done,
-.pill-replied, .pill-reachable, .pill-good, .notice-success, .conn-kind-tailnet,
+.pill-replied, .pill-reachable, .pill-good, .notice-success,
 .connection-state-reachable, .connection-state-ready, .connection-state-good, .tone-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
@@ -25,7 +25,7 @@
 }
 .pill-paused, .pill-editing, .pill-drafting, .pill-researching,
 .pill-internal, .pill-attention, .notice-warning,
-.conn-kind-declined, .connection-state-attention, .connection-state-stale, .tone-attention {
+.connection-state-attention, .connection-state-stale, .tone-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
   --tone-tint: var(--tone-caution-tint);
@@ -36,8 +36,7 @@
 .pill-replaced, .pill-deleted, .pill-login_failed, .pill-denied, .pill-spam,
 .pill-unreachable, .notice-error,
 .connection-state-unreachable, .connection-state-revoked, .connection-state-unauthorized,
-.connection-state-unreported,
-.conn-kind-elsewhere, .conn-kind-public, .conn-kind-hop-ignored {
+.connection-state-unreported {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
   --tone-tint: var(--tone-critical-tint);

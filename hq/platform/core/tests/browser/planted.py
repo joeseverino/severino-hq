@@ -12,7 +12,9 @@ from typing import Any, override
 from hq.platform.application.pages import Page, PageAction
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.reading import probe
+from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.widths import WIDE
 
 
@@ -497,6 +499,29 @@ _LEFT_BEHIND = _TABLE.format('on <span style="display: inline-block">example-nam
 _CAPS = "planted/caps"
 _CAPPED = '<div class="section-flow"><section style="max-inline-size: 12rem"><p>Example</p></section></div>'
 
+# Who a layout shift is charged to, each page a part that one shift moves
+# (`example-moved`) by its margin before it is removed or kept: a vendored
+# part moved from inside its box to above it, as a viewer's skeleton is; one
+# drawn across the box's edge and moved off it, as the viewer's header
+# skeleton is; a part of HQ's outside the box; and a part of HQ's laid over the box in one
+# grid cell, as the API reference's loading line shares the mount's. A box
+# that is a flow root keeps the part's margin from moving the box itself.
+_SHIFTED_OUT = "planted/shifted-out-of-the-box"
+_SHIFTED_ACROSS = "planted/shifted-off-the-box-s-edge"
+_SHIFTED_BESIDE = "planted/shifted-beside-the-box"
+_SHIFTED_OVER = "planted/shifted-over-the-box"
+_SHIFTS = {
+    _SHIFTED_OUT: '<div data-vendored style="display: flow-root; block-size: 400px; margin-block-start: 420px">'
+    '<div id="example-moved" style="block-size: 300px; margin-block-start: 20px">Example</div></div>',
+    _SHIFTED_ACROSS: '<div data-vendored style="display: flow-root; block-size: 400px; margin-block-start: 420px">'
+    '<div id="example-moved" style="block-size: 300px; margin-block-start: -50px">Example</div></div>',
+    _SHIFTED_BESIDE: '<div style="display: flow-root; block-size: 800px"><div id="example-moved" '
+    'style="block-size: 300px; margin-block-start: 420px">Example</div></div>'
+    '<div data-vendored style="block-size: 100px"></div>',
+    _SHIFTED_OVER: '<div style="display: grid"><div id="example-moved" style="grid-area: 1 / 1; block-size: 300px; '
+    'margin-block-start: 420px">Example</div><div data-vendored style="grid-area: 1 / 1; block-size: 800px"></div></div>',
+}
+
 
 def _said(finding):
     """A finding as a value a set holds: the audit's are dicts."""
@@ -524,6 +549,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
             _LIFTED: probe(_OUTRANKED),
             _LEFT: probe(_LEFT_BEHIND),
             _CAPS: probe(_CAPPED),
+            **{name: probe(markup) for name, markup in _SHIFTS.items()},
         }
 
     def found(self, name, plant):
@@ -565,6 +591,62 @@ class PlantedBrowserTests(LayoutBrowserTests):
     def test_a_flow_member_that_caps_its_width_leaves_its_row_short(self):
         found = self.found(_CAPS, Plant("")).get("flows share their rows", [])
         self.assertTrue([said for said in found if "caps its width" in said], found)
+
+    def shifted(self, name, *, removed, given=(SELECTORS["vendored"], CLS_LIMIT)):
+        """What the layout shift check finds once ``name``'s part has moved up
+        420px by itself, and then been removed or kept."""
+
+        self.open(name, WIDE)
+        self.settle()
+        if not self.records_layout_shifts():
+            self.skipTest("this engine keeps no record of layout shifts")
+        self.page.evaluate(
+            """() => {
+              const moved = document.getElementById('example-moved');
+              moved.style.setProperty('margin-block-start', `${parseFloat(getComputedStyle(moved).marginBlockStart) - 420}px`);
+            }"""
+        )
+        self.settle()
+        if removed:
+            self.page.evaluate("() => document.getElementById('example-moved').remove()")
+            self.settle()
+        return self.page.evaluate(LAYOUT_SHIFTS, given and list(given))
+
+    @with_script
+    def test_a_vendored_part_moved_out_of_its_box_and_removed_is_the_script_s(self):
+        """A removed part is the script's when it was in the box before the
+        shift, though the shift carried it out."""
+
+        self.assertEqual(self.shifted(_SHIFTED_OUT, removed=True), [])
+
+    @with_script
+    def test_a_vendored_part_drawn_across_its_box_s_edge_and_removed_is_the_script_s(self):
+        """A removed part the box held is the script's though the script drew
+        it past the box's edge before the shift and wholly outside after."""
+
+        self.assertEqual(self.shifted(_SHIFTED_ACROSS, removed=True), [])
+
+    @with_script
+    def test_a_part_of_hq_s_removed_after_it_shifted_is_hq_s(self):
+        self.assertTrue(self.shifted(_SHIFTED_BESIDE, removed=True))
+
+    @with_script
+    def test_a_part_of_hq_s_still_in_the_page_within_the_box_s_bounds_is_hq_s(self):
+        """A part still in the page is judged by what holds it, so HQ's laid
+        over the box is HQ's wherever it is drawn."""
+
+        self.assertTrue(self.shifted(_SHIFTED_OVER, removed=False))
+
+    @with_script
+    def test_the_layout_shift_check_run_alone_lists_every_shift_and_whose_parts_moved(self):
+        """Given no argument, as `dev:look --probe` runs it alone, the check
+        lists each shift whatever its score, each part marked as the
+        script's or HQ's."""
+
+        for name, removed, whose in ((_SHIFTED_OUT, True, "(the script's)"), (_SHIFTED_OVER, False, "(HQ's)")):
+            with self.subTest(page=name):
+                listed = self.shifted(name, removed=removed, given=None)
+                self.assertTrue([line for line in listed if line.endswith(whose)], listed)
 
     def records_layout_shifts(self):
         return self.page.evaluate("() => PerformanceObserver.supportedEntryTypes.includes('layout-shift')")

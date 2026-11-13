@@ -8,6 +8,10 @@ from .reach import NETWORKS
 from .request_channel import channel_of
 from .request_connection import Connection
 
+# The tone of an address's network: the tailnet is the private way in, the
+# internet the exposed one.
+_TONES = {"tailnet": "good", "elsewhere": "serious"}
+
 
 @dataclass(frozen=True, slots=True)
 class Address:
@@ -18,6 +22,10 @@ class Address:
     label: str
     source: str
     current: bool = False
+
+    @property
+    def tone(self) -> str:
+        return _TONES.get(self.kind, "neutral")
 
 
 def _address_row(value: str, source: str, *, current: bool = False) -> Address | None:

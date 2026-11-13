@@ -253,6 +253,13 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
    share their first baseline, whatever face and size a page sets its chips in
    and whatever wraps after it; beside chips the arrow is set in their face. */
 .change { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) .35em; max-width: 100%; }
+/* With no script a wide region's table is as wide as its cells ask (tables.css),
+   and a wrapping row asks for both values side by side, so a cell's own pair
+   asks for its longer value alone, the new under the old, and the table fits
+   its region. A pair in a cell's sentence stays in its line. */
+@media (scripting: none) {
+  .data-table .change:not(:is(p, li) *) { display: inline-grid; grid-template-columns: minmax(min-content, max-content); justify-items: start; }
+}
 .change-to { display: flex; align-items: baseline; column-gap: .35em; }
 .change > *, .change-to > * { min-width: 0; }
 .change-arrow { flex: none; color: var(--muted-2); font-weight: 400; }

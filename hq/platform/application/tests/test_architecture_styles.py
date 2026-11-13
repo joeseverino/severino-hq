@@ -701,7 +701,6 @@ HAND_ROLLED: dict[str, str] = {
     "404.html": "notice-body notice-code notice-page notice-search",
     "500.html": "notice-body notice-code notice-page",
     "analytics/overview.html": "bar-label bar-list bar-row bar-track bar-value chip reading-note window-switch",
-    "assets/asset_detail.html": "prose",
     "auth/login.html": "auth-card auth-logo auth-note auth-sso",
     "base.html": (
         "action-badge brand conn-badge-* conn-dot content demo-about demo-about-dot demo-flag demo-foot global-search "
@@ -723,7 +722,7 @@ HAND_ROLLED: dict[str, str] = {
     "control_plane/_connection_read.html": "connection-evidence-* connection-sight-* connection-sight-state",
     "control_plane/_container_band.html": "github-gap",
     "control_plane/_container_detail.html": (
-        "band-note hardening-head hardening-notes hardening-patch prose upgrade-blockers upgrade-reasons upgrade-steps"
+        "band-note hardening-head hardening-notes hardening-patch upgrade-blockers upgrade-reasons upgrade-steps"
     ),
     "control_plane/_credential_fix.html": (
         "connection-credential-fix connection-credential-fix-headline connection-credential-steps"
@@ -732,7 +731,6 @@ HAND_ROLLED: dict[str, str] = {
     "control_plane/_machine_status.html": "page-title-meta",
     "control_plane/_path_hops.html": "hop-body hop-icon hop-label hop-proof-key path-proof-note request-path route",
     "control_plane/_record_status.html": "page-title-meta",
-    "control_plane/_service_parts.html": "prose",
     "control_plane/_service_rows.html": "exposure exposure-* pin-move pin-toggle pinned service-name",
     "control_plane/_tool_dns.html": "lookup-grid",
     "control_plane/_topology_node_body.html": (
@@ -748,13 +746,12 @@ HAND_ROLLED: dict[str, str] = {
         "connection-ability-all connection-ability-list connection-ability-more connection-authority "
         "connection-authority-* connection-depends connection-more-scope connection-next connection-problems "
         "connection-reach connection-read-list connection-row-meta connection-sight-list connection-sight-refusal "
-        "connection-standing connection-state connection-state-* connection-summary connection-table is-attention "
-        "prose"
+        "connection-standing connection-state connection-state-* connection-summary connection-table is-attention"
     ),
-    "control_plane/container_list.html": "container-advisories container-reach github-gap prose",
-    "control_plane/machine_detail.html": "node-key prose",
+    "control_plane/container_list.html": "container-advisories container-reach github-gap",
+    "control_plane/machine_detail.html": "node-key",
     "control_plane/resource_detail.html": "operation-evidence operation-result",
-    "control_plane/service_detail.html": "control-origin exposure exposure-* prose",
+    "control_plane/service_detail.html": "control-origin exposure exposure-*",
     "control_plane/tools.html": "tool-summary tool-tabs",
     "control_plane/topology.html": (
         "scope-chip topology-detail topology-hint topology-kind-* topology-kind-filters topology-kind-mark "
@@ -763,7 +760,7 @@ HAND_ROLLED: dict[str, str] = {
         "topology-search topology-stage topology-toolbar topology-trace-bar topology-trace-controls topology-view "
         "topology-workspace"
     ),
-    "control_plane/zone_detail.html": "relation-source zone-switch zone-switch-note",
+    "control_plane/zone_detail.html": "zone-switch zone-switch-note",
     "control_plane/zone_mail.html": (
         "control-label mail-record-value mail-records mail-stage-head mail-stage-question mail-stage-warning "
         "mail-stages"
@@ -785,11 +782,10 @@ HAND_ROLLED: dict[str, str] = {
     "core/_connection_loading.html": "conn-pending",
     "core/_connection_panel.html": (
         "conn conn-* conn-agree conn-agree-no conn-agree-yes conn-aside conn-carriage conn-carriage-* conn-check "
-        "conn-dot conn-headline conn-hop-detail conn-hop-more conn-hop-page conn-kind conn-kind-* conn-kind-hop-* "
-        "conn-kind-read conn-layer conn-layer-* conn-layer-body conn-layer-boundary conn-layer-evidence "
-        "conn-layer-label conn-layers conn-link conn-link-* conn-link-line conn-more conn-note conn-note-after "
-        "conn-path conn-peer conn-peer-name conn-peer-role conn-peering conn-row conn-row-* conn-row-note "
-        "conn-row-used conn-rows conn-rules conn-sub conn-tick conn-verdict-* prose"
+        "conn-dot conn-headline conn-hop-detail conn-hop-more conn-hop-page conn-layer conn-layer-* conn-layer-body "
+        "conn-layer-boundary conn-layer-evidence conn-layer-label conn-layers conn-link conn-link-* conn-link-line "
+        "conn-more conn-note conn-path conn-peer conn-peer-name conn-peer-role conn-peering conn-row-note "
+        "conn-rules conn-sub conn-tick conn-verdict-*"
     ),
     "core/_dashboard_connection.html": (
         "conn-badge-* conn-dot conn-verdict-* dash-reading glance-caption glance-lead glance-panel-head glance-symbol"
@@ -808,37 +804,31 @@ HAND_ROLLED: dict[str, str] = {
     "core/_hq_status.html": "page-title-meta",
     "core/_policy_setting.html": "policy-select policy-unavailable rule-*",
     "core/_policy_table.html": "effect-* policy-default policy-effect policy-table",
-    "core/_public_address.html": "conn-kind conn-kind-read conn-row conn-row-note conn-rows",
-    "core/agent_policy.html": "agent-events mcp-endpoint prose step-list",
+    "core/agent_policy.html": "agent-events mcp-endpoint step-list",
     "core/auditlog_detail.html": "compare-table",
-    "core/hq.html": "cell-notes prose",
+    "core/hq.html": "cell-notes",
     "dashboard.html": (
         "calendar-month dash-needs dash-start dashboard-patterns ext-arrow ext-links is-compact step-list"
     ),
-    "expenses/expense_detail.html": "prose",
     "hq_api/reference.html": "api-reference api-reference-failed api-reference-loading api-reference-status",
     "list_page.html": "select-column",
     "page.html": "page-foot",
-    "partials/_change.html": "change change-arrow change-to",
     "partials/_demo_about.html": "demo-about-foot ext-arrow ext-links",
     "partials/_discovery_catalog.html": "discovery-link discovery-list discovery-main discovery-meta scope-chip",
     "partials/_linked_text.html": "linked-text",
     "partials/_operator_step.html": "operator-step",
-    "partials/_page_navigation.html": "page-nav page-nav-list",
-    "partials/_posture.html": "posture-checks prose step-list",
+    "partials/_posture.html": "posture-checks step-list",
     "partials/_queue_groups.html": "queue-table",
-    "partials/_relationships.html": "relation-source",
-    "partials/_timeline.html": "timeline-* timeline-copy timeline-item timeline-list",
     "partials/approval_card.html": "approval-actions approval-card approval-reason",
-    "projects/_github_panel.html": "github-gap github-list github-mark prose workflow-chip workflow-chips",
-    "projects/_project_meta.html": "project-meta prose",
+    "projects/_github_panel.html": "github-gap github-list github-mark workflow-chip workflow-chips",
+    "projects/_project_meta.html": "project-meta",
     "projects/_updates.html": "github-list github-mark",
     "projects/posture.html": (
         "is-unmet posture-access posture-meter posture-meter-break posture-repo-name posture-repos posture-score"
     ),
     "projects/project_detail.html": "project-tags",
-    "projects/watching.html": "gh-avatar gh-identity gh-name gh-profile gh-verified prose",
-    "receipts/receipt_detail.html": "document-picture prose",
+    "projects/watching.html": "gh-avatar gh-identity gh-name gh-profile gh-verified",
+    "receipts/receipt_detail.html": "document-picture",
     "search.html": (
         "command-hint scope-chip search-badge search-group search-hit search-hit-main search-hit-title search-hits "
         "search-scopes search-snippet search-summary"

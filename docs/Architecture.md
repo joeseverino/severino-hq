@@ -1236,3 +1236,42 @@ units that already run a labeled container on that machine, which its
 Portainer token can already do to those containers through Docker. Planting a
 labeled container can only block a real unit from being acted on: a refusal,
 never an action.
+
+### Operation manifests
+
+An automation procedure (an Ansible playbook a worker runs against a host) is
+declared once, as an `OperationManifest`
+(`hq/platform/application/automation_manifest.py`). Manifests reach HQ at
+runtime from an extension, never from the host's source, and an
+`OperationRegistry` is built from the tuple supplied. It refuses two manifests
+with one id and answers an unknown id with `UnknownOperation`.
+
+A manifest is frozen and strict: an unknown field, a value of the wrong type
+or one out of range is refused when it is declared. What it
+declares, and why:
+
+| Field | What it holds | Why |
+| --- | --- | --- |
+| `id` | A dotted name, `example.service_logs` | A run, an approval and a grant name the procedure by it. |
+| `revision` | The reviewed commit, 40 lowercase hex | What was reviewed is what runs. A new commit is a new procedure, and an approval of the old one no longer holds. |
+| `input_type` | A `StrictCommand` subclass | A run's parameters are validated the way every capability's are. |
+| `target_kinds` | The resource kinds it may act on, at least one | A run's target is held to what the procedure was written for. |
+| `hosts` | The hosts it may act on, empty for any of those kinds | A procedure written for one machine says so. |
+| `privilege` | `None`, or the reviewed profile it escalates through | Escalation is reviewed per procedure, since Ansible's `become` bounds nothing. |
+| `effect` | `read`, `infrastructure_change` or `destructive` | The capability effects, so approval and grants treat a run as they treat any command. |
+| `timeout_seconds` | 1 to 3600 | A stalled run holds what it acts on for a bounded time. |
+| `preconditions` | What must hold before it runs | A run that cannot start safely stops before it changes anything. |
+| `verification` | What shows it did what it says | Success is the intended postcondition, observed. |
+| `recovery` | How to recover from a partial run | A cancel or a failure cannot undo what was applied. |
+| `retry` | `never`, `observe_first` or `safe` | After an uncertain failure, whether the run may repeat, or must be observed first. |
+
+`admits(kind, host)` says whether a target is one the manifest names.
+
+Two declarations are refused as over-privileged. A read names no privilege
+profile, since check mode is no sandbox and a read that escalates is not a
+read. And the input type is closed: it and every model inside it forbid
+undeclared fields, take no free-form mapping or `Any`, and name none of
+Ansible Runner's or Ansible's own execution settings (a playbook, an
+inventory, extra-vars, a limit, tags, a module, SSH options, `become`),
+however the name is spelled. A run's playbook, inventory and connection come
+from its manifest and HQ's facts, never from the caller.

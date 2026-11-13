@@ -52,14 +52,19 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% comment %}Each posture check HQ could not judge, with why: folded, since the line above already counts them.{% endcomment %}
   {% if posture.unread_count %}
     {% section "Not read" count=posture.unread_count fold=True lede="Checks HQ could not read, and why" %}
-        <div class="conn-rows">
-          {% for standing in posture.standings %}{% if standing.reading.met is None %}
-            <div class="conn-row" data-posture-unread="{{ standing.check.id }}">
-              <strong>{{ standing.check.label|breakable }}</strong>
-              <span class="conn-row-note prose">{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %}</span>
-            </div>
-          {% endif %}{% endfor %}
-        </div>
+        {% table_region "Not read" %}
+          <table class="data-table">
+            <thead><tr>{% table_heading "Check" %}{% table_heading "Reason" %}</tr></thead>
+            <tbody>
+              {% for standing in posture.standings %}{% if standing.reading.met is None %}
+                <tr data-posture-unread="{{ standing.check.id }}">
+                  <td><strong>{{ standing.check.label|breakable }}</strong></td>
+                  <td><span class="cell-prose prose">{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %}</span></td>
+                </tr>
+              {% endif %}{% endfor %}
+            </tbody>
+          </table>
+        {% endtable_region %}
     {% endsection %}
   {% endif %}
 
@@ -127,13 +132,10 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
               <summary>
                 About <code>{{ connection.peering.address|breakable }}</code>
               </summary>
-              <div class="conn-rows"
-                   data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
+              <div data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
                    data-fragment-load
                    data-fragment-failure="Lookup failed.">
-                <div class="conn-row">
-                  <span class="conn-row-note">Loading…</span>
-                </div>
+                <p class="muted">Loading…</p>
               </div>
             </details>
           {% endif %}
@@ -185,15 +187,20 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
               {% if hop.unread %}<p class="conn-row-note">{{ hop.unread|capfirst|breakable }}</p>{% endif %}
               {% for relation, link in hop.overlays %}<p class="conn-row-note">{{ relation|breakable }} {% entity link %}</p>{% endfor %}
               {% if hop.evidence %}
-                <ol class="conn-rows">
-                  {% for item in hop.evidence %}
-                    <li class="conn-row{% if item.role %} conn-row-{{ item.role }}{% endif %}">
-                      <code>{{ item.value|breakable }}</code>
-                      <span class="conn-kind{% if item.role %} conn-kind-hop-{{ item.role }}{% endif %}">{{ item.role|default:item.label|breakable }}</span>
-                      <span class="conn-row-note">{{ item.detail|breakable }}</span>
-                    </li>
-                  {% endfor %}
-                </ol>
+                {% table_region "Evidence" %}
+                  <table class="data-table">
+                    <thead><tr>{% table_heading "Value" "identifier" %}{% table_heading "Type" "status" %}{% table_heading "Note" %}</tr></thead>
+                    <tbody>
+                      {% for item in hop.evidence %}
+                        <tr>
+                          <td><code class="cell-whole">{{ item.value|breakable }}</code></td>
+                          <td>{% status item.role|default:item.label tone=item.tone %}</td>
+                          <td>{{ item.detail|breakable }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                {% endtable_region %}
               {% endif %}
               {% if hop.layers %}
                 <ol class="conn-layers">
@@ -230,71 +237,104 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
 
   <div class="conn-aside">
   {% section "Addresses" fold=True open=True lede="Yours and HQ's" %}
+    <div class="section-flow">
       {% section "Your addresses" %}
-        <div class="conn-rows">
-          {% for address in request_path.addresses %}
-            <div class="conn-row{% if address.current %} conn-current{% endif %}">
-              <code>{{ address.value|breakable }}</code>
-              <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label|breakable }}</span>
-              <span class="conn-row-note">{{ address.source|breakable }}</span>
-            </div>
-          {% endfor %}
-        </div>
-        {% if connection.tailnet_observed_at %}
-          <p class="conn-note conn-note-after">Tailnet read {{ connection.tailnet_observed_at|when }}.</p>
-        {% endif %}
+        {% table_region "Your addresses" %}
+          <table class="data-table" data-addresses="yours">
+            <thead><tr>{% table_heading "Address" "identifier" %}{% table_heading "Network" "status" %}{% table_heading "Known from" %}</tr></thead>
+            <tbody>
+              {% for address in request_path.addresses %}
+                <tr>
+                  <td><code class="cell-whole">{{ address.value|breakable }}</code></td>
+                  <td>{% status address.label tone=address.tone %}</td>
+                  <td>{{ address.source|breakable }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endtable_region %}
+      {% aside %}{% if connection.tailnet_observed_at %}<span class="count">Tailnet{% dot %}{% include "partials/_reading_age.html" with at=connection.tailnet_observed_at only %}</span>{% endif %}
       {% endsection %}
 
       {% if request_path.hq_addresses %}
         {% section "HQ answers at" %}
-          <div class="conn-rows">
-            {% for address in request_path.hq_addresses %}
-              <div class="conn-row">
-                <code>{{ address.value|breakable }}</code>
-                <span class="conn-kind conn-kind-{{ address.kind }}">{{ address.label|breakable }}</span>
-                <span class="conn-row-note">{{ address.source|breakable }}</span>
-              </div>
-            {% endfor %}
-          </div>
+          {% table_region "HQ answers at" %}
+            <table class="data-table" data-addresses="hq">
+              <thead><tr>{% table_heading "Address" "identifier" %}{% table_heading "Network" "status" %}</tr></thead>
+              <tbody>
+                {% for address in request_path.hq_addresses %}
+                  <tr>
+                    <td><code class="cell-whole">{{ address.value|breakable }}</code></td>
+                    <td>{% status address.label tone=address.tone %}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% endtable_region %}
         {% endsection %}
       {% endif %}
+    </div>
   {% aside %}<span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %}{% dot %}HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
   {% endsection %}
 
   {% comment %}Folded: the response is read back only once somebody opens it.{% endcomment %}
   {% section "Headers" fold=True lede="Sent by your browser and by HQ" data_connection_protocol=True %}
       {% section "Request" %}
-        <div class="conn-rows">
-          {% for header in request_path.headers %}{% if header.used %}
-            <div class="conn-row conn-row-used">
-              <code>{{ header.name|breakable:":" }} {{ header.value|breakable }}</code>
-              <span class="conn-kind conn-kind-read">read</span>
-              <span class="conn-row-note">{{ header.purpose|breakable }}</span>
-            </div>
-          {% endif %}{% endfor %}
-        </div>
+        {% table_region "Headers HQ read" %}
+          <table class="data-table" data-request-headers="read">
+            <thead><tr>{% table_heading "Header" %}{% table_heading "HQ" "status" %}{% table_heading "For" drop=1 %}</tr></thead>
+            <tbody>
+              {% for header in request_path.headers %}{% if header.used %}
+                <tr>
+                  <td><code class="cell-whole">{{ header.name|breakable:":" }} {{ header.value|breakable }}</code></td>
+                  <td>{% status header.state tone=header.tone %}</td>
+                  <td><span class="cell-prose">{{ header.purpose|breakable }}</span></td>
+                </tr>
+              {% endif %}{% endfor %}
+            </tbody>
+          </table>
+        {% endtable_region %}
         {% if request_path.unread_headers %}
-          {% comment %}
-          <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
-          {% endcomment %}<details class="conn-more">
-            <summary>{{ request_path.unread_headers|length|measured:"unread" }}</summary>
-            <div class="conn-rows">
-              {% for header in request_path.unread_headers %}
-                <div class="conn-row">
-                  <code>{{ header.name|breakable:":" }} {{ header.value|breakable }}</code>
-                  <span class="conn-kind conn-kind-{{ header.state }}">{{ header.state|breakable }}</span>
-                  <span class="conn-row-note">{{ header.declined|breakable }}</span>
-                </div>
-              {% endfor %}
-            </div>
-          </details>
+          {% section "Not read" count=request_path.unread_headers|length fold=True %}
+            {% table_region "Unread headers" %}
+              <table class="data-table" data-request-headers="unread">
+                <thead><tr>{% table_heading "Header" %}{% table_heading "HQ" "status" drop=2 %}{% table_heading "Reason" drop=1 %}</tr></thead>
+                <tbody>
+                  {% for header in request_path.unread_headers %}
+                    <tr>
+                      <td><code class="cell-whole">{{ header.name|breakable:":" }} {{ header.value|breakable }}</code></td>
+                      <td>{% status header.state tone=header.tone %}</td>
+                      <td><span class="cell-prose">{{ header.declined|breakable }}</span></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endtable_region %}
+          {% endsection %}
         {% endif %}
       {% endsection %}
 
       {% section "Response" %}
-        <div class="conn-rows" data-response-headers>
-          <div class="conn-row"><span class="conn-row-note">Loading…</span></div>
-        </div>
+        {% comment %}
+        Each row's value and state are read back by the browser from a real
+        response once the fold opens (connection.js); until then each says
+        it is waiting.
+        {% endcomment %}
+        {% table_region "Headers HQ sent" %}
+          <table class="data-table" data-response-headers>
+            <thead><tr>{% table_heading "Header" %}{% table_heading "HQ" "status" %}{% table_heading "For" drop=1 %}</tr></thead>
+            <tbody>
+              {% for check in request_path.response_checks %}
+                <tr data-response-check="{{ check.name }}"{% if check.directive %} data-response-directive{% endif %}>
+                  <td><code class="cell-whole" data-response-value>{{ check.name|breakable }}</code></td>
+                  <td><span data-response-state="waiting">{% status "Reading" %}</span><span data-response-state="present" hidden>{% if check.directive %}{% status "Enforced" tone="good" %}{% else %}{% status "Sent" tone="good" %}{% endif %}</span><span data-response-state="absent" hidden>{% status "Absent" tone="serious" %}</span></td>
+                  <td>{{ check.purpose|breakable }}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endtable_region %}
+        <p class="muted" data-response-failure hidden>The response could not be read back.</p>
       {% endsection %}
   {% aside %}<span class="count">Yours {{ request_path.headers|length }}</span>
   {% endsection %}
