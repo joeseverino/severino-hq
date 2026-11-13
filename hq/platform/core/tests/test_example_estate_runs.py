@@ -1,13 +1,12 @@
 """The example estate holds an automation run in every state a run can be in,
-each carried out through the paths a real run takes, once a composition
-supplies example procedures."""
+each carried out through the paths a real run takes, of the example
+procedures it adopted."""
 
 from django.db.models import Q
 from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationHost, OperationRequest
-from hq.platform.application.tests.example_procedures import supplied
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.names import LAPTOP_NAME, MACHINE, PHONE_NAME
 from hq.platform.core.example_estate.testing import throwaway_media
@@ -18,7 +17,7 @@ State = OperationRequest.State
 class EstateRunTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        with supplied(), throwaway_media(), seeds.built("showcase"):
+        with throwaway_media(), seeds.built("showcase"):
             pass
 
     def runs(self, *conditions, **lookups):
@@ -59,10 +58,14 @@ class EstateRunTests(TestCase):
         self.assertGreater(max(times) - min(times), timezone.timedelta(days=14))
         self.assertLessEqual(max(times), timezone.now())
 
+    def test_its_procedures_are_adopted_from_what_its_worker_s_scan_proposed(self):
+        from hq.domains.control_plane.models import AdoptedCatalog
+        from hq.platform.application.automation_adoption import catch_up
+        from hq.platform.application.automation_runs import operation_registry
 
-class EstateWithoutProceduresTests(TestCase):
-    def test_with_none_supplied_there_is_nothing_to_run(self):
-        with throwaway_media(), seeds.built("showcase"):
-            pass
-
-        self.assertFalse(OperationRequest.objects.filter(action=OperationRequest.Action.RUN).exists())
+        (catalog,) = AdoptedCatalog.objects.all()
+        catch_up()
+        commands = set(operation_registry())
+        self.assertEqual(catalog.proposal.operation.state, State.SUCCEEDED)
+        self.assertEqual(commands, {row["id"] for row in catalog.procedures})
+        self.assertLessEqual(set(self.runs().values_list("input__operation", flat=True)), commands)

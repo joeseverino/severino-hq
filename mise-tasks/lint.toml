@@ -487,6 +487,25 @@ outputs = []
 extends = "django"
 run = "uv run python manage.py connections_reference --check"
 
+["lint:drift-procedure-schema"]
+description = "The published JSON Schema of a procedure's sidecar is what ProcedureDeclaration validates"
+hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "hq/platform/application/hq-procedure.schema.json",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+extends = "django"
+run = "uv run python manage.py procedure_schema --check"
+
 ["lint:drift-font"]
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
 hide = true

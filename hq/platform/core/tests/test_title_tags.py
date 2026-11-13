@@ -2,12 +2,13 @@
 
 import inspect
 import re
+from pathlib import Path
 
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.markup import elements, with_class
-from hq.platform.core.tests.test_part_tags import CATALOG, _catalog_templates
+from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 
 def _render(source: str, **context) -> str:
@@ -49,9 +50,10 @@ class TitleMetaCatalogTests(SimpleTestCase):
         """The browser survey reads the part through the catalog, so each
         element it draws and each option it takes is drawn there at least
         once. An entry draws it as a page head's aside, so its tags are read
-        from the catalog's source."""
+        from the part family's source."""
 
         from hq.platform.core.templatetags.title_tags import ELEMENTS, register
+        from hq.platform.core.tests.browser.catalog.families import part
 
         takes = register.tags["title_meta"].__wrapped__
         options = [
@@ -60,7 +62,7 @@ class TitleMetaCatalogTests(SimpleTestCase):
             if parameter.kind is inspect.Parameter.KEYWORD_ONLY
         ]
         entries = " ".join(t for name, t in _catalog_templates().items() if name.startswith("part/title-meta"))
-        opened = re.findall(r"\{% title_meta ?(.*?)%\}", CATALOG.read_text(encoding="utf-8"))
+        opened = re.findall(r"\{% title_meta ?(.*?)%\}", Path(part.__file__).read_text(encoding="utf-8"))
         self.assertIn("page_head", entries, "add a part/title-meta-* entry")
         self.assertEqual([o for o in options if not any(f"{o}=" in tag for tag in opened)], [], "draw each option")
         self.assertEqual(

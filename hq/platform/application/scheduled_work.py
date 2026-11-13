@@ -28,6 +28,7 @@ lazy from hq.platform.core.models import AuditLog
 from .ui import counted
 lazy from . import approvals, outbound_work
 lazy from .asks import job_standing
+lazy from .automation_adoption import prune_proposals
 lazy from .cadence import request_reading
 lazy from .outbound_work import run_now
 lazy from .public_registry import refresh
@@ -47,7 +48,8 @@ class ScheduledWork:
 
 
 def prune_audit(_progress: Any = None) -> dict[str, Any]:
-    """Delete routine audit events past their window, on the record."""
+    """Delete routine audit events, and the procedure proposals nothing
+    still needs, past the one routine window, on the record."""
 
     days = int(settings.SEVERINO_AUDIT_ROUTINE_DAYS)
     deleted = prune_routine(days=days)
@@ -58,10 +60,12 @@ def prune_audit(_progress: Any = None) -> dict[str, Any]:
             action=AuditLog.Action.DELETED,
             metadata={"deleted": deleted, "days": days},
         )
+    # Each proposal's deletion is audited as itself.
+    proposals = prune_proposals()
     # The one job that holds the database every day is when SQLite refreshes
     # its planner statistics.
     optimize()
-    return {"deleted": deleted, "days": days}
+    return {"deleted": deleted, "days": days, "proposals": proposals}
 
 
 def _clear_sessions(_progress: Any) -> dict[str, Any]:
@@ -129,7 +133,7 @@ DAILY = timedelta(days=1)
 # (``units.read``, through ``OnFailure=``), or by HQ through ``start`` when it
 # learns something is due sooner than the timer would find it.
 SCHEDULED: tuple[ScheduledWork, ...] = (
-    ScheduledWork("audit.prune", "Delete old routine log entries", prune_audit, every=DAILY),
+    ScheduledWork("audit.prune", "Delete old routine log entries and proposals", prune_audit, every=DAILY),
     ScheduledWork("content.sync", "Fetch the site's content list", _content_index, every=DAILY),
     ScheduledWork("due", "Do the work that is due", _due),
     ScheduledWork("registry.refresh", "Read domain registration and image data", _public_registry, every=DAILY),

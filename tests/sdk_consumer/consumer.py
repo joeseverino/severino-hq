@@ -23,7 +23,6 @@ from django.utils.safestring import SafeString
 
 from hq_sdk import (
     audit,
-    automation,
     capabilities,
     connections,
     demo,
@@ -732,29 +731,3 @@ def a_capability_renamed() -> None:
     assert_type(migrations.CAPABILITY_ROWS, tuple[str, str])
 
     migrations.RenameCapabilities(["example.entries"])  # type: ignore[arg-type]
-
-
-def an_operation() -> None:
-    # An automation procedure an extension supplies, as HQ composes it.
-    operation = automation.OperationManifest(
-        id="example.service_logs",
-        revision="0123456789abcdef0123456789abcdef01234567",
-        playbook="playbooks/service_logs.yml",
-        input_type=Noting,
-        target_kinds=("example.machine",),
-        privilege=None,
-        effect="read",
-        timeout_seconds=120,
-        preconditions=("The service is installed on the host.",),
-        verification=("The answer holds the service's last lines.",),
-        recovery=("Nothing to recover: the procedure changes nothing.",),
-        retry="safe",
-    )
-    integration = plugin.PluginIntegration(operations=lambda: (operation,))
-    assert_type(integration.operations, Callable[[], Iterable[Any]] | None)
-    assert_type(operation.admits("example.machine", "app.example.com"), bool)
-    assert_type(operation.hosts, tuple[str, ...])
-    assert_type(operation.playbook, str)
-
-    automation.OperationManifest(id="example.service_logs")  # type: ignore[call-arg]
-    operation.admits("example.machine")  # type: ignore[call-arg]

@@ -1,0 +1,4 @@
+{% comment %}
+A row's tick-box, from `{% row_select %}` (table_tags.row_select): the cell
+under the heading that selects every row, which tables.js reads.
+{% endcomment %}<td class="select-column">{% if pk %}<input type="checkbox" data-row-select value="{{ pk }}" aria-label="Select row">{% endif %}</td>

@@ -1,5 +1,5 @@
-"""Running an automation procedure: the command each supplied manifest is asked
-through, and the operation it queues for the automation worker.
+"""Running an automation procedure: the command each procedure of the adopted
+catalog is asked through, and the operation it queues for the automation worker.
 
 A run passes HQ's one capability checkpoint like any command, and nothing runs
 here. What it binds to, and what its approval is measured against:
@@ -9,7 +9,7 @@ docs/Architecture.md, "Running a procedure".
 import hashlib
 import json
 import secrets
-from functools import cache, partial
+from functools import lru_cache, partial
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
@@ -25,12 +25,12 @@ lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.platform.core.audit import audit_operation
 lazy from hq.platform.core.templatetags.value_tags import seconds
 
-from .automation_manifest import OperationManifest, OperationRegistry
+from .automation_manifest import OperationManifest, OperationRegistry, sorted_unique
 from .command_fields import Describe
 from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
-lazy from . import plugins
+lazy from . import automation_adoption
 lazy from .approvals import ApprovalSubject, measured_by
 lazy from .cadence import ring_automation_doorbell
 lazy from .entity_links import kind_label
@@ -46,15 +46,21 @@ lazy from .ui import ended
 lazy from .work_runs import recent_runs
 
 
-@cache
-def _registry() -> OperationRegistry:
-    return OperationRegistry(plugins.plugin_operations())
+# One catalog at a time: a process builds its commands from the catalog
+# adopted now, and builds them anew once another is.
+@lru_cache(maxsize=1)
+def _registry(generation: str) -> OperationRegistry:
+    return OperationRegistry(automation_adoption.manifests(generation))
 
 
-def operation_registry() -> OperationRegistry:
-    """Every manifest the composition supplies, by id, built once per composition."""
+def operation_registry(generation: str | None = None) -> OperationRegistry:
+    """Every procedure of the adopted catalog, by id, built once per adoption.
 
-    return _registry()
+    ``generation`` is the catalog's digest (``automation_adoption.generation``),
+    read now when not given.
+    """
+
+    return _registry(automation_adoption.generation() if generation is None else generation)
 
 
 def clear_operation_registry_cache() -> None:
@@ -87,14 +93,10 @@ def _host(name: str) -> str:
     return host
 
 
-def _sorted_unique(names: tuple[str, ...]) -> tuple[str, ...]:
-    return tuple(sorted(set(names)))
-
-
 type Hosts = Annotated[
     tuple[Annotated[StrictStr, Field(min_length=1, max_length=253), AfterValidator(_host)], ...],
     Field(min_length=1, max_length=64),
-    AfterValidator(_sorted_unique),
+    AfterValidator(sorted_unique),
     Describe("The machines to run it on, each by its name in HQ."),
 ]
 type Correlation = Annotated[
@@ -219,10 +221,11 @@ def _bound(manifest: OperationManifest, command: RunCommand) -> dict[str, Any]:
 
 
 def run_subject(manifest: OperationManifest, command: RunCommand) -> ApprovalSubject:
-    """What a held run is about and measured against: the manifest as supplied,
-    the parameters as validated and the hosts as they resolve now. Read from the
-    manifest rather than its record, which a run writes only when it is asked
-    for, so an approval of one revision never applies another."""
+    """What a held run is about and measured against: the procedure as the
+    catalog adopted now pins it, the parameters as validated and the hosts as
+    they resolve now. Read from the catalog rather than the procedure's record,
+    which a run writes only when it is asked for, so an approval of one
+    revision never applies another and a new adoption stales it."""
 
     bound = _bound(manifest, command)
     return ApprovalSubject(
@@ -397,7 +400,7 @@ def _capability(manifest: OperationManifest) -> CapabilitySpec:
     )
 
 
-def capability_specs() -> tuple[CapabilitySpec, ...]:
-    """The command each supplied procedure is run through."""
+def capability_specs(generation: str | None = None) -> tuple[CapabilitySpec, ...]:
+    """The command each procedure of the adopted catalog is run through."""
 
-    return tuple(_capability(manifest) for manifest in operation_registry().values())
+    return tuple(_capability(manifest) for manifest in operation_registry(generation).values())

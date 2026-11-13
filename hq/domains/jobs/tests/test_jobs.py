@@ -438,11 +438,10 @@ class JobsListRunsTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        from hq.platform.application.tests.example_procedures import supplied
         from hq.platform.core import seeds
         from hq.platform.core.example_estate.testing import throwaway_media
 
-        with supplied(), throwaway_media(), seeds.built("showcase") as owner:
+        with throwaway_media(), seeds.built("showcase") as owner:
             cls.owner = owner
 
     def setUp(self):

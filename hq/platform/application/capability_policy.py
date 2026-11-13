@@ -18,7 +18,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentIdentity, AuditLog
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive
+from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive, waits
 from .command_fields import Describe
 from .default_hold import held_by_default, may_be_held_by_default, needs_approval
 from .doors import interface_label
@@ -67,17 +67,20 @@ def decide(spec, principal: Principal, command, target) -> Decision:
         return Decision(Rule.ALLOW, "operator", default)
     if not is_agent(principal.interface):
         return Decision(default, "default", default)
-    if is_destructive(spec, command):
+    wider = waits(spec)
+    if is_destructive(spec, command) or wider is not None:
         default = Rule.APPROVE
 
     # The agent's own rule beats the default outright: it is how one agent is
     # allowed what the rest still wait for, and how one is kept off what its
-    # grant carries.
+    # grant carries. Only a call wider than any standing consent waits past it.
     rule = (
         CapabilityRule.objects.filter(capability=spec.name, subject=agent_subject(principal))
         .values_list("rule", flat=True)
         .first()
     )
+    if rule == Rule.ALLOW and wider is not None and wider(command):
+        return Decision(Rule.APPROVE, "default", default)
     if rule is None:
         return Decision(default, "default", default)
     return Decision(rule, f"{principal.actor} policy", default)
@@ -336,10 +339,11 @@ def _subject_label(subject: str) -> str:
 
 
 def _default_label(spec) -> str:
-    """What happens with no rule set: a destructive call always asks, and a
-    change to a type that needs approval asks for that type."""
+    """What happens with no rule set: a destructive call, or one that waits
+    for a person, always asks, and a change to a type that needs approval
+    asks for that type."""
 
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if spec.effect == DESTRUCTIVE_EFFECT or waits(spec) is not None:
         return RULE_LABELS[Rule.APPROVE]
     if may_be_held_by_default(spec):
         return f"{RULE_LABELS[Rule.APPROVE]} for {_approved_types(spec)}"

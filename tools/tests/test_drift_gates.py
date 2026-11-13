@@ -21,6 +21,7 @@ HELD = {
     "lint:drift-api-document": "hq/platform/api/hq-api.openapi.json",
     "lint:drift-bridge-contract": "controller/api/hq-controller.openapi.json",
     "lint:drift-connections-reference": "docs/Connections.md",
+    "lint:drift-procedure-schema": "hq/platform/application/hq-procedure.schema.json",
     "lint:drift-font": "static/fonts/inter/inter-variable-latin.woff2",
 }
 # How a failure names its rewrite: "...; run `<command>` and ...".

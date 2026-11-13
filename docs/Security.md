@@ -222,7 +222,10 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   30 days (`SEVERINO_AUDIT_ROUTINE_DAYS`) by the daily `audit.prune`
   job. Only the types listed in `hq.platform.core.audit.ROUTINE_EVENTS` are eligible, and
   only when no user is attached. Logins, refusals, settings changes, deletions
-  and every change to a resource or credential are kept indefinitely.
+  and every change to a resource or credential are kept indefinitely. The
+  same job deletes an automation proposal past that window unless it is the
+  newest, the one adopted now, or one a held adoption names; each adopted
+  catalog is kept, so the history of what HQ ran from stays whole.
 - The audit log is append-only by SQLite's own rule
   (`hq/platform/core/append_only.py`). Two triggers refuse an UPDATE or
   DELETE of an audit row from every write path (the ORM, raw SQL, a shell).

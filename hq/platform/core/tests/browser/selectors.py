@@ -191,12 +191,12 @@ SELECTORS = {
     "map": ".topology-map",
     "map_lane": ".topology-lane",
     "map_node": ".topology-node",
-    # A node's select link, the details beside the lanes, a trace's groups of
-    # chips, and a chip.
+    # A node's select link, the details beside the lanes, a trace's switches
+    # and a choice in one.
     "map_select": "[data-topology-select]",
     "map_detail": ".topology-detail",
-    "trace_controls": ".topology-trace-controls",
-    "trace_chip": ".scope-chip",
+    "trace_controls": "#trace .switch",
+    "trace_chip": ".switch li > a",
     # The command center: its field, its options, and the hint Enter's choice hides.
     "palette_input": "[data-command-center-input]",
     "palette_option": "[data-command-center-option]",

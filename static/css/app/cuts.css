@@ -201,11 +201,11 @@
 /* Here the name is one line, like the endpoint under it: the name leads five
    more facts in the same cell. */
 .connection-table td > [data-cell~=name] > [data-entity] { display: -webkit-inline-box; overflow: hidden; -webkit-line-clamp: 1; line-clamp: 1; }
-.topology-relation-other {
+.relation-other {
   grid-area: 2 / 2 / 3 / 3;
   white-space: nowrap; color: var(--ink); overflow: hidden; text-overflow: ellipsis;
 }
-.topology-relation-kind {
+.relation-kind {
   grid-area: 2 / 3 / 3 / 4; min-width: 0; white-space: nowrap;
   font-size: var(--text-3xs); color: var(--muted-2);
   font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis;

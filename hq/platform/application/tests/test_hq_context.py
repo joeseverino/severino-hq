@@ -157,7 +157,7 @@ class ProjectionTests(TestCase):
             (found.release.short, found.release.behind, found.release.runs_deployed), (HEAD[:7], False, True)
         )
         (timer,) = (job for job in found.work.jobs if job.unit.endswith(".timer"))
-        self.assertEqual((timer.runs, timer.result), ("Delete old routine log entries", "Done"))
+        self.assertEqual((timer.runs, timer.result), ("Delete old routine log entries and proposals", "Done"))
         (web,) = (job for job in found.work.jobs if job.unit.endswith("-web.service"))
         self.assertEqual((web.runs, web.runs_unit), ("", False))
         self.assertEqual([job.unit for job in found.work.services], ["severino-hq-example-web.service"])
@@ -362,7 +362,7 @@ class PageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         for words in ("Release", "Runs on", "Reached through", "Jobs", "Readings"):
             self.assertContains(response, words)
-        self.assertContains(response, "Delete old routine log entries")
+        self.assertContains(response, "Delete old routine log entries and proposals")
 
     def test_a_problem_is_drawn_under_the_part_it_is_about_and_the_status_leads_to_it(self):
         estate()
@@ -455,7 +455,9 @@ class ResourceTests(TestCase):
             self.assertEqual(found["release"]["revision"], HEAD)
             self.assertFalse(found["release"]["behind"])
             self.assertEqual(found["where"]["container"], "example-box:app")
-            self.assertIn("Delete old routine log entries", [job["runs"] for job in found["work"]["jobs"]])
+            self.assertIn(
+                "Delete old routine log entries and proposals", [job["runs"] for job in found["work"]["jobs"]]
+            )
             self.assertIsNone(found["reached"])  # no request to describe
 
     def test_an_image_the_registry_refused_is_not_called_clean_and_says_why(self):

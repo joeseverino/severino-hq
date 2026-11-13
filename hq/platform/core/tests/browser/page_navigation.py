@@ -8,7 +8,8 @@ from typing import override
 from django.conf import settings
 from django.template import Context, Template
 
-from hq.platform.core.tests.browser.catalog import CATALOG, part_page
+from hq.platform.core.tests.browser.catalog import CATALOG
+from hq.platform.core.tests.browser.catalog.common import part_page
 from hq.platform.core.tests.browser.gate import BrowserGate, tab_key, with_script
 from hq.platform.core.tests.browser.probes.settle import PAINTED
 from hq.platform.core.tests.browser.selectors import SELECTORS

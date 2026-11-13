@@ -1,4 +1,5 @@
-"""A claimed run, read from the bridge's answer, and what it binds the worker to.
+"""A claim, read from the bridge's answer, and what it binds the worker to: a
+run of one procedure, or a scan of the source the procedures come from.
 
 What runs is decided here and only here: the procedure the claim names, at the
 revision it was reviewed at, as this worker resolves it (``procedures``), on
@@ -20,8 +21,12 @@ from .connections import ConnectionsError, Target
 
 RUN_KIND = "automation.operation"
 RUN_ACTION = "run"
-# What a run worker claims: the one kind:action it has a handler for.
-CAPABILITY = f"{RUN_KIND}:{RUN_ACTION}"
+# A scan reads which procedures the worker's own repository offers at the tip
+# of its default branch (``catalog``); it names nothing of the repository.
+SCAN_KIND = "automation.source"
+SCAN_ACTION = "scan"
+# What the worker claims: each kind:action it has a handler for.
+CAPABILITIES = (f"{RUN_KIND}:{RUN_ACTION}", f"{SCAN_KIND}:{SCAN_ACTION}")
 _REVISION = re.compile(r"[0-9a-f]{40}")
 
 
@@ -69,12 +74,20 @@ class Run:
 
 @dataclass(frozen=True, slots=True)
 class Claimed:
-    """What a claim answered: the operation's id and the run's generation,
-    which its report names, before anything about it is trusted to run."""
+    """What a claim answered: the operation's id and the generation its report
+    names, before anything about it is trusted to run."""
 
     operation: str
     generation: int
     pending: Mapping[str, Any]
+
+    @property
+    def scans(self) -> bool:
+        """Whether this is a scan of the source rather than a run."""
+
+        resource = self.pending.get("resource")
+        kind = resource.get("kind") if isinstance(resource, Mapping) else None
+        return kind == SCAN_KIND and self.pending["operation"].get("action") == SCAN_ACTION
 
 
 def claimed(pending: Mapping[str, Any]) -> Claimed | None:
@@ -85,8 +98,10 @@ def claimed(pending: Mapping[str, Any]) -> Claimed | None:
         return None
     if not isinstance(operation, Mapping) or not isinstance(operation.get("id"), str):
         raise Refused("Unrunnable", "The claim's answer names no operation id.")
-    run_input = pending.get("input")
-    generation = run_input.get("generation") if isinstance(run_input, Mapping) else None
+    # A run's report names the generation it was asked of, any other work's
+    # the generation of its record.
+    named = pending.get("input") if operation.get("action") == RUN_ACTION else pending.get("resource")
+    generation = named.get("generation") if isinstance(named, Mapping) else None
     if not isinstance(generation, int) or isinstance(generation, bool):
         # Without the generation its report cannot be accepted, so there is
         # nothing to say back; the lease lapses and HQ ends it as unknown.

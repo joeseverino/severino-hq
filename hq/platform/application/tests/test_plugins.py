@@ -8,7 +8,6 @@ from collections.abc import Iterator
 from dataclasses import MISSING, asdict, fields, replace
 from datetime import timedelta
 from pathlib import Path
-from typing import Any
 from unittest import TestCase, mock
 
 from django.core.exceptions import ImproperlyConfigured
@@ -165,25 +164,17 @@ class PluginContractTests(TestCase):
             self.assertEqual(installed_plugins(), ())
 
     def test_the_host_source_never_names_an_installed_extension(self):
-        """The host must not know which extensions exist.
+        """The host must not know which extensions exist, even by a mention (a
+        docstring, a fixture, a default), since that is the first dependency.
+        Imports are `hq_sdk.validation`'s half; this is the other.
 
-        This proves it does not. Imports are checked by `hq_sdk.validation`;
-        this checks the other half. A host that merely *mentions* an extension
-        (in a docstring, a comment, a fixture, a default) has begun to depend on
-        it, and the properties this architecture exists for start to go:
-        install an extension without touching the host, run the host with none,
-        release the two apart.
-
-        The names are taken from the runtime composition rather than written
-        down here, since a list of them in the host would itself be the
-        coupling being tested for. So this is quiet on a checkout with no
-        extensions and speaks in the composed image, where the real set exists
-        and where `compose.yml` runs the suite.
-
-        The tree is walked rather than asked of git: neither `.git` nor git
-        itself exists in the runtime image, which is where this has to run.
-        Walking also asks about what is installed, which is the better
-        question.
+        The names come from the runtime composition, since a list of them here
+        would be the coupling itself, so this speaks only where a set is
+        composed. The tree is walked, never asked of git, which the image
+        lacks. The composed suite hands it a copy of the whole checkout
+        (`HQ_CHECKOUT_COPY`), since the worker, its procedure fixtures, the
+        controller and the docs are host source the image leaves out; the
+        image's own run reads what it holds.
         """
 
         forbidden = _installed_extension_names()
@@ -195,7 +186,7 @@ class PluginContractTests(TestCase):
         needle = re.compile("|".join(re.escape(word) for word in sorted(forbidden)), re.IGNORECASE)
         kind_of = {word.lower(): kind for word, kind in forbidden.items()}
 
-        root = Path(__file__).resolve().parents[4]
+        root = Path(os.environ.get("HQ_CHECKOUT_COPY") or Path(__file__).resolve().parents[4])
         offences: list[str] = []
         for path, body in _host_texts(root):
             found = needle.search(body)
@@ -681,87 +672,6 @@ class AttentionContractTests(TestCase):
     def test_extension_without_a_provider_is_skipped(self):
         gathered = self._gather((self._manifest(),), {})
         self.assertEqual(gathered, ())
-
-
-class OperationSupplyTests(SimpleTestCase):
-    """An extension supplies the operation manifests; the host names none."""
-
-    @staticmethod
-    def _operation(operation_id: str):
-        # Built through the SDK, the one surface an extension imports.
-        from hq_sdk.automation import OperationManifest
-        from hq_sdk.capabilities import StrictCommand
-
-        class ServiceLogs(StrictCommand):
-            service: str
-
-        return OperationManifest(
-            id=operation_id,
-            revision="0123456789abcdef0123456789abcdef01234567",
-            playbook="playbooks/service_logs.yml",
-            input_type=ServiceLogs,
-            target_kinds=("example.machine",),
-            hosts=("app.example.com",),
-            privilege=None,
-            effect="read",
-            timeout_seconds=120,
-            preconditions=("The service is installed on the host.",),
-            verification=("The answer holds the service's last lines.",),
-            recovery=("Nothing to recover: the procedure changes nothing.",),
-            retry="safe",
-        )
-
-    @staticmethod
-    def _supplied(*supplies: tuple[str, tuple[Any, ...] | None]):
-        from hq.platform.application import plugins
-
-        integrations = tuple(
-            (
-                AttentionContractTests._manifest(id=plugin_id, name=plugin_id),
-                PluginIntegration(operations=None if supplied is None else (lambda supplied=supplied: supplied)),
-            )
-            for plugin_id, supplied in supplies
-        )
-        with mock.patch.object(plugins, "installed_integrations", return_value=integrations):
-            return plugins.plugin_operations()
-
-    def test_an_installed_extensions_manifest_reaches_the_host(self):
-        from hq.platform.application.plugins import plugin_operations
-
-        operation = self._operation("example.service_logs")
-        contribution = PluginIntegration(operations=lambda: (operation,))
-        env = mock.patch.dict(
-            os.environ,
-            {"SEVERINO_HQ_PLUGINS": "example.plugin:manifest", "SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION": "0"},
-            clear=False,
-        )
-        with env, importable({"example.plugin": {"manifest": VALID, "integration": lambda: contribution}}):
-            self.assertEqual(plugin_operations(), (operation,))
-
-    def test_an_extension_with_no_operations_is_skipped(self):
-        operation = self._operation("example.service_logs")
-
-        self.assertEqual(self._supplied(("example.a", None), ("example.b", (operation,))), (operation,))
-        self.assertEqual(self._supplied(("example.a", None)), ())
-
-    def test_an_item_that_is_not_a_manifest_is_refused_naming_its_extension(self):
-        declared = self._operation("example.service_logs").model_dump()
-        for item in (declared, "example.service_logs"):
-            with (
-                self.subTest(type(item).__name__),
-                self.assertRaisesRegex(ImproperlyConfigured, r"'example\.b'.*OperationManifest"),
-            ):
-                self._supplied(("example.a", ()), ("example.b", (item,)))
-
-    def test_one_id_supplied_by_two_extensions_is_refused_when_composed(self):
-        from hq.platform.application.automation_manifest import DuplicateOperation, OperationRegistry
-
-        supplied = self._supplied(
-            ("example.a", (self._operation("example.service_logs"),)),
-            ("example.b", (self._operation("example.service_logs"),)),
-        )
-        with self.assertRaises(DuplicateOperation):
-            OperationRegistry(supplied)
 
 
 class ComposedPluginTestKitTests(TestCase):

@@ -438,7 +438,9 @@ reads the last, then formats as the lint gates read:
 3. the controller's contracts from the connection registry, and the Go types
    generated from them;
 4. `docs/Connections.md`, from what the providers declare;
-5. the served font, cut to the characters HQ prints.
+5. the JSON Schema of a procedure's sidecar, from the model HQ validates one
+   with ([Declaring a procedure](Architecture.md#declaring-a-procedure));
+6. the served font, cut to the characters HQ prints.
 
 It then lowers each count in `tools/lint/stylelint-suppressions.json` and
 `tools/lint/eslint-suppressions.json` that has fallen to what the linter finds
@@ -831,7 +833,8 @@ server answers, so a page drawn from its query (Command Center's results, a
 filtered list) is a name like any other.
 
 A component catalog entry (`part/notice-error`, `table/figures`, every key of
-`CATALOG` in `hq/platform/core/tests/browser/catalog.py`) is drawn by the
+`CATALOG`, which `hq/platform/core/tests/browser/catalog/` gathers from its
+families' modules) is drawn by the
 catalog gate's own `CatalogLayoutTests.render`, so a look and that gate never
 draw an entry apart. It is answered from memory as a gate page is, with no
 server or estate behind it, so a look at one entry is the quick way to see a

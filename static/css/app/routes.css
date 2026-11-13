@@ -209,8 +209,9 @@ kbd {
 span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; }
 .notice p { margin: var(--space-2) 0 0; }
 /* A notice is words, so a link in it differs from them by more than its
-   color (WCAG 1.4.1), as a link in a paragraph does (base.css). */
-.notice a:where(:not([class]), .external-link):not(strong a) {
+   color (WCAG 1.4.1), as a link in a paragraph does (base.css). A link drawn
+   as a chip (a switch's choice) is a place to go, marked by its frame. */
+.notice a:where(:not([class]), .external-link):not(strong a, :has(> .scope-chip)) {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-decoration-thickness: 1px;

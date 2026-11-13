@@ -6,7 +6,8 @@ control only where there are rows to sort, and each row's toggle in the
 gutter. ``{% table_heading %}`` draws each column heading with its kind, its
 drop rank and its sort control, and ``{% row_toggle %}`` draws the disclosure
 of a row in a table with no headings to say where its gutter is.
-``{% row_state %}`` says how a row stands among the others. Which columns
+``{% row_select %}`` draws a row's tick-box under the heading that selects
+every row, and ``{% row_state %}`` says how a row stands among the others. Which columns
 show is the browser's to say (docs/Design.md, A table fits its box).
 """
 
@@ -414,6 +415,15 @@ def row_toggle() -> dict[str, Any]:
     the row has something hidden."""
 
     return {}
+
+
+@register.inclusion_tag("partials/_row_select.html")
+def row_select(pk: Any) -> dict[str, Any]:
+    """The cell that holds a row's tick-box, first in a row under the heading
+    that selects every row (``select_all=True``), keyed by ``pk``. A row with
+    no key keeps the cell empty, so its columns stay under their headings."""
+
+    return {"pk": pk}
 
 
 @register.simple_tag

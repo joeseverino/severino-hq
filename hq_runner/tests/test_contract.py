@@ -41,6 +41,39 @@ class ContractTests(unittest.TestCase):
         outcomes = {"ok", "changed", *(outcome for outcome in events._OUTCOMES.values())}
         self.assertLessEqual(outcomes, set(run_event["outcome"]["enum"]))
 
+    def test_a_scan_s_catalog_is_held_to_source_catalog_s_bounds(self):
+        from hq_runner import catalog
+
+        source = self.schemas["SourceCatalog"]["properties"]
+        procedure = self.schemas["ScannedProcedure"]["properties"]
+        self.assertEqual(catalog.MOST_PROCEDURES, source["procedures"]["maxItems"])
+        self.assertEqual(catalog.MOST_FILES, source["files"]["maxItems"])
+        self.assertLessEqual(catalog.MOST_FILES, source["unpinned"]["maxItems"])
+        self.assertEqual(catalog.TITLE_LIMIT, procedure["title"]["maxLength"])
+        self.assertEqual(catalog.MOST_ROLES, procedure["roles"]["maxItems"])
+        self.assertEqual(catalog.MOST_PROBLEMS, procedure["problems"]["maxItems"])
+        self.assertEqual(catalog.PROBLEM_LIMIT, procedure["problems"]["items"]["maxLength"])
+        for statements in ("preconditions", "verification"):
+            self.assertEqual(catalog.MOST_STATEMENTS, procedure[statements]["maxItems"])
+            self.assertEqual(catalog.STATEMENT_LIMIT, procedure[statements]["items"]["maxLength"])
+        for path in (procedure["sidecar"], self.schemas["ScannedFile"]["properties"]["path"]):
+            self.assertEqual(catalog.PATH_LIMIT, path["maxLength"])
+        kinds = {found["kind"] for found in catalog.unpinned(["ansible.cfg", "library/x.py", "group_vars/all.yml"])}
+        self.assertEqual(kinds, set(self.schemas["UnpinnedPath"]["properties"]["kind"]["enum"]))
+
+    def test_the_recorded_scan_conforms_to_source_catalog(self):
+        from jsonschema import Draft202012Validator
+        from referencing import Registry, Resource
+        from referencing.jsonschema import DRAFT202012
+
+        contract = json.loads(BASE.read_text(encoding="utf-8"))
+        uri = "urn:hq-bridge"
+        registry = Registry().with_resource(uri, Resource.from_contents(contract, default_specification=DRAFT202012))
+        recorded = json.loads((Path(__file__).with_name("recorded_scan.json")).read_text(encoding="utf-8"))
+        validator = Draft202012Validator({"$ref": f"{uri}#/components/schemas/SourceCatalog"}, registry=registry)
+
+        self.assertEqual([error.message for error in validator.iter_errors(recorded)], [])
+
     def test_a_call_is_held_to_the_bridge_s_bounds(self):
         self.assertEqual(bridge.MAX_BRIDGE_BODY, self.schemas["BridgeBody"]["maxLength"])
         lease = self.schemas["LeaseSeconds"]

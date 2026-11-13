@@ -109,7 +109,6 @@ domain; the SDK owns integration mechanics:
 | Capability-gated Django views | `hq_sdk.web` |
 | Audit attribution and summary events | `hq_sdk.audit` |
 | Work that reaches a network or a provider | `hq_sdk.outbound` |
-| Automation procedures HQ may run | `hq_sdk.automation` |
 | Kept reads and derivations | `hq_sdk.reads` |
 | References to other records | `hq_sdk.references` |
 | Calendar sources | `hq_sdk.calendar` |
@@ -492,7 +491,7 @@ stay in their package even when the host would be their only consumer.
 An integration provider returns one frozen `PluginIntegration` of lazy, typed
 callables for every runtime contribution: capabilities, resources,
 connections, dashboard cards, overview, attention, search, calendars, outbound
-work, [operations](#operations), health and [demo data](#demo-data). HQ calls only the one a surface needs. The manifest carries
+work, health and [demo data](#demo-data). HQ calls only the one a surface needs. The manifest carries
 static install, routing, navigation and authority metadata plus exactly one
 executable entry point; an extension never registers a surface on its own. How
 the host compiles these into one graph is in
@@ -1176,53 +1175,6 @@ In an extension's tests, two helpers hold the rule. `example_hq_plugin` and
 | --- | --- |
 | `hq_sdk.testing.held_jobs` | records each job a request starts, and holds its work until the test calls `run()` |
 | `hq_sdk.testing.reaches_out()` | called from a network double, makes the double subject to the rule, so a test that drives a view proves the view answered without reaching out |
-
-## Operations
-
-An automation procedure HQ may run against a host is declared by the
-extension that owns it, as an `OperationManifest` from `hq_sdk.automation`,
-so the host's source names no procedure, repository or host. Each field and
-what it holds: [Architecture](Architecture.md#operation-manifests).
-
-```python
-from hq_sdk.automation import OperationManifest
-from hq_sdk.plugin import PluginIntegration
-
-
-def operations():
-    return (
-        OperationManifest(
-            id="example.service_logs",
-            revision="0123456789abcdef0123456789abcdef01234567",
-            playbook="playbooks/service_logs.yml",
-            input_type=ServiceLogs,
-            target_kinds=("example.machine",),
-            privilege=None,
-            effect="read",
-            timeout_seconds=120,
-            preconditions=("The service is installed on the host.",),
-            verification=("The answer holds the service's last lines.",),
-            recovery=("Nothing to recover: the procedure changes nothing.",),
-            retry="safe",
-        ),
-    )
-
-
-def integration():
-    return PluginIntegration(operations=operations)
-```
-
-`plugin_operations()` in `hq/platform/application/plugins.py` gathers every
-installed extension's manifests, skipping one that supplies none, and refuses
-an item that is not an `OperationManifest` with an error naming the extension.
-The `OperationRegistry` built from them refuses one id supplied twice, by one
-extension or two.
-
-`playbook` is the playbook's path inside the project at `revision`
-(`playbooks/service_logs.yml`): relative, each part starting with a letter,
-digit or underscore, ending `.yml`. Which repository and which directory of it
-are the project is the host's own configuration, never a manifest's. A
-manifest without one is refused, so `PLUGIN_API_VERSION` 12 adds it.
 
 ## Derived reads
 

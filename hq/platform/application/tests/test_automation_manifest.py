@@ -135,8 +135,18 @@ class InvalidShapeTests(SimpleTestCase):
             with self.subTest(field):
                 with self.assertRaises(ValidationError):
                     OperationManifest(**{key: value for key, value in declared().items() if key != field})
-                self.assertRefused(**{field: ()})
                 self.assertRefused(**{field: ("   ",)})
+        self.assertRefused(recovery=())
+
+    def test_a_change_states_what_it_needs_and_what_shows_it_worked(self) -> None:
+        for field in ("preconditions", "verification"):
+            with self.subTest(field):
+                self.assertRefused(effect="infrastructure_change", **{field: ()})
+
+    def test_a_read_may_state_neither(self) -> None:
+        built = manifest(preconditions=(), verification=())
+
+        self.assertEqual((built.preconditions, built.verification), ((), ()))
 
     def test_a_timeout_out_of_bounds(self) -> None:
         for bad in (0, -1, 3601, True):

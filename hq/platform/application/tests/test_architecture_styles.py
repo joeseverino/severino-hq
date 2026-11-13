@@ -613,7 +613,7 @@ class TemplateClassStyleTests(SimpleTestCase):
             [],
             "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a template "
             "the component catalog draws); a widget with no part becomes one, with its own entry in "
-            "hq/platform/core/tests/browser/catalog.py",
+            "hq/platform/core/tests/browser/catalog/families/",
         )
         self.assertEqual(
             sorted(f"templates/{name}: .{word}" for name, word in baseline - found),

@@ -213,6 +213,36 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .control-label { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 .compact-table { box-shadow: none; }
 .relation-source { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
+/* The edges from where one node stands (partials/_relation_list.html), under
+   a kicker for each direction. The whole row is the link, so walking the
+   graph is one click per hop. */
+.relation-list { display: grid; gap: var(--space-1); }
+.relation-list > .eyebrow { margin: var(--space-2) 0 0; }
+.relation-list > ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+/* One edge: the link to the other end on its own line, then each value it
+   carries on a line of its own with its kind and age. */
+.relation-list > ul > li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
+.relation-list > ul > li > .pill { flex: 0 0 auto; }
+.relation-values {
+  display: grid; gap: var(--space-2); flex: 1 1 100%; min-width: 0;
+  margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-7); list-style: none; font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.relation-values li { display: grid; gap: 1px; min-width: 0; }
+.relation-reading { flex: 1 1 100%; margin: 0; font-size: var(--text-2xs); overflow-wrap: anywhere; }
+.relation-link {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 var(--space-3);
+  align-items: center; flex: 1 1 auto; min-width: 0; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-2); border-radius: var(--radius-sm);
+  background: var(--surface-2); color: var(--ink-2); text-decoration: none;
+  font-size: var(--text-xs); transition: border-color 100ms ease, background 100ms ease;
+}
+.relation-link:hover, .relation-link:focus-visible {
+  border-color: var(--accent); background: var(--accent-tint); color: var(--ink);
+}
+.relation-arrow { grid-area: 1 / 1 / 3 / 2; color: var(--muted); font-size: var(--text-sm); }
+[data-direction="out"] .relation-arrow { color: var(--accent-2); }
+.relation-verb { grid-area: 1 / 2 / 2 / 4; font-size: var(--text-3xs); color: var(--muted); }
 /* Policy names and ports, wrapping between them: in a table a chip is held whole, elsewhere a chip wider than its line breaks at its seams. */
 .code-list { display: inline-flex; flex-wrap: wrap; gap: var(--space-1) var(--space-2); }
 .data-table .code-list code { white-space: nowrap; }

@@ -194,81 +194,6 @@
         ]
       }
     },
-    "automation": {
-      "OperationManifest": {
-        "bases": [
-          "BaseModel"
-        ],
-        "constructor": [
-          "*",
-          "id",
-          "revision",
-          "playbook",
-          "input_type",
-          "target_kinds",
-          "hosts=",
-          "privilege",
-          "effect",
-          "timeout_seconds",
-          "preconditions",
-          "verification",
-          "recovery",
-          "retry"
-        ],
-        "fields": {
-          "effect": {
-            "required": true
-          },
-          "hosts": {
-            "required": false
-          },
-          "id": {
-            "required": true
-          },
-          "input_type": {
-            "required": true
-          },
-          "playbook": {
-            "required": true
-          },
-          "preconditions": {
-            "required": true
-          },
-          "privilege": {
-            "required": true
-          },
-          "recovery": {
-            "required": true
-          },
-          "retry": {
-            "required": true
-          },
-          "revision": {
-            "required": true
-          },
-          "target_kinds": {
-            "required": true
-          },
-          "timeout_seconds": {
-            "required": true
-          },
-          "verification": {
-            "required": true
-          }
-        },
-        "kind": "model",
-        "members": {
-          "admits": {
-            "kind": "method",
-            "parameters": [
-              "self",
-              "kind",
-              "host"
-            ]
-          }
-        }
-      }
-    },
     "calendar": {
       "CalendarEvent": {
         "bases": [],
@@ -1188,7 +1113,6 @@
           "health=",
           "calendars=",
           "outbound=",
-          "operations=",
           "demo_seed=",
           "demo_pages="
         ],

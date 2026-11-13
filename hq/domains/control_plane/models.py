@@ -490,6 +490,10 @@ class OperationRequest(TimestampedModel):
         # automation worker claims it, never the controller, which has no
         # handler for it (``provider_adapters.automation``).
         RUN = "run", "Run"
+        # A read of the automation source's repository for the procedures it
+        # declares, claimed by the automation worker. Asked for by a person's
+        # Refresh, never on a timer.
+        SCAN = "scan", "Refresh"
 
     # Declared above the model so a rule in ``Meta`` can name its values.
     State = OperationState
@@ -591,6 +595,67 @@ class OperationHost(models.Model):
     @override
     def __str__(self) -> str:
         return self.host
+
+
+class SourceProposal(TimestampedModel):
+    """What one scan of the automation source found: the procedures its
+    repository declares at one commit, as HQ judged them.
+
+    A proposal is never adopted and never runnable; it says what adopting
+    that commit would bring. Written by ``automation_sources.propose``, its
+    one writer, which ``controller._settle_scan`` calls as the scan's report
+    is settled.
+    """
+
+    operation = models.OneToOneField(OperationRequest, on_delete=models.CASCADE, related_name="proposal")
+    branch = models.CharField(max_length=200)
+    revision = models.CharField(max_length=40)
+    verified = models.BooleanField()
+    verification_reason = models.CharField(max_length=40)
+    committer = models.CharField(max_length=39, blank=True)
+    # Each procedure as the worker read it with HQ's problems added, every
+    # file with its object id, and each path Ansible reads that no setting pins.
+    procedures = models.JSONField(default=list)
+    files = models.JSONField(default=list)
+    unpinned = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.branch} at {self.revision[:12]}"
+
+
+class AdoptedCatalog(TimestampedModel):
+    """The procedures HQ runs: one commit of the automation source, adopted
+    by a person from what a scan proposed.
+
+    The newest row is the catalog every procedure's command is built from;
+    each earlier one is what was adopted before it. Each row carries all it
+    pins, so a pruned proposal leaves it whole. Written by
+    ``automation_adoption.adopt``, its one writer.
+    """
+
+    proposal = models.ForeignKey(SourceProposal, on_delete=models.SET_NULL, null=True, related_name="adoptions")
+    branch = models.CharField(max_length=200)
+    revision = models.CharField(max_length=40)
+    committer = models.CharField(max_length=39, blank=True)
+    # Each procedure as adopted: its manifest's fields, its inputs and the
+    # files it runs; and every file of the commit, which the next adoption
+    # is compared against.
+    procedures = models.JSONField(default=list)
+    files = models.JSONField(default=list)
+    # Over the revision and the procedures: what every process builds its
+    # commands from, and so how it knows its own are current.
+    digest = models.CharField(max_length=64)
+
+    class Meta:
+        ordering = ("-id",)
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.branch} at {self.revision[:12]}"
 
 
 class ApprovalState(models.TextChoices):

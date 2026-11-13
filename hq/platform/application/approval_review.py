@@ -12,7 +12,7 @@ from typing import Any
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import DECLARATIONS, DESTRUCTIVE_EFFECT
+from .approvals import COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT
 from .payload_words import ChangeRow, changed_words, document, field_words, value_words
 lazy from . import capabilities
 lazy from .command_forms import switch_field
@@ -107,6 +107,10 @@ def preview(held: ApprovalRequest) -> ChangePreview:
     that answers "what happens to the network if I click this".
     """
 
+    compared = held.baseline.get(COMPARED)
+    if isinstance(compared, Mapping):
+        # A handler that measures its own subject says what it compares.
+        return compare(dict(compared["before"]), dict(compared["after"]), label="Would change")
     spec = capabilities.capability_registry().get(held.capability)
     if spec is not None and spec.subject_resource != DECLARATIONS:
         return _record_preview(spec, held)

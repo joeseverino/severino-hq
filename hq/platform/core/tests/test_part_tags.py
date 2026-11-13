@@ -1,10 +1,8 @@
 """The section part: one look whether a template writes it or code builds it."""
 
-import ast
 import inspect
 import re
 from datetime import date
-from pathlib import Path
 
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase, tag
@@ -13,6 +11,7 @@ from django.utils.functional import SimpleLazyObject
 from hq.platform.application.page_parts import SectionPart
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class
 from hq.platform.core.templatetags.part_tags import SECTION
+lazy from hq.platform.core.tests.browser.catalog import CATALOG
 
 MONTH = date(2026, 11, 1)
 
@@ -385,24 +384,10 @@ class SectionPartTests(SimpleTestCase):
                 SectionPart(heading="Hosts", level=level)
 
 
-CATALOG = Path(__file__).resolve().parent / "browser" / "catalog.py"
-
-
 def _catalog_templates() -> dict[str, str]:
-    """Each catalog entry's template, read from the module's source, which a
-    source run reads without the browser group the module imports."""
+    """Each catalog entry's template, by its name."""
 
-    tree = ast.parse(CATALOG.read_text(encoding="utf-8"))
-    (catalog,) = [
-        node.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign) and [getattr(t, "id", "") for t in node.targets] == ["CATALOG"]
-    ]
-    return {
-        ast.literal_eval(key): entry.args[0].value
-        for key, entry in zip(catalog.keys, catalog.values, strict=True)
-        if isinstance(entry, ast.Call) and entry.args and isinstance(entry.args[0], ast.Constant)
-    }
+    return {name: entry.template for name, entry in CATALOG.items()}
 
 
 @tag("source")
@@ -432,5 +417,7 @@ class SectionCatalogTests(SimpleTestCase):
             )
         }
         self.assertEqual(
-            sorted(set(taken) - drawn), [], "add a part/section-* entry to browser/catalog.py that draws it"
+            sorted(set(taken) - drawn),
+            [],
+            "add a part/section-* entry to browser/catalog/families/part.py that draws it",
         )

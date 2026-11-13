@@ -32,6 +32,7 @@ from hq.platform.application.capabilities import adapter_refusal
 from hq.platform.application.refusal_status import LATER_CODES, Refusal, refusal_of
 from hq.platform.application.security import Principal
 from hq.platform.core.outside_requests import connections_of_its_own
+lazy from hq.platform.application import automation_adoption
 
 from . import listen, prompts, resources, tasks
 from .binding import Tool, bind_tools
@@ -309,6 +310,8 @@ class ToolServer:
             refused = await sync_to_async(_refused_now)()
             if refused is not None:
                 return _answer(refused.answer())
+            # Served from the procedures adopted now, whichever process adopted them.
+            await sync_to_async(automation_adoption.catch_up)()
             result = await tool.call(params.arguments or {})
             if isinstance(result, dict) and approvals.is_held(result) and tasks.requested(context):
                 task = await sync_to_async(tasks.created)(result, current_principal())

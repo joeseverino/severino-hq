@@ -115,7 +115,6 @@ class TopologyView(PageMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         asked = self.request.GET
         active_lens = lens_for(asked.get("lens", "").strip())
-        lens_name = active_lens.name if active_lens else ""
         topology = derive_topology(principal=web_principal(self.request.user), request=self.request)
         if active_lens is not None:
             topology = apply_lens(topology, active_lens)
@@ -125,16 +124,33 @@ class TopologyView(PageMixin, TemplateView):
             direction=asked.get("direction", "both").strip(),
             depth=asked.get("depth", "2").strip(),
         )
+        context.update(
+            topology=topology,
+            **self.drawn(topology, active_lens=active_lens, trace=trace, everything=bool(asked.get("all"))),
+        )
+        return context
+
+    @classmethod
+    def drawn(
+        cls, topology, *, active_lens=None, trace: TopologyTrace | None = None, everything: bool = False
+    ) -> dict[str, Any]:
+        """What the page draws of a topology already narrowed by its view and
+        its trace, which the component catalog draws the map from too."""
+
+        lens_name = active_lens.name if active_lens else ""
         # The whole map leaves its quiet lanes and unlinked cards out until
         # asked. A view or a trace is already a question, and shows its answer.
         lanes = _Lanes.of(
-            self.node_items(topology, lens_name, trace),
-            everything=bool(active_lens or trace or asked.get("all")),
+            cls.node_items(topology, lens_name, trace),
+            everything=bool(active_lens or trace or everything),
             focus=trace.focus if trace else "",
         )
-        context.update(
-            topology=topology,
+        return dict(
             topology_groups=lanes.groups,
+            # The map's kind filter: a toggle for each lane, every one shown.
+            topology_kinds=tuple(
+                {"value": group["kind"], "label": group["label"], "checked": True} for group in lanes.groups
+            ),
             # Passed rather than written into the template: the window is one
             # number, and a page that restates it drifts from the query that
             # produced the figures the moment either changes.
@@ -145,13 +161,12 @@ class TopologyView(PageMixin, TemplateView):
             # ones too.
             topology_shown=lanes.shown,
             topology_total=lanes.left_out + lanes.shown,
-            topology_everything=bool(asked.get("all")) and not (active_lens or trace),
+            topology_everything=everything and not (active_lens or trace),
             topology_lenses=topology_lenses(),
             active_lens=active_lens,
             trace_reset_url=_reset_url(lens_name),
-            **self._trace_context(topology, trace, lens_name),
+            **cls._trace_context(topology, trace, lens_name),
         )
-        return context
 
     @classmethod
     def _trace_context(cls, topology, trace: TopologyTrace | None, lens_name: str) -> dict[str, Any]:
@@ -187,11 +202,19 @@ class TopologyView(PageMixin, TemplateView):
             "topology_trace_focus": by_id.get(trace.focus),
             "topology_trace_label": dict(_TRACE_DIRECTIONS).get(trace.direction, ""),
             "trace_direction_links": tuple(
-                {"name": name, "label": label, "url": cls._trace_url(trace.focus, name, lens_name, trace.depth)}
+                {
+                    "label": label,
+                    "url": cls._trace_url(trace.focus, name, lens_name, trace.depth),
+                    "current": name == trace.direction,
+                }
                 for name, label in _TRACE_DIRECTIONS
             ),
             "trace_depth_links": tuple(
-                {"depth": depth, "url": cls._trace_url(trace.focus, trace.direction, lens_name, depth)}
+                {
+                    "depth": depth,
+                    "url": cls._trace_url(trace.focus, trace.direction, lens_name, depth),
+                    "current": depth == trace.depth,
+                }
                 for depth in range(1, 6)
             ),
         }

@@ -288,7 +288,7 @@ class CapabilityShapeTests(RunTestCase):
         effects = {
             name: (registry[name].effect, registry[name].required_capabilities)
             for name in registry
-            if name.startswith("automation.")
+            if name.startswith("automation.") and name.endswith(".run")
         }
 
         self.assertEqual(

@@ -1,0 +1,7 @@
+id: example.host_health
+target_kinds: [machine]
+effect: read
+timeout_seconds: 120
+retry: safe
+recovery:
+  - Nothing to recover from; it reads and changes nothing.

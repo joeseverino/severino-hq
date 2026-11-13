@@ -125,7 +125,7 @@ VARIANTS: dict[str, tuple[str, ...]] = {
 
 
 def _run_command(_seeded: Seeded) -> dict[str, Any] | None:
-    """The command the bench's runs on lab-1 are asked through, where example procedures are supplied."""
+    """The command the bench's runs on lab-1 are asked through."""
 
     supplied = automation.procedures()
     return {"name": capability_name(supplied[0].id)} if supplied else None

@@ -2148,25 +2148,25 @@
     "responses": {
       "200": {
         "data": {
-          "count": 42,
+          "count": 46,
           "items": [
             {
               "enabled": true,
               "health": {
-                "label": "Working",
+                "label": "Not checked",
                 "message": "",
-                "reason": "Reconciled",
-                "state": "healthy"
+                "reason": "",
+                "state": "declared"
               },
-              "in_sync": true,
-              "key": "hq-dns",
-              "kind": "adguard.rewrite",
-              "last_observed_at": "2026-01-15T09:30:00+00:00",
+              "in_sync": false,
+              "key": "automation-source",
+              "kind": "automation.source",
+              "last_observed_at": null,
               "public_effect": false
             }
           ],
           "next": null,
-          "total": 42,
+          "total": 46,
           "truncated": false
         },
         "ok": true
@@ -2180,7 +2180,7 @@
                 "loc": [
                   "kind"
                 ],
-                "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone', 'cloudflare.contact_inbox' or 'automation.operation'",
+                "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone', 'cloudflare.contact_inbox', 'automation.operation' or 'automation.source'",
                 "type": "literal_error"
               }
             ],
@@ -2195,7 +2195,7 @@
               "tool": "describe_resources"
             }
           },
-          "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox, automation.operation."
+          "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox, automation.operation, automation.source."
         },
         "ok": false
       }
@@ -3239,12 +3239,12 @@
               "connection": 10,
               "machine": 3,
               "registry": 1,
-              "resource": 42,
+              "resource": 46,
               "service": 8,
               "target": 2,
               "zone": 1
             },
-            "nodes": 128
+            "nodes": 132
           },
           "trace": null
         },

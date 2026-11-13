@@ -33,6 +33,7 @@ from .infrastructure import controller_contract, resolved_spec, serialize_resour
 from .inventory import strike_removed
 from .plugin_admission import admitted_sources
 from .resource_operations import enqueue, serialize_operation
+lazy from .automation_sources import propose
 lazy from .cadence import request_reading, swept
 lazy from .dependency_updates import plan as dependency_updates
 lazy from .derivations import present
@@ -53,6 +54,8 @@ class ControllerReport:
     message: str = ""
     # A run's task outcomes (``RunEvent``); no other operation reports any.
     events: list[dict[str, Any]] = field(default_factory=list)
+    # What a scan found (``SourceCatalog``); no other operation reports one.
+    catalog: dict[str, Any] | None = None
 
 
 def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any]) -> None:
@@ -596,10 +599,19 @@ def report_operation(
         raise ValueError("A run reports what its tasks did as events, never a status for its record.")
     if report.events and not run:
         raise ValueError("Only a run reports events.")
+    scan = operation.action == OperationRequest.Action.SCAN
+    if report.catalog is not None and not scan:
+        raise ValueError("Only a scan reports a catalog.")
+    if scan and report.status:
+        raise ValueError("A scan reports what it found as a catalog, never a status for its record.")
+    if scan and report.success and report.catalog is None:
+        raise ValueError("A scan that succeeded reports the catalog it found.")
 
     with _as_its_own(operation):
         if run:
             return _settle_run(operation, report)
+        if scan:
+            return _settle_scan(operation, report)
         return _settle_report(operation, report)
 
 
@@ -659,6 +671,17 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
             metadata={"event": {name: event[name] for name in ("host", "task", "outcome")}},
             required=True,
         )
+    return {"ok": True, "operation": serialize_operation(operation)}
+
+
+def _settle_scan(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
+    """Record how a scan ended and, when it read the repository, what it
+    proposes. The source's record holds nothing a scan found."""
+
+    result: dict[str, Any] = {"message": report.message, "conditions": report.conditions}
+    if report.catalog is not None:
+        result["proposal"] = propose(operation, report.catalog).pk
+    _finish(operation, report, result)
     return {"ok": True, "operation": serialize_operation(operation)}
 
 

@@ -1119,6 +1119,11 @@
               "$ref": "#/components/schemas/RunEvent"
             },
             "description": "A run's task outcomes; an operation other than a run reports none."
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/SourceCatalog",
+            "description": "What a scan of an automation source found; an operation other than a scan reports none.",
+            "x-go-type-skip-optional-pointer": false
           }
         },
         "additionalProperties": false,
@@ -2386,6 +2391,211 @@
           "JobStateFailed",
           "JobStateLost",
           "JobStateRunning"
+        ]
+      },
+      "SourceCatalog": {
+        "type": "object",
+        "description": "The procedures an automation source's repository declares at the tip of its default branch, as the automation worker read them without running any: HQ stores it as a proposal and judges it.",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "revision": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "verification": {
+            "$ref": "#/components/schemas/CommitVerification"
+          },
+          "procedures": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/ScannedProcedure"
+            }
+          },
+          "files": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "$ref": "#/components/schemas/ScannedFile"
+            }
+          },
+          "unpinned": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "$ref": "#/components/schemas/UnpinnedPath"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "branch",
+          "revision",
+          "verification",
+          "procedures",
+          "files",
+          "unpinned"
+        ]
+      },
+      "CommitVerification": {
+        "type": "object",
+        "description": "Whether GitHub verified the commit's signature, and the GitHub account that committed it.",
+        "properties": {
+          "verified": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "committer": {
+            "type": "string",
+            "maxLength": 39
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "verified",
+          "reason",
+          "committer"
+        ]
+      },
+      "ScannedProcedure": {
+        "type": "object",
+        "description": "One sidecar and the playbook of the same name beside it: the sidecar as parsed, the play's title and assertions, each role's argument spec, and what could not be read.",
+        "properties": {
+          "sidecar": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "playbook": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "declaration": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "x-go-type": "any",
+            "description": "The sidecar as YAML read it, unjudged; null when it could not be read."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "roles": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/ScannedRole"
+            }
+          },
+          "preconditions": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "verification": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "problems": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sidecar",
+          "playbook",
+          "declaration",
+          "title",
+          "roles",
+          "preconditions",
+          "verification",
+          "problems"
+        ]
+      },
+      "ScannedRole": {
+        "type": "object",
+        "description": "A role a procedure's plays list, and its main entry point's argument spec as ansible-doc read it.",
+        "properties": {
+          "role": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "argument_spec": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "x-go-type": "any",
+            "description": "Null when the role declares none or could not be found."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "argument_spec"
+        ]
+      },
+      "ScannedFile": {
+        "type": "object",
+        "description": "A file of the repository, by its path and the git object id that names its content.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "object": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "object"
+        ]
+      },
+      "UnpinnedPath": {
+        "type": "object",
+        "description": "A path Ansible would read beyond a playbook and its roles: a configuration, plugins or shared variables.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "config",
+              "plugins",
+              "variables"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind"
         ]
       },
       "AdGuardClientRecord": {
@@ -5349,6 +5559,7 @@
           "adguard.query_summary",
           "adguard.rewrite",
           "automation.operation",
+          "automation.source",
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
@@ -5413,6 +5624,7 @@
           "ResourceKindAdGuardQuerySummary",
           "ResourceKindAdGuardRewrite",
           "ResourceKindAutomationOperation",
+          "ResourceKindAutomationSource",
           "ResourceKindCaddyRoute",
           "ResourceKindCloudflareAccessApp",
           "ResourceKindCloudflareAccessServiceToken",

@@ -26,7 +26,7 @@ class DrainTests(unittest.TestCase):
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
         self.remote = Remote(self.root / "remote")
-        self.revision = self.remote.commit({"ansible/playbooks/restart.yml": PLAY})
+        self.revision = self.remote.commit({"playbooks/restart.yml": PLAY})
         (self.root / "scratch").mkdir()
         (self.root / "state").mkdir()
         self.connections = self.root / "connections.json"
@@ -41,7 +41,6 @@ class DrainTests(unittest.TestCase):
             "HQ_AUTOMATION_SSH_DIR": str(self.root / "ssh"),
             "HQ_AUTOMATION_SCRATCH": str(self.root / "scratch"),
             "HQ_AUTOMATION_REPOSITORY": REPOSITORY,
-            "HQ_AUTOMATION_PROJECT_DIR": "ansible",
             "HQ_AUTOMATION_TOKEN_FILE": str(self.token),
         }
 
@@ -71,7 +70,7 @@ class DrainTests(unittest.TestCase):
         self.assertEqual([action for action, _ in bridge.calls].count("claim"), 3)
         (run, _) = runner.runs
         self.assertEqual(run.procedure.revision, self.revision)
-        self.assertEqual(run.procedure.project_dir.name, "ansible")
+        self.assertTrue(run.procedure.project_dir.is_relative_to((self.root / "scratch").resolve()))
         self.assertEqual(run.procedure.playbook, fakes.PLAYBOOK)
         self.assertEqual(run.targets[0].identity, self.root / "ssh" / fakes.APP)
         self.assertEqual(list((self.root / "scratch").iterdir()), [])
@@ -109,9 +108,3 @@ class DrainTests(unittest.TestCase):
         ):
             with self.subTest(name=name), self.assertRaises(ConfigError):
                 self.config(**{name: value})
-
-    def test_a_project_directory_that_leaves_the_repository_is_refused(self):
-        from hq_runner.__main__ import ConfigError
-
-        with self.assertRaises(ConfigError):
-            self.config(HQ_AUTOMATION_PROJECT_DIR="../elsewhere")

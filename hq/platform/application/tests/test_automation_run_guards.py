@@ -1,6 +1,6 @@
 """The guards that walk every command walk each procedure's run too.
 
-A run's command exists only for a manifest an extension supplies, which no
+A run's command exists only for a procedure a person adopted, which no
 host test does, so each guard's walk is run here with three synthetic
 procedures supplied, one of each effect. Where a guard walks only the
 registry, it walks the runs alone; its tests that name a host command are

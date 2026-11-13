@@ -1,9 +1,14 @@
-"""A bridge and a runner that stand in for HQ and ansible-runner, so a pass of
-the worker runs whole with no host, socket or credential.
+"""A bridge, a runner and a scan's readers that stand in for HQ, ansible-runner,
+ansible-doc and GitHub, so a pass of the worker runs whole with no host,
+socket or credential.
 
 The claim answers are shaped as the bridge contract's ``Pending`` (a claimed
-run, with its ``input``), and the runner replays events ansible-runner 2.4.3
-recorded from a real playbook run (``recorded_events.json``).
+run, with its ``input``, or a claimed scan), the runner replays events
+ansible-runner 2.4.3 recorded from a real playbook run
+(``recorded_events.json``), the role specs are what ansible-doc answered for
+the example project's roles (``recorded_role_specs.json``, which the smoke
+holds to a real ansible-doc), and a commit's verification is GitHub's answer
+for one, in the shape its REST API documents.
 """
 
 import copy
@@ -92,6 +97,102 @@ def recorded(task: str, event: str) -> dict[str, Any]:
     return copy.deepcopy(found)
 
 
+# The fixture repository in Ansible's sample layout: playbooks, roles, an
+# inventory and group_vars at its root, and things a scan reports beside them.
+EXAMPLE_PROJECT = Path(__file__).with_name("example_project")
+SCAN_OPERATION = "22222222-3333-4444-8555-666666666666"
+SOURCE = "automation-source"
+# What ``ansible-doc -t role -j <role>`` answered for each of the example
+# project's roles, ``path`` aside, which is where the role sat on the machine
+# that read it.
+RECORDED_ROLE_SPECS: dict[str, Any] = json.loads(
+    Path(__file__).with_name("recorded_role_specs.json").read_text("utf-8")
+)
+# GitHub's answer for one commit (``GET /repos/{owner}/{repo}/commits/{ref}``)
+# as its REST API reference documents the response, cut to the members a
+# verification is read from and those around them.
+GITHUB_COMMIT: dict[str, Any] = {
+    "sha": REVISION,
+    "node_id": "C_kwDOAAAAAA",
+    "commit": {
+        "author": {"name": "Example", "email": "automation@example.com", "date": "2026-10-03T12:00:00Z"},
+        "committer": {"name": "GitHub", "email": "noreply@github.com", "date": "2026-10-03T12:00:00Z"},
+        "message": "procedures",
+        "tree": {"sha": OTHER_REVISION, "url": "https://api.github.com/repos/example/automation/git/trees/x"},
+        "comment_count": 0,
+        "verification": {
+            "verified": True,
+            "reason": "valid",
+            "signature": "-----BEGIN PGP SIGNATURE-----\n...\n-----END PGP SIGNATURE-----",
+            "payload": "tree ...",
+            "verified_at": "2026-10-03T12:00:01Z",
+        },
+    },
+    "author": {"login": "example-author", "id": 1, "type": "User"},
+    "committer": {"login": "web-flow", "id": 19864447, "type": "User"},
+    "parents": [],
+    "files": [],
+}
+
+
+def role_spec(role: str, playbook_dir: Path, project_dir: Path) -> Any:
+    """A role's argument spec as ansible-doc answered it for the example project."""
+
+    from hq_runner.ansible import entry_point
+
+    del playbook_dir, project_dir
+    # ansible-doc's answer for a role it cannot find is an empty object.
+    return entry_point(role, {role: RECORDED_ROLE_SPECS[role]} if role in RECORDED_ROLE_SPECS else {})
+
+
+def verified(revision: str) -> dict[str, Any]:
+    """The verification GitHub reports of any commit: signed and valid."""
+
+    from hq_runner.catalog import verification
+
+    return verification({**GITHUB_COMMIT, "sha": revision})
+
+
+def scanned() -> dict[str, Any]:
+    """A scan that finds nothing, for a pass that claims none."""
+
+    raise AssertionError("this pass claimed no scan")
+
+
+def scan_pending(*, generation: int = 1) -> dict[str, Any]:
+    """A claimed scan as the bridge's claim answers it: no input, its record's
+    generation."""
+
+    return {
+        "ok": True,
+        "operation": {
+            "id": SCAN_OPERATION,
+            "resource": SOURCE,
+            "action": "scan",
+            "state": "claimed",
+            "reason": "",
+            "requested_actor": "example-person",
+            "requested_interface": "web",
+            "created_at": "2026-10-03T12:00:00+00:00",
+            "completed_at": None,
+            "claimed_by": WORKER,
+            "lease_expires_at": "2026-10-03T12:02:00+00:00",
+            "attempt_count": 1,
+            "result": None,
+            "correlation": "",
+        },
+        "schema_version": 1,
+        "resource": {
+            "key": SOURCE,
+            "kind": "automation.source",
+            "generation": generation,
+            "enabled": True,
+            "spec": {},
+            "observed": {},
+        },
+    }
+
+
 def pending(
     *, revision: str = REVISION, parameters: Mapping[str, Any] | None = None, timeout: int = 300
 ) -> dict[str, Any]:
@@ -152,8 +253,12 @@ class Bridge:
         self.reports: list[dict[str, Any]] = []
         self.fail_report = False
 
-    def claim(self, controller_id: str, *, capability: str, lease_seconds: int, attempt: str) -> dict[str, Any]:
-        self.calls.append(("claim", {"controller_id": controller_id, "capability": capability, "attempt": attempt}))
+    def claim(
+        self, controller_id: str, *, capabilities: Iterable[str], lease_seconds: int, attempt: str
+    ) -> dict[str, Any]:
+        self.calls.append(
+            ("claim", {"controller_id": controller_id, "capabilities": tuple(capabilities), "attempt": attempt})
+        )
         return self.claims.pop(0) if self.claims else {"ok": True, "operation": None}
 
     def renew(self, controller_id: str, operation: str, *, lease_seconds: int) -> dict[str, Any]:

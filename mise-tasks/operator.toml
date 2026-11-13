@@ -34,6 +34,7 @@ run = [
   "uv run python manage.py bridge_contract",
   "cd controller && go generate ./...",
   "uv run python manage.py connections_reference",
+  "uv run python manage.py procedure_schema",
   "uv run python -m tools.fonts.subset",
 ]
 

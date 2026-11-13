@@ -1,12 +1,8 @@
-"""The component catalog: each shared part filled the way an extension's page
-fills it, which no host page does, drawn through its own partial or tag on a
-page of its own and held by the whole survey. A new state of a shared part is
-one entry here."""
+"""The catalog's parts: the page frame and every shared part no other family names."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, Literal, override
 from unittest import mock
 from uuid import UUID
 
@@ -15,17 +11,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import ERROR, INFO, SUCCESS, WARNING
 from django.contrib.messages.storage.base import Message
 from django.core.paginator import Paginator
-from django.template import Context, Template
-from django.template.loader import render_to_string
-from django.test import RequestFactory, override_settings
-from django.utils.html import escape
+from django.template import Template
 
 from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
-from hq.platform.application.adoption import ONLY_READS, WriteGap
 from hq.platform.application.appearance import Theme
 from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
-from hq.platform.application.cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
@@ -34,7 +25,6 @@ from hq.platform.application.credential_mint import CredentialFix
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, StripTile, Trend
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.finding_model import OperatorStep
-from hq.platform.application.forms import ChoiceCards, SuffixedInput
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit
 from hq.platform.application.posture import CheckOutcome, CheckStanding, Posture, PostureCheck
@@ -47,80 +37,17 @@ from hq.platform.application.tables import TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
 from hq.platform.application.ui import (
-    ActivityCalendar,
-    CalendarDay,
-    ChartSeries,
     PageNavigation,
     PageSection,
-    PlannedDay,
-    PlanNote,
-    WeekPlan,
-    line_chart,
-    stacked_bar_chart,
 )
 from hq.platform.core.models import AgentIdentity
-from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+from hq.platform.core.tests.browser.catalog.common import HEAD, Entry
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
 lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.github_estate import Repository
 lazy from hq.platform.application.github_posture import posture_of
 lazy from hq.platform.application.path_model import Certificate, Hop, Route
 lazy from hq.platform.application.request_path import CONTRADICTED, PROVEN, HopCheck
-lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
-
-
-@dataclass(frozen=True)
-class Entry:
-    """A part as a template writes it, with what it is given.
-
-    ``premise`` is what the entry must draw to stand for its state, as a probe
-    and its argument returning what falls short of it: a value meant to wrap
-    that fits on one line holds nothing the survey could find wrong.
-    ``heads_the_page`` says the part is a page's own head; any other is drawn
-    under one, as every HQ page is. ``frame`` says the part is the page
-    frame's own, which base.html draws beside the page's main rather than in
-    it, ``"before"`` or ``"after"``, so it is drawn there, beside a main that
-    holds a page head alone."""
-
-    template: str
-    context: dict[str, Any] = field(default_factory=dict)
-    premise: tuple[str, Any] | None = None
-    heads_the_page: bool = False
-    frame: Literal["", "before", "after"] = ""
-    # The address the part is drawn at, for a part that reads its request: a
-    # page's query, or the row its address opens.
-    address: str = ""
-    # The settings the part is drawn under, for a part only some deployments draw.
-    settings: dict[str, Any] = field(default_factory=dict)
-
-    def drawn(self, name):
-        with override_settings(**self.settings):
-            head = "" if self.heads_the_page or self.frame else _head(name)
-            context = _Asked(self.context, self.address) if self.address else Context(self.context)
-            return head + Template(self.template).render(context)
-
-    def page(self, name):
-        """The entry on a page of its own: in its main, or beside it for a part of the frame."""
-
-        drawn = self.drawn(name)
-        return part_page(name, _head(name), **{self.frame: drawn}) if self.frame else part_page(name, drawn)
-
-
-def _head(name):
-    return render_to_string(HEAD, {"page": Page(title=name)})
-
-
-class _Asked(Context):
-    """A context drawn for a request at ``address``, which it carries as
-    ``{% querystring %}`` and ``{% row_editor %}`` read it."""
-
-    def __init__(self, values, address):
-        self.request = RequestFactory().get(address)
-        super().__init__({**values, "request": self.request})
-
-
-HEAD = "partials/_page_head.html"
 
 
 class _Drawn:
@@ -159,6 +86,8 @@ _READINGS = (
     '{% foot %}<span><a href="/example/settings/">Settings</a></span>{% endreading %}'
     "</div>{% endreadings %}"
 )
+
+
 _READINGS_EMPTY = (
     "{% readings %}"
     '{% reading icon="activity" url="/example/controller/" %}'
@@ -174,6 +103,7 @@ _READINGS_EMPTY = (
     "</div>{% endreadings %}"
 )
 
+
 # Each value that fits on one line of its own.
 _ONE_LINE = """(values) => [...document.querySelectorAll(values)]
   .filter((value) => Math.round(value.getBoundingClientRect().height / parseFloat(getComputedStyle(value).lineHeight)) < 2)
@@ -185,33 +115,6 @@ _TIGHTER = """(lists) => {
   const [page, opened] = [...document.querySelectorAll(lists)].map((list) => parseFloat(getComputedStyle(list).rowGap));
   return opened < page ? [] : [`the opened list's rows are ${opened}px apart, the page's ${page}px`];
 }"""
-
-
-# Each form not drawn as one question, or drawn otherwise than its width
-# calls for: its button on the control's line in a form of 30rem or more
-# inside its padding, under the control in one narrower (forms.css).
-_ONE_QUESTION = """({forms, question, control: controls, button: buttons}) => [...document.querySelectorAll(forms)].filter((form) => {
-  if (!form.matches(question)) return true;
-  const control = form.querySelector(controls).getBoundingClientRect();
-  const button = form.querySelector(buttons).getBoundingClientRect();
-  const style = getComputedStyle(form);
-  const width = form.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-  const roomy = width >= 30 * parseFloat(getComputedStyle(document.documentElement).fontSize);
-  return roomy ? !(button.top < control.bottom && button.bottom > control.top) : button.top < control.bottom;
-}).map((form) => form.outerHTML.slice(0, 120))"""
-_QUESTION_PARTS = {
-    "forms": "main form",
-    "question": SELECTORS["one_question"],
-    "control": SELECTORS["question_control"],
-    "button": SELECTORS["question_button"],
-}
-
-# Each drawing with no box of its own while the box that holds it has one.
-_UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
-  const held = drawing.parentElement.getBoundingClientRect();
-  const drawn = drawing.getBoundingClientRect();
-  return held.width > 0 && held.height > 0 && (drawn.width < 1 || drawn.height < 1);
-}).map((drawing) => drawing.outerHTML.slice(0, 120))"""
 
 
 def _holding(entry: CalendarEvent) -> Callable[[date, date], tuple[CalendarEvent, ...]]:
@@ -238,118 +141,6 @@ def _month_gone_by():
     )
     with mock.patch.object(calendar, "calendar_sources", return_value=sources):
         return calendar_month(month, today=today)
-
-
-_WEEK = date(2026, 1, 5)
-
-
-class _ExampleForm(forms.Form):
-    name = forms.CharField(label="Example name", help_text="An example of what the name is for.")
-    notes = forms.CharField(label="Example notes", required=False, widget=forms.Textarea)
-
-
-_EXAMPLE_ANSWERS = (
-    ("refuse", "Refuse it", "Every example nobody listed is refused, which is what the example policy needs to work."),
-    ("mark", "Mark it as suspicious", "Receivers usually accept it and flag it."),
-    ("allow", "Allow it", "Every example passes."),
-)
-
-
-class _ExampleChoices(forms.Form):
-    answer = forms.ChoiceField(
-        label="Every other example",
-        choices=[(value, label) for value, label, _ in _EXAMPLE_ANSWERS],
-        widget=ChoiceCards(described={value: what for value, _, what in _EXAMPLE_ANSWERS}),
-        help_text="What happens to an example the list above leaves out.",
-    )
-    share = forms.IntegerField(
-        label="Apply it to", min_value=0, max_value=100, widget=SuffixedInput(suffix="%"), help_text="Of every example."
-    )
-
-
-class _ExampleRange(forms.Form):
-    """A form of pairs (``starts_pair``): each range's start and end on a row
-    of their own, whatever columns the form has, and a field after them."""
-
-    starts_on = forms.DateField(label="Example start", widget=forms.DateInput(attrs={"type": "date"}))
-    ends_on = forms.DateField(
-        label="Example end", required=False, widget=forms.DateInput(attrs={"type": "date"}), help_text="An example end."
-    )
-    starts_at = forms.TimeField(label="Example from", required=False, widget=forms.TimeInput(attrs={"type": "time"}))
-    ends_at = forms.TimeField(label="Example to", required=False, widget=forms.TimeInput(attrs={"type": "time"}))
-    place = forms.CharField(label="Example place", required=False)
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # An option field.html reads, which Django's Field does not declare.
-        fields: dict[str, Any] = dict(self.fields)
-        for name in ("starts_on", "starts_at"):
-            fields[name].starts_pair = True
-
-
-class _NoFields(forms.Form):
-    """A command that takes nothing."""
-
-
-class _ExampleLookup(forms.Form):
-    name = forms.CharField(label="Example hostname", required=False)
-
-
-class _ExampleNaming(forms.Form):
-    name = forms.CharField(
-        label="Example group", help_text="An example of what a group is named for, long enough to wrap on a phone."
-    )
-
-
-def _readings(title, lede, *names, unit="min"):
-    """A line chart of a week's readings, one line for each name."""
-
-    return line_chart(
-        title,
-        lede,
-        tuple(
-            (name, tuple((_WEEK + timedelta(days=day), float((day * slot) % 5 + slot)) for day in range(7)), slot)
-            for slot, name in enumerate(names, 1)
-        ),
-        unit=unit,
-    )
-
-
-def _weeks(title, lede):
-    """A stacked bar chart of four weeks, two kinds in each."""
-
-    return stacked_bar_chart(
-        title,
-        lede,
-        ("Week 1", "Week 2", "Week 3", "Week 4"),
-        (ChartSeries("Running", (3, 4, 2, 5), 1), ChartSeries("Strength", (1, 2, 2, 1), 2)),
-        unit="min",
-    )
-
-
-def _month():
-    """A month of plan against what was done, paged, with its period."""
-
-    return ActivityCalendar(
-        "Example training",
-        "Planned days against what was done.",
-        tuple(
-            tuple(
-                CalendarDay(_WEEK + timedelta(days=week * 7 + day), "done", slots=(1,), planned=True)
-                if day in (0, 2)
-                else CalendarDay(_WEEK + timedelta(days=week * 7 + day), "missed", planned=True)
-                if day == 4
-                else CalendarDay(_WEEK + timedelta(days=week * 7 + day))
-                for day in range(7)
-            )
-            for week in range(4)
-        ),
-        series=(ChartSeries("Example running", (), 1),),
-        period_label="January 2026",
-        previous_url="/example/?month=2025-12",
-        next_url="/example/?month=2026-02",
-        current_url="/example/",
-    )
 
 
 def _problems(*titles, family="", status="attention"):
@@ -443,6 +234,8 @@ def _flow(*sections):
 _NARROW = (
     '{% facts %}{% fact "Example name" value="example-01" %}{% fact "Example state" value="Online" %}{% endfacts %}'
 )
+
+
 # A wide one: a table of four columns, which takes the whole row.
 _WIDE = (
     '{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
@@ -454,25 +247,6 @@ _WIDE = (
 
 # What a part that says how long ago is drawn against.
 _NOW = datetime.now(UTC)
-
-
-def _matrix():
-    """Three things over the same six weeks, one a link with a line about it."""
-
-    def weeks(*marks):
-        return tuple(
-            CadenceWeek(label, hit=mark == "x", no_data=mark == "?", detail=f"Week of {label}")
-            for label, mark in zip(("Jan 5", "Jan 12", "Jan 19", "Jan 26", "Feb 2", "Feb 9"), marks, strict=True)
-        )
-
-    return CadenceMatrix(
-        ("Jan 5", "Jan 12", "Jan 19", "Jan 26", "Feb 2", "Feb 9"),
-        (
-            CadenceRow("Example run", weeks("x", "x", "-", "x", "x", "x"), url="/example/run/", detail="3 a week"),
-            CadenceRow("Example lift", weeks("x", "-", "?", "x", "-", "x")),
-            CadenceRow("An example habit with a name long enough to wrap", weeks("-", "-", "x", "x", "x", "-")),
-        ),
-    )
 
 
 def _route():
@@ -513,10 +287,6 @@ class _Service:
 
     hostname: str
     pinned: bool = False
-
-
-class _ExampleFiles(forms.Form):
-    exports = forms.FileField(label="Example exports", help_text="An example of the files it takes.")
 
 
 def _runs():
@@ -776,7 +546,7 @@ def _palette():
     }
 
 
-CATALOG = {
+ENTRIES = {
     # The page frame's header, as every signed-in page draws it: the sections,
     # the doorway to search, the queue's count and the person's menu, whose
     # popovers the survey opens.
@@ -1360,139 +1130,6 @@ CATALOG = {
         '{% section "Example link" %}' + _NARROW + "{% endsection %}</aside></div>",
         {"calendar": _month_gone_by()},
     ),
-    # What the table region derives from its headings, each in a table of its
-    # own: a figure's column aligned under its heading, body and totals, with
-    # no class on a cell; the sort control on a table of rows and none on a
-    # table of one; each row's toggle in the gutter column's cell, shown on a
-    # row that holds something back.
-    "table/figures": Entry(
-        '{% section "Example costs" %}{% table_region "Example costs" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" %}{% table_heading "Count" "numeric" %}{% table_heading "Cost" "numeric" %}'
-        "</tr></thead><tbody><tr><td>example-01</td><td>3</td><td>$1,204.50</td></tr>"
-        "<tr><td>example-02</td><td>12</td><td>$8.00</td></tr></tbody>"
-        "<tfoot><tr><td>Total</td><td>15</td><td>$1,212.50</td></tr></tfoot></table>"
-        "{% endtable_region %}{% endsection %}"
-    ),
-    "table/sorts": Entry(
-        '{% section "Example hosts" %}{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" %}{% table_heading "State" "status" %}'
-        '{% table_heading "Actions" "control" hidden=True %}</tr></thead>'
-        '<tbody><tr><td>example-01</td><td>{% status "Online" tone="good" %}</td><td><a href="#">Open</a></td></tr>'
-        '<tr><td>example-02</td><td>{% status "Offline" tone="attention" %}</td><td><a href="#">Open</a></td></tr>'
-        "</tbody></table>{% endtable_region %}{% endsection %}"
-        '{% section "Example host" %}{% table_region "Example host" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead>'
-        '<tbody><tr><td>example-01</td><td>{% status "Online" tone="good" %}</td></tr></tbody></table>'
-        "{% endtable_region %}{% endsection %}"
-    ),
-    # A region whose tables hold no row: what is missing and what fills it,
-    # then a list its own filter emptied, with the way back.
-    "table/empty": Entry(
-        '{% section "Example hosts" %}{% table_region "Example hosts" empty="No example hosts yet." '
-        'action_url="#" action_label="Add an example host" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead><tbody></tbody></table>'
-        "{% endtable_region %}{% endsection %}"
-        '{% section "Example records" %}{% table_region "Example records" empty="No example records yet." '
-        'filtered=True clear="#" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead><tbody></tbody></table>'
-        "{% endtable_region %}{% endsection %}"
-    ),
-    "table/gutter": Entry(
-        '{% section "Example records" %}{% table_region "Example records" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" "identifier" gutter=True %}{% table_heading "Note" %}</tr></thead><tbody>'
-        "<tr><td><strong>example-01</strong></td><td>An example note"
-        '<div class="row-below">An example line the row holds back.</div></td></tr>'
-        "<tr><td><strong>example-02</strong></td><td>Another example note</td></tr></tbody></table>"
-        "{% endtable_region %}{% endsection %}"
-    ),
-    # A row's actions ({% row_actions %}): a POST and a destructive link side
-    # by side, a link alone, one refused, and a row whose note takes several
-    # lines, each set on its row's first line.
-    "table/row-actions": Entry(
-        '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "From" "identifier" gutter=True %}{% table_heading "Note" %}'
-        '{% table_heading "Actions" css="actions-col" hidden=True drop=1 %}</tr></thead><tbody>'
-        "{% for row in rows %}<tr><td><strong>{{ row.0 }}</strong></td><td>{{ row.1 }}</td>"
-        "{% row_actions row.2 %}</tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
-        {
-            "rows": (
-                (
-                    "example-01",
-                    "An example note.",
-                    (
-                        PageAction("Read", "/example/1/status/", method="post", value="read", field="status"),
-                        PageAction("Delete", "/example/1/delete/", danger=True),
-                    ),
-                ),
-                ("example-02", "Another example note.", (PageAction("Open", "/example/2/"),)),
-                (
-                    "example-03",
-                    "An example note that wraps on a phone.",
-                    (PageAction("Spam", "/example/3/", method="post", disabled=True, title="An example reason."),),
-                ),
-            )
-        },
-    ),
-    # A status as its words in its tone, among figures, as a change is drawn.
-    "status/toned": Entry(
-        '{% section "Example changes" %}<p>{% status "+$120.00" tone="good" pill=False %}'
-        ' {% status "−$40.00" tone="attention" pill=False %} {% status "−$900.00" tone="serious" pill=False %}'
-        ' {% status "$0.00" tone="neutral" pill=False %}</p>{% endsection %}'
-    ),
-    # A standing state after its dot: its words in its tone, then a heading's
-    # own words in the ink around them, the dot alone toned.
-    "status/dot": Entry(
-        '{% section "Example states" %}<p>{% status "Allowed" tone="good" dot=True %}'
-        ' {% status "Paused" tone="attention" dot=True %} {% status "Refused" tone="serious" dot=True %}'
-        ' {% status "Not tested" tone="neutral" dot=True %}</p>'
-        '<p><strong>{% status "Example" tone="good" dot=True ink="context" %}</strong>'
-        ' {% status "Examples" tone="attention" dot=True ink="context" %}</p>{% endsection %}'
-    ),
-    # The names a record carries, as chips beside its name: each as written.
-    "status/chip": Entry(
-        '{% section "Example project" %}<p><strong>example-app</strong> {% status "django" chip=True %}'
-        '{% status "example.com" chip=True %}{% status "Reverse proxy" chip=True title="An example role" %}</p>'
-        "{% endsection %}"
-    ),
-    # Each chart partial, its head a section's: the heading, the line under
-    # it, and its legend or a month's controls beside them; its data a folded
-    # section in its frame.
-    "chart/line": Entry(
-        '{% include "partials/_line_chart.html" %}',
-        {"chart": _readings("Example pace", "Example readings over a week, two of them.", "Easy", "Hard")},
-    ),
-    "chart/line-empty": Entry(
-        '{% include "partials/_line_chart.html" %}',
-        {"chart": line_chart("Example pace", "Too few readings to draw.", (), unit="example")},
-    ),
-    "chart/stacked-bar": Entry(
-        '{% include "partials/_stacked_bar_chart.html" %}',
-        {"chart": _weeks("Example sessions", "Each week's sessions by kind.")},
-    ),
-    "chart/activity-calendar": Entry('{% include "partials/_activity_calendar.html" %}', {"calendar": _month()}),
-    "chart/tabs": Entry(
-        '{% include "partials/_chart_tabs.html" with group="example" %}',
-        {"charts": (_readings("Example pace", "A week of pace.", "Pace"), _weeks("Example load", "Load by week."))},
-    ),
-    # Two charts in a pair, one line under each heading longer than the other's,
-    # and a chart beside a section of prose: each pair's frames start together.
-    "chart/pair": Entry(
-        '<div class="two-col">{% include "partials/_line_chart.html" with chart=first %}'
-        '{% include "partials/_stacked_bar_chart.html" with chart=second %}</div>',
-        {
-            "first": _readings(
-                "Example pace",
-                "An example line under the heading long enough to take two lines beside its neighbor.",
-                "Pace",
-            ),
-            "second": _weeks("Example sessions", "Each week's sessions."),
-        },
-    ),
-    "chart/beside-section": Entry(
-        '<div class="two-col">{% include "partials/_line_chart.html" %}'
-        '{% section "Example notes" %}<p>An example line of prose in the frame.</p>{% endsection %}</div>',
-        {"chart": _readings("Example pace", "Example readings over a week.", "Pace")},
-    ),
     # A row's buttons whose labels end in a name, one of them hyphenated, as a
     # queue row draws a plan for each container behind: the hyphenated part is
     # a box of its own (`breakable`), set on the line of the words before it.
@@ -1690,6 +1327,14 @@ CATALOG = {
         {"name": "example-target.example.com"},
     ),
     "part/notice-info": Entry('{% notice tone="info" %}An example line of news.{% endnotice %}'),
+    # A notice holding a switch, as a trace's says what it shows: a link in
+    # its words is underlined, a choice's chip is not.
+    "part/notice-switch": Entry(
+        '{% notice tone="info" %}<p>An example line with <a href="/example/">a link</a>.</p>'
+        '{% switch label="Example direction" %}{% choice url="/example/in/" %}Example in{% endchoice %}'
+        '{% choice url="/example/both/" current=True %}Example both{% endchoice %}{% endswitch %}'
+        "{% title %}Showing example-host-01{% endnotice %}"
+    ),
     "part/notice-success": Entry('{% notice tone="success" %}Example saved.{% endnotice %}'),
     "part/notice-error": Entry(
         '{% notice tone="error" %}An example failure long enough to take more than one line on a phone, '
@@ -1704,6 +1349,24 @@ CATALOG = {
                 for level, name in ((SUCCESS, "success"), (INFO, "info"), (WARNING, "warning"), (ERROR, "error"))
             ]
         },
+    ),
+    # A code patch ({% patch %}), the declaration of its one caller's (a
+    # container's compose change): a title naming a long path, the code with a
+    # line longer than a phone's, the words under it and its notes.
+    "part/patch": Entry(
+        '{% section "Example runtime" %}{% patch id="example-patch" %}services:\n'
+        "  example-service-with-a-long-name:\n"
+        "    volumes:\n"
+        '      - "/opt/example-applications/an-example-application-with-a-long-name/configuration:/srv/configuration:ro"\n'
+        '    user: "1000:1000"'
+        "{% title %}Add to <code>/opt/example-applications/an-example-application/compose.production.yaml</code>"
+        "{% detail %}Where its service already has one of these keys, replace it. Then run "
+        "<code>docker compose up -d example-service-with-a-long-name</code> in that directory."
+        "{% notes %}<li><strong>Remove</strong> <code>pid: host</code></li>"
+        '<li><code>user</code> <span class="muted">Its files must be readable by 1000:1000.</span></li>'
+        '<li class="prose"><strong>Not included</strong> <span class="muted">An example reason it leaves out,'
+        ' with <a href="/example/">an example link</a>.</span></li>'
+        "{% endpatch %}{% endsection %}"
     ),
     # Agents' rules (core/_policy_table.html), each setting a toned select
     # (core/_policy_setting.html): every state a rule can be in, and a cell
@@ -1761,87 +1424,6 @@ CATALOG = {
     "part/command-center": Entry('{% include "partials/_command_center.html" %}'),
     "part/command-center-results": Entry('{% include "partials/_command_center.html#results" %}', _palette()),
     "part/command-center-empty": Entry('{% include "partials/_command_center.html#results" %}', {"q": "example-none"}),
-    # The form page's card (form_page.html) with fields and what saving does,
-    # one with no fields, which is its closing row alone, and a form that asks
-    # (partials/_form.html method="get"), one question on its button's line,
-    # once more with its help and an error under them; a new option of either
-    # comes with an entry here (test_form_page).
-    "form/page": Entry(
-        '{% include "form_page.html#form_card" %}',
-        {
-            "form": _ExampleForm(),
-            "form_verb": "Add example",
-            "cancel_url": "#",
-            "form_note": "An example note on what saving does, long enough to wrap on a phone.",
-        },
-    ),
-    "form/page-fieldless": Entry(
-        '{% include "form_page.html#form_card" %}', {"form": _NoFields(), "form_verb": "Run example", "cancel_url": "#"}
-    ),
-    "form/page-pairs": Entry(
-        '{% include "form_page.html#form_card" %}',
-        {"form": _ExampleRange(), "form_verb": "Add example", "cancel_url": "#"},
-    ),
-    # A form whose connection cannot make the change (`gap`): its verb drawn
-    # unusable, with what it needs beside it.
-    "form/write-gap": Entry(
-        '{% section "Example record" %}{% include "partials/_form.html" with form=form verb="Save example" '
-        'cancel_url="#" gap=gap note="" choices="" choice_field="" bar="" %}{% endsection %}',
-        {
-            "form": _ExampleForm(),
-            "gap": WriteGap(
-                "HQ only reads through Example connection example-main. A change through it also needs Example Write.",
-                ONLY_READS,
-                "Needs manages: 1 and Example Write",
-                "#",
-            ),
-        },
-    ),
-    # A form whose answers each say what choosing them does (`ChoiceCards`), one
-    # card a choice, and a number with its unit after the box
-    # (`SuffixedInput`), sent with the number past its limit.
-    "form/choice-cards": Entry(
-        '{% section "Example policy" %}{% include "partials/_form.html" with form=form verb="Save example" '
-        'cancel_url="" note="" choices="" choice_field="" bar="" %}{% endsection %}',
-        {"form": _ExampleChoices(data={"answer": "refuse", "share": "150"})},
-    ),
-    "form/lookup": Entry(
-        '{% section "Example lookup" %}{% include "partials/_form.html" with method="get" form=form verb="Look up" '
-        'cancel_url="" note="" choices="" choice_field="" bar="" %}{% endsection %}',
-        {"form": _ExampleLookup()},
-        premise=(_ONE_QUESTION, _QUESTION_PARTS),
-    ),
-    "form/lookup-help": Entry(
-        '{% section "Example group" %}{% include "partials/_form.html" with form=form verb="Add example group" '
-        'cancel_url="" note="" choices="" choice_field="" bar="" %}{% endsection %}',
-        {"form": _ExampleNaming(data={})},
-        premise=(_ONE_QUESTION, _QUESTION_PARTS),
-    ),
-    # The filter bar ({% filter_bar %}) narrowed, with its way back and its
-    # count; with one choice and nothing narrowed; and with labeled choices
-    # asking another page, its verb its own. A new option of the tag comes
-    # with an entry here (test_filter_tags).
-    "form/filter-bar": Entry(
-        '{% filter_bar filtered=True clear="#" %}'
-        '<input type="search" name="q" value="example" placeholder="Filter example records" '
-        'aria-label="Filter example records">'
-        '<select name="state" aria-label="Example state"><option value="">Any example state</option>'
-        '<option value="on" selected>Online</option></select>'
-        '<select name="kind" aria-label="Example kind"><option value="">All example kinds</option></select>'
-        "{% summary %}<strong>3 of 12 example records</strong>, 1 needs a look{% endfilter_bar %}"
-    ),
-    "form/filter-bar-one": Entry(
-        '{% filter_bar %}<select name="year" aria-label="Example year"><option>2026</option>'
-        "<option>2025</option></select>{% endfilter_bar %}"
-    ),
-    "form/filter-bar-labeled": Entry(
-        '{% filter_bar verb="Check" action="#" css="example" data_example="example" %}'
-        '{% control_label "From" control="example-from" %}'
-        '<select id="example-from" name="from"><option>example-host-01</option></select>'
-        '{% control_label "To" control="example-to" %}'
-        '<select id="example-to" name="to"><option>example-host-02</option></select>'
-        "{% endfilter_bar %}"
-    ),
     # A control label ({% control_label %}) with no control, naming the answer
     # that follows it; the filter bar above draws it for its controls
     # (test_label_tags).
@@ -1960,58 +1542,6 @@ CATALOG = {
         '<li>{% entity "https://example.org/"|outside label="An example tool whose name runs long enough to wrap" %}</li>'
         "{% endlink_chips %}{% endsection %}"
     ),
-    # Whether a thing happened, week by week: hits, a miss, a week counted
-    # more than once, one nothing is known of, and a run up to now.
-    "chart/cadence": Entry(
-        '{% section "Example habits" %}{% include "partials/_cadence.html" %}{% endsection %}',
-        {
-            "cadence": Cadence(
-                "Example stretching",
-                "Each week it happened at least once.",
-                (
-                    CadenceWeek("Jan 5", hit=True, detail="Week of Jan 5: once"),
-                    CadenceWeek("Jan 12", hit=False, detail="Week of Jan 12: not done"),
-                    CadenceWeek("Jan 19", hit=False, no_data=True),
-                    CadenceWeek("Jan 26", hit=True, count=3, detail="Week of Jan 26: 3 times"),
-                    CadenceWeek("Feb 2", hit=True, detail="Week of Feb 2: once"),
-                    CadenceWeek("Feb 9", hit=True, count=2, detail="Week of Feb 9: twice"),
-                ),
-            )
-        },
-    ),
-    # Several things over the same weeks, one a link with a line about it.
-    "chart/cadence-matrix": Entry(
-        '{% section "Example habits" %}{% include "partials/_cadence_matrix.html" %}{% endsection %}',
-        {"matrix": _matrix()},
-    ),
-    # The same, sharing a row with a chart.
-    "chart/cadence-matrix-compact": Entry(
-        '<div class="two-col">{% section "Example habits" %}'
-        '{% include "partials/_cadence_matrix.html" with compact=True label="Example habit" %}{% endsection %}'
-        '{% include "partials/_line_chart.html" %}</div>',
-        {"matrix": _matrix(), "chart": _readings("Example minutes", "Minutes each day.", "Example run")},
-    ),
-    # The days of a week a thing is planned for: two on one day, a day with
-    # its note, the notes under the week and the link that changes it.
-    "chart/week-plan": Entry(
-        '{% include "partials/_week_plan.html" %}',
-        {
-            "plan": WeekPlan(
-                "Example week",
-                (
-                    PlannedDay("M", "Monday", (1,), detail="Example run"),
-                    PlannedDay("T", "Tuesday"),
-                    PlannedDay("W", "Wednesday", (1, 2), note="Long", detail="Example run and example lift"),
-                    PlannedDay("T", "Thursday"),
-                    PlannedDay("F", "Friday", (2,), detail="Example lift"),
-                    PlannedDay("S", "Saturday", (1,), note="Easy", detail="Example run"),
-                    PlannedDay("S", "Sunday"),
-                ),
-                notes=(PlanNote("Example runs", "3 a week"), PlanNote("Example lifts", "2 a week")),
-                url="/example/plan/",
-            )
-        },
-    ),
     # Readings that need reading, each tone: one a link, one with its next
     # step, one with neither a value nor an eyebrow.
     "part/insight-grid": Entry(
@@ -2039,17 +1569,6 @@ CATALOG = {
                 Insight("neutral", "", "An example reading with nothing to show", "", "An example interpretation."),
             ]
         },
-    ),
-    # A file field that takes a drop: as it is first drawn, and sent with
-    # nothing in it.
-    "form/dropzone": Entry(
-        '{% section "Example import" %}{% include "partials/_dropzone.html" with field=form.exports '
-        'title="Drop example exports here" hint="CSV or JSON, several at once" %}{% endsection %}',
-        {"form": _ExampleFiles()},
-    ),
-    "form/dropzone-errors": Entry(
-        '{% section "Example import" %}{% include "partials/_dropzone.html" with field=form.exports %}{% endsection %}',
-        {"form": _ExampleFiles(data={})},
     ),
     # A command to paste somewhere else, short and long enough to wrap at its
     # slashes and spaces.
@@ -2439,53 +1958,3 @@ CATALOG = {
         {"old": "example:2026.1.0", "new": "example:2026.3.0"},
     ),
 }
-
-
-def part_page(name, markup, before="", after=""):
-    """A page titled ``name``, of HQ's stylesheets, with ``markup`` alone in
-    its main, and the frame's parts base.html draws before and after it."""
-
-    return (
-        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        f"<title>{escape(name)}</title>{stylesheets()}</head>"
-        f'<body>{before}<main class="content" id="content">{markup}</main>{after}</body></html>'
-    )
-
-
-class CatalogLayoutTests(LayoutBrowserTests):
-    """Every catalog entry under the whole survey, without script, at the
-    sparse widths, which cross the stylesheet's media queries: closed, in both
-    palettes, and with every disclosure open."""
-
-    @classmethod
-    @override
-    def render(cls):
-        return {name: entry.page(name) for name, entry in CATALOG.items()}
-
-    def test_every_entry_keeps_the_layout_rules_without_script(self):
-        for name in CATALOG:
-            for width in SPARSE_WIDTHS:
-                if not self.loaded(name, width):
-                    continue
-                self.hold(name, width, [self.draws_the_state_it_stands_for, self.every_layout_check_holds])
-                self.in_scheme("dark")
-                self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
-                self.in_scheme("light")
-                self.hold(name, width, [self.open_every_disclosure, self.every_layout_check_holds], disclosures="open")
-
-    def test_every_drawing_is_drawn_on_a_phone(self):
-        """A chart, a trend, a bar or a calendar is drawn wherever what holds
-        it is: on a phone a drawing hidden for want of room is a figure that
-        shows nothing, when the table beside it or the line under it has the
-        room to show it."""
-
-        for name in CATALOG:
-            if not self.loaded(name, PHONE_SCREEN[0]):
-                continue
-            with self.subTest(page=name):
-                self.assertEqual(self.read([(_UNDRAWN, SELECTORS["drawing"])])[0], [])
-
-    def draws_the_state_it_stands_for(self, name):
-        if premise := CATALOG[name].premise:
-            self.assertEqual(self.read([premise])[0], [], f"{name} does not draw the state it stands for")

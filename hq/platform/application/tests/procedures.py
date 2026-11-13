@@ -1,4 +1,4 @@
-"""Synthetic ``example.*`` procedures and machines, supplied as an extension and HQ's facts would be."""
+"""Synthetic ``example.*`` procedures and machines, supplied as an adopted catalog and HQ's facts would be."""
 
 from typing import Annotated, Any
 from unittest.mock import patch
@@ -55,7 +55,10 @@ class Supply:
         self.manifests = manifests
         self.machines: tuple[Machine, ...] = (Machine(APP), Machine(DB), Machine(EDGE))
         for patcher in (
-            patch("hq.platform.application.plugins.plugin_operations", side_effect=lambda: self.manifests),
+            patch("hq.platform.application.automation_adoption.generation", return_value="supplied"),
+            patch(
+                "hq.platform.application.automation_adoption.manifests", side_effect=lambda _generation: self.manifests
+            ),
             patch("hq.platform.application.automation_runs.machine_catalog", side_effect=lambda: self.machines),
         ):
             patcher.start()

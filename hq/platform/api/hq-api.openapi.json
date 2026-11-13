@@ -2159,7 +2159,7 @@
                   "loc": [
                     "kind"
                   ],
-                  "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone', 'cloudflare.contact_inbox' or 'automation.operation'",
+                  "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone', 'cloudflare.contact_inbox', 'automation.operation' or 'automation.source'",
                   "type": "literal_error"
                 }
               ],
@@ -2174,7 +2174,7 @@
                 "tool": "describe_resources"
               }
             },
-            "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox, automation.operation."
+            "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox, automation.operation, automation.source."
           },
           "ok": false
         },
@@ -2183,25 +2183,25 @@
       "listInfrastructureV2OK": {
         "dataValue": {
           "data": {
-            "count": 42,
+            "count": 46,
             "items": [
               {
                 "enabled": true,
                 "health": {
-                  "label": "Working",
+                  "label": "Not checked",
                   "message": "",
-                  "reason": "Reconciled",
-                  "state": "healthy"
+                  "reason": "",
+                  "state": "declared"
                 },
-                "in_sync": true,
-                "key": "hq-dns",
-                "kind": "adguard.rewrite",
-                "last_observed_at": "2026-01-15T09:30:00+00:00",
+                "in_sync": false,
+                "key": "automation-source",
+                "kind": "automation.source",
+                "last_observed_at": null,
                 "public_effect": false
               }
             ],
             "next": null,
-            "total": 42,
+            "total": 46,
             "truncated": false
           },
           "ok": true
@@ -3329,12 +3329,12 @@
                 "connection": 10,
                 "machine": 3,
                 "registry": 1,
-                "resource": 42,
+                "resource": 46,
                 "service": 8,
                 "target": 2,
                 "zone": 1
               },
-              "nodes": 128
+              "nodes": 132
             },
             "trace": null
           },
@@ -3613,6 +3613,30 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/AddressLookedUp"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
+      "AdoptedSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/Adopted"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -5435,6 +5459,33 @@
         "description": "The notes kept on it, for HQ only. Empty for none.",
         "type": "string"
       },
+      "Adopted": {
+        "additionalProperties": false,
+        "description": "What an adoption did: whether the catalog moved, and how it widened.",
+        "properties": {
+          "adopted": {
+            "description": "False when the proposal was the catalog adopted already.",
+            "type": "boolean"
+          },
+          "digest": {
+            "description": "The adopted catalog's digest, which names it.",
+            "type": "string"
+          },
+          "widened": {
+            "description": "What it lets a run do that the catalog before did not.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "adopted",
+          "digest",
+          "widened"
+        ],
+        "type": "object"
+      },
       "AdvisoryPart": {
         "additionalProperties": false,
         "properties": {
@@ -6217,6 +6268,70 @@
       "AttemptCount": {
         "description": "How many times a controller has tried it.",
         "type": "integer"
+      },
+      "AutomationSourceAdoptRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The proposal to adopt, and why.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "proposal": {
+                "description": "The proposal a Refresh made, by its id.",
+                "minimum": 1,
+                "type": "integer"
+              },
+              "reason": {
+                "default": "",
+                "description": "Why it is adopted, kept with the adoption.",
+                "maxLength": 300,
+                "type": "string"
+              }
+            },
+            "required": [
+              "proposal"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "AutomationSourceRefreshRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "A Refresh takes nothing but why it was asked and its retry key: the\nrepository is the host's configuration.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "reason": {
+                "default": "",
+                "description": "Why it is refreshed, kept with the scan.",
+                "maxLength": 300,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
       },
       "AwaitingApproval": {
         "additionalProperties": false,
@@ -12095,12 +12210,14 @@
           "cloudflare.dns_record",
           "cloudflare.zone",
           "cloudflare.contact_inbox",
-          "automation.operation"
+          "automation.operation",
+          "automation.source"
         ],
         "type": "string",
         "x-enumDescriptions": {
           "adguard.rewrite": "Internal DNS record",
           "automation.operation": "Automation procedure",
+          "automation.source": "Automation source",
           "caddy.route": "Caddy route",
           "cloudflare.contact_inbox": "Contact inbox",
           "cloudflare.dns_record": "Public DNS record",
@@ -12739,7 +12856,7 @@
         "type": "string"
       },
       "OperationAction": {
-        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes` or `run`.",
+        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run` or `scan`.",
         "type": "string"
       },
       "OperationCommand": {
@@ -18465,6 +18582,148 @@
         ]
       }
     },
+    "/api/v2/capabilities/automation.source.adopt/": {
+      "post": {
+        "description": "Make a proposal the catalog of procedures HQ runs, once a person agrees. A commit GitHub did not verify, or one carrying an Ansible configuration or plugins, is refused.",
+        "operationId": "automationSourceAdoptV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationSourceAdoptRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/AdoptedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Adopt the procedures",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-capability": "automation.source.adopt",
+        "x-hq-effect": "infrastructure_change",
+        "x-hq-required-capabilities": [
+          "manage_infrastructure"
+        ]
+      }
+    },
+    "/api/v2/capabilities/automation.source.refresh/": {
+      "post": {
+        "description": "Ask the automation worker which procedures its repository holds, and keep what it finds as a proposal. Nothing it finds can run until it is adopted.",
+        "operationId": "automationSourceRefreshV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationSourceRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationQueuedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Refresh the procedures",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-capability": "automation.source.refresh",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "manage_infrastructure"
+        ]
+      }
+    },
     "/api/v2/capabilities/calendar.entry.create/": {
       "post": {
         "description": "Put an event on the calendar.",
@@ -22619,6 +22878,8 @@
                 "asset.delete",
                 "asset.update",
                 "asset.upsert",
+                "automation.source.adopt",
+                "automation.source.refresh",
                 "calendar.entry.create",
                 "calendar.entry.delete",
                 "calendar.entry.update",
@@ -25245,7 +25506,8 @@
                     "cloudflare.dns_record",
                     "cloudflare.zone",
                     "cloudflare.contact_inbox",
-                    "automation.operation"
+                    "automation.operation",
+                    "automation.source"
                   ],
                   "type": "string"
                 },
@@ -27367,6 +27629,13 @@
       "name": "hq.containers",
       "parent": "hq.infrastructure",
       "summary": "Containers"
+    },
+    {
+      "description": "HQ's background jobs and their runs.",
+      "kind": "nav",
+      "name": "hq.jobs",
+      "parent": "hq.infrastructure",
+      "summary": "Jobs"
     },
     {
       "description": "The machines the estate runs on, as the services and agents on them report them.",

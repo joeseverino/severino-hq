@@ -1,5 +1,5 @@
 """The automation worker as a program: ``python -m hq_runner`` claims queued runs
-over the bridge, one pass at a time, until none is left, then exits.
+and scans over the bridge, one pass at a time, until none is left, then exits.
 
 Everything it reads is named by its environment, set by the host's launcher:
 where the bridge, the journal, the connections document, the ssh directory and
@@ -18,11 +18,11 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-from . import ansible, connections, procedures
+from . import ansible, catalog, connections, procedures
 from .bridge import Bridge, BridgeError
 from .claim import Refused
 from .journal import Journal
-from .worker import Bridge as BridgeProtocol, Runner, work_once
+from .worker import Bridge as BridgeProtocol, Runner, Scan, work_once
 
 # The variables the launcher sets: the host side calls this worker
 # "automation", since "runner" there is the Actions runner's word.
@@ -33,7 +33,6 @@ CONNECTIONS = "HQ_AUTOMATION_CONNECTIONS"
 SSH_DIR = "HQ_AUTOMATION_SSH_DIR"
 SCRATCH = "HQ_AUTOMATION_SCRATCH"
 REPOSITORY = "HQ_AUTOMATION_REPOSITORY"
-PROJECT_DIR = "HQ_AUTOMATION_PROJECT_DIR"
 TOKEN_FILE = "HQ_AUTOMATION_TOKEN_FILE"  # noqa: S105 a variable's name, not a token
 # The longest token file read: a GitHub installation token is far shorter.
 _TOKEN_LIMIT = 4096
@@ -68,9 +67,6 @@ class Config:
         repository = environ.get(REPOSITORY, "").strip()
         if not repository:
             raise ConfigError(f"{REPOSITORY} is not set")
-        directory = environ.get(PROJECT_DIR, "").strip() or "."
-        if directory != "." and not procedures.safe_path(directory):
-            raise ConfigError(f"{PROJECT_DIR} is not a plain relative path")
         return cls(
             controller_id=environ.get(ID, "").strip() or socket.gethostname(),
             bridge_socket=str(path(BRIDGE_SOCKET)),
@@ -78,7 +74,7 @@ class Config:
             connections=path(CONNECTIONS),
             ssh_dir=path(SSH_DIR),
             scratch=path(SCRATCH),
-            project=procedures.Project(repository, directory),
+            project=procedures.Project(repository),
             token_file=path(TOKEN_FILE) if environ.get(TOKEN_FILE, "").strip() else None,
         )
 
@@ -105,8 +101,27 @@ def _reach(config: Config) -> Callable[[str], connections.Target | None]:
     return lambda host: read().get(host)
 
 
-def drain(config: Config, bridge: BridgeProtocol, *, runner: Callable[[Path], Runner] = ansible.runner) -> int:
-    """Work every queued run, each in a pass of its own; answer how many."""
+def _scan(config: Config, scratch: Path, token: str) -> Scan:
+    """A pass's scan of the configured repository, read through Ansible and
+    GitHub's API as the worker reaches them."""
+
+    return lambda: catalog.scan(
+        config.project,
+        scratch=scratch,
+        token=token,
+        role_spec=ansible.role_spec(scratch),
+        verify=catalog.github_verify(config.project, token),
+    )
+
+
+def drain(
+    config: Config,
+    bridge: BridgeProtocol,
+    *,
+    runner: Callable[[Path], Runner] = ansible.runner,
+    scan: Callable[[Config, Path, str], Scan] = _scan,
+) -> int:
+    """Work every queued run and scan, each in a pass of its own; answer how many."""
 
     journal = Journal(config.journal)
     worked = 0
@@ -121,6 +136,7 @@ def drain(config: Config, bridge: BridgeProtocol, *, runner: Callable[[Path], Ru
                 reach=_reach(config),
                 journal=journal,
                 runner=runner(scratch),
+                scan=scan(config, scratch, token),
                 secrets=(token,) if token else (),
             )
         if outcome is None:
@@ -128,7 +144,7 @@ def drain(config: Config, bridge: BridgeProtocol, *, runner: Callable[[Path], Ru
         worked += 1
         conditions = outcome.report.get("conditions") or [{}]
         ended = "succeeded" if outcome.report["success"] else f"ended {conditions[0].get('reason', 'Failed')}"
-        print(f"hq_runner: run {outcome.operation} {ended}", flush=True)
+        print(f"hq_runner: operation {outcome.operation} {ended}", flush=True)
 
 
 def main(environ: Mapping[str, str] = os.environ) -> int:
@@ -138,7 +154,7 @@ def main(environ: Mapping[str, str] = os.environ) -> int:
     except (ConfigError, BridgeError, Refused) as exc:
         print(f"hq_runner: {exc}", file=sys.stderr)
         return 1
-    print(f"hq_runner: {worked} runs worked, none left", flush=True)
+    print(f"hq_runner: {worked} operations worked, none left", flush=True)
     return 0
 
 

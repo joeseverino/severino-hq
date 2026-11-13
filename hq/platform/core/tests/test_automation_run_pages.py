@@ -7,12 +7,11 @@ from urllib.parse import parse_qs, urlsplit
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
 
-from hq.platform.application.tests.example_procedures import supplied
 from hq.platform.application.tests.markup import select, within
 from hq.platform.core import seeds
+from hq.platform.core.example_estate.automation import CACHE_FLUSH
 from hq.platform.core.example_estate.names import MACHINE
 from hq.platform.core.example_estate.testing import throwaway_media
-from tests.fixtures.example_hq_plugin.operations import CACHE_FLUSH, operations
 
 RUN = f"automation.{CACHE_FLUSH}.run"
 
@@ -41,24 +40,25 @@ def _more(html, section: str, path: str) -> dict[str, list[str]]:
 class AutomationRunPageTests(TestCase):
     @classmethod
     def setUpTestData(cls):
-        with supplied(), throwaway_media(), seeds.built("showcase") as owner:
+        with throwaway_media(), seeds.built("showcase") as owner:
             cls.owner = owner
 
     def setUp(self):
         self.client.force_login(self.owner)
 
     def page(self, url: str) -> str:
-        with supplied():
-            from hq.platform.application.work_runs import recent_runs, runs_on
+        from hq.platform.application.work_runs import recent_runs, runs_on
 
-            response = self.client.get(url)
-            self.runs = {"command": recent_runs(CACHE_FLUSH), "machine": runs_on(MACHINE)}
+        response = self.client.get(url)
+        self.runs = {"command": recent_runs(CACHE_FLUSH), "machine": runs_on(MACHINE)}
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
 
-    def test_a_procedure_s_page_states_what_its_manifest_declares(self):
+    def test_a_procedure_s_page_states_what_its_adopted_catalog_declares(self):
+        from hq.platform.application.automation_runs import operation_registry
+
         html = self.page(reverse("command", args=[RUN]))
-        manifest = next(manifest for manifest in operations() if manifest.id == CACHE_FLUSH)
+        manifest = operation_registry()[CACHE_FLUSH]
         about = " ".join(element.words for element in select(html, "id", "command-about"))
 
         for statement in (*manifest.preconditions, *manifest.verification, *manifest.recovery):

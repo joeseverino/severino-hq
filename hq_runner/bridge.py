@@ -15,7 +15,7 @@ import socket
 import stat
 import struct
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import PurePosixPath
 from typing import Any, override
 from urllib.parse import urlencode
@@ -156,13 +156,15 @@ class Bridge:
             raise BridgeError("bridge answer does not match the contract: not an object")
         return decoded
 
-    def claim(self, controller_id: str, *, capability: str, lease_seconds: int, attempt: str) -> dict[str, Any]:
+    def claim(
+        self, controller_id: str, *, capabilities: Sequence[str], lease_seconds: int, attempt: str
+    ) -> dict[str, Any]:
         return self.call(
             "claim",
             {
                 "controller-id": controller_id,
                 "lease-seconds": lease_seconds,
-                "capability": [capability],
+                "capability": list(capabilities),
                 "attempt": attempt,
             },
         )

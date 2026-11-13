@@ -392,9 +392,6 @@ class WorkRunsBudgetTests(TestCase):
         return len(page)
 
     def test_a_page_and_a_machine_s_runs_cost_the_same_at_both_sizes(self):
-        from .example_procedures import supplied
-
-        with supplied():
-            small, large = at_both_sizes(self._queries)
+        small, large = at_both_sizes(self._queries)
 
         self.assertEqual(large, small)

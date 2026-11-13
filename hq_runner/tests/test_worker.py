@@ -1,6 +1,8 @@
 """A pass of the worker runs only what its claim binds it to, holds the run's
 lease while it runs, stops when HQ or the timeout says so, never runs a run a
-crash may have started, and reports a bounded outcome no secret reaches.
+crash may have started, and reports a bounded outcome no secret reaches; a
+scan it claims reports the catalog it read, and a scan a crash cut short is
+read again.
 
 Every pass here runs over the fake bridge and runner (``fakes``): no host,
 socket or credential.
@@ -11,7 +13,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from hq_runner.claim import CAPABILITY
+from hq_runner.claim import CAPABILITIES
 from hq_runner.journal import Journal
 from hq_runner.worker import LEASE_SECONDS, RENEW_EVERY_SECONDS, work_once
 
@@ -31,7 +33,7 @@ class PassTestCase(unittest.TestCase):
         self.journal = Journal(Path(scratch.name) / "journal.json")
         self.clock = fakes.Clock()
 
-    def work(self, bridge: fakes.Bridge, runner: fakes.Runner):
+    def work(self, bridge: fakes.Bridge, runner: fakes.Runner, scan=fakes.scanned, secrets=()):
         return work_once(
             bridge,
             controller_id=fakes.WORKER,
@@ -39,7 +41,9 @@ class PassTestCase(unittest.TestCase):
             reach=fakes.reach,
             journal=self.journal,
             runner=runner,
+            scan=scan,
             clock=self.clock,
+            secrets=secrets,
         )
 
     def only_report(self, bridge: fakes.Bridge) -> dict:
@@ -81,8 +85,9 @@ class SuccessTests(PassTestCase):
         self.assertEqual(run.hosts, (fakes.APP,))
         self.assertEqual(run.parameters, {"service": "db"})
         action, sent = bridge.calls[0]
-        self.assertEqual((action, sent["capability"]), ("claim", "automation.operation:run"))
-        self.assertEqual(sent["capability"], CAPABILITY)
+        self.assertEqual(action, "claim")
+        self.assertEqual(sent["capabilities"], CAPABILITIES)
+        self.assertIn("automation.operation:run", sent["capabilities"])
 
     def test_nothing_waiting_runs_nothing_and_reports_nothing(self):
         bridge = fakes.Bridge()
@@ -107,20 +112,18 @@ class FailedRunTests(PassTestCase):
 
 
 class TimeoutTests(PassTestCase):
-    def test_a_run_past_its_procedure_s_timeout_is_stopped_and_reported_timed_out(self):
+    def test_a_run_ansible_runner_ended_at_its_timeout_reports_timed_out(self):
         bridge = fakes.Bridge(fakes.pending(timeout=30))
-
-        def later():
-            self.clock.now += 20
-
-        runner = fakes.Runner(fakes.OUTCOMES, between=later)
+        runner = fakes.Runner(fakes.OUTCOMES[:2], status="timeout")
 
         self.work(bridge, runner)
 
+        (run,) = runner.runs
+        self.assertEqual(run.timeout_seconds, 30)
         report = self.only_report(bridge)
         self.assertFalse(report["success"])
         self.assertEqual(report["conditions"][0]["reason"], "TimedOut")
-        # Stopped after the second task, when 40 of its 30 seconds had passed.
+        self.assertIn("30 second", report["message"])
         self.assertEqual(len(report["events"]), 2)
 
 
@@ -302,3 +305,68 @@ class RestartTests(PassTestCase):
 
         self.assertEqual(runner.runs, [])
         self.assertTrue(self.only_report(bridge)["success"])
+
+
+class ScanTests(PassTestCase):
+    CATALOG = {
+        "branch": "main",
+        "revision": fakes.REVISION,
+        "verification": {"verified": True, "reason": "valid", "committer": "web-flow"},
+        "procedures": [],
+        "files": [],
+        "unpinned": [],
+    }
+
+    def test_a_claimed_scan_reports_its_catalog_under_its_record_s_generation_and_runs_nothing(self):
+        bridge = fakes.Bridge(fakes.scan_pending(generation=3))
+        runner = fakes.Runner(fakes.RECORDED)
+
+        outcome = self.work(bridge, runner, scan=lambda: self.CATALOG)
+
+        self.assertEqual(outcome.operation, fakes.SCAN_OPERATION)
+        report = self.only_report(bridge)
+        self.assertTrue(report["success"])
+        self.assertEqual(report["observed_generation"], 3)
+        self.assertEqual(report["catalog"], self.CATALOG)
+        self.assertEqual(report["events"], [])
+        self.assertEqual(runner.runs, [])
+        self.assertIsNone(self.journal.read())
+
+    def test_a_scan_that_cannot_read_its_source_reports_why_and_no_catalog(self):
+        from hq_runner.claim import Refused
+
+        def refused():
+            raise Refused("FetchFailed", "git fetch failed: ghs_example0123456789token was refused")
+
+        bridge = fakes.Bridge(fakes.scan_pending())
+
+        self.work(bridge, fakes.Runner(), scan=refused, secrets=("ghs_example0123456789token",))
+
+        report = self.only_report(bridge)
+        self.assertFalse(report["success"])
+        self.assertNotIn("catalog", report)
+        self.assertEqual(report["conditions"][0]["reason"], "FetchFailed")
+        self.assertNotIn("ghs_example0123456789token", json.dumps(report))
+
+    def test_the_token_never_reaches_a_catalog(self):
+        token = "ghs_example0123456789token"
+        leaked = {**self.CATALOG, "files": [{"path": f"notes/{token}.txt", "object": fakes.REVISION}]}
+        bridge = fakes.Bridge(fakes.scan_pending())
+
+        self.work(bridge, fakes.Runner(), scan=lambda: leaked, secrets=(token,))
+
+        self.assertNotIn(token, json.dumps(self.only_report(bridge)))
+
+    def test_a_scan_a_crash_cut_short_is_read_again_rather_than_reported_unknown(self):
+        def crash():
+            raise SystemExit("the worker stopped")
+
+        with self.assertRaises(SystemExit):
+            self.work(fakes.Bridge(fakes.scan_pending()), fakes.Runner(), scan=crash)
+        bridge = fakes.Bridge(fakes.scan_pending())
+
+        self.work(bridge, fakes.Runner(), scan=lambda: self.CATALOG)
+
+        report = self.only_report(bridge)
+        self.assertTrue(report["success"])
+        self.assertEqual(report["catalog"], self.CATALOG)

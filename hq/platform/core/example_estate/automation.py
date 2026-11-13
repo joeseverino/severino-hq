@@ -1,16 +1,17 @@
-"""The estate's automation runs: weeks of one procedure on the server, and a
-run in each state a run can be in now, each asked for and carried out through
-the paths a real one takes (``automation_runs.request_run``, then the worker's
-claim, renewal and report, or its lease running out).
+"""The estate's automation: the example repository's procedures adopted, then
+weeks of one procedure's runs on the server and a run in each state a run can
+be in now, each asked for and carried out through the paths a real one takes
+(a Refresh, the worker's scan, Adopt; then ``automation_runs.request_run``,
+the worker's claim, renewal and report, or its lease running out).
 
-The procedures are whatever ``example.*`` ones the composition supplies (the
-example plugin's, ``tests/fixtures/example_hq_plugin/operations.py``), since
-HQ names none of its own; with none supplied there is nothing to run, and the
-estate has no runs. A procedure has one active run, and a machine one active
-run, at a time, so the run that waits and the run whose worker stopped are
-each another procedure's on another machine.
+The repository is synthetic, as a scan of it would report it: three
+``example.*`` procedures, each with a default for every input, so a seed can
+ask for a run of one it knows only by its id. A procedure has one active run,
+and a machine one active run, at a time, so the run that waits and the run
+whose worker stopped are each another procedure's on another machine.
 """
 
+import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import timedelta
@@ -20,9 +21,11 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
-from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
+from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
+from hq.platform.application.automation_adoption import AdoptProposal, adopt, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
 from hq.platform.application.automation_runs import capability_name, command_type, operation_registry, request_run
+from hq.platform.application.automation_sources import RefreshCommand, refresh
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
@@ -37,6 +40,153 @@ from .names import LAPTOP_NAME, MACHINE, PHONE_NAME
 # The automation worker, as it names itself when it claims.
 WORKER = "example-automation-worker"
 CLAIMS_RUNS = ((OPERATION_KIND, "run"),)
+CLAIMS_SCANS = ((SOURCE_KIND, "scan"),)
+
+CACHE_FLUSH = "example.cache_flush"
+DISK_REPORT = "example.disk_report"
+PACKAGE_UPGRADE = "example.package_upgrade"
+# The commit the example repository's scan reads.
+REVISION = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _procedure(name: str, role: str, declaration: dict[str, Any], **found: Any) -> dict[str, Any]:
+    """One procedure as the worker's scan reports it (``ScannedProcedure``)."""
+
+    return {
+        "sidecar": f"playbooks/{name}.hq.yml",
+        "playbook": f"playbooks/{name}.yml",
+        "declaration": {"target_kinds": ["machine"], **declaration},
+        "roles": [{"role": role, "argument_spec": found.pop("argument_spec")}],
+        "problems": [],
+        **found,
+    }
+
+
+PROCEDURES = (
+    _procedure(
+        "cache_flush",
+        "cache",
+        {
+            "id": CACHE_FLUSH,
+            "effect": "infrastructure_change",
+            "timeout_seconds": 300,
+            "retry": "observe_first",
+            "recovery": ["The cache refills on its own as it is read."],
+        },
+        title="Empty a cache",
+        preconditions=["The cache's service is running on the machine."],
+        verification=["The cache reports no entries."],
+        argument_spec={
+            "short_description": "Empty one cache",
+            "options": {
+                "cache": {
+                    "type": "str",
+                    "choices": ["web", "api"],
+                    "default": "web",
+                    "description": "The cache to empty.",
+                }
+            },
+        },
+    ),
+    _procedure(
+        "disk_report",
+        "disk",
+        {
+            "id": DISK_REPORT,
+            "effect": "read",
+            "timeout_seconds": 60,
+            "retry": "safe",
+            "recovery": ["Nothing changes, so nothing needs recovering."],
+            "inputs": {"mount": {"pattern": "^/[A-Za-z0-9/_.-]*$", "max_length": 200}},
+        },
+        title="Report a mount's use",
+        preconditions=["The mount point exists on the machine."],
+        verification=["The report names the mount's size and use."],
+        argument_spec={
+            "short_description": "Report one mount",
+            "options": {"mount": {"type": "path", "default": "/", "description": "The mount point to report on."}},
+        },
+    ),
+    _procedure(
+        "package_upgrade",
+        "packages",
+        {
+            "id": PACKAGE_UPGRADE,
+            "effect": "infrastructure_change",
+            "privilege": "example.package_admin",
+            "timeout_seconds": 1800,
+            "retry": "never",
+            "recovery": ["Pin the package back to its last version and restart what uses it."],
+        },
+        title="Upgrade packages",
+        preconditions=["The machine's package index is reachable."],
+        verification=["No upgradable package asked for is left."],
+        argument_spec={
+            "short_description": "Upgrade the machine's packages",
+            "options": {
+                "security_only": {
+                    "type": "bool",
+                    "default": True,
+                    "description": "Whether to apply only security updates.",
+                }
+            },
+        },
+    ),
+)
+
+
+def _files() -> list[dict[str, str]]:
+    paths = sorted(
+        {
+            *(path for procedure in PROCEDURES for path in (procedure["sidecar"], procedure["playbook"])),
+            *(f"roles/{role['role']}/tasks/main.yml" for procedure in PROCEDURES for role in procedure["roles"]),
+            *(
+                f"roles/{role['role']}/meta/argument_specs.yml"
+                for procedure in PROCEDURES
+                for role in procedure["roles"]
+            ),
+            "README.md",
+        }
+    )
+    return [{"path": path, "object": hashlib.sha1(path.encode(), usedforsecurity=False).hexdigest()} for path in paths]
+
+
+def catalog() -> dict[str, Any]:
+    """The example repository as the worker's scan reports it (``SourceCatalog``)."""
+
+    return {
+        "branch": "main",
+        "revision": REVISION,
+        "verification": {"verified": True, "reason": "valid", "committer": "example-maintainer"},
+        "procedures": [dict(procedure) for procedure in PROCEDURES],
+        "files": _files(),
+        "unpinned": [],
+    }
+
+
+def adopted(person: Principal) -> None:
+    """The example repository refreshed by ``person``, scanned by its worker,
+    and what it found adopted by ``person``."""
+
+    with doors.page("command", name="automation.source.refresh"):
+        queued = refresh(RefreshCommand(idempotency_key="example-refresh"), principal=person)["operation"]
+    with doors.controller("claim"):
+        claimed = claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)["operation"]
+    if claimed is None or claimed["id"] != queued["id"]:
+        raise RuntimeError("The estate's scan was not the one its worker claimed.")
+    scan = OperationRequest.objects.get(pk=queued["id"])
+    report = ControllerReport(
+        success=True, observed_generation=scan.input["generation"], message="Read the procedures.", catalog=catalog()
+    )
+    with doors.controller("report"):
+        report_operation(queued["id"], report, controller_id=WORKER)
+    scan.refresh_from_db()
+    with doors.page("command", name="automation.source.adopt"):
+        adopt(AdoptProposal(proposal=scan.result["proposal"]), principal=person)
+    # A seed's transaction has not committed, so this process reads what it adopted now.
+    catch_up()
+
+
 # The id the agent's runs are found by, as an investigation's would be.
 CORRELATION = "example-investigation-7"
 # Where the run that waits and the run whose worker stopped act.
@@ -70,7 +220,7 @@ FAILED = Ended(
 
 
 def procedures() -> list[OperationManifest]:
-    """The ``example.*`` procedures supplied, each one a seed can ask for with no inputs, by id."""
+    """The ``example.*`` procedures adopted, each one a seed can ask for with no inputs, by id."""
 
     return [
         manifest
@@ -88,14 +238,14 @@ def runs(
     waiting_on: str = WAITING_ON,
     past: int | None = None,
 ) -> None:
-    """Past runs of the first procedure on ``server``, ``past`` of them (one of
-    each ending by default) three days apart, then the three a run can be in now."""
+    """The example procedures adopted, then past runs of the first on
+    ``server``, ``past`` of them (one of each ending by default) three days
+    apart, then the three a run can be in now."""
 
-    supplied = procedures()
-    if not supplied:
-        return
     owner = owner or get_user_model().objects.order_by("pk").first()
     person = web_principal(owner) if owner is not None else cli_principal()
+    adopted(person)
+    supplied = procedures()
     agent = token_principal(CLAIMS, MCP_INTERFACE)
     first, *others = supplied
     approved = replace(agent, approved_by=person.actor)

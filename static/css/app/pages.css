@@ -4,55 +4,22 @@
 
 /* ----- Derived topology ------------------------------------------------- */
 
-/* A lens is chosen by following a link, so these are the shared chip primitive,
-   whose current choice is drawn from its aria-current. */
-.topology-lens-note { margin: 0 0 var(--space-5); font-size: var(--text-sm); }
-.topology-trace-bar {
-  display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-8); align-items: center;
-  margin-bottom: var(--space-6); padding: var(--space-6); border: 1px solid var(--accent);
-  border-radius: var(--radius); background: var(--accent-tint);
-}
-.topology-trace-bar > div { display: grid; gap: 1px; margin-right: auto; }
-.topology-trace-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-.topology-trace-controls .scope-chip { background: var(--surface); }
-.topology-hop { display: flex; align-items: center; gap: var(--space-3); }
-
+/* The map (partials/_topology_map.html) and the selected node's details. The
+   details sit beside the lanes where there is room and below them where
+   there is not; never in a lane. */
 .topology-workspace {
+  display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0;
   background: var(--surface-2);
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the canvas clips the drawing it pans, not text */
   overflow: clip;
 }
-.topology-toolbar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-8);
-  padding: var(--space-5); border-bottom: 1px solid var(--line); background: var(--surface);
-}
-.topology-search { flex: 1 1 240px; }
-.topology-search input { width: 100%; min-height: 36px; }
-.topology-kind-filters {
-  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);
-  min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0;
-}
-.topology-kind-filters label {
-  display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-2);
-  font-size: var(--text-xs); white-space: nowrap;
-}
-.topology-kind-filters input { accent-color: var(--accent); }
-/* A control the script shows only when it has something to act on. */
-.topology-toolbar [hidden] { display: none; }
-.topology-hint { margin: 0; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--line-2); font-size: var(--text-xs); }
-/* Lanes wrap into rows, so every lane is on screen at any width. The 1px
-   gap between lanes is drawn by each lane's own ring, which leaves the empty
-   cells of a short last row blank. */
-/* The map and the selected node's details. The details sit beside the lanes
-   where there is room and below them where there is not; never in a lane. */
-.topology-stage { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 /* A viewport query, not a container one: the workspace holds buttons, and
    inside a size container Chrome restyles them once the container is measured
    and runs their transitions from nothing (docs/Design.md). */
 @media (min-width: 1180px) {
-  .topology-stage:has(> .topology-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
+  .topology-workspace:has(> .topology-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
   /* Beside a map the page scrolls, the details stay in view. */
-  .topology-stage > .topology-detail:not([hidden]) {
+  .topology-workspace > .topology-detail:not([hidden]) {
     position: sticky; top: var(--site-header-height); align-self: start;
     max-height: calc(100vh - var(--site-header-height)); overflow-y: auto; border-top: 0; border-left: 1px solid var(--line);
   }
@@ -114,54 +81,15 @@
   min-width: 0; padding: var(--space-6); border-top: 1px solid var(--line); background: var(--surface);
 }
 .topology-detail[aria-busy="true"] { opacity: .6; }
-.topology-node-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.topology-node-actions form { display: inline-flex; }
 /* A name is read whole: it wraps inside the node rather than being cut. */
 .topology-node-title strong > * { display: block; }
 .topology-node-link { color: inherit; text-decoration: none; }
 .topology-node-link:hover, .topology-node-link:focus-visible { color: var(--accent); text-decoration: underline; }
 
-/* An edge stated from the node standing at one end of it. The arrow and the
-   heading both carry the direction, because a verb alone reads the same in
-   either, and the whole row is the link, so walking the graph is one click
-   per hop. */
-.topology-relation-set { display: grid; gap: var(--space-1); }
-.topology-relation-heading { margin: var(--space-2) 0 0; }
-.topology-relation-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-/* One relationship: the link to the other end on its own line, then each
-   value it carries on a line of its own with its source and age. */
-.topology-relation { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
-.topology-relation-values {
-  display: grid; gap: var(--space-2); flex: 1 1 100%; min-width: 0;
-  margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-7); list-style: none; font-size: var(--text-xs);
-}
-.topology-relation-values li { display: grid; gap: 1px; min-width: 0; }
-.topology-relation-value { overflow-wrap: anywhere; }
-.topology-relation-source { flex: 1 1 100%; margin: 0; font-size: var(--text-2xs); overflow-wrap: anywhere; }
-.topology-relation-link {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 var(--space-3);
-  align-items: center; flex: 1 1 auto; min-width: 0; padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line-2); border-radius: var(--radius-sm);
-  background: var(--surface-2); color: var(--ink-2); text-decoration: none;
-  font-size: var(--text-xs); transition: border-color 100ms ease, background 100ms ease;
-}
-.topology-relation-link:hover, .topology-relation-link:focus-visible {
-  border-color: var(--accent); background: var(--accent-tint); color: var(--ink);
-}
-.topology-relation-arrow { grid-area: 1 / 1 / 3 / 2; color: var(--muted); font-size: var(--text-sm); }
-.topology-relation-out .topology-relation-arrow { color: var(--accent-2); }
-.topology-relation-verb {
-  grid-area: 1 / 2 / 2 / 4; font-size: var(--text-3xs); color: var(--muted);
-}
-.topology-relation .pill { flex: 0 0 auto; }
 .btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
 .topology-node:has(> [aria-current]) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
 .topology-node.is-related { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .topology-node[hidden], .topology-lane[hidden] { display: none; }
-/* A fixed reading height, so the ledger is a pane. Scroll chaining is kept:
-   reaching the last edge hands the wheel back to the page. */
-.topology-relations .table-scroll { max-height: 480px; overflow-y: auto; }
-.topology-relations tr.is-related { background: var(--accent-tint); }
 
 
 @media (prefers-reduced-motion: reduce) {

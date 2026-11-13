@@ -28,7 +28,7 @@ class ResolverTestCase(unittest.TestCase):
         self.remote = Remote(self.root / "remote")
         self.scratch = self.root / "scratch"
         self.scratch.mkdir()
-        self.project = Project(REPOSITORY, "ansible", origin=self.remote.origin)
+        self.project = Project(REPOSITORY, origin=self.remote.origin)
 
     def resolve(self, revision: str, playbook: str = "playbooks/check.yml", **options):
         from hq_runner.procedures import resolver
@@ -45,15 +45,14 @@ class ResolverTestCase(unittest.TestCase):
 
 class FetchTests(ResolverTestCase):
     def test_the_procedure_is_the_pinned_commit_s_even_once_the_branch_has_moved_on(self):
-        reviewed = self.remote.commit({"ansible/playbooks/check.yml": PLAY + "# reviewed\n"})
-        self.remote.commit({"ansible/playbooks/check.yml": PLAY + "# not reviewed\n"})
+        reviewed = self.remote.commit({"playbooks/check.yml": PLAY + "# reviewed\n"})
+        self.remote.commit({"playbooks/check.yml": PLAY + "# not reviewed\n"})
 
         procedure = self.resolve(reviewed)
 
         self.assertEqual(procedure.revision, reviewed)
         playbook = procedure.project_dir / procedure.playbook
         self.assertIn("# reviewed", playbook.read_text(encoding="utf-8"))
-        self.assertEqual(procedure.project_dir.name, "ansible")
         head = subprocess.run(
             ["git", "-C", str(procedure.project_dir), "rev-parse", "HEAD"],
             capture_output=True,
@@ -65,23 +64,23 @@ class FetchTests(ResolverTestCase):
         self.assertTrue(procedure.project_dir.is_relative_to(self.scratch.resolve()))
 
     def test_a_commit_the_repository_does_not_have_is_refused(self):
-        self.remote.commit({"ansible/playbooks/check.yml": PLAY})
+        self.remote.commit({"playbooks/check.yml": PLAY})
 
         self.assertEqual(self.refused("0123456789abcdef0123456789abcdef01234567"), "FetchFailed")
 
     def test_an_id_that_names_a_tag_rather_than_its_commit_is_refused_as_another_tree(self):
-        self.remote.commit({"ansible/playbooks/check.yml": PLAY})
+        self.remote.commit({"playbooks/check.yml": PLAY})
         tag = self.remote.tag("v1")
 
         self.assertEqual(self.refused(tag), "RevisionMismatch")
 
     def test_a_commit_without_the_playbook_is_refused(self):
-        revision = self.remote.commit({"ansible/playbooks/other.yml": PLAY})
+        revision = self.remote.commit({"playbooks/other.yml": PLAY})
 
         self.assertEqual(self.refused(revision), "NotInstalled")
 
     def test_the_token_reaches_git_through_its_environment_and_never_its_command_line(self):
-        revision = self.remote.commit({"ansible/playbooks/check.yml": PLAY})
+        revision = self.remote.commit({"playbooks/check.yml": PLAY})
         token = "ghs_example0123456789token"
         with mock.patch("hq_runner.procedures.subprocess.run", wraps=subprocess.run) as ran:
             self.resolve(revision, token=token)
@@ -106,15 +105,15 @@ class FetchTests(ResolverTestCase):
     def test_a_repository_reached_by_another_transport_is_refused(self):
         from hq_runner.procedures import Project
 
-        revision = self.remote.commit({"ansible/playbooks/check.yml": PLAY})
-        self.project = Project(REPOSITORY, "ansible", origin="ssh://git@example.com")
+        revision = self.remote.commit({"playbooks/check.yml": PLAY})
+        self.project = Project(REPOSITORY, origin="ssh://git@example.com")
 
         self.assertEqual(self.refused(revision), "Unrunnable")
 
 
 class PlaybookPathTests(ResolverTestCase):
     def test_a_playbook_path_that_is_not_plain_relative_yml_is_refused_before_any_fetch(self):
-        revision = self.remote.commit({"ansible/playbooks/check.yml": PLAY})
+        revision = self.remote.commit({"playbooks/check.yml": PLAY})
         for playbook in ("../check.yml", "/etc/check.yml", "playbooks/../check.yml", "check.yaml", "-check.yml", ""):
             with self.subTest(playbook=playbook), mock.patch("hq_runner.procedures.subprocess.run") as ran:
                 self.assertEqual(self.refused(revision, playbook), "Unrunnable")
@@ -123,13 +122,6 @@ class PlaybookPathTests(ResolverTestCase):
     def test_a_playbook_that_links_out_of_the_checkout_is_refused(self):
         outside = self.root / "outside.yml"
         outside.write_text(PLAY, encoding="utf-8")
-        revision = self.remote.commit({}, links={"ansible/playbooks/check.yml": str(outside)})
-
-        self.assertEqual(self.refused(revision), "Unrunnable")
-
-    def test_a_playbook_that_links_out_of_the_project_directory_is_refused(self):
-        revision = self.remote.commit(
-            {"elsewhere.yml": PLAY}, links={"ansible/playbooks/check.yml": "../../elsewhere.yml"}
-        )
+        revision = self.remote.commit({}, links={"playbooks/check.yml": str(outside)})
 
         self.assertEqual(self.refused(revision), "Unrunnable")

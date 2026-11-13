@@ -40,15 +40,20 @@ source_url="$(source_url)"
 # Named as a test run's directory is, so a copy a killed run left is swept by
 # a test run once it is older than any run (hq/config/sandbox.py).
 tree="$(mktemp -d "${TMPDIR:-/tmp}/hq-run-XXXXXX")"
-# This shell outlives the suite so the copy goes however it ends. A signal is
+# The coupling scan (test_plugins.py) reads all of the host's source, and the
+# worker, the controller and the docs are host source the image leaves out:
+# so a second copy, of every file git sees, named to the suite.
+checkout="$(mktemp -d "${TMPDIR:-/tmp}/hq-run-XXXXXX")"
+# This shell outlives the suite so the copies go however it ends. A signal is
 # acted on once the suite has stopped (a terminal's interrupt reaches both),
 # and the exit says which signal it was.
-trap 'rm -rf "${tree}"' EXIT
+trap 'rm -rf "${tree}" "${checkout}"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
 image_tree "${tree}"
+export_tree "${checkout}"
 
 # The image installs the runtime dependencies alone, so the suite runs in an
 # environment of the checkout's that holds only those: a test module that loads
@@ -67,6 +72,7 @@ env \
     UV_PROJECT_ENVIRONMENT="${environment}" \
     SEVERINO_HQ_SOURCE="${source_url}" \
     SEVERINO_HQ_REVISION="${revision}" \
+    HQ_CHECKOUT_COPY="${checkout}" \
     uv run --locked --no-default-groups python -m tools.gate.verdict test:composed \
     uv run --directory "${tree}" --locked --no-default-groups python manage.py test --noinput --parallel auto --exclude-tag=source "$@" \
     || status=$?

@@ -1568,6 +1568,7 @@ fuzz = [
 runner = [
     { name = "ansible-core" },
     { name = "ansible-runner" },
+    { name = "pyyaml" },
 ]
 source-tests = [
     { name = "pyyaml" },
@@ -1621,6 +1622,7 @@ fuzz = [{ name = "schemathesis", specifier = "==4.33.1" }]
 runner = [
     { name = "ansible-core", specifier = "==2.22.0" },
     { name = "ansible-runner", specifier = "==2.4.3" },
+    { name = "pyyaml", specifier = "==6.0.3" },
 ]
 source-tests = [{ name = "pyyaml", specifier = "==6.0.3" }]
 tools = [

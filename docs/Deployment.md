@@ -218,13 +218,13 @@ hand-off for `severino-hq-renovate.service`. A host adds its own grants to
 ```
 
 The automation worker's procedures come from the repository the host's
-`automation` entry names, with the directory in it they run from and, for a
+`automation` entry names, an Ansible project at its root, and, for a
 private one, the grant whose token fetches it, which must read that
 repository's contents:
 
 ```json
 "grants": [{"name": "automation-projects", "repositories": ["example/playbooks"], "permissions": {"contents": "read", "metadata": "read"}, "path": "/run/severino-hq-automation/github_token"}],
-"automation": {"repository": "example/playbooks", "directory": "ansible", "grant": "automation-projects"}
+"automation": {"repository": "example/playbooks", "grant": "automation-projects"}
 ```
 
 `hq-host controller` reads the grants on every pass, so a grant added there
@@ -332,7 +332,7 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
-| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run queued), else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
+| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a Refresh queued), else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
 | `severino-hq-unit.socket` / `severino-hq-unit@.service` | `hq-host unit --serve`, one instance per connection from the controller |

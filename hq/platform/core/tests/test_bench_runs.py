@@ -5,8 +5,6 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationRequest
-from hq.platform.application.tests.example_procedures import supplied
-from hq.platform.core.bench import seed
 
 from .estate_sizes import at_both_sizes
 
@@ -30,15 +28,9 @@ def _runs(_seeded) -> dict[str, int]:
 
 class BenchRunTests(TestCase):
     def test_lab_1_has_a_run_in_each_state_and_more_at_a_larger_size(self):
-        with supplied():
-            small, large = at_both_sizes(_runs)
+        small, large = at_both_sizes(_runs)
 
         for state, count in small.items():
             with self.subTest(state=state):
                 self.assertGreater(count, 0)
         self.assertGreater(large["on lab-1"], small["on lab-1"])
-
-    def test_with_no_procedure_supplied_it_seeds_none(self):
-        seed(0.05)
-
-        self.assertFalse(OperationRequest.objects.filter(action=OperationRequest.Action.RUN).exists())

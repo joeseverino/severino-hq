@@ -1,12 +1,13 @@
-"""One pass of the automation worker: claim a run, hold its lease while it runs,
-and report how it ended.
+"""One pass of the automation worker: claim a run or a scan, hold a run's lease
+while it runs, and report how it ended.
 
-The runner is handed in, so a test runs the whole pass with a fake: ``ansible``
-(``hq_runner.ansible``) runs a playbook through ansible-runner, and anything
-with its signature stands in for it. Whatever runs, the worker decides when it
+The runner and the scan are handed in, so a test runs the whole pass with
+fakes: ``ansible`` (``hq_runner.ansible``) runs a playbook through
+ansible-runner and ``catalog`` reads the source, and anything with their
+signatures stands in for them. Whatever runs, the worker decides when it
 stops: when HQ answers a renewal with stop (the asker is held, or the run was
-cancelled), when a renewal fails so the lease cannot be held, or when the
-procedure's timeout passes.
+cancelled), or when a renewal fails so the lease cannot be held; past the
+procedure's timeout, ansible-runner stops it.
 """
 
 import time
@@ -16,7 +17,7 @@ from typing import Any, Protocol
 
 from . import tracing
 from .bridge import BridgeError
-from .claim import CAPABILITY, Claimed, Installed, Reach, Refused, Run, bind, claimed
+from .claim import CAPABILITIES, Claimed, Installed, Reach, Refused, Run, bind, claimed
 from .events import Event, bounded, from_ansible, learned, strike
 from .journal import Journal
 
@@ -32,7 +33,9 @@ UNKNOWN = (
 
 
 class Bridge(Protocol):
-    def claim(self, controller_id: str, *, capability: str, lease_seconds: int, attempt: str) -> dict[str, Any]: ...
+    def claim(
+        self, controller_id: str, *, capabilities: Sequence[str], lease_seconds: int, attempt: str
+    ) -> dict[str, Any]: ...
 
     def renew(self, controller_id: str, operation: str, *, lease_seconds: int) -> dict[str, Any]: ...
 
@@ -41,12 +44,18 @@ class Bridge(Protocol):
 
 class Runner(Protocol):
     """Runs one bound run, passing each Ansible event to ``on_event`` and asking
-    ``should_stop`` as it goes; answers ansible-runner's final status
-    (``successful``, ``failed``, ``timeout``, ``canceled``)."""
+    ``should_stop`` as it goes, and stopping it once its procedure's timeout
+    passes; answers ansible-runner's final status (``successful``, ``failed``,
+    ``timeout``, ``canceled``)."""
 
     def __call__(
         self, run: Run, *, on_event: Callable[[Mapping[str, Any]], None], should_stop: Callable[[], bool]
     ) -> str: ...
+
+
+# Reads the source at the tip of its default branch and answers its catalog
+# (``catalog.scan``); it may refuse.
+Scan = Callable[[], Mapping[str, Any]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,9 +77,7 @@ class _Hold:
         self._run = run
         self._clock = clock
         self._secrets = secrets
-        start = clock()
-        self._renewed = start
-        self._deadline = start + run.timeout_seconds
+        self._renewed = clock()
         self.stopped: tuple[str, str] | None = None
         # The run's span, which ansible-runner's thread asks this on.
         self.span: Any = None
@@ -79,9 +86,7 @@ class _Hold:
         if self.stopped is not None:
             return True
         now = self._clock()
-        if now >= self._deadline:
-            self.stopped = ("TimedOut", f"It ran past its procedure's {self._run.timeout_seconds} second timeout.")
-        elif now - self._renewed >= RENEW_EVERY_SECONDS:
+        if now - self._renewed >= RENEW_EVERY_SECONDS:
             self._renew(now)
         return self.stopped is not None
 
@@ -121,10 +126,16 @@ def _report(
     return report
 
 
-_ENDED = {
-    "successful": (True, "", "It ran to the end on every machine."),
-    "failed": (False, "Failed", "A task failed or a machine could not be reached."),
-}
+def _ended(run: Run, status: str) -> tuple[bool, str, str]:
+    """Whether a run ansible-runner ended as ``status`` succeeded, and why not."""
+
+    if status == "successful":
+        return True, "", "It ran to the end on every machine."
+    if status == "failed":
+        return False, "Failed", "A task failed or a machine could not be reached."
+    if status == "timeout":
+        return False, "TimedOut", f"It ran past its procedure's {run.timeout_seconds} second timeout."
+    return False, "Failed", f"ansible-runner ended it as {status}."
 
 
 def _finish(run: Run, status: str, hold: _Hold, events: list[Event]) -> dict[str, Any]:
@@ -133,7 +144,7 @@ def _finish(run: Run, status: str, hold: _Hold, events: list[Event]) -> dict[str
         reason, message = hold.stopped
         success = False
     else:
-        success, reason, message = _ENDED.get(status, (False, "Failed", f"ansible-runner ended it as {status}."))
+        success, reason, message = _ended(run, status)
     if left_out:
         message += f" {left_out} task outcomes that were fine or skipped are not listed."
     return _report(run.generation, success=success, message=message, reason=reason, events=kept)
@@ -171,6 +182,39 @@ def run_claimed(
     return report
 
 
+def _struck(node: Any, secrets: Collection[str]) -> Any:
+    """``node`` with ``secrets`` struck from every string in it, at any depth."""
+
+    if isinstance(node, str):
+        return strike(node, secrets)
+    if isinstance(node, Mapping):
+        return {key: _struck(value, secrets) for key, value in node.items()}
+    if isinstance(node, list):
+        return [_struck(value, secrets) for value in node]
+    return node
+
+
+def scan_claimed(claim: Claimed, scan: Scan, secrets: Collection[str] = ()) -> dict[str, Any]:
+    """Read the source ``claim`` asks about and answer the report carrying its
+    catalog, struck of ``secrets``.
+
+    A scan changes nothing, so a scan a crash cut short is read again rather
+    than reported unknown: the journal never records one as started.
+    """
+
+    with tracing.span("scan source"):
+        try:
+            catalog = scan()
+        except Refused as refused:
+            message = strike(refused.message, secrets)
+            return _report(claim.generation, success=False, message=message, reason=refused.reason)
+        tracing.note(**{"hq.procedures": len(catalog["procedures"])})
+    message = f"Read {catalog['revision'][:12]} on {catalog['branch']}; procedures found: {len(catalog['procedures'])}."
+    report = _report(claim.generation, success=True, message=strike(message, secrets))
+    report["catalog"] = _struck(dict(catalog), secrets)
+    return report
+
+
 def work_once(
     bridge: Bridge,
     *,
@@ -179,17 +223,19 @@ def work_once(
     reach: Reach,
     journal: Journal,
     runner: Runner,
+    scan: Scan,
     clock: Callable[[], float] = time.monotonic,
     secrets: Collection[str] = (),
 ) -> Outcome | None:
-    """Claim one run and see it through to its report; None when nothing waits.
+    """Claim one run or scan and see it through to its report; None when nothing waits.
 
-    ``installed`` resolves the procedure a claim names and ``reach`` the
-    connection to each of its machines; ``secrets`` are struck from the report
-    wherever they appear, as the run's own secrets are.
+    ``installed`` resolves the procedure a run names and ``reach`` the
+    connection to each of its machines; ``scan`` reads the source a scan asks
+    about. ``secrets`` are struck from the report wherever they appear, as a
+    run's own secrets are.
     """
 
-    with tracing.span("automation run", **{"hq.capability": CAPABILITY}):
+    with tracing.span("automation pass", **{"hq.capabilities": ",".join(CAPABILITIES)}):
         outcome = _pass(
             bridge,
             controller_id=controller_id,
@@ -197,6 +243,7 @@ def work_once(
             reach=reach,
             journal=journal,
             runner=runner,
+            scan=scan,
             clock=clock,
             secrets=secrets,
         )
@@ -213,11 +260,12 @@ def _pass(
     reach: Reach,
     journal: Journal,
     runner: Runner,
+    scan: Scan,
     clock: Callable[[], float],
     secrets: Collection[str],
 ) -> Outcome | None:
     entry = journal.begin()
-    pending = bridge.claim(controller_id, capability=CAPABILITY, lease_seconds=LEASE_SECONDS, attempt=entry.attempt)
+    pending = bridge.claim(controller_id, capabilities=CAPABILITIES, lease_seconds=LEASE_SECONDS, attempt=entry.attempt)
     try:
         claim: Claimed | None = claimed(pending)
     except Refused:
@@ -226,7 +274,9 @@ def _pass(
     if claim is None:
         journal.clear()
         return None
-    if entry.operation == claim.operation:
+    if claim.scans:
+        report = scan_claimed(claim, scan, secrets)
+    elif entry.operation == claim.operation:
         report = entry.report or _report(claim.generation, success=False, message=UNKNOWN, reason="OutcomeUnknown")
     else:
         try:

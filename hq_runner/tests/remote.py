@@ -18,6 +18,10 @@ _ENVIRONMENT = {
     "GIT_AUTHOR_EMAIL": "automation@example.com",
     "GIT_COMMITTER_NAME": "Example",
     "GIT_COMMITTER_EMAIL": "automation@example.com",
+    # One moment for every commit, so a commit of the same files after the
+    # same parent is the same commit, which a recorded scan names.
+    "GIT_AUTHOR_DATE": "2026-10-03T12:00:00+00:00",
+    "GIT_COMMITTER_DATE": "2026-10-03T12:00:00+00:00",
 }
 
 

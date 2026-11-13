@@ -19,6 +19,15 @@
 .filter-bar > input[type=search] { flex: 1 1 auto; field-sizing: content; min-width: 0; }
 /* A choice is as wide as its longest option, so the bar holds still as the choice changes (never `field-sizing`, which follows the option chosen), and narrower only in a bar too narrow for it. */
 .filter-bar > select { max-width: 100%; min-width: 0; }
+/* A control a script shows only once it has something to act on. */
+.filter-bar > [hidden] { display: none; }
+/* A set of toggles (partials/_toggle_set.html): the checkboxes in a row of their own words, wrapping between them. */
+.toggle-set {
+  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);
+  min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0;
+}
+.toggle-set label { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-2); font-size: var(--text-xs); white-space: nowrap; }
+.toggle-set input { accent-color: var(--accent); }
 /* A field and its button on one line: the field takes the room. */
 .field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
 .field-row > input { flex: 1; min-width: 0; }
@@ -94,7 +103,8 @@
     scroll-margin-block-start: calc(var(--page-nav-height) + var(--heading-height));
   }
 }
-/* A pane is the scroll container, so its heading pins to the pane's top edge with no chrome offset. */
+/* A pane is the scroll container, so its heading pins to the pane's top edge with no chrome offset. It is as tall as its rows up to a fixed reading height, as a ledger is; scroll chaining is kept, so reaching its last row hands the wheel back to the page. */
+.table-scroll.is-pane:not([data-chart]) { max-block-size: 480px; overflow-y: auto; }
 .table-scroll.is-pane:not([data-chart]) .data-table { overflow: visible; }
 .table-scroll.is-pane:not([data-chart]) .data-table thead th {
   position: sticky;

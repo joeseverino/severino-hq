@@ -636,6 +636,7 @@ const (
 	ResourceKindAdGuardQuerySummary          ResourceKind = "adguard.query_summary"
 	ResourceKindAdGuardRewrite               ResourceKind = "adguard.rewrite"
 	ResourceKindAutomationOperation          ResourceKind = "automation.operation"
+	ResourceKindAutomationSource             ResourceKind = "automation.source"
 	ResourceKindCaddyRoute                   ResourceKind = "caddy.route"
 	ResourceKindCloudflareAccessApp          ResourceKind = "cloudflare.access_app"
 	ResourceKindCloudflareAccessServiceToken ResourceKind = "cloudflare.access_service_token"
@@ -707,6 +708,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindAdGuardRewrite:
 		return true
 	case ResourceKindAutomationOperation:
+		return true
+	case ResourceKindAutomationSource:
 		return true
 	case ResourceKindCaddyRoute:
 		return true
@@ -1019,6 +1022,27 @@ func (e TLSConsumerKind) Valid() bool {
 	case TLSConsumerKindCaddy:
 		return true
 	case TLSConsumerKindNPM:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UnpinnedPathKind.
+const (
+	Config    UnpinnedPathKind = "config"
+	Plugins   UnpinnedPathKind = "plugins"
+	Variables UnpinnedPathKind = "variables"
+)
+
+// Valid indicates whether the value is a known member of the UnpinnedPathKind enum.
+func (e UnpinnedPathKind) Valid() bool {
+	switch e {
+	case Config:
+		return true
+	case Plugins:
+		return true
+	case Variables:
 		return true
 	default:
 		return false
@@ -1355,6 +1379,13 @@ type CloudflareTunnelTunnelIngressRecord struct {
 	Service  string `json:"service,omitempty"`
 }
 
+// CommitVerification Whether GitHub verified the commit's signature, and the GitHub account that committed it.
+type CommitVerification struct {
+	Committer string `json:"committer"`
+	Reason    string `json:"reason"`
+	Verified  bool   `json:"verified"`
+}
+
 // Condition defines model for Condition.
 type Condition struct {
 	Message string `json:"message"`
@@ -1433,7 +1464,9 @@ type ControllerRegistry struct {
 
 // ControllerReport defines model for ControllerReport.
 type ControllerReport struct {
-	Conditions []Condition `json:"conditions,omitempty"`
+	// Catalog What a scan of an automation source found; an operation other than a scan reports none.
+	Catalog    *SourceCatalog `json:"catalog,omitempty"`
+	Conditions []Condition    `json:"conditions,omitempty"`
 
 	// Events A run's task outcomes; an operation other than a run reports none.
 	Events             []RunEvent `json:"events,omitempty"`
@@ -2345,6 +2378,44 @@ type RunInput struct {
 	Revision string `json:"revision"`
 }
 
+// ScannedFile A file of the repository, by its path and the git object id that names its content.
+type ScannedFile struct {
+	Object string `json:"object"`
+	Path   string `json:"path"`
+}
+
+// ScannedProcedure One sidecar and the playbook of the same name beside it: the sidecar as parsed, the play's title and assertions, each role's argument spec, and what could not be read.
+type ScannedProcedure struct {
+	// Declaration The sidecar as YAML read it, unjudged; null when it could not be read.
+	Declaration   any           `json:"declaration"`
+	Playbook      string        `json:"playbook"`
+	Preconditions []string      `json:"preconditions"`
+	Problems      []string      `json:"problems"`
+	Roles         []ScannedRole `json:"roles"`
+	Sidecar       string        `json:"sidecar"`
+	Title         string        `json:"title"`
+	Verification  []string      `json:"verification"`
+}
+
+// ScannedRole A role a procedure's plays list, and its main entry point's argument spec as ansible-doc read it.
+type ScannedRole struct {
+	// ArgumentSpec Null when the role declares none or could not be found.
+	ArgumentSpec any    `json:"argument_spec"`
+	Role         string `json:"role"`
+}
+
+// SourceCatalog The procedures an automation source's repository declares at the tip of its default branch, as the automation worker read them without running any: HQ stores it as a proposal and judges it.
+type SourceCatalog struct {
+	Branch     string             `json:"branch"`
+	Files      []ScannedFile      `json:"files"`
+	Procedures []ScannedProcedure `json:"procedures"`
+	Revision   string             `json:"revision"`
+	Unpinned   []UnpinnedPath     `json:"unpinned"`
+
+	// Verification Whether GitHub verified the commit's signature, and the GitHub account that committed it.
+	Verification CommitVerification `json:"verification"`
+}
+
 // StepFailure Work one pass could not finish; subject is the connection ref it used.
 type StepFailure struct {
 	Reason  string `json:"reason"`
@@ -2410,6 +2481,15 @@ type TailscaleUserRecord struct {
 	Role        string `json:"role,omitempty"`
 	Status      string `json:"status,omitempty"`
 }
+
+// UnpinnedPath A path Ansible would read beyond a playbook and its roles: a configuration, plugins or shared variables.
+type UnpinnedPath struct {
+	Kind UnpinnedPathKind `json:"kind"`
+	Path string           `json:"path"`
+}
+
+// UnpinnedPathKind defines model for UnpinnedPath.Kind.
+type UnpinnedPathKind string
 
 // Verification How long the controller keeps checking that an applied change is actually served, declared by the action it belongs to.
 type Verification struct {

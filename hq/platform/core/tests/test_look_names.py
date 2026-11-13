@@ -276,7 +276,7 @@ class RecordPagesTests(TestCase):
 
     def test_the_example_procedure_has_a_record_page_the_look_reaches(self):
         from hq.platform.application.automation_runs import resource_key
-        from tests.fixtures.example_hq_plugin.operations import CACHE_FLUSH
+        from hq.platform.core.example_estate.automation import CACHE_FLUSH
 
         name = estate_name(reverse("control_plane:detail", args=(resource_key(CACHE_FLUSH),)))
         [page] = _named(name)

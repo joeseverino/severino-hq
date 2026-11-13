@@ -198,6 +198,35 @@ def measured_by[Handler: Callable[..., Any]](
     return declare
 
 
+# Where ``waits_for_a_person`` puts a handler's test of a call too wide for a standing rule.
+_WAITS = "waits"
+# The key of a measured baseline that holds the comparison a person decides
+# on, as ``{"before": ..., "after": ...}`` (``approval_review.preview``).
+COMPARED = "compared"
+
+
+def waits_for_a_person[Handler: Callable[..., Any]](
+    always: Callable[[Any], bool],
+) -> Callable[[Handler], Handler]:
+    """Declare that an agent's call of a handler waits for a person unless
+    its own rule allows it, and that a call ``always`` holds true of waits
+    whatever rule it has: a change wider than any standing consent covers."""
+
+    def declare(handler: Handler) -> Handler:
+        setattr(handler, _WAITS, always)
+        return handler
+
+    return declare
+
+
+def waits(spec) -> Callable[[Any], bool] | None:
+    """The handler's test of a call no rule may let past a person, when it waits for one by default."""
+
+    # Read from the handler's own attributes, so a stand-in that answers every
+    # name (a mock) declares nothing.
+    return vars(spec.handler).get(_WAITS) if hasattr(spec.handler, "__dict__") else None
+
+
 def approval_subject(spec, command: Any, target: Any) -> ApprovalSubject | None:
     """What a held call is about, and its baseline. Shared by hold and approve,
     whose fingerprints must match. None for a read or a missing target.

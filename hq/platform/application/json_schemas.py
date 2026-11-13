@@ -109,7 +109,12 @@ class PublishedSchema(GenerateJsonSchema):
 
     @override
     def dict_schema(self, schema: core_schema.DictSchema) -> JsonSchemaValue:
-        return _unsaid(super().dict_schema(schema))
+        value = _unsaid(super().dict_schema(schema))
+        # Pydantic refuses a key outside its pattern but writes the pattern as
+        # patternProperties alone, which admits any other key.
+        if "patternProperties" in value:
+            value.setdefault("additionalProperties", False)
+        return value
 
 
 class AnswerSchema(PublishedSchema):

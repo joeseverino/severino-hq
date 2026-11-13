@@ -1,0 +1,11 @@
+{% comment %}
+A set of toggles in a filter bar, drawn by {% include "partials/_toggle_set.html" with legend="Show" set="kind" toggles=kinds only %}:
+a checkbox for each toggle (its value, label and checked), named by legend
+for a screen reader, set the data-toggle-set a script finds them by. A query
+names its checkboxes (name), so the bar's Filter sends them; with no name
+they narrow what the page already holds, through its script. With no
+toggles nothing is drawn.
+{% endcomment %}{% if toggles %}<fieldset class="toggle-set" data-toggle-set="{{ set }}">
+  <legend class="visually-hidden">{{ legend|breakable }}</legend>
+  {% for toggle in toggles %}<label><input type="checkbox"{% if name %} name="{{ name }}"{% endif %} value="{{ toggle.value }}"{% if toggle.checked %} checked{% endif %}> {{ toggle.label|breakable }}</label>{% endfor %}
+</fieldset>{% endif %}

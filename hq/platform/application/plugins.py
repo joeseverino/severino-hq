@@ -27,7 +27,6 @@ from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
 from .ui import STATUS_VALUES, DomainOverview
 lazy from .action_items import item_key
-lazy from .automation_manifest import OperationManifest
 lazy from .automation_runs import clear_operation_registry_cache
 lazy from .domains import NAVIGATION_GROUPS
 lazy from .integrations import clear_integration_graph_cache
@@ -184,10 +183,6 @@ class PluginIntegration:
     # Work that reaches outside the process: each an ``OutboundWork``. HQ
     # derives its job, capability, route, control and audit entries.
     outbound: Callable[[], Iterable[Any]] | None = None
-    # Automation procedures HQ may run: each an ``OperationManifest``. The
-    # extension owns the procedure, its repository and its hosts, so the host
-    # names none; HQ composes every one into a registry that refuses a shared id.
-    operations: Callable[[], Iterable[Any]] | None = None
     # The extension's demo records, written for the user it is given into a
     # database the example estate was just written to, by the showcase and
     # standard data sets alone (``hq.platform.core.seeds``). Its dates sit
@@ -905,20 +900,6 @@ def plugin_attention_items() -> tuple[dict[str, Any], ...]:
 
 def plugin_outbound_work() -> tuple[Any, ...]:
     return _provided("outbound")
-
-
-def plugin_operations() -> tuple[OperationManifest, ...]:
-    """Every operation manifest the installed extensions supply, each checked to be one."""
-
-    manifests: list[OperationManifest] = []
-    for plugin, integration in installed_integrations():
-        for manifest in integration.operations() if integration.operations is not None else ():
-            if not isinstance(manifest, OperationManifest):
-                raise ImproperlyConfigured(
-                    f"Plugin {plugin.id!r} operations must be OperationManifest, not {type(manifest).__name__}."
-                )
-            manifests.append(manifest)
-    return tuple(manifests)
 
 
 def plugin_capability_specs() -> tuple[Any, ...]:

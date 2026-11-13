@@ -53,8 +53,7 @@ lazy from django.test import TransactionTestCase
 from hq.config.imports import lazily
 from hq.config.sandbox import MARKERS, shared_tempdir
 from hq.platform.core.live_objects import live
-lazy from hq.platform.application import agent_limits, plugins, roles
-lazy from hq.platform.application.plugins import clear_plugin_composition_cache
+lazy from hq.platform.application import agent_limits, automation_adoption, plugins, roles
 lazy from hq.platform.core import append_only
 lazy from hq.platform.core.attribution import bind_this_thread, bound, command_operation, from_the_shell
 
@@ -265,7 +264,8 @@ class _CompositionIsolation:
     _class_markers: dict[str, tuple[bytes, int]] | None = None
 
     def startTest(self, test):
-        clear_plugin_composition_cache()
+        plugins.clear_plugin_composition_cache()
+        automation_adoption.forget()
         if type(test) is not self._class:
             # The first of its class: what the set holds is what its setup left.
             self._class, self._class_limits = type(test), agent_limits.LIMITS

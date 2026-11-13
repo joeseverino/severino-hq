@@ -27,17 +27,16 @@
   .upgrade-reasons { display: grid; justify-items: start; gap: var(--space-2); margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: var(--text-sm); }
   .upgrade-reasons li::before { content: "·" / ""; margin-right: var(--space-3); color: var(--muted-2); }
 
-  /* The compose change that meets its unmet checks: one block to paste, then
-     what each line can break and what HQ could not write. */
-  .hardening-patch { display: grid; gap: var(--space-4); min-width: 0; }
-  .hardening-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+  /* A code patch ({% patch %}): its title beside the Copy button, the block
+     to paste, then what each line can break and what it leaves out. */
+  .patch { display: grid; gap: var(--space-4); min-width: 0; }
+  .patch-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
   /* Wrapped rather than scrolled: a long path stays on screen, and the copy
      takes the text, not the wrapping. */
-  .hardening-patch pre { margin: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
-  .hardening-patch > p { margin: 0; font-size: var(--text-sm); }
-  .hardening-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); font-size: var(--text-sm); }
-  .hardening-notes li { min-width: 0; overflow-wrap: anywhere; }
-  [data-copy-target][hidden] { display: none; }
+  .patch > pre { margin: 0; max-width: 100%; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .patch > p { margin: 0; font-size: var(--text-sm); }
+  .patch > .stack-list { margin: 0; gap: var(--space-3); font-size: var(--text-sm); }
+  .patch > .stack-list > li { min-width: 0; overflow-wrap: anywhere; }
 
   /* Repositories' posture (projects/_repository_postures.html): a row per
      repository with a segment per check. A row is short: as many to a line

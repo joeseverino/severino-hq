@@ -672,6 +672,11 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Jobs",
         description="HQ's background jobs and their runs.",
         navigation=(NavigationItem("Background jobs", "jobs:list", "jobs", 132, "Infrastructure"),),
+        # Refresh queues a scan for the automation worker, listed with the
+        # rest of its work, and Adopt makes what a scan found the catalog.
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.automation_adoption:capability_specs"),
+        ),
         apps=("hq.domains.jobs",),
         mounts=(Mount("jobs/", "hq.domains.jobs.urls"),),
     ),

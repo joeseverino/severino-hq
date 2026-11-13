@@ -88,21 +88,14 @@ standard, with what it uses beside its limits. Each said once; the band above ha
 {% section "Runtime" id="how-it-runs" %}
   {% if posture.gaps %}{% include "partials/_work_queue.html" with items=posture.gaps grouped=True here=True dense=True only %}{% endif %}
   {% with patch=item.hardening %}{% if patch.any %}
-  <div id="hardening" class="hardening-patch">
-    {% if patch.yaml %}
-      <div class="hardening-head">
-        <strong>Add to {% if patch.compose_file %}<code>{{ patch.compose_file|breakable }}</code>{% else %}its compose file{% endif %}</strong>
-        <button class="btn compact ghost" type="button" data-copy-target="hardening-yaml">Copy</button>
-      </div>
-      <pre tabindex="0" id="hardening-yaml"><code>{{ patch.yaml|breakable }}</code></pre>
-      <p class="muted">Where its service already has one of these keys, replace it. Then run <code>docker compose up -d {{ patch.service|breakable }}</code> in that directory.</p>
-    {% endif %}
-    <ul class="hardening-notes">
-      {% for removal in patch.removals %}<li><strong>Remove</strong> {% for line in removal.lines %}<code>{{ line|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% if removal.caution %} <span class="muted">{{ removal.caution|breakable }}</span>{% endif %}</li>{% endfor %}
-      {% for change in patch.cautions %}<li><code>{{ change.key|breakable }}</code> <span class="muted">{{ change.caution|breakable }}</span></li>{% endfor %}
-      {% for gap in patch.unwritten %}<li class="prose"><strong>Not included</strong> <span class="muted">{{ gap.reason|breakable }}</span>{% if gap.check == "no-docker-socket" and patch.socket_link %} <a href="{{ patch.socket_link.url }}">{{ patch.socket_link.label|breakable }}</a>{% endif %}</li>{% endfor %}
-    </ul>
-  </div>
+  {% patch id="hardening" %}{% if patch.yaml %}{{ patch.yaml|breakable }}{% endif %}
+  {% title %}Add to {% if patch.compose_file %}<code>{{ patch.compose_file|breakable }}</code>{% else %}its compose file{% endif %}
+  {% detail %}Where its service already has one of these keys, replace it. Then run <code>docker compose up -d {{ patch.service|breakable }}</code> in that directory.
+  {% notes %}
+    {% for removal in patch.removals %}<li><strong>Remove</strong> {% for line in removal.lines %}<code>{{ line|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% if removal.caution %} <span class="muted">{{ removal.caution|breakable }}</span>{% endif %}</li>{% endfor %}
+    {% for change in patch.cautions %}<li><code>{{ change.key|breakable }}</code> <span class="muted">{{ change.caution|breakable }}</span></li>{% endfor %}
+    {% for gap in patch.unwritten %}<li class="prose"><strong>Not included</strong> <span class="muted">{{ gap.reason|breakable }}</span>{% if gap.check == "no-docker-socket" and patch.socket_link %} <a href="{{ patch.socket_link.url }}">{{ patch.socket_link.label|breakable }}</a>{% endif %}</li>{% endfor %}
+  {% endpatch %}
   {% endif %}{% endwith %}
   {% facts %}
     {% if item.compose_files or item.running.stack %}{% fact "Defined in" %}{% if item.running.stack %}{{ item.running.stack|breakable }}{% if item.compose_files %}<span class="muted">{% dot %}</span> {% endif %}{% endif %}{% for path in item.compose_files %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}

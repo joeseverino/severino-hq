@@ -6,7 +6,7 @@ What each field holds and why: docs/Architecture.md, "Operation manifests".
 import re
 from collections.abc import Iterator, Mapping
 from types import MappingProxyType
-from typing import Annotated, Any, Literal, get_args, get_origin
+from typing import Annotated, Any, Literal, Self, get_args, get_origin
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
@@ -77,20 +77,24 @@ REVISION = r"^[0-9a-f]{40}$"
 # A playbook's path inside the reviewed commit, in one spelling: relative,
 # each part starting with a letter, digit or underscore (so no `.` or `..`
 # part, no empty one, and nothing ansible-playbook reads as an option), and a
-# YAML file. Which repository and which directory of it hold the project is
-# the host's own configuration, never a manifest's.
+# YAML file. Which repository holds the project is the host's own
+# configuration, never a manifest's.
 PLAYBOOK = r"^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*/)*[A-Za-z0-9_][A-Za-z0-9_.-]*\.yml$"
 PLAYBOOK_LONGEST = 200
 
 
-def _hosts(names: tuple[str, ...]) -> tuple[str, ...]:
+def host_names(names: tuple[str, ...]) -> tuple[str, ...]:
+    """``names`` as host names in HQ's spelling, sorted once each; refuses any other."""
+
     for name in names:
         if name != normalized_hostname(name) or not is_hostname(name):
             raise ValueError(f"{name!r} is not a host name in HQ's spelling (lowercase, no trailing dot).")
-    return tuple(sorted(set(names)))
+    return sorted_unique(names)
 
 
-def _sorted_unique(names: tuple[str, ...]) -> tuple[str, ...]:
+def sorted_unique(names: tuple[str, ...]) -> tuple[str, ...]:
+    """``names`` sorted, each once, so two spellings of one set compare equal."""
+
     return tuple(sorted(set(names)))
 
 
@@ -125,26 +129,40 @@ def _closed(model: type[BaseModel], seen: set[type[BaseModel]]) -> None:
                 _closed(annotation, seen)
 
 
-class OperationManifest(BaseModel):
-    """One reviewed automation procedure, as HQ may run it."""
+class ProcedureTerms(BaseModel):
+    """What a procedure's manifest and its sidecar both say of it: where it
+    may run, what it does, and how a failed run is recovered."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     id: DottedName
-    revision: Annotated[str, StringConstraints(pattern=REVISION)]
-    playbook: Annotated[str, StringConstraints(pattern=PLAYBOOK, max_length=PLAYBOOK_LONGEST)]
-    input_type: type[BaseModel]
-    target_kinds: Annotated[tuple[DottedName, ...], Field(min_length=1), AfterValidator(_sorted_unique)]
+    target_kinds: Annotated[tuple[DottedName, ...], Field(min_length=1), AfterValidator(sorted_unique)]
     # Empty: any host of those kinds.
-    hosts: Annotated[tuple[str, ...], AfterValidator(_hosts)] = ()
+    hosts: Annotated[tuple[str, ...], AfterValidator(host_names)] = ()
     # None, or the reviewed profile a run escalates through.
     privilege: DottedName | None
     effect: Literal["read", "infrastructure_change", "destructive"]
     timeout_seconds: Annotated[int, Field(ge=1, le=LONGEST_TIMEOUT_SECONDS)]
-    preconditions: Statements
-    verification: Statements
     recovery: Statements
     retry: Literal["never", "observe_first", "safe"]
+
+    @model_validator(mode="after")
+    def _read_needs_no_privilege(self) -> Self:
+        if self.effect == "read" and self.privilege is not None:
+            raise ValueError("A read runs without privilege, so it names no privilege profile.")
+        return self
+
+
+class OperationManifest(ProcedureTerms):
+    """One reviewed automation procedure, as HQ may run it."""
+
+    revision: Annotated[str, StringConstraints(pattern=REVISION)]
+    playbook: Annotated[str, StringConstraints(pattern=PLAYBOOK, max_length=PLAYBOOK_LONGEST)]
+    input_type: type[BaseModel]
+    # The names of the play's own assertions before and after its work. A
+    # read may state none; a change states each.
+    preconditions: tuple[Statement, ...]
+    verification: tuple[Statement, ...]
 
     @field_validator("input_type")
     @classmethod
@@ -153,9 +171,9 @@ class OperationManifest(BaseModel):
         return model
 
     @model_validator(mode="after")
-    def _read_needs_no_privilege(self) -> OperationManifest:
-        if self.effect == "read" and self.privilege is not None:
-            raise ValueError("A read runs without privilege, so it names no privilege profile.")
+    def _a_change_says_how_it_is_checked(self) -> Self:
+        if self.effect != "read" and not (self.preconditions and self.verification):
+            raise ValueError("A change asserts what it needs before it runs and what shows it worked.")
         return self
 
     def admits(self, kind: str, host: str) -> bool:

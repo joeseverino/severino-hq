@@ -1,0 +1,11 @@
+argument_specs:
+  main:
+    short_description: Check one service on a host
+    description:
+      - Says which service it checks, and records that it checked.
+    options:
+      service:
+        type: str
+        required: true
+        choices: [web, db]
+        description: The service to check.

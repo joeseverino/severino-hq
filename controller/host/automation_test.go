@@ -98,7 +98,7 @@ func newWorker(t *testing.T) *worker {
 		Source:      automationSource,
 		SecretDir:   secrets,
 		Journal:     filepath.Join(root, "journal"),
-		Project:     &AutomationConfig{Repository: "example/playbooks", Directory: "ansible", Grant: w.grant.Name},
+		Project:     &AutomationConfig{Repository: "example/playbooks", Grant: w.grant.Name},
 		Grants:      []Grant{w.grant},
 		ID:          "example-host",
 		Bound:       time.Hour,
@@ -323,7 +323,7 @@ func TestTheWorkersContainerIsConfined(t *testing.T) {
 		}
 	}
 	for name, value := range map[string]string{
-		"HQ_AUTOMATION_REPOSITORY": "example/playbooks", "HQ_AUTOMATION_PROJECT_DIR": "ansible",
+		"HQ_AUTOMATION_REPOSITORY":    "example/playbooks",
 		"HQ_AUTOMATION_BRIDGE_SOCKET": BridgeSocket, "HQ_AUTOMATION_ID": "example-host",
 		"HQ_AUTOMATION_TOKEN_FILE": automationToken + "/" + automationTokenName,
 	} {
@@ -346,7 +346,7 @@ func TestTheWorkerIsToldWhatHqRunnerReads(t *testing.T) {
 		}
 	}
 	args := AutomationArgs("example", automationImageRef, "/run", "/journal", "example-host",
-		AutomationConfig{Repository: "example/playbooks", Directory: "ansible", Grant: "example"})
+		AutomationConfig{Repository: "example/playbooks", Grant: "example"})
 	var told []string
 	for i, arg := range args {
 		if arg == "--env" {
@@ -452,13 +452,13 @@ func TestNoWorkerStartsWithoutWhatItNeeds(t *testing.T) {
 }
 
 // A host's automation entry is refused unless its repository is GitHub's to
-// name, its directory stays inside it, and its grant reads it.
+// name and its grant reads it.
 func TestAHostsAutomationEntryIsReadStrictly(t *testing.T) {
 	grant := `{"name": "automation-projects", "repositories": ["example/playbooks"], "permissions": {"contents": "read"}, "path": "/run/example-automation/github_token"}`
 	declared := func(automation string) string {
 		return strings.Replace(hostJSON, `"vault"`, `"grants": [`+grant+`], "automation": `+automation+`, "vault"`, 1)
 	}
-	valid := `{"repository": "example/playbooks", "directory": "ansible", "grant": "automation-projects"}`
+	valid := `{"repository": "example/playbooks", "grant": "automation-projects"}`
 	config, err := ReadConfig([]byte(declared(valid)))
 	if err != nil || config.Automation == nil || config.Automation.Grant != "automation-projects" {
 		t.Fatalf("a valid entry is refused: %v", err)
@@ -467,10 +467,8 @@ func TestAHostsAutomationEntryIsReadStrictly(t *testing.T) {
 		t.Errorf("a public repository's entry is refused: %v", err)
 	}
 	for name, automation := range map[string]string{
-		"no repository":            `{"directory": "ansible"}`,
+		"no repository":            `{"grant": "automation-projects"}`,
 		"a repository that is not": `{"repository": "example"}`,
-		"a directory outside":      `{"repository": "example/playbooks", "directory": "../ansible"}`,
-		"an absolute directory":    `{"repository": "example/playbooks", "directory": "/ansible"}`,
 		"a grant the host lacks":   `{"repository": "example/playbooks", "grant": "example-other"}`,
 		"a grant of another repo":  `{"repository": "example/other", "grant": "automation-projects"}`,
 		"a key it does not know":   `{"repository": "example/playbooks", "revision": "main"}`,

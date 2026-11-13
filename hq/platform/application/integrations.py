@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Callable, Iterable, Mapping
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from functools import cache
+from functools import lru_cache
 from typing import Any
 
 from django.core.exceptions import ImproperlyConfigured
@@ -20,7 +20,7 @@ from .integration_validation import (
 )
 from .search_contracts import SearchDefinition
 from .ui import ended
-lazy from . import automation_runs, outbound_work, plugins
+lazy from . import automation_adoption, automation_runs, outbound_work, plugins
 lazy from .core_capabilities import CORE_CAPABILITY_SPECS
 lazy from .domains import host_specs
 lazy from .plugins import plugin_capability_specs, plugin_search_definitions
@@ -306,8 +306,10 @@ def compile_integration_graph(
     return IntegrationGraph(capability_index, resource_index, connection_index, search_index)
 
 
-@cache
-def _compiled_integration_graph() -> IntegrationGraph:
+# One graph at a time, keyed by the adopted catalog's digest: an adoption
+# moves the commands, and each process builds its graph anew at its next ask.
+@lru_cache(maxsize=1)
+def _compiled_integration_graph(generation: str) -> IntegrationGraph:
     return compile_integration_graph(
         capabilities=(
             *CORE_CAPABILITY_SPECS,
@@ -315,7 +317,7 @@ def _compiled_integration_graph() -> IntegrationGraph:
             *host_specs("capabilities"),
             *plugin_capability_specs(),
             *outbound_work.capability_specs(),
-            *automation_runs.capability_specs(),
+            *automation_runs.capability_specs(generation),
         ),
         resources=(*core_resource_specs(), *host_specs("resources"), *plugins.plugin_resource_specs()),
         connections=(*host_specs("connections"), *plugins.plugin_connection_specs()),
@@ -327,7 +329,7 @@ _GRAPH_OVERRIDE: ContextVar[IntegrationGraph | None] = ContextVar("integration_g
 
 
 def integration_graph() -> IntegrationGraph:
-    return _GRAPH_OVERRIDE.get() or _compiled_integration_graph()
+    return _GRAPH_OVERRIDE.get() or _compiled_integration_graph(automation_adoption.generation())
 
 
 def clear_integration_graph_cache() -> None:

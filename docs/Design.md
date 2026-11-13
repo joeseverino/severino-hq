@@ -181,8 +181,8 @@ responsive-table pattern is. It is a `group` where that pattern writes
 `region`, and a region that fits is a plain box, so neither is a landmark:
 the section or card around a table is one already, often by the same name.
 *Gate:* `test_a_section_and_the_table_in_it_are_one_landmark`. A pane
-(`pane=True`) has a height of its own, as a chart's data or the topology
-ledger has, or is a table sized to its content. A table never stacks into
+(`pane=True`) is as tall as its rows up to a fixed reading height, as the
+topology ledger is, and scrolls past it. A table never stacks into
 cards and is not swiped through.
 
 A key/value table (row headers, no `thead`) sizes its label column to its
@@ -210,6 +210,21 @@ column asks for, and wrap only in a tight table, where every kept line does
 `test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`,
 `only_a_table_scrolls_sideways`, and the page crawl, which fails any
 `.data-table` outside `.table-scroll`.
+
+What a table's rows are to each other is an option of its parts, never a
+class of the page's:
+
+- Rows selected together (`data-selectable-table`) start with a column of
+  tick-boxes: the heading that selects every row
+  (`table_heading ... select_all=True`), then each row's
+  `{% row_select row.pk %}`, a cell of fixed width, so selecting moves
+  nothing. A row with no key keeps the cell empty.
+- A table that sets two values side by side in each row, after the row's
+  name (a change's before and after), is a `table_region ... compare=True`:
+  the two share the room evenly.
+- A row that asks to be read first (a message not yet read) says so in its
+  `tr` with `{% row_state emphasized=True %}`: its cells are tinted and its
+  links weigh more.
 
 **Opening a row moves nothing.** What a row holds back (the columns that
 left, the `narrow-more` parts and the `row-below` blocks) is in a line of its
@@ -454,6 +469,13 @@ A plain list read down (a row's notes, a record's statuses, a section's
 records) is `{% stack_list %}`, its `<li>`s each running their parts inline a
 small gap apart, an item that reads as a sentence marked `.prose`;
 `below="Label"` makes it a block the open row shows under that label.
+
+A block of code to paste somewhere else (a container's compose change) is
+`{% patch id=... %}`: its code, then `{% title %}` (where it goes, beside the
+Copy button that copies the code), `{% detail %}` (the words under it) and
+`{% notes %}` (`<li>`s, drawn as a stack list), in that order. The code wraps
+rather than scrolls, so a long path stays on screen; with no code the notes
+stand alone. *Catalog:* `part/patch`.
 
 A row of readings beside a page's title is `{% readings %}`, each
 `{% reading icon=... %}`: its mark, its figure, its quiet lines
@@ -800,7 +822,11 @@ search field and selects, one Filter (or the bar's own `verb=`), Clear
 filters back to `clear` when anything is set, and the count of what shows
 (`{% summary %}`) at the row's end. A list's table toolbar is the same bar.
 The search takes the row's room; every other control is as wide as what it
-says, a select its longest option. No chip walls.
+says, a select its longest option. No chip walls: a set of on-or-off choices
+is `partials/_toggle_set.html`, checkboxes in a row of their own words under
+one hidden legend, named (`name=`) when Filter sends them and unnamed when the
+page's script narrows what it already holds. A control the script shows only
+once it has something to act on is drawn `hidden` in the bar and stays so.
 A control's visible name is `{% control_label "From" control="id" %}`, the
 `<label>` of the control with that id; with no `control` it names what follows.
 A choice of one drawn from data is `{% select "rule" choices chosen=rule label="What it sets" tone=tone %}`:
@@ -818,6 +844,15 @@ over its bar.
 same view (a window, a status, a tab, a sibling), each a `scope-chip`, the
 current one `aria-current="page"`, a choice's `count` beside its chip and its
 `note` and `mark` inside it.
+
+**One map.** A graph is drawn by `partials/_topology_map.html` from what
+`TopologyView.drawn` hands it: the filter bar that narrows it, a lane of
+cards for each kind, and the one panel beside the lanes that holds the
+selected node, never a card. The edges a node stands at the end of are
+`partials/_relation_list.html`, grouped by direction under a kicker each, every
+row the link to the other end. A page's own list of what a record relates to,
+grouped by what each says, is `partials/_relationships.html` instead. The
+catalog's `graph/` entries draw both from an example graph.
 
 **Values read as what they are.** `|readout` puts identifiers (keys, hosts,
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
@@ -1606,10 +1641,15 @@ Decoration:
    the browser gate, so the layout rules run over it.
 5. A new state of a shared part (a long heading, a short trail step, a value
    that wraps), filled the way an extension's page fills it, is one entry in
-   the component catalog (`hq/platform/core/tests/browser/catalog.py`). The
-   entry is drawn through the part's own partial or tag, and held by the whole
-   survey. An
-   entry whose state is not on the page by itself says so as its premise.
+   the component catalog (`hq/platform/core/tests/browser/catalog/`), in the
+   module of its family under `families/`, the prefix of its name (`part/`,
+   `table/`), so two changes that add entries of different families never
+   edit one file. A new family is a new module there, imported by the
+   catalog's `__init__.py` and listed in `test_browser_probes.py`'s
+   `MODULES`. The entry is drawn through the part's own partial or tag, and
+   held by the whole survey. An entry whose state is not on the page by
+   itself says so as its premise. An entry is drawn without script, so a
+   table entry must fit by CSS alone.
 6. Run `mise run check` and `mise run browser`, then look at the page at a phone,
    a tablet and a desktop width (`mise run dev:look`), against the rules held
    by eye. The gates catch classes of mistakes; they do

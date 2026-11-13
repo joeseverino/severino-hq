@@ -26,7 +26,6 @@
   ],
   "automation": {
     "repository": "example/playbooks",
-    "directory": "ansible",
     "grant": "automation-projects"
   }
 }

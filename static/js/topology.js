@@ -13,7 +13,7 @@ hqFragment.each("[data-topology]", (workspace) => {
   const ledger = document.getElementById(workspace.dataset.topologyLedger);
   const edges = [...(ledger?.querySelectorAll("[data-topology-edge]") || [])];
   const search = workspace.querySelector("[data-topology-search]");
-  const kindControls = [...workspace.querySelectorAll("[data-topology-kind]")];
+  const kindControls = [...workspace.querySelectorAll('[data-toggle-set="kind"] input')];
   const status = workspace.querySelector("[data-topology-status]");
   const reset = workspace.querySelector("[data-topology-reset]");
   // The total counts every card, including those hidden until asked for.
@@ -107,7 +107,7 @@ hqFragment.each("[data-topology]", (workspace) => {
       const ends = edge.dataset.topologyEdge.split(" ");
       const touchesFocus = Boolean(selected) && ends.includes(focused);
       edge.hidden = Boolean(selected) && !touchesFocus;
-      edge.classList.toggle("is-related", touchesFocus);
+      edge.toggleAttribute("data-emphasized", touchesFocus);
     });
     if (ledger) ledger.hidden = edges.length > 0 && edges.every((edge) => edge.hidden);
     if (status && said) {
@@ -174,6 +174,9 @@ hqFragment.each("[data-topology]", (workspace) => {
       search.value = "";
       filter();
     } else if (event.key === "Enter") {
+      // The field is in the view's form, whose Filter Enter would send: here
+      // Enter opens the first card the words find instead.
+      event.preventDefault();
       const first = nodes.find((node) => !node.hidden);
       if (first) {
         focus(first.dataset.topologyNode);

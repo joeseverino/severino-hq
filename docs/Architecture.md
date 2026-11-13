@@ -1263,20 +1263,23 @@ never an action.
 ### Operation manifests
 
 An automation procedure (an Ansible playbook a worker runs against a host) is
-declared once, as an `OperationManifest`
-(`hq/platform/application/automation_manifest.py`). Manifests reach HQ at
-runtime from an extension, never from the host's source, and an
-`OperationRegistry` is built from the tuple supplied. It refuses two manifests
-with one id and answers an unknown id with `UnknownOperation`.
+declared beside its playbook, in the repository the worker reads
+([Declaring a procedure](#declaring-a-procedure)). HQ learns a repository's
+procedures by a Refresh, which proposes them as that repository's tip declares
+them, and runs one only once a person has adopted the proposal through
+approval. Each procedure of the adopted commit is then an `OperationManifest`
+(`hq/platform/application/automation_manifest.py`), and an
+`OperationRegistry` is built from them. No extension supplies a manifest, and
+the host's source names no procedure. The registry refuses two manifests with
+one id and answers an unknown id with `UnknownOperation`.
 
 A manifest is frozen and strict: an unknown field, a value of the wrong type
-or one out of range is refused when it is declared. What it
-declares, and why:
+or one out of range is refused when it is built. What it holds, and why:
 
 | Field | What it holds | Why |
 | --- | --- | --- |
 | `id` | A dotted name, `example.service_logs` | A run, an approval and a grant name the procedure by it. |
-| `revision` | The reviewed commit, 40 lowercase hex | What was reviewed is what runs. A new commit is a new procedure, and an approval of the old one no longer holds. |
+| `revision` | The adopted commit, 40 lowercase hex | What was reviewed is what runs. A new commit is a new procedure, and an approval of the old one no longer holds. |
 | `playbook` | The playbook's path inside the project at that commit, `playbooks/service_logs.yml`: relative, each part starting with a letter, digit or underscore, ending `.yml` | The manifest names what runs, and only one spelling of it, so an approval pins it. The repository and the project's directory come from the host's root configuration, never from a manifest or a claim. |
 | `input_type` | A `StrictCommand` subclass | A run's parameters are validated the way every capability's are. |
 | `target_kinds` | The resource kinds it may act on, at least one | A run's target is held to what the procedure was written for. |
@@ -1299,6 +1302,42 @@ Ansible Runner's or Ansible's own execution settings (a playbook, an
 inventory, extra-vars, a limit, tags, a module, SSH options, `become`),
 however the name is spelled. A run's playbook, inventory and connection come
 from its manifest and HQ's facts, never from the caller.
+
+### Declaring a procedure
+
+A procedure is a playbook, `<name>.yml`, with a sidecar beside it,
+`<name>.hq.yml`, anywhere in the repository. The sidecar says what HQ needs to
+know that Ansible has no word for: the manifest's `id`, `target_kinds`,
+`hosts`, `privilege`, `effect`, `timeout_seconds`, `recovery` and `retry`, as
+the table above has them, and `inputs`, which gives each text input its roles'
+argument specs declare a `pattern` and a `max_length`. The rest is Ansible's
+own, read from the playbook and its roles at the commit
+([Refreshing the procedures](#refreshing-the-procedures)), and a sidecar names
+no playbook, revision or repository.
+
+The sidecar's format is published as a JSON Schema,
+`hq/platform/application/hq-procedure.schema.json`, written from
+`ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the
+model HQ holds a sidecar to, by the generator every schema HQ publishes comes
+from (`hq/platform/application/json_schemas.py`, Pydantic's own beneath). `mise run fix` rewrites it,
+and `lint:drift-procedure-schema` fails while it is behind the model. A
+repository of procedures lints its sidecars against the file at the HQ commit
+it targets, with [check-jsonschema](https://check-jsonschema.readthedocs.io/):
+
+```sh
+check-jsonschema --schemafile hq-procedure.schema.json playbooks/*.hq.yml
+```
+
+check-jsonschema reads YAML as it reads JSON, takes a schema by path or URL,
+and ships as a pre-commit hook and as a Python tool (`pipx:check-jsonschema`
+in mise). It validates with python-jsonschema, the library HQ's own test of
+the schema judges a sidecar with.
+
+The schema holds a sidecar's shape: every key, its type and range, the dotted
+names, the enumerations, and the inputs' names. What it cannot say HQ still
+refuses at a Refresh, naming each in the proposal: a read that names a
+privilege, a host not in HQ's spelling, a statement that is only whitespace,
+an input `pattern` Python cannot compile, and two sidecars with one id.
 
 ### Running a procedure
 
@@ -1352,8 +1391,8 @@ exits. Its environment names everything it reads, each as an
 `HQ_AUTOMATION_*` variable (`hq_runner/__main__.py`), since on the host
 "runner" is the Actions runner's word: the bridge socket, the journal, the
 connections document, the ssh directory, the scratch space each pass works
-in, the repository its procedures come from with the directory inside it they
-run from, and the file holding the token that repository is fetched with.
+in, the repository its procedures come from, whose root is an Ansible
+project, and the file holding the token that repository is fetched with.
 Nothing in a claim names any of them.
 
 What runs is the procedure its claim names, at the claim's reviewed revision
@@ -1365,7 +1404,7 @@ configuration but the worker's own, set through its environment: no system or
 global file, no hooks, https alone, every received object checked, and the
 token as an `http.extraHeader`, never on its command line. The playbook is the
 claim's `spec.playbook`, checked again by the worker: a plain relative `.yml`
-path that, once every link is followed, stays inside the project directory.
+path that, once every link is followed, stays inside the checkout.
 
 Each of the run's hosts is reached through the `ssh_transport` connection
 whose ref is the host's name and whose role is `runner`
@@ -1377,9 +1416,14 @@ password), its pinned `known_hosts` with host key checking on, and its
 `shell_type` when it carries one. The hosts and extra-vars come from the
 claim's `input`, and every ansible-runner argument is fixed in
 `hq_runner/ansible.py`, with its artifacts, Ansible's own working files and
-ssh's control sockets in a private directory removed when the run ends. While
-it runs the worker renews the lease, and stops when HQ answers stop, a renewal
-fails or the manifest's `timeout_seconds` passes. Its report carries one event
+ssh's control sockets in a private directory removed when the run ends.
+Ansible reads the worker's own empty configuration through `ANSIBLE_CONFIG`,
+never a project's `ansible.cfg`, and every plugin and module path is pinned
+to a directory that does not exist; roles come from the project's `roles/`.
+What Ansible loads from beside a playbook or inside a role, no setting turns
+off, so a scan reports each such directory. While it runs the worker renews
+the lease and stops when HQ answers stop or a renewal fails, and
+ansible-runner's own job timeout ends it at the manifest's `timeout_seconds`. Its report carries one event
 per task and machine, built from Ansible's message alone and struck of
 secrets: the run's secret parameters, the token and each identity's path. A
 journal names each claim before it is sent and records a run once it starts,
@@ -1387,6 +1431,33 @@ so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook
 on the local machine through its entry point, fetched from a repository on
 the same machine.
+
+### Refreshing the procedures
+
+HQ learns which procedures the worker's repository offers only when a person
+asks: `automation.source.refresh` (Refresh) queues one scan of the
+`automation.source` record and rings the doorbell, with no timer and no
+webhook. A Refresh while one waits is answered that one. The worker claims
+it as `automation.source:scan`, asks the repository which commit its default
+branch points at, fetches that commit as it fetches a run's, and runs nothing
+of it (`hq_runner/catalog.py`). A procedure is a sidecar, `<name>.hq.yml`,
+anywhere in the tree, beside the playbook `<name>.yml`; its title is the first
+play's name, its preconditions and verification the names of the
+`ansible.builtin.assert` tasks in `pre_tasks` and `post_tasks`, and its
+inputs each listed role's argument spec, read through ansible-runner's
+`get_role_argspec` with the pinned configuration
+([Declaring a procedure](#declaring-a-procedure)). The report
+(`SourceCatalog` in the bridge contract) also lists every file with its git
+object id, each configuration, plugin, collection or variables directory
+Ansible would read past a playbook and its roles, and the commit's signature
+as GitHub verifies it.
+
+HQ holds each sidecar to `ProcedureDeclaration`
+(`hq/platform/application/automation_sources.py`), adds every way it falls
+short, and a second sidecar with the same id, to that procedure's problems,
+and stores the whole as a `SourceProposal` of the scan. A proposal runs
+nothing: its procedures become manifests only when a person adopts it through
+approval.
 
 ### The automation worker on the host
 
@@ -1417,12 +1488,12 @@ container's packet as it leaves the host, changing its source "to an address
 on the host interface the packet is sent on" (Docker,
 [Port publishing and mapping](https://docs.docker.com/engine/network/port-publishing/),
 "Masquerade or SNAT for outgoing packets"). So a machine the worker reaches
-over the tailnet sees the host's tailnet address, which its `hq-read` login
-allows. A packet to the host itself is delivered locally, through the
+over the tailnet sees the host's tailnet address, which the login its runner
+connection names allows. A packet to the host itself is delivered locally, through the
 prerouting and input hooks alone (nftables,
 [Netfilter hooks](https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks)),
 so no masquerade applies and it would arrive from the network's own subnet
-(`AutomationSubnet`, its one declaration), which the host's `hq-read` login
+(`AutomationSubnet`, its one declaration), which the host's runner login
 refuses: sshd's `from=` and `AllowUsers` and the PAM check of the source's
 tailnet node all know the host by its own address. So the table's nat chain
 on the input hook, at srcnat, after every filter has seen the subnet, gives
@@ -1456,10 +1527,10 @@ What it is given, and what that means:
   drops everything else: the LAN, the tailnet, the host's other services,
   other containers, IPv6 and a forged source. A runner connection whose host
   is not an IPv4 address cannot be named by the table, so it is not lent.
-- **A compromised worker** reaches `hq-read` on the machines lent to it (no
-  sudo, no docker), an hour's read of the procedures' repository, and the
-  whole bridge as the web account, as the controller does: the socket
-  authorizes by account.
+- **A compromised worker** reaches the runner login on each machine lent to
+  it, with the rights that machine gives the login, an hour's read of the
+  procedures' repository, and the whole bridge as the web account, as the
+  controller does: the socket authorizes by account.
 - **A reviewed playbook's local tasks** run as the worker's account, and can
   read the token file and the identity files, as any Ansible controller's
   can.

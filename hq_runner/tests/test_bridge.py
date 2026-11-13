@@ -64,11 +64,14 @@ class BridgeTestCase(unittest.TestCase):
 
 
 class CallTests(BridgeTestCase):
-    def test_a_claim_names_its_controller_capability_lease_and_attempt(self):
+    def test_a_claim_names_its_controller_capabilities_lease_and_attempt(self):
         self.answer = (200, "application/json", b'{"ok": true, "operation": null}')
 
         answer = self.bridge.claim(
-            "example-worker", capability="automation.operation:run", lease_seconds=120, attempt="a1"
+            "example-worker",
+            capabilities=("automation.operation:run", "automation.source:scan"),
+            lease_seconds=120,
+            attempt="a1",
         )
 
         self.assertEqual(answer, {"ok": True, "operation": None})
@@ -79,7 +82,7 @@ class CallTests(BridgeTestCase):
             {
                 "controller-id": ["example-worker"],
                 "lease-seconds": ["120"],
-                "capability": ["automation.operation:run"],
+                "capability": ["automation.operation:run", "automation.source:scan"],
                 "attempt": ["a1"],
             },
         )

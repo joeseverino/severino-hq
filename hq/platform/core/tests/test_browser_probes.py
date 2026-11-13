@@ -42,6 +42,8 @@ from hq.platform.core.tests.browser import (
     uncaught,
     widths,
 )
+from hq.platform.core.tests.browser.catalog import common, families as catalog_families
+from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
 from hq.platform.core.tests.browser.probes import (
     audit,
     axe,
@@ -70,6 +72,14 @@ MODULES = (
     accessibility,
     agent_devices,
     catalog,
+    common,
+    catalog_families,
+    chart,
+    form,
+    graph,
+    part,
+    status,
+    table,
     command_forms,
     components,
     current_state,
@@ -83,6 +93,7 @@ MODULES = (
     page_errors,
     page_navigation,
     planted,
+    probe_package,
     reading,
     reference,
     refresh,

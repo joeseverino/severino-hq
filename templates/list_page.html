@@ -37,7 +37,7 @@ the pages.
     <tbody>
       {% for row in object_list %}
         <tr{% block row_attributes %}{% endblock %}>
-          {% if table.selectable %}<td class="select-column">{% if row.pk %}<input type="checkbox" data-row-select value="{{ row.pk }}" aria-label="Select row">{% endif %}</td>{% endif %}
+          {% if table.selectable %}{% row_select row.pk %}{% endif %}
           {% block row %}{% endblock %}
         </tr>
       {% endfor %}

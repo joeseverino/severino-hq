@@ -89,29 +89,53 @@ class InventoryTests(DocumentTestCase):
 
         self.assertEqual(host["ansible_shell_type"], "powershell")
 
-    def test_ansible_s_working_files_stay_inside_the_run_s_private_directory(self):
-        from hq_runner.ansible import arguments
+    def bound_run(self):
         from hq_runner.claim import Procedure, Run
 
         self.write(fakes.connection("app.example.com", role="runner"))
         targets = tuple(self.targets().values())
-        run = Run(
+        return Run(
             "11111111-2222-4333-8444-555555555555",
             2,
             "example.check",
-            Procedure("0" * 40, self.root, "check.yml"),
+            Procedure("0" * 40, self.root / "project", "playbooks/check.yml"),
             ("app.example.com",),
             targets,
             {},
             60,
         )
+
+    def test_ansible_s_working_files_stay_inside_the_run_s_private_directory(self):
+        from hq_runner.ansible import arguments
+
         private = self.root / "run-example"
 
-        envvars = arguments(run, private)["envvars"]
+        envvars = arguments(self.bound_run(), private)["envvars"]
 
         for name in ("ANSIBLE_HOME", "ANSIBLE_LOCAL_TEMP", "ANSIBLE_SSH_CONTROL_PATH_DIR"):
             self.assertTrue(Path(envvars[name]).is_relative_to(private), name)
         self.assertEqual(envvars["ANSIBLE_HOST_KEY_CHECKING"], "True")
+
+    def test_ansible_reads_the_run_s_own_configuration_and_searches_no_project_path_but_its_roles(self):
+        from hq_runner.ansible import PLUGIN_PATHS, arguments
+
+        private = self.root / "run-example"
+
+        found = arguments(self.bound_run(), private)
+        envvars = found["envvars"]
+
+        config = Path(envvars["ANSIBLE_CONFIG"])
+        self.assertTrue(config.is_file())
+        self.assertTrue(config.is_relative_to(private))
+        for name in PLUGIN_PATHS:
+            self.assertTrue(Path(envvars[name]).is_relative_to(private), name)
+            self.assertNotIn(":", envvars[name], name)
+        self.assertEqual(envvars["ANSIBLE_ROLES_PATH"], str(self.root / "project" / "roles"))
+
+    def test_ansible_runner_ends_a_run_at_its_procedure_s_timeout(self):
+        from hq_runner.ansible import arguments
+
+        self.assertEqual(arguments(self.bound_run(), self.root / "run-example")["timeout"], 60)
 
 
 class DocumentTests(DocumentTestCase):

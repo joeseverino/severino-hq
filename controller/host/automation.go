@@ -11,7 +11,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,35 +33,23 @@ const (
 )
 
 // AutomationConfig is where the worker's procedures come from, in the host's
-// configuration: a GitHub repository, the directory in it the playbooks run
-// from, and the host grant whose token fetches it, none for a public one.
+// configuration: a GitHub repository, whose root is an Ansible project, and
+// the host grant whose token fetches it, none for a public one.
 // Only root's configuration names them; a run's claim never does.
 type AutomationConfig struct {
 	Repository string `json:"repository"`
-	Directory  string `json:"directory,omitempty"`
 	Grant      string `json:"grant,omitempty"`
 }
 
-// projectPart is one name of the project directory, as the worker holds it
-// (hq_runner/procedures.py:safe_path).
-var projectPart = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]*$`)
-
 // checkAutomation refuses an automation entry unless its repository is one
-// GitHub could name, its directory is plain names inside it, and its grant is
-// one of the host's that reads that repository.
+// GitHub could name and its grant is one of the host's that reads that
+// repository.
 func checkAutomation(automation *AutomationConfig, grants []Grant) error {
 	if automation == nil {
 		return nil
 	}
 	if err := checkRepositories([]string{automation.Repository}); err != nil {
 		return fmt.Errorf("automation.repository: %w", err)
-	}
-	if automation.Directory != "" {
-		for part := range strings.SplitSeq(automation.Directory, "/") {
-			if !projectPart.MatchString(part) {
-				return errors.New("automation.directory must be a relative path of plain names")
-			}
-		}
 	}
 	if automation.Grant == "" {
 		return nil
@@ -358,9 +345,6 @@ func AutomationArgs(name, image, run, journal, id string, project AutomationConf
 		"--env", "HQ_AUTOMATION_SCRATCH="+automationScratch,
 		"--env", "HQ_AUTOMATION_REPOSITORY="+project.Repository,
 	)
-	if project.Directory != "" {
-		args = append(args, "--env", "HQ_AUTOMATION_PROJECT_DIR="+project.Directory)
-	}
 	if project.Grant != "" {
 		args = append(args,
 			"--mount", readOnly(filepath.Join(run, "token"), automationToken),

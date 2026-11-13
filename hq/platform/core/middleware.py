@@ -24,7 +24,7 @@ from hq.platform.core import speculation, tracing
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.outbound import serving
 from hq.platform.core.write_bounds import NOTHING, Bound, writes
-lazy from hq.platform.application import hq_self
+lazy from hq.platform.application import automation_adoption, hq_self
 lazy from hq.platform.application.pages import authorizes_itself, page_refusal
 lazy from hq.platform.application.projection import projection_scope
 lazy from hq.platform.application.request_identity import signed_in
@@ -227,6 +227,12 @@ class ProjectionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        # Every request, a write's included, is served from the procedures
+        # adopted now, whichever process adopted them.
+        with automation_adoption.served():
+            return self._served(request)
+
+    def _served(self, request):
         if request.method not in ("GET", "HEAD"):
             return self.get_response(request)
         with projection_scope(seed=hq_self.serving(request)):

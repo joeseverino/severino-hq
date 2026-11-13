@@ -1,7 +1,8 @@
 from typing import Annotated, Any, TypedDict
 
 from django.test import SimpleTestCase
-from pydantic import BaseModel, Field
+from jsonschema import Draft202012Validator
+from pydantic import BaseModel, Field, StringConstraints, ValidationError
 
 from ..json_schemas import json_schema
 from ..labels import field_label
@@ -34,6 +35,10 @@ class ExampleHeld(TypedDict):
 
 class _Answered(TypedDict):
     data: ExampleSaved | ExampleHeld | None
+
+
+class _Bounded(BaseModel):
+    by_name: dict[Annotated[str, StringConstraints(pattern=r"^[a-z]+$")], int]
 
 
 class GeneratorTests(SimpleTestCase):
@@ -70,3 +75,12 @@ class GeneratorTests(SimpleTestCase):
 
         self.assertEqual(schema.get("additionalProperties", True), False)
         self.assertNotIn("additionalProperties", schema["properties"]["extra"])
+
+    def test_a_mapping_whose_keys_have_a_pattern_admits_no_other_key(self):
+        validator = Draft202012Validator(json_schema(_Bounded))
+        other = {"by_name": {"Unit": 1}}
+
+        with self.assertRaises(ValidationError):
+            _Bounded.model_validate(other)
+        self.assertFalse(validator.is_valid(other))
+        self.assertTrue(validator.is_valid({"by_name": {"unit": 1}}))

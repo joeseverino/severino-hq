@@ -1,9 +1,10 @@
-"""The runner that runs a bound run's playbook through ansible-runner.
+"""The worker's two uses of ansible-runner: a bound run's playbook, and a role's
+argument spec as ``ansible-doc`` reads it.
 
 Every argument is fixed here or comes from the bound run (``claim.bind``): the
 playbook and project from the resolved procedure, the inventory from the
 connection each of the run's hosts is reached through, the extra-vars from its
-parameters. Nothing is read from the
+parameters, the timeout from its procedure's record. Nothing is read from the
 private data directory's ``env/`` (a fresh, empty one per run), so no file
 there can add a command-line option, a variable or a callback, and none is
 written there (``suppress_env_files``). The artifacts live in a private
@@ -12,12 +13,20 @@ handler did not keep and no stdout, and are removed with it when the run ends,
 as are Ansible's own working files and ssh's control sockets, which a
 read-only root has nowhere else to put.
 
+Ansible reads the worker's configuration and no project's (``environment``):
+its configuration file is an empty one of the run's own, so a project's
+``ansible.cfg`` is never read, and every path it looks for plugins and modules
+on is pinned. What Ansible loads from beside a playbook or inside a role
+(``callback_plugins/``, ``library/`` and the rest), no setting turns off; the
+scan reports each such directory a project holds (``catalog.unpinned``).
+
 Every host is reached over ssh as its connection says, with its identity
 alone (no agent, no password, no other key), against its host key as the
 renderer pinned it, and nothing else: ansible-runner turns host key checking
 off unless told otherwise, so the inventory turns it on.
 """
 
+import json
 import shlex
 import tempfile
 from collections.abc import Callable, Mapping
@@ -26,7 +35,7 @@ from typing import Any
 
 lazy import ansible_runner
 
-from .claim import Run
+from .claim import Refused, Run
 from .connections import Target
 
 # The ssh options every connection is opened with; the host's known_hosts is
@@ -41,6 +50,36 @@ _SSH_OPTIONS = (
     "KbdInteractiveAuthentication=no",
     "ForwardAgent=no",
 )
+
+# Each path Ansible searches for plugins and modules beyond the ones it ships
+# and the image installs, by the variable that sets it: its configuration's
+# ``*_PLUGIN_PATH``, ``DEFAULT_MODULE_PATH`` and ``DEFAULT_MODULE_UTILS_PATH``
+# (ansible-core 2.22's ``config/base.yml``; the smoke holds this to them).
+PLUGIN_PATHS = (
+    "ANSIBLE_ACTION_PLUGINS",
+    "ANSIBLE_BECOME_PLUGINS",
+    "ANSIBLE_CACHE_PLUGINS",
+    "ANSIBLE_CALLBACK_PLUGINS",
+    "ANSIBLE_CLICONF_PLUGINS",
+    "ANSIBLE_CONNECTION_PLUGINS",
+    "ANSIBLE_DOC_FRAGMENT_PLUGINS",
+    "ANSIBLE_FILTER_PLUGINS",
+    "ANSIBLE_HTTPAPI_PLUGINS",
+    "ANSIBLE_INVENTORY_PLUGINS",
+    "ANSIBLE_LIBRARY",
+    "ANSIBLE_LOOKUP_PLUGINS",
+    "ANSIBLE_MODULE_UTILS",
+    "ANSIBLE_NETCONF_PLUGINS",
+    "ANSIBLE_STRATEGY_PLUGINS",
+    "ANSIBLE_TERMINAL_PLUGINS",
+    "ANSIBLE_TEST_PLUGINS",
+    "ANSIBLE_VARS_PLUGINS",
+)
+# Where a project's roles are, by Ansible's directory layout: ``roles/`` at its
+# root, beside ``playbooks/``.
+ROLES = "roles"
+# How long ansible-doc may take to read one role's argument spec.
+DOC_TIMEOUT_SECONDS = 60
 
 
 def _host_vars(target: Target) -> dict[str, Any]:
@@ -63,14 +102,30 @@ def _inventory(hosts: tuple[str, ...], targets: tuple[Target, ...]) -> dict[str,
     return {"all": {"hosts": {host: _host_vars(target) for host, target in zip(hosts, targets, strict=True)}}}
 
 
-def _working_files(private_data_dir: Path) -> dict[str, str]:
-    """Where Ansible keeps its own files during the run: inside the run's private directory."""
+def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
+    """What every Ansible program the worker starts is told, for a project at
+    ``project_dir``: its configuration and every path it searches, all inside
+    ``private_data_dir`` but the project's own roles.
 
+    Writes the empty configuration file it names, since Ansible goes on to the
+    working directory's ``ansible.cfg`` when the one ``ANSIBLE_CONFIG`` names
+    does not exist.
+    """
+
+    config = private_data_dir / "ansible.cfg"
+    config.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    config.write_text("# The worker's own: a project's ansible.cfg is never read.\n", encoding="utf-8")
+    # A directory nothing creates: ansible-runner adds its own callback's
+    # directory after the callback path, and nothing else is found.
+    nothing = str(private_data_dir / "plugins")
     return {
+        "ANSIBLE_CONFIG": str(config),
         "ANSIBLE_HOME": str(private_data_dir / "home"),
         "ANSIBLE_LOCAL_TEMP": str(private_data_dir / "tmp"),
         "ANSIBLE_SSH_CONTROL_PATH_DIR": str(private_data_dir / "cp"),
         "ANSIBLE_HOST_KEY_CHECKING": "True",
+        "ANSIBLE_ROLES_PATH": str(project_dir / ROLES),
+        **dict.fromkeys(PLUGIN_PATHS, nothing),
     }
 
 
@@ -85,7 +140,10 @@ def arguments(run: Run, private_data_dir: Path) -> dict[str, Any]:
         "playbook": run.procedure.playbook,
         "inventory": _inventory(run.hosts, run.targets),
         "extravars": dict(run.parameters),
-        "envvars": _working_files(private_data_dir),
+        "envvars": environment(private_data_dir, run.procedure.project_dir),
+        # ansible-runner's own job timeout: past it, the run is killed and
+        # ends as ``timeout``.
+        "timeout": run.timeout_seconds,
         "suppress_env_files": True,
         "suppress_output_file": True,
         "suppress_ansible_output": True,
@@ -117,3 +175,56 @@ def runner(scratch: Path) -> Callable[..., str]:
             return str(started.status)
 
     return run_playbook
+
+
+# The argument spec of role ``role`` at its ``main`` entry point, as a playbook
+# in ``playbook_dir`` of the project at ``project_dir`` finds it; None when
+# the role declares none. It may refuse.
+RoleSpec = Callable[[str, Path, Path], Mapping[str, Any] | None]
+
+
+def role_spec(scratch: Path) -> RoleSpec:
+    """A reader of role argument specs through ansible-runner's
+    ``get_role_argspec``, each read in a directory of its own under ``scratch``."""
+
+    def read(role: str, playbook_dir: Path, project_dir: Path) -> Mapping[str, Any] | None:
+        with tempfile.TemporaryDirectory(prefix="doc-", dir=scratch) as private:
+            response, _said = ansible_runner.get_role_argspec(
+                role,
+                playbook_dir=str(playbook_dir),
+                private_data_dir=private,
+                # ansible-doc runs here, so no project file is its working directory's.
+                host_cwd=private,
+                envvars=environment(Path(private), project_dir),
+                suppress_env_files=True,
+                quiet=True,
+                timeout=DOC_TIMEOUT_SECONDS,
+            )
+        return entry_point(role, response)
+
+    return read
+
+
+def entry_point(role: str, response: Any) -> Mapping[str, Any] | None:
+    """The ``main`` entry point of ``role`` in what ``ansible-doc -t role -j``
+    answered, or None when the role declares no argument spec.
+
+    ansible-doc answers an empty object for a role it cannot find, and says
+    why only in warnings that name the worker's own paths, so those are not
+    repeated.
+    """
+
+    if not isinstance(response, Mapping) or not response:
+        raise Refused("NoArgumentSpec", f"No role {role} is in the project's roles/ or beside the playbook.")
+    found = response.get(role)
+    if not isinstance(found, Mapping):
+        raise Refused("NoArgumentSpec", f"ansible-doc answered about another role than {role}.")
+    points = found.get("entry_points")
+    main = points.get("main") if isinstance(points, Mapping) else None
+    if not isinstance(main, Mapping):
+        return None
+    # Its options and words alone: ansible-doc adds where the role is on this
+    # machine, which is the worker's and no part of the spec.
+    kept = {name: main[name] for name in ("short_description", "description", "options") if name in main}
+    spec: dict[str, Any] = json.loads(json.dumps(kept))
+    return spec

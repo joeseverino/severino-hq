@@ -19,7 +19,6 @@ from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import counting
 from hq.platform.application.projection import projection_scope, years_of
 from hq.platform.application.services import service_catalog
-from hq.platform.application.tests.example_procedures import supplied
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.bench import Seeded, seed
 from hq.platform.core.management.commands.bench_pages import ALSO, SAMPLES, _pages
@@ -131,15 +130,15 @@ READERS = 2
 class StoredPageBudgetTests(TestCase):
     """A page between two changes of the estate derives nothing, at any size.
 
-    The example procedures are supplied, so the estate holds automation runs
-    in every state at both sizes, which Jobs, the machine's page and the
+    The estate adopts the example procedures, so it holds automation runs in
+    every state at both sizes, which Jobs, the machine's page and the
     procedure's command list.
     """
 
     def _costs(self, seeded: Seeded) -> tuple[dict[str, tuple[int, int]], Counter, Counter]:
         self.client.force_login(seeded.user)
         urls = dict(_pages(seeded)[0])
-        with supplied(alone=True), frozen():
+        with host_only(), frozen():
             with counting() as (first, _served):
                 for name in STORED_PAGES:
                     self.assertEqual(self.client.get(urls[name]).status_code, 200, name)
@@ -152,8 +151,7 @@ class StoredPageBudgetTests(TestCase):
         return found, Counter(first), again
 
     def test_a_page_costs_the_same_at_any_size_and_a_second_visit_derives_nothing(self):
-        with supplied():
-            (small, small_first, small_again), (large, large_first, large_again) = at_both_sizes(self._costs)
+        (small, small_first, small_again), (large, large_first, large_again) = at_both_sizes(self._costs)
 
         self.assertEqual(large, small)
         self.assertEqual(large_first, small_first)
@@ -163,15 +161,9 @@ class StoredPageBudgetTests(TestCase):
 
 class BenchPagesTests(TestCase):
     def test_every_sample_names_a_route_and_a_seeded_record(self):
-        with supplied():
-            seeded = seed(SMALL)
-            pages, left = _pages(seeded)
+        seeded = seed(SMALL)
+        pages, left = _pages(seeded)
 
         benched = {name.split("?")[0] for name, _ in pages}
         self.assertLessEqual(set(SAMPLES) | set(ALSO), benched)
         self.assertNotIn("dashboard", dict(left))
-
-    def test_a_procedure_s_command_is_benched_only_where_one_is_supplied(self):
-        seeded = seed(SMALL)
-
-        self.assertNotIn("command:run", dict(_pages(seeded)[0]))

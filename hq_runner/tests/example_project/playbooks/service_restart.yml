@@ -1,0 +1,8 @@
+- name: Restart a service
+  hosts: all
+  roles:
+    - role: service
+  post_tasks:
+    - name: The service answers after its restart
+      ansible.builtin.assert:
+        that: restarted is succeeded

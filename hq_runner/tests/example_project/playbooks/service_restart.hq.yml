@@ -1,0 +1,13 @@
+id: example.service_restart
+target_kinds: [machine]
+hosts: [app.example.com]
+effect: infrastructure_change
+privilege: example.service_control
+timeout_seconds: 300
+retry: observe_first
+recovery:
+  - Start the service by hand if it does not come back.
+inputs:
+  unit:
+    pattern: "^[a-z0-9@._-]+$"
+    max_length: 64

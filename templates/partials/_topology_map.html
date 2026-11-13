@@ -1,0 +1,78 @@
+{% comment %}
+The map of a graph, drawn by {% include "partials/_topology_map.html" %} from
+what TopologyView hands its page: the bar that narrows it, its lanes of node
+cards (topology_groups, a lane for each kind), and beside them the one panel
+that holds the selected node's details (topology_detail, drawn by
+control_plane/_topology_node_body.html), never inside a card. It is useful
+HTML before any script: a card's select control is a link that focuses the
+node, and static/js/topology.js, reading data-topology and the data-topology-*
+hooks, filters it and loads a card's details in place. topology_kinds are the
+toggles of the kind filter, topology_lenses the views, active_lens the one
+seen through; focus_node, topology_shown, topology_total, topology_left_out
+and topology_everything say what the map holds and what it leaves out.
+{% endcomment %}{% url 'control_plane:topology' as everything_url %}
+<div data-topology data-topology-ledger="topology-relations" data-focus="{{ focus_node }}" data-topology-total="{{ topology_total }}">
+  {% comment %}
+  One bar, in the order a reader narrows: a name, then which view (the
+  server's question, which its Filter sends), then the kinds. The count says
+  what the map leaves out, beside the one control for it: the lanes that are
+  context and the cards nothing links to (`topology_lenses.kept_on_the_map`).
+  The script rewrites only the count, and shows Clear selection only while a
+  card is selected.
+  {% endcomment %}
+  {% filter_bar filtered=active_lens clear=everything_url %}
+    <input type="search" placeholder="Find on the map" aria-label="Find on the map" data-topology-search autocomplete="off">
+    <select name="lens" aria-label="View">
+      <option value="">Show: everything</option>
+      {% for lens in topology_lenses %}<option value="{{ lens.name }}"{% if active_lens.name == lens.name %} selected{% endif %}>{{ lens.label }}</option>{% endfor %}
+    </select>
+    {% include "partials/_toggle_set.html" with legend="Show" set="kind" toggles=topology_kinds only %}
+    <button class="btn ghost compact" type="button" data-topology-reset hidden>Clear selection</button>
+  {% summary %}<span data-topology-status>{{ topology_shown|breakable }} of {{ topology_total|measured:"shown" }}.</span>
+    {% if topology_left_out %}<a href="{{ everything_url }}?all=1#map">Show {{ topology_left_out|measured:"more" }}</a>{% elif topology_everything %}<a href="{{ everything_url }}#map">Show fewer</a>{% endif %}
+  {% endfilter_bar %}
+
+  <div class="topology-workspace">
+  <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Map lanes">
+    {% for group in topology_groups %}{% if group.items %}
+      {% section group.label count=group.items|length id="topology-"|add:group.kind css="topology-lane" data_topology_lane=group.kind %}
+        <div class="topology-node-list">
+          {% for item in group.items %}
+            {% comment %}
+              A card names the node and selects it. Its details render once, in
+              the panel beside the lanes, never inside the card.
+            {% endcomment %}
+            <article
+              class="topology-node topology-node-{{ item.node.kind }} is-{{ item.node.status }}"
+              data-topology-node="{{ item.node.id }}"
+              data-topology-node-kind="{{ item.node.kind }}"
+              data-topology-neighbors="{{ item.neighbors }}"
+              data-topology-search-text="{{ item.node.label }} {{ item.node.name }} {{ item.node.subtitle }} {{ item.node.summary }} {{ item.node.detail }}"
+              data-topology-body="{{ item.body_url }}"
+            >
+              <span class="topology-node-title" title="{{ item.node.label }} · {{ item.node.subtitle }}{% if item.node.summary %} · {{ item.node.summary }}{% endif %}">
+                <strong>{% if item.link.url and item.link.external %}{% outside_link url=item.link.url css="topology-node-link" entity=item.link.kind_label %}{{ item.link.label|breakable }}{% endoutside_link %}{% elif item.link.url %}<a class="topology-node-link" href="{{ item.link.url }}" data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</a>{% else %}<span data-entity="{{ item.link.kind_label }}">{{ item.link.label|breakable }}</span>{% endif %}</strong>
+                <small>{{ item.node.subtitle|breakable }}</small>
+                {% if item.node.summary %}<small data-topology-node-summary>{{ item.node.summary|breakable }}</small>{% endif %}
+              </span>
+              <a class="topology-node-select" href="{{ item.focus_url }}" data-topology-select aria-controls="topology-detail" title="Details · {{ item.degree|counted:"link" }}" aria-label="Details for {{ item.node.label }}, {{ item.degree|counted:"link" }}"{% if item.node.id == focus_node %} aria-current="true"{% endif %}><span class="topology-node-degree" aria-hidden="true">{{ item.degree|counted:"link" }}</span></a>
+            </article>
+          {% endfor %}
+        </div>
+      {% aside %}<span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
+      {% endsection %}
+    {% endif %}{% empty %}
+      {% if active_lens %}
+        {% include "partials/_empty_state.html" with message="Nothing matches." %}
+      {% else %}
+        {% include "partials/_empty_state.html" with message="Nothing here yet." %}
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-section --> the map's details pane: a labeled live region the selection moves focus to, titled by the node it shows
+  {% endcomment %}<section class="topology-detail" id="topology-detail" tabindex="-1" aria-label="Details" aria-live="polite" data-topology-detail="{{ focus_node }}" data-fragment-failure="Details did not load."{% if not topology_detail %} hidden{% endif %}>
+    {% if topology_detail %}{% include "control_plane/_topology_node_body.html" with item=topology_detail %}{% endif %}
+  </section>
+  </div>
+</div>

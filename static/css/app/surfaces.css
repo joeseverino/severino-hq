@@ -196,11 +196,6 @@
   .section-fold > summary :is(h2, h3) { margin: 0; }
   .section-fold[open] > summary { margin-bottom: var(--space-5); }
 
-  /* The topology's view picker, first in its own filter row. */
-  .topology-view { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin: 0; }
-  /* A view's name is a sentence: the picker takes the row and never more. */
-  .topology-view, .topology-view select { min-width: 0; max-width: 100%; }
-
   /* What the filter bar currently shows, at its far end. */
   .filter-bar-summary { margin: 0 0 0 auto; align-self: center; color: var(--muted); font-size: var(--text-sm); }
   .filter-bar-summary strong { color: var(--ink); }

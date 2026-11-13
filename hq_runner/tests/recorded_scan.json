@@ -1,0 +1,214 @@
+{
+  "branch": "main",
+  "files": [
+    {
+      "object": "85f8ae45d77d0e45bf19d7d1964117833d30511c",
+      "path": "ansible.cfg"
+    },
+    {
+      "object": "15b68d488cffd9fd44bd09c10cf6ef913bd8d715",
+      "path": "callback_plugins/example_loud.py"
+    },
+    {
+      "object": "03592f82dc63f6e48bfaaac8813b2d0e1e5146dd",
+      "path": "collections/ansible_collections/example/smoke/plugins/callback/loud.py"
+    },
+    {
+      "object": "9f86052b1dbeb041eb3efed6b184cccd7248b6bf",
+      "path": "compose/web/compose.yml"
+    },
+    {
+      "object": "b13ddfe313856fd2be95ddf3d003d2522c28b9e3",
+      "path": "group_vars/all.yml"
+    },
+    {
+      "object": "3a5d04efd2a6d7bcdb2948d1bf62c3a894ac73c2",
+      "path": "inventory.yml"
+    },
+    {
+      "object": "7d3185107de5728ca9f68ea0199e2b60ab16d4a9",
+      "path": "playbooks/host_health.hq.yml"
+    },
+    {
+      "object": "0238dfe065d6ce62056f2e0acb5237e2d4e76a34",
+      "path": "playbooks/host_health.yml"
+    },
+    {
+      "object": "b31589efeba678f74002a6d17e675cd799cdf068",
+      "path": "playbooks/service_restart.hq.yml"
+    },
+    {
+      "object": "ce8a9e6712a7dd4c670ee0dcf5f8d08cc0de1703",
+      "path": "playbooks/service_restart.yml"
+    },
+    {
+      "object": "2d199f698d30a7daf1ec1787a5c7b66894a43cc3",
+      "path": "playbooks/unfinished.hq.yml"
+    },
+    {
+      "object": "940154d4e72c2a3d19efddf16715692af74bb519",
+      "path": "roles/health/meta/argument_specs.yml"
+    },
+    {
+      "object": "057b422f4568af68aa355fa001683e26f646e13d",
+      "path": "roles/health/tasks/main.yml"
+    },
+    {
+      "object": "0def497564f3fdd551b9194b73d26efd3302f7f5",
+      "path": "roles/service/library/example_probe.py"
+    },
+    {
+      "object": "ee0c5284a7bb9439c5e9589dbd21a3968db50d38",
+      "path": "roles/service/meta/argument_specs.yml"
+    },
+    {
+      "object": "2173b5b4d9d168e8d1956cdcb717936209d50917",
+      "path": "roles/service/tasks/main.yml"
+    }
+  ],
+  "procedures": [
+    {
+      "declaration": {
+        "effect": "read",
+        "id": "example.host_health",
+        "recovery": [
+          "Nothing to recover from; it reads and changes nothing."
+        ],
+        "retry": "safe",
+        "target_kinds": [
+          "machine"
+        ],
+        "timeout_seconds": 120
+      },
+      "playbook": "playbooks/host_health.yml",
+      "preconditions": [
+        "The service to check is named"
+      ],
+      "problems": [],
+      "roles": [
+        {
+          "argument_spec": {
+            "description": [
+              "Says which service it checks, and records that it checked."
+            ],
+            "options": {
+              "service": {
+                "choices": [
+                  "web",
+                  "db"
+                ],
+                "description": "The service to check.",
+                "required": true,
+                "type": "str"
+              }
+            },
+            "short_description": "Check one service on a host"
+          },
+          "role": "health"
+        }
+      ],
+      "sidecar": "playbooks/host_health.hq.yml",
+      "title": "Check a service on the host",
+      "verification": [
+        "The check ran"
+      ]
+    },
+    {
+      "declaration": {
+        "effect": "infrastructure_change",
+        "hosts": [
+          "app.example.com"
+        ],
+        "id": "example.service_restart",
+        "inputs": {
+          "unit": {
+            "max_length": 64,
+            "pattern": "^[a-z0-9@._-]+$"
+          }
+        },
+        "privilege": "example.service_control",
+        "recovery": [
+          "Start the service by hand if it does not come back."
+        ],
+        "retry": "observe_first",
+        "target_kinds": [
+          "machine"
+        ],
+        "timeout_seconds": 300
+      },
+      "playbook": "playbooks/service_restart.yml",
+      "preconditions": [],
+      "problems": [],
+      "roles": [
+        {
+          "argument_spec": {
+            "options": {
+              "unit": {
+                "description": "The unit to restart.",
+                "required": true,
+                "type": "str"
+              }
+            },
+            "short_description": "Restart one systemd unit"
+          },
+          "role": "service"
+        }
+      ],
+      "sidecar": "playbooks/service_restart.hq.yml",
+      "title": "Restart a service",
+      "verification": [
+        "The service answers after its restart"
+      ]
+    },
+    {
+      "declaration": {
+        "effect": "sometimes",
+        "recovery": [
+          "None yet."
+        ],
+        "retry": "never",
+        "target_kinds": [
+          "machine"
+        ],
+        "timeout_seconds": 60
+      },
+      "playbook": "",
+      "preconditions": [],
+      "problems": [
+        "No playbook playbooks/unfinished.yml sits beside it."
+      ],
+      "roles": [],
+      "sidecar": "playbooks/unfinished.hq.yml",
+      "title": "",
+      "verification": []
+    }
+  ],
+  "revision": "d32ae975e8ead147ce187ec8108533c144487d3d",
+  "unpinned": [
+    {
+      "kind": "config",
+      "path": "ansible.cfg"
+    },
+    {
+      "kind": "plugins",
+      "path": "callback_plugins"
+    },
+    {
+      "kind": "plugins",
+      "path": "collections"
+    },
+    {
+      "kind": "variables",
+      "path": "group_vars"
+    },
+    {
+      "kind": "plugins",
+      "path": "roles/service/library"
+    }
+  ],
+  "verification": {
+    "committer": "web-flow",
+    "reason": "valid",
+    "verified": true
+  }
+}
