@@ -53,7 +53,7 @@
   <script src="{% static 'js/tables.js' %}" {% csp_nonce_attr %}></script>
   {% block head_extra %}{% endblock %}
 </head>
-<body data-sign-in="{% url 'login' %}">
+<body data-sign-in="{% url 'login' %}" data-ask-newer="{% newer_reading %}" data-ask-show="{% show_newer %}">
   {% comment %}
   The header is a dozen tab stops wide, and better than thirty with the
   sections menu open. Visible only while focused, so it costs a pointer

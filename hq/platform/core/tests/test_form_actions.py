@@ -16,7 +16,8 @@ from hq.platform.application.tests.tree import ROOT
 
 TEMPLATES = ROOT / "templates"
 PARTIAL = "partials/_form_actions.html"
-COMMAND = "command.html"
+# The form part itself, which every form that writes is drawn through.
+FORM = "partials/_form.html"
 # A form that writes: a query form (method get) closes with its own Filter.
 _POSTS = re.compile(r"<form\b[^>]*\bmethod=\"post\"", re.IGNORECASE)
 _OWN_ROW = re.compile(r"type=\"submit\"|class=\"[^\"]*\bform-actions\b|<button\b(?![^>]*type=\"button\")")
@@ -29,8 +30,6 @@ ONE_VERB = frozenset(name for name, shape in PARTS if shape == "a form that writ
 # partials/_form.html; this only falls.
 OWN_ROW_TODAY = frozenset(
     {
-        "calendars/calendar.html",
-        "control_plane/service_start.html",
         "control_plane/zone_mail.html",
     }
 )
@@ -88,7 +87,7 @@ class FormTemplateTests(SimpleTestCase):
     def test_every_form_closes_with_the_shared_row(self):
         forms = form_templates()
 
-        self.assertIn(COMMAND, forms)
+        self.assertIn(FORM, forms)
         self.assertEqual(
             [
                 f"{name}: {missed}"

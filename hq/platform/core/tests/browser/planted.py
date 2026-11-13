@@ -350,13 +350,16 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
-    # The dot held inside the name's box, a count's noun held to its figure,
-    # a run of parts whose dot before a part that opens a row is clipped, and
-    # a filter bar whose search fills its row, a field for words and no mark.
+    # The dot held inside the name's box, the dot after a clamped link that
+    # opens its line, a count's noun held to its figure, a run of parts whose
+    # dot before a part that opens a row is clipped, and a filter bar whose
+    # search fills its row, a field for words and no mark.
     "lines opening on a stray": Plant(
         "{% load filter_tags %}"
         '<p style="inline-size: 12ch"><span style="display: inline-block; inline-size: 100%">example-name&nbsp;·</span>'
-        ' Example</p><p style="inline-size: 6ch">Example 12&nbsp;days</p>'
+        ' Example</p><p style="inline-size: 16ch">Example read through <a href="#" style="display: -webkit-inline-box;'
+        ' -webkit-box-orient: vertical; -webkit-line-clamp: 2">Example Home</a>&nbsp;· Example</p>'
+        '<p style="inline-size: 6ch">Example 12&nbsp;days</p>'
         '<ul class="dot-list" style="inline-size: 12ch"><li>Example one</li><li>Example two</li></ul>'
         '<div style="inline-size: 16rem">{% filter_bar %}<input type="search" name="q" aria-label="Example"'
         ' placeholder="Example names, vendors and notes">{% endfilter_bar %}</div>'

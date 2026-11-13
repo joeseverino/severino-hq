@@ -15,6 +15,7 @@ from django.template.loader import render_to_string
 from django.utils.html import escape
 
 from hq.platform.application import calendar
+from hq.platform.application.adoption import ONLY_READS, WriteGap
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
 from hq.platform.application.card_items import Insight, Kpi, ListRow
 from hq.platform.application.drawings import AllocationBar, Share, Trend
@@ -732,6 +733,19 @@ CATALOG = {
         "{% endfacts %}",
         {"lines": ("Example issuer", "24 example days left")},
     ),
+    # A band beside a name in a card that lays out its parts in a flex row,
+    # as a GitHub profile's counts sit beside its account: the band, whose
+    # width is its frame's and never its facts', still holds them.
+    "part/facts-band-in-a-row": Entry(
+        '{% card %}<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 2rem">'
+        "<p>An example account, and a line about it</p>"
+        '{% facts layout="band" label="Example account" %}'
+        '{% fact "Example followers" value=12 url="https://example.com/followers" %}'
+        '{% fact "Example following" value=9 url="https://example.com/following" %}'
+        '{% fact "Example repositories" value=4 url="https://example.com/repositories" %}'
+        '{% fact "Example starred" value=38 url="https://example.com/stars" %}'
+        "{% endfacts %}</div>{% endcard %}"
+    ),
     # A card's summary line under its head: a zero, a linked count, a toned
     # count. Its labels read on from the value, so they are lower case.
     "part/facts-inline": Entry(
@@ -801,6 +815,17 @@ CATALOG = {
         "{% endfacts %}",
         {"none": None},
     ),
+    # A run of links long enough to wrap, as a record's relationships list
+    # what each phrase reaches: every line a target tall.
+    "part/facts-list-links": Entry(
+        "{% facts %}"
+        '{% fact "Example forwards to" %}<ul class="dot-list">'
+        '<li><a href="/example/one/">example-app-one</a></li><li><a href="/example/two/">example-app-two</a></li>'
+        '<li><a href="/example/three/">example-app-three</a></li><li><a href="/example/four/">example-four</a></li>'
+        '<li><a href="/example/five/">example-five</a></li><li><a href="/example/six/">example-app-six</a></li>'
+        "</ul>{% endfact %}"
+        "{% endfacts %}"
+    ),
     # A list on the page and one in a disclosure under it, as a resource's
     # other settings are drawn: the list opened to read more sits closer.
     "part/facts-list-compact": Entry(
@@ -860,6 +885,21 @@ CATALOG = {
     ),
     "form/page-fieldless": Entry(
         '{% include "form_page.html#form_card" %}', {"form": _NoFields(), "form_verb": "Run example", "cancel_url": "#"}
+    ),
+    # A form whose connection cannot make the change (`gap`): its verb drawn
+    # unusable, with what it needs beside it.
+    "form/write-gap": Entry(
+        '{% section "Example record" %}{% include "partials/_form.html" with form=form verb="Save example" '
+        'cancel_url="#" gap=gap note="" choices="" choice_field="" bar="" %}{% endsection %}',
+        {
+            "form": _ExampleForm(),
+            "gap": WriteGap(
+                "HQ only reads through Example connection example-main. A change through it also needs Example Write.",
+                ONLY_READS,
+                "Needs manages: 1 and Example Write",
+                "#",
+            ),
+        },
     ),
     "form/lookup": Entry(
         '{% section "Example lookup" %}{% include "partials/_form.html" with method="get" form=form verb="Look up" '

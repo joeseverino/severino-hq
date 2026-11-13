@@ -44,7 +44,8 @@ SELECTORS = {
     "ask_note": "[data-ask-note]",
     # A page's note on its readings, at the end of the head's first line, and
     # the page it heads.
-    "page_note": '.page-trail-row > [data-ask-note][form="page-visit"]',
+    "page_note": '.page-trail-row [data-ask-note][form="page-visit"]',
+    "page_trail_row": ".page-trail-row",
     "content": "#content",
     # A family's toggle, the row toggle, and a row's own dismiss.
     "decision_family": "[data-queue-family] [data-fold-toggle]",
@@ -75,6 +76,10 @@ SELECTORS = {
     # its line.
     "name_cut": "main td :is(.token[data-sole], .cell-line):not(code *) > .cut:has(.whole)",
     "part": ".whole",
+    # A cell's kept line, the icon it opens with and the name beside it.
+    "kept_line": "main td > .kept-line",
+    "line_icon": ".icon",
+    "line_name": ".token",
     "decision_actions": ".queue-act .attention-actions",
     # The queue's table, and its cells of what is wrong and of its buttons.
     "queue_table": ".queue-table",

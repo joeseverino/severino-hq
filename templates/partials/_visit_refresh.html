@@ -15,9 +15,14 @@ page.html and the dashboard draw it. A page's note (`#note`) ends the head's
 first line, the trail's or the dashboard's date, so it takes no line of its
 own. It names the form it speaks for, so it stands apart from the ask, in the
 head the refresh swaps with the rest, and the new note finds the form by that
-name. A region that fills itself (`refresh="[data-connection-panel]"`, also
-shown in a dialog with no head) holds its note, and is fetched again from its
-own address when the reading lands.
+name. It stands in a slot as wide as the longest sentence HQ writes for it
+word for word, drawn here unseen from the same words the script writes
+(asks.REFRESHING, REFRESHED, NEWER_READING and SHOW_NEWER), so each of those
+is whole, the trail beside it never moves whatever it says, and only a
+failure's sentence is cut, whole in its title. A region that fills itself
+(`refresh="[data-connection-panel]"`, also shown in a dialog with no head)
+holds its note, and is fetched again from its own address when the reading
+lands.
 {% endcomment %}
 <div class="ask ask-quiet" data-ask data-ask-state="idle" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
   <form method="post" action="{% url 'control_plane:visit' %}" data-ask-auto hidden{% if not refresh %} id="page-visit"{% endif %}>
@@ -27,4 +32,4 @@ own address when the reading lands.
   </form>
   {% if refresh %}<output class="visit-status" data-ask-note hidden></output>{% endif %}
 </div>
-{% partialdef note %}<output class="visit-status" form="page-visit" data-ask-note></output>{% endpartialdef %}
+{% partialdef note %}<span class="visit-slot"><output class="visit-status" form="page-visit" data-ask-note data-ask-cut></output><span class="strut" data-strut="{% refreshing %}" aria-hidden="true"></span><span class="strut" data-strut="{% refreshed %}" aria-hidden="true"></span><span class="strut" data-strut="{% newer_reading %} {% show_newer %}" aria-hidden="true"></span></span>{% endpartialdef %}

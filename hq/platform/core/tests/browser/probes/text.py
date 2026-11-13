@@ -152,10 +152,11 @@ STRAYS_OPENING_A_LINE = (
   const blockOf = (el) => { while (el.parentElement && inlineDisplay(el)) el = el.parentElement; return el; };
   const drawnRect = (el, rect) => rect && rect.width > 0.5 && painted(el, rect);
   // A box set in its block's line whole: an inline block, an inline flex or
-  // grid box, or a replaced element (an icon, an image).
+  // grid box, a clamped one (`-webkit-inline-box`), or a replaced element (an
+  // icon, an image).
   const atomic = (el) => {
     const display = getComputedStyle(el).display;
-    return display.startsWith('inline-') || (display === 'inline' && el instanceof SVGSVGElement) || el.matches('img, svg, input, select, button');
+    return /^(-webkit-)?inline-/.test(display) || (display === 'inline' && el instanceof SVGSVGElement) || el.matches('img, svg, input, select, button');
   };
   // The separator a part draws before itself (`::before`), where its box
   // lands: its own size from its margin before the part's first line.

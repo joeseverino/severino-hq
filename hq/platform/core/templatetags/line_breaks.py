@@ -259,9 +259,14 @@ def _line(value, *, sole: bool | None = None) -> list[str]:
     for at, part in enumerate(parts):
         words = _words(part, sole=alone)
         if len(words) >= 3 and 'class="token"' in words[-3] and _TAIL.fullmatch(words[-1]) and words[-2] == " ":
-            # In the token's own box, after the parts a cell cuts.
-            name = words[-3].removesuffix("</span>")
-            words = [*words[:-3], f"{name}\xa0{words[-1]}</span>"]
+            # In the token's own box, after the parts a cell cuts; in a
+            # phrase whose last part is a box of its own (`.whole`), inside
+            # that box, after the text a cell cuts in it (`.part`).
+            name = words[-3]
+            boxed = "data-sole" not in name and 'class="part"' in name and name.endswith("</span>" * 3)
+            closing = "</span>" * (2 if boxed else 1)
+            name = name.removesuffix(closing)
+            words = [*words[:-3], f"{name}\xa0{words[-1]}{closing}"]
         if at < len(parts) - 1:
             # The dot as {% dot %} draws it, hidden from a reader, and the
             # space after it outside the box, where the line may break.

@@ -546,7 +546,9 @@ class StyleContractTests(SimpleTestCase):
 
 # A class a script or a test finds an element by, which no rule styles. Each
 # says who reads it; a class that styles nothing and nothing reads is deleted.
-HOOK_CLASSES: dict[str, str] = {}
+HOOK_CLASSES: dict[str, str] = {
+    "form-card": "the frame's card (form_page.html), by which test_form_page tells a card drawn by hand from it",
+}
 
 # Decided at render time, so a word joined to one is not a literal class.
 _INTERPOLATED = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)

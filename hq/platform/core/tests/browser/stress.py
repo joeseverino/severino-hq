@@ -1,9 +1,12 @@
 """The stress estate: every page it draws."""
 
+import tempfile
 from functools import cache
+from pathlib import Path
 from types import MappingProxyType
 
 from django.db import transaction
+from django.test import override_settings
 
 from hq.platform.core import seeds
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES, _asked_on_opening
@@ -26,17 +29,26 @@ def stress_pages(asked):
     sparse, dense = ({name: page for name, page in family.items() if name in asked} for family in (PAGES, DENSE_PAGES))
     derived = {name: page for name, page in derived_pages().items() if name in asked}
     pages: dict[str, str] = {}
-    for seed, chosen, needed in (
-        ("sparse", sparse, sparse),
-        ("dense", dense, sparse or dense),
-        ("derived", derived, derived),
-    ):
-        if needed:
-            with transaction.atomic(), seeds.built(seed) as owner:
-                pages |= render_pages(owner, chosen)
-                # Asked once every page is drawn, so each is drawn before anything was asked.
-                pages |= _asked_on_opening(owner) if seed == "dense" else {}
-                transaction.set_rollback(True)
+    # Drawn with a controller reporting here, so a page about one thing
+    # draws the note it keeps in its head (cadence.ControllerStanding.here).
+    with tempfile.TemporaryDirectory() as directory:
+        heartbeat = Path(directory) / "controller-heartbeat"
+        heartbeat.touch()
+        for seed, chosen, needed in (
+            ("sparse", sparse, sparse),
+            ("dense", dense, sparse or dense),
+            ("derived", derived, derived),
+        ):
+            if needed:
+                with (
+                    override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)),
+                    transaction.atomic(),
+                    seeds.built(seed) as owner,
+                ):
+                    pages |= render_pages(owner, chosen)
+                    # Asked once every page is drawn, so each is drawn before anything was asked.
+                    pages |= _asked_on_opening(owner) if seed == "dense" else {}
+                    transaction.set_rollback(True)
     return pages
 
 

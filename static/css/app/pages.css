@@ -247,7 +247,6 @@
 .approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-left: 2px solid var(--line-strong); color: var(--ink-2); font-size: var(--text-sm); }
 .approval-label { margin: var(--space-10) 0 var(--space-4); font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
 .approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
-.approval-actions form { margin: 0; }
 
 /* Agents: the state and its one control, each agent with its own block, then every rule in a table. */
 .agent-state { display: grid; gap: var(--space-6); }
@@ -317,13 +316,15 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   min-block-size: var(--head-room);
 }
 .ask.ask-quiet[hidden] { display: none; }
+/* The dot's size, which a page's note keeps room for beside its words (cuts.css). */
+.visit-status, .visit-slot { --visit-dot: 6px; }
 .visit-status { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; overflow-wrap: anywhere; }
 /* A dot before what it says, in the tone of how the read stands: moving
    while it is read, the way a live reading does (connection.css). A page's
    note stands apart from its ask, so it reads the state off the form it
    names. */
 .visit-status:not(:empty)::before {
-  content: ""; display: inline-block; inline-size: 6px; block-size: 6px;
+  content: ""; display: inline-block; inline-size: var(--visit-dot); block-size: var(--visit-dot);
   margin-inline-end: var(--space-4); border-radius: 50%; vertical-align: .1em;
   background: var(--muted-2);
 }
@@ -391,19 +392,27 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 .dash-head > .dash-hello { flex: 0 1 auto; }
 .dash-readings {
   --readings: 2;
-  --reading: 11rem;
+  /* The narrowest a reading stands beside another: under it, a phone's half
+     row, a caption would wrap past the lines a reading holds. */
+  --reading: 12rem;
+  /* A reading's lead, and one line of what it says under it: a caption's
+     line and the gap it leaves before the next (page.css). */
+  --reading-lead: 26px;
+  --quiet-line: calc(1.5 * var(--text-2xs) + var(--space-1));
   /* Half a row for an even count; an odd one goes from one row to one a line. */
   --half: calc(50% - var(--space-5));
   display: grid; align-items: start; justify-content: end;
   /* Asks for a whole row before it settles beside the greeting. */
   flex: 1 1 calc(var(--readings) * var(--reading)); min-width: 0;
   /* Each track is a whole row's share; where that is under a reading's width,
-     half the row; where half is, the whole row. */
-  grid-template-columns: repeat(auto-fit, minmax(max(
+     half the row; where half is, the whole row. The share alone, never what a
+     reading says: one that lands saying more wraps in its place, and its
+     neighbors stay where they were drawn. */
+  grid-template-columns: repeat(auto-fit, max(
     calc(100% / var(--readings) - var(--space-5)),
     clamp(0px, (var(--readings) * var(--reading) - 100%) * 999, var(--half)),
     clamp(0px, (2 * var(--reading) - 100%) * 999, 100%)
-  ), max-content));
+  ));
   gap: var(--space-4) var(--space-5);
 }
 .dash-readings:has(.glance-panel:nth-child(1 of .glance-panel)) { --readings: 3; --half: 100%; }
@@ -418,10 +427,16 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
    than centered on however many lines the reading happens to have (it keeps
    its own column for the whole reading, so nothing is ever set under it); then
    the quiet lines, which start level because the leads do. */
-.dash-readings .glance-panel-head { padding-inline: var(--space-3); grid-template-columns: 22px minmax(0, 1fr); }
+/* Each holds the room of its lead and two quiet lines whatever it says now
+   (a caption that wraps, an age, the checks on the way in), so a reading
+   that lands with fewer lines leaves the strip and the page under it still. */
+.dash-readings .glance-panel-head {
+  padding-inline: var(--space-3); grid-template-columns: 22px minmax(0, 1fr); align-content: start;
+  min-block-size: calc(2 * var(--space-3) + var(--reading-lead) + 2 * var(--quiet-line));
+}
 .dash-readings .glance-symbol { align-self: start; margin-top: var(--space-1); }
 .dash-readings .glance-panel-head > :not(.glance-symbol) { grid-column: 2; }
-.dash-readings .glance-lead { display: flex; align-items: baseline; gap: var(--space-3); min-height: 26px; color: var(--muted); line-height: 1; }
+.dash-readings .glance-lead { display: flex; align-items: baseline; gap: var(--space-3); min-height: var(--reading-lead); color: var(--muted); line-height: 1; }
 .dash-readings .glance-lead :is(strong, .conn-dot) { align-self: center; }
 .dash-readings .glance-lead strong,
 .dash-readings .glance-lead-empty { color: var(--ink); font-size: var(--text-4xl); font-weight: 650; line-height: 1.15; letter-spacing: -.01em; }

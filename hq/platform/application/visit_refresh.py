@@ -26,6 +26,7 @@ from .asks import Standing, StandingAnswer, read_standing, read_status_url
 from .cadence import controller_standing, forced_reads, request_reads, swept
 from .command_fields import Describe
 from .freshness import PAGE_VISIT, freshness
+from .pages import PageVisit
 from .record_errors import RecordNotFound
 from .security import Principal
 lazy from . import machines
@@ -155,10 +156,19 @@ def _due(kinds: tuple[str, ...], now: datetime) -> list[str]:
     ]
 
 
+def page_visit(subject: str, name: str) -> PageVisit | None:
+    """The ask a page about one thing draws, where a controller will read what
+    it asks for; None where none will, so the page promises no refresh."""
+
+    return PageVisit(subject, name) if controller_standing().takes_reads else None
+
+
 def worth_asking(subject: str, name: str) -> bool:
     """Whether opening the page would ask for anything now. A page that
     renders its ask only then posts nothing on a visit that would read nothing."""
 
+    if not controller_standing().takes_reads:
+        return False
     reads = reads_of(subject, name)
     return bool(reads and _due(reads.kinds, timezone.now()))
 
@@ -228,8 +238,7 @@ def request_visit_refresh(command: VisitRefreshCommand, *, principal: Principal)
     reads = reads_of(command.subject, command.name)
     if reads is None:
         raise RecordNotFound("HQ has no such page.")
-    standing = controller_standing()
-    if not standing.known or standing.silent:
+    if not controller_standing().takes_reads:
         return {"ok": True, **_answer([], ())}
     requested = list(request_reads(_due(reads.kinds, timezone.now())))
     return {"ok": True, **_answer(requested, reads.kinds)}

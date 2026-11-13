@@ -44,9 +44,13 @@ _LABELS = {IDLE: "", QUEUED: "Waiting", RUNNING: "Running", DONE: "Done", FAILED
 # What asked-for work says while it waits its turn, and while a read is under way.
 WAITING = "Waiting…"
 REFRESHING = "Refreshing…"
-# What a read asked of the controller says while it waits for one to arrive,
-# and when none is arriving to take it.
-READ_WAITING = "Refresh asked for; HQ reads it shortly."
+# What a read says once it is in, and what a page says of a newer reading it
+# could not draw in place, with the link that loads it.
+REFRESHED = "Refreshed just now."
+NEWER_READING = "A newer reading is in."
+SHOW_NEWER = "Show it"
+# What a read asked of the controller says when none is arriving to take it;
+# while one is on its way, it says REFRESHING.
 READ_UNTAKEN = "Cannot refresh: {absent}"
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."
@@ -204,17 +208,18 @@ def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: st
 def _untried(asked: datetime) -> Standing:
     """How a read asked for at ``asked``, and not yet answered, stands: under
     way once the controller has arrived since, waiting while one is due, and
-    failed when none is arriving to take it."""
+    failed when none is arriving to take it. Readings in a database copied from
+    elsewhere are no controller of this HQ's (``ControllerStanding.here``)."""
 
     controller = cadence.controller_standing()
-    if controller.seen_at is None:
-        return Standing(FAILED, ended(READ_UNTAKEN.format(absent="no controller has ever reported")), since=asked)
+    if controller.seen_at is None or not controller.here:
+        return Standing(FAILED, ended(READ_UNTAKEN.format(absent="no controller reports to this HQ")), since=asked)
     if controller.seen_at > asked:
         return Standing(RUNNING, REFRESHING, since=asked)
     if controller.silent:
         silence = duration(timezone.now() - controller.seen_at)
         return Standing(FAILED, ended(READ_UNTAKEN.format(absent=f"no controller seen in {silence}")), since=asked)
-    return Standing(QUEUED, READ_WAITING, since=asked)
+    return Standing(QUEUED, REFRESHING, since=asked)
 
 
 def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> Standing:
@@ -262,7 +267,7 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
     ]
     if refused:
         return Standing(FAILED, ended(refused[0].phrase), since=asked)
-    return Standing(DONE, "Refreshed just now.", since=asked)
+    return Standing(DONE, REFRESHED, since=asked)
 
 
 # ----- Jobs the runner runs ---------------------------------------------------

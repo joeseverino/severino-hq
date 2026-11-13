@@ -475,6 +475,12 @@ saving does where the page has one. A field's help is its command's meaning
 writes its own only for what it alone asks. The view supplies the verb and
 the way back, never the template, and a record's form page is the frame with
 nothing of its own (`form_fields`, `form_note` from the view).
+A form whose verb can't be pressed because its connection can't make the
+change passes `gap`; the closing row draws the verb unusable and what it
+needs beside it. A form a script or test finds names its `data-` attributes
+as `hooks`. A form answered in another region's place gives that region's id
+as `in_place`. A toggle that posts is a `post_button` with `pressed`.
+*Catalog:* `form/write-gap`.
 *Gate:* `hq/platform/core/tests/test_form_actions.py`, which reads every form
 template, and `test_form_page.py`, which holds every routed create and edit
 view to the frame and the card to it alone.
@@ -1153,9 +1159,17 @@ somebody opens it, or a reading its queue is drawn from is due (below).
 
 **A page about one thing asks for that thing's readings.** A machine's page,
 a service's page and a record's page name which page they are as
-`page_visit` (`application.pages.PageVisit`); `page.html` draws the ask
-(`partials/_visit_refresh.html`) and its note says what it waits for, in the
-band between the bar and the page, under the person's control. The dashboard names itself only when a reading its
+`page_visit` (`visit_refresh.page_visit`), and only where a controller will
+read what it asks for (`cadence.ControllerStanding.takes_reads`: one whose
+heartbeat says it reports to this HQ, and is not silent). Where none will,
+the page draws no ask and no note, so it never promises a refresh that cannot
+come. `page.html` draws the ask (`partials/_visit_refresh.html`), and its
+note says what it waits for at the end of the head's first line. The note
+keeps its own room there: an unseen strut of each sentence HQ writes for it
+word for word (`asks.REFRESHING`, `REFRESHED`, `NEWER_READING` and
+`SHOW_NEWER`, which the script writes from the page) sizes its slot, so those
+sentences are always whole, the trail beside it never moves whatever the note
+says, and only a failure's sentence is cut, whole in its title. The dashboard names itself only when a reading its
 queue is drawn from is due (`visit_refresh.PAGES`), and the connection panel
 only when the tailnet, container or posture readings it shows are due. The
 panel asks once its dialog is open, and names itself as the part to refresh:

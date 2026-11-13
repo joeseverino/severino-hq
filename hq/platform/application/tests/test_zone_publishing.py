@@ -257,7 +257,8 @@ class PublishAServiceTests(TestCase):
     def test_a_name_that_is_not_a_name_is_refused(self):
         response = self.client.post(reverse("control_plane:service_start"), {"hostname": "not a hostname"})
 
-        self.assertRedirects(response, reverse("control_plane:service_start"))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.context["form"].errors["hostname"], ["Enter a hostname, like app.example.com."])
 
     def test_saving_returns_to_the_service_being_built(self):
         """Landing on each resource's own page made the next step a navigation

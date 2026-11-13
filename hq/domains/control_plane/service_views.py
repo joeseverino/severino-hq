@@ -3,7 +3,6 @@
 from functools import cached_property
 from typing import override
 
-from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.urls import reverse_lazy
@@ -19,7 +18,7 @@ from hq.platform.application.exposure_fixes import gate_links
 from hq.platform.application.hq_self import LABEL as HQ_LABEL, hq_service
 from hq.platform.application.inventory import inventory_state
 from hq.platform.application.labels import sentence
-from hq.platform.application.pages import PageAction, PageMixin, PageVisit, page_context
+from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.resource_capabilities import (
     LIFECYCLE_VERBS,
     resource_capabilities,
@@ -38,10 +37,12 @@ from hq.platform.application.service_facets import CERTIFICATE_FACET, DNS_FACET,
 from hq.platform.application.service_list import listed_service, listed_services
 from hq.platform.application.services import alias_target
 from hq.platform.application.ui import PageNavigation, PageSection
+from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.page_relations import for_service
 lazy from hq.platform.application.pins import FAVORITES, MOVE, PIN, SERVICE, ordered
 
+from .forms import ServiceStartForm
 from .models import ManagedResource
 from .names import normalized_hostname
 from .provider_adapters.portainer import CONTAINER_KIND
@@ -245,7 +246,7 @@ class ServiceDetailView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["service"] = self.service
-        context["page_visit"] = PageVisit("service", self.service.hostname)
+        context["page_visit"] = page_visit("service", self.service.hostname)
         context["summary"] = service_summary(self.service)
         context["page_badges"] = service_badges(self.service, own=self.own is not None)
         context.update(page_parts(self.service, self.request))
@@ -275,18 +276,21 @@ class ServiceStartView(View):
     """
 
     def get(self, request):
+        return self._page(request, ServiceStartForm())
+
+    def post(self, request):
+        form = ServiceStartForm(request.POST)
+        if not form.is_valid():
+            return self._page(request, form, status=400)
+        return redirect("control_plane:service", hostname=form.cleaned_data["hostname"])
+
+    def _page(self, request, form, status=200):
         return render(
             request,
             "control_plane/service_start.html",
-            page_context("Publish a service", "Enter a hostname to see what it needs."),
+            {**page_context("Publish a service", "Enter a hostname to see what it needs."), "form": form},
+            status=status,
         )
-
-    def post(self, request):
-        hostname = normalized_hostname(request.POST.get("hostname", ""))
-        if not hostname or " " in hostname or "." not in hostname:
-            messages.error(request, "Enter a hostname, like app.example.com.")
-            return redirect("control_plane:service_start")
-        return redirect("control_plane:service", hostname=hostname)
 
 
 class ServicePinView(View):

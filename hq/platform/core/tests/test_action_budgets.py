@@ -68,6 +68,8 @@ class AnswersBeforeTheWorkTests(TestCase):
         self.held = _held_outside()
         self.held.__enter__()
         self.addCleanup(self.held.__exit__, None, None, None)
+        # A controller of this HQ's, so a read asked of it waits on it.
+        self.enterContext(_controller_arriving())
 
     def post(self, name: str):
         url, action = self.exercised[name]

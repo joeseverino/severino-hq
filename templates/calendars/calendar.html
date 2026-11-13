@@ -58,17 +58,10 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% if group %}<h3>{{ group|breakable }}</h3>{% endif %}
         <ul>
           {% for source in sources %}
-            <li>
-              <form method="post" action="{% url 'calendar:source' source.id %}" data-fragment-target>
-                {% write_token %}
-                <input type="hidden" name="next" value="{{ here }}">
-                <input type="hidden" name="shown" value="{% if source.shown %}0{% else %}1{% endif %}">
-                <button type="submit" class="calendar-source series-{{ source.slot }}" aria-pressed="{% if source.shown %}true{% else %}false{% endif %}">
-                  <i class="calendar-check" aria-hidden="true"></i>
-                  <span>{{ source.label|breakable }}{% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}</span>
-                  {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
-                </button>
-              </form>
+            <li class="series-{{ source.slot }}">
+              {% url 'calendar:source' source.id as source_url %}{% post_button source.label source_url name="shown" value=source.shown|yesno:"0,1" css="calendar-source" pressed=source.shown %}
+              {% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}
+              {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
             </li>
           {% endfor %}
         </ul>

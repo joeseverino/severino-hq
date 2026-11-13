@@ -23,7 +23,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog
 
 from .. import cadence, visit_refresh
-from ..asks import READ_WAITING, Standing, read_standing, watched
+from ..asks import REFRESHING, Standing, read_standing, watched
 from ..capabilities import execute_capability
 from ..freshness import VISIT_EVERY
 from ..record_errors import PolicyError, RecordNotFound
@@ -276,7 +276,7 @@ class VisitRefreshTests(TestCase):
         store(FAST, age=OLD)
         with page(FAST):
             status = self.ask()["status"]
-        self.assertEqual((followed(status).state, followed(status).note), ("queued", READ_WAITING))
+        self.assertEqual((followed(status).state, followed(status).note), ("queued", REFRESHING))
 
         quiet = DIRECTORY / "quiet-heartbeat"
         quiet.touch()
@@ -288,6 +288,21 @@ class VisitRefreshTests(TestCase):
         self.assertFalse(stalled.live)
         self.assertEqual(stalled.state, "failed")
         self.assertIn("no controller", stalled.note)
+
+    def test_a_read_waiting_in_a_copied_database_says_no_controller_takes_it(self):
+        """Readings stored a moment ago, with no heartbeat beside them, came
+        with the database: they say no controller reaches this HQ."""
+
+        store(FAST, age=OLD)
+        with page(FAST):
+            status = self.ask()["status"]
+        store("npm.proxy_host")
+
+        with override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "never-written")):
+            copied = followed(status)
+
+        self.assertEqual(copied.state, "failed")
+        self.assertIn("no controller", copied.note)
 
     def test_a_watch_hq_did_not_sign_is_not_honored(self):
         from ..asks import _WATCH_SALT
@@ -579,6 +594,24 @@ class VisitRefreshViewTests(TestCase):
         self.assertContains(response, "data-ask-auto")
         self.assertContains(response, 'name="subject" value="service"')
         self.assertContains(response, 'name="name" value="example.test"')
+
+    def test_where_no_controller_reports_here_the_page_draws_no_ask(self):
+        """A database copied from another host holds fresh readings and no
+        heartbeat of this HQ's: nothing drains its requests, so neither a
+        record's page nor the dashboard promises a refresh."""
+
+        self.client.force_login(self.user)
+        store(REPOSITORY_KIND, age=OLD)
+        # Read a moment ago, by the controller of the host it was copied from.
+        store("npm.proxy_host")
+
+        with override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(DIRECTORY / "never-written")):
+            for address in (reverse("control_plane:service", args=["example.test"]), reverse("dashboard")):
+                with self.subTest(address=address):
+                    self.assertNotContains(self.client.get(address), "data-ask-auto")
+            with page(FAST):
+                self.assertEqual(self.post().json()["requested"], [])
+        self.assertEqual(asked(), set())
 
     def test_the_note_is_swapped_with_the_content_and_the_ask_is_not(self):
         """The ask is a quiet child of the content, which its refresh

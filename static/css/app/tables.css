@@ -153,9 +153,9 @@
 .data-table[data-narrow] > tbody td[data-long]::before { inline-size: min(16ch, var(--hold)); }
 /* Outside a narrow box the columns showing have the room they ask (tables.js), so such a line keeps it. */
 @container style(--box: whole) {
-  /* The region wraps what such a cell says in one `.kept-line`, as wide as its line up to the share; an identifier in it breaks past the share, a pill or a time never wraps. */
+  /* The region wraps what such a cell says in one `.kept-line`, as wide as its line up to the share and the icon it opens with (`--hang`, figures.css); an identifier in it breaks past the share, a pill or a time never wraps. */
   .data-table > tbody td > .kept-line {
-    display: inline-block; width: max-content; max-width: var(--hold); vertical-align: top;
+    display: inline-block; width: max-content; max-width: calc(var(--hold) + var(--hang, 0px)); vertical-align: top;
     white-space: normal; overflow-wrap: break-word;
   }
   /* A line is never narrower than what in it cannot wrap, or it runs out of its cell while the table counts as fitting; an identifier in it is cut or breaks at its seams, so it keeps no floor. */

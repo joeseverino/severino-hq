@@ -42,7 +42,7 @@ from hq.domains.control_plane.observations.public_registry import (
 from hq.domains.projects.models import Project
 from hq.platform.application import readings
 from hq.platform.application.approvals import entry_event, is_held
-from hq.platform.application.asks import READ_WAITING
+from hq.platform.application.asks import REFRESHING
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.pins import SERVICE as PINNED_SERVICE, toggle
 from hq.platform.application.plugin_testing import form_keyed
@@ -471,7 +471,7 @@ def _asked_on_opening(user):
             asked = client.post(reverse("control_plane:visit"), form_keyed({"subject": "page", "name": "dashboard"}))
             status = asked.json()["status"]
             followed = client.get(status)
-    if asked.json()["note"] != READ_WAITING or followed.json()["note"] != READ_WAITING:
+    if asked.json()["note"] != REFRESHING or followed.json()["note"] != REFRESHING:
         raise AssertionError(f"the dashboard's ask was answered {asked.json()} and then {followed.json()}")
     return {
         reverse("control_plane:visit").strip("/"): answered(asked),

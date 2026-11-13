@@ -22,6 +22,8 @@
 //   [data-ask-note]   the live region: it changes only when the state does.
 //                     One drawn apart from its control is an <output> naming
 //                     the control's form (`form=`), as a page's note does
+//   [data-ask-cut]    a note its line may cut, which holds its whole
+//                     sentence in its title
 //   [data-ask-elapsed] ticks beside it, outside the region
 //
 // Polling rather than a socket: one small question every couple of seconds
@@ -89,6 +91,12 @@
     if (note.textContent === said) return;
     if (said === text) note.textContent = text;
     else note.replaceChildren(part("ask-word", word), part("ask-sentence", text));
+    // A note its line may cut (`data-ask-cut`, a page's) holds the whole
+    // sentence in its title.
+    if ("askCut" in note.dataset) {
+      if (said) note.title = said;
+      else note.removeAttribute("title");
+    }
     // A line of the head's own keeps its room whether or not it says anything.
     if (control.matches(".ask-quiet") && control.contains(note)) note.hidden = !text;
     if ("askWord" in note.dataset) sayBelow(control, text && word ? `${word}: ${text}` : text);
@@ -196,8 +204,11 @@
       if (!note) return;
       const link = document.createElement("a");
       link.href = window.location.href;
-      link.textContent = "Show it";
-      note.replaceChildren(part("ask-sentence", "A newer reading is in. "), link);
+      // HQ writes the words (asks.NEWER_READING), so a page's note keeps
+      // their room (_visit_refresh.html).
+      const { askNewer, askShow } = document.body.dataset;
+      link.textContent = askShow;
+      note.replaceChildren(part("ask-sentence", `${askNewer} `), link);
       note.hidden = false;
     };
     if (touched || !showing() || reloadedRecently()) return offer();

@@ -20,7 +20,10 @@ __all__ = ("as_production", "sign_in", "throwaway_media")
 def as_production():
     """The settings and host facts a production request is answered under."""
 
+    # The estate's controller reports to this HQ, so its pages ask for their
+    # readings as production's do (cadence.ControllerStanding.here).
     heartbeat = Path(tempfile.mkdtemp()) / "controller-heartbeat"
+    heartbeat.touch()
     with ExitStack() as stack:
         stack.enter_context(
             override_settings(

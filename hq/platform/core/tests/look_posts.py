@@ -64,6 +64,8 @@ POSTS = {
     # A command's form whose values pass the form and are refused by the
     # command itself: the refusal said over the form as sent.
     "project-create-taken": Posted("command", ("project.create",), _a_project_held),
+    # The one question that starts publishing a service, answered with no name.
+    "service-start-not-a-name": Posted("control_plane:service_start", (), lambda: {"hostname": "not a hostname"}),
 }
 
 

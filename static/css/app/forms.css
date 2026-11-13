@@ -8,15 +8,17 @@
 /* A form's fields flow in reading order across as many columns as hold a
    field of 18rem, so a wide frame gains columns rather than stretching each
    input. Anything that is not a single short field (a textarea, a group of
-   boxes, a field marked wide, errors, the actions) takes the row. */
+   boxes, a field marked wide, a command's confirmation, errors, the
+   actions) takes the row. */
 .form {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
   gap: var(--space-7) var(--space-10);
   align-items: start;
   padding: var(--surface-inset, var(--space-10));
+  text-align: start;
 }
-.form > :not(.field), .form > .field:has(textarea), .form > .field:has(> div > * + *), .form .field.is-wide { grid-column: 1 / -1; }
+.form > :not(.field), .form > .field:has(textarea), .form > .field:has(> div > * + *), .form .field:is(.is-wide, .command-confirm) { grid-column: 1 / -1; }
 .form > .field { margin-bottom: 0; }
 /* A form that asks one question (`is-question`, partials/_form.html) draws its
    button on the field's line wherever the field keeps 18rem beside it, as a
@@ -99,9 +101,6 @@
   font-weight: 600;
 }
 .errors { color: var(--danger); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
-/* Every form a page is about sits in one card that spans its column, as every
-   frame in the page's flow does. */
-.form-card { margin: 0; }
 .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
 .form-actions-note { font-size: var(--text-xs); }
 /* A row's editor ({% row_editor %}), in the line beneath its row: one panel
@@ -354,8 +353,6 @@ a.discovery-link:hover strong { color: var(--accent); }
    a switch stands for it: facts the form names, not fields to fill. */
 :is(.command-target, .command-state) p { margin: 0; }
 :is(.command-target, .command-state) .field-label { display: block; color: var(--muted); font-size: var(--text-xs); }
-/* The confirmation closes the form, a row of its own under the fields it confirms. */
-.command-form > .command-confirm { flex-basis: 100%; }
 .command-confirm {
   padding: var(--space-6) var(--space-7);
   /* A callout, like .notice: inside a surface its tint and its bar, not a frame. */

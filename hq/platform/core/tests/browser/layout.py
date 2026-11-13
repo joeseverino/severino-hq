@@ -55,15 +55,20 @@ _ESCAPES_READ = (SIDEWAYS, ANY_SCROLLER)
 # says (a failure that names what it could not read), against the band
 # between the bar and the page: where it stands, how far its end is from the
 # end of the person's control, and where each part of the page is with it
-# silent, saying that, and gone. The note is left saying what it said.
-_PAGE_NOTE = """([noteSelector, contentSelector]) => [...document.querySelectorAll(noteSelector)].map((note) => {
+# silent, saying that, and gone; and whether each sentence its slot keeps room
+# for (its struts) is drawn whole. The note is left saying what it said.
+_PAGE_NOTE = """([noteSelector, lineSelector, contentSelector]) => [...document.querySelectorAll(noteSelector)].map((note) => {
   const content = document.querySelector(contentSelector);
-  const line = note.parentElement;
+  const line = note.closest(lineSelector);
   // Every part of the page but the note, where it lands.
   const parts = () => [...line.children, ...content.querySelectorAll(':scope > *, :scope > * > *')]
     .filter((part) => part !== note && part !== line && part.getClientRects().length)
     .map((part) => { const r = part.getBoundingClientRect(); return [r.top, r.left, r.width, r.height].map(Math.round).join(' '); });
   const said = note.textContent;
+  const cut = [...note.parentElement.children].filter((strut) => strut.dataset.strut).map((strut) => {
+    note.textContent = strut.dataset.strut;
+    return note.scrollWidth > note.clientWidth + 0.5 ? strut.dataset.strut : null;
+  }).filter(Boolean);
   note.textContent = '';
   const silent = parts();
   note.textContent = 'Cannot refresh: ' + Array.from({length: 24}, (_, at) => `example reading ${at}`).join(', ') + '.';
@@ -72,12 +77,12 @@ _PAGE_NOTE = """([noteSelector, contentSelector]) => [...document.querySelectorA
   const box = line.getBoundingClientRect();
   const placed = {top: r.top - box.top, bottom: box.bottom - r.bottom, start: r.left - box.left, end: box.right - r.right,
     lines: note.scrollHeight > note.clientHeight + 0.5};
-  const sibling = note.nextSibling;
+  const [slot, sibling] = [note.parentElement, note.nextSibling];
   note.remove();
   const gone = parts();
-  line.insertBefore(note, sibling);
+  slot.insertBefore(note, sibling);
   note.textContent = said;
-  return {silent, saying, gone, placed};
+  return {silent, saying, gone, placed, cut};
 })"""
 
 
@@ -247,9 +252,12 @@ class LayoutBrowserTests(BrowserGate):
     def a_heads_note_costs_its_head_no_room(self, name):
         """A page's note on its readings ends the head's first line, inside
         it and on one line however long what it says: the page is laid out as
-        it is with no note at all, and saying something moves nothing."""
+        it is with no note at all, saying something moves nothing, and each
+        sentence HQ writes for it word for word is drawn whole."""
 
-        notes = self.page.evaluate(_PAGE_NOTE, [SELECTORS["page_note"], SELECTORS["content"]])
+        notes = self.page.evaluate(
+            _PAGE_NOTE, [SELECTORS["page_note"], SELECTORS["page_trail_row"], SELECTORS["content"]]
+        )
         if 'form="page-visit"' in self.pages[name]:
             self.assertGreater(len(notes), 0, "the probe measured nothing")
         for note in notes:
@@ -261,6 +269,7 @@ class LayoutBrowserTests(BrowserGate):
             self.assertGreaterEqual(placed["start"], -0.5)
             self.assertGreaterEqual(placed["end"], -0.5)
             self.assertFalse(placed["lines"])
+            self.assertEqual(note["cut"], [])
 
     def no_block_breaks_a_paragraph(self, _name):
         # A block written inside a <p> closes it early and leaves an empty <p>

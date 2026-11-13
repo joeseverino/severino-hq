@@ -284,7 +284,9 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   /* 12rem, about what an icon and a short value take, so a band too narrow for its facts' own widths holds fewer to a row instead of breaking each value a word a line; or the whole band once it is too narrow for two (27.5rem), where it reads as a list (surfaces.css). */
   --fact-min: clamp(12rem, (27.5rem - 100%) * 999, 100%);
   --fact-max: 22rem;
+  /* A container's width is its frame's, never its facts', so in a flex row (a card that lays out its parts in one) it would size to nothing; it takes a line of its own there instead. */
   container: band / inline-size;
+  flex: 1 1 100%;
 }
 /* Each fact takes three of the band's rows (label, value, detail), so the facts of a row share their lines: every label starts level and every value stands on one baseline, however many lines a label wraps to, a link or a zero alike. */
 .facts-band > .fact {
@@ -356,13 +358,17 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .ext-choice-label { overflow-wrap: anywhere; }
 .ext-choice-sub { font-size: var(--text-xs); text-align: end; }
 .icon { width: 1em; height: 1em; flex: none; }
-/* An icon a cell's value opens with hangs in an indent before the value's
-   lines, so a name the cell cuts at its line's width keeps the icon on its
-   line rather than leaving it on one of its own. */
-.kept-line:has(> .icon:first-child) {
-  --hang: 1.5em;
-  padding-inline-start: var(--hang); text-indent: calc(-1 * var(--hang));
-  & * { text-indent: 0; }
+/* An icon a cell's kept line opens with (tables.css) hangs in the line's padding, a float of no width there, so the value's lines start clear of it and a name the line cuts fills what the line holds out for, beside the icon on its first line. An indent would not do: a cut name is as wide as the line's box, which leaves out the indent its first line gets back. The hang is past the line's hold, so the value holds out for what it would with no icon. In a narrow box the line is no block, and the icon sits in it as in any line. */
+@container style(--box: whole) {
+  .kept-line:has(> .icon:first-child) {
+    --hang: 1.5em;
+    padding-inline-start: var(--hang);
+    & > .icon:first-child {
+      float: inline-start; margin-inline: calc(-1 * var(--hang)) calc(var(--hang) - 1em);
+      /* Centered on the first line, as an icon set in the line is. */
+      margin-block-start: calc((1lh - 1em) / 2);
+    }
+  }
 }
 /* The bar's marks, drawn from the set at the size each control sets them
    (the menu's, the badge's and the search dialog's set by their own rules). */

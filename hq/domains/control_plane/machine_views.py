@@ -18,7 +18,7 @@ from hq.platform.application.machine_context import (
     sections_for as machine_sections,
 )
 from hq.platform.application.machines import declaration_seed, machine
-from hq.platform.application.pages import PageAction, PageDialog, PageMixin, PageVisit
+from hq.platform.application.pages import PageAction, PageDialog, PageMixin
 from hq.platform.application.resource_capabilities import (
     UPDATE_CAPABILITY,
     Offered,
@@ -28,6 +28,7 @@ from hq.platform.application.resource_capabilities import (
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.application.tailnet_context import tailnet_context
+from hq.platform.application.visit_refresh import page_visit
 lazy from hq.platform.application import tailnet
 lazy from hq.platform.application.containers import on_machine
 lazy from hq.platform.application.docker_sections import docker_line
@@ -253,7 +254,7 @@ class MachineDetailView(PageMixin, TemplateView):
         context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["hq_label"] = HQ_LABEL
         context["page_aside"] = "control_plane/_machine_status.html"
-        context["page_visit"] = PageVisit("machine", found.name)
+        context["page_visit"] = page_visit("machine", found.name)
         context["container_kind"] = CONTAINER_KIND
 
         # Whether what each container runs is current and safe, as the

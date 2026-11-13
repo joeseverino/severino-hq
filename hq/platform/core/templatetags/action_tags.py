@@ -217,6 +217,28 @@ def refreshing():
 
 
 @register.simple_tag
+def refreshed():
+    """``{% refreshed %}``: what a reading says once it is in."""
+
+    return asks.REFRESHED
+
+
+@register.simple_tag
+def newer_reading():
+    """``{% newer_reading %}``: what a page says of a newer reading it could
+    not draw in place, before the link that loads it."""
+
+    return asks.NEWER_READING
+
+
+@register.simple_tag
+def show_newer():
+    """``{% show_newer %}``: the link that loads a newer reading."""
+
+    return asks.SHOW_NEWER
+
+
+@register.simple_tag
 def applies_shortly():
     """``{% applies_shortly %}``: what a saved change says of when it goes live."""
 

@@ -22,7 +22,7 @@ from hq.platform.application.infrastructure import (
 from hq.platform.application.integration_specs import requested as requested_note
 from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
-from hq.platform.application.pages import PageAction, PageMixin, PageVisit, page_context
+from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.relationships import relationships_for
@@ -55,6 +55,7 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.topology_model import RELATIONS
 from hq.platform.application.ui import counted
+from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 from hq.platform.application.whereabouts import whereabouts
 from hq.platform.core.templatetags.nav_tags import returning_to
@@ -456,7 +457,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         context = super().get_context_data(**kwargs)
         capabilities = self.capabilities
         context["capabilities"] = capabilities
-        context["page_visit"] = PageVisit("resource", self.object.key)
+        context["page_visit"] = page_visit("resource", self.object.key)
         context["controller"] = controller_summary(capabilities.actions, verb_words)
         derived = self.derived
         context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))

@@ -309,15 +309,17 @@
 .calendar-sources h3:first-child { margin-top: 0; }
 .calendar-swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
 .calendar-sources ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-.calendar-sources form { margin: 0; }
-/* A source is a toggle: the whole row is the button, its box filled in its color when checked. */
+/* A source is a toggle ({% post_button %} with `pressed`): the whole line is
+   the button, its box drawn before the name and filled in its color when
+   checked. What it shows and how it failed stand under the name, past the box. */
+.calendar-sources li { display: grid; --check: 14px; --check-gap: var(--space-3); --check-inset: var(--space-2); }
 .calendar-source {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
+  gap: var(--check-gap);
   width: 100%;
   min-height: 0;
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--check-inset);
   border: 0;
   border-radius: var(--radius-sm);
   background: none;
@@ -325,19 +327,15 @@
   color: var(--ink);
   font: inherit;
   font-size: var(--text-sm);
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 }
+.calendar-source::before { content: ""; flex: none; width: var(--check); height: var(--check); border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--source); }
+.calendar-source[aria-pressed="true"]::before { background: var(--source); }
 .calendar-source:hover { background: var(--bg-tint); border: 0; }
-.calendar-source small { color: var(--muted-2); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
-.calendar-source .calendar-source-failure { color: var(--warn); }
-/* What a calendar shows, under its name, where a phone can read it. */
-.calendar-source-note { display: block; white-space: normal; font-variant-numeric: normal; }
-.calendar-source:has(.calendar-source-note) { align-items: start; }
-.calendar-source:has(.calendar-source-note) .calendar-check { margin-top: var(--space-1); }
-.calendar-check { flex: 0 0 auto; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1.5px var(--source); }
-.calendar-source[aria-pressed="true"] .calendar-check { background: var(--source); }
-.calendar-source[aria-pressed="false"] > span { color: var(--muted); }
+.calendar-source[aria-pressed="false"] { color: var(--muted); }
+:is(.calendar-source-note, .calendar-source-failure) { padding-inline-start: calc(var(--check-inset) + var(--check) + var(--check-gap)); color: var(--muted-2); font-size: var(--text-2xs); }
+.calendar-source-failure { color: var(--warn); font-variant-numeric: tabular-nums; }
 /* Compact, as the dashboard shows it: where things are, not what. Bars are
    slivers and lines fold away; the day opens the calendar for the rest. */
 .calendar-month.is-compact .month-day { height: 2.5rem; padding: var(--space-1); }

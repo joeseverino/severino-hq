@@ -66,6 +66,17 @@ class BreakableTests(SimpleTestCase):
         self.assertEqual(boxed(html), ["_example-verification."])
         self.assertEqual(text(html), "_example-verification.example.com TXT")
 
+    def test_a_word_a_phrase_ends_on_stays_in_the_box_of_the_part_before_it(self):
+        """A line breaks at a box's edge whatever space follows it, so after
+        a hyphenated part the word is inside the part's box, after the text
+        a cell cuts."""
+
+        html = str(breakable("pulled 2024.12.1-ubu2404-ls48 available"))
+        (part,) = with_class(html, "whole")
+        self.assertTrue(part.text.endswith("ls48\xa0available"), html)
+        self.assertEqual(boxed(html), ["2024.12.1-ubu2404-ls48"])
+        self.assertEqual(text(html), "pulled 2024.12.1-ubu2404-ls48 available")
+
     def test_an_address_is_whole_and_wraps_after_its_colon(self):
         self.assertEqual(pieces(breakable("10.0.0.10:8000")), ["10.0.0.10:", "8000"])
 
@@ -272,7 +283,7 @@ class BreakableTests(SimpleTestCase):
     def test_a_readout_identifier_is_a_breakable_token(self):
         self.assertEqual(pieces(readout("app.example.com:443")), ["<code>app.", "example.com:", "443</code>"])
         self.assertEqual(readout("11"), "11")
-        self.assertEqual(wholes(readout("restart example-web now")), ["example-web"])
+        self.assertEqual(boxed(readout("restart example-web now")), ["example-web"])
 
 
 class FigureWordTests(SimpleTestCase):

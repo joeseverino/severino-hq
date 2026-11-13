@@ -106,10 +106,11 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .page-head { container: page-head / inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
 .page-head-copy { display: contents; }
 /* The head's first line: the trail, then at its end the note of a page about
-   one thing (partials/_visit_refresh.html), cut to the room the trail leaves
-   it (cuts.css). */
+   one thing (partials/_visit_refresh.html) in the room it keeps (cuts.css).
+   A trail longer than the line wraps between its steps inside it, leaving the
+   note its room, so neither runs past the page's edge. */
 .page-trail-row { display: flex; align-items: baseline; gap: var(--space-6); }
-.page-trail-row > :not(.visit-status) { flex: none; max-inline-size: 100%; }
+.page-trail-row > :not(.visit-slot) { flex: 0 1 auto; min-inline-size: 0; }
 .page-head-copy > .page-trail-row { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
 /* The title yields width before the controls do: a long name wraps in its
    own column at its spaces and seams. The controls take a row of their own
@@ -183,6 +184,8 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* A run of short things on one line (links, values, figures): one separator
    for all of them, drawn here, so no list writes its own commas or gaps. */
 .dot-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--dot-gap); margin: 0; padding: 0; list-style: none; }
+/* A run of links wraps onto lines a target tall (`--target-min`), so a link is never pressed for the one above it; in a table the row keeps its height, and a cell spaces its own links (figures.css). */
+.dot-list:has(a):not(td *) { line-height: var(--target-min); }
 /* The dot stands in the gap before its part, so where the run wraps, the dot
    that would open a line lies outside the run and is clipped: a line never
    starts with a separator. */

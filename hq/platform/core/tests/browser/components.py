@@ -1761,7 +1761,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_name_a_cell_cuts_is_drawn_whole_on_its_line_where_its_cell_has_room(self):
         """A one-token name cut by a box of its own (a bare name, a cell's
-        line, a link), in a cell with room to spare, draws every part on its
+        line, a link, a kept line an icon opens), in a cell with room to spare, draws every part on its
         one line uncut, in a box at least as wide as what it draws. A box
         sized by its own measure is short wherever an engine measures it a
         fraction short of the parts it lays out, and then the last part
@@ -1774,10 +1774,15 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
         shapes = ("example-connect", "example2-proxy", "example2-proxy-web", "example-id", "example-hq", "example-a1")
         names = [f"/opt/apps/{name}" for name in shapes]
+        icon = render_to_string("partials/_icon.html", {"name": "deploy"}).strip()
         cells = [
             *(breakable(name) for name in names),
             *(cell_line(name) for name in names),
             *(f'<a data-entity href="/example/">{breakable(name)}</a>' for name in names),
+            *(
+                f'<span class="kept-line">{icon} {breakable(name)}</span>'
+                for name in [*names, "2024.12.1-ubu2404-ls48"]
+            ),
         ]
         rows = "".join(f"<tr><td>{cell}</td><td>Example</td></tr>" for cell in cells)
         self.pages = {
@@ -1816,6 +1821,55 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 drawn = self.page.evaluate(short, [SELECTORS["name_cut"], SELECTORS["part"]])
                 self.assertGreater(drawn["read"], 0)
                 self.assertEqual(drawn["found"], [])
+
+    @with_script
+    def test_an_icon_a_kept_line_opens_stays_beside_its_name_inside_its_cell(self):
+        """A kept line an icon opens, its column held short of the icon and
+        the name together, keeps the icon on the name's first line and both
+        inside the cell, the name cut there: a name the line cuts is as wide
+        as what the line holds out for, never wider than the room its first
+        line leaves it beside the icon."""
+
+        from hq.platform.core.templatetags.value_tags import breakable
+
+        icon = render_to_string("partials/_icon.html", {"name": "deploy"}).strip()
+        names = ("2024.12.1-ubu2404-ls48", "/opt/apps/example2-proxy-web", "example-connect")
+        rows = "".join(
+            f'<tr><td><span class="kept-line">{icon} {breakable(name)}</span></td><td>Example</td></tr>'
+            for name in names
+        )
+        self.pages = {
+            **self.pages,
+            "hang-probe": probe(
+                '<div class="table-scroll"><table class="data-table"><thead><tr><th>Update</th><th>State</th></tr>'
+                f"</thead><tbody>{rows}</tbody></table></div>"
+            ),
+        }
+        placed = """([lines, mark, name]) => [...document.querySelectorAll(lines)].flatMap((line) => {
+          const cell = line.closest('td');
+          const pad = getComputedStyle(cell);
+          const edge = cell.getBoundingClientRect().right - parseFloat(pad.paddingRight) + 0.5;
+          const icon = line.querySelector(mark).getBoundingClientRect();
+          const token = line.querySelector(name);
+          const first = token.getClientRects()[0];
+          const found = [];
+          if (Math.max(icon.right, token.getBoundingClientRect().right, line.getBoundingClientRect().right) > edge)
+            found.push(`${token.textContent} runs past its cell`);
+          if (icon.bottom <= first.top || icon.top >= first.bottom) found.push(`${token.textContent} leaves its icon`);
+          return found;
+        })"""
+        self.start(java_script_enabled=True)
+        for hold in ("4em", "7em", "9em", "11em"):
+            with self.subTest(hold=hold):
+                self.open("hang-probe", WIDE)
+                add_css(self.page, f".data-table {{ --hold: {hold}; }}")
+                self.page.evaluate(SETTLE)
+                self.assertEqual(
+                    self.page.evaluate(
+                        placed, [SELECTORS["kept_line"], SELECTORS["line_icon"], SELECTORS["line_name"]]
+                    ),
+                    [],
+                )
 
     @with_script
     def test_a_table_whose_content_widens_after_its_fit_gives_way_again(self):
