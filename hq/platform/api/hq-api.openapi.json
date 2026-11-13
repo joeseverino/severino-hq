@@ -27793,7 +27793,7 @@
     },
     "/api/v2/resources/request.path/": {
       "get": {
-        "description": "How the calling request reached HQ, hop by hop. Each hop is checked against what the request shows, with the admission layers decided there.",
+        "description": "How the calling request reached HQ, hop by hop, each checked against the request, with the admission layers decided there.",
         "operationId": "listRequestPathV2",
         "parameters": [
           {
@@ -28536,7 +28536,7 @@
     },
     "/api/v2/resources/upgrades/": {
       "get": {
-        "description": "Every running container with a newer release. For each: the target digest, its fixes, data and verification, blockers and steps. Read-only.",
+        "description": "Every running container with a newer release: target digest, fixes, data, verification, blockers and steps. Read-only.",
         "operationId": "listUpgradesV2",
         "parameters": [
           {

@@ -468,10 +468,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
 /* A button's label wraps in an opened row and the line beneath it (surfaces.css), where its words and an identifier in it are flex items side by side, each squeezed until it breaks inside a word; wrapping, each keeps its own line before it shrinks. One with an icon keeps its label beside it. */
 .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) td .btn:not(:has(> svg)) { flex-wrap: wrap; }
-/* Broken, its identifiers break where they must, the last give before it scrolls: a name broken is read where a name past the card is not. A word is no identifier (line_breaks.breakable leaves it plain text), so a chip or a link holding only words keeps them whole, and its column is never narrower than its longest word. */
+/* Broken, its identifiers break where they must, the last give before it scrolls: a name broken is read where a name past the card is not. A word is no identifier (line_breaks.breakable leaves it plain text), so a chip or a link holding only words keeps them whole, and its column is never narrower than its longest word. Code is always an identifier, one with no seam for `breakable` to mark (`describe_capabilities`) too. */
 @container style(--break: given) {
   .data-table :is(td, th) .whole { white-space: normal; }
-  .data-table :is(td, th) :is(.token, .whole, :is(code, [data-entity]):has(.token, .whole)) { overflow-wrap: anywhere; }
+  .data-table :is(td, th) :is(.token, .whole, code, [data-entity]:has(.token, .whole)) { overflow-wrap: anywhere; }
 }
 .data-table > * > tr > [data-dropped] { display: none; }
 .data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }

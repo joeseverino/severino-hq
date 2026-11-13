@@ -43,6 +43,9 @@ from threading import local
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[4]
+# A copy of the host with no checkout (the extension check's, an image's) has no change for fast to select
+# a test by, nor git to say what it ignores, so a declaration there holds nothing and is not watched.
+CHECKOUT = (ROOT / ".git").exists()
 # The declaration an ``apart`` walk is held to, handed to its process.
 ENVIRONMENT = "HQ_TREE_READS"
 APART = "hq.platform.application.tests.apart"
@@ -109,6 +112,9 @@ def reads(*opened: str, lists: tuple[str, ...] = ()) -> Callable[[type], type]:
 
 
 def _held(declared: Reads, step: Callable[..., Any]) -> Callable[..., Any]:
+    if not CHECKOUT:
+        return step
+
     @functools.wraps(step)
     def held(*args: Any, **kwargs: Any) -> Any:
         with watching(declared):

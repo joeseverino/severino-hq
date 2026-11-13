@@ -23,7 +23,10 @@ CLS_LIMIT = 0.1
 # may draw a part past its box's edge, or carry it out, and then remove it. A
 # page loads at its top, so a shift's rect, taken in the viewport as it
 # happened, is the page's. A browser that keeps no such record (WebKit) has
-# nothing to say; Chromium's legs of the gates read it. The record is read at
+# nothing to say; Chromium's legs of the gates read it. A shift until the
+# frame after the page's face arrived is the face's: the gates wait for it
+# (`serving.in_the_face`) where a reader's browser draws it from the first paint
+# or never, so that move is the gate's own and left out. The record is read at
 # once: with script off Chromium runs no timer and calls back no observer, so a
 # probe that waits on either never returns.
 #
@@ -58,9 +61,12 @@ LAYOUT_SHIFTS = (
   const whose = (shift) => `${when(shift)}${shift.hadRecentInput ? ' after input' : ''}: `
     + shift.sources.map((part) => `${moved(part)} (${theScripts(part) ? "the script's" : "HQ's"})`).join('; ');
   const sum = (shifts) => shifts.reduce((total, shift) => total + shift.value, 0);
+  const faceArrived = Math.max(0, ...performance.getEntriesByType('resource')
+    .filter((entry) => entry.name.endsWith('.woff2')).map((entry) => entry.responseEnd)) + 50;
   const worst = (entries) => {
     let found = [], session = [];
-    for (const shift of entries.filter((s) => !s.hadRecentInput && !s.sources.every(theScripts))) {
+    const counted = (s) => !s.hadRecentInput && !s.sources.every(theScripts) && s.startTime > faceArrived;
+    for (const shift of entries.filter(counted)) {
       const [first, last] = [session[0], session.at(-1)];
       const joins = first && shift.startTime - last.startTime < 1000 && shift.startTime - first.startTime < 5000;
       session = joins ? [...session, shift] : [shift];

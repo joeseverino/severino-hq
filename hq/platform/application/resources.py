@@ -384,8 +384,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "upgrades",
             "Upgrades",
-            "Every running container with a newer release. For each: the target digest, its fixes, "
-            "data and verification, blockers and steps. Read-only.",
+            "Every running container with a newer release: target digest, fixes, data, verification, "
+            "blockers and steps. Read-only.",
             Capability.READ,
             container_reads.list_upgrades,
             BoundedQuery,
@@ -522,8 +522,8 @@ def connections() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "request.path",
             "Request path",
-            "How the calling request reached HQ, hop by hop. Each hop is checked against what "
-            "the request shows, with the admission layers decided there.",
+            "How the calling request reached HQ, hop by hop, each checked against the request, "
+            "with the admission layers decided there.",
             Capability.READ,
             derived_reads.list_request_path,
             EmptyQuery,

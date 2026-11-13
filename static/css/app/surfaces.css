@@ -147,10 +147,11 @@
   }
   /* A figure's token never breaks, so on a phone three supporting figures
      would run into each other: each sizes its value to its own column, a
-     nine-character amount filling it, between the two steps of the scale. */
+     nine-character amount taking nine tenths of it, the rest for the pixel or
+     two one engine's text runs wider than another's. */
   .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) { container: figure / inline-size; }
   .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) .value {
-    font-size: clamp(var(--text-lg), 20cqi, var(--text-2xl));
+    font-size: clamp(var(--text-sm), 18cqi, var(--text-2xl));
     color: var(--ink);
     overflow-wrap: anywhere;
   }

@@ -31,6 +31,9 @@ CATALOG = _assembled(chart, form, graph, part, status, table)
 
 
 # Each drawing with no box of its own while the box that holds it has one.
+_CLOSED = """(disclosure) => document.querySelector(
+  `${disclosure}:not([open]), [popover]:not(:popover-open)`) !== null"""
+
 _UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
   const held = drawing.parentElement.getBoundingClientRect();
   const drawn = drawing.getBoundingClientRect();
@@ -54,10 +57,17 @@ class CatalogLayoutTests(LayoutBrowserTests):
                 if not self.loaded(name, width):
                     continue
                 self.hold(name, width, [self.draws_the_state_it_stands_for, self.every_layout_check_holds])
-                self.in_scheme("dark")
-                self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
-                self.in_scheme("light")
-                self.hold(name, width, [self.open_every_disclosure, self.every_layout_check_holds], disclosures="open")
+                # A palette is a color per token, the same at every width, so
+                # the narrowest and widest read every part either draws.
+                if width in (SPARSE_WIDTHS[0], SPARSE_WIDTHS[-1]):
+                    self.in_scheme("dark")
+                    self.hold(name, width, [self.every_palette_check_holds], scheme="dark")
+                    self.in_scheme("light")
+                # With nothing closed to open, the page open is the page as read.
+                if self.page.evaluate(_CLOSED, SELECTORS["disclosure"]):
+                    self.hold(
+                        name, width, [self.open_every_disclosure, self.every_layout_check_holds], disclosures="open"
+                    )
 
     def test_every_drawing_is_drawn_on_a_phone(self):
         """A chart, a trend, a bar or a calendar is drawn wherever what holds
