@@ -457,3 +457,26 @@ func TestAnUploadedCertificateInstallsTheKeyOpenedFromItsSlot(t *testing.T) {
 		}
 	}
 }
+
+// The expiry condition words a moment as HQ's moments.expiry_words does, a
+// past one as past.
+func TestTLSConditionsWordAnExpiryAsHQDoes(t *testing.T) {
+	said := map[time.Duration]string{
+		3 * 24 * time.Hour:      "expires in 3 days",
+		24 * time.Hour:          "expires in 1 day",
+		0:                       "expires today",
+		-2 * time.Hour:          "expired today",
+		-(24 + 1) * time.Hour:   "expired 1 day ago",
+		-(4*24 + 1) * time.Hour: "expired 4 days ago",
+	}
+	spec := TLSCertificateSpec{RenewalWindowDays: 30}
+	for offset, want := range said {
+		conditions := tlsConditions(spec, nil, nil, nil, daysUntil(tlsNow.Add(offset), tlsNow))
+		if len(conditions) != 1 || conditions[0].Reason != "ExpiringSoon" {
+			t.Fatalf("%v: conditions %+v", offset, conditions)
+		}
+		if got := conditions[0].Message; got != "A certificate a site serves "+want+"." {
+			t.Errorf("%v: %q, want it to say %q", offset, got, want)
+		}
+	}
+}

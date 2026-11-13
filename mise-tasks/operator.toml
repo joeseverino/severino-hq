@@ -37,6 +37,21 @@ run = [
   "uv run python -m tools.fonts.subset",
 ]
 
+# A linter's suppressions file holds a count per file and rule that only
+# falls: a rise is a new problem, which lint:css and lint:js refuse. ESLint's
+# --prune-suppressions only lowers a count. Stylelint has no such flag, and its
+# --suppress sets every count to what it finds, raising one too, so it rewrites
+# the file only after a run with the file as it stands passes, when no count is
+# below what it finds and the rewrite can only lower or drop one.
+["fix:suppressions"]
+description = "Lower each count in the linters' suppressions files that has fallen to what the linter finds; a risen count is left for lint:css or lint:js to refuse"
+hide = true
+depends = ["setup:lint-tools"]
+run = [
+  "if stylelint --config tools/lint/stylelint.config.mjs --suppress-location=tools/lint/stylelint-suppressions.json 'static/css/**/*.css' >/dev/null 2>&1; then stylelint --config tools/lint/stylelint.config.mjs --suppress --suppress-location=tools/lint/stylelint-suppressions.json 'static/css/**/*.css'; else echo 'fix:suppressions: lint:css finds a problem, so the stylesheets keep their counts until mise run lint:css passes'; fi",
+  "eslint --config tools/lint/eslint.config.mjs --suppressions-location tools/lint/eslint-suppressions.json --prune-suppressions 'static/js/**/*.js' >/dev/null || echo 'fix:suppressions: lint:js finds a problem; mise run lint:js names it'",
+]
+
 # A docs figure is drawn from its source beside it by brand, the renderer its
 # source line names. brand lives on an operator's machine only, so this is no
 # step of fix.

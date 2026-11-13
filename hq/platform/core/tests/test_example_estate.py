@@ -27,6 +27,7 @@ from hq.platform.core.audit import ANONYMOUS
 from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED
 from hq.platform.core.example_estate.testing import sign_in, throwaway_media
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
+from hq.platform.core.tests.browser.estate import ask_as_production, owner_client
 
 
 class ExampleEstateTests(TestCase):
@@ -204,3 +205,16 @@ class ExampleEstateTests(TestCase):
         (container,) = containers("container-image-unpinned")
 
         self.assertNotIn(container, containers("container-image-behind"))
+
+
+class PinnedWordsTests(TestCase):
+    def test_a_pinned_image_is_said_in_the_words_of_the_standard_s_check(self):
+        from hq.platform.application.supply_chain import STANDARD
+
+        (pinned,) = (check.label for check in STANDARD if check.id == "pinned")
+        with owner_client() as client:
+            container = ask_as_production(client, reverse("control_plane:detail", args=["home-automation-container"]))
+            hq = ask_as_production(client, reverse("hq_self"))
+
+        self.assertContains(container, pinned)
+        self.assertContains(hq, pinned.lower())

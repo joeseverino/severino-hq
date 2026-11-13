@@ -11,7 +11,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% fact "To" icon="deploy" %}
       {% entity plan.release.url|outside label=plan.target_tag code=True %}
     {% detail %}
-      <small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}{% if plan.release.published %}{% dot %}released {{ plan.release.published|ago_short }}{% endif %}</small>
+      <ul class="dot-list"><li><small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}</small></li>{% if plan.release.published %}<li><small>released {{ plan.release.published|ago_short }}</small></li>{% endif %}</ul>
     {% endfact %}
     {% fact "Fixes" icon="shield" tone=plan.fixes_tone %}
       {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
@@ -42,7 +42,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
       {% endif %}
     </div>
   </div>
-{% aside %}<span class="muted">{{ plan.change_label|breakable }}{% dot %}upgrade risk {% with mark=plan.risk_reason|then:"," %}{{ plan.risk|breakable:mark }}{% endwith %}{% if plan.risk_reason %} because {{ plan.risk_reason|breakable }}{% endif %}</span>
+{% aside %}<span class="muted">{{ plan.change_label|breakable }}{% dot %}{{ plan.risk|breakable }} risk</span>
 {% endsection %}
 {% endif %}
 
@@ -113,7 +113,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% fact "Memory" %}<span data-usage="memory">{{ usage.memory|bytes }} <span class="muted">{{ usage.memory_basis|breakable }}{% dot %}{% if usage.memory_limit %}{{ usage.memory_of_limit|floatformat:"-1" }}% of its {{ usage.memory_limit|bytes }} limit{% else %}no limit{% endif %}</span></span>{% endfact %}
     {% fact "CPU" %}<span data-usage="cpu">{% if usage.cpu_percent is not None %}{{ usage.cpu_percent|floatformat:"-1" }}% of one core <span class="muted">since the read before{% dot %}{% else %}<span class="muted">Measured once HQ has read it twice{% dot %}{% endif %}{% if usage.cpu_limit %}limit {{ usage.cpu_limit|floatformat:"-2" }} CPUs{% else %}no limit{% endif %}</span></span>{% endfact %}
     {% endif %}{% endwith %}
-    {% if posture.measured < posture.results|length %}{% fact "Not read yet" %}<span class="muted"><span tabindex="0" data-tip="{% for result in posture.results %}{% if result.state == 'unavailable' %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">{{ posture.unread|counted:"check,checks" }}</span>. {% waiting %}</span>{% endfact %}{% endif %}
+    {% if posture.measured < posture.results|length %}{% fact "Checks not read" %}<span tabindex="0" data-tip="{% for result in posture.results %}{% if result.state == 'unavailable' %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">{{ posture.unread|breakable }}</span> <span class="muted">until its runtime is read</span>{% endfact %}{% endif %}
   {% endfacts %}
 {% aside %}<span class="muted">{% if posture.measured %}{{ posture.met|breakable }} of {{ posture.measured|breakable }} checks pass{% if posture.intended %}, {{ posture.intended|length }} by design{% endif %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=item.running.observed_at only %}</span>
 {% endsection %}

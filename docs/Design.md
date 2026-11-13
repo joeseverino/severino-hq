@@ -408,6 +408,9 @@ value stands on one baseline, a zero beside a linked count alike. A list, the
 default, is the facts about one thing, each label beside its value, its label
 column as wide as its longest label, so a few short pairs never spread across
 a wide page. A label with several values holds them as a list inside one fact.
+An identifier in a value (code, a `|breakable` name) runs inline, code a chip
+on each line it wraps to, so a value's first line stands on its label's line
+in every engine.
 A line (`{% facts layout="inline" %}`) is a card's summary: each fact its bold
 value, then its words ("3 rules"). Its facts stand a fixed gap apart, under a
 rule when they follow the card's head. Its labels read on from the value, so
@@ -681,8 +684,11 @@ loses. Host-only, as the dialog it opens is.
 search field and selects, one Filter (or the bar's own `verb=`), Clear
 filters back to `clear` when anything is set, and the count of what shows
 (`{% summary %}`) at the row's end. A list's table toolbar is the same bar.
-No chip walls.
-*Gate:* `test_hand_drawn.py` refuses `.filter-bar` written by hand.
+The search takes the row's room; every other control is as wide as what it
+says, a select its longest option. No chip walls.
+*Gate:* `test_hand_drawn.py` refuses `.filter-bar` written by hand; the
+survey's "filter choices as wide as their options" finds a choice stretched
+over its bar.
 
 **Values read as what they are.** `|readout` puts identifiers (keys, hosts,
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
@@ -923,7 +929,11 @@ A list of facts (`{% facts %}`) is as wide as its longest pair, so its card
 shares a row with the sections beside it rather than crossing the page with
 its values ending a third of the way in. A record page's facts are a
 `{% card %}` that opens its `.section-flow`, beside its notes and related
-records. *Gate:* `lists across an empty frame` in the layout survey.
+records. In a flow, a frame of facts grows no wider than what it holds, so
+one alone in its flow, or alone on a row the others wrapped off, keeps its
+pairs together at the start; it is never narrower than a flow member, and
+spans the column once the flow holds one to a row. *Gate:* `lists across an
+empty frame` in the layout survey.
 
 A row of a record list (`.list-rows`) reads as one line: its meta follows its
 name a gap after, never at the row's far side across an empty middle.

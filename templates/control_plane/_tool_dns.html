@@ -1,18 +1,8 @@
 {% load nav_tags %}
 <div class="lookup-grid">
   {% section "Name lookup" %}
-    <form method="get" class="lookup-form">
-      <input type="hidden" name="tab" value="dns">
-      <div class="field compact">
-        <label for="lookup-name">Hostname</label>
-        <input type="text" name="name" id="lookup-name" spellcheck="false"
-               autocomplete="off" placeholder="example.com"
-               value="{{ asked|dictkey:'lookup.name.read' }}">
-      </div>
-      <div class="form-actions">
-        <button type="submit" class="primary">{% words "lookup.name.read" %}</button>
-      </div>
-    </form>
+    {% words "lookup.name.read" as verb %}
+    {% include "partials/_form.html" with form=lookups|dictkey:"lookup.name.read" method="get" verb=verb only %}
 
     {% with reading=results|dictkey:"lookup.name.read" %}
       {% if reading %}
@@ -46,18 +36,8 @@
   {% endsection %}
 
   {% section "Address lookup" %}
-    <form method="get" class="lookup-form">
-      <input type="hidden" name="tab" value="dns">
-      <div class="field compact">
-        <label for="lookup-address">IP address</label>
-        <input type="text" name="address" id="lookup-address" spellcheck="false"
-               autocomplete="off" placeholder="1.1.1.1"
-               value="{{ asked|dictkey:'lookup.address.read' }}">
-      </div>
-      <div class="form-actions">
-        <button type="submit" class="primary">{% words "lookup.address.read" %}</button>
-      </div>
-    </form>
+    {% words "lookup.address.read" as verb %}
+    {% include "partials/_form.html" with form=lookups|dictkey:"lookup.address.read" method="get" verb=verb only %}
 
     {% with reading=results|dictkey:"lookup.address.read" %}
       {% if reading %}
@@ -88,17 +68,8 @@
               <dt>Note</dt><dd class="muted">{{ reading.note|breakable }}</dd>
             {% endif %}
           </dl>
-          {% if reading.observed_at %}
-            <p class="help">
-              Read
-              {{ reading.observed_at|when }}
-              <form method="post" class="inline-form">
-                {% write_token %}
-                <input type="hidden" name="tab" value="dns">
-                <input type="hidden" name="address" value="{{ asked|dictkey:'lookup.address.read' }}">
-                <button type="submit" class="btn ghost compact">{% words "lookup.address.read" %}</button>
-              </form>
-            </p>
+          {% if reread %}
+            <div class="help">Read {{ reading.observed_at|when }} {% include "partials/_page_action.html" with action=reread extra="ghost compact" only %}</div>
           {% endif %}
         {% else %}
           <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>

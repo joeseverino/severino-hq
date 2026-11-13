@@ -25,7 +25,6 @@ BASELINE: dict[tuple[str, str], int] = {
     ("control_plane/_removal_summary.html", "a notice"): 1,
     ("control_plane/_removal_summary.html", "label and value facts"): 2,
     ("control_plane/_service_rows.html", "an empty line"): 1,
-    ("control_plane/_tool_dns.html", "a form that writes"): 1,
     ("control_plane/_tool_dns.html", "an empty line"): 1,
     ("control_plane/_tool_dns.html", "label and value facts"): 1,
     ("control_plane/_topology_node_body.html", "a heading"): 1,

@@ -15,14 +15,10 @@
   padding: var(--surface-inset, var(--space-5));
   margin: 0 0 var(--space-6);
 }
-/* A wrapped bar is whole rows: controls grow to fill their row, the first (search or the one choice) takes most of it, words never grow. */
-.filter-bar > :where(:not(.control-label, .filter-bar-summary)) { flex: 1 1 auto; }
-.filter-bar > :first-child:not(.control-label) { flex: 1000 1 240px; min-width: 0; }
-/* A search asks for its whole placeholder, or what is typed in it (`field-sizing`), so the controls beside it wrap before it is cut. */
-.filter-bar > input[type=search]:first-child { field-sizing: content; flex-basis: auto; }
-/* A select is as wide as its longest option unless told otherwise. */
+/* The search alone grows, taking what its row leaves: it asks first for its whole placeholder, or what is typed in it (`field-sizing`), so the controls beside it wrap before it is cut. Every other control is as wide as what it says, as a native control is; the count's own margin carries it to the row's end. */
+.filter-bar > input[type=search] { flex: 1 1 auto; field-sizing: content; min-width: 0; }
+/* A choice is as wide as its longest option, so the bar holds still as the choice changes (never `field-sizing`, which follows the option chosen), and narrower only in a bar too narrow for it. */
 .filter-bar > select { max-width: 100%; min-width: 0; }
-.filter-bar > .btn { justify-content: center; }
 /* A field and its button on one line: the field takes the room. */
 .field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
 .field-row > input { flex: 1; min-width: 0; }

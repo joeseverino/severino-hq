@@ -9,6 +9,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import tomllib
 from collections import Counter
 from pathlib import Path
 
@@ -225,7 +226,7 @@ class StylesheetLintTests(SimpleTestCase):
                 self.assertEqual(lint(sheet, css), [])
 
     def test_each_sheets_restyled_count_is_what_the_rule_finds(self):
-        """A sheet's count of restyled primitives only falls: a fix lowers it in
+        """A sheet's count of restyled primitives only falls: `mise run fix` lowers it in
         tools/lint/stylelint-suppressions.json, which Stylelint reads as a ceiling alone."""
 
         with tempfile.TemporaryDirectory() as scratch:
@@ -258,5 +259,54 @@ class StylesheetLintTests(SimpleTestCase):
         self.assertEqual(
             {sheet: rules[RESTYLED]["count"] for sheet, rules in recorded.items() if RESTYLED in rules},
             dict(counted),
-            f"record each sheet's count: stylelint --config {CONFIG} --suppress={RESTYLED} --suppress-location={SUPPRESSIONS} 'static/css/**/*.css'",
+            "a fallen count is lowered by `mise run fix`; a risen one is a new restyled primitive, which lint:css names",
         )
+
+
+FIXED = {"stylelint": SUPPRESSIONS, "eslint": "tools/lint/eslint-suppressions.json"}
+
+
+def fix_suppressions(planted: dict[str, dict]) -> dict[str, dict]:
+    """Each linter's suppressions file after ``mise run fix``'s step for them
+    runs on a tree whose files are this checkout's but for ``planted``."""
+
+    steps = tomllib.loads((ROOT / "mise-tasks/operator.toml").read_text(encoding="utf-8"))["fix:suppressions"]["run"]
+    with tempfile.TemporaryDirectory() as scratch:
+        tree = Path(scratch)
+        (tree / "static").symlink_to(ROOT / "static")
+        (tree / "tools/lint").mkdir(parents=True)
+        for each in (ROOT / "tools/lint").iterdir():
+            (tree / "tools/lint" / each.name).symlink_to(each)
+        for linter, path in FIXED.items():
+            (tree / path).unlink()
+            (tree / path).write_text(json.dumps(planted[linter], indent=2) + "\n", encoding="utf-8")
+        for step in steps:
+            subprocess.run(["sh", "-c", step], cwd=tree, capture_output=True, check=True)
+        return {linter: json.loads((tree / path).read_text(encoding="utf-8")) for linter, path in FIXED.items()}
+
+
+@tag("source")
+class FixSuppressionsTests(SimpleTestCase):
+    """`mise run fix` lowers a suppression count that has fallen and never raises one."""
+
+    def setUp(self):
+        self.recorded = {
+            linter: json.loads((ROOT / path).read_text(encoding="utf-8")) for linter, path in FIXED.items()
+        }
+
+    def planted(self, by: int) -> dict[str, dict]:
+        """The recorded files with each one's first count moved ``by``."""
+
+        planted = json.loads(json.dumps(self.recorded))
+        for counts in planted.values():
+            rules = next(iter(counts.values()))
+            next(iter(rules.values()))["count"] += by
+        return planted
+
+    def test_a_count_above_what_the_linter_finds_is_lowered_to_it(self):
+        self.assertEqual(fix_suppressions(self.planted(3)), self.recorded)
+
+    def test_a_count_below_what_the_linter_finds_is_left_for_the_lint_gate(self):
+        risen = self.planted(-1)
+
+        self.assertEqual(fix_suppressions(risen), risen)

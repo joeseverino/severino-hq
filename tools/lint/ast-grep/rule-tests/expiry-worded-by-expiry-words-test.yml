@@ -1,0 +1,16 @@
+id: expiry-worded-by-expiry-words
+valid:
+  - 'title = f"{label} {expiry_words(days)}"'
+  - 'fact += f", first {expiry_words(first)}"'
+  - 'body = f"Expires {ended(phrase)} Renewal has not run; renew it."'
+  - 'detail = "Does not expire"'
+  - |
+    def key_expiry(self):
+        """When the node key runs out, in words ("expired 4 days ago")."""
+invalid:
+  - |
+    fact += f", first expires in {counted(days_until(first), 'day')}"
+  - 'title = f"{domain} expires in {span(days)}"'
+  - 'said = "Expires today"'
+  - |
+    return f"expired {abs(days)} days ago"

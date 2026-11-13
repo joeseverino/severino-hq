@@ -255,6 +255,29 @@ ACTIONS_STACKED_WITH_ROOM = (
 )
 
 
+# A filter bar's choice (a select, a filter's menu, the sort) is as wide as
+# its options, never stretched over the bar: one drawn wider than it lays out
+# at its own width, the bar's room being its search's. One a bar too narrow
+# for it shrinks stays within its own width, so it passes.
+CHOICES_AS_WIDE_AS_THEIR_OPTIONS = (
+    "(choices) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll(choices)) {
+    if (!el.checkVisibility()) continue;
+    const drawn = box(el).width;
+    const before = el.style.cssText;
+    el.style.cssText += ';flex: none !important; inline-size: auto !important';
+    const own = box(el).width;
+    el.style.cssText = before;
+    if (drawn > own + 1) found.push(`${describe(el)} is ${drawn.toFixed(1)}px wide, its options ${own.toFixed(1)}px`);
+  }
+  return found;
+}"""
+)
+
+
 # The survey checks these probes answer (`probes/__init__.py`).
 CHECKS = {
     "actions on the first line": ACTIONS_OFF_THE_LINE,
@@ -269,5 +292,9 @@ CHECKS = {
     "one height to a row of controls": (
         CONTROL_HEIGHTS,
         [SELECTORS["pressed"], SELECTORS["fillable"], SELECTORS["vendored"]],
+    ),
+    "filter choices as wide as their options": (
+        CHOICES_AS_WIDE_AS_THEIR_OPTIONS,
+        ".filter-bar > :is(select, .table-filter-menu, .table-sort)",
     ),
 }

@@ -124,11 +124,18 @@ class ValeRuleTests(SimpleTestCase):
             ("Consumer", "Every consumer"),
             ("Render", "It rendered"),
             ("Mint", "Minted today"),
+            ("Expiry", "It expires in 3 days"),
+            ("Expiry", "It expired 4 days ago"),
         )
         page = "".join(f"<p>{sentence}.</p>\n" for _rule, sentence in sentences)
 
         self.assertEqual(sorted(rules({"page.html": page})), sorted(rule for rule, _sentence in sentences))
         self.assertEqual(rules({"page.html": "<p>Findings</p><p>A kind-hearted reader.</p>"}), [])
+
+    def test_an_expiry_a_template_words_around_a_value_is_found(self):
+        page = '<dd>Expires in {{ days|counted:"day" }}</dd>\n<dd>{{ key.expiry|capfirst }}</dd>\n'
+
+        self.assertEqual(vale({"page.html": page}), [("page.html", 1, "Expiry")])
 
     def test_a_retired_name_is_found_as_written(self):
         page = "".join(f"<p>{name}</p>\n" for name in RETIRED)

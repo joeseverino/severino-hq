@@ -79,7 +79,7 @@
           <dd>{{ machine.presence.reached_hq.phrase|capfirst|breakable }}</dd>
         {% endif %}
         <dt>Node key</dt>
-          <dd>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days|counted:"day" }}{% else %}Does not expire{% endif %}</dd>
+          <dd>{% if machine.presence.key_expiry %}{{ machine.presence.key_expiry|capfirst|breakable }}{% else %}Does not expire{% endif %}</dd>
         <dt>Runs</dt>
           <dd>{{ machine.presence.os|or_empty }}{% if tailscale_version %}{% dot %}<span title="{{ machine.presence.client_version }}">Tailscale {{ tailscale_version|breakable }}</span>{% if machine.presence.update_available %} <strong>(update available)</strong>{% endif %}{% endif %}</dd>
         {% comment %}

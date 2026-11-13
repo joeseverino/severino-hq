@@ -333,7 +333,7 @@ class CredentialFindingTests(TestCase):
         finding = {f.rule: f for f in self.findings()}["credential-expiring"]
 
         self.assertEqual(finding.severity, "serious")
-        self.assertIn("has expired", finding.title)
+        self.assertIn("expired 1 day ago", finding.title)
 
     def test_expiry_outside_the_window_is_quiet(self):
         ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())

@@ -683,8 +683,8 @@
               "by_design": [],
               "checks": [
                 {
-                  "id": "sbom",
-                  "label": "Has a package list (SBOM)",
+                  "id": "pinned",
+                  "label": "Pinned by digest",
                   "state": "met"
                 }
               ],

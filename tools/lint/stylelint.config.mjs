@@ -242,7 +242,8 @@ const primitives = [
 ];
 // A sheet that draws a primitive may write that one's variants. Today's
 // instances are counted in stylelint-suppressions.json beside it, a count
-// per sheet that only falls (StylesheetLintTests holds it to the rule's).
+// per sheet that only falls: `mise run fix` lowers it (StylesheetLintTests
+// holds it to the rule's).
 const restyledBySheet = [...new Set(primitives.flatMap((each) => each.sheets))].map((name) => ({
   files: [sheet(name)],
   rules: { "hq/restyled-primitive": { primitives, sheet: name } },

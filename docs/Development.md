@@ -358,6 +358,12 @@ reads the last, then formats as the lint gates read:
 4. `docs/Connections.md`, from what the providers declare;
 5. the served font, cut to the characters HQ prints.
 
+It then lowers each count in `tools/lint/stylelint-suppressions.json` and
+`tools/lint/eslint-suppressions.json` that has fallen to what the linter finds
+(`fix:suppressions`), so a change that removes a suppressed problem leaves its
+count right. A count that rose is a new problem: `fix` leaves it, and
+`lint:css` or `lint:js` refuses it.
+
 Each `lint:drift-*` gate checks one against its source without writing. Its
 failure names the command that rewrites that file alone, in seconds; `fast`
 runs the ones a change reaches. A rebase conflict in one is settled by

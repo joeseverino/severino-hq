@@ -7,7 +7,8 @@ Expects `routing` and `policy`, each record with its actions (zone_views'
 `_record_rows`), `zone` and `public_dns_enabled`; with public DNS
 changes off, a record offers no Edit or Remove it would refuse. A state is said
 only where it is not healthy, and a TTL only where it is not automatic:
-seventeen rows that each say "Healthy" and "Auto" say nothing. Where the Value
+seventeen rows that each say "Healthy" and "Auto" say nothing, and a zone
+whose every record is automatic has no TTL column (`zone.ttl_set`). Where the Value
 column has left, a record that shares its name and type with another says its
 value under its name (`record.summary`), so the two still read as two.
 {% endcomment %}
@@ -26,7 +27,7 @@ value under its name (`record.summary`), so the two still read as two.
             <span class="zone-value">{{ record.value|breakable }}</span>
             {% if record.proxied %}{% status "Proxied" tone="neutral" %}{% endif %}
           </td>
-          <td>{% if record.ttl != 1 %}{{ record.ttl|breakable }}&nbsp;s{% endif %}</td>
+          {% if zone.ttl_set %}<td>{% if record.ttl != 1 %}{{ record.ttl|breakable }}&nbsp;s{% endif %}</td>{% endif %}
           {% if zone.managed %}
             <td>
               {% comment %}
@@ -55,7 +56,7 @@ value under its name (`record.summary`), so the two still read as two.
         {% table_heading "Name" "identifier" gutter=True local_sort=True %}
         {% table_heading "Type" "identifier" css="key-col" local_sort=True %}
         {% table_heading "Value" "identifier" drop=4 local_sort=True %}
-        {% table_heading "TTL" "status" drop=3 local_sort=True %}
+        {% if zone.ttl_set %}{% table_heading "TTL" "status" drop=3 local_sort=True %}{% endif %}
         {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=True %}{% table_heading "Actions" css="actions-col" drop=1 hidden=True %}{% endif %}
       </tr>
     </thead>

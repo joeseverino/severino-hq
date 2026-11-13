@@ -30,6 +30,7 @@ from .facts import Subject, inventory_about, inventory_records, readings as stor
 from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
 from .mail_policy import is_null_mx
+from .moments import expiry_words
 from .timestamps import moment
 from .ui import counted, ended
 from .zones import ZONE_KIND, ZoneInsight
@@ -242,7 +243,7 @@ def security(zone) -> ZoneInsight | None:
         certificates_fact = counted(count, "certificate")
         first = moment(earliest) if earliest else None
         if first is not None:
-            certificates_fact += f", first expires in {counted(days_until(first), 'day')}"
+            certificates_fact += f", first {expiry_words(first)}"
         facts.append(certificates_fact)
     stronger = _stronger_elsewhere(zone)
     concerns = []

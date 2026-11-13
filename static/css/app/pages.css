@@ -211,14 +211,6 @@
 /* Two tools side by side where there is room, stacked where there is not.
    Neither is primary, so neither takes the wider column. */
 .lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-.lookup-form { display: flex; gap: var(--space-5); align-items: flex-end; margin: 0 0 var(--space-8); flex-wrap: wrap; }
-.lookup-form .field { flex: 1 1 200px; }
-/* The input and its button share a line, so the spacing that separates stacked
-   fields would knock them out of alignment: `flex-end` lines up margin boxes,
-   so a margin under the field plus one above the actions drops the button
-   below the box it belongs to. The field takes the existing `.compact`
-   modifier; the actions give up their stack margin here. */
-.lookup-form .form-actions { margin-top: 0; }
 .tool-result > :last-child { margin-bottom: 0; }
 
 /* Side-by-side tools have to agree on where their rows are, and left to

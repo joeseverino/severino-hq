@@ -43,11 +43,11 @@ def _tag_current(container: Any) -> bool | None:
 STANDARD: tuple[Check, ...] = (
     Check(
         "pinned",
-        "Locked to an exact build",
+        "Pinned by digest",
         lambda container: container.standing.pinned,
         "A tag can later point at a different image. A digest always names the same build.",
         "Pin the image by digest in the compose file.",
-        unmet="Not locked to an exact build",
+        unmet="Not pinned by digest",
     ),
     Check(
         "source-known",

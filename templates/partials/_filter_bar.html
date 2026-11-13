@@ -1,6 +1,8 @@
 {% comment %}
 A filter bar, drawn by {% filter_bar %}: {% filter_bar filtered=narrowed clear=every_url %}<select name="kind">...</select>{% summary %}3 of 12{% endfilter_bar %}.
-The page's controls come first, the first taking most of its row; then the
+The page's controls come first, a search taking what its row leaves and
+every other control as wide as what it says (a select its longest option);
+then the
 one button that sends them (verb, Filter unless told), Clear filters back to
 clear while anything narrows (filtered), and the summary, a count of what
 shows, at the row's end. It is a query (method get), sent to action when it

@@ -46,6 +46,32 @@ func daysUntil(when, now time.Time) int {
 	return 0
 }
 
+// expiryWords says when something runs out, from a daysUntil count, as HQ's
+// moments.expiry_words does: "expires in 3 days", "expires today", "expired
+// today", "expired 4 days ago". A past expiry is a past tense, never a count
+// below nothing.
+func expiryWords(days int) string {
+	if days > 0 {
+		return "expires in " + countedDays(days)
+	}
+	if days == 0 {
+		return "expires today"
+	}
+	// daysUntil counts a moment past by under a day as -1, so the whole days
+	// since are one fewer.
+	if since := -days - 1; since > 0 {
+		return "expired " + countedDays(since) + " ago"
+	}
+	return "expired today"
+}
+
+func countedDays(days int) string {
+	if days == 1 {
+		return "1 day"
+	}
+	return strconv.Itoa(days) + " days"
+}
+
 // npmCoveredHosts is the serving proxy hosts with a name the certificate covers.
 func (r *Registry) npmCoveredHosts(ctx context.Context, certificateDomains []string) ([]npmapi.ProxyHostObject, error) {
 	base, headers, err := r.npmSession(ctx, "")
@@ -163,7 +189,7 @@ func tlsConditions(spec TLSCertificateSpec, observations []TLSObservation, unver
 		conditions = append(conditions, Condition{Type: runtime.ConditionDrifted, Status: true, Reason: "ConsumerMismatch", Message: "Sites are serving different certificates."})
 	}
 	if daysRemaining <= spec.RenewalWindowDays {
-		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ExpiringSoon", Message: fmt.Sprintf("A verified TLS consumer expires in %d days.", daysRemaining)})
+		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ExpiringSoon", Message: "A certificate a site serves " + expiryWords(daysRemaining) + "."})
 	}
 	if len(unverified) > 0 {
 		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ConsumerUnverified", Message: "No name to check is set for: " + strings.Join(unverified, ", ")})

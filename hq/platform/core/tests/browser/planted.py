@@ -321,6 +321,11 @@ PLANTS = {
     "button edges": Plant('<button type="button" style="border: 1px solid var(--field-line)">Example</button>'),
     # A fill the light palette shows and the dark one drops.
     "fills": Plant('<p><span style="background: light-dark(#ccc, transparent)">Example</span></p>'),
+    # A filter bar's one choice grown over the bar.
+    "filter choices as wide as their options": Plant(
+        '{% load filter_tags %}{% filter_bar %}<select name="example" aria-label="Example" style="flex-grow: 1">'
+        "<option>Example</option></select>{% endfilter_bar %}"
+    ),
 }
 
 # What a check passes that is close to what it finds: the case its plant
@@ -344,10 +349,13 @@ PASSES = {
         '<div class="card">Example</div><div style="display: flex; gap: 1rem">'
         '<div class="card">Example</div><div class="card">Example</div></div>'
     ),
-    # The same card and section sharing a row in the flow.
+    # The same card and section sharing a row in the flow, then the card
+    # alone in a flow of its own, as narrow as what it holds.
     "lists across an empty frame": Plant(
         '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
         '{% endfacts %}{% endcard %}{% section "Example" %}<p>Example</p>{% endsection %}</div>'
+        '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
+        "{% endfacts %}{% endcard %}</div>"
     ),
     "titles at the head's start": Plant(
         '{% section "Example" %}<p>Example</p>{% aside %}<a href="#">Example</a>{% endsection %}'
@@ -383,6 +391,12 @@ PASSES = {
     "one height to a row of controls": Plant(
         '<div style="display: flex; gap: 1rem"><button type="button" class="btn">Example</button>'
         '<input type="search" aria-label="Example"><select aria-label="Example"><option>Example</option></select></div>'
+    ),
+    # A filter bar's choice in a bar too narrow for its option, shrunk to it.
+    "filter choices as wide as their options": Plant(
+        '<div style="inline-size: 10rem">{% load filter_tags %}{% filter_bar %}'
+        '<select name="example" aria-label="Example"><option>Example option far wider than its bar</option></select>'
+        "{% endfilter_bar %}</div>"
     ),
 }
 

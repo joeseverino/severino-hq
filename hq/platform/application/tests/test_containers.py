@@ -489,7 +489,7 @@ class PageTests(TestCase):
         detail = self.client.get(reverse("control_plane:detail", args=["example-box-kuma"]))
 
         self.assertContains(listing, reverse("control_plane:detail", args=["example-box-kuma"]))
-        self.assertIn("2 available", text(detail))
+        self.assertIn("1 newer release available", text(detail))
         self.assertIn("Cannot check", text(detail))
 
     def test_a_machine_shows_each_container_standing_as_the_containers_page_does(self):

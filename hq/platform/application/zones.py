@@ -295,6 +295,16 @@ class Zone:
         return tuple(record for record in self.records if not record.ephemeral)
 
     @property
+    def ttl_set(self) -> bool:
+        """Whether a listed record has a TTL of its own.
+
+        1 leaves it to the DNS service (Cloudflare's "Auto"), which the table
+        leaves blank, so a zone where every record does has no TTL column.
+        """
+
+        return any(record.ttl != 1 for record in self.listed)
+
+    @property
     def routing(self) -> tuple[ZoneRecord, ...]:
         """Where traffic goes. The question a domain is usually opened to answer."""
 

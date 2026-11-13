@@ -17,6 +17,7 @@ from django.utils.html import escape
 from hq.platform.application import calendar
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
 from hq.platform.application.drawings import AllocationBar, Share, Trend
+from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page, PageAction
 from hq.platform.application.ui import (
     ActivityCalendar,
@@ -609,6 +610,31 @@ CATALOG = {
         ".well-known/openid-configuration</a>{% endfact %}"
         '{% fact "Protocol" %}<code>2025-06-18</code>{% endfact %}'
         "{% endfacts %}"
+    ),
+    # Identifiers that wrap in a list held narrow, code, a bare path, an
+    # entity's name and one linked outside, each under a fact of one line:
+    # every value stands on its label's line, clear of the fact above it.
+    "part/facts-list-identifiers": Entry(
+        '<div style="inline-size: 300px">{% facts %}'
+        '{% fact "Example name" value="example-01" %}'
+        '{% fact "Example image" %}<code>{{ image|breakable }}</code>{% endfact %}'
+        '{% fact "Example kind" value="Renewal" %}'
+        '{% fact "Example path" value=path %}'
+        '{% fact "Example port" value="8123" %}'
+        '{% fact "Example serves" %}{% entity service %}{% endfact %}'
+        '{% fact "Example state" value="Running" %}'
+        '{% fact "Example update" %}{% entity url|outside label=tag code=True %}{% endfact %}'
+        "{% endfacts %}</div>",
+        {
+            "image": "registry.example.com/example-team/example-image:2024.11.3-example-build",
+            "path": "example-vault/renewals/example-renewal-with-a-long-name.md",
+            "service": EntityLink(
+                label="example-automation-dashboard.example.com", url="/example/", kind_label="Service"
+            ),
+            "tag": "2024.11.3-example2404-ls45-example-build",
+            "url": "https://example.com/releases/2024.11.3",
+        },
+        premise=(_ONE_LINE, f".fact:nth-child(even) > {SELECTORS['fact_value']}"),
     ),
     "part/facts-list-many": Entry(
         "{% facts %}"

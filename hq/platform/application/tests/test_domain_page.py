@@ -101,7 +101,7 @@ class RecordTableTests(SimpleTestCase):
             {
                 "routing": [(row, ()) for row in rows],
                 "policy": [(row, ()) for row in policy],
-                "zone": SimpleNamespace(managed=True),
+                "zone": SimpleNamespace(managed=True, ttl_set=any(row.ttl != 1 for row in (*rows, *policy))),
                 "public_dns_enabled": True,
                 "request": SimpleNamespace(get_full_path=lambda: "/domains/example.com/"),
                 **context,
@@ -122,6 +122,18 @@ class RecordTableTests(SimpleTestCase):
 
         self.assertNotIn("Auto", text(html))
         self.assertIn("300 s", texts(html, "td"))
+
+    def test_a_zone_whose_every_ttl_is_automatic_has_no_ttl_column(self):
+        html = self.table(self.record(), self.record(name="www.example.com"))
+
+        self.assertNotIn("TTL", texts(html, "th"))
+
+    def test_a_zone_says_whether_any_record_set_its_own_ttl(self):
+        automatic = ZoneRecord("app.example.com", "A", "192.0.2.10")
+        slow = ZoneRecord("slow.example.com", "A", "192.0.2.11", ttl=300)
+
+        self.assertFalse(Zone("example.com", records=(automatic,)).ttl_set)
+        self.assertTrue(Zone("example.com", records=(automatic, slow)).ttl_set)
 
     def test_an_empty_half_says_where_the_records_are(self):
         self.assertIn("No records.", self.table())

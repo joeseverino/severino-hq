@@ -12,11 +12,11 @@ lazy from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from . import tailnet
+from .moments import expiry_words
 from .request_channel import Channel
 from .request_identity import Identity
 from .timestamps import moment
 from .ui import counted, ended
-lazy from .expiry import days_until
 lazy from .zones import public_answers_for
 
 
@@ -719,20 +719,10 @@ def _tailnet_observation_layer(observer: tailnet.Device | None, serving: Serving
 
 
 def _expiry_phrase(stamp: str) -> str:
-    """When a node key runs out, in the tense that fits.
-
-    An expired key is not a smaller version of a valid one (the device stops
-    being on the tailnet) so the two do not share a sentence.
-    """
+    """When a node key runs out, in the tense that fits."""
 
     parsed = moment(stamp)
-    if parsed is None:
-        return "has an expiry HQ could not read"
-
-    days = days_until(parsed)
-    if days < 0:
-        return f"expired {abs(days)} days ago"
-    return f"expires in {days} days"
+    return "has an expiry HQ could not read" if parsed is None else expiry_words(parsed)
 
 
 def _gate_layer(channel: Channel) -> Layer:

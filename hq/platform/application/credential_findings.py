@@ -23,8 +23,7 @@ from .finding_model import THEN_REFRESH, FindingRule, OperatorStep, built_findin
 from .timestamps import moment
 from .ui import counted, ended
 lazy from .credential_mint import address_fields
-lazy from .expiry import days_until
-lazy from .moments import span
+lazy from .moments import expiry_words
 
 # Fact keys a connection node carries; ``topology`` writes them.
 FAILURE = "connection-failure"
@@ -194,14 +193,11 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
         if when is None:
             continue
         expired = reached(when)
-        left = days_until(when)
         found.append(
             {
                 "rule": "credential-expiring",
                 "subject": node.id,
-                "title": (
-                    f"{node.label}'s token has expired" if expired else f"{node.label}'s token expires in {span(left)}"
-                ),
+                "title": f"{node.label}'s token {expiry_words(when)}",
                 "severity": "serious" if expired else "attention",
                 "explanation": (
                     f"HQ cannot read anything through {node.label} until it is replaced."

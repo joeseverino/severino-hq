@@ -1,6 +1,7 @@
 # The words of the host's Go that reach a page, for Plain: a ProviderError's
 # Message, which a finding, a connection's state and a refused change show,
-# and the message decodeAs words such an error with. Comments, logs and every
+# the message decodeAs words such an error with, and a Condition's Message,
+# which a resource's status shows, written whole or through condition. Comments, logs and every
 # other string are for whoever writes the code; HQ's rules read the raw file.
 #
 # A message is a literal, a literal joined with values, or a format's first
@@ -20,7 +21,7 @@ scopes:
                (binary_expression [(interpreted_string_literal) @prose (binary_expression [(interpreted_string_literal) @prose (binary_expression [(interpreted_string_literal) @prose (binary_expression [(interpreted_string_literal) @prose (binary_expression (interpreted_string_literal) @prose)])])])])
                (call_expression arguments: (argument_list . (interpreted_string_literal) @prose))
              ]))))
-       (#eq? @_t "ProviderError")
+       (#match? @_t "^(ProviderError|Condition)$")
        (#eq? @_k "Message"))
 
   - name: shown
@@ -32,3 +33,13 @@ scopes:
            (binary_expression [(interpreted_string_literal) @prose (binary_expression (interpreted_string_literal) @prose)])
          ]))
        (#eq? @_f "decodeAs"))
+
+  - name: shown
+    expr: |
+      ((call_expression
+         function: (identifier) @_f
+         arguments: (argument_list . (_) . (_) . [
+           (interpreted_string_literal) @prose
+           (binary_expression [(interpreted_string_literal) @prose (binary_expression (interpreted_string_literal) @prose)])
+         ]))
+       (#eq? @_f "condition"))

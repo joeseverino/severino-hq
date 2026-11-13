@@ -348,9 +348,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .fact-value :is(a, [tabindex]) { display: inline-block; vertical-align: top; }
 /* Code in a value is set in its own face, whose line would sit the line half a pixel off the plain value beside it; at one line of its size it stays inside the value's line. */
 .facts-band .fact-value :is(code, kbd, samp) { line-height: 1; }
-/* It runs inline, its parts too, a chip on each line it wraps to, so its first line is the value's first line in every engine: an inline block stands on its last line wherever `baseline-source` is not supported (WebKit), so a wrapped chip would lift its value off its row's baseline. */
-.facts-band .fact-value :is(code, kbd, samp),
-.facts-band .fact-value :is(code, kbd, samp) :is(.token, .whole) { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+/* An identifier in a value (code, a `|breakable` token) runs inline, its parts too, code a chip on each line it wraps to, so the value's first line is its first line in every engine: an inline block stands on its last line wherever `baseline-source` is not supported (WebKit), so a wrapped identifier would lift a band's value off its row's baseline and draw a list's over the fact above, whose row lines up on baselines. */
+:is(.facts-band, .facts-list) .fact-value :is(code, kbd, samp, .token, .whole):not(td *) { display: inline; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 .band-icon {
   display: grid; place-items: center; flex: none;
   width: 36px; height: 36px; border-radius: var(--radius);

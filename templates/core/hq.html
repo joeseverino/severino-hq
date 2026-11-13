@@ -32,7 +32,6 @@ uptime and how the request came.
         {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
         {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7"|breakable }}</code>
         {% else %}<span class="muted">Not read</span>{% endif %}
-        {% if release.runs_deployed is False %}<br><strong>Running an undeployed commit</strong>{% endif %}
         <br>{% entity repository.url|outside label=repository.name %}<span class="muted">{% dot %}{% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
       </span>{% endfact %}
     {% endwith %}{% endif %}

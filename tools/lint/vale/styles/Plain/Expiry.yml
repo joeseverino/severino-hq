@@ -1,0 +1,14 @@
+# A template or a controller message that words an expiry builds its own sign
+# test, and one that forgets it says "expires in -4 days". Python's strings
+# are held to the same by ast-grep's expiry-worded-by-expiry-words, so
+# .vale.ini reads this rule in templates and the controller's shown messages,
+# which say an expiry through expiryWords.
+extends: existence
+message: "'%s' is an expiry worded by hand; show the phrase expiry_words (expiryWords in Go) gives"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment]
+tokens:
+  - '(?<![\w-])expires (?:in|today)(?![\w-])'
+  - '(?<![\w-])expired\b.*\bago(?![\w-])'

@@ -27,7 +27,7 @@ from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .first_seen import dated
 from .item_help import cannot_help, remedy_link
-from .moments import ago, when_day
+from .moments import ago, expiry_words, when_day
 from .projection import read_once
 from .security import Principal
 from .service_health import UNKNOWN
@@ -530,11 +530,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 status="serious" if days <= CERTIFICATE_SERIOUS_DAYS else "attention",
                 eyebrow="Certificates",
                 key=key,
-                title=(
-                    f"{expiry.subject} expires in {counted(days, 'day')}"
-                    if expiry.days >= 0
-                    else f"{expiry.subject} has expired"
-                ),
+                title=f"{expiry.subject} {expiry_words(expiry.days)}",
                 value=str(days),
                 body=body,
                 action=action,

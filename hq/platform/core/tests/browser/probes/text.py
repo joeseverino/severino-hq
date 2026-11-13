@@ -651,8 +651,12 @@ const extent = (found) => found.length && {
 # row move apart as the band widens. A track's floor (`--fact-min`) sets a
 # short fact's neighbor a fixed distance off, which a wider band keeps; a
 # track that takes a share of the band (`1fr`, a spread `justify-content`)
-# gives away its width. Read from what each fact draws, with the band set
-# wider for the length of one layout and put back before it paints.
+# gives away its width. A fact narrower than its own natural width (what it
+# says, up to `--fact-max`) is skipped: the band lets a track narrow toward
+# `--fact-min` when a row's facts want more than it holds, and such a fact
+# rightly takes back its width as the band widens. Read from what each fact
+# draws, with the band set wider for the length of one layout and put back
+# before it paints.
 FACTS_SPREAD_APART = (
     "([band, fact, unseen]) => {"
     + DESCRIBE
@@ -679,11 +683,21 @@ FACTS_SPREAD_APART = (
     }
     return apart;
   };
+  const squeezed = (cell) => {
+    const width = cell.getBoundingClientRect().width;
+    const style = cell.getAttribute('style');
+    cell.style.setProperty('inline-size', 'max-content', 'important');
+    const natural = cell.getBoundingClientRect().width;
+    if (style === null) cell.removeAttribute('style');
+    else cell.setAttribute('style', style);
+    return width < natural - 0.5;
+  };
   const found = [];
   for (const each of document.querySelectorAll(band)) {
     if (!each.checkVisibility()) continue;
     const before = gaps(each);
     if (!before.size) continue;
+    const narrowed = new Set([...each.querySelectorAll(`:scope > ${fact}`)].filter(squeezed));
     const style = each.getAttribute('style');
     each.style.setProperty('inline-size', `${each.getBoundingClientRect().width + WIDER}px`, 'important');
     each.style.setProperty('max-inline-size', 'none', 'important');
@@ -691,7 +705,9 @@ FACTS_SPREAD_APART = (
     if (style === null) each.removeAttribute('style');
     else each.setAttribute('style', style);
     for (const [left, next] of before) {
+      if (narrowed.has(left)) continue;
       for (const [right, gap] of next) {
+        if (narrowed.has(right)) continue;
         const wider = after.get(left)?.get(right);
         if (wider !== undefined && wider > gap + 0.5) found.push(`${describe(each)} sets two facts ${Math.round(gap)}px apart, ${Math.round(wider - gap)}px further as it widens by ${WIDER}px`);
       }

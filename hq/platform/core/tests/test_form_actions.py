@@ -32,7 +32,6 @@ OWN_ROW_TODAY = frozenset(
         "auth/login.html",
         "calendars/calendar.html",
         "contacts/contact_detail.html",
-        "control_plane/_tool_dns.html",
         "control_plane/certificate_upload.html",
         "control_plane/service_start.html",
         "control_plane/zone_mail.html",

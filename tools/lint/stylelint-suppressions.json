@@ -41,17 +41,12 @@
   },
   "static/css/app/pages.css": {
     "hq/restyled-primitive": {
-      "count": 11
+      "count": 10
     }
   },
   "static/css/app/routes.css": {
     "hq/restyled-primitive": {
       "count": 10
-    }
-  },
-  "static/css/app/tables.css": {
-    "hq/restyled-primitive": {
-      "count": 1
     }
   },
   "static/css/app/watching.css": {

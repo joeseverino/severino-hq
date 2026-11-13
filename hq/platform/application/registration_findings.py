@@ -4,7 +4,7 @@ from datetime import UTC
 
 from .expiry import days_until
 from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, parse_stamp
-from .moments import span, when_day
+from .moments import expiry_words, when_day
 from .ui import ended
 
 
@@ -44,11 +44,7 @@ def _registration_lapsing(estate: FindingEstate) -> tuple[Finding, ...]:
             Finding(
                 rule="registration-lapsing",
                 subject=node.id,
-                title=(
-                    f"{domain} has expired and will not renew"
-                    if days < 0
-                    else f"{domain} expires in {span(days)} and will not renew"
-                ),
+                title=f"{domain} {expiry_words(days)} and will not renew",
                 severity="serious" if days <= 30 else "attention",
                 explanation=(
                     f"On {when_day(expires.date())} its records, certificate and every name under it stop working."
