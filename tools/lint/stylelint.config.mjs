@@ -6,7 +6,9 @@ const tokens = "../../static/css/app/tokens.css";
 const cuts = "../../static/css/app/cuts.css";
 // The sheets the table primitive is drawn in (docs/Design.md, "A table fits
 // its box"); every other app sheet is a page's.
-const tablePrimitive = ["base", "cuts", "figures", "tables", "surfaces"].map((name) => `../../static/css/app/${name}.css`);
+const sheet = (name) => `../../static/css/app/${name}.css`;
+const tableSheets = ["base", "cuts", "figures", "tables", "surfaces"];
+const tablePrimitive = tableSheets.map(sheet);
 const reference = "../../static/css/api-reference.css";
 
 // CSS Color 4's system colors. color-named knows only the named colors, and
@@ -168,8 +170,34 @@ const cellRoles = [
   `/(?:${cell})[\\s\\S]*\\.(?!(?:${cellParts.join("|")})(?![-\\w]))[a-zA-Z][\\w-]*/`,
 ];
 
+// A primitive looks one way, drawn in the sheets that draw it, so a page
+// built from it looks like every other (`hq/restyled-primitive`). Each is
+// the classes that name it, a table its own elements too, and those sheets.
+const primitives = [
+  {
+    name: "table",
+    classes: "data-table|row-detail|row-columns",
+    names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
+    sheets: tableSheets,
+  },
+  { name: "button", classes: "btn", sheets: ["page"] },
+  { name: "facts list", classes: "kv", sheets: ["layout", "surfaces"] },
+  { name: "field", classes: "field", sheets: ["forms"] },
+  { name: "section", classes: String.raw`section(?:-[\w-]+)?`, sheets: ["layout", "page", "surfaces"] },
+  { name: "stat", classes: String.raw`kpi(?:-[\w-]+)?`, sheets: ["cards", "surfaces"] },
+  { name: "message", classes: "msg|msg-(?:error|info|success|warning)|notice|notice-attention", sheets: ["routes"] },
+  { name: "card", classes: "card", sheets: ["layout", "surfaces"] },
+];
+// A sheet that draws a primitive may write that one's variants. Today's
+// instances are counted in stylelint-suppressions.json beside it, a count
+// per sheet that only falls (StylesheetLintTests holds it to the rule's).
+const restyledBySheet = [...new Set(primitives.flatMap((each) => each.sheets))].map((name) => ({
+  files: [sheet(name)],
+  rules: { "hq/restyled-primitive": { primitives, sheet: name } },
+}));
+
 export default {
-  plugins: ["./stylelint-faded-text.mjs", "./stylelint-ground-cover.mjs"],
+  plugins: ["./stylelint-faded-text.mjs", "./stylelint-ground-cover.mjs", "./stylelint-restyled-primitive.mjs"],
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
   referenceFiles: ["../../static/css/app/*.css"],
@@ -180,6 +208,8 @@ export default {
   rules: {
     "hq/faded-text": fadedText,
     "hq/ground-cover": true,
+    // Any other sheet draws none.
+    "hq/restyled-primitive": { primitives },
     // CSS resolves an undefined custom property to an invalid value without
     // an error, so a typo'd token degrades to a browser default.
     "no-unknown-custom-properties": true,
@@ -221,6 +251,7 @@ export default {
         ],
       },
     },
+    ...restyledBySheet,
     {
       // The tokens layer is where colors are written.
       files: [tokens],
@@ -252,6 +283,9 @@ export default {
           ...unspokenContent,
           ...cutText,
         }),
+        // Its classes are the vendored viewer's markup (`.section-header`),
+        // which HQ's primitives do not draw.
+        "hq/restyled-primitive": null,
       },
     },
   ],

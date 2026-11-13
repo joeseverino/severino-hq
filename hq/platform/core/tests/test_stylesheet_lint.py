@@ -8,12 +8,15 @@ file itself.
 import json
 import shutil
 import subprocess
+import tempfile
+from collections import Counter
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
 ROOT = Path(__file__).resolve().parents[4]
 CONFIG = "tools/lint/stylelint.config.mjs"
+SUPPRESSIONS = "tools/lint/stylelint-suppressions.json"
 
 APP = "static/css/app/fixture.css"
 TOKENS = "static/css/app/tokens.css"
@@ -26,6 +29,7 @@ SIZED = "rule-selector-property-disallowed-list"
 # A text's case, which only a kicker over a group sets.
 CASE = SIZED
 ROLE = "selector-disallowed-list"
+RESTYLED = "hq/restyled-primitive"
 
 REFUSED = [
     (APP, ".a { color: #0a0a0a; }", "color-no-hex"),
@@ -101,6 +105,14 @@ REFUSED = [
     (TABLES, ".data-table td .a, .b { white-space: nowrap; }", ROLE),
     (TABLES, ".row-detail .attention-title .token { white-space: nowrap; }", ROLE),
     (CUTS, ".data-table td .service-name strong > [data-entity] { overflow: hidden; }", ROLE),
+    (APP, ".a-page .btn { color: var(--ink); }", RESTYLED),
+    (APP, ".kv.a-variant { gap: 0; }", RESTYLED),
+    (APP, ".a-page > .section-body { margin: 0; }", RESTYLED),
+    (APP, ".a-page .msg-error { color: var(--ink); }", RESTYLED),
+    (APP, ".a-table th { color: var(--ink); }", RESTYLED),
+    (APP, ".a-page { .card { margin: 0; } }", RESTYLED),
+    (APP, ".a-page { & > .notice { margin: 0; } }", RESTYLED),
+    (TABLES, ".a-page .btn { color: var(--ink); }", RESTYLED),
 ]
 
 PASSED = [
@@ -112,11 +124,11 @@ PASSED = [
     (APP, ".a { font-size: .9em; padding: 7px 1px; gap: calc(var(--space-2) + 8px); }"),
     (APP, ".pill-green { color: var(--ok); }"),
     (APP, ".eyebrow { text-transform: uppercase; }"),
-    (APP, ".month-grid th,\n.calendar-weekday { text-transform: uppercase; letter-spacing: .08em; }"),
+    (TABLES, ".month-grid th,\n.calendar-weekday { text-transform: uppercase; letter-spacing: .08em; }"),
     (TABLES, ".eyebrow { text-transform: uppercase; }"),
     (
         APP,
-        ".data-table { width: 100%; } .a-list > li { flex: none; } .data-table td .a { padding: 0; } .width-td { width: 1rem; }",
+        ".data-table { width: 100%; } .a-list > li { flex: none; } .data-table td code { padding: 0; } .width-td { width: 1rem; }",
     ),
     (
         TABLES,
@@ -144,7 +156,16 @@ PASSED = [
             " .data-table td strong > [data-entity] { color: var(--ink); }"
         ),
     ),
-    (APP, ".a-table td .attention-title { font-weight: 600; }"),
+    (APP, ".data-table td strong { font-weight: 600; }"),
+    (
+        APP,
+        (
+            ".card > .kpi-grid { gap: 0; } .two-col > section:not(.section) { margin: 0; }"
+            " .btn:not(.a-page *) { color: var(--ink); } .btn.is-busy { cursor: wait; }"
+        ),
+    ),
+    ("static/css/app/page.css", ".btn.a-variant { color: var(--ink); }"),
+    (REFERENCE, ".scalar-app .section-header { color: var(--ink); }"),
     (APP, ".a { overflow: auto; } .b { overflow-x: visible; overflow-y: scroll; }"),
     (APP, f"{WHY} -- a frame's corners clip its fill */\n.a {{ overflow: hidden; }}"),
 ]
@@ -182,3 +203,40 @@ class StylesheetLintTests(SimpleTestCase):
         for sheet, css in PASSED:
             with self.subTest(sheet=sheet, css=css):
                 self.assertEqual(lint(sheet, css), [])
+
+    def test_each_sheets_restyled_count_is_what_the_rule_finds(self):
+        """A sheet's count of restyled primitives only falls: a fix lowers it in
+        tools/lint/stylelint-suppressions.json, which Stylelint reads as a ceiling alone."""
+
+        with tempfile.TemporaryDirectory() as scratch:
+            unsuppressed = Path(scratch, "none.json")
+            unsuppressed.write_text("{}", encoding="utf-8")
+            found = Path(scratch, "found.json")
+            subprocess.run(
+                [
+                    "stylelint",
+                    "--config",
+                    CONFIG,
+                    "--formatter",
+                    "json",
+                    f"--suppress-location={unsuppressed}",
+                    f"--output-file={found}",
+                    "static/css/**/*.css",
+                ],
+                capture_output=True,
+                cwd=ROOT,
+                check=False,
+            )
+            report = json.loads(found.read_text(encoding="utf-8"))
+        counted = Counter(
+            Path(file["source"]).relative_to(ROOT).as_posix()
+            for file in report
+            for warning in file["warnings"]
+            if warning["rule"] == RESTYLED
+        )
+        recorded = json.loads((ROOT / SUPPRESSIONS).read_text(encoding="utf-8"))
+        self.assertEqual(
+            {sheet: rules[RESTYLED]["count"] for sheet, rules in recorded.items() if RESTYLED in rules},
+            dict(counted),
+            f"record each sheet's count: stylelint --config {CONFIG} --suppress={RESTYLED} --suppress-location={SUPPRESSIONS} 'static/css/**/*.css'",
+        )

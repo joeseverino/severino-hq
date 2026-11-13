@@ -1,6 +1,9 @@
 #!/bin/sh
 #MISE description="Trivy's Dockerfile checks pass over every Dockerfile git tracks, or tools/lint/trivy/ignore.yaml says why not"
 #MISE hide=true
+#MISE tags=["fast"]
+#MISE sources=["**/*Dockerfile", "tools/lint/trivy/**", "pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env"]
+#MISE outputs=[]
 
 # The checks are the ones built into the Trivy mise.toml pins, so the result
 # moves only with that pin and the run reaches no network: an empty cache and

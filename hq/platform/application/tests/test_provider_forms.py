@@ -324,10 +324,11 @@ class ResourceFormViewTests(TestCase):
         self.assertIn(f"Updated “{key}”", text(updated))
 
     def test_a_refused_save_rerenders_the_form_with_the_reason(self):
-        from hq.platform.application.adoption import OBSERVES_ONLY
+        from hq.platform.application.adoption import write_gap
         from hq.platform.application.adoption_testing import connection
 
         connection("adguard", manages=False)
+        gap = write_gap("adguard.rewrite", {})
 
         response = self.client.post(
             reverse("control_plane:create"),
@@ -335,7 +336,7 @@ class ResourceFormViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, OBSERVES_ONLY)
+        self.assertContains(response, gap.refusal)
         self.assertFalse(ManagedResource.objects.exists())
 
     def test_material_that_cannot_be_stored_sends_the_operator_to_upload_it(self):
@@ -368,7 +369,7 @@ class ResourceFormViewTests(TestCase):
 
         key = ManagedResource.objects.get(kind="tls.uploaded_certificate").key
         self.assertRedirects(response, reverse("control_plane:upload_certificate", kwargs={"key": key}))
-        (said,) = with_class(response, "msg-error")
+        (said,) = with_class(response, "notice-error")
         self.assertIn("fullchain.pem", said.text)
 
 

@@ -13,7 +13,6 @@ from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
-from django.utils.safestring import SafeString
 from django.views import View
 
 from hq.domains.control_plane.models import ManagedResource
@@ -47,7 +46,7 @@ from hq.platform.application.zones import (
     find_zone,
     zone_catalog,
 )
-from hq.platform.core.templatetags.value_tags import breakable
+from hq.platform.core.templatetags.value_tags import entity
 
 
 def _records_lede(zone) -> str:
@@ -299,7 +298,8 @@ class ZoneDetailView(View):
                     found.zone,
                     (
                         format_html(
-                            "The DNS records of this domain, from {}.", _connection_mention(found.connection_ref)
+                            "The DNS records of this domain, from {}.",
+                            entity({"request": request}, entity_link("connection", found.connection_ref)),
                         )
                         if found.connection_ref
                         else "The DNS records of this domain."
@@ -355,8 +355,3 @@ class ZoneAdoptView(View):
             f"HQ now manages {zone} and {counted(adopted, 'record')} in it. Nothing changed at Cloudflare.",
         )
         return redirect("zones:detail", zone=zone)
-
-
-def _connection_mention(ref: str) -> SafeString:
-    link = entity_link("connection", ref)
-    return format_html('<a href="{}" data-entity="{}">{}</a>', link.url, link.kind_label, breakable(link.label))

@@ -117,6 +117,15 @@ def _estate(owner) -> None:
             demo(owner)
 
 
+def _reading(owner) -> None:
+    """The example estate with every connection only reading, as an HQ whose
+    credentials may not make changes runs: each page that offers a change
+    says what it needs instead."""
+
+    _estate(owner)
+    apps.get_model("control_plane", "ProviderConnection").objects.update(manages=False)
+
+
 @contextmanager
 def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
@@ -148,6 +157,7 @@ _SET_UP = frozendict({"SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS": "1"})
 SEEDS: dict[str, Seed] = {
     "showcase": Seed(_estate, frozendict({**_SET_UP, "SEVERINO_POSTURE": "advanced"})),
     "standard": Seed(_estate, _SET_UP),
+    "reading": Seed(_reading, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

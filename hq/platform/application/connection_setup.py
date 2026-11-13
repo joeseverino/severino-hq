@@ -20,6 +20,8 @@ lazy from .entity_links import web_url
 lazy from .page_reads import need
 
 # 1Password's own names for the built-in fields a setting can come from.
+# The item's field that lets HQ make changes through a connection, not only read.
+MANAGES_FIELD = "manages"
 _BUILT_IN = {"credential": "credential", "password": "password", "username": "username"}
 
 
@@ -133,7 +135,7 @@ def _fields(provider: str, shape: ConnectionShape) -> tuple[ItemField, ...]:
         ItemField("projection", shape.name, "The shape HQ reads the item as."),
         ItemField("env_prefix", provider.upper(), "Says which service it is for."),
         *(_field(setting) for setting in shape.settings),
-        ItemField("manages", "1", "Optional. Lets HQ make changes through it, not only read."),
+        ItemField(MANAGES_FIELD, "1", "Optional. Lets HQ make changes through it, not only read."),
     )
 
 

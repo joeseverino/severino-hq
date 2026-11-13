@@ -231,12 +231,14 @@ kbd {
 /* ── Messages ───────────────────────────────────────────────────── */
 
 .messages { list-style: none; padding: 0; margin: 0 0 var(--space-8); }
-/* Same tone contract as `.pill`, at the wash fill level. A success banner and
-   a success chip therefore cannot drift apart: they read the same three
-   tokens, and only the fill differs by design. */
-/* A notice in the page: a titled callout in one of the tones, for anything
-   that needs saying before the content it is about. Tone from the modifier
-   (notice-attention, notice-info); the tone section colors it. */
+/* Among the page's messages a notice is a toast: the same part, set close,
+   one to a line. */
+.messages > li + li { margin-top: var(--space-3); }
+.messages .notice { margin: 0; padding: var(--space-4) var(--space-6); }
+/* A notice ({% notice %}): a callout in one of the tones, for anything that
+   needs saying before the content it is about. It reads the same tone
+   contract as `.pill`, at the wash fill level, so a success notice and a
+   success chip cannot drift apart; the tone section (page.css) colors it. */
 .notice {
   margin: 0 0 var(--stack-gap);
   padding: var(--space-6) var(--space-7);
@@ -254,6 +256,16 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 /* In a grid that spaces its own rows, a notice adds no margin of its own. */
 .conn > .notice { margin: 0; }
 .notice p { margin: var(--space-2) 0 0; }
+/* A notice is words, so a link in it differs from them by more than its
+   color (WCAG 1.4.1), as a link in a paragraph does (base.css). */
+.notice a:where(:not([class]), .external-link):not(strong a) {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+  &:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
+}
+/* A banner written by hand; a new one is a {% notice %}. */
 .msg {
   padding: var(--space-4) var(--space-6); border-radius: var(--radius-sm); margin-bottom: var(--space-3);
   font-size: var(--text-sm);

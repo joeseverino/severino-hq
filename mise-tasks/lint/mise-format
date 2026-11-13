@@ -1,6 +1,9 @@
 #!/bin/sh
 #MISE description="mise.toml and the task files in mise-tasks/ are formatted as `mise fmt` writes them"
 #MISE hide=true
+#MISE tags=["fast"]
+#MISE sources=["tools/lib/mise-files.sh", "pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env"]
+#MISE outputs=[]
 
 # Each file through stdin: `mise fmt --check` also judges the gitignored
 # mise.local.toml, and never reads a task file.

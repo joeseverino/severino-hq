@@ -10,7 +10,7 @@ import logging
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Annotated, Any, Literal, TypedDict
+from typing import Annotated, Any, Literal, NoReturn, TypedDict
 
 from django.db import transaction
 from pydantic import Field
@@ -20,19 +20,25 @@ lazy from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, NotManaged, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.names import normalized_hostname
 from hq.domains.control_plane.providers import PROVIDERS, record_spec, registry_label, service_facets
+lazy from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS, connection_credential
 
 from .command_fields import Describe, Names
 from .conditions import stamped
 from .inventory import record_identity, record_token, service_hostnames
-from .record_errors import PolicyError, RecordNotFound
+from .record_errors import PolicyError, RecordNotFound, Sentence
 from .security import Principal
+lazy from .connection_catalog import EVIDENCE_DETAILS, PROVEN_EVIDENCE, grant_evidence
+lazy from .connection_contracts import ConnectionAbility, ConnectionInstance
+lazy from .connection_setup import MANAGES_FIELD
 lazy from .connections import connection_rows
 lazy from .infrastructure import (
     ManagedResourceCommand,
     save_managed_resource,
     suggest_key,
 )
+lazy from .page_reads import setup_url
 lazy from .resource_operations import ResourceSaved
+lazy from .ui import ended
 
 # The capabilities that adopt, by name, for the pages that offer them.
 logger = logging.getLogger("severino.adoption")
@@ -40,7 +46,39 @@ logger = logging.getLogger("severino.adoption")
 ADOPT = "infrastructure.resource.adopt"
 ADOPT_SERVICE = "infrastructure.service.adopt"
 
-OBSERVES_ONLY = "This connection only reads. Its setup guide says how to let HQ make changes through it."
+
+NO_CONNECTION: Sentence = (
+    "No connection this change is made through has reported, so HQ cannot make it. "
+    "The Connections page says how to set one up."
+)
+ONLY_READS: Sentence = (
+    "HQ only reads through the connection this change is made through: its 1Password item does not let "
+    "HQ make changes through it. The Connections page says how to let it, and which permissions a change needs."
+)
+
+
+@dataclass(frozen=True, slots=True)
+class WriteGap:
+    """Why HQ cannot make a change through a declaration's connection, and where that is fixed.
+
+    Every page that would offer the change offers this instead, and every
+    write path refuses with its ``refusal``, so the two cannot disagree.
+    """
+
+    # Whole sentences: what is missing, then what a change needs beside it.
+    reason: str
+    # What is missing, in words HQ wrote alone, for a refusal to carry: the
+    # reason names a connection and permissions, which a refusal may not.
+    refusal: Sentence
+    # The same in a few words, for a row: "Needs manages: 1 and Zone Write".
+    needs: str
+    # The Connections page, at how to set the connection up to make changes.
+    setup_url: str
+
+    def refuse(self) -> NoReturn:
+        """Refuse the change it holds back, saying what is missing."""
+
+        raise PolicyError(self.refusal)
 
 
 def manages_through(
@@ -77,6 +115,38 @@ class _Management:
     def _named_manages(self, connection_ref: str) -> bool:
         return any(ref == connection_ref and flag for rows in self._by_provider.values() for ref, flag in rows)
 
+    def gap(self, kind: str, connection_ref: str) -> WriteGap:
+        """What is missing for a change of ``kind`` through ``connection_ref``
+        (or, unnamed, through every connection of its providers)."""
+
+        providers = PROVIDERS[kind].connection_providers
+        found = [
+            (provider, ref, flag)
+            for provider, rows in self._by_provider.items()
+            for ref, flag in rows
+            if (ref == connection_ref if connection_ref else provider in providers)
+        ]
+        provider = found[0][0] if found else providers[0]
+        label = CONNECTION_KINDS[provider].label
+        if not found:
+            named = f" named {connection_ref}" if connection_ref else ""
+            said = [f"No {label} connection{named} has reported, so HQ cannot make this change."]
+            needs = [f"a {label} connection"]
+            refusal = NO_CONNECTION
+        else:
+            reading = _and(sorted(ref for _, ref, flag in found if not flag))
+            unset = f"its 1Password item does not let HQ make changes through it ({MANAGES_FIELD})."
+            said = [f"HQ only reads through {label} connection {reading}: {unset}"]
+            needs = [f"{MANAGES_FIELD}: 1"]
+            refusal = ONLY_READS
+        permissions = CONNECTION_KINDS[provider].writes
+        evidence = _write_evidence(kind, provider, permissions, connection_ref)
+        if permissions and evidence not in PROVEN_EVIDENCE:
+            also = ended(f"A change through it also needs {_and(permissions)}")
+            said.append(f"{also} {EVIDENCE_DETAILS[evidence]}")
+            needs.extend(permissions)
+        return WriteGap(" ".join(said), refusal, f"Needs {_and(needs)}", setup_url(provider))
+
     def _every_of_kind_manages(self, kind: str) -> bool:
         provider = PROVIDERS.get(kind)
         if provider is None:
@@ -98,6 +168,48 @@ def observes_only(kind: str, spec, manages=None) -> bool:
         return False
     test = manages or manages_through()
     return not test(kind, str((spec or {}).get("connection_ref", "")))
+
+
+def _and(words) -> str:
+    words = list(words)
+    return f"{', '.join(words[:-1])} and {words[-1]}" if len(words) > 1 else "".join(words)
+
+
+def _write_evidence(kind: str, provider: str, permissions: tuple[str, ...], connection_ref: str) -> str:
+    """What proves the credential holds the permissions a change needs, by the
+    rule the Connections page judges every ability by. A connection reports
+    reach and its ``manages`` flag, never its grants."""
+
+    if not permissions:
+        return "not_applicable"
+    ability = ConnectionAbility(name=kind, label=kind, summary="", grant="scoped", required_scopes=permissions)
+    instance = ConnectionInstance(
+        id=connection_ref or provider,
+        label=connection_ref or provider,
+        kind=provider,
+        status="neutral",
+        status_label="",
+        credential_model=connection_credential(provider),
+    )
+    return grant_evidence(ability, instance)[0]
+
+
+def write_gap(kind: str, spec, manages=None) -> WriteGap | None:
+    """Why a change to a declaration of ``kind`` cannot be made through its
+    connection, or None when it can: ``observes_only`` decides, this says
+    what is missing and where it is set up."""
+
+    test = manages or manages_through()
+    if not observes_only(kind, spec, test):
+        return None
+    return test.gap(kind, str((spec or {}).get("connection_ref", "")))
+
+
+def require_writable(kind: str, spec, manages=None) -> None:
+    """Refuse a change its connection cannot make, saying ``write_gap``'s why."""
+
+    if gap := write_gap(kind, spec, manages):
+        gap.refuse()
 
 
 def kept_out() -> frozenset[tuple[str, str]]:

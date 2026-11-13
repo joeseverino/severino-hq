@@ -1,0 +1,36 @@
+# A shared part of a page (a table, a form, a section, a disclosure, a
+# heading, a button, a notice or message, a row's opened line, an entity's
+# name) is drawn by its template or template tag, so a change to the part
+# reaches every page that shows it. Markup in a Python string is a second
+# drawing that change never reaches. The template tags under templatetags/
+# are those drawings. The class names are the browser scripts' own list
+# (primitiveClass in tools/lint/eslint.config.mjs), held equal by
+# MarkupRuleTests; a pill is status-pill-built-by-status-pill's.
+id: markup-drawn-by-templates
+language: python
+severity: error
+message: Python draws a shared part of a page as markup in a string.
+note: Render the part's template or call its template tag (hq/platform/core/templatetags), and grow that primitive if it lacks what the page needs.
+files:
+  - "hq/**"
+  - "hq_sdk/**"
+  - "tools/**"
+ignores:
+  - "**/tests/**"
+  - "**/test_*.py"
+  - "**/migrations/**"
+  # Test code reads a page's markup; it draws none.
+  - "**/testing.py"
+  - "**/*_testing.py"
+  - "hq/**/templatetags/**"
+  # The provider form's name list is a form widget, which Django renders from
+  # Python; its remove control is a button like every other.
+  - "hq/platform/application/provider_forms.py"
+rule:
+  kind: string
+  any:
+    - regex: <(table|form|section|details|h[1-6])[\s>/\\]
+    - regex: data-entity
+    - regex: class=\\?["']([^"']*\s)?(notice(-attention)?|msg(-(error|info|success|warning))?|btn|pill(-[\w-]+)?|row-detail|row-columns)(\s|\\?["'])
+  not:
+    regex: class=\\?["']pill(\s|\\?["'])

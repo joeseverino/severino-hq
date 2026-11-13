@@ -1,5 +1,5 @@
 {
-  "api_version": 10,
+  "api_version": 11,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -2427,6 +2427,13 @@
       }
     },
     "validation": {
+      "hand_drawn": {
+        "kind": "function",
+        "parameters": [
+          "text",
+          "shapes"
+        ]
+      },
       "main": {
         "kind": "function",
         "parameters": []
@@ -2971,6 +2978,65 @@
         ]
       }
     },
+    "hand_drawn": {
+      "a <section> element": {
+        "pattern": "<section\\b",
+        "write": "{% section \"Heading\" %}body{% endsection %}, or a <div> for one that only groups a layout"
+      },
+      "a figure": {
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:kpi|kpi-grid)(?![\\w-])",
+        "write": "{% include \"partials/_kpi_grid.html\" %} from hq_sdk.ui.Kpi"
+      },
+      "a filter bar": {
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:filter-bar)(?![\\w-])",
+        "write": "partials/_filter_bar.html, the part to come (hq-1768)"
+      },
+      "a fold": {
+        "pattern": "<details\\b",
+        "write": "{% section \"Heading\" fold=True %}body{% endsection %}"
+      },
+      "a form that writes": {
+        "pattern": "(?i)<form\\b[^>]*\\bmethod=[\"\\']?post\\b",
+        "write": "{% include \"partials/_form.html\" %}, or {% post_button %} for a single verb"
+      },
+      "a heading": {
+        "pattern": "<h[1-6]\\b",
+        "write": "the heading of {% section \"Heading\" %}, a sub-head a {% section %} inside it (it heads itself a level down); the page's own title is the frame's, from page"
+      },
+      "a list of rows": {
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:list-rows)(?![\\w-])",
+        "write": "{% include \"partials/_record_list.html\" %} from hq_sdk.ui.ListRow"
+      },
+      "a notice": {
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:msg|notice)(?![\\w-])",
+        "write": "{% notice %}, the part to come (hq-1766)"
+      },
+      "a table outside its region": {
+        "outside": "table_region",
+        "pattern": "<table\\b",
+        "write": "{% table_region \"Label\" %} around its <table class=\"data-table\">"
+      },
+      "a toned value": {
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:tone-)",
+        "write": "{% status value tone=tone pill=False %}"
+      },
+      "an empty line": {
+        "pattern": "<(?:p|span|td|li|dd)\\b[^>]*\\bclass=\"muted\"[^>]*>\\s*(?:No|Nothing|None|There (?:is|are) no)\\b",
+        "write": "{% include \"partials/_empty_state.html\" with message=\"...\" %}, or a {% section %}'s {% empty %}; this shape is read by its opening words, so it finds one spelling of an empty line"
+      },
+      "an empty state": {
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:empty)(?![\\w-])",
+        "write": "{% include \"partials/_empty_state.html\" with message=\"...\" %}"
+      },
+      "an icon": {
+        "pattern": "<svg\\b[^>]*\\baria-hidden=\"true\"",
+        "write": "{% include \"partials/_icon.html\" with name=\"...\" %}; a drawing that says something is role=\"img\""
+      },
+      "label and value facts": {
+        "pattern": "<dl\\b[^>]*\\bclass=\"(?:[^\"]*[\\s}])?(?:kv)(?![\\w-])",
+        "write": "{% facts %}, the part to come (hq-1770)"
+      }
+    },
     "hooks": [
       "data-chart",
       "data-sort",
@@ -3101,6 +3167,13 @@
         "about": "What was wrong with a submitted form as a whole, above its fields.",
         "optional": [
           "form"
+        ],
+        "required": []
+      },
+      "partials/_icon.html": {
+        "about": "One of the host's icons, by `name`, the height of the text beside it.",
+        "optional": [
+          "name"
         ],
         "required": []
       },
@@ -3325,17 +3398,6 @@
           "aside",
           "empty",
           "foot"
-        ]
-      },
-      "section_head": {
-        "classes": [],
-        "parameters": [
-          "*",
-          "id=",
-          "lede="
-        ],
-        "parts": [
-          "aside"
         ]
       },
       "status": {

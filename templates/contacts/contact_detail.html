@@ -1,12 +1,14 @@
 {% extends "page.html" %}
 {% block page %}
 <div class="quick-actions">
+  {% if gap %}<p class="muted">{{ gap.reason|breakable }} {% include "partials/_write_gap.html" %}</p>{% else %}
   {% url 'contacts:set_status' submission.id as status_url %}
   {% if submission.status != "read" %}{% post_button "Mark read" status_url name="status" value="read" %}{% endif %}
   {% if submission.status != "replied" %}{% post_button "Mark replied" status_url name="status" value="replied" %}{% endif %}
   {% if submission.status != "archived" %}{% post_button "Archive" status_url name="status" value="archived" %}{% endif %}
   {% if submission.status != "spam" %}{% post_button "Spam" status_url name="status" value="spam" %}{% endif %}
   <a class="btn danger" href="{% url 'contacts:delete' submission.id %}">Delete</a>
+  {% endif %}
 </div>
 
 {% section "Message" %}
@@ -39,7 +41,7 @@
     {% include "partials/_form_errors.html" %}
     {{ form }}
     <div class="form-actions">
-      <button type="submit" class="primary">Save note</button>
+      {% if gap %}<button type="submit" class="primary" disabled>Save note</button> {% include "partials/_write_gap.html" %}{% else %}<button type="submit" class="primary">Save note</button>{% endif %}
     </div>
   </form>
 {% endsection %}

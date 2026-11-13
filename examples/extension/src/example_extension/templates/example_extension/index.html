@@ -1,9 +1,8 @@
 {% extends "page.html" %}
 {% block page %}
-{% card id="example-notes" heading="example-notes-heading" %}
-  {% section_head id="example-notes-heading" %}Notes{% aside %}<span class="count">{{ notes|length }}</span>{% endsection_head %}
+{% section "Notes" id="example-notes" count=notes|length %}
   <ul>
     {% for note in notes %}<li><a href="{% url 'example_extension:note' note.slug %}">{{ note.title|breakable }}</a></li>{% endfor %}
   </ul>
-{% endcard %}
+{% endsection %}
 {% endblock %}

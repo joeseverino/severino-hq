@@ -2,25 +2,47 @@
 
 A record's form and a command's end alike: the verb its view supplies, Cancel,
 and what saving does (docs/Design.md, "Every form a page is about is drawn one
-way"). A form template that writes its own submit button or ``form-actions``
-row has drawn a second kind.
+way"). Every host template that writes a form is read, whatever its name: one
+that writes its own submit button or ``form-actions`` row has drawn a second
+kind.
 """
 
 import re
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.test_hand_drawn import PARTS
 from hq.platform.application.tests.tree import ROOT
 
 TEMPLATES = ROOT / "templates"
 PARTIAL = "partials/_form_actions.html"
-# The command page's form, and every template named for the form it draws.
 COMMAND = "command.html"
 # A form that writes: a query form (method get) closes with its own Filter.
 _POSTS = re.compile(r"<form\b[^>]*\bmethod=\"post\"", re.IGNORECASE)
 _OWN_ROW = re.compile(r"type=\"submit\"|class=\"[^\"]*\bform-actions\b|<button\b(?![^>]*type=\"button\")")
 _COMMENT = re.compile(r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}|{#.*?#}", re.DOTALL)
 _FORM = re.compile(r"<form\b.*?</form>", re.DOTALL | re.IGNORECASE)
+# The forms that are one verb or none (a menu's button, a form a script
+# submits), which test_hand_drawn names as parts of their own.
+ONE_VERB = frozenset(name for name, shape in PARTS if shape == "a form that writes")
+# Today's forms that close with a row of their own, each to move onto
+# partials/_form.html; this only falls.
+OWN_ROW_TODAY = frozenset(
+    {
+        "auth/login.html",
+        "calendars/calendar.html",
+        "contacts/contact_detail.html",
+        "control_plane/_tool_dns.html",
+        "control_plane/certificate_upload.html",
+        "control_plane/service_start.html",
+        "control_plane/zone_mail.html",
+        "core/_public_address.html",
+        "core/agent_policy.html",
+        "core/dashboard_glance_settings.html",
+        "docs_index/import.html",
+        "partials/approval_card.html",
+    }
+)
 
 
 def form_templates() -> dict[str, str]:
@@ -28,11 +50,9 @@ def form_templates() -> dict[str, str]:
 
     found = {}
     for path in sorted(TEMPLATES.rglob("*.html")):
-        name = path.relative_to(TEMPLATES).as_posix()
-        if name == COMMAND or path.stem.endswith("_form"):
-            source = _COMMENT.sub("", path.read_text(encoding="utf-8"))
-            if _POSTS.search(source):
-                found[name] = source
+        source = _COMMENT.sub("", path.read_text(encoding="utf-8"))
+        if _POSTS.search(source):
+            found[path.relative_to(TEMPLATES).as_posix()] = source
     return found
 
 
@@ -78,10 +98,17 @@ class FormTemplateTests(SimpleTestCase):
         forms = form_templates()
 
         self.assertIn(COMMAND, forms)
-        self.assertTrue(any(name != COMMAND for name in forms), f"no *_form.html under {TEMPLATES}")
         self.assertEqual(
-            [f"{name}: {missed}" for name, source in forms.items() if (missed := misses(source))],
+            [
+                f"{name}: {missed}"
+                for name, source in forms.items()
+                if name not in ONE_VERB | OWN_ROW_TODAY and (missed := misses(source))
+            ],
             [],
             f"A form closes with {{% include {PARTIAL!r} with verb=... cancel_url=... only %}}, its verb and its"
             " way back from the view",
         )
+
+    def test_each_form_left_to_move_still_closes_its_own_way(self):
+        forms = form_templates()
+        self.assertEqual(sorted(name for name in OWN_ROW_TODAY if not misses(forms.get(name, ""))), [])

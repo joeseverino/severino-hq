@@ -9,8 +9,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable
-from fnmatch import fnmatch
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,27 +19,14 @@ from django.test.utils import iter_test_cases
 from hq.config.sandbox import RUN
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.test_runner import excluded_tags
-from hq.platform.core.tests.task import RefError, Usage, names, trusted_mise
+from hq.platform.core.tests.task import RefError, Usage, trusted_mise
 from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks, takes_the_turn
 from tools.gate import fast as fast_gate, verdict as gate_verdict
-from tools.gate.tests.base import UNITTEST, GateTestCase
+from tools.gate.tests.base import UNITTEST, GateTestCase, fixture_git
 from tools.gate.tests.fast_runs import run_main
 from tools.gate.verdict import FailedTest
 
 ROOT = Path(__file__).resolve().parents[3]
-# The shell gate's own lister, which fast asks rather than restating.
-SOURCES = ROOT / "tools" / "gate" / "shell-sources.sh"
-IDENTITY = ["-c", "user.name=Example", "-c", "user.email=dev@example.com", "-c", "commit.gpgsign=false"]
-
-
-def fixture_git(root: Path) -> Callable[..., str]:
-    """git in the fixture repository at ``root``, committing as an example identity."""
-
-    def git(*args: str) -> str:
-        done = subprocess.run(["git", *IDENTITY, *args], cwd=root, check=True, capture_output=True, text=True)
-        return done.stdout.strip()
-
-    return git
 
 
 class Recorder:
@@ -175,100 +160,6 @@ class FastGateMappingTests(GateTestCase):
 
     def test_apps_are_derived_from_the_tree(self):
         self.assertLessEqual({"expenses", "core", "projects"}, set(fast_gate.django_apps().values()))
-
-
-@tag("source", "tree")
-class FastGateTaskSelectionTests(GateTestCase):
-    def test_every_quick_gate_declares_paths_that_name_files_of_this_tree(self):
-        files = names("ls-files", root=ROOT)
-        for task, patterns in fast_gate.TASKS.items():
-            with self.subTest(task=task):
-                self.assertTrue(patterns, f"{task} declares no paths, so fast would never run it")
-                for pattern in patterns:
-                    self.assertTrue(any(fnmatch(path, pattern) for path in files), f"{task}: {pattern} names no file")
-
-    def test_the_quick_gates_are_tasks_and_every_drift_gate_is_one(self):
-        tasks = mise_tasks()
-        self.assertLessEqual(set(fast_gate.TASKS), set(tasks))
-        drift = {name for name in tasks if name.startswith("lint:drift-")}
-        self.assertTrue(drift, "no task is named lint:drift-*, so this holds nothing")
-        self.assertLessEqual(drift, set(fast_gate.TASKS), "a drift gate is a quick gate: name its paths in TASKS")
-
-    def test_a_docs_change_runs_only_the_prose_gate_and_the_gate_that_derives_it(self):
-        self.assertEqual(set(fast_gate.selected_tasks(["docs/Example.md"])), {"lint:prose"})
-        self.assertEqual(
-            set(fast_gate.selected_tasks(["docs/Connections.md"])), {"lint:prose", "lint:drift-connections-reference"}
-        )
-
-    def test_a_change_to_a_file_the_shell_gate_reads_runs_it_and_no_other_change_does(self):
-        """A workflow's run blocks are read by the shell gate's contracts, as its scripts and suites are."""
-        for changed in (
-            ".github/workflows/deploy.yml",
-            ".github/actions/admit-plugin/action.yml",
-            "tools/lib/heavy-turn.sh",
-            "tests/shell/test-heavy.sh",
-            "mise-tasks/lint/shell/_default",
-        ):
-            with self.subTest(changed=changed):
-                self.assertIn("lint:shell", fast_gate.selected_tasks([changed]))
-        for changed in ("docs/Example.md", "tools/gate/fast.py", "controller/host/verify.go"):
-            with self.subTest(changed=changed):
-                self.assertNotIn("lint:shell", fast_gate.selected_tasks([changed]))
-
-    def test_a_python_change_runs_the_python_gates_and_not_the_stylesheet_ones(self):
-        selected = fast_gate.selected_tasks(["hq/domains/docs_index/importer.py"])
-        self.assertLessEqual({"lint:ruff", "lint:mypy", "test:migrations", "lint:drift-api-document"}, set(selected))
-        self.assertNotIn("lint:css", selected)
-        self.assertNotIn("lint:drift-font", selected)
-
-    def test_a_change_to_tests_alone_leaves_out_the_structural_bar_which_never_reads_them(self):
-        self.assertNotIn("lint:structural", fast_gate.selected_tasks(["hq/platform/core/tests/test_example.py"]))
-        self.assertIn("lint:structural", fast_gate.selected_tasks(["hq/platform/core/example.py"]))
-        both = ["hq/platform/core/tests/test_example.py", "hq/platform/core/example.py"]
-        self.assertIn("lint:structural", fast_gate.selected_tasks(both))
-
-    def test_a_change_to_tests_alone_runs_the_complexity_bound_and_a_migration_alone_does_not(self):
-        self.assertIn("lint:complexity", fast_gate.selected_tasks(["hq/platform/core/tests/test_example.py"]))
-        self.assertIn("lint:complexity", fast_gate.selected_tasks(["tests/example/consumer.py"]))
-        self.assertNotIn("lint:complexity", fast_gate.selected_tasks(["hq/domains/example/migrations/0001_initial.py"]))
-
-    def test_a_change_to_what_every_gate_reads_runs_them_all(self):
-        for changed in ("uv.lock", "mise-tasks/lint.toml"):
-            with self.subTest(changed=changed):
-                self.assertEqual(set(fast_gate.selected_tasks([changed])), {*fast_gate.TASKS, "lint:shell"})
-
-
-@tag("source")
-class FastGateLintPlacementTests(GateTestCase):
-    """Every lint gate is either selected by the paths it reads or named as one fast leaves out, with why,
-    so a new gate is never skipped unseen."""
-
-    def test_every_lint_task_is_a_quick_gate_the_shell_gate_or_named_unselected(self):
-        lint = sorted(name for name in mise_tasks() if name.startswith("lint:"))
-        self.assertTrue(lint, "mise lists no lint:* task, so this holds nothing")
-        placed = {*fast_gate.TASKS, fast_gate.SHELL, *fast_gate.UNSELECTED}
-        unplaced = [task for task in lint if task not in placed]
-        self.assertFalse(
-            unplaced,
-            f"{', '.join(unplaced)}: add each to TASKS in tools/gate/fast.py with the paths it reads,"
-            " or to UNSELECTED with why fast leaves it out",
-        )
-
-    def test_each_unselected_gate_is_a_lint_task_fast_never_selects_with_its_reason(self):
-        tasks = mise_tasks()
-        for task, reason in fast_gate.UNSELECTED.items():
-            with self.subTest(task=task):
-                self.assertIn(task, tasks, f"{task} is no task; drop it from UNSELECTED")
-                self.assertTrue(task.startswith("lint:"))
-                self.assertNotIn(task, {*fast_gate.TASKS, fast_gate.SHELL}, f"{task} is selected and unselected")
-                self.assertTrue(reason.strip(), f"{task} is left out with no reason")
-
-    def test_a_change_to_mise_toml_or_a_workflow_runs_the_gates_that_read_them(self):
-        self.assertLessEqual({"lint:mise-format", "lint:workflows"}, set(fast_gate.selected_tasks(["mise.toml"])))
-        self.assertIn("lint:mise-format", fast_gate.selected_tasks(["mise-tasks/lint/mise-format"]))
-        self.assertIn("lint:workflows", fast_gate.selected_tasks([".github/workflows/ci.yml"]))
-        self.assertIn("lint:workflows", fast_gate.selected_tasks([".github/actions/toolchain/action.yml"]))
-        self.assertNotIn("lint:workflows", fast_gate.selected_tasks(["docs/Example.md"]))
 
 
 @tag("source")
@@ -708,12 +599,12 @@ class FastGateTurnTests(GateTestCase):
             calls.append((label, cmd))
             return gate_verdict.Step(label, ok=ok or fast_gate.TESTS not in cmd)
 
-        quick = (*fast_gate.TASKS, fast_gate.SHELL)
+        quick = fast_gate.quick_gates()
         run_main(("hq/example.py",), quick, step, affected=(set(), set()), test_labels=([], 0))
         return calls
 
     def test_the_gates_run_beside_the_tests_and_those_that_take_the_lock_after(self):
-        quick = (*fast_gate.TASKS, fast_gate.SHELL)
+        quick = fast_gate.quick_gates()
         locking = {task for task in quick if HEAVY_LOCK in locks(task)}
         self.assertTrue(locking)
         calls = self.run_fast()
@@ -727,7 +618,7 @@ class FastGateTurnTests(GateTestCase):
 
     def test_after_a_failure_the_gates_that_take_the_lock_do_not_run(self):
         words = {word for _, cmd in self.run_fast(ok=False) for word in cmd}
-        self.assertFalse(words & {task for task in (*fast_gate.TASKS, fast_gate.SHELL) if HEAVY_LOCK in locks(task)})
+        self.assertFalse(words & {task for task in fast_gate.quick_gates() if HEAVY_LOCK in locks(task)})
 
 
 TREE = "1" * 40
@@ -744,7 +635,7 @@ class FastGatePassRecordTests(GateTestCase):
 
     def run_fast(self, *, still=True, ok=True, whole=False, labels=("hq.example.tests.test_x",)) -> list[str]:
         total = len(labels) if whole else len(labels) + 5
-        selected = (*fast_gate.TASKS, fast_gate.SHELL) if whole else ()
+        selected = fast_gate.quick_gates() if whole else ()
         groups = tuple(fast_gate.group_tests().values()) if whole else ()
         result = gate_verdict.Step("tests", ok=ok)
         with patch.object(fast_gate, "passes", return_value=self.folder):
@@ -817,64 +708,6 @@ class FastGateExtensionSuiteTests(GateTestCase):
         said = [line for line in out.splitlines() if "skipped" in line]
         self.assertEqual(len(said), 1)
         self.assertIn("mise run setup:extensions", said[0])
-
-
-@tag("source")
-class ShellSourcesTests(GateTestCase):
-    """The one definition of a shell file, asked by the shell gate and by fast, on a fixture repository."""
-
-    def setUp(self):
-        folder = tempfile.TemporaryDirectory()
-        self.addCleanup(folder.cleanup)
-        self.root = Path(folder.name)
-        files = {
-            "script": "#!/bin/sh\necho\n",
-            "bash.sh": "#!/usr/bin/env bash\necho\n",
-            "lib.sh": "# shellcheck shell=sh\nx=1\n",
-            "tool.py": "#!/usr/bin/env python3\n",
-            "notes.sh.md": "text\n",
-            "gone.sh": "#!/bin/sh\n",
-            "gone.txt": "text\n",
-            "ignored.sh": "#!/bin/sh\n",
-            "new.sh": "#!/bin/dash\n",
-        }
-        for name, text in files.items():
-            (self.root / name).write_text(text)
-        (self.root / ".gitignore").write_text("ignored.sh\nnew.sh\n")
-        git = fixture_git(self.root)
-        git("init", "--quiet")
-        git("add", "-A")
-        git("commit", "--quiet", "--no-verify", "-m", "base")
-        self.base = git("rev-parse", "HEAD")
-        (self.root / ".gitignore").write_text("ignored.sh\n")
-        (self.root / "gone.sh").unlink()
-        (self.root / "gone.txt").unlink()
-
-    def lister(self, *paths: str) -> list[str]:
-        done = subprocess.run(
-            ["/bin/sh", str(SOURCES), *paths], cwd=self.root, check=True, capture_output=True, text=True
-        )
-        return done.stdout.splitlines()
-
-    def test_without_paths_it_lists_every_shell_file_git_tracks_or_would_track(self):
-        self.assertEqual(sorted(self.lister()), ["bash.sh", "lib.sh", "new.sh", "script"])
-
-    def test_a_shell_file_whose_name_git_quotes_in_a_list_of_lines_is_listed_as_it_is(self):
-        """systemd's escaping writes a backslash into a name, which git quotes unless asked for -z."""
-
-        name = r"run\x2dname.sh"
-        (self.root / name).write_text("#!/bin/sh\n")
-        self.assertIn(name, self.lister())
-
-    def test_given_paths_it_names_those_of_them_that_are_shell_files(self):
-        self.assertEqual(self.lister("tool.py", "lib.sh", "missing.sh", "ignored.sh"), ["lib.sh", "ignored.sh"])
-
-    def test_fast_reads_a_present_path_here_and_a_deleted_one_as_the_base_had_it(self):
-        with patch.object(fast_gate, "ROOT", self.root):
-            listed = fast_gate.shell_files(["tool.py", "script", "gone.sh", "gone.txt"], self.base)
-            self.assertEqual(sorted(listed), ["gone.sh", "script"])
-            self.assertNotIn("lint:shell", fast_gate.selected_tasks(["gone.txt", "tool.py"], self.base))
-            self.assertIn("lint:shell", fast_gate.selected_tasks(["gone.sh"], self.base))
 
 
 WRITE = """

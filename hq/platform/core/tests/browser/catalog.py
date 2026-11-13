@@ -438,6 +438,28 @@ CATALOG = {
             )
         },
     ),
+    # The notice ({% notice %}) in each tone and with each option; a new tone
+    # or option of the tag comes with an entry here (test_notice_tags).
+    "part/notice-neutral": Entry(
+        '{% notice css="example" data_example="example" %}An example line that needs saying first, '
+        'with <a href="/example/">an example link</a>.{% endnotice %}'
+    ),
+    "part/notice-titled": Entry(
+        '{% notice tone="warning" title="2 example jobs failed on their last run" %}'
+        "<p>example-backup, example-sync</p>{% endnotice %}"
+    ),
+    "part/notice-info": Entry('{% notice tone="info" %}An example line of news.{% endnotice %}'),
+    "part/notice-success": Entry('{% notice tone="success" %}Example saved.{% endnotice %}'),
+    "part/notice-error": Entry(
+        '{% notice tone="error" %}An example failure long enough to take more than one line on a phone, '
+        "so its wrapping is read too.{% endnotice %}"
+    ),
+    # Among the page's messages, as a post's outcome is said: each a toast.
+    "part/notice-messages": Entry(
+        '<ul class="messages">{% for tone in tones %}<li>{% notice tone=tone %}An example {{ tone }} message.'
+        "{% endnotice %}</li>{% endfor %}</ul>",
+        {"tones": ("success", "info", "warning", "error")},
+    ),
 }
 
 

@@ -1,6 +1,9 @@
 #!/bin/sh
 #MISE description="Vale holds the wording to tools/lint/vale: no history in source, no em dash or hedged plural, none of HQ's own words on a page"
 #MISE hide=true
+#MISE tags=["fast"]
+#MISE sources=["**/*.py", "**/*.html", "**/*.md", "**/*.js", "**/*.css", "**/*.go", "**/*.sh", "tools/lint/vale/**", "pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env"]
+#MISE outputs=[]
 set -u
 
 # Vale reads the tree; plain_words hands it the template attributes and tag

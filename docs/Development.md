@@ -226,14 +226,21 @@ The tests it selects are:
   change reaches what extensions render through (`templates/`, `static/`,
   `hq_sdk/`, the shared table, page, UI and moment modules, template tags).
 
-Beside the tests it runs each quick gate whose paths the change touches, as
-`TASKS` in `tools/gate/fast.py` lists them. The shell gate runs when a path
-the change touched is one `tools/gate/shell-sources.sh` names (a deleted one
-as the base had it). A change to the dependencies, tool pins or task
-definitions runs them all. A lint gate that reaches the network, or whose
-check fast makes another way, is named instead in `UNSELECTED` beside
-`TASKS`, with why it is left out; `test_fast.py` fails on a `lint:*` task in
-neither.
+Beside the tests it runs each quick gate the change affects, as mise's
+`--affected` reads it from the merge base: a quick gate is a task tagged
+`fast`, and it is affected when a changed or deleted file matches its
+`sources` (`!` patterns take paths out) or its own definition changed. Every
+quick gate's sources also name the dependencies, tool pins and task
+definitions, so a change to one runs them all, and each declares
+`outputs = []`, so a direct `mise run` of it never skips as up to date. The
+shell gate also runs when a path the change touched is one
+`tools/gate/shell-sources.sh` names (a deleted one as the base had it), which
+no glob can say. `mise run --tag fast --affected --affected-base <ref>
+--affected-json` names each gate it would pick and why, running none. A lint gate that reaches the network, or whose check
+fast makes another way, is left untagged and named in `EXEMPT` in
+`tools/gate/tests/test_fast_selection.py`, with why; that module fails on a
+`lint:*` task in neither, and holds each gate's `!` patterns to the
+exclusions its tool declares.
 
 A test module that a `test:*` task runs by its label in a dependency group's
 environment (`uv run --group fuzz`), which the tests' environment lacks, is

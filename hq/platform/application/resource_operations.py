@@ -17,7 +17,7 @@ from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
 from hq.platform.core.audit import audit_operation
 
-from .adoption import OBSERVES_ONLY, keep_out_declaration, observes_only
+from .adoption import keep_out_declaration, observes_only, require_writable
 from .asks import WAITING
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
@@ -341,8 +341,7 @@ def _queue_operation(
 ) -> OperationQueued:
     if require_enabled and not resource.enabled:
         raise PolicyError("This record is switched off in HQ.")
-    if observes_only(resource.kind, resource.spec):
-        raise PolicyError(OBSERVES_ONLY)
+    require_writable(resource.kind, resource.spec)
     # Nothing enters the queue for a gated kind without a person behind it. The
     # controller's own automatic work does not pass through here (it writes its
     # rows directly, as itself, converging toward a declaration somebody has

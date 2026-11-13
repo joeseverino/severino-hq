@@ -56,23 +56,9 @@ class FormErrorsTests(SimpleTestCase):
 
 
 class SectionHeadTests(SimpleTestCase):
+    """The head ``{% section %}`` draws (partials/_section_head.html)."""
+
     PARTIAL = "partials/_section_head.html"
-
-    def test_the_heading_is_named_and_what_sits_beside_it_follows(self):
-        html = _render(
-            '{% section_head id="example-heading" %}Hosts <span class="count">{{ n }}</span>'
-            '{% aside %}<a href="/example/">All</a>{% endsection_head %}',
-            n=3,
-        )
-
-        (head,) = with_class(html, "section-head")
-        (heading,) = elements(html, "h2")
-        (link,) = elements(html, "a")
-        self.assertEqual(heading.attrs["id"], "example-heading")
-        self.assertEqual(heading.words, "Hosts 3")
-        self.assertIn(head, heading.ancestors)
-        self.assertNotIn(heading, link.ancestors)
-        self.assertIn(head, link.ancestors)
 
     def test_what_sits_beside_the_heading_is_one_box_of_the_head(self):
         """A count, a dot and a link beside the heading wrap as one line of
@@ -80,7 +66,7 @@ class SectionHeadTests(SimpleTestCase):
 
         aside = '<span>6 active</span>{% dot %}<a href="/example/">All</a>'
         for source, box in (
-            (f"{{% section_head %}}Projects{{% aside %}}{aside}{{% endsection_head %}}", "div"),
+            (f'{{% section "Projects" %}}<p>Body</p>{{% aside %}}{aside}{{% endsection %}}', "div"),
             (f'{{% section "Projects" fold=True %}}<p>Body</p>{{% aside %}}{aside}{{% endsection %}}', "span"),
         ):
             with self.subTest(box=box):
@@ -97,12 +83,12 @@ class SectionHeadTests(SimpleTestCase):
                 self.assertIn(aside, elements(html, "a")[0].ancestors)
 
     def test_with_nothing_beside_the_heading_the_head_draws_no_aside(self):
-        self.assertEqual(
-            with_class(_render("{% section_head %}Load{% aside %} {% endsection_head %}"), "section-aside"), []
-        )
+        html = _render('{% section "Load" %}<p>Body</p>{% aside %} {% endsection %}')
+
+        self.assertEqual(with_class(html, "section-aside"), [])
 
     def test_a_lede_is_grouped_with_its_heading(self):
-        html = _render("{% section_head lede=lede %}Load{% endsection_head %}", lede="Read a minute ago")
+        html = _render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="Read a minute ago")
 
         (group,) = elements(html, "hgroup")
         (line,) = with_class(html, "section-lede")
@@ -110,22 +96,9 @@ class SectionHeadTests(SimpleTestCase):
         self.assertEqual(line.words, "Read a minute ago")
 
     def test_an_empty_lede_leaves_the_heading_alone(self):
-        self.assertEqual(
-            elements(_render("{% section_head lede=lede %}Load{% endsection_head %}", lede=""), "hgroup"), []
-        )
+        html = _render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="")
 
-    def test_what_the_page_writes_is_escaped_as_it_always_is(self):
-        html = _render("{% section_head %}{{ name }}{% endsection_head %}", name="<b>x</b>")
-
-        self.assertEqual(elements(html, "b"), [])
-
-    def test_an_option_it_does_not_take_is_refused(self):
-        for source in (
-            '{% section_head class="x" %}A{% endsection_head %}',
-            '{% section_head "A" %}A{% endsection_head %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                Template(source)
+        self.assertEqual(elements(html, "hgroup"), [])
 
 
 class BandFactTests(SimpleTestCase):
@@ -172,7 +145,7 @@ class CardTests(SimpleTestCase):
     def test_a_card_frames_what_it_holds_under_its_heading(self):
         html = _render(
             '{% card css="example-card" heading="example-heading" %}'
-            '{% section_head id="example-heading" %}Hosts{% endsection_head %}<p>{{ n }} up</p>{% endcard %}',
+            '<span id="example-heading">Hosts</span><p>{{ n }} up</p>{% endcard %}',
             n=3,
         )
 
@@ -292,7 +265,7 @@ class SharedMarkupTemplateTests(SimpleTestCase):
 
     def test_only_the_tag_draws_a_section_head(self):
         found = _written_by_hand(r'class="section-head[" ]', SectionHeadTests.PARTIAL)
-        self.assertEqual(found, [], "write {% section_head %} instead")
+        self.assertEqual(found, [], "write {% section %} instead")
 
     def test_only_the_tag_draws_a_card(self):
         found = _written_by_hand(r'\bclass="(?:[^"]*[\s}])?card[\s"{]', CardTests.PARTIAL)

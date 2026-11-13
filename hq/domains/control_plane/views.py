@@ -423,6 +423,9 @@ class InfrastructureDetailView(PageMixin, DetailView):
         )
         if console:
             actions.insert(0, PageAction(provider.console_label, console, primary=not drifted))
+        if gap := capabilities.write_gap:
+            # Beside the verbs it holds back: what they need, at the step that gives it.
+            actions.append(PageAction(gap.needs, gap.setup_url, title=gap.reason))
         if capabilities.offered.edit_url:
             actions.append(
                 PageAction(

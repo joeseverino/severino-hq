@@ -531,6 +531,19 @@ writes `{{ part }}`. The part is the head, the frame and the spacing between,
 so a page states the content and never the spacing, the frame or the count's
 look.
 
+**A notice is drawn by `{% notice %}`.** `{% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}`
+(`notice_tags.py`, drawn by `partials/_notice.html`) is every banner and
+message a page shows: a callout in its tone, for what needs saying before the
+content it is about. `tone` is one of `info`, `success`, `warning` and
+`error`, Django's message levels, so a message's `level_tag` is its tone as
+it stands; with none it is neutral. An error is an `alert`, which a screen
+reader says at once, and any other a `status`. `title` is its first line, in
+bold; `css` and `data_*` are the page's, as a section's are. Among the page's
+messages (`<ul class="messages">`, base.html) the same part is a toast, set
+closer; it is never a second part. Drawn with no body it is the frame a script
+clones and fills, so a line a script adds looks like one the server drew. An
+error page's notice (`.notice-page`) is a page of its own, never this part.
+
 **A state is a pill drawn by `{% status %}`.** `{% status row.get_status_display tone=row.status %}`
 (`status_tags.py`; `hq_sdk.ui.status_pill` from Python) says the state in
 sentence case (`labels.sentence`), whatever its source wrote: Docker's

@@ -36,9 +36,8 @@
 .row-unread td { background: var(--accent-tint); }
 .row-unread .msg-preview a, .row-unread td:first-child a { font-weight: 650; }
 .row-actions form { display: inline-block; margin: 0; }
-.inline-form { display: inline; margin: 0; }
-.row-actions button.icon-link { cursor: pointer; font-size: var(--text-sm); }
 .icon-link.danger-link { color: var(--danger); }
+.inline-form { display: inline; margin: 0; }
 .quick-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0 0 var(--space-10); }
 .quick-actions form { margin: 0; }
 

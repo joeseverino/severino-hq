@@ -428,6 +428,7 @@ TEMPLATES = [
                 "hq.platform.core.templatetags.write_tags",
                 "hq.platform.core.templatetags.status_tags",
                 "hq.platform.core.templatetags.part_tags",
+                "hq.platform.core.templatetags.notice_tags",
             ],
         },
     },

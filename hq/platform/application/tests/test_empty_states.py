@@ -62,12 +62,10 @@ class OneEmptyStateTests(SimpleTestCase):
 class EmptyStateTemplateTests(SimpleTestCase):
     """Templates draw an empty state only through the partial."""
 
-    def test_only_the_partial_draws_an_empty_state(self):
+    def test_no_list_overrides_what_empty_means(self):
+        # An empty state drawn by hand is one of test_hand_drawn's shapes.
         for name, text in _templates():
-            if name == PARTIAL:
-                continue
             with self.subTest(template=name):
-                self.assertNotRegex(text, r'class="empty[ "]', "include partials/_empty_state.html instead")
                 self.assertNotIn("{% block empty %}", text, "a list says what empty means with table_empty")
 
     def test_an_empty_state_is_one_line_and_one_remedy(self):

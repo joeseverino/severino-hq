@@ -177,10 +177,22 @@ _ROWS = """{% load action_tags %}{% if said %}<ul class="messages"><li class="ms
 {% post_button "Mark" "/probe-rows/aside/" value="mark" %}</div>
 {% post_button "Quiet" "/probe-rows/quiet/" value="quiet" %}
 {% post_button "Broken" "/probe-rows/broken/" value="broken" %}
+{% post_button "Refused" "/probe-rows/refused/" value="refused" %}
+{% post_button "Declined" "/probe-rows/declined/" value="declined" %}
 <a data-probe="link" href="/probe-rows/?again=1">Again</a>
 <form method="post" action="/probe-rows/plain/"><button data-probe="plain">Send</button></form>
 {% for line in lines %}<p>An example line after {{ line }}.</p>{% endfor %}"""
 _MAIN = re.compile(r"(<main\b[^>]*>).*?(</main>)", re.DOTALL)
+
+# Why the server refused a press: drawn among the messages of the page it
+# sent the press on to, and as the whole answer to one it answered itself.
+_REFUSED = "Example refused: its connection only reads."
+_DECLINED = "Example declined: it needs a connection that manages."
+# Another page, saying the refusal among its messages. Read again, it would
+# not: a message is said once.
+_ELSEWHERE = f"""<!doctype html><html><head><title>Elsewhere</title></head><body>
+<main class="content" id="elsewhere"><ul class="messages"><li class="msg msg-error">{_REFUSED}</li></ul></main>
+</body></html>"""
 
 # What each press leaves of the rows.
 _PRESSED = {("ABC", "C", "up"): "ACB", ("ABC", "B", "up"): "BAC", ("ABC", "B", "delete"): "AC"}
@@ -279,6 +291,13 @@ class FragmentBrowserTests(BrowserGate):
             row = parts.path.removeprefix("/probe-rows/").strip("/")
             if row == "broken":
                 return route.fulfill(status=500, body="Example failure")
+            if row == "refused":
+                # Refused, and answered with another page that says why: what
+                # a redirect elsewhere answers, which a route cannot send.
+                return self.fulfill(route, _ELSEWHERE)
+            if row == "declined":
+                # Refused, answered with the sentence alone (``refusal_response``).
+                return route.fulfill(status=409, content_type="text/plain; charset=utf-8", body=_DECLINED)
             if row == "quiet":
                 # What a view gives a script that asks with nothing to show.
                 return route.fulfill(status=204)
@@ -404,6 +423,26 @@ class FragmentBrowserTests(BrowserGate):
         self.assertTrue(self.page.evaluate("() => window.kept === true"))
         self.assertEqual(self.page.evaluate(_ROWS_SHOWN), "ABC")
         self.assertEqual(self.page.evaluate(_SAID), ["That could not be sent."])
+
+    def test_a_press_refused_and_sent_on_to_another_page_says_why_where_it_was_pressed(self):
+        self.page.goto(f"{ORIGIN}/probe-rows/", wait_until="load")
+        self.page.evaluate("() => { window.kept = true; }")
+        self.page.get_by_role("button", name="Refused").click()
+        self.page.wait_for_function(f"() => ({_SAID})().length > 0")
+
+        self.assertTrue(self.page.evaluate("() => window.kept === true"))
+        self.assertTrue(self.page.url.endswith("/probe-rows/"))
+        self.assertEqual(self.page.evaluate(_ROWS_SHOWN), "ABC")
+        self.assertEqual(self.page.evaluate(_SAID), [_REFUSED])
+
+    def test_a_press_refused_with_a_sentence_says_that_sentence(self):
+        self.page.goto(f"{ORIGIN}/probe-rows/", wait_until="load")
+        self.page.evaluate("() => { window.kept = true; }")
+        self.page.get_by_role("button", name="Declined").click()
+        self.page.wait_for_function(f"() => ({_SAID})().length > 0")
+
+        self.assertTrue(self.page.evaluate("() => window.kept === true"))
+        self.assertEqual(self.page.evaluate(_SAID), [_DECLINED])
 
     def test_the_content_answers_no_link_or_form_of_its_own(self):
         """The page's content is a region only for presses: its own links and

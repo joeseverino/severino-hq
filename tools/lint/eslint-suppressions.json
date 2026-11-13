@@ -1,0 +1,17 @@
+{
+  "static/js/app.js": {
+    "no-restricted-syntax": {
+      "count": 1
+    }
+  },
+  "static/js/ask.js": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  },
+  "static/js/fragment.js": {
+    "no-restricted-syntax": {
+      "count": 2
+    }
+  }
+}

@@ -10,7 +10,9 @@ otherwise name a fixture's failures.
 """
 
 import os
+import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import override
 from unittest.mock import patch
@@ -34,6 +36,19 @@ run = unittest.main(
 write_failures(run.result)
 sys.exit(not run.result.wasSuccessful())
 """
+
+
+IDENTITY = ["-c", "user.name=Example", "-c", "user.email=dev@example.com", "-c", "commit.gpgsign=false"]
+
+
+def fixture_git(root: Path) -> Callable[..., str]:
+    """git in the fixture repository at ``root``, committing as an example identity."""
+
+    def git(*args: str) -> str:
+        done = subprocess.run(["git", *IDENTITY, *args], cwd=root, check=True, capture_output=True, text=True)
+        return done.stdout.strip()
+
+    return git
 
 
 class GateTestCase(SimpleTestCase):

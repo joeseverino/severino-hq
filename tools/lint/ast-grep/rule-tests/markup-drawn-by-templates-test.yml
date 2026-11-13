@@ -1,0 +1,21 @@
+id: markup-drawn-by-templates
+valid:
+  - 'format_html("<code>{}</code>", value)'
+  - 'format_html("<a href=\"{}\">{}</a>", url, label)'
+  - 'render_to_string("partials/_section.html", {"title": title})'
+  - 'css = "btn ghost"'
+  - 'format_html("<span class=\"btn-group-label\">{}</span>", label)'
+  - 'format_html("<header>{}</header>", title)'
+  - 'mark_safe("<span class=\"pill\">Draft</span>")'
+invalid:
+  - 'format_html("<table class=\"data-table\">{}</table>", rows)'
+  - "format_html('<form method=\"post\">{}</form>', fields)"
+  - 'f"<section>{body}</section>"'
+  - 'mark_safe("<details><summary>More</summary></details>")'
+  - 'format_html("<h2>{}</h2>", title)'
+  - "format_html('<a href=\"{}\" data-entity=\"{}\">{}</a>', url, kind, label)"
+  - "format_html('<button type=\"button\" class=\"btn ghost\">{}</button>', label)"
+  - 'f"<p class=\"msg msg-error\">{text}</p>"'
+  - "format_html('<div class=\"card notice\">{}</div>', text)"
+  - "format_html('<span class=\"pill-ok\">{}</span>', label)"
+  - "format_html('<tr class=\"row-detail\">{}</tr>', cells)"

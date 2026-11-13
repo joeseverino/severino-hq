@@ -222,6 +222,25 @@ const hqFragment = (() => {
     list.append(line);
   };
 
+  // Why a post was refused, as the page it was answered with says it among
+  // its messages: the server's own sentence, which nothing else carries once
+  // that page is not the one shown.
+  const refusals = (page) =>
+    [...page.querySelectorAll(".messages > .msg-error")].map((line) => line.textContent.trim()).filter(Boolean);
+  // Why an answer that is not a success was given, where it says: a refusal
+  // is a sentence, or the page drawn again with it. A server's failure says
+  // nothing a person can act on.
+  const failed = async (response) => {
+    const failure = new Error(String(response.status));
+    const type = response.headers.get("Content-Type") || "";
+    if (response.status < 500 && type.startsWith("text/plain")) {
+      failure.said = [(await response.text()).trim()].filter(Boolean);
+    } else if (response.status < 500 && type.startsWith("text/html")) {
+      failure.said = refusals(parse(await response.text()));
+    }
+    return failure;
+  };
+
   // A region says why it is empty: the session ended, or its own failure
   // line. One that declares neither keeps what it held.
   const fail = (region, error) => {
@@ -251,7 +270,7 @@ const hqFragment = (() => {
     if (response.redirected && new URL(response.url).pathname.startsWith(SIGN_IN)) {
       throw Object.assign(new Error("signed out"), { signIn: response.url });
     }
-    if (!response.ok) throw new Error(String(response.status));
+    if (!response.ok) throw await failed(response);
     return { response, page: parse(await response.text()) };
   };
 
@@ -493,6 +512,7 @@ const hqFragment = (() => {
         // or for a press this one.
         if (options.method && (response.redirected || options.page)) {
           error.landed = response.redirected ? response.url : window.location.href;
+          error.said = refusals(page);
         }
         throw error;
       }
@@ -639,9 +659,12 @@ const hqFragment = (() => {
 
   // A form answered in place. A question (GET) that cannot be answered here
   // is asked the ordinary way. A post is never sent twice: what went wrong is
-  // said beside the form, in its `[data-fragment-status]` or in the region.
-  // A post answered with another page, or one that is not this page's, shows
-  // that page, as the post would have without this file.
+  // said beside the form, in its `[data-fragment-status]` or in the region,
+  // in the server's words where its answer gives them: a refusal is answered
+  // here even when the server sent it on to another page, since showing that
+  // page would read it again without them. Any other post answered with
+  // another page, or one that is not this page's, shows that page, as the
+  // post would have without this file.
   //
   // A button that names its form from outside it (`post_button`, which posts
   // the one form base.html draws) is answered in the region it sits in, and
@@ -684,17 +707,20 @@ const hqFragment = (() => {
       done?.close();
     } catch (error) {
       if (error.name === "AbortError") return;
-      if (!posting || error.signIn || error.landed) {
+      const refused = posting && !error.signIn && error.said?.length ? error.said : null;
+      if (!refused && (!posting || error.signIn || error.landed)) {
         window.location.assign(posting ? error.signIn || error.landed : url);
         return;
       }
-      const said = form.dataset.fragmentFailure || region.dataset.fragmentFailure || "That could not be sent.";
-      if (status?.isConnected) status.textContent = said;
+      const said = refused || [
+        form.dataset.fragmentFailure || region.dataset.fragmentFailure || "That could not be sent.",
+      ];
+      if (status?.isConnected) status.textContent = said.join(" ");
       // A press's region is the page's content, which keeps what it shows:
-      // the line is said where the server says how a post went, among the
+      // each line is said where the server says how a post went, among the
       // page's messages.
-      else if (pressed) say(region, said);
-      else explain(region, said);
+      else if (pressed) said.forEach((line) => say(region, line));
+      else explain(region, said.join(" "));
     } finally {
       form.removeAttribute("aria-busy");
       controls.forEach((control) => control.removeAttribute("aria-disabled"));

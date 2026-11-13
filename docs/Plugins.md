@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=10,
+    api_version=11,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -828,6 +828,18 @@ by hand: the pill and tone classes are not public.
 `PLUGIN_API_VERSION` 10 retires the `|sortable` filter and the `num-col`,
 `pill*` and `worth*` classes, each derived or drawn by the host.
 
+No template draws by hand what a shared part draws: a `<section>`, a heading,
+a fold, a form that writes, a notice and the other shapes the table at the end
+of this section names, each beside the part to write instead. `hq plugin
+check` refuses each where it is drawn, and the host's own templates are held
+to the same table. A package whose pages still draw some has a
+`hand_drawn.json` beside its `plugin.py` that counts them by template and
+shape (`{"example_notes/index.html": {"a fold": 2}}`); the check refuses a
+count above it and one below it, so it only falls. It exists to be emptied:
+each page moved onto its part lowers its count, and the file goes when none
+is left. `PLUGIN_API_VERSION` 11 retires `{% section_head %}`, whose
+head `{% section %}` draws, and publishes `partials/_icon.html`.
+
 A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
 ranks derived from the columns unless one says `drop=`, and its region's
 `room=` as `table_room`.
@@ -885,6 +897,7 @@ A test that posts a form without opening its page first sends
 | `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `in_place`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
 | `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
+| `partials/_icon.html` | nothing | `name` | One of the host's icons, by `name`, the height of the text beside it. |
 | `partials/_insight_grid.html` | `items` | `label` | Readings that need interpreting, each with its next step. |
 | `partials/_job_progress.html` | `job` | nothing | A running job and what it is doing. |
 | `partials/_kpi_grid.html` | `items` | `featured`, `label` | Responsive linked or static figures. |
@@ -895,11 +908,28 @@ A test that posts a form without opening its page first sends
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% section_head %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`.
 
 Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`.
+
+| Drawn by hand | Write instead |
+| --- | --- |
+| a `<section>` element | `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout |
+| a figure | `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi |
+| a filter bar | `partials/_filter_bar.html`, the part to come (hq-1768) |
+| a fold | `{% section "Heading" fold=True %}`body`{% endsection %}` |
+| a form that writes | `{% include "partials/_form.html" %}`, or `{% post_button %}` for a single verb |
+| a heading | the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page |
+| a list of rows | `{% include "partials/_record_list.html" %}` from hq_sdk.ui.ListRow |
+| a notice | `{% notice %}`, the part to come (hq-1766) |
+| a table outside its region | `{% table_region "Label" %}` around its `<table class="data-table">` |
+| a toned value | `{% status value tone=tone pill=False %}` |
+| an empty line | `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`; this shape is read by its opening words, so it finds one spelling of an empty line |
+| an empty state | `{% include "partials/_empty_state.html" with message="..." %}` |
+| an icon | `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img" |
+| label and value facts | `{% facts %}`, the part to come (hq-1770) |
 
 <!-- /sdk_contract -->
 

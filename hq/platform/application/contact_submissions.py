@@ -23,7 +23,7 @@ from hq.domains.control_plane.providers import validate_spec
 from hq.platform.core.audit import audit_operation, record_event
 from hq.platform.core.models import AuditLog
 
-from .adoption import OBSERVES_ONLY, observes_only
+from .adoption import WriteGap, require_writable, write_gap
 from .cadence import request_reading
 from .command_fields import Choices, Describe
 from .integration_specs import Kept, keeps
@@ -104,6 +104,18 @@ def get_contact_submission(identifier: int) -> dict[str, Any]:
     return _submission(identifier, inbox.current())
 
 
+def change_gap(current: inbox.Inbox | None = None) -> WriteGap | None:
+    """Why HQ cannot change a message now, or None when it can.
+
+    Asked of the connection the messages were read through, the one a change
+    is made through, by the rule ``_declare`` refuses by; a page offers its
+    review and delete controls only when this is None.
+    """
+
+    database = (current or inbox.current()).database
+    return write_gap(inbox.DECLARATION, {"connection_ref": database.connection_ref} if database else {})
+
+
 def _unconfirmed(spec: dict[str, Any], current: inbox.Inbox) -> dict[str, Any]:
     """The declaration without the changes the reading already shows.
 
@@ -151,8 +163,7 @@ def _declare(spec: dict[str, Any], *, principal: Principal) -> None:
     """Write the declaration and queue the controller to apply it."""
 
     validated = validate_spec(inbox.DECLARATION, spec)
-    if observes_only(inbox.DECLARATION, validated):
-        raise PolicyError(f"{OBSERVES_ONLY} The Cloudflare API connection also needs D1 Write (account).")
+    require_writable(inbox.DECLARATION, validated)
     resource = ManagedResource.objects.select_for_update().filter(key=inbox.DECLARATION_KEY).first()
     if resource is None:
         resource = ManagedResource(key=inbox.DECLARATION_KEY, kind=inbox.DECLARATION)

@@ -60,6 +60,7 @@ PARTIALS: dict[str, str] = {
     "partials/_form.html": "A form that writes: its token, its errors, its fields or its table, and its closing row.",
     "partials/_form_actions.html": "A form's closing row: its one verb, Cancel, and what saving does.",
     "partials/_form_errors.html": "What was wrong with a submitted form as a whole, above its fields.",
+    "partials/_icon.html": "One of the host's icons, by `name`, the height of the text beside it.",
     "partials/_insight_grid.html": "Readings that need interpreting, each with its next step.",
     "partials/_job_progress.html": "A running job and what it is doing.",
     "partials/_kpi_grid.html": "Responsive linked or static figures.",
@@ -87,7 +88,6 @@ TAGS = (
     "row_group",
     "row_toggle",
     "section",
-    "section_head",
     "status",
     "table_heading",
     "table_region",
@@ -210,6 +210,87 @@ HOOKS = (
     "data-submit-status",
     "data-tip",
 )
+
+
+def _class_word(*words: str, prefix: bool = False) -> str:
+    """A ``class`` attribute holding one of ``words`` whole, or one beginning
+    with one of them when ``prefix`` is set (``tone-`` and ``tone-{{ t }}``)."""
+
+    after = "" if prefix else r"(?![\w-])"
+    return rf'\bclass="(?:[^"]*[\s}}])?(?:{"|".join(words)}){after}'
+
+
+# The shapes a page draws by hand where a shared part draws it, each with the
+# part to write instead: hq_sdk.validation refuses each in an extension's
+# templates, and the host's source test (test_hand_drawn.py) holds the host's
+# own to the same table, so one table says what hand-rolling is. A pattern is
+# read over a template with its comments taken out; ``outside`` names a block
+# tag inside which the shape is the part itself.
+HAND_DRAWN: dict[str, dict[str, str]] = {
+    "a <section> element": {
+        "pattern": r"<section\b",
+        "write": '{% section "Heading" %}body{% endsection %}, or a <div> for one that only groups a layout',
+    },
+    "a heading": {
+        "pattern": r"<h[1-6]\b",
+        "write": (
+            'the heading of {% section "Heading" %}, a sub-head a {% section %} inside it (it heads itself a'
+            " level down); the page's own title is the frame's, from page"
+        ),
+    },
+    "a fold": {
+        "pattern": r"<details\b",
+        "write": '{% section "Heading" fold=True %}body{% endsection %}',
+    },
+    "a table outside its region": {
+        "pattern": r"<table\b",
+        "outside": "table_region",
+        "write": '{% table_region "Label" %} around its <table class="data-table">',
+    },
+    "a form that writes": {
+        "pattern": r'(?i)<form\b[^>]*\bmethod=["\']?post\b',
+        "write": '{% include "partials/_form.html" %}, or {% post_button %} for a single verb',
+    },
+    "a list of rows": {
+        "pattern": _class_word("list-rows"),
+        "write": '{% include "partials/_record_list.html" %} from hq_sdk.ui.ListRow',
+    },
+    "a figure": {
+        "pattern": _class_word("kpi", "kpi-grid"),
+        "write": '{% include "partials/_kpi_grid.html" %} from hq_sdk.ui.Kpi',
+    },
+    "a notice": {
+        "pattern": _class_word("msg", "notice"),
+        "write": "{% notice %}, the part to come (hq-1766)",
+    },
+    "a filter bar": {
+        "pattern": _class_word("filter-bar"),
+        "write": "partials/_filter_bar.html, the part to come (hq-1768)",
+    },
+    "an icon": {
+        "pattern": r'<svg\b[^>]*\baria-hidden="true"',
+        "write": '{% include "partials/_icon.html" with name="..." %}; a drawing that says something is role="img"',
+    },
+    "a toned value": {
+        "pattern": _class_word("tone-", prefix=True),
+        "write": "{% status value tone=tone pill=False %}",
+    },
+    "label and value facts": {
+        "pattern": r"<dl\b[^>]*" + _class_word("kv"),
+        "write": "{% facts %}, the part to come (hq-1770)",
+    },
+    "an empty state": {
+        "pattern": _class_word("empty"),
+        "write": '{% include "partials/_empty_state.html" with message="..." %}',
+    },
+    "an empty line": {
+        "pattern": (r'<(?:p|span|td|li|dd)\b[^>]*\bclass="muted"[^>]*>\s*(?:No|Nothing|None|There (?:is|are) no)\b'),
+        "write": (
+            '{% include "partials/_empty_state.html" with message="..." %}, or a {% section %}\'s {% empty %};'
+            " this shape is read by its opening words, so it finds one spelling of an empty line"
+        ),
+    },
+}
 
 # Read by every template through the host's context processors and Django's
 # own; never a parameter a page passes.
@@ -490,6 +571,7 @@ def describe() -> dict[str, Any]:
         "django": _django(engine),
         "classes": _checked(CLASSES, defined.__contains__, "classes"),
         "hooks": _checked(HOOKS, lambda hook: _read_by(scripts, hook), "hooks"),
+        "hand_drawn": HAND_DRAWN,
     }
 
 
@@ -524,6 +606,12 @@ def drift(before: dict[str, Any], after: dict[str, Any]) -> list[str]:
 
 def _code(names: Iterable[str]) -> str:
     return ", ".join(f"`{name}`" for name in names) or "nothing"
+
+
+def _cell(text: str) -> str:
+    """Text for a Markdown table cell, its markup shown as code."""
+
+    return re.sub(r"(\{%.*?%\}|<[a-z/][^>]*>|partials/\S+\.html)", r"`\1`", text).replace("|", "\\|")
 
 
 def markdown(templates: dict[str, Any]) -> str:
@@ -561,5 +649,9 @@ def markdown(templates: dict[str, Any]) -> str:
         f"Classes: {_code(templates['classes'])}.",
         "",
         f"Script hooks: {_code(templates['hooks'])}.",
+        "",
+        "| Drawn by hand | Write instead |",
+        "| --- | --- |",
+        *(f"| {_cell(name)} | {_cell(shape['write'])} |" for name, shape in templates["hand_drawn"].items()),
     ]
     return "\n".join(lines) + "\n"

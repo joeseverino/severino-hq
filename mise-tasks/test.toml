@@ -20,6 +20,17 @@ run = "tools/pipeline/check-plugin.sh --plugin-root examples/extension"
 ["test:migrations"]
 description = "No model change without its migration"
 hide = true
+tags = ["fast"]
+sources = [
+  "hq/**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
 run = "uv run python manage.py makemigrations --check --dry-run"
 

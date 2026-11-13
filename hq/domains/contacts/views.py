@@ -17,6 +17,7 @@ from hq.platform.application.contact_submissions import (
     DELETE,
     MOST_SHOWN,
     REVIEW,
+    change_gap,
     find_submission,
     list_contact_submissions,
 )
@@ -80,6 +81,7 @@ def contact_list(request):
             "problem": current.problem,
             "observed_at": current.observed_at,
             "waiting_note": _waiting_note(current),
+            "gap": change_gap(current),
             **page_context(
                 "Messages", "What people sent through the contact form on the site.", reads=contact_list.page_reads
             ),
@@ -125,6 +127,7 @@ def contact_detail(request, pk: int):
             "submission": submission,
             "reply_href": reply,
             "form": form,
+            "gap": change_gap(),
             **page_context(
                 f"Message #{pk}",
                 dotted(submission.get("name", ""), _sent(submission)),
@@ -184,6 +187,7 @@ def contact_delete(request, pk: int):
                 "url": reverse("contacts:delete", args=[pk]),
                 "label": f"Delete message #{pk}",
                 "cancel_url": reverse("contacts:detail", args=[pk]),
+                "gap": change_gap(),
             },
             **page_context(
                 f"Delete message #{pk}?",

@@ -9,125 +9,32 @@ from __future__ import annotations
 
 import ast
 import functools
-import glob
 import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
-import tomllib
 from fnmatch import fnmatch
 from pathlib import Path
+from typing import Any
 
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
 from tests.mise_tasks import HEAVY_LOCK, ROOT as TASKS_ROOT, body, locks, mise_tasks, run_files, runs
 from tools.gate.verdict import Gate, Step, run
-from tools.structural.classify import TEST
 
 ROOT = Path(__file__).resolve().parents[2]
-# The quick gates, each with the paths a change must touch for it to run, as
-# fnmatch patterns, where `*` crosses directories. Those selected run side by
-# side with the tests, in one mise run; each Django gate opens a database of
-# its own (the django task template). A drift gate's paths are its sources and
-# the file it derives.
-PYTHON = ("*.py",)
-TASKS: dict[str, tuple[str, ...]] = {
-    "lint:ruff": PYTHON,
-    "lint:mypy": PYTHON,
-    "lint:ast-grep": (*PYTHON, "tools/lint/ast-grep/*"),
-    # The graph fingerprints functions in every language it indexes.
-    "lint:structural": (*PYTHON, "*.go", "*.js", "*.mjs", "*.sh", "mise-tasks/*", "tools/structural/*"),
-    "lint:complexity": (*PYTHON, "complexipy.toml"),
-    "lint:controller": ("controller/*",),
-    "lint:css": ("static/css/*", "tools/lint/*.mjs", "tools/lint/package*.json"),
-    "lint:js": ("static/js/*", "tools/lint/*.mjs", "tools/lint/package*.json"),
-    "lint:deptry": ("hq/*.py", "hq_sdk/*.py"),
-    "lint:imports": ("hq/*.py",),
-    "lint:prose": (*PYTHON, "*.html", "*.md", "*.js", "*.css", "*.go", "*.sh", "tools/lint/vale/*"),
-    "lint:mise-tasks": ("mise-tasks/*",),
-    "lint:mise-format": ("mise.toml", "mise-tasks/*.toml", "mise-tasks/lint/mise-format", "tools/lib/mise-files.sh"),
-    # jactionlint, then zizmor over .github, each with its config there.
-    "lint:workflows": (".github/workflows/*", ".github/actions/*", ".github/actionlint.yaml", ".github/zizmor.yml"),
-    # mise.toml's Go pin reads controller/go.mod.
-    "lint:toolchain": (
-        "mise.toml",
-        "mise.lock",
-        "controller/go.mod",
-        "Dockerfile",
-        "composition/Dockerfile",
-        "tools/pipeline/toolchain_lock.py",
-    ),
-    "lint:lockfile": ("pyproject.toml", "uv.lock"),
-    # The checks are those built into the Trivy that mise.toml pins.
-    "lint:trivy-config": ("*Dockerfile", "mise.toml", "tools/lint/trivy/*", "mise-tasks/lint/trivy-config"),
-    "lint:deploycheck": PYTHON,
-    "lint:openapi": (
-        "hq/platform/api/hq-api.openapi.json",
-        "controller/api/*.openapi.json",
-        "tools/lint/package*.json",
-    ),
-    "test:migrations": ("hq/*.py",),
-    "lint:drift-sdk-contract": (*PYTHON, "hq_sdk/*", "docs/Plugins.md"),
-    "lint:drift-api-document": (*PYTHON, "hq/platform/api/hq-api.openapi.json"),
-    "lint:drift-api-examples": (*PYTHON, "hq/platform/api/openapi-examples.json"),
-    "lint:drift-bridge-contract": (*PYTHON, "controller/api/*", "hq/config/controller-connections.json"),
-    "lint:drift-connections-reference": (*PYTHON, "docs/Connections.md"),
-    "lint:drift-font": ("tools/fonts/*", "static/fonts/*", "static/css/*"),
-}
-# The shell gate reads every file its lister names, the suites among them, so a
-# change selects it when the lister names a path it touched: as this tree has
+# The tag of the quick gates: each declares the files it reads as its sources,
+# and mise's --affected picks those a change touched. Those selected run side
+# by side with the tests, in one mise run; each Django gate opens a database of
+# its own (the django task template).
+QUICK = "fast"
+# The shell gate also reads every file its lister names, which no glob can, so
+# a change selects it when the lister names a path it touched: as this tree has
 # it, or as the base had it once deleted.
 SHELL = "lint:shell"
 SHELL_SOURCES = ROOT / "tools" / "gate" / "shell-sources.sh"
-# The shell suites also read the workflows and actions, whose run blocks are
-# shell the lister cannot name (tests/shell/test-shell-contracts.sh reads every
-# one), so a change to them selects the gate too.
-SHELL_READS = (".github/workflows/*", ".github/actions/*")
-# Each lint gate a change never selects, and why: it reaches the network, so
-# it is left to `mise run check`, or fast runs its check another way. A lint
-# task in none of TASKS, SHELL and this is one fast would skip unseen, which
-# test_fast.py fails on.
-UNSELECTED: dict[str, str] = {
-    "lint:audit": "queries the advisory services (uv audit, osv-scanner); left to `mise run check`",
-    "lint:govulncheck": "queries vuln.go.dev for the advisories the controller reaches; left to `mise run check`",
-    "lint:codeql-bundle": "fetches the pinned CodeQL action's defaults from GitHub; left to `mise run check`",
-    "lint:scorecard": "its Vulnerabilities check queries OSV over an export of the tree; left to `mise run check`",
-    "lint:units": "systemd-analyze is Linux's, so CI's lint job scores the units",
-    "lint:patch": "fast's own patch integrity step runs `git diff --check` over the change",
-    "lint:source": "fast runs the source-tagged tests among its labels, since a labeled run leaves no tag out",
-    "lint:shell:suites": "runs within lint:shell, which fast selects as SHELL",
-    "lint:shell:suite": "runs within lint:shell, which fast selects as SHELL",
-}
-
-
-def _globs(patterns: list[str]) -> re.Pattern[str]:
-    """One pattern matching a path any of ``patterns`` does, each a glob over
-    the path from the root, ``**`` crossing directories."""
-
-    alternatives = [f"(?:{glob.translate(pattern, recursive=True, include_hidden=True)})" for pattern in patterns]
-    return re.compile(f"^(?:{'|'.join(alternatives) or '(?!)'})")
-
-
-# Paths a gate never reads, so a change to them alone leaves it out: the
-# structural bar drops test code before it pairs anything, and complexipy
-# leaves out what complexipy.toml's exclude names, read from there so the two
-# never disagree.
-UNREAD = {
-    "lint:structural": TEST,
-    "lint:complexity": _globs(tomllib.loads((ROOT / "complexipy.toml").read_text(encoding="utf-8"))["exclude"]),
-}
-# What every gate reads: the dependencies, the tool pins and the task
-# definitions. A change to one runs them all.
-EVERY_TASK = (
-    "pyproject.toml",
-    "uv.lock",
-    "mise.toml",
-    "mise.lock",
-    "mise-tasks/*.toml",
-    "tools/pipeline/toolchain.env",
-)
 # Never part of the Django suite: other languages and vendored trees.
 SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 # Run whatever changed. The startup budgets count what settings and
@@ -189,20 +96,26 @@ def reaches_tree(paths: list[str]) -> bool:
     return any(fnmatch(path, pattern) for path in paths for pattern in TREE)
 
 
-def selected_tasks(paths: list[str], base: str | None = None) -> tuple[str, ...]:
-    """The quick gates a change can have broken: those whose paths it touches, or all when it touches EVERY_TASK.
+def quick_gates() -> tuple[str, ...]:
+    """Every task tagged QUICK."""
 
-    A path this tree no longer has is read as ``base`` has it, for the shell gate."""
+    return tuple(task["name"] for task in mise_json("tasks", "ls", "--tag", QUICK, "--hidden", "--local", "--json"))
 
-    def touched(patterns: tuple[str, ...], task: str = "") -> bool:
-        unread = UNREAD.get(task)
-        read = [path for path in paths if not (unread and unread.search(path))]
-        return any(fnmatch(path, pattern) for path in read for pattern in patterns)
 
-    if touched(EVERY_TASK):
-        return (*TASKS, SHELL)
-    selected = tuple(task for task, patterns in TASKS.items() if touched(patterns, task))
-    return (*selected, SHELL) if touched(SHELL_READS) or shell_files(paths, base) else selected
+def selected_tasks(paths: list[str], base: str) -> tuple[str, ...]:
+    """The quick gates a change can have broken: those whose sources or definition it touches, as mise's
+    --affected reads the change from ``base`` with this checkout's work, and the shell gate when its lister
+    names one of ``paths``. HEAD is named so no CI metadata stands in for it."""
+
+    affected = ("--affected", "--affected-base", base, "--affected-head", "HEAD", "--affected-json")
+    selected = tuple(task["name"] for task in mise_json("run", "--tag", QUICK, *affected)["tasks"])
+    return selected if SHELL in selected or not shell_files(paths, base) else (*selected, SHELL)
+
+
+def mise_json(*args: str) -> Any:
+    """What a mise command prints as JSON, run in this checkout; its errors print as they come."""
+
+    return json.loads(subprocess.run(["mise", *args], cwd=ROOT, check=True, stdout=subprocess.PIPE, text=True).stdout)
 
 
 def shell_files(paths: list[str], base: str | None = None) -> list[str]:
@@ -679,7 +592,7 @@ def main(asked: Usage) -> int:
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
     passed = all(s.ok for s in steps)
     if passed:
-        record_pass(gate.judged(), base, whole=every_test and set(tasks) == {*TASKS, SHELL, *group_tests().values()})
+        record_pass(gate.judged(), base, whole=every_test and set(tasks) == {*quick_gates(), *group_tests().values()})
     gate.close(steps, " (full gate before push: `mise run check`)")
     return 0 if passed else 1
 

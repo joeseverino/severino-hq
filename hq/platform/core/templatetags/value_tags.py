@@ -878,14 +878,21 @@ type Shape = Callable[[str, dict], dict]
 
 
 def slotted(
-    name: str, partial: str, parts: tuple[str, ...], options: frozenset[str], *, shape: Shape | None = None
+    name: str,
+    partial: str,
+    parts: tuple[str, ...],
+    options: frozenset[str],
+    *,
+    shape: Shape | None = None,
+    library: template.Library = register,
 ) -> None:
     """Register ``{% name option=value %}first{% second %}...{% endname %}``:
     markup a page would otherwise write by hand, drawn by ``partial`` with
     each part as the variable it is named for. The first part follows the
     opening tag; the others may be left out, and come in ``parts``' order.
     A tag with a ``shape`` also takes ``data_*`` options, and its shape turns
-    what a page gave into the partial's variables."""
+    what a page gave into the partial's variables. ``library`` is the one
+    it is registered in."""
 
     end = f"end{name}"
     takes = Takes(name, partial, parts, options, shape)
@@ -907,7 +914,7 @@ def slotted(
 
     # The template contract reads a tag's parameters from what it wraps.
     compile_.__wrapped__ = takes  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
-    register.tag(name, compile_)
+    library.tag(name, compile_)
 
 
 CARD_ELEMENTS = frozenset(("section", "article", "figure", "details", "div"))

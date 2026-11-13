@@ -4,10 +4,9 @@ What failed on its last run, said once above the rows that lead the list.
 {% endcomment %}
 {% block summary %}
 {% if failed_last %}
-  <div class="notice notice-attention">
-    <strong>{{ failed_last|length|counted:"job failed on its last run,jobs failed on their last run" }}</strong>
+  {% notice tone="warning" title=failed_last|length|counted:"job failed on its last run,jobs failed on their last run" %}
     <p>{{ failed_last|join:", "|breakable }}</p>
-  </div>
+  {% endnotice %}
 {% endif %}
 {% endblock %}
 {% block row %}

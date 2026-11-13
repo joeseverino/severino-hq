@@ -1,15 +1,43 @@
 # The Lint job: every lint:* gate here and under mise-tasks/lint/. A derived
 # file's gate is lint:drift-<file>, held against its source; `mise run fix`
 # rewrites them all.
+#
+# A quick gate, one `mise run fast` runs when a change affects it, is tagged
+# fast. Its sources are the files it reads, then the dependencies, tool pins
+# and task definitions every gate reads; `!` takes out a path its tool never
+# reads, as the tool's own config says. outputs = [] keeps mise from skipping
+# it as up to date. tools/gate/tests/test_fast_selection.py holds all of it.
 
 ["lint:ruff"]
 description = "Ruff lints the Python and holds it to its format"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = ["uv run ruff check .", "uv run ruff format --check ."]
 
 ["lint:mypy"]
 description = "mypy type-checks the seams pyproject.toml names and the browser test package's calls, then every source module for code its types rule out"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # django-stubs loads the host's settings.
 extends = "django"
 run = [
@@ -20,6 +48,18 @@ run = [
 ["lint:ast-grep"]
 description = "ast-grep holds every Python module to the structural rules in tools/lint/ast-grep/rules, each over the scope its rule declares (code HQ runs: hq, hq_sdk and tools less their tests; test code: tests/, test_*.py, testing.py and *_testing.py; or every module), and each rule to its own cases"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "tools/lint/ast-grep/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # The scan reads the whole repository, since each rule's files: and ignores:
 # say which modules it holds. A rule's cases (rule-tests/) prove it refuses
 # what it is for before its scan is trusted to find nothing.
@@ -31,6 +71,19 @@ run = [
 ["lint:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
 hide = true
+tags = ["fast"]
+sources = [
+  "hq/platform/api/hq-api.openapi.json",
+  "controller/api/*.openapi.json",
+  "tools/lint/package*.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 depends = ["setup:lint-tools"]
 # Specification rules cover wire contracts. HTTP style recommendations do not
 # apply to Django's canonical trailing slashes or the stdin/stdout bridge.
@@ -42,33 +95,105 @@ run = "redocly lint --extends=spec --format=stylish hq/platform/api/hq-api.opena
 ["lint:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
 hide = true
+tags = ["fast"]
+sources = [
+  "hq/**/*.py",
+  "hq_sdk/**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # Host code is these two packages less their tests/ ([tool.deptry]).
 run = "uv run deptry hq hq_sdk"
 
 ["lint:imports"]
 description = "Each module imports only what pyproject.toml's import contracts allow it"
 hide = true
+tags = ["fast"]
+sources = [
+  "hq/**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "uv run lint-imports --no-cache"
 
 ["lint:lockfile"]
 description = "uv.lock matches pyproject.toml"
 hide = true
+tags = ["fast"]
+sources = [
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # uv's own hint, a plain uv lock, is refused under mise.toml's UV_LOCKED.
 run = "uv lock --check || { echo 'lint:lockfile: write the lock with UV_LOCKED=0 uv lock, then commit uv.lock (docs/Development.md).' >&2; exit 1; }"
 
 ["lint:toolchain"]
 description = "mise.lock checksums every pinned tool for each gate platform, mise renders Go from go.mod's toolchain line, no image borrows a build tool"
 hide = true
+tags = ["fast"]
+sources = [
+  "controller/go.mod",
+  "Dockerfile",
+  "composition/Dockerfile",
+  "tools/pipeline/toolchain_lock.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "uv run python -m tools.pipeline.toolchain_lock"
 
 ["lint:mise-tasks"]
 description = "Every task is valid: its usage spec parses, its dependencies exist, its timeout and globs are well formed"
 hide = true
+tags = ["fast"]
+sources = [
+  "mise-tasks/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "mise tasks validate"
 
 ["lint:workflows"]
 description = "The workflows are valid, run: blocks included, and pass zizmor's security audit"
 hide = true
+tags = ["fast"]
+sources = [
+  ".github/workflows/**",
+  ".github/actions/**",
+  ".github/actionlint.yaml",
+  ".github/zizmor.yml",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # zizmor runs offline, with no token, at its default persona; a deliberate
 # finding is suppressed in .github/zizmor.yml with its reason.
 # Named rather than found: found, jactionlint reads every action.yml under the
@@ -81,6 +206,17 @@ run = [
 ["lint:deploycheck"]
 description = "Production settings raise no security warning"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # DEBUG off, a real host. The values mirror a production configuration so the
 # check judges how settings.py reads one. The key is a throwaway long enough
 # for the strength check.
@@ -91,6 +227,28 @@ run = "uv run python manage.py check --deploy --fail-level WARNING"
 ["lint:structural"]
 description = "No new near-duplicate pair outside tests"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "**/*.go",
+  "**/*.js",
+  "**/*.mjs",
+  "**/*.sh",
+  "mise-tasks/**",
+  "tools/structural/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+  "!**/test_*.py",
+  "!**/tests.py",
+  "!**/*_tests.py",
+  "!**/tests/**",
+  "!**/*_test.go",
+]
+outputs = []
 usage = '''
 flag "--record" help="Rewrite the baseline from this tree instead of checking it"
 flag "--pairs" help="First print every pair outside tests with the classification that explains it, or unexplained, one per line, sorted"
@@ -100,6 +258,19 @@ run = "uv run python -m tools.structural.bar"
 ["lint:complexity"]
 description = "complexipy holds every function but a migration to cognitive complexity 20"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "complexipy.toml",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+  "!**/migrations/**",
+]
+outputs = []
 # The bound and the tree are complexipy.toml's, which reads and writes no
 # snapshot: every function over the bound fails.
 run = "uv run complexipy"
@@ -107,20 +278,59 @@ run = "uv run complexipy"
 ["lint:css"]
 description = "Stylelint holds the stylesheets to their contract: color and sizes from tokens, every custom property defined"
 hide = true
+tags = ["fast"]
+sources = [
+  "static/css/**",
+  "tools/lint/stylelint-suppressions.json",
+  "tools/lint/*.mjs",
+  "tools/lint/package*.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 depends = ["setup:lint-tools"]
-run = "stylelint --config tools/lint/stylelint.config.mjs 'static/css/**/*.css'"
+run = "stylelint --config tools/lint/stylelint.config.mjs --suppress-location=tools/lint/stylelint-suppressions.json 'static/css/**/*.css'"
 
 ["lint:js"]
 description = "ESLint holds the browser scripts to its recommended rules and the modern forms (const and let, strict equality), every name they use defined, no unsanitized markup sink, fetching, parsing and polling to fragment.js, and tables.js's layout reads to the places that say why"
 hide = true
+tags = ["fast"]
+sources = [
+  "static/js/**",
+  "tools/lint/eslint-suppressions.json",
+  "tools/lint/*.mjs",
+  "tools/lint/package*.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 depends = ["setup:lint-tools"]
-run = "eslint --config tools/lint/eslint.config.mjs --max-warnings 0 'static/js/**/*.js'"
+run = "eslint --config tools/lint/eslint.config.mjs --suppressions-location tools/lint/eslint-suppressions.json --max-warnings 0 'static/js/**/*.js'"
 
 # The Go controller's static half: format, generated types, the vendor slicer,
 # golangci-lint and the advisory guard. Its race tests are test:controller.
 ["lint:controller"]
 description = "The Go controller is formatted and linted, its generated types current"
 hide = true
+tags = ["fast"]
+sources = [
+  "controller/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "controller/scripts/check.sh"
 
 # Every advisory whose vulnerable function the controller can reach, through
@@ -139,12 +349,37 @@ run = "go tool govulncheck -test ./..."
 ["lint:drift-sdk-contract"]
 description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "hq_sdk/**",
+  "docs/Plugins.md",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
 run = "uv run python manage.py sdk_contract --check"
 
 ["lint:drift-api-document"]
 description = "The machine API's OpenAPI document is current"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "hq/platform/api/hq-api.openapi.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
 run = "uv run python manage.py api_openapi --check"
 
@@ -153,24 +388,74 @@ run = "uv run python manage.py api_openapi --check"
 ["lint:drift-api-examples"]
 description = "The machine API's recorded examples are what its tests receive"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "hq/platform/api/openapi-examples.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
 run = 'recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
 
 ["lint:drift-bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "controller/api/**",
+  "hq/config/controller-connections.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
 run = "uv run python manage.py bridge_contract --check"
 
 ["lint:drift-connections-reference"]
 description = "docs/Connections.md is what the providers declare"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "docs/Connections.md",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
 run = "uv run python manage.py connections_reference --check"
 
 ["lint:drift-font"]
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
 hide = true
+tags = ["fast"]
+sources = [
+  "tools/fonts/**",
+  "static/fonts/**",
+  "static/css/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "uv run python -m tools.fonts.subset --check"
 
 ["lint:shell:suite"]

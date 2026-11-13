@@ -28,7 +28,7 @@ from hq.domains.control_plane.providers import (
 from hq.platform.core.audit import audit_operation
 lazy from hq.domains.control_plane.provider_spec import ProviderResolutionContext
 
-from .adoption import OBSERVES_ONLY, observes_only
+from .adoption import require_writable
 from .command_fields import Choices, Describe
 from .default_hold import consent_gap
 from .integration_specs import Kept, keeps
@@ -389,8 +389,7 @@ def _refuse_authored(command: ManagedResourceCommand, validated_spec: dict[str, 
             "to allow them, or save this record switched off."
         )
     # A declaration HQ would act on needs a connection that manages.
-    if observes_only(command.kind, validated_spec):
-        raise PolicyError(OBSERVES_ONLY)
+    require_writable(command.kind, validated_spec)
 
 
 def _stored(key: str) -> dict[str, Any]:

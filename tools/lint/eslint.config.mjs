@@ -67,6 +67,27 @@ const primitiveSyntax = [
   },
 ];
 
+// A primitive's markup is the server's: a notice, a message, a button, a pill
+// or a row's opened line drawn by a script is a second drawing of it that
+// the template's never sees change. A class is written as a literal in a
+// className, a class attribute or a classList change, and each form is
+// refused for a primitive's class or one of its tones (`msg-error`).
+// Today's instances are counted in eslint-suppressions.json beside it,
+// which ESLint fails on once one no longer occurs.
+// Python strings are refused the same names by markup-drawn-by-templates
+// (tools/lint/ast-grep), which MarkupRuleTests holds to this list.
+const primitiveClass = String.raw`/(^|\s)(notice(-attention)?|msg(-(error|info|success|warning))?|btn|pill(-[\w-]+)?|row-detail|row-columns)(\s|$)/`;
+const drawnMarkup = [
+  `AssignmentExpression[left.property.name='className'] Literal[value=${primitiveClass}]`,
+  `AssignmentExpression[left.property.name='className'] TemplateElement[value.raw=${primitiveClass}]`,
+  `CallExpression[callee.property.name='setAttribute'][arguments.0.value='class'] Literal[value=${primitiveClass}]`,
+  `CallExpression[callee.object.property.name='classList'][callee.property.name=/^(add|toggle|replace)$/] > Literal[value=${primitiveClass}]`,
+].map((selector) => ({
+  selector,
+  message:
+    "A primitive's markup is the server's: fill what the page's HTML already holds, or swap in a part a template draws (`hqFragment.swap`), never spelling its class in a script.",
+}));
+
 // In fragment.js each of these happens once, where a disable comment says
 // so; a second one is refused, and a comment left over is reported unused.
 // The parser is declared and called, never handed out, so no script outside
@@ -132,7 +153,7 @@ export default [
     rules: {
       "no-restricted-globals": ["error", ...primitiveGlobals],
       "no-restricted-properties": ["error", ...primitiveProperties],
-      "no-restricted-syntax": ["error", ...primitiveSyntax, layoutReads, submitterRebuilt],
+      "no-restricted-syntax": ["error", ...primitiveSyntax, ...drawnMarkup, layoutReads, submitterRebuilt],
     },
   },
   {
@@ -145,7 +166,7 @@ export default [
         { name: "setTimeout", message: "fragment.js keeps one timer, hqEvery's, as window.setTimeout." },
       ],
       "no-restricted-properties": ["error", ...oncePerPage],
-      "no-restricted-syntax": ["error", parserStaysInside, layoutReads, submitterRebuilt],
+      "no-restricted-syntax": ["error", parserStaysInside, ...drawnMarkup, layoutReads, submitterRebuilt],
     },
   },
 ];

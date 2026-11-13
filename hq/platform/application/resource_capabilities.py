@@ -20,7 +20,7 @@ from hq.domains.control_plane.providers import (
     resource_home,
 )
 
-from .adoption import OBSERVES_ONLY, manages_through, observes_only as observes_through
+from .adoption import WriteGap, manages_through, observes_only as observes_through, write_gap
 from .routes import reverse
 lazy from . import resource_operations
 lazy from .capabilities import capability_words
@@ -72,6 +72,8 @@ class ResourceCapabilities:
     home: str
     offered: Offered
     removal_pending: bool = False
+    # Why its connection cannot make a change, and where that is set up; None when it can.
+    write_gap: WriteGap | None = None
 
     @property
     def removal_words(self) -> str:
@@ -154,15 +156,15 @@ def resource_capabilities(
         running = _running_verbs(resource) if LIFECYCLE_VERBS & policies.keys() else ()
 
     # A kind that acts through a connection acts only through one that manages.
-    observes_only = observes_through(resource.kind, resource.spec, manages)
+    gap = write_gap(resource.kind, resource.spec, manages)
 
     actions = {
-        verb: _allowed(verb, policy, resource, provider, removal_pending, observes_only)
+        verb: _allowed(verb, policy, resource, provider, removal_pending, gap)
         for verb, policy in policies.items()
         if verb != "delete" and policy.mode == "apply" and (verb not in LIFECYCLE_VERBS or verb in running)
     }
     _hold_out_of_reach_units(resource, actions)
-    removal, removal_reason = _removal(provider, policies, removal_pending, observes_only)
+    removal, removal_reason = _removal(provider, policies, removal_pending, gap is not None)
 
     return ResourceCapabilities(
         actions=actions,
@@ -173,16 +175,17 @@ def resource_capabilities(
         home=resource_home(resource),
         removal_pending=removal_pending,
         offered=_offered(resource, provider, removal, removal_pending=removal_pending),
+        write_gap=gap,
     )
 
 
-def _allowed(verb, policy, resource, provider, removal_pending, observes_only) -> Allowed:
+def _allowed(verb, policy, resource, provider, removal_pending, gap: WriteGap | None) -> Allowed:
     if removal_pending:
         return Allowed(enabled=False, reason="A removal is in progress.", automatic=policy.automatic)
     if not resource.enabled:
         return Allowed(enabled=False, reason="It is switched off in HQ.", automatic=policy.automatic)
-    if observes_only:
-        return Allowed(enabled=False, reason=OBSERVES_ONLY, automatic=policy.automatic)
+    if gap is not None:
+        return Allowed(enabled=False, reason=gap.reason, automatic=policy.automatic)
     if verb == "reconcile" and provider is not None and provider.public_effect and not public_dns_enabled():
         return Allowed(enabled=False, reason="Public DNS changes are off on this server.")
     if verb == "renew":

@@ -3,9 +3,10 @@
 A rule nothing renders is weight every page downloads and every edit reads.
 The stylesheet is the host's one shared bundle, and its users are the host's
 templates, scripts and Python, plus the extensions that style through it. The
-host cannot see an extension's templates, so a class an extension may write is
-admitted from the published contract (``hq_sdk.template_contract.CLASSES``)
-instead of by naming the extension.
+host cannot see an extension's templates, so a published class
+(``hq_sdk.template_contract.CLASSES``) is used when the host or the example
+extensions draw it, and a state that modifies one is the extensions' to draw.
+Publishing a class is no use of it: one nothing draws keeps its rules alive.
 """
 
 import re
@@ -21,7 +22,7 @@ from hq_sdk.template_contract import CLASSES
 from ..plugin_testing import selector_classes, stylesheet_selectors
 
 ROOT = Path(__file__).resolve().parents[4]
-USER_ROOTS = ("templates", "hq", "hq_sdk", "static/js")
+USER_ROOTS = ("templates", "hq", "hq_sdk", "static/js", "examples/extension/src", "tests/fixtures")
 # The contract lists the classes an extension may write; it is not a user.
 NOT_USERS = frozenset({"template_contract.py", "contract.json"})
 
@@ -53,14 +54,15 @@ def user_files(root: Path = ROOT) -> Iterable[Path]:
 
 def _admitted_by_contract(selectors: Iterable[str], public: Collection[str]) -> set[str]:
     """Classes that only modify a published one: ``.route-line.route-band-2``
-    styles a state of a primitive an extension draws, so the state is theirs."""
+    styles a state of a primitive an extension draws, so the state is theirs.
+    The published class itself is not admitted: something must draw it."""
 
-    admitted = set(public)
+    admitted: set[str] = set()
     for selector in selectors:
         for chain in re.findall(r"(?:\.[\w-]+)+", selector):
             names = selector_classes(chain)
             if any(name in public for name in names):
-                admitted.update(names)
+                admitted.update(name for name in names if name not in public)
     return admitted
 
 
@@ -68,7 +70,8 @@ def unused_style_classes(css: str, sources: Iterable[tuple[str, str]], public: C
     """Classes ``css`` defines that no ``(suffix, text)`` source uses.
 
     A class is used when it appears as a word in any source, or begins with a
-    prefix some source builds at render time. ``public`` classes are admitted."""
+    prefix some source builds at render time. A class that modifies a
+    ``public`` one is admitted."""
 
     selectors = stylesheet_selectors(css)
     defined = {name for selector in selectors for name in selector_classes(selector)}
@@ -83,6 +86,43 @@ def unused_style_classes(css: str, sources: Iterable[tuple[str, str]], public: C
     )
 
 
+# Published classes nothing draws, each to be deleted with its rules or drawn
+# by the example extension; this only falls.
+UNDRAWN = frozenset(
+    {
+        "card-columns",
+        "chart-card",
+        "danger-link",
+        "domain-charts",
+        "domain-head",
+        "domain-head-copy",
+        "domain-stack",
+        "field-row",
+        "figure-hero",
+        "figure-hero-note",
+        "figure-stats",
+        "finding-evidence",
+        "pie-chart",
+        "pie-row",
+        "print-footer",
+        "print-only",
+        "prose-list",
+        "route-band-1",
+        "route-band-2",
+        "route-band-3",
+        "route-band-4",
+        "route-band-5",
+        "route-frame",
+        "route-line",
+        "route-map",
+        "route-marker",
+        "route-scale",
+        "route-swatch",
+        "section-period",
+    }
+)
+
+
 @tag("source", "tree")
 class StylesheetUsageTests(SimpleTestCase):
     # Django renders a form's errors as ``<ul class="errorlist">`` itself.
@@ -90,14 +130,15 @@ class StylesheetUsageTests(SimpleTestCase):
 
     def test_every_class_the_stylesheet_defines_has_a_user(self) -> None:
         sources = [(path.suffix, path.read_text(encoding="utf-8")) for path in user_files()]
-        unused = unused_style_classes(stylesheet(), sources, set(CLASSES) | self.FRAMEWORK)
+        unused = set(unused_style_classes(stylesheet(), sources, set(CLASSES))) - self.FRAMEWORK
 
         self.assertEqual(
-            unused,
+            sorted(unused - UNDRAWN),
             [],
-            "The stylesheet defines classes nothing renders: delete their rules, or if an extension "
-            "needs one, add it to hq_sdk.template_contract.CLASSES.",
+            "The stylesheet defines classes nothing renders: delete their rules, and a published one's "
+            "hq_sdk.template_contract.CLASSES entry, or draw it in the example extension.",
         )
+        self.assertEqual(sorted(UNDRAWN - unused), [], "a class is drawn or gone: delete its UNDRAWN entry")
 
     def test_the_search_reaches_the_files_it_reads(self) -> None:
         suffixes = {path.suffix for path in user_files()}
@@ -109,12 +150,12 @@ class UnusedStyleClassTests(SimpleTestCase):
     CSS = ".used { color: red } .orphan { color: red } .tone-good, .tone-bad { color: red } .card.state { color: red }"
 
     def test_a_class_nothing_uses_is_reported(self) -> None:
-        sources = [(".html", '<p class="used tone-good">')]
+        sources = [(".html", '<p class="card used tone-good">')]
 
         self.assertEqual(unused_style_classes(self.CSS, sources, {"card"}), ["orphan", "tone-bad"])
 
     def test_a_family_built_at_render_time_is_used_through_its_prefix(self) -> None:
-        sources = [(".html", '<p class="used tone-{{ tone }}">')]
+        sources = [(".html", '<p class="card used tone-{{ tone }}">')]
 
         self.assertEqual(unused_style_classes(self.CSS, sources, {"card"}), ["orphan"])
 
@@ -123,6 +164,9 @@ class UnusedStyleClassTests(SimpleTestCase):
 
         self.assertIn("tone-good", unused_style_classes(self.CSS, sources, {"card"}))
 
-    def test_a_published_class_and_its_modifiers_are_admitted(self) -> None:
-        self.assertEqual(unused_style_classes(".card.state { color: red }", [], {"card"}), [])
+    def test_a_published_class_s_modifiers_are_admitted_and_it_needs_a_drawer(self) -> None:
+        self.assertEqual(unused_style_classes(".card.state { color: red }", [], {"card"}), ["card"])
+        self.assertEqual(
+            unused_style_classes(".card.state { color: red }", [(".html", '<p class="card">')], {"card"}), []
+        )
         self.assertEqual(unused_style_classes(".card.state { color: red }", [], set()), ["card", "state"])
