@@ -29,7 +29,7 @@ from .locate import host_of, split_endpoint
 from .naming import name_context
 from .projection import read_once
 from .published_sites import published_projects
-from .reach import UNKNOWN, Reach, is_documentation, reach_of
+from .reach import is_documentation
 from .service_declarations import Claim, declarations, runtime_claim
 from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, ServiceFacet
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
@@ -57,9 +57,6 @@ class Service:
     # Other names that reach this same service, folded in rather than listed
     # separately. See ``_aliases``.
     aliases: tuple[str, ...] = ()
-    # Who can open a connection to this name, derived from the addresses it
-    # resolves to. Not a declaration anybody makes: a consequence of one.
-    reach: Reach = UNKNOWN
     # ``(alias, claim)`` for the declarations that make those other names work.
     # Beside the service, never merged into its facets: merged, two CNAMEs read
     # as two records competing for one name.
@@ -255,7 +252,6 @@ def _service_catalog() -> tuple[Service, ...]:
         aliases,
         alias_claims,
         machines,
-        answers,
         routed,
         served_with,
     ) = declarations()
@@ -271,7 +267,6 @@ def _service_catalog() -> tuple[Service, ...]:
             origins.get(hostname, ""),
             tuple(by_target.get(hostname, ())),
             tuple(alias_claims.get(hostname, ())),
-            tuple(answers.get(hostname, ())),
             routed=hostname in routed,
             served_with=served_with.get(hostname, frozenset()),
         )
@@ -413,7 +408,6 @@ def prospects(hostnames: tuple[str, ...]) -> tuple[Service, ...]:
         aliases,
         alias_claims,
         machines,
-        answers,
         routed,
         served_with,
     ) = declarations()
@@ -426,7 +420,6 @@ def prospects(hostnames: tuple[str, ...]) -> tuple[Service, ...]:
             origins.get(name, ""),
             tuple(alias for alias, target in sorted(aliases.items()) if target == name),
             tuple(alias_claims.get(name, ())),
-            answers=tuple(answers.get(name, ())),
             routed=name in routed,
             served_with=served_with.get(name, frozenset()),
         )
@@ -522,7 +515,6 @@ def _assemble(
     origin_address: str,
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, Claim], ...] = (),
-    answers: tuple[str, ...] = (),
     *,
     routed: bool = True,
     served_with: frozenset[str] = frozenset(),
@@ -575,7 +567,6 @@ def _assemble(
         origin=origin,
         project=projects.get(hostname),
         faults=_faults(facets, origin, in_use, hostname),
-        reach=reach_of(answers),
     )
 
 

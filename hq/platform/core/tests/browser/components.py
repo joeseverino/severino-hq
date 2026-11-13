@@ -518,6 +518,32 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.page.mouse.move(0, 0)
         self.assertEqual((chosen(), shown(), ringed()), ([2], [2], []))
 
+    def test_about_text_opens_from_the_keyboard_and_gives_focus_back(self):
+        """The about button is reached by the key for every control, opens
+        its dialog with Enter and no script, and Escape closes it with focus
+        back on the button."""
+
+        self.pages = {
+            **self.pages,
+            "about-probe": probe(
+                render_to_string(
+                    "partials/_about.html",
+                    {"id": "example", "title": "Example notes", "body_template": "partials/_empty_state.html"},
+                )
+            ),
+        }
+        self.open("about-probe", WIDE)
+        dialog = self.page.locator(SELECTORS["dialog"])
+        focused_opener = "() => document.activeElement?.getAttribute('commandfor')"
+
+        self.page.keyboard.press(tab_key(self.browser))
+        self.assertEqual(self.page.evaluate(focused_opener), "modal-example")
+        self.page.keyboard.press("Enter")
+        self.assertTrue(dialog.evaluate("(dialog) => dialog.open"))
+        self.page.keyboard.press("Escape")
+        self.assertFalse(dialog.evaluate("(dialog) => dialog.open"))
+        self.assertEqual(self.page.evaluate(focused_opener), "modal-example")
+
     @with_script
     def test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to(self):
         """A row's Refresh that fails says its word in the row, which keeps

@@ -35,7 +35,7 @@ from hq.platform.core import append_only, seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.test_runner import stall_watch
 from hq.platform.core.tests import task
-from hq.platform.core.tests.browser import probes
+from hq.platform.core.tests.browser import catalog, probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
@@ -56,6 +56,7 @@ from hq.platform.core.tests.browser.shots import TALLEST, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
 from hq.platform.core.tests.browser.survey import AUDIT, palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
+from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
 from hq.platform.core.tests.look_records import EstatePages
 from hq.platform.core.tests.look_report import (
     Found,
@@ -652,14 +653,35 @@ def no_rule(rule: str) -> str:
     return f"{said} Rules: {', '.join(_rules())}"
 
 
+def _families(asked: tuple[str, ...]) -> list[str]:
+    """``asked`` with each name that begins catalog entries rather than naming
+    one (``part/notice``, ``table``) spelled out as those entries, in the
+    catalog's order."""
+
+    spelled = []
+    for name in asked:
+        family = [entry for entry in catalog.CATALOG if entry.startswith((f"{name}/", f"{name}-"))]
+        spelled += family if family and name not in catalog.CATALOG else [name]
+    return spelled
+
+
+def catalog_pages(asked) -> dict[str, str]:
+    """The catalog entries ``asked`` names, each drawn as the catalog's own
+    gate draws it, so a look and that gate never draw an entry apart."""
+
+    if not set(asked) & set(catalog.CATALOG):
+        return {}
+    return {name: page for name, page in catalog.CatalogLayoutTests.render().items() if name in asked}
+
+
 def _pages(asked: tuple[str, ...]) -> list[str]:
     """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out, an
     estate page by its name; one dev:look cannot draw is refused."""
 
-    gate = [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES]
+    gate = [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES, *catalog.CATALOG, *post_names()]
     try:
         with EstatePages(_asked().text("seed")) as records:
-            found = task.pages(asked, estate_pages(), gate, records)
+            found = task.pages(_families(asked), estate_pages(), gate, records)
     except task.PageRefused as refused:
         raise AssertionError(str(refused)) from None
     return [page if page in gate else estate_name(page) for page in found]
@@ -738,12 +760,14 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         pages = cls.asked
         estate = [estate_name(path) for path in navigation()]
         cls.addresses = {name: estate_path(name) for name in {*estate, *filter(is_estate, pages)}}
-        rendered = stress_pages(pages)
+        cls.addresses |= {name: posted(name).address() for name in filter(is_post, pages)}
+        rendered = stress_pages(pages) | catalog_pages(pages)
         if set(pages) & set(REFERENCE_PAGES):
             rendered |= render_reference()
         # Last: the stress estates are rolled back, the example estate is
         # committed, and both sign in as the same owner.
-        cls.estate_client = cls.serve_estate() if any(map(is_estate, pages)) else None
+        served = any(is_estate(name) or is_post(name) for name in pages)
+        cls.estate_client = cls.serve_estate() if served else None
         return rendered
 
     @classmethod
@@ -778,6 +802,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     # and an estate page can share an address (`projects`), so the address
     # alone cannot say whose it is.
     on_estate = False
+    # The named POST the next load of its address sends, set by ``open``.
+    sending: Posted | None = None
 
     @override
     def answer(self, route):
@@ -806,14 +832,20 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             for name, value in request.headers.items()
             if name not in _TRANSPORT
         }
-        # Marked as a guess, so a page that would act or reach out is refused,
-        # except where no browser guesses: a route that answers without a
-        # session is never prefetched, and a guess there is refused whole, so
-        # the page's own fetch of one (the reference's document) is sent as made.
-        if _guessable(parts.path):
-            headers["HTTP_SEC_PURPOSE"] = "prefetch"
         # A browser route cannot answer with a redirect, so it is followed here.
-        response = self.estate_client.get(address, secure=True, follow=True, **{**headers, **REQUEST})
+        sending = self.sending
+        if sending is not None and request.is_navigation_request() and address == sending.address():
+            # The page a named POST lands on: the form sent once, as its page sends it.
+            self.sending = None
+            response = sending.send(self.estate_client, **headers)
+        else:
+            # Marked as a guess, so a page that would act or reach out is refused,
+            # except where no browser guesses: a route that answers without a
+            # session is never prefetched, and a guess there is refused whole, so
+            # the page's own fetch of one (the reference's document) is sent as made.
+            if _guessable(parts.path):
+                headers["HTTP_SEC_PURPOSE"] = "prefetch"
+            response = self.estate_client.get(address, secure=True, follow=True, **{**headers, **REQUEST})
         self.answered[address] = (response.status_code, response.get("X-Speculation-Refused", ""))
         body = response.getvalue()
         # The event loop's own connection, closed rather than left to leak.
@@ -832,6 +864,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     @override
     def open(self, name, width):
         if is_estate(name):
+            self.visit(self.addresses[name], width)
+        elif is_post(name):
+            self.sending = posted(name)
             self.visit(self.addresses[name], width)
         else:
             self.on_estate = False
@@ -882,7 +917,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             printed = [f"Page by page: {REPORT}", *said, *printed]
             failed = [said[-1]] * rule_failed + failed
         # A page that did not answer was not looked at, here or at a base, so it fails either way.
-        unanswered = [f"{name} answered {status}, not 200" for name, status in self.unanswered_pages.items()]
+        unanswered = [
+            f"{name} answered {status}, not {posted(name).status if is_post(name) else 200}"
+            for name, status in self.unanswered_pages.items()
+        ]
         base = f", the base's in {_shown(this_run() / BASE_OUT)}/" if self.base is not None else ""
         shots = f"Screenshots in {_shown(this_run())}/{base}"
         if not self.shooting:
@@ -1138,9 +1176,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.open(name, width)
         except BrowserError as refused:
             return f"not a page ({str(refused).splitlines()[0]})"
-        if is_estate(name) and (said := self.answered.get(_address(self.page.url), (None, ""))) != (200, ""):
+        # A named POST's page is its refusal, so it answers that refusal's status.
+        expected = posted(name).status if is_post(name) else 200
+        served = is_estate(name) or is_post(name)
+        if served and (said := self.answered.get(_address(self.page.url), (None, ""))) != (expected, ""):
             status, refusal = said
-            if status != 200:
+            if status != expected:
                 self.unanswered_pages[name] = status
             return f"answered {status}{f', refused as a guess ({refusal})' if refusal else ''}, not looked at"
         if not self.page.locator("main").count():

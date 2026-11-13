@@ -67,7 +67,7 @@ value under its name (`record.summary`), so the two still read as two.
       </tr>
     </thead>
     <tbody>
-      {% if policy %}{% row_group "Records that send traffic" routing|length %}{% endif %}
+      {% if policy %}{% row_group "Routing records" routing|length %}{% endif %}
       {% for record in routing %}
         {% partial record_row %}
       {% empty %}
@@ -78,7 +78,7 @@ value under its name (`record.summary`), so the two still read as two.
     </tbody>
     {% if policy %}
       <tbody>
-        {% row_group "Policy and verification records" policy|length folds="zone-policy-records" %}
+        {% row_group "Policy records" policy|length folds="zone-policy-records" %}
         {% for record in policy %}
           {% with folded="zone-policy-records" %}{% partial record_row %}{% endwith %}
         {% endfor %}

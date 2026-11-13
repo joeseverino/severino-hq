@@ -53,9 +53,9 @@ declaration's machinery: the controller's actions are the buttons above, and
       <h3>Names</h3>
       <p>{% for domain in resolved_spec.domains %}<span class="tag">{{ domain|breakable }}</span>{% endfor %}</p>
     {% endsection %}
-    {% section "Where it is installed" %}
+    {% section "Installed on" %}
       {% if display_consumers %}
-      {% table_region "Where it is installed" %}
+      {% table_region "Installed on" %}
       <table class="data-table compact-table">
         <thead><tr>{% table_heading "Place" "identifier" gutter=True local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
         <tbody>
@@ -81,7 +81,7 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% endcomment %}
       {% if resource.status.unreachable_consumers %}
         <details class="operation-evidence" open>
-          <summary>{{ resource.status.unreachable_consumers|length }} could not be checked</summary>
+          <summary>{{ resource.status.unreachable_consumers|length }} unchecked</summary>
           <ul>
             {% for item in resource.status.unreachable_consumers %}
               <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
@@ -108,7 +108,7 @@ stretches across the page.
   The certificate keeps its own section above: renewal, topology and consumers
   are machinery, not a description, and no readout expresses them.
   {% endcomment %}
-  {% comment %}A running container says all of this in its Upgrade and How it runs sections.{% endcomment %}
+  {% comment %}A running container says all of this in its Upgrade and Runtime sections.{% endcomment %}
   {% if not container.item and not resolved_spec and not resolution_error %}
   {% section label %}
     {% include "control_plane/_record_says.html" %}
@@ -273,7 +273,7 @@ one thing worth doing then is reading what it was. The certificate's link only w
 saying a thing cannot be done yet is a status report filed in the wrong place.
 {% endcomment %}
 <p class="muted">
-  <a class="subtle-link" href="{% url 'core:audit_list' %}?about={{ resource.key|urlencode }}">Everything that happened to it</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download this record (JSON)</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+  <a class="subtle-link" href="{% url 'core:audit_list' %}?about={{ resource.key|urlencode }}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
   {% endif %}
 </p>
 
@@ -285,7 +285,7 @@ above it found is not a row.
 {% section "History" %}
 {% table_region "History" %}
   <table class="data-table">
-    <thead><tr>{% table_heading "What" gutter=True local_sort=True %}{% table_heading "Result" local_sort=True %}{% table_heading "By" drop=1 local_sort=True %}{% table_heading "When" "status" local_sort=True %}</tr></thead>
+    <thead><tr>{% table_heading "Action" gutter=True local_sort=True %}{% table_heading "Result" local_sort=True %}{% table_heading "By" drop=1 local_sort=True %}{% table_heading "Time" "status" local_sort=True %}</tr></thead>
     <tbody>
       {% for operation in operations %}
         <tr>

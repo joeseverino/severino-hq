@@ -83,12 +83,13 @@ by inheritance, so nobody has to remember it.
 
 **Size to content, fit the window.** Layouts are intrinsic: grids fit as many
 columns as their content allows (`repeat(auto-fit, minmax(min(100%, X), 1fr))`),
-rows wrap (`flex-wrap` with a basis), text wraps by measure. When a component
+rows wrap (`flex-wrap` with a basis), text wraps at its box's edge. When a component
 must change shape, it asks its own container (`@container`), not the screen,
 so it reads the same in a narrow card as on a phone. A viewport breakpoint is
 for what the viewport decides (the header, a full-screen modal) and says why
-in a comment. Content uses the window up to `--content-max`; prose keeps
-`--measure`. Never make an element holding buttons a size container: Chrome
+in a comment. Content uses the window up to `--content-max`; prose fills the
+card or section it sits in: no text stops at a reading measure (`lint:css`
+refuses a measure token and a width cap in `ch`). Never make an element holding buttons a size container: Chrome
 restyles its contents once the container is measured and runs their
 transitions from nothing, so every button fades in on load.
 *Gates:* the overflow sweep at a phone's width (402), 820 and 1360
@@ -611,6 +612,15 @@ toggle, with its count beside it; never a separate "Show all". What it holds
 sits on a panel like its neighbors: a fold of one table has the table's
 region, and any other fold is a folded `{% section %}`, its body in the
 section's frame (the survey's "bare folds").
+
+**About text opens in a dialog.** Long reference text a page explains itself
+with (a server's instructions to its clients, a reading's method) sits behind
+`partials/_about.html`: an info button that opens it in the shared dialog
+through the platform's `command="show-modal"` invoker, with no script. It is
+never content the page's job depends on, which stays on the page. It goes in a
+section's body or a head's aside, never in a fold's summary: a button inside
+the summary is a control nested in the toggle, whose role a screen reader
+loses. Host-only, as the dialog it opens is.
 
 **One filter bar.** `.filter-bar`: a search field, selects, Apply, and Clear
 when anything is set. No chip walls.

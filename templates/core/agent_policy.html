@@ -88,7 +88,7 @@ it is not blocked, since removal never lifts a block.
                 {% with streams=standing.streams %}{% if streams.open and not streams.full %}<p data-streams="open">Holding {{ streams.open|counted:"connection" }} open for live updates ({{ streams.cap|breakable }} allowed).</p>{% endif %}{% endwith %}
                 {% if standing.in_force %}<p>Permissions: {% for name in standing.in_force %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
-                {% if standing.missing %}<p data-missing>Not granted by its last sign-in, though HQ offers {% if standing.missing|length == 1 %}it{% else %}them{% endif %}: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again: a sign-in that asks for every permission HQ offers is refused until then. {% entity client_setup|outside label="Setting up a client" %}</p>{% endif %}
+                {% if standing.missing %}<p data-missing>Not granted by its last sign-in, though HQ offers {% if standing.missing|length == 1 %}it{% else %}them{% endif %}: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again: a sign-in that asks for every permission HQ offers is refused until then. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
                 {% if activity.latest %}
                   <ul class="agent-events prose" data-label="Latest">
                     {% for event in activity.latest %}
@@ -142,7 +142,7 @@ this links to it only for how a provider's permission list is written.
   <ol class="step-list">
     <li><span class="band-icon">{% include "partials/_icon.html" with name="card" %}</span><span><strong>Public client</strong> <span class="muted">Register one client per agent in your sign-in service, signing in with the authorization code and PKCE, and no client secret. Its client id is the agent's name here and in the audit log.</span></span></li>
     <li><span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span><span><strong>Who signs in</strong> <span class="muted">Set its allowed user groups: the sign-in service refuses anyone else before HQ sees a token. An agent acts for the person who signed it in, within their role.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="lock" %}</span><span><strong>Permissions</strong> <span class="muted">Give the client all {{ offered|counted:"permission" }} HQ offers an agent, delegated by a signed-in person. A sign-in asks for every one, and a sign-in service that has not granted one refuses it. Narrow what each agent does with the rules below, which take effect at once. {% entity client_setup|outside label="Setting up a client" %}</span></span></li>
+    <li><span class="band-icon">{% include "partials/_icon.html" with name="lock" %}</span><span><strong>Permissions</strong> <span class="muted">Give the client all {{ offered|counted:"permission" }} HQ offers an agent, delegated by a signed-in person. A sign-in asks for every one, and a sign-in service that has not granted one refuses it. Narrow what each agent does with the rules below, which take effect at once. {% entity client_setup|outside label="Client setup" %}</span></span></li>
     <li><span class="band-icon">{% include "partials/_icon.html" with name="clock" %}</span><span><strong>Token life</strong> <span class="muted">Set its access token life to about an hour: a permission taken away there ends at the agent's next refresh.</span></span></li>
     <li><span class="band-icon">{% include "partials/_icon.html" with name="laptop" %}</span><span><strong>First sign-in</strong> <span class="muted">Sign it in once in a browser. It appears under Agents above, and its first call from each tailnet device waits for that device's approval here.</span></span></li>
     <li><span class="band-icon">{% include "partials/_icon.html" with name="server" %}</span><span><strong>Unattended agents</strong> <span class="muted">An agent that runs unattended signs in as itself with its sign-in service's federated client assertion, a token its platform signs, so it keeps no stored secret. Grant it, as its own, only the permissions its work needs.</span></span></li>
@@ -261,7 +261,7 @@ change. Asked for when opened: asking takes the server's SDK into the process.
       <dt>Sign-in</dt><dd>{% outside_link url=endpoint.sign_in %}{{ endpoint.sign_in|breakable }}{% endoutside_link %}</dd>
       <dt>Protocol</dt><dd><code>{{ endpoint.protocol|breakable }}</code></dd>
     </dl>
-    {% if endpoint.told %}<div class="mcp-instructions">{% for paragraph in endpoint.told %}<p>{{ paragraph|code_spans }}</p>{% endfor %}</div>{% endif %}
+    {% if endpoint.told %}{% include "partials/_about.html" with id="mcp-told" title="Agent instructions" lede="Sent by the MCP server before an agent's first call." body_template="core/_mcp_told.html" %}{% endif %}
     {% table_region "MCP server" %}
       <table class="data-table">
         <thead>
@@ -309,7 +309,7 @@ posts only the changed rules, and a rule not posted is left as it holds.
 {% endcomment %}
 {% partialdef every_rule %}
 <div id="every-rule">
-  {% include "core/_policy_table.html" with groups=default_groups label="Actions at the default" %}
+  {% include "core/_policy_table.html" with groups=default_groups label="Defaults" %}
 </div>
 {% endpartialdef %}
 <form method="post" class="policy" data-submit-busy data-submit-label="Working…">
@@ -320,7 +320,7 @@ posts only the changed rules, and a rule not posted is left as it holds.
     {% endsection %}
   {% endif %}
   {% if default_groups %}
-    {% section "Actions at the default" count=default_count fold=True id="every-action" open=every_read %}
+    {% section "Defaults" count=default_count fold=True id="every-action" open=every_read %}
       {% if every_read %}
         {% partial every_rule %}
       {% else %}

@@ -718,7 +718,7 @@ ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-det
 IDENTIFIER_TABLES = """{% load value_tags %}
 {% table_region "Steps" %}<table class="data-table"><thead><tr>
 {% table_heading "Step" gutter=True %}{% table_heading "Name" "identifier" %}{% table_heading "State" "status" %}
-{% table_heading "Since" drop=3 %}{% table_heading "If it breaks" drop=2 %}{% table_heading "Read from" drop=1 %}</tr></thead><tbody>
+{% table_heading "Since" drop=3 %}{% table_heading "Impact" drop=2 %}{% table_heading "Read from" drop=1 %}</tr></thead><tbody>
 <tr><td>Proxy host</td><td><a href="/proxy/" data-entity="Proxy host">{{ address|breakable }}</a></td>
 <td><span class="pill">Up</span></td><td>1 day</td><td>If it is removed, the name stops reaching the app it serves.</td>
 <td>Read from the proxy's own list of hosts, a minute ago</td></tr>
@@ -727,7 +727,7 @@ IDENTIFIER_TABLES = """{% load value_tags %}
 <tr><td>Service</td><td><span data-entity="Service">{{ host|breakable }}</span></td><td></td><td>1 day</td>
 <td>The service stops answering at this name.</td><td>Declared in HQ</td></tr>
 </tbody></table>{% endtable_region %}
-{% table_region "Who is allowed" %}<table class="data-table"><thead><tr>
+{% table_region "Access" %}<table class="data-table"><thead><tr>
 {% table_heading "Access list" gutter=True %}{% table_heading "Admits by" drop=3 %}
 {% table_heading "Addresses" drop=2 %}{% table_heading "Logins" drop=1 %}</tr></thead><tbody>
 <tr><td>office only</td><td>Address rules</td><td>{{ networks|breakable }}</td><td>{{ logins|breakable }}</td></tr>

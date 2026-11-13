@@ -111,7 +111,7 @@ VIEWS = {
             "HQ",
             (
                 "HQ itself: its release, where it runs, its jobs and its open problems. "
-                "system_health says whether it answers; the status-brief prompt is a brief of both."
+                "`system_health` says whether it answers; the `status-brief` prompt is a brief of both."
             ),
             hq_itself,
             READS,

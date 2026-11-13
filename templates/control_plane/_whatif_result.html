@@ -14,7 +14,7 @@ The answer to the policy test. The tailnet page answers it alone as its
     to a line of policy is one they have to take on faith, and the next thing
     they want is to go and change it.
     {% endcomment %}
-    {% table_region "Rules that decide it" %}
+    {% table_region "Matching rules" %}
     <table class="data-table compact-table">
       <thead><tr>{% table_heading "Rule" "status" %}{% table_heading "Admits" "identifier" %}{% table_heading "To" "identifier" %}</tr></thead>
       <tbody>
@@ -50,7 +50,7 @@ The answer to the policy test. The tailnet page answers it alone as its
       </tbody>
     </table>
     {% endtable_region %}
-    <p><a class="btn" href="{{ policy_edit_url }}">Open the policy editor{% arrow %}</a></p>
+    <p><a class="btn" href="{{ policy_edit_url }}">Edit policy{% arrow %}</a></p>
   {% endif %}
 {% endif %}
 </div>

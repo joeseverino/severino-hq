@@ -339,7 +339,7 @@
                 "title": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
                 "workflow": {
                   "id": "resolve:claim:727c884d159f86c2",
-                  "label": "What to do",
+                  "label": "Next steps",
                   "outcome": {
                     "claim_id": "claim:727c884d159f86c2",
                     "kind": "claim_absent",
@@ -2704,7 +2704,7 @@
                     "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
                     "workflow": {
                       "id": "resolve:claim:5bec129f1d278ff4",
-                      "label": "What to do",
+                      "label": "Next steps",
                       "outcome": {
                         "claim_id": "claim:5bec129f1d278ff4",
                         "kind": "claim_absent",
@@ -18139,7 +18139,7 @@
             "type": "string"
           },
           "label": {
-            "description": "The plan's heading, such as `What to do`.",
+            "description": "The plan's heading, such as `Next steps`.",
             "type": "string"
           },
           "outcome": {

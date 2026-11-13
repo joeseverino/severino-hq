@@ -340,7 +340,7 @@ CORE_CAPABILITY_SPECS = (
         label="Remove a record",
         verb=OperationRequest.Action.DELETE.label,
         # A record HQ only watches is forgotten, and nothing live is touched.
-        variants=(("forget", "Stop tracking in HQ"),),
+        variants=(("forget", "Stop tracking"),),
     ),
     *(
         CapabilitySpec(
@@ -429,7 +429,7 @@ CORE_CAPABILITY_SPECS = (
             "Change the Tailscale policy. A person approves the change before anything reaches the tailnet.",
         ),
         label="Allow a blocked Tailscale connection",
-        verb="Allow in the tailnet policy",
+        verb="Allow in policy",
         wants="allow the connections Tailscale blocks for {target}",
     ),
     CapabilitySpec(
@@ -539,9 +539,9 @@ CORE_CAPABILITY_SPECS = (
         target_query=(("kind", MACHINE_KIND),),
         execution_notes=("Refuse a record that is not an enabled machine.",),
         label="Show a machine on the dashboard",
-        verb="Show on the dashboard",
+        verb="Show on dashboard",
         wants="show {target} on the dashboard",
-        variants=(("on", "Show on the dashboard"), ("off", "Take off the dashboard")),
+        variants=(("on", "Show on dashboard"), ("off", "Remove from dashboard")),
         state=dashboard_machine_selected,
     ),
     # A person's decision on a change a credential asked for. Held only in the

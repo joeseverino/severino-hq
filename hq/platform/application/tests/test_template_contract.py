@@ -287,7 +287,7 @@ class PageDialogTests(SimpleTestCase):
         self.assertIn('href="/example/import/" data-modal-open="import"', html)
 
     def test_a_dialog_the_host_draws_elsewhere_is_only_opened(self):
-        html = self.render(PageAction("How I am connected", "/connection/", modal="connection"))
+        html = self.render(PageAction("Your connection", "/connection/", modal="connection"))
 
         self.assertIn('data-modal-open="connection"', html)
         self.assertNotIn('id="modal-connection"', html)

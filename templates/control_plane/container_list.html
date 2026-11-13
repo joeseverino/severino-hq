@@ -22,7 +22,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
       <strong>{% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.running %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date|breakable }} of {{ tally.running|breakable }} up to date{% else %}Unknown{% endif %}</strong>
       <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|breakable }} up to date{% if tally.update_unknown and tally.up_to_date != tally.running %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.running %}{{ tally.update_unknown|breakable }} unknown{% endif %}{% if tally.update_available and tally.up_to_date or tally.update_unknown and tally.up_to_date != tally.running %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
     {% endband_fact %}
-    {% band_fact icon="lock" label="Locked to an exact build" tone=tally.pinned_tone %}
+    {% band_fact icon="lock" label="Pinned" tone=tally.pinned_tone %}
       <strong>{{ tally.pinned|breakable }} of {{ tally.running|breakable }}</strong>
       <small>{% if tally.pinned == tally.running %}None change on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
     {% endband_fact %}
@@ -73,8 +73,8 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
     {% endsection %}
   {% endfor %}
 
-  {% section "Every container" count=containers|length %}
-  {% table_region "Every container" %}
+  {% section "All containers" count=containers|length %}
+  {% table_region "All containers" %}
     <table class="data-table">
       <thead>
         <tr>

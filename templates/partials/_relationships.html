@@ -54,7 +54,7 @@
     {% endfor %}
   </dl>
   {% partial rest %}
-{% aside %}{% if relationships.focus_url and not topology_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">See on the map</a>{% endif %}
+{% aside %}{% if relationships.focus_url and not topology_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">View on map</a>{% endif %}
 {% endsection %}
 {% elif relationships %}
 {% card element="div" %}{% partial rest %}{% endcard %}

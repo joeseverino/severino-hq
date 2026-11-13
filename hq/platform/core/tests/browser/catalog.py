@@ -182,6 +182,13 @@ CATALOG = {
         '{% aside %}<span class="pill pill-neutral">Example state</span>'
         ' <a class="btn ghost compact" href="/example/">Example action</a>{% endsection %}'
     ),
+    # Reference text behind an info button in a section's body (partials/_about.html).
+    "part/about": Entry(
+        '{% section "Example endpoint" %}<p>An example line of prose in the frame.</p>'
+        '{% include "partials/_about.html" with id="example-about" title="Example notes"'
+        ' lede="An example lede, the line under the dialog\'s title." body_template="partials/_empty_state.html"'
+        ' message="An example paragraph of reference text." %}{% endsection %}'
+    ),
     "part/section-empty": Entry(
         '{% section "Example agents" count=0 %}{% empty %}No example agent has connected yet.{% endsection %}'
     ),

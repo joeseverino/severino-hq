@@ -50,16 +50,26 @@ const cutText = {
   "text-overflow": ["/./"],
   "/^(-webkit-)?line-clamp$/": ["/./"],
 };
-const cutsText = (property) => Object.keys(cutText).some((key) => new RegExp(key.slice(1, -1)).test(property));
-// One list holds every disallowed value, so its message tells a cut from the
-// rest by its property.
+const matches = (keys, property) => Object.keys(keys).some((key) => new RegExp(key.slice(1, -1)).test(property));
+// Prose fills the card or section it sits in, so no text stops at a reading
+// measure: no measure token, and no cap in characters, the unit a measure is
+// written in. A cap that sizes a box other than prose (a centered notice, a
+// control) says why in a disable comment.
+const readingMeasure = {
+  "/^--([\\w-]*-)?measure(-[\\w-]*)?$/": ["/./"],
+  "/^max-(width|inline-size)$/": ["/(?<![-\\w.])[\\d.]+ch\\b/"],
+};
+// One list holds every disallowed value, so its message tells a cut and a
+// measure from the rest by its property.
 const disallowedValues = (keys) => [
   keys,
   {
     message: (property, value) =>
-      cutsText(property)
+      matches(cutText, property)
         ? `"${property}: ${value}" cuts text outside cuts.css: move the whole rule to static/css/app/cuts.css, since a selector is styled in one sheet (test_a_selector_is_styled_in_one_place); a box that clips something other than text says why in a disable comment`
-        : `Disallowed value "${value}" for property "${property}"`,
+        : matches(readingMeasure, property)
+          ? `"${property}: ${value}" stops text at a reading measure: prose fills the card or section it sits in (docs/Design.md); a cap that sizes something other than prose says why in a disable comment`
+          : `Disallowed value "${value}" for property "${property}"`,
   },
 ];
 
@@ -227,6 +237,7 @@ export default {
       ...systemColor,
       ...unspokenContent,
       ...cutText,
+      ...readingMeasure,
     }),
     // A face that arrives late and is swapped in moves every line it sets, so
     // each is shown only if it is ready for the first paint. Its file is
@@ -259,14 +270,14 @@ export default {
         "color-no-hex": null,
         "color-named": null,
         "function-disallowed-list": null,
-        "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText }),
+        "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...unspokenContent, ...cutText, ...readingMeasure }),
       },
     },
     {
       // The one sheet that cuts text.
       files: [cuts],
       rules: {
-        "declaration-property-value-disallowed-list": { ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent },
+        "declaration-property-value-disallowed-list": disallowedValues({ ...literalFontSize, ...spacingLiteral, ...systemColor, ...unspokenContent, ...readingMeasure }),
       },
     },
     {
@@ -282,6 +293,7 @@ export default {
           ...systemColor,
           ...unspokenContent,
           ...cutText,
+          ...readingMeasure,
         }),
         // Its classes are the vendored viewer's markup (`.section-header`),
         // which HQ's primitives do not draw.

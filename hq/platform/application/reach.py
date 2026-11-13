@@ -84,9 +84,23 @@ def is_documentation(address: str) -> bool:
     return any(found in network for network in DOCUMENTATION)
 
 
+# What each network is called, wherever HQ names one: a path's step, how a
+# request arrived, and the audiences below, which are built from these nouns.
+NETWORKS = {
+    "tailnet": "Tailnet",
+    "network": "Home network",
+    "loopback": "Loopback",
+    "public": "Internet",
+}
+
+
 @dataclass(frozen=True, slots=True)
 class Reach:
-    """Who can open a connection to a name, and what said so."""
+    """Who can open a connection to a name, and what said so.
+
+    The one wording of an audience: the service page's header, its path and
+    the exposure tables all say a name's reach with these labels.
+    """
 
     id: str
     label: str
@@ -99,20 +113,22 @@ class Reach:
 
 TAILNET_ONLY = Reach(
     "tailnet",
-    "Tailnet only",
+    f"{NETWORKS['tailnet']} only",
     "It answers with a tailnet address, so only tailnet devices can connect.",
 )
 LOCAL_NETWORK = Reach(
     "network",
-    "Home network and tailnet",
+    f"{NETWORKS['network']} and {NETWORKS['tailnet'].lower()}",
     "It answers with a private address, so anything on your home network can reach it, on the tailnet or not.",
 )
 PUBLIC = Reach(
     "public",
-    "Internet",
+    NETWORKS["public"],
     "It answers with a public address.",
 )
 UNKNOWN = Reach("unknown", "", "")
+# Widest audience first: the order a ranking compares.
+WIDEST_FIRST = (PUBLIC, LOCAL_NETWORK, TAILNET_ONLY, UNKNOWN)
 
 
 def reach_of(answers: tuple[str, ...]) -> Reach:
@@ -123,11 +139,8 @@ def reach_of(answers: tuple[str, ...]) -> Reach:
     a boundary that is not there.
     """
 
-    found = [_classify(answer) for answer in answers]
-    for candidate in (PUBLIC, LOCAL_NETWORK, TAILNET_ONLY):
-        if candidate in found:
-            return candidate
-    return UNKNOWN
+    found = {_classify(answer) for answer in answers}
+    return next(candidate for candidate in WIDEST_FIRST if candidate in found or candidate is UNKNOWN)
 
 
 # Where the kernel lists this host's IPv6 addresses, one per line:

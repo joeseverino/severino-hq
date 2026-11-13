@@ -59,7 +59,7 @@ is not a row, so an unchanged minute-by-minute result is one line.
 {% section "Recent changes" count=changes|length %}
 {% table_region "Recent changes" %}
   <table class="data-table">
-    <thead><tr>{% table_heading "What" "identifier" gutter=True local_sort=True %}{% table_heading "Change" drop=3 local_sort=True %}{% table_heading "Result" css="key-col" local_sort=True %}{% table_heading "By" drop=2 local_sort=True %}{% table_heading "When" "status" drop=1 local_sort=True %}</tr></thead>
+    <thead><tr>{% table_heading "Record" "identifier" gutter=True local_sort=True %}{% table_heading "Change" drop=3 local_sort=True %}{% table_heading "Result" css="key-col" local_sort=True %}{% table_heading "By" drop=2 local_sort=True %}{% table_heading "Time" "status" drop=1 local_sort=True %}</tr></thead>
     <tbody>
       {% for change in changes %}
         <tr>

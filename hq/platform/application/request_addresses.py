@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from hq.platform.core.network import split_host_port
 
+from .reach import NETWORKS
 from .request_channel import channel_of
 from .request_connection import Connection
 
@@ -35,11 +36,7 @@ def _address_row(value: str, source: str, *, current: bool = False) -> Address |
     return Address(
         value=text,
         kind=channel.id,
-        label={
-            "tailnet": "Tailnet",
-            "network": "Local network",
-            "loopback": "Loopback",
-        }.get(channel.id, "Public"),
+        label=NETWORKS.get(channel.id, NETWORKS["public"]),
         source=source,
         current=current,
     )

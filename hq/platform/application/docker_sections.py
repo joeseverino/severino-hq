@@ -104,7 +104,7 @@ def _networks(machine) -> ServiceSection | None:
         renders=(NETWORK_KIND,),
         folded=True,
         label="Networks",
-        columns=("Network", "Driver", "Subnet", "Containers on it"),
+        columns=("Network", "Driver", "Subnet", "Containers"),
         records=tuple(
             (
                 Cell(str(record.get("name", ""))),
@@ -140,7 +140,7 @@ def _data(machine) -> ServiceSection | None:
         id="docker-data",
         renders=(VOLUME_KIND,),
         folded=True,
-        label="Where data lives",
+        label="Storage",
         columns=("Mount", "Type", "On the machine", "Used by", "Project"),
         records=tuple(
             (

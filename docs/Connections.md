@@ -12,7 +12,7 @@ How a connection item works in general is in [Secrets](Secrets.md#connections).
 
 Your domains and their public DNS records.
 
-A custom API token in the Cloudflare dashboard, under My Profile, API Tokens, limited to your zones. [Where to make it](https://dash.cloudflare.com/profile/api-tokens)
+A custom API token in the Cloudflare dashboard, under My Profile, API Tokens, limited to your zones. [Setup page](https://dash.cloudflare.com/profile/api-tokens)
 
 Permissions, and no others:
 
@@ -34,7 +34,7 @@ Store it as an API Credential item:
 
 Every container on your machines, with its image, stack, volumes and networks.
 
-An access token in Portainer, under My account, Access tokens. [Where to make it](https://docs.portainer.io/api/access)
+An access token in Portainer, under My account, Access tokens. [Setup page](https://docs.portainer.io/api/access)
 
 This is the whole account: Portainer offers nothing narrower, so make it for HQ alone.
 
@@ -53,7 +53,7 @@ Store it as an API Credential item:
 
 Your tailnet's devices, who may reach what, and its DNS.
 
-An OAuth client in the Tailscale admin console, under Settings, Trust credentials. [Where to make it](https://tailscale.com/kb/1215/oauth-clients)
+An OAuth client in the Tailscale admin console, under Settings, Trust credentials. [Setup page](https://tailscale.com/kb/1215/oauth-clients)
 
 Permissions, and no others:
 
@@ -83,7 +83,7 @@ Store it as an API Credential item:
 
 Your proxy hosts, their certificates, and whom each one lets in.
 
-A user in Nginx Proxy Manager, under Users, allowed to manage proxy hosts and certificates. [Where to make it](https://nginxproxymanager.com/guide/)
+A user in Nginx Proxy Manager, under Users, allowed to manage proxy hosts and certificates. [Setup page](https://nginxproxymanager.com/guide/)
 
 This is the whole account: Nginx Proxy Manager offers nothing narrower, so make it for HQ alone.
 
@@ -103,7 +103,7 @@ Store it as a Login item:
 
 Your site's visits and contact-form messages, its tunnels, Access apps and Pages projects.
 
-A custom API token in the Cloudflare dashboard, under My Profile, API Tokens. [Where to make it](https://dash.cloudflare.com/profile/api-tokens)
+A custom API token in the Cloudflare dashboard, under My Profile, API Tokens. [Setup page](https://dash.cloudflare.com/profile/api-tokens)
 
 Permissions, and no others:
 
@@ -140,7 +140,7 @@ Store it as an API Credential item:
 
 Your internal DNS records, and which devices look up what.
 
-A login for AdGuard Home's web interface: the one made on first run, or another under users in AdGuardHome.yaml. [Where to make it](https://github.com/AdguardTeam/AdGuardHome/wiki/Configuration)
+A login for AdGuard Home's web interface: the one made on first run, or another under users in AdGuardHome.yaml. [Setup page](https://github.com/AdguardTeam/AdGuardHome/wiki/Configuration)
 
 This is the whole account: AdGuard Home offers nothing narrower, so make it for HQ alone.
 
@@ -160,7 +160,7 @@ Store it as a Login item:
 
 Repo checks on your repositories, and HQ's deploys waiting for your approval.
 
-A GitHub App on your account; mise run wire-github-app records its ID and stores its key. [Where to make it](https://github.com/settings/apps/new)
+A GitHub App on your account; mise run wire-github-app records its ID and stores its key. [Setup page](https://github.com/settings/apps/new)
 
 Permissions, and no others:
 
@@ -197,7 +197,7 @@ Store it as an item of any type:
 
 Caddy routes and certificates on your machines, and which of their ports answer.
 
-An SSH key made in 1Password, its public half in the machine's authorized_keys. [Where to make it](https://developer.1password.com/docs/ssh/manage-keys/)
+An SSH key made in 1Password, its public half in the machine's authorized_keys. [Setup page](https://developer.1password.com/docs/ssh/manage-keys/)
 
 This is the whole account: SSH offers nothing narrower, so make it for HQ alone.
 
@@ -220,7 +220,7 @@ Store it as an item of any type:
 
 Renewed certificates published to a vault, for machines that fetch their own.
 
-A 1Password service account that can write only to the vault certificates are published to. HQ reads its own secrets through Connect, not this. [Where to make it](https://developer.1password.com/docs/service-accounts/get-started/)
+A 1Password service account that can write only to the vault certificates are published to. HQ reads its own secrets through Connect, not this. [Setup page](https://developer.1password.com/docs/service-accounts/get-started/)
 
 Store it as an API Credential item:
 
@@ -236,7 +236,7 @@ Store it as an API Credential item:
 
 Certificates for the names you serve, issued and renewed.
 
-An account at an ACME certificate authority: its directory address and a contact email. [Where to make it](https://letsencrypt.org/docs/client-options/)
+An account at an ACME certificate authority: its directory address and a contact email. [Setup page](https://letsencrypt.org/docs/client-options/)
 
 This is the whole account: ACME certificate authority offers nothing narrower, so make it for HQ alone.
 

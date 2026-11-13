@@ -34,7 +34,7 @@ class TraceLinkTests(TestCase):
         context = self.page(lens="unobserved-resources", focus="resource:internal-name", direction="inbound").context
 
         self.assertEqual(context["topology_trace_focus"].id, "resource:internal-name")
-        self.assertEqual(context["topology_trace_label"], "What depends on this")
+        self.assertEqual(context["topology_trace_label"], "Dependents")
         self.assertFalse(context["topology_everything"])
         directions = [asks(link["url"]) for link in context["trace_direction_links"]]
         depths = [asks(link["url"]) for link in context["trace_depth_links"]]

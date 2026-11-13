@@ -103,6 +103,6 @@ class WorkflowPlan:
     __pydantic_config__ = _OWN_CONFIG
 
     id: Annotated[str, Describe("The plan's id, the same at every read of the problem it resolves.")]
-    label: Annotated[str, Describe("The plan's heading, such as `What to do`.")]
+    label: Annotated[str, Describe("The plan's heading, such as `Next steps`.")]
     steps: Annotated[tuple[WorkflowStep, ...], Describe("Its steps, in the order they are taken.")]
     outcome: WorkflowOutcome

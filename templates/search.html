@@ -71,7 +71,7 @@
       </li>
       {% endfor %}
     </ul>
-    <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search inside the messages{% arrow %}</a></p>
+    <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search messages{% arrow %}</a></p>
   {% endsection %}
   {% endif %}
 

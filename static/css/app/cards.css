@@ -185,8 +185,8 @@ a.kpi:hover { background: var(--surface-2); }
 /* What it means, then what to do, then the reason it cannot be done from
    here, then what can be pressed. */
 .attention-detail { margin: var(--space-3) 0 0; font-size: var(--text-sm); line-height: 1.65; color: var(--ink-2); overflow-wrap: anywhere; }
-.attention-advice { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
-.attention-reason { max-width: var(--measure); margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
+.attention-advice { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); overflow-wrap: anywhere; }
+.attention-reason { margin: var(--space-3) 0 0; font-size: var(--text-xs); line-height: 1.55; color: var(--muted); overflow-wrap: anywhere; }
 .attention-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-4); }
 .attention-actions form { margin: 0; }
 /* The pages that help look into it: quiet links, the topology's as icons. */
@@ -338,7 +338,7 @@ a.kpi:hover { background: var(--surface-2); }
 .resolution-workflow > li > .command:first-child { flex-basis: 100%; }
 ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .resolution-workflow li > strong { color: var(--ink); font-weight: 650; }
-.resolution-workflow li > p { max-width: var(--measure); margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
+.resolution-workflow li > p { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
 .resolution-fold { margin-top: var(--space-3); }
 .resolution-fold > summary { width: fit-content; max-width: 100%; color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
 

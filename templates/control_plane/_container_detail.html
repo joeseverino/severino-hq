@@ -16,7 +16,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
       <strong>{% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}</strong>
       {% if plan.fixes %}<span class="band-note">{% for advisory in plan.fixes|slice:":2" %}{% entity advisory.url|outside label=advisory.id %}{% if not forloop.last %} {% endif %}{% endfor %}</span>{% else %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
     {% endband_fact %}
-    {% band_fact icon="layers" label="Its data" tone=plan.data_tone %}
+    {% band_fact icon="layers" label="Data" tone=plan.data_tone %}
       <strong>{% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
       <small>{% for mount in plan.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
     {% endband_fact %}
@@ -71,13 +71,13 @@ standard, with what it uses beside its limits. Each said once; the band above ha
 {% endif %}
 
 {% if not plan and readiness %}
-{% section "When a new version comes out" id="upgrade" %}
+{% section "Upgrade" id="upgrade" %}
   <div class="fact-band upgrade-band readiness-band">
     {% band_fact icon="check-circle" label="Checked afterwards by" tone=readiness.verified_tone %}
       <strong>{% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
       <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not readiness.verified_by %}Add a health check to change that.{% endif %}{% endfor %}</small>
     {% endband_fact %}
-    {% band_fact icon="layers" label="Its data" %}
+    {% band_fact icon="layers" label="Data" %}
       <strong>{% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
       <small>{% for mount in readiness.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
     {% endband_fact %}
@@ -92,7 +92,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
 {% endif %}
 
 {% with chain=item.supply_chain standing=item.standing %}
-{% section "Where it came from" id="supply-chain" %}
+{% section "Source" id="supply-chain" %}
   {% include "partials/_standard_gaps.html" with posture=chain %}
   <dl class="github-facts container-facts boxed-facts">
     <div><dt>Built from</dt><dd class="prose">{% if standing.source|web_url %}{% entity standing.source|outside label=standing.upstream %} <span class="muted">{{ standing.source_known_by|breakable }}</span>{% elif edit_url %}<a href="{{ edit_url }}">Name its source repository</a><span class="muted">{% dot %}the image does not say</span>{% else %}<span class="muted">The image does not say.</span>{% endif %}</dd></div>
@@ -105,7 +105,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
 {% endwith %}
 
 {% with posture=item.posture %}
-{% section "How it runs" id="how-it-runs" %}
+{% section "Runtime" id="how-it-runs" %}
   {% include "partials/_standard_gaps.html" with posture=posture %}
   {% with patch=item.hardening %}{% if patch.any %}
   <div id="hardening" class="hardening-patch boxed-facts">

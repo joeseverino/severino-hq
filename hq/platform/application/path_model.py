@@ -16,13 +16,6 @@ from .labels import dotted, lower_first
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
 
-NETWORK_LABELS = {
-    "tailnet": "Tailnet",
-    "network": "Local network",
-    "loopback": "Loopback",
-    "public": "Internet",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class HopSource:

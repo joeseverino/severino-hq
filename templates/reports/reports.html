@@ -68,7 +68,7 @@ mostly empty card. A reading with nothing in it is not drawn.
   {% endif %}
 
   {% if docs_needing_review %}
-  {% section "Documents due for review" more_label="All" more_url=docs_needing_review_url %}
+  {% section "Due for review" more_label="All" more_url=docs_needing_review_url %}
     <ul class="list-rows">
       {% for link, reviewed in docs_needing_review %}
         <li><span class="row-main">{% entity link %}</span><span class="row-meta">{% if reviewed %}last reviewed {{ reviewed|when:"day" }}{% else %}never reviewed{% endif %}</span></li>

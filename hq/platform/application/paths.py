@@ -25,9 +25,9 @@ from .facts import Joined, Subject, readings, refusals_about, snapshots_of
 from .infrastructure import enabled_resources
 from .labels import dotted, lower_first
 from .locate import host_of, split_endpoint
-from .path_model import NETWORK_LABELS, Certificate, Hop, HopSource, Route, ServicePath, dns_label, pointing_at
+from .path_model import Certificate, Hop, HopSource, Route, ServicePath, dns_label, pointing_at
 from .projection import read_once
-from .reach import is_documentation, network_of
+from .reach import NETWORKS, is_documentation, network_of
 lazy from . import connections, request_path, services
 lazy from .containers import container_watchers, standing_of, started_at, up_for
 lazy from .expiry import days_until
@@ -511,7 +511,7 @@ def _from_answer(name: str, answer: str, *, fronted: bool, depth: int, edge: str
         return _alias(name, host, depth=depth)
     if is_documentation(host):
         return [_placeholder(name, host, fronted=fronted, edge=edge)]
-    hops = [Hop("network", NETWORK_LABELS.get(network, network), "", detail=host)]
+    hops = [Hop("network", NETWORKS.get(network, network), "", detail=host)]
     machine = _machine(host)
     if machine is None:
         hops.append(

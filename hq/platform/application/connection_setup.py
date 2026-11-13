@@ -168,7 +168,7 @@ def reference_markdown() -> str:
 
 
 def _reference_section(setup: ProviderSetup) -> str:
-    lines = ["", f"## {setup.label}", "", setup.gives, "", f"{setup.create} [Where to make it]({setup.create_url})", ""]
+    lines = ["", f"## {setup.label}", "", setup.gives, "", f"{setup.create} [Setup page]({setup.create_url})", ""]
     if setup.permissions:
         lines += ["Permissions, and no others:", "", *(f"- `{permission}`" for permission in setup.permissions), ""]
     elif setup.credential == "coarse":

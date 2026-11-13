@@ -347,7 +347,10 @@ says who it admits, worst first:
   meets the edge, or its answer is a public address.
 - **gated**: reachable from the internet, but a reading that `restricts` names
   it. HQ reads that the gate exists, not what its policy admits.
-- **private**: the answer is on the tailnet or the local network.
+- **private**: the answer is on the tailnet or the home network. A private
+  route says who it admits as its reach (`reach.Reach`): tailnet only, or the
+  home network and tailnet when any answer is a local address. That wording is
+  the one the service page's header, its path and the services list all show.
 - **unrouted**: nothing HQ reads routes a name to it.
 - **unknown**: nothing HQ saw routes to it, but HQ has not read every kind that
   could (`paths.reads_every_route`), or the container publishes ports and no
@@ -370,7 +373,7 @@ about (`exposure.status_at`):
 
 This applies to container advisories and container posture failures, and the
 item says which container is most exposed and how. Information stays off the
-action queue. The services list gives each name its reach in one word, with the
+action queue. The services list gives each name its reach in a few words, with the
 route as its title. A name open to the internet offers on its page the fix
 HQ can run: an access list on the proxy host it declares.
 
@@ -478,7 +481,7 @@ A declared container is a subject keyed by `contract.container_key`, so every
 Docker reading that names it (its networks, mounts, image, runtime and compose
 project) joins to it as it joins to its machine. The machine page's Docker
 bands (environment, compose projects, networks, where data lives, images) and
-the service page's "Who is allowed" band read the same joined records
+the service page's "Access" band read the same joined records
 (`hq/platform/application/docker_sections.py`,
 `hq/platform/application/npm_sections.py`).
 
@@ -495,7 +498,7 @@ Findings from these readings:
   (`hq/platform/application/certificate_expiry.py`).
 
 The machine, service, domain and declaration pages render the section, with
-"See on the map" (`?focus=<node>`), one "Not readable" line linking to the
+"View on map" (`?focus=<node>`), one "Not readable" line linking to the
 connections page, and each source's raw records under a disclosure.
 
 ## Links
@@ -855,7 +858,7 @@ manage; one that names none needs every connection of its kind's providers to
 manage. Anything else shows everywhere as observed and is never declared.
 
 "Stop managing" an adopted record stores a `NotManaged` row (kind, record
-token, who, when), and sweeps skip it. Managing it again ("Manage this domain",
+token, who, when), and sweeps skip it. Managing it again ("Manage domain",
 or adopting the record) clears the row. Both are audited.
 
 A deployment that relies on a sweep adopting sets `manages` to `1` on each

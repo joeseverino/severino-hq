@@ -313,9 +313,6 @@
   /* The page uses the window: content runs to the gutters up to this, and only
      a very wide monitor sees margins. */
   --content-max: 1600px;
-  /* A paragraph's measure, whatever the column: past about 80 characters a
-     line is hard to track back to the start of the next. */
-  --measure: 80ch;
   --font-h1: clamp(19px, 0.55vw + 17.2px, 22px);
   --font-h2: clamp(12px, 0.18vw + 11.4px, 13px);
   /* Two spacing steps, and only two. `--layout-gap` separates siblings inside a

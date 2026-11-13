@@ -16,7 +16,7 @@ lazy from hq.domains.control_plane.observations.host import PERIMETER_KIND
 from .facts import Subject, readings
 from .path_model import Route
 from .projection import read_once
-from .reach import network_of
+from .reach import LOCAL_NETWORK, PUBLIC, UNKNOWN as UNKNOWN_REACH, WIDEST_FIRST, Reach, network_of, reach_of
 lazy from . import paths
 lazy from .paths import path_to, routed_names
 
@@ -24,15 +24,16 @@ OPEN, GATED, PRIVATE, UNKNOWN, UNROUTED = "open", "gated", "private", "unknown",
 # Worst first: the order a page lists them and the index a ranking compares.
 # Unknown ranks next to open, because for all HQ knows it is open.
 LEVELS = (OPEN, UNKNOWN, GATED, PRIVATE, UNROUTED)
+# A private route names no audience here: it says its ``Reach``, the one
+# wording of who is inside, so a page's header and its path never disagree.
 LABELS = {
     OPEN: "Open to the internet",
     GATED: "Open to the internet, behind a login",
-    PRIVATE: "Tailnet or home network only",
     UNKNOWN: "Not known who can reach it",
     UNROUTED: "Not reachable",
 }
-# One word each, for a table column; the sentence says the rest.
-SHORT = {OPEN: "Internet", GATED: "Behind a login", PRIVATE: "Private", UNKNOWN: "Unknown", UNROUTED: "Not reachable"}
+# A few words each, for a table column; the sentence says the rest.
+SHORT = {OPEN: "Internet", GATED: "Internet, behind a login", UNKNOWN: "Unknown", UNROUTED: "Not reachable"}
 # What a serious problem becomes at each exposure. Unknown keeps it serious.
 _SERIOUS_AT = {
     OPEN: "serious",
@@ -54,6 +55,9 @@ class RouteExposure:
     level: str
     line: str
     via: str
+    # Who the route lets in: the internet for open and gated, the tailnet or
+    # the home network for private.
+    reach: Reach = UNKNOWN_REACH
     # The readings that gate the name: "Behind Access: Example app".
     gates: tuple[str, ...] = ()
     # Gates in front of some paths only, which leave the name as it was.
@@ -61,7 +65,17 @@ class RouteExposure:
 
     @property
     def label(self) -> str:
-        return LABELS[self.level]
+        return self.reach.label if self.level == PRIVATE else LABELS[self.level]
+
+    @property
+    def short(self) -> str:
+        return self.reach.label if self.level == PRIVATE else SHORT[self.level]
+
+    @property
+    def rank(self) -> tuple[int, int, str]:
+        """Worst first: the level, then within it the wider audience."""
+
+        return LEVELS.index(self.level), WIDEST_FIRST.index(self.reach), self.hostname
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,11 +95,20 @@ class Exposure:
 
     @property
     def label(self) -> str:
-        return LABELS[self.level]
+        worst = self.worst
+        return worst.label if worst is not None else LABELS[self.level]
 
     @property
     def short(self) -> str:
-        return SHORT[self.level]
+        worst = self.worst
+        return worst.short if worst is not None else SHORT[self.level]
+
+    @property
+    def reach(self) -> Reach:
+        """Who the worst route lets in; unknown when no route was walked."""
+
+        worst = self.worst
+        return worst.reach if worst is not None else UNKNOWN_REACH
 
     @property
     def worst(self) -> RouteExposure | None:
@@ -97,7 +120,7 @@ class Exposure:
 
         worst = self.worst
         if worst is None:
-            return LABELS[self.level]
+            return self.label
         gate = f" ({'; '.join(worst.gates)})" if worst.gates else ""
         partial = f"; login only at {', '.join(worst.path_gates)}" if worst.path_gates else ""
         return f"{worst.label} as {worst.hostname}{gate}{partial}"
@@ -175,10 +198,12 @@ def public_name(route: Route) -> bool:
     return bool(provider is not None and provider.public_effect)
 
 
-def route_level(hostname: str, route: Route) -> str:
-    """Open, gated or private: which networks this route admits a request from."""
+def route_reach(route: Route) -> Reach:
+    """Who this route admits a request from: the internet, or the widest
+    private network its answers are on."""
 
-    networks = {network_of(hop.detail) for hop in route.hops if hop.step == "network"}
+    answers = tuple(hop.detail for hop in route.hops if hop.step == "network")
+    networks = {network_of(answer) for answer in answers}
     through_edge = any(hop.step == "edge" for hop in route.hops)
     if "public" in networks or (through_edge and public_name(route)):
         reachable = True
@@ -188,7 +213,18 @@ def route_level(hostname: str, route: Route) -> str:
         # A public name whose answer HQ could not place: the internet can
         # resolve it, so it is not called private on a guess.
         reachable = public_name(route)
-    if not reachable:
+    if reachable:
+        return PUBLIC
+    # A name only a private resolver answers, at nothing HQ could place: the
+    # widest private audience, since the narrower one would be a guess.
+    found = reach_of(answers)
+    return LOCAL_NETWORK if found is UNKNOWN_REACH else found
+
+
+def route_level(hostname: str, route: Route) -> str:
+    """Open, gated or private: which networks this route admits a request from."""
+
+    if route_reach(route) is not PUBLIC:
         return PRIVATE
     return GATED if gates_of(hostname) else OPEN
 
@@ -210,18 +246,19 @@ def _exposure_of_name(name: str) -> Exposure:
                 level=level,
                 line=route.line,
                 via=route.via,
+                reach=route_reach(route),
                 gates=gates_of(name) if level == GATED else (),
                 path_gates=path_gates_of(name) if level == OPEN else (),
             )
         )
-    return Exposure(tuple(sorted(found, key=lambda item: LEVELS.index(item.level))))
+    return Exposure(tuple(sorted(found, key=lambda item: item.rank)))
 
 
 def exposure_of_names(hostnames: Iterable[str]) -> Exposure:
     """The worst-first routes over several names: what serves them all."""
 
     routes = [route for name in sorted(set(hostnames)) for route in exposure_of_name(name).routes]
-    return Exposure(tuple(sorted(routes, key=lambda item: (LEVELS.index(item.level), item.hostname))))
+    return Exposure(tuple(sorted(routes, key=lambda item: item.rank)))
 
 
 def publicly_answering(addresses: Iterable[str]) -> frozenset[int]:
@@ -306,6 +343,7 @@ def _exposure_of_container(item) -> Exposure:
             level=OPEN,
             line=f"Port {port} on {machine.name}",
             via="Published port",
+            reach=PUBLIC,
         )
         for port in ports
     )
@@ -313,7 +351,7 @@ def _exposure_of_container(item) -> Exposure:
     # container publishing ports, checked which answer from the internet.
     checked = not item.running.ports or bool(_perimeter_read(machine))
     return Exposure(
-        tuple(sorted((*direct, *named.routes), key=lambda route: LEVELS.index(route.level))),
+        tuple(sorted((*direct, *named.routes), key=lambda route: route.rank)),
         known=paths.reads_every_route() and checked,
     )
 

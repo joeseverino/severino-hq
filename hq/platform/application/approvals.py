@@ -797,7 +797,7 @@ def preview(held: ApprovalRequest) -> ChangePreview:
         return ChangePreview(label="", rows=(), lines=())
     live = held.baseline.get("observed")
     if isinstance(live, Mapping) and live:
-        return compare(dict(live), declared, label="The live record would change")
+        return compare(dict(live), declared, label="Live record changes")
     return compare({}, declared, label="Would be applied")
 
 

@@ -72,7 +72,7 @@ def for_machine(machine: Any, sections: Iterable[Any], *, principal: Principal) 
 
 def for_container(found: Relationships) -> Relationships:
     """Less what its band says (the machine, the image), "Answers for" the
-    names, and How it runs its compose file, mounts and how it is run."""
+    names, and Runtime names its compose file, mounts and how it is run."""
 
     shown = (OBSERVATIONS[kind] for kind in (IMAGE_KIND, RUNTIME_KIND, STACK_KIND, VOLUME_KIND))
     return found.without(

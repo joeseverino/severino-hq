@@ -195,7 +195,7 @@
 }
 .domain-head-copy { min-width: 0; }
 .domain-head-copy .eyebrow { display: block; margin-bottom: var(--space-2); }
-.domain-head-copy p { margin: var(--space-2) 0 0; max-width: 680px; }
+.domain-head-copy p { margin: var(--space-2) 0 0; }
 .domain-head > a { flex: 0 0 auto; }
 
 /* A domain's featured analysis: the chart and the calendar beside it. Two
@@ -534,7 +534,7 @@ td > .subtle-link:not(:only-child) { display: table; }
    what is missing and then what would fill it. Inside another frame the
    surface rule clears the card's frame and its inset. In the page's flow it
    is a frame like the others and spans its column, so it never reads as cut
-   short beside them; its line keeps the reading measure. */
+   short beside them, and its line fills it. */
 .empty.card {
   margin: 0 0 var(--stack-gap);
   padding: var(--surface-inset, var(--space-6) var(--space-8));
@@ -553,8 +553,7 @@ td > .subtle-link:not(:only-child) { display: table; }
   font-size: var(--text-md);
   text-align: center;
 }
-:is(main, main > :is([data-table-results], [data-search-results]):not(:has(~ :not(dialog)))) > .empty.card:not(:has(~ :not(dialog))) p { margin-inline: auto; }
-.empty p { margin: 0; max-width: var(--measure); }
+.empty p { margin: 0; }
 .empty .empty-cta { color: var(--accent-2); font-weight: 500; white-space: nowrap; }
 
 /* ── KV grid ────────────────────────────────────────────────────── */

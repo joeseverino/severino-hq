@@ -85,7 +85,7 @@ container's uptime and how the request came.
 {% section "Reached through" id="hq-reach" %}
   {% include "partials/_example_connection.html" with notice=True %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.reach|not_urgent only %}
-  {% include "control_plane/_path_hops.html" with route=found.route label="How this page reached you" %}
+  {% include "control_plane/_path_hops.html" with route=found.route label="Request path" %}
   {% for hop in found.findings %}<p class="notice notice-attention"><strong>{{ hop.label|breakable }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>{% endfor %}
 {% endsection %}
 {% endwith %}{% endif %}
@@ -121,7 +121,7 @@ row in the flow.
   {% if work.scheduled %}
     {% table_region "Scheduled work" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Scheduled work" local_sort=True gutter=True %}{% table_heading "How often" "status" css="optional-col" local_sort=True drop=2 %}{% table_heading "Recent runs" "status" local_sort=True drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=True %}{% table_heading "Next due" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
+        <thead><tr>{% table_heading "Scheduled work" local_sort=True gutter=True %}{% table_heading "Schedule" "status" css="optional-col" local_sort=True drop=2 %}{% table_heading "Recent runs" "status" local_sort=True drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=True %}{% table_heading "Next due" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
         <tbody>
           {% for item in work.scheduled %}
             <tr>

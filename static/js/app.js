@@ -221,12 +221,11 @@ document.addEventListener("click", (event) => {
   dialog.showModal();
 });
 
-document.querySelectorAll("dialog.modal").forEach((dialog) => {
-  // The dialog element is the backdrop's hit target; its content sits in an
-  // inner panel, so a click landing on the dialog itself was outside the panel.
-  dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) dialog.close();
-  });
+// The dialog element is the backdrop's hit target; its content sits in an
+// inner panel, so a click landing on the dialog itself was outside the panel.
+// Asked of the document, so a dialog a fragment brings in closes the same way.
+document.addEventListener("click", (event) => {
+  if (event.target instanceof HTMLDialogElement && event.target.matches("dialog.modal")) event.target.close();
 });
 
 // The command center is an operator palette over the same authorization-aware

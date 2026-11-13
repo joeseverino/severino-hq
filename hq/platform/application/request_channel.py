@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
-from .reach import network_of
+from .reach import NETWORKS, network_of
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,15 +26,15 @@ class Channel:
 
 TAILNET_CHANNEL = Channel(
     "tailnet",
-    "Tailnet",
+    NETWORKS["tailnet"],
     "This request came from an address only Tailscale issues, so it came over the tailnet.",
 )
 NETWORK_CHANNEL = Channel(
     "network",
-    "Local network",
+    NETWORKS["network"],
     "This request came from a private address on the network HQ is on.",
 )
-LOOPBACK_CHANNEL = Channel("loopback", "Loopback", "This request never left the machine HQ runs on.")
+LOOPBACK_CHANNEL = Channel("loopback", NETWORKS["loopback"], "This request never left the machine HQ runs on.")
 OPAQUE_CHANNEL = Channel(
     "opaque",
     "Address not passed through",

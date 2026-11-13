@@ -59,7 +59,7 @@ class ConnectionListView(PageMixin, TemplateView):
                     "Add a connection", reverse("control_plane:connections") + "#connection-setup-heading", primary=True
                 )
             )
-        actions.append(PageAction("How I am connected", inspect, modal="connection"))
+        actions.append(PageAction("Your connection", inspect, modal="connection"))
         read_all = found.read_all
         if read_all:
             actions.append(Ask(read_all.label, read_all.url, title=read_all.reason))

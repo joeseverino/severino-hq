@@ -3,6 +3,7 @@ calls from, the person's devices, and what an agent finds at the MCP endpoint,
 asked of the server only when opened."""
 
 import re
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -14,7 +15,7 @@ from django.utils import timezone
 from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
-from hq.platform.application.tests.markup import select, text, within
+from hq.platform.application.tests.markup import elements, select, text, within
 from hq.platform.application.tokens import DEVICE_SCOPE
 from hq.platform.core.audit import operation_context
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog, LinkedAccount, OwnDevice
@@ -421,3 +422,20 @@ class EndpointTests(TestCase):
             part = self.client.get(reverse("agent_policy"), **PART)
 
         self.assertIn("cannot connect", text(part))
+
+    def test_the_server_s_instructions_open_from_their_button_and_nowhere_else(self):
+        told = replace(ENDPOINT, instructions="Start with `hq://hq`.\n\nThen `example_next`.")
+        with mock.patch("hq.platform.mcp.listing.endpoint", return_value=told):
+            part = self.client.get(reverse("agent_policy"), **PART)
+
+        (opener,) = select(part, "command", "show-modal")
+        (dialog,) = select(part, "id", opener.attrs["commandfor"])
+        self.assertEqual((opener.tag, dialog.tag), ("button", "dialog"))
+        self.assertIn("aria-labelledby", dialog.attrs)
+        inside = within(part, "id", dialog.attrs["id"])
+        self.assertLessEqual(
+            {"hq://hq", "example_next"}, {element.words for element in inside if element.tag == "code"}
+        )
+        paragraphs = [element for element in elements(part, "p") if "example_next" in element.words]
+        self.assertTrue(paragraphs)
+        self.assertTrue(all(dialog in element.ancestors for element in paragraphs))

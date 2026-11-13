@@ -19,9 +19,9 @@ from hq.platform.application.labels import dotted
 from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
 from .entity_links import entity_link
-from .path_model import NETWORK_LABELS, Hop, HopSource, Route, ServicePath, last_machine
+from .path_model import Hop, HopSource, Route, ServicePath, last_machine
 from .paths import hq_path, why_unread
-from .reach import network_of
+from .reach import NETWORKS, network_of
 from .request_addresses import Address, addresses_of, addresses_of_hq
 from .request_channel import forwarded_chain
 from .request_connection import Connection, connection
@@ -377,7 +377,7 @@ def _device_check(found: Connection) -> HopCheck:
             )
         return HopCheck(
             UNPROVEN,
-            f"{found.address} is on the local network, and HQ has no reading that names the device at it.",
+            f"{found.address} is on the {NETWORKS['network'].lower()}, and HQ has no reading that names the device at it.",
         )
     return HopCheck(
         CONTRADICTED,
@@ -429,9 +429,9 @@ def _network(hop: Hop, context: _Context):
     # A caller off every private range arrived from the internet.
     arrived = {"elsewhere": "public"}.get(found.channel.id, found.channel.id)
     expected = network_of(hop.detail)
-    here = NETWORK_LABELS.get(expected, expected).lower()
+    here = NETWORKS.get(expected, expected).lower()
     evidence = (Evidence("Arrived from", found.address, found.channel.label),)
-    if arrived not in NETWORK_LABELS:
+    if arrived not in NETWORKS:
         return evidence, HopCheck(
             UNPROVEN, "HQ has no address for the caller, so it cannot tell which network the request used."
         )
@@ -441,7 +441,7 @@ def _network(hop: Hop, context: _Context):
             f"The name points to an address on the {here}, and this request "
             f"came from {found.address}, also on the {ended(here)}",
         )
-    came = NETWORK_LABELS[arrived].lower()
+    came = NETWORKS[arrived].lower()
     return evidence, HopCheck(
         CONTRADICTED,
         ended(

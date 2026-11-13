@@ -159,7 +159,7 @@ def recent_changes(keys: list[str], *, what: str, limit: int) -> ServiceSection 
     return ServiceSection(
         id="activity",
         label="Recent changes",
-        columns=(what, "Change", "When"),
+        columns=(what, "Change", "Time"),
         records=records,
     )
 
@@ -598,7 +598,7 @@ def missing_facets(service: Any) -> list[Any]:
 def service_badges(service: Any, *, own: bool) -> tuple[Any, ...]:
     """Beside the hostname: who can reach it, and whether HQ may change it."""
 
-    reach = service.reach
+    reach = service.exposure.reach
     found = []
     if reach.label:
         found.append(PageBadge(reach.label, "reachable" if reach.tailnet_only else "unprobed", reach.detail))

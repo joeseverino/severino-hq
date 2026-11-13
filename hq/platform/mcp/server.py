@@ -49,47 +49,47 @@ RETRY_AFTER = "retry_after"
 INSTRUCTIONS = "\n\n".join(
     (
         (
-            "Typed access to Severino HQ's live operational records. describe_resources names what "
-            "list_resource and get_resource read; describe_capabilities, narrowed by name or resource, "
-            "names what execute_capability runs."
+            "Typed access to Severino HQ's live operational records. `describe_resources` names what "
+            "`list_resource` and `get_resource` read; `describe_capabilities`, narrowed by name or resource, "
+            "names what `execute_capability` runs."
         ),
         (
-            "An answer is JSON. A refusal has ok: false and error.code; a held change is not one. A field "
-            "a success leaves out holds its default, as the tool's outputSchema states it: empty text, false, "
+            "An answer is JSON. A refusal has `ok: false` and `error.code`; a held change is not one. A field "
+            "a success leaves out holds its default, as the tool's `outputSchema` states it: empty text, false, "
             "null, or an empty list or object."
         ),
         (
-            'A change run through execute_capability may answer status: "awaiting_approval": nothing was '
+            'A change run through `execute_capability` may answer `status: "awaiting_approval"`: nothing was '
             "written, a person decides it in HQ's web interface, and repeating the call returns the same "
-            "request, so report approval.id to whoever asked and stop."
+            "request, so report `approval.id` to whoever asked and stop."
         ),
         (
-            "Every capability whose effect is not read takes an idempotency_key in its payload: send one, "
+            "Every capability whose effect is not read takes an `idempotency_key` in its payload: send one, "
             "and reuse it when you retry, so a repeat returns the first result instead of acting twice."
         ),
         (
-            "While an operator has paused agents, every tool call answers error.code agents_paused and "
+            "While an operator has paused agents, every tool call answers `error.code` `agents_paused` and "
             "does nothing; the connection stays up, so retry the call later, without reconnecting. "
-            f"error.code {' or '.join(sorted(LATER_CODES))} means HQ takes no more of this agent's calls "
-            "for now: nothing ran, so wait error.retry_after seconds and retry. call_timed_out means HQ "
-            "stopped waiting and the call may still finish: read before repeating it, and repeat a change "
-            "with the same idempotency_key."
+            f"`error.code` {' or '.join(f'`{code}`' for code in sorted(LATER_CODES))} means HQ takes no more "
+            "of this agent's calls for now: nothing ran, so wait `error.retry_after` seconds and retry. "
+            "`call_timed_out` means HQ stopped waiting and the call may still finish: read before repeating "
+            "it, and repeat a change with the same `idempotency_key`."
         ),
         (
-            "Prompts needs-me, status-brief and held-requests each return one message of HQ's live answer "
-            "for a person to act on. Resources hq://action_items, hq://approvals and hq://hq are the "
-            "action queue, the held requests and HQ itself; a template hq://<kind>/{identifier} reads one "
-            "record as get_resource does. hq://approvals, the held-requests prompt and the action queue "
-            "show you only the held requests you asked for yourself; a request another agent holds is "
-            "not yours to read or to wait on."
+            "Prompts `needs-me`, `status-brief` and `held-requests` each return one message of HQ's live "
+            "answer for a person to act on. Resources `hq://action_items`, `hq://approvals` and `hq://hq` "
+            "are the action queue, the held requests and HQ itself; a template `hq://<kind>/{identifier}` "
+            "reads one record as `get_resource` does. `hq://approvals`, the `held-requests` prompt and the "
+            "action queue show you only the held requests you asked for yourself; a request another agent "
+            "holds is not yours to read or to wait on."
         ),
         (
-            "A client that declares the io.modelcontextprotocol/tasks extension is answered a held change "
-            "as a task whose id is approval.id: tasks/get reads working until a person decides and HQ "
-            "applies it, then completed with the call's answer, or with an error result coded declined, "
-            "expired, stale or operation_failed. "
-            "Poll at pollIntervalMs; neither tasks/update nor tasks/cancel decides it, and a task answers "
-            "only the agent that asked."
+            "A client that declares the `io.modelcontextprotocol/tasks` extension is answered a held change "
+            "as a task whose id is `approval.id`: `tasks/get` reads `working` until a person decides and HQ "
+            "applies it, then `completed` with the call's answer, or with an error result coded `declined`, "
+            "`expired`, `stale` or `operation_failed`. "
+            "Poll at `pollIntervalMs`; neither `tasks/update` nor `tasks/cancel` decides it, and a task "
+            "answers only the agent that asked."
         ),
     )
 )

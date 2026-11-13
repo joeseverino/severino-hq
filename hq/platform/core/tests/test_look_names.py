@@ -1,6 +1,8 @@
 """dev:look reaches a record's page of the estate it draws, by the route that
-takes the record or by a template the page draws, and a name it refuses is
-answered with names it takes, one a line, each as it is typed; a rule it
+takes the record or by a template the page draws, a component catalog entry
+as the catalog gate draws it, and the page a named POST's refusal answers; a
+name it refuses is answered with names it takes, one a line, each as it is
+typed; a rule it
 refuses that is a check of the survey is answered with the gate test that
 holds it."""
 
@@ -43,6 +45,51 @@ class RefusedNamesTests(SimpleTestCase):
                 self.assertLessEqual(expected, set(offers))
                 for offer in offers:
                     self.assertEqual(len(_named(offer)), 1, offer)
+
+
+class CatalogNamesTests(SimpleTestCase):
+    def test_an_entry_is_drawn_as_the_catalog_gate_draws_it(self):
+        from hq.platform.core.tests.browser.catalog import CATALOG, CatalogLayoutTests
+
+        names = [next(name for name in CATALOG if name.startswith("table/")), "part/notice-error"]
+        self.assertEqual(_named(*names), names)
+        gate = CatalogLayoutTests.render()
+        self.assertEqual(look.catalog_pages(names), {name: gate[name] for name in names})
+
+    def test_a_name_that_begins_entries_is_every_one_of_them(self):
+        from hq.platform.core.tests.browser.catalog import CATALOG
+
+        notices = [name for name in CATALOG if name.startswith("part/notice-")]
+        self.assertTrue(notices)
+        self.assertEqual(_named("part/notice"), notices)
+        self.assertEqual(_named("table"), [name for name in CATALOG if name.startswith("table/")])
+
+    def test_an_entry_that_is_none_is_refused_with_the_nearest(self):
+        with self.assertRaises(AssertionError) as refused:
+            _named("part/notice-eror")
+
+        self.assertIn("part/notice-error", _offers(refused.exception))
+
+
+class PostNamesTests(TestCase):
+    def test_every_named_post_is_refused_on_the_seed_as_it_says(self):
+        from hq.platform.core.tests.look_posts import post_names, posted
+
+        names = post_names()
+        self.assertEqual(_named(*names), names)
+        with owner_client() as client:
+            for name in names:
+                with self.subTest(post=name):
+                    sent = posted(name)
+                    response = sent.send(client)
+                    self.assertEqual(response.status_code, sent.status)
+                    self.assertTrue(response.context["form"].errors)
+
+    def test_a_post_that_is_none_is_refused_with_the_nearest(self):
+        with self.assertRaises(AssertionError) as refused:
+            _named("post:project-create-blnk")
+
+        self.assertIn("post:project-create-blank", _offers(refused.exception))
 
 
 class RefusedRuleTests(SimpleTestCase):

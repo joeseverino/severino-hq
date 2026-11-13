@@ -1,4 +1,4 @@
-"""The compose change that meets each "How it runs" check a container fails.
+"""The compose change that meets each "Runtime" check a container fails.
 
 Derived from what HQ already read of the container (Docker's inspect,
 ``portainer.runtime``, its mounts) and written for its own compose service, so

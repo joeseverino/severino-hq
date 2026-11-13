@@ -39,8 +39,8 @@ _LANE_NOUNS: dict[str, tuple[str, str, str]] = {
 
 # The ways to follow links from one card, by the direction in the URL.
 _TRACE_DIRECTIONS = (
-    ("inbound", "What depends on this"),
-    ("outbound", "What this depends on"),
+    ("inbound", "Dependents"),
+    ("outbound", "Dependencies"),
     ("both", "Both"),
 )
 

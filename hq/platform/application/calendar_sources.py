@@ -167,7 +167,7 @@ def history_sources() -> tuple[CalendarSource, ...]:
         ),
         CalendarSource(
             id="history.changes",
-            label="Changes made in HQ",
+            label="HQ changes",
             events=change_events,
             description="Changes made in HQ, and changes HQ noticed that were made elsewhere.",
             url=reverse("core:audit_list"),

@@ -265,7 +265,7 @@
       for the copy alone.
       {% endcomment %}
       <footer class="demo-foot">
-        {% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" css="demo-about" modal="demo-about" %}<span class="demo-about-dot" aria-hidden="true"></span>About this demo{% endoutside_link %}
+        {% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" css="demo-about" modal="demo-about" %}<span class="demo-about-dot" aria-hidden="true"></span>About the demo{% endoutside_link %}
       </footer>
     {% endif %}
   {% endblock %}
@@ -285,7 +285,7 @@
     {% endcomment %}
     {% include "partials/_modal.html" with id="connection" title="Your connection" lede="How this browser reaches HQ, and each check on the way." body_template="core/_connection_loading.html" modal_class="modal-wide" %}
     {% if saved_copy %}
-      {% include "partials/_modal.html" with id="demo-about" title="About this demo" body_template="partials/_demo_about.html" %}
+      {% include "partials/_modal.html" with id="demo-about" title="About the demo" body_template="partials/_demo_about.html" %}
     {% endif %}
   {% endif %}
 

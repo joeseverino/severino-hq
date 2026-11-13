@@ -23,7 +23,7 @@ for it. Nothing here asks it anything.
     {% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|when:"length" }}</strong><small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
     {% else %}<strong>After the first run</strong><small>Nothing has been read yet.</small>{% endif %}
   {% endband_fact %}
-  {% band_fact icon="layers" label="Waiting to be applied" tone=controller.queue_tone %}
+  {% band_fact icon="layers" label="Pending changes" tone=controller.queue_tone %}
     <strong>{% if controller.queue %}{{ controller.queue|length|counted:"change" }}{% else %}Nothing{% endif %}</strong>
     <small>{% if controller.asked %}{% words "infrastructure.controller.refresh" %} asked for {% for read in controller.asked %}{% with mark=forloop.last|then:".|," %}{{ read.subject|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}{% elif controller.queue %}{% waiting %}{% endif %}</small>
   {% endband_fact %}
@@ -45,10 +45,10 @@ arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).
 {% endwith %}
 
 {% if controller.queue %}
-{% section "Waiting to be applied" count=controller.queue|length %}
-  {% table_region "Waiting to be applied" %}
+{% section "Pending changes" count=controller.queue|length %}
+  {% table_region "Pending changes" %}
     <table class="data-table">
-      <thead><tr>{% table_heading "What" "identifier" gutter=True local_sort=True %}{% table_heading "Change" drop=2 local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Asked" "status" drop=1 local_sort=True %}</tr></thead>
+      <thead><tr>{% table_heading "Record" "identifier" gutter=True local_sort=True %}{% table_heading "Change" drop=2 local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Asked" "status" drop=1 local_sort=True %}</tr></thead>
       <tbody>
         {% for work in controller.queue %}
           <tr>

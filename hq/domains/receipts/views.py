@@ -136,7 +136,7 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
     """Suggest potential Expense links for an unlinked receipt."""
 
     template_name = "receipts/receipt_match.html"
-    page_title = "Link receipt to expense"
+    page_title = "Link receipt"
 
     @cached_property
     def receipt(self):

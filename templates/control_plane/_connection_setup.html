@@ -25,7 +25,7 @@ connected is in one place.
           <ol class="resolution-workflow">
             <li>
               <strong>Create</strong>
-              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Where to make it" %}{% endif %}</p>
+              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Setup page" %}{% endif %}</p>
               {% if setup.permissions %}
                 <p>Give it these permissions, and no others:</p>
                 <ul class="setup-permissions">{% for permission in setup.permissions %}<li><code>{{ permission|breakable }}</code></li>{% endfor %}</ul>
@@ -42,7 +42,7 @@ connected is in one place.
               <p>In the vault HQ reads, as {{ setup.item|breakable }} with these fields:</p>
               {% table_region setup.label|add:" fields" %}
                 <table class="data-table">
-                  <thead><tr>{% table_heading "Field" "identifier" gutter=True local_sort=True %}{% table_heading "Value" "identifier" drop=2 local_sort=True %}{% table_heading "What it is" css="optional-col" drop=1 local_sort=True %}</tr></thead>
+                  <thead><tr>{% table_heading "Field" "identifier" gutter=True local_sort=True %}{% table_heading "Value" "identifier" drop=2 local_sort=True %}{% table_heading "Description" css="optional-col" drop=1 local_sort=True %}</tr></thead>
                   <tbody>
                     {% for field in setup.fields %}
                       <tr>
@@ -72,5 +72,5 @@ connected is in one place.
       </li>
     {% endfor %}
   </ul>
-{% aside %}{% if guide %}{% entity guide|outside label="How connections work" %}{% endif %}
+{% aside %}{% if guide %}{% entity guide|outside label="Connections guide" %}{% endif %}
 {% endsection %}

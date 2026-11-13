@@ -38,7 +38,7 @@ four domains behind a click and then need a second one to go anywhere.
     </p>
     {% if zone.adopt_token %}
       {% url 'zones:adopt' zone.zone as adopt_url %}
-      <p>{% post_button "Manage this domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}</p>
+      <p>{% post_button "Manage domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}</p>
     {% elif zone.observed_only %}
       <p class="muted">HQ can read this domain, but the credential it reads with cannot change it.</p>
     {% endif %}

@@ -31,8 +31,8 @@ class AddressEvidenceTests(TestCase):
 
         rows = {row.value: row for row in addresses_of(connection(a_request()))}
 
-        self.assertEqual(rows["10.0.0.50:41641"].label, "Local network")
-        self.assertEqual(rows["198.51.100.8:41641"].label, "Public")
+        self.assertEqual(rows["10.0.0.50:41641"].label, "Home network")
+        self.assertEqual(rows["198.51.100.8:41641"].label, "Internet")
 
     def test_path_endpoints_are_timestamped_snapshots_not_current_claims(self):
         a_tailnet(

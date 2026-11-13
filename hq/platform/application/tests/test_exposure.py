@@ -6,7 +6,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, disti
 
 from ..exposure import GATED, OPEN, PRIVATE, UNKNOWN, UNROUTED, exposure_of_name, status_at
 from ..projection import projection_scope
-from .markup import select, text
+from .markup import select, text, with_class, within
 from .test_paths import CLOUDFLARE, PUBLIC_RANGE, estate, record, store
 
 
@@ -83,6 +83,18 @@ class ExposureTests(TestCase):
         self.assertEqual(exposure.worst.path_gates, ("/admin*",))
         self.assertIn("login only at /admin*", exposure.sentence)
 
+    def test_a_private_name_says_the_widest_network_any_route_admits(self):
+        store(
+            "adguard.rewrite",
+            {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
+            {"domain": "app.example.com", "answer": "10.0.0.5", "connection_ref": "example-adguard"},
+        )
+
+        with projection_scope():
+            exposure = exposure_of_name("app.example.com")
+
+        self.assertEqual((exposure.level, exposure.label), (PRIVATE, "Home network and tailnet"))
+
     def test_a_name_nothing_resolves_is_unrouted(self):
         self.assertEqual(self.level("nothing.example.com"), UNROUTED)
 
@@ -129,8 +141,55 @@ class ServiceReachTests(TestCase):
     def test_a_private_name_offers_no_gate(self):
         body = self.service("app.example.com")
 
-        self.assertIn("Tailnet or home network only", body)
+        self.assertEqual([item.words for item in with_class(body, "exposure-private")], ["Tailnet only"])
         self.assertNotIn("Add an access list", body)
+
+    def test_the_header_the_path_and_the_list_name_one_audience(self):
+        """Each reach a name can have, said by the page's header, its path and
+        the services list in the words ``reach`` declares for it."""
+
+        from hq.domains.control_plane.models import ManagedResource
+
+        from ..reach import LOCAL_NETWORK, PUBLIC, TAILNET_ONLY
+
+        rewrites = (
+            {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
+            {"domain": "home.example.com", "answer": "10.0.0.5", "connection_ref": "example-adguard"},
+        )
+        store("adguard.rewrite", *rewrites)
+        # Declared, so the services list holds a row for each.
+        for spec in rewrites:
+            ManagedResource.objects.create(key=spec["domain"].split(".")[0], kind="adguard.rewrite", spec=spec)
+        ManagedResource.objects.create(
+            key="shop",
+            kind="npm.proxy_host",
+            spec={
+                "domain_names": ["shop.example.com"],
+                "forward_scheme": "http",
+                "forward_host": "198.51.100.20",
+                "forward_port": 8080,
+                "connection_ref": "example-npm",
+            },
+        )
+        listed = self.page().content.decode()
+        for hostname, reach in (
+            ("shop.example.com", PUBLIC),
+            ("home.example.com", LOCAL_NETWORK),
+            ("app.example.com", TAILNET_ONLY),
+        ):
+            with self.subTest(reach=reach.id):
+                body = self.service(hostname)
+                (header,) = (item for item in within(body, "class", "page-title-row") if item.attrs.get("title"))
+                (path,) = with_class(body, "exposure")
+                (row,) = (item for item in with_class(listed, "exposure") if hostname in item.attrs["title"])
+
+                steps = [item.words for item in with_class(body, "hop-label")]
+
+                self.assertEqual((header.words, header.attrs["title"]), (reach.label, reach.detail))
+                # The network the path crosses is called what the audience calls it.
+                self.assertTrue(any(step and reach.label.startswith(step) for step in steps), steps)
+                for said in (path.words, row.words):
+                    self.assertIn(reach.label.lower(), said.lower())
 
     def test_an_open_name_behind_a_declared_proxy_offers_its_access_list(self):
         from hq.domains.control_plane.models import ManagedResource

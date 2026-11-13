@@ -207,7 +207,7 @@
 .tool-tab-current {
   background: var(--surface-2); color: var(--ink); border-color: var(--line-2);
 }
-.tool-summary { max-width: 68ch; margin: 0 0 var(--space-9); }
+.tool-summary { margin: 0 0 var(--space-9); }
 /* Two tools side by side where there is room, stacked where there is not.
    Neither is primary, so neither takes the wider column. */
 .lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
@@ -333,12 +333,6 @@
 .agent-state-facts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
 /* An agent's latest events, under its row: one line each, newest first. */
 .agent-events { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-/* A person's apps take the row as every card on the page does; the one field
-   under them keeps the measure a line of input is read at. */
-.own-devices > .form { max-inline-size: var(--measure); }
-/* What the MCP server tells an agent first: prose in paragraphs, so it keeps the measure. */
-.mcp-instructions { display: grid; gap: var(--space-4); max-inline-size: var(--measure); }
-.mcp-instructions > p { margin: 0; }
 .mcp-endpoint { display: grid; gap: var(--stack-gap); }
 .policy { display: grid; gap: var(--stack-gap); }
 .policy-table .policy-select { width: 100%; max-width: 11rem; }

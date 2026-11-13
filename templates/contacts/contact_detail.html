@@ -20,7 +20,7 @@
 {% aside %}{% status submission.status|default:"unread" tone=submission.status|default:"unread" %}{% if submission.pending %} {% waiting as waits %}{% status waits tone="attention" %}{% endif %}
 {% endsection %}
 
-{% section "How it arrived" %}
+{% section "Delivery" %}
   <dl class="kv">
     <dt>Number</dt><dd>#{{ submission.id|breakable }}</dd>
     <dt>Bot check</dt><dd>{{ submission.turnstile|or_empty }}</dd>

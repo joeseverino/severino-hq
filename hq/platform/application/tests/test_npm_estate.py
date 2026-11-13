@@ -277,7 +277,7 @@ class DeliveryTests(TestCase):
 
         response = self.client.get(reverse("control_plane:service", args=["app.example.com"]))
 
-        self.assertContains(response, "Who is allowed")
+        self.assertContains(response, "Access")
         self.assertIn("allow 100.64.0.0/10; deny all", text(response))
         self.assertContains(response, "Address or login")
 

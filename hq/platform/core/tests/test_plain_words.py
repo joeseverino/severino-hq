@@ -238,6 +238,98 @@ class TemplatePieceTests(SimpleTestCase):
             plain_words.document([Path("templates/no-such-page.html")])
 
 
+@tag("source", "tree")
+class LabelTests(SimpleTestCase):
+    """A heading, a tab, a fold, a column, a row group, a dialog, a button and
+    a link to another page each say the name of the thing, never a sentence."""
+
+    def test_a_label_that_asks_or_describes_is_refused(self):
+        refused = (
+            "Where it came from",
+            "Actions at the default",
+            "Who is allowed",
+            "What",
+            "Everything that happened to it",
+            "Parts of this service",
+            "Names HQ does not manage",
+            "Each step",
+            "Rules that decide it",
+        )
+        named = (
+            "Access",
+            "This week",
+            "Activity",
+            "Installed on",
+            "Unmanaged names",
+            "Request",
+            "Needs you",
+            "Your apps",
+        )
+
+        self.assertEqual([text for text in refused if not plain_words.label_fault(text)], [])
+        self.assertEqual({text: plain_words.label_fault(text) for text in named}, dict.fromkeys(named, ""))
+
+    def test_the_labels_are_each_label_a_template_writes(self):
+        template = (
+            '{% section "Where it came from" lede="What it was built from, and where." more_label="All" %}\n'
+            '{% table_region "Rules" %}<table><thead><tr>{% table_heading "Who" title="Who did it, if anyone" %}'
+            "</tr></thead>\n"
+            '<tbody>{% row_group "Records that send traffic" n %}<tr><th scope="row">{{ name }}'
+            "<p>Every call it makes is refused.</p></th></tr></tbody></table>{% endtable_region %}\n"
+            '{% include "partials/_modal.html" with id="x" title="About this demo" %}\n'
+            "<h2>How it runs</h2><button>Link this</button><summary>{{ n }} received but not read</summary>\n"
+            '<p><a href="/a/">Everything that happened to it</a>{% dot %}<a href="/b/">Download JSON</a></p>\n'
+            '<p>Read <a href="/c/">the guide for how it works</a> first.</p>\n'
+            '{% outside_link url="https://example.com/" %}How it is built{% endoutside_link %}\n'
+            "{% comment %}<h2>What it was</h2>{% endcomment %}\n"
+        )
+
+        self.assertEqual(
+            plain_words.labels(template),
+            [
+                (1, "All"),
+                (1, "Where it came from"),
+                (2, "Rules"),
+                (2, "Who"),
+                (3, "Records that send traffic"),
+                (4, "About this demo"),
+                (5, "\x00 received but not read"),
+                (5, "How it runs"),
+                (5, "Link this"),
+                (6, "Download JSON"),
+                (6, "Everything that happened to it"),
+                (8, "How it is built"),
+            ],
+        )
+
+    def test_every_label_a_template_writes_is_a_name(self):
+        labels = plain_words.template_labels([Path(settings.BASE_DIR) / "templates"])
+
+        self.assertGreater(len(labels), 300)
+        self.assertEqual(plain_words.label_findings(labels), [])
+
+    def test_every_label_python_declares_is_a_name(self):
+        """A page's title, a section's heading, a column, a page's action, a
+        nav entry and a button's verb, wherever HQ's Python writes one."""
+
+        base = Path(settings.BASE_DIR)
+        labels = plain_words.python_labels([base / "hq", base / "hq_sdk"])
+
+        self.assertGreater(len(labels), 200)
+        self.assertEqual(plain_words.label_findings(labels), [])
+
+    def test_a_finding_is_reported_at_its_template_line(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp, "page.html")
+            page.write_text('<p>Fine</p>\n{% section "Who is allowed" %}{% endsection %}\n')
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                status = plain_words.main([str(page)])
+
+        self.assertEqual(status, 1)
+        self.assertEqual([line.split(": ")[0:2] for line in printed.getvalue().splitlines()], [[f"{page}:2", "Label"]])
+
+
 def command_labels() -> list[tuple[str, str]]:
     """``(capability.field, label)`` for each field a command's form labels,
     its target included, as every command form and held request shows it."""
@@ -265,6 +357,29 @@ class DerivedLabelTests(SimpleTestCase):
 
         self.assertGreater(len(labels), 100)
         self.assertEqual(plain_words.refused(labels), [])
+
+    def test_every_button_nav_entry_and_tab_hq_registers_is_a_name(self):
+        """Read from the registries, so an extension's and a derived one are
+        read too: a command's button, its variants, the nav and the tools."""
+
+        from hq.platform.application.capabilities import capability_registry
+        from hq.platform.application.domains import all_domains
+        from hq.platform.application.toolkit import TOOL_TABS
+
+        labels = [
+            *(
+                (f"{name}.{variant or 'verb'}", words)
+                for name, spec in sorted(capability_registry().items())
+                for variant, words in (("", spec.verb), *spec.variants)
+                if words
+            ),
+            *((f"domain {domain.id}", domain.label) for domain in all_domains()),
+            *((f"domain {domain.id} nav", item.label) for domain in all_domains() for item in domain.navigation),
+            *((f"tool {tab.id}", tab.label) for tab in TOOL_TABS),
+        ]
+
+        self.assertGreater(len(labels), 40)
+        self.assertEqual(plain_words.label_findings(labels), [])
 
     def test_a_label_derived_from_a_name_plain_refuses_is_found(self):
         from hq.platform.application.labels import field_label

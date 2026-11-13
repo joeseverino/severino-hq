@@ -112,7 +112,7 @@
     <div class="topology-node-actions">{% include "partials/_action_links.html" with actions=item.node.actions only %}</div>
   {% endif %}
   <div class="topology-node-actions" aria-label="Follow links from {{ item.node.label }}">
-    <a class="btn ghost compact" href="{{ item.inbound_url }}">What depends on this</a>
-    <a class="btn ghost compact" href="{{ item.outbound_url }}">What this depends on</a>
+    <a class="btn ghost compact" href="{{ item.inbound_url }}">Dependents</a>
+    <a class="btn ghost compact" href="{{ item.outbound_url }}">Dependencies</a>
   </div>
 </div>

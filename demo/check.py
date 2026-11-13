@@ -27,7 +27,7 @@ _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
 # The main pages, including the one with cards to dismiss.
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
-_ALARMS = ("No reading yet", "Not set up yet", "not fully set up", "not answering", " failed", "not confirmed")
+_ALARMS = ("No reading yet", "Not configured", "not fully set up", "not answering", " failed", "not confirmed")
 # The showcase leaves four things to do on purpose (an image update, an image
 # run by tag alone, a certificate to renew, an agent's request to approve);
 # anything more is the seed missing a reading.
@@ -73,7 +73,7 @@ _ROOT = Path(__file__).resolve().parents[1]
 _MOST_PAGES_OF_A_LIST = 6
 # The widths HQ's browser gate reads (WIDTHS in core/tests/browser/widths.py), and a small phone's.
 _WIDTHS = (390, 402, 820, 1360)
-# About this demo floats in the bottom left corner, over some of the page at
+# About the demo floats in the bottom left corner, over some of the page at
 # almost every scroll stop; what it promises is to leave none of it there.
 # Read at the page's end: the room below the content, against the room the
 # chip and its inset take (from its top down), and each control still under
@@ -472,7 +472,7 @@ class DemoSiteTests(unittest.TestCase):
                 page = browser.new_page(viewport={"width": width, "height": 700})
                 page.goto(self.origin + "/", wait_until="load")
                 with self.subTest(width=width):
-                    control = page.get_by_role("link", name="About this demo")
+                    control = page.get_by_role("link", name="About the demo")
                     for stop in (
                         "0",
                         "document.documentElement.scrollHeight / 2",
@@ -516,7 +516,7 @@ class DemoSiteTests(unittest.TestCase):
                 page = browser.new_page(viewport={"width": width, "height": height})
                 page.goto(self.origin + "/", wait_until="load")
                 with self.subTest(width=width, height=height):
-                    page.get_by_role("link", name="About this demo").click()
+                    page.get_by_role("link", name="About the demo").click()
                     dialog = page.locator("#modal-demo-about")
                     self.assertTrue(dialog.evaluate("dialog => dialog.open"))
                     overflow = dialog.evaluate("dialog => dialog.scrollHeight - dialog.clientHeight")
@@ -529,12 +529,12 @@ class DemoSiteTests(unittest.TestCase):
         trigger.focus()
         page.keyboard.press("Enter")
         self.assertTrue(dialog.evaluate("dialog => dialog.open"), "Enter opens it")
-        self.assertTrue(dialog.get_by_role("heading", name="About this demo").is_visible())
+        self.assertTrue(dialog.get_by_role("heading", name="About the demo").is_visible())
         page.keyboard.press("Escape")
         self.assertFalse(dialog.evaluate("dialog => dialog.open"), "Escape closes it")
 
     def test_the_command_center_answers_what_is_typed(self):
-        # About this demo's Find anything and ⌘K open it; it lists what it
+        # About the demo's Find anything and ⌘K open it; it lists what it
         # offers, answers a word as it is typed, and a word the demo has no
         # search for is answered as HQ answers one nothing matches, in the
         # palette and after Enter, about the word typed.
@@ -547,7 +547,7 @@ class DemoSiteTests(unittest.TestCase):
             for opening in ("about", "keys"):
                 with self.subTest(opening=opening):
                     if opening == "about":
-                        page.get_by_role("link", name="About this demo").click()
+                        page.get_by_role("link", name="About the demo").click()
                         offered = self._answer_to(
                             page,
                             page.locator("#modal-demo-about").get_by_role("link", name="Find anything").click,

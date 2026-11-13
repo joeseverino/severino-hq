@@ -65,9 +65,9 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     # The Message column is prose, so what a row names gets what it leaves.
     table_room = "shared"
     table_columns = (
-        TableColumn("What", "object_type", "Type A–Z", "Type Z–A"),
-        TableColumn("When", "created_at", "Oldest event", "Newest event", css="date-col key-col"),
-        TableColumn("Who", "user__username", "User A–Z", "User Z–A", css="optional-col"),
+        TableColumn("Type", "object_type", "Type A–Z", "Type Z–A"),
+        TableColumn("Time", "created_at", "Oldest event", "Newest event", css="date-col key-col"),
+        TableColumn("User", "user__username", "User A–Z", "User Z–A", css="optional-col"),
         TableColumn("Action", "action", "Action A–Z", "Action Z–A"),
         TableColumn("Message", "message", "Message A–Z", "Message Z–A"),
     )
@@ -225,7 +225,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
 
 
 # The metadata an event's page says in rows of their own rather than under
-# "Recorded with it": who acted and through which door are the Who row's.
+# "Metadata": who acted and through which door are the Who row's.
 # What started it and the record it is about are the Cause and About rows'.
 _STATED_ABOVE = frozenset({"changes", "operation", "actor", "interface", "approved_by", "cause", "subject"})
 

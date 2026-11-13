@@ -30,6 +30,8 @@ SIZED = "rule-selector-property-disallowed-list"
 CASE = SIZED
 ROLE = "selector-disallowed-list"
 RESTYLED = "hq/restyled-primitive"
+# A cap that stops text at a reading measure.
+MEASURE = CUT
 
 REFUSED = [
     (APP, ".a { color: #0a0a0a; }", "color-no-hex"),
@@ -96,6 +98,12 @@ REFUSED = [
     (APP, ".a { -webkit-line-clamp: 2; }", CUT),
     (APP, ".a { line-clamp: 2; }", CUT),
     (TOKENS, ".a { overflow: hidden; }", CUT),
+    (TOKENS, ":root { --measure: 80ch; }", MEASURE),
+    (TOKENS, ":root { --prose-measure: 40rem; }", MEASURE),
+    (APP, ".a p { max-width: 72ch; }", MEASURE),
+    (APP, ".a { max-inline-size: min(100%, 65ch); }", MEASURE),
+    (CUTS, ".a { max-width: 30ch; }", MEASURE),
+    (REFERENCE, ".a { max-inline-size: 60ch; }", MEASURE),
     (APP, f"{WHY} */\n.a {{ overflow: hidden; }}", "--report-descriptionless-disables"),
     (APP, f"{WHY} -- a frame's corners */\n.a {{ overflow: auto; }}", "--report-needless-disables"),
     (TABLES, ".data-table td .whole:not(td > strong:first-child *) { white-space: nowrap; }", ROLE),
@@ -167,6 +175,7 @@ PASSED = [
     ("static/css/app/page.css", ".btn.a-variant { color: var(--ink); }"),
     (REFERENCE, ".scalar-app .section-header { color: var(--ink); }"),
     (APP, ".a { overflow: auto; } .b { overflow-x: visible; overflow-y: scroll; }"),
+    (APP, ".a { max-width: 100%; max-inline-size: 24rem; inline-size: 16ch; } .b { max-width: max-content; }"),
     (APP, f"{WHY} -- a frame's corners clip its fill */\n.a {{ overflow: hidden; }}"),
 ]
 

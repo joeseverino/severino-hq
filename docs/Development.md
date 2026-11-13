@@ -710,6 +710,25 @@ the record pages it names ([Plugins](Plugins.md#demo-data)). An unknown page or
 rule is refused before anything runs, and a page that answers anything but 200
 fails the run.
 
+A component catalog entry (`part/notice-error`, `table/figures`, every key of
+`CATALOG` in `hq/platform/core/tests/browser/catalog.py`) is drawn by the
+catalog gate's own `CatalogLayoutTests.render`, so a look and that gate never
+draw an entry apart. It is answered from memory as a gate page is, with no
+server or estate behind it, so a look at one entry is the quick way to see a
+change to a shared part, ahead of the catalog's whole browser class. A name that begins entries
+(`part/notice`, `table`) is each of them, in the catalog's order. The gate
+reads the catalog without script, so `--no-script` looks at an entry as it
+does.
+
+A form's refused state is looked at by name, `post:<name>`, one of `POSTS` in
+`hq/platform/core/tests/look_posts.py`: the estate's owner sends that form to
+the seed's estate once, as its page sends it, and the page is what the refusal
+answers, its errors drawn. What it sends is written there or read from the
+estate, never typed, and the page must answer the refusal's status: one the
+form accepts fails the run, as does a page that answers anything but 200. A new
+refused state to look at is one entry there; `test_look_names` sends every one
+and holds it refused.
+
 A look saves a full-page screenshot of each page at each width in a folder of
 the run's own, `var/look/<when it began>/`, which its last line names. A page
 taller than the window is also shot as window-sized bands

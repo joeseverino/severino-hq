@@ -93,7 +93,7 @@ h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.01
 h2 { font-size: var(--text-xl); margin: 0 0 var(--space-6); color: var(--ink); font-weight: 650; letter-spacing: -.01em; }
 h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-weight: 600; }
 
-.page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); max-width: var(--measure); }
+.page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); }
 .muted { color: var(--muted); }
 
 /* One head at every width. The copy steps aside (`display: contents`) so its
@@ -113,12 +113,10 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* Its width is its whole name, so the controls give way rather than split it. */
 .page-head h1 .token { width: max-content; }
 .page-head > .page-actions { order: 2; }
-/* Full width so it always takes its own row; the reading measure is kept by
-   padding rather than a width cap, which would let it fit beside the title. */
-.page-head .page-lede { flex: 1 1 100%; order: 3; max-width: none; margin-bottom: 0; padding-inline-end: max(0px, 100% - var(--measure)); margin-top: calc(-1 * var(--space-1)); }
+/* Full width so it always takes its own row, under the title and controls. */
+.page-head .page-lede { flex: 1 1 100%; order: 3; margin-bottom: 0; margin-top: calc(-1 * var(--space-1)); }
 /* A line of facts is short things side by side, which read best on as few
-   lines as fit, so it takes the head's width where the prose above keeps
-   the measure. */
+   lines as fit, so it takes the head's width. */
 .page-head .page-facts { flex: 1 1 100%; order: 3; color: var(--muted); font-size: var(--text-sm); margin-top: calc(-1 * var(--space-1)); }
 .page-head h1 { margin: 0; }
 .page-head p { margin: 0; }

@@ -69,7 +69,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     {% endsection %}
   {% endif %}
 
-  {% section "You" %}
+  {% section "Identity" %}
     <dl class="kv">
       <dt>Signed in</dt>
       <dd>
@@ -157,7 +157,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
         <strong>{{ connection.peering.label|breakable }}</strong>
         <details class="conn-more conn-why">
-          <summary aria-label="Why this says that">Why</summary>
+          <summary aria-label="Reason for this answer">Reason</summary>
           <p class="conn-row-note">{{ connection.peering.detail|breakable }}</p>
         </details>
         {% if connection.peering.public %}
@@ -321,7 +321,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
 
   {% comment %}Folded: the response is read back only once somebody opens it.{% endcomment %}
   {% section "Headers" fold=True lede="Sent by your browser and by HQ" data_connection_protocol=True %}
-      {% section "What this request carried" lede="Every header this request carried, and what HQ reads it for." %}
+      {% section "Request" lede="Every header this request carried, and what HQ reads it for." %}
         <div class="conn-rows">
           {% for header in request_path.headers %}{% if header.used %}
             <div class="conn-row conn-row-used">
@@ -333,7 +333,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         </div>
         {% if request_path.unread_headers %}
           <details class="conn-more">
-            <summary>{{ request_path.unread_headers|length }} received but not read</summary>
+            <summary>{{ request_path.unread_headers|length }} unread</summary>
             <div class="conn-rows">
               {% for header in request_path.unread_headers %}
                 <div class="conn-row">
@@ -347,7 +347,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% endif %}
       {% endsection %}
 
-      {% section "What HQ sent back" lede="Read from the response this browser received." %}
+      {% section "Response" lede="Read from the response this browser received." %}
         <div class="conn-rows" data-response-headers>
           <div class="conn-row"><span class="conn-row-note">Open Headers to read the response.</span></div>
         </div>

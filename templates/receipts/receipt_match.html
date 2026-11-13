@@ -24,7 +24,7 @@
               <td><strong>{{ exp.vendor|breakable }}</strong></td>
               <td>{{ exp.item|breakable }}</td>
               <td>{{ exp.total_cost|money }}</td>
-              <td>{% post_button "Link this" request.path name="expense_id" value=exp.pk css="btn primary" %}</td>
+              <td>{% post_button "Link" request.path name="expense_id" value=exp.pk css="btn primary" %}</td>
             </tr>
           {% endfor %}
         </tbody>

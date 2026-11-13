@@ -49,7 +49,7 @@ A check met everywhere is a word in one closing line.
   {% endsection %}
 
   {% if everywhere %}
-    {% section "Checks every repository passes" count=everywhere|length fold=True %}
+    {% section "Passing everywhere" count=everywhere|length fold=True %}
       <ul>{% for check in everywhere %}<li>{{ check.label|breakable }}</li>{% endfor %}</ul>
     {% endsection %}
   {% endif %}
