@@ -16,6 +16,14 @@ make it a button. The close button is the platform's own `command="close"`
 invoker, which needs no script. Opening fires the dialog's `toggle` event,
 where fragment.js fetches what the dialog holds back.
 
+An opener is one of three controls, each naming the dialog: a link with
+`data-modal-open="<id>"`, a control with `aria-haspopup="dialog"` and
+`aria-controls="modal-<id>"`, or the platform's invoker,
+`command="show-modal" commandfor="modal-<id>"` (partials/_about.html). The
+browser gates and dev:look find a dialog's opener by those three alone
+(SELECTORS["dialog_opener"]), so a dialog opened any other way counts as one
+nobody can open.
+
 `body_template` is rendered with the surrounding context. Escape and the
 backdrop close the dialog; both are handled by the host, not by the caller.
 {% endcomment %}

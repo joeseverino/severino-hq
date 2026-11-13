@@ -315,10 +315,9 @@ LINKS_AT_REST = """([links, vendored]) => {
 # A dialog a page declares is one a reader can open: some control on the page
 # names it, so drawing a dialog without its control is a finding.
 DIALOGS_WITHOUT_OPENERS = """([dialogs, openers]) => {
-  const named = new Set([...document.querySelectorAll(openers)].map((opener) =>
-    'modalOpen' in opener.dataset ? `modal-${opener.dataset.modalOpen}` : opener.getAttribute('aria-controls')));
+  const opened = (dialog) => document.querySelector(openers.replaceAll('{id}', dialog.id.slice('modal-'.length)));
   return [...document.querySelectorAll(dialogs)]
-    .filter((dialog) => !named.has(dialog.id))
+    .filter((dialog) => !opened(dialog))
     .map((dialog) => `dialog #${dialog.id} has no control that opens it`);
 }"""
 

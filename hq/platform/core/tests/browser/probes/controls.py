@@ -1,6 +1,7 @@
 """Probes of controls drawn as controls: their words on one line, and one height to a row."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, TEXT_SHOWN
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # A control drawn as one: a select, or a box the selector names that
 # paints an edge, a fill or a shadow. A bare button is a link set in a
@@ -152,5 +153,39 @@ CONTROL_HEIGHTS = (
     }
   }
   return found;
+}"""
+)
+
+# Each control a row's actions cell holds on its first line whose middle is
+# off that line's middle, where the words in the cells beside it are set: a
+# button taller than a line, set on the line's top, sits lower than the row's
+# text. The cell is a row's actions (`{% row_actions %}`) or any cell of a
+# column of controls.
+ACTIONS_OFF_THE_LINE = (
+    "() => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  const pressed = 'a, button, form, [role="button"], [data-ask]';
+  for (const cell of document.querySelectorAll('"""
+    + SELECTORS["row_actions_cell"]
+    + """')) {
+    if (!cell.checkVisibility()) continue;
+    const style = getComputedStyle(cell);
+    const line = parseFloat(style.lineHeight) || 1.2 * parseFloat(style.fontSize);
+    const middle = box(cell).top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop) + line / 2;
+    const controls = [...cell.children].filter((el) => el.matches(pressed) && el.checkVisibility() && box(el).height >= 2);
+    if (!controls.length) continue;
+    const first = box(controls[0]);
+    for (const el of controls) {
+      const r = box(el);
+      if (r.top >= first.bottom) continue;
+      const off = r.top + r.height / 2 - middle;
+      if (Math.abs(off) > 1.5) {
+        found.push(`${describe(el)} sits ${Math.round(Math.abs(off))}px ${off > 0 ? 'below' : 'above'} its row's first line: ${el.textContent.trim().slice(0, 40)}`);
+      }
+    }
+  }
+  return [...new Set(found)];
 }"""
 )

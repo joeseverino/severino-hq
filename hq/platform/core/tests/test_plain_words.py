@@ -8,6 +8,7 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.conf import settings
 from django.test import SimpleTestCase, tag
@@ -417,3 +418,48 @@ RETIRED = (
     "Topology",
     "topology",
 )
+
+
+class PluginLabelTests(SimpleTestCase):
+    """``hq plugin check`` holds an extension's labels to the host's label rule."""
+
+    def _checked(self, files: dict[str, str]) -> tuple[int, str]:
+        from hq_sdk import validation
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, content in files.items():
+                (root / name).parent.mkdir(parents=True, exist_ok=True)
+                (root / name).write_text(content, encoding="utf-8")
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed), mock.patch("sys.argv", ["validation", tmp]):
+                status = validation.main()
+        return status, printed.getvalue()
+
+    def test_a_sentence_label_in_a_template_or_python_is_refused_where_it_is(self):
+        status, printed = self._checked(
+            {
+                "example_notes/__init__.py": "",
+                "example_notes/views.py": 'from hq_sdk.pages import PageSection\n\nPageSection("x", "Every note")\n',
+                "example_notes/templates/example_notes/page.html": (
+                    '{% section "Who is allowed" %}{% endsection %}\n<th>Status</th>\n'
+                ),
+            }
+        )
+
+        self.assertEqual(status, 1)
+        self.assertIn("example_notes/templates/example_notes/page.html:1: Label:", printed)
+        self.assertIn("example_notes/views.py:3: Label:", printed)
+        self.assertNotIn("Status", printed)
+
+    def test_plain_labels_pass(self):
+        status, printed = self._checked(
+            {
+                "example_notes/__init__.py": "",
+                "example_notes/templates/example_notes/page.html": (
+                    '{% section "Access" %}{% endsection %}\n<th>Installed on</th>\n'
+                ),
+            }
+        )
+
+        self.assertEqual(status, 0, printed)

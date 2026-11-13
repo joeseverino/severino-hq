@@ -56,14 +56,7 @@
         <td class="msg-preview">{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
         <td>{% status s.status tone=s.status %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
         <td class="muted">{{ s.country|or_empty }}</td>
-        <td class="actions-col row-actions">
-          {% if gap %}{% include "partials/_write_gap.html" %}{% else %}
-          {% url 'contacts:set_status' s.id as status_url %}
-          {% if s.status == "unread" %}{% post_button "Mark read" status_url name="status" value="read" css="btn compact" %}{% endif %}
-          {% if s.status != "spam" %}{% post_button "Spam" status_url name="status" value="spam" css="btn compact" %}{% endif %}
-          <a class="btn compact ghost danger" href="{% url 'contacts:delete' s.id %}">Delete</a>
-          {% endif %}
-        </td>
+        {% row_actions s.actions gap=gap %}
       </tr>
     {% empty %}
       <tr><td colspan="7" class="muted">{% if selected_status or q %}Nothing matches.{% else %}No messages yet.{% endif %}</td></tr>

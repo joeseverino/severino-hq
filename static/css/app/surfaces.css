@@ -25,7 +25,7 @@
      is part of the outer frame. */
   :where(
   .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section), .control-card,
-  .control-metric, .control-summary, .service-band, .fact-band,
+  .control-metric, .control-summary, .facts-band,
   .filter-bar, .table-toolbar, .kpi-grid, .insight-grid,
   .kv, .form,
   .auth-card, .mail-stage,
@@ -61,6 +61,12 @@
     align-content: start;
     background: none;
   }
+  /* Facts in a card are the card's content, as its stats are: set apart by
+     gaps, with no cell padding doubling the card's own. The space between
+     columns is each fact's end padding, since a band's tracks are shares of
+     its width (`--band-cell`) that a column gap would push onto a new row. */
+  .card > .facts-band { gap: var(--space-6) 0; }
+  .card > .facts-band > .fact { padding: 0 var(--space-7) 0 0; }
   /* A row of stats shares its lines. Each stat takes the row's three tracks
      (label, value, note), so the labels start level and the values stand
      level, however many lines one label wraps to. */
@@ -242,16 +248,16 @@
      each fact one row, its label and its value at the right edge, the detail
      under both. Asked of the band's own width, so a band in a narrow card
      reads the same as one on a phone. 27.5rem is two 220px cells. */
-  :is(.service-band, .fact-band, .control-summary) { container: band / inline-size; }
+  :is(.facts-band, .control-summary) { container: band / inline-size; }
   @container band (max-width: 27.5rem) {
-    .band-fact { gap: var(--space-4); padding: var(--space-5) var(--space-6); align-items: center; }
-    .band-icon { width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
-    /* The label keeps its words; a long value wraps at the right instead of
-       squeezing the label to a letter a line. */
-    .band-fact > div { flex: 1 1 auto; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; column-gap: var(--space-4); }
-    .band-fact > div > .band-label { grid-column: 1; grid-row: 1; font-size: var(--text-sm); }
-    .band-fact > div > strong { grid-column: 2; grid-row: 1; text-align: right; font-size: var(--text-md); }
-    .band-fact > div > :not(.band-label):not(strong) { grid-column: 1 / -1; }
+    /* The label keeps its words up to three fifths of the row and wraps past
+       that, so a long label never squeezes its value to a letter a line. */
+    .facts-band > .fact { grid-template-columns: auto fit-content(60%) minmax(0, 1fr); align-items: baseline; column-gap: var(--space-4); padding: var(--space-5) var(--space-6); }
+    .facts-band > .fact:not(:has(.band-icon)) { grid-template-columns: fit-content(60%) minmax(0, 1fr); }
+    .facts-band .band-icon { align-self: center; width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
+    .facts-band .fact-label { grid-row: 1; grid-column: -3; font-size: var(--text-sm); }
+    .facts-band .fact-value { grid-row: 1; grid-column: -2; text-align: right; font-size: var(--text-md); }
+    .facts-band .fact-detail { grid-row: 2; grid-column: -3 / -1; }
     .control-summary > .control-metric {
       flex-direction: row;
       flex-wrap: wrap;

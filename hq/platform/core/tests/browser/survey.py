@@ -22,7 +22,7 @@ from hq.platform.core.tests.browser.probes.boxes import (
     SMALL_TARGETS,
     TITLES_OFF_THEIR_START,
 )
-from hq.platform.core.tests.browser.probes.controls import CONTROL_HEIGHTS, WRAPPED_CONTROLS
+from hq.platform.core.tests.browser.probes.controls import ACTIONS_OFF_THE_LINE, CONTROL_HEIGHTS, WRAPPED_CONTROLS
 from hq.platform.core.tests.browser.probes.headings import HEADINGS_IN_CAPITALS, QUIET_LINKS_IN_THE_LINE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES, FIELD_CONTRAST, FIELD_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
@@ -63,6 +63,7 @@ from hq.platform.core.tests.browser.probes.text import (
     PAST_THE_CLAMP,
     RAISED_TEXT,
     TOUCHING_TEXT,
+    VALUES_OFF_THEIR_ROW,
 )
 from hq.platform.core.tests.browser.reading import _probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
@@ -150,6 +151,11 @@ CHANGES_READ = (
 
 CHIPS_READ = (CHIPS_OFF_THEIR_LINE, [SELECTORS["chip"], SELECTORS["unseen"]])
 
+FACT_ROWS_READ = (
+    VALUES_OFF_THEIR_ROW,
+    [SELECTORS["fact_band"], SELECTORS["band_fact_cell"], SELECTORS["fact_value"], SELECTORS["unseen"]],
+)
+
 HEADS_READ = (
     HEAD_CONTROLS,
     [SELECTORS["head_actions"], SELECTORS["head_menu"], SELECTORS["head_menu_panel"], SELECTORS["ask"]],
@@ -162,6 +168,7 @@ _READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(select
 _GEOMETRY = {
     "sideways": _SIDEWAYS_READ,
     "cells": CELLS,
+    "actions on the first line": ACTIONS_OFF_THE_LINE,
     "broken words": (BROKEN_WORDS, SELECTORS["identifier"]),
     "words broken in text": (BROKEN_WORDS_IN_TEXT, _IDENTIFIER),
     "broken identifiers": (BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]),
@@ -187,6 +194,7 @@ _GEOMETRY = {
     "cut when open": (CUT_WHEN_OPEN, SELECTORS["unseen"]),
     "changes": CHANGES_READ,
     "chips": CHIPS_READ,
+    "fact rows": FACT_ROWS_READ,
     "raised text": (RAISED_TEXT, SELECTORS["unseen"]),
     "heads": HEADS_READ,
     "section heads": (CRAMPED_HEADS, SELECTORS["section_head"]),

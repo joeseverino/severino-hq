@@ -122,9 +122,9 @@ holds the boundary with Ruff's `banned-api` over the package's source
 (`tools/pipeline/extension-imports.toml`), which also refuses
 `django.core.cache`: a cache the host cannot see serves a stale answer, so a
 derived read is kept with `hq_sdk.reads.derivation` ([Derived
-reads](#derived-reads)). The check refuses three habits, the first two by the
+reads](#derived-reads)). The check refuses four habits, the first two by the
 host's `cell-read-by-its-text` and `absent-text-read-from-the-text` rules
-(`tools/lint/ast-grep/rules`) and the third by `python -m hq_sdk.validation
+(`tools/lint/ast-grep/rules`) and the last two by `python -m hq_sdk.validation
 src`:
 
 | Refused | Why | Instead |
@@ -132,6 +132,7 @@ src`:
 | A test whose `assertContains`, `assertNotContains`, `assertIn` or `assertNotIn` looks for text ending on `</td>` or `</th>` | the host may wrap what a cell says | read the cell's text |
 | A test whose `assertNotContains` or `assertNotIn` over a response's markup says a short word (one to seven letters, digits, `_` or `-`) is absent | a CSRF token, nonce or retry key on the page can hold it by chance | `assertNotContains(response, word, html=True)`, which reads the text between the tags |
 | A page sentence that closes on a value with a period written by hand (`f"Renews through {registrar}."`) | a value HQ did not write can end in its own period | close it through `hq_sdk.ui.ended(f"... {value}")`, which adds the full stop only when the text has none |
+| A label (a heading, a column, a button, a link) written as a sentence: past three words, opening on a question word, or saying a pronoun or "each" (`"What owners complain about"`) | a label names the thing, as a dashboard does, and the host's own are held to it ([Design](Design.md)) | the plain noun (`"Complaints"`), with what the part holds in its lede |
 
 The host's own code is held to the same rule, and an extension to the refusal
 from `PLUGIN_API_VERSION` 6.
@@ -908,7 +909,7 @@ A test that posts a form without opening its page first sends
 | `partials/_timeline.html` | nothing | `timeline` | Chronological linked events, from `hq_sdk.ui.Timeline`. |
 | `partials/_week_plan.html` | `plan` | nothing | Which days of the week a thing is scheduled for, from `hq_sdk.ui.WeekPlan`. |
 
-Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
+Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
 Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`.
 
@@ -917,6 +918,7 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | Drawn by hand | Write instead |
 | --- | --- |
 | a `<section>` element | `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout |
+| a count split from its words | {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}` |
 | a figure | `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi |
 | a filter bar | `partials/_filter_bar.html`, the part to come (hq-1768) |
 | a fold | `{% section "Heading" fold=True %}`body`{% endsection %}` |
@@ -924,12 +926,13 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | a heading | the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page |
 | a list of rows | `{% include "partials/_record_list.html" %}` from hq_sdk.ui.ListRow |
 | a notice | `{% notice %}`, the part to come (hq-1766) |
+| a row's actions | `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell |
 | a table outside its region | `{% table_region "Label" %}` around its `<table class="data-table">` |
 | a toned value | `{% status value tone=tone pill=False %}` |
 | an empty line | `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`; this shape is read by its opening words, so it finds one spelling of an empty line |
 | an empty state | `{% include "partials/_empty_state.html" with message="..." %}` |
 | an icon | `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img" |
-| label and value facts | `{% facts %}`, the part to come (hq-1770) |
+| label and value facts | `{% facts %}` around each `{% fact "Label" value=... %}`, or `{% facts layout="band" %}` for a band |
 
 <!-- /sdk_contract -->
 

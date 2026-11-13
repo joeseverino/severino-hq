@@ -80,10 +80,13 @@ TAGS = (
     "dot",
     "empty_value",
     "entity",
+    "fact",
+    "facts",
     "outside_link",
     "post_button",
     "reference",
     "referenced_by",
+    "row_actions",
     "row_editor",
     "row_group",
     "row_toggle",
@@ -275,9 +278,33 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
         "pattern": _class_word("tone-", prefix=True),
         "write": "{% status value tone=tone pill=False %}",
     },
+    # A list of pairs (`.kv`) or one of the bands each page drew its facts in
+    # before the part.
     "label and value facts": {
-        "pattern": r"<dl\b[^>]*" + _class_word("kv"),
-        "write": "{% facts %}, the part to come (hq-1770)",
+        "pattern": _class_word(
+            "kv",
+            "fact-band",
+            "service-band",
+            "control-summary",
+            "control-metric",
+            "boxed-facts",
+            "github-facts",
+            "vitals-strip",
+            "glance-metrics",
+            "agent-state-facts",
+            "attention-facts",
+        ),
+        "write": '{% facts %} around each {% fact "Label" value=... %}, or {% facts layout="band" %} for a band',
+    },
+    # A figure set bold apart from the words that count it ("<strong>{{ n }}</strong>
+    # refused"): read by what names a count (a `_count`, a `counts.`, a total,
+    # a `|length`, a plural), so the bolded names of prose are left alone.
+    "a count split from its words": {
+        "pattern": (
+            r"<strong>\{\{\s*(?:(?:[\w.]*[._])?(?:count|counts|total)\b[\w.]*|[\w.]*[a-z][^\Wsu]s|[\w.]+\|length)"
+            r"(?:\|(?!counted)\w+(?::\S+)?)*\s*\}\}</strong>\s+[a-z]"
+        ),
+        "write": '{{ n|counted:"thing" }}, the figure and its words as one, or {% fact "Label" value=n %}',
     },
     "an empty state": {
         "pattern": _class_word("empty"),
@@ -289,6 +316,16 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
             '{% include "partials/_empty_state.html" with message="..." %}, or a {% section %}\'s {% empty %};'
             " this shape is read by its opening words, so it finds one spelling of an empty line"
         ),
+    },
+    # A button in a cell, read from the cell's start to its first button: a
+    # `post_button` drawn as one (its default class, or a `css` naming `btn`)
+    # or an element or include given the button class.
+    "a row's actions": {
+        "pattern": (
+            r"(?s)<td\b[^>]*>(?:(?!</td>).)*?"
+            r'(?:\{%\s*post_button\b(?![^%]*\bcss=)|\b(?:class|css)="(?:[^"]*\s)?btn(?![\w-]))'
+        ),
+        "write": "{% row_actions actions %} from hq_sdk.pages.PageAction, which draws the row's cell",
     },
 }
 
@@ -492,7 +529,10 @@ def _class_options(parameters: list[str]) -> list[str]:
 
 def _tag(compile_function: Any) -> dict[str, Any]:
     parameters = _tag_parameters(compile_function)
-    return {"parameters": parameters, "parts": _tag_parts(compile_function), "classes": _class_options(parameters)}
+    record = {"parameters": parameters, "parts": _tag_parts(compile_function), "classes": _class_options(parameters)}
+    target = getattr(compile_function, "__wrapped__", None)
+    bare_with = target.bare_with if isinstance(target, Takes) else ""
+    return record | ({"bare_with": bare_with} if bare_with else {})
 
 
 def _libraries(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:

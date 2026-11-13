@@ -24,7 +24,13 @@ from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, 
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
-from hq.platform.core.tests.browser.probes.parts import READINGS, SPILLED_LABELS, WRAPPED, reading_problems
+from hq.platform.core.tests.browser.probes.parts import (
+    DIALOGS_WITHOUT_OPENERS,
+    READINGS,
+    SPILLED_LABELS,
+    WRAPPED,
+    reading_problems,
+)
 from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
@@ -406,25 +412,25 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {
             **self.pages,
             "band-fact-probe": probe(
-                '<h3 class="eyebrow">Example heading over the band</h3><div class="fact-band">'
-                '{% band_fact icon="search" label="An example label long enough to crowd its value" %}'
-                '<strong><a href="#example">An example value that has to wrap</a></strong>{% endband_fact %}'
-                '{% band_fact icon="shield" label="Example" %}<strong>One</strong>{% endband_fact %}</div>'
+                '<h3 class="eyebrow">Example heading over the band</h3>{% facts layout="band" %}'
+                '{% fact "An example label long enough to crowd its value" icon="search" %}'
+                '<a href="#example">An example value that has to wrap</a>{% endfact %}'
+                '{% fact "Example" value="One" icon="shield" %}{% endfacts %}'
             ),
         }
         for width in (NARROWEST, PHONE_SCREEN[0]):
             with self.subTest(width=width):
                 self.open("band-fact-probe", width)
                 fact, label, lines = self.page.evaluate(
-                    """([band, label]) => {
+                    """([band, label, value]) => {
                   const fact = document.querySelector(band);
                   const edges = (r) => [r.top, r.bottom];
                   const words = document.createRange();
-                  words.selectNodeContents(fact.querySelector('strong a'));
+                  words.selectNodeContents(fact.querySelector(`${value} a`));
                   return [edges(fact.getBoundingClientRect()), edges(fact.querySelector(label).getBoundingClientRect()),
                     [...words.getClientRects()].map(edges)];
                 }""",
-                    [SELECTORS["band_fact"], SELECTORS["band_label"]],
+                    [SELECTORS["band_fact"], SELECTORS["band_label"], SELECTORS["fact_value"]],
                 )
                 self.assertGreater(len({top for top, _bottom in lines}), 1, "the value wraps")
                 self.assertGreaterEqual(min(top for top, _bottom in lines), fact[0])
@@ -517,6 +523,29 @@ class ComponentLayoutTests(LayoutBrowserTests):
         # A tab under the pointer is drawn as hovered, which is not chosen.
         self.page.mouse.move(0, 0)
         self.assertEqual((chosen(), shown(), ringed()), ([2], [2], []))
+
+    def test_each_kind_of_dialog_opener_is_found_for_its_dialog(self):
+        """A dialog opened by any opener the modal contract allows is one the
+        gates and dev:look can open: a link the page's wiring intercepts, a
+        control that names its dialog, and the platform's own invoker, bare."""
+
+        openers = {
+            "example-link": '<a href="/" data-modal-open="example-link">Link</a>',
+            "example-named": '<a href="/" aria-haspopup="dialog" aria-controls="modal-example-named">Named</a>',
+            "example-invoker": '<button type="button" command="show-modal" commandfor="modal-example-invoker">Invoker</button>',
+        }
+        dialog = '{%% include "partials/_modal.html" with id="%s" title="Example" %%}'
+        self.pages = {
+            **self.pages,
+            "openers-probe": probe("".join(opener + dialog % name for name, opener in openers.items())),
+        }
+        self.open("openers-probe", WIDE)
+
+        for name in openers:
+            with self.subTest(name):
+                self.assertEqual(self.page.locator(SELECTORS["dialog_opener"].format(id=name)).count(), 1)
+        said = self.page.evaluate(DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]])
+        self.assertEqual(said, [])
 
     def test_about_text_opens_from_the_keyboard_and_gives_focus_back(self):
         """The about button is reached by the key for every control, opens

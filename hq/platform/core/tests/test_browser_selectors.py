@@ -98,7 +98,9 @@ def _template_markup(source: str, classes: set[str], ids: set[str], text: list[s
 
     text.append(source)
     for value in re.findall(r'\bclass="([^"]*)"', source):
-        classes.update(value.split())
+        # A class set beside a tag or a variable (``fact{% if tone %}``) is
+        # read without them.
+        classes.update(re.sub(r"\{%.*?%\}|\{\{.*?\}\}", " ", value).split())
     ids.update(re.findall(r'\bid="([^"{}]+)"', source))
     ids.update(generated_ids(source))
     # A card's class, id and data- attributes are its tag's options.

@@ -20,6 +20,7 @@ from hq.platform.core import seeds
 from . import look, look_report, look_tables
 from .browser import stress
 from .browser.probes import boxes
+from .browser.selectors import SELECTORS
 
 ASKED = {"usage_pages": "example"}
 
@@ -419,7 +420,7 @@ class _Dialogs:
         self.at, self.hovered = (0, 0), None
 
     def named(self, openers):
-        return next(dialog for dialog in self.open if look._OPENERS.format(id=dialog) == openers)
+        return next(dialog for dialog in self.open if SELECTORS["dialog_opener"].format(id=dialog) == openers)
 
     def evaluate(self, script, arg=None):
         if script == look._DIALOGS:

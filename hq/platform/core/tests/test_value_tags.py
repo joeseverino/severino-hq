@@ -245,6 +245,22 @@ class CodeSpanTests(SimpleTestCase):
 
         self.assertEqual(texts(code_spans("An unclosed `name"), "code"), [])
 
+    def test_the_punctuation_after_a_span_is_held_inside_its_last_box(self):
+        # Outside the span's box, a line may break between the box and the
+        # mark, which then starts the next line alone.
+        for name in ("get_resource", "hq://hq"):
+            for mark in (";", ":", ",", ".", ")", ")."):
+                with self.subTest(name=name, mark=mark):
+                    html = str(code_spans(f"Call `{name}`{mark} then stop"))
+
+                    (held,) = with_class(html, "mark")
+                    self.assertEqual(held.text, mark)
+                    self.assertIn("code", {ancestor.tag for ancestor in held.ancestors})
+                    # No box closes between the span's last letter and its mark.
+                    self.assertTrue(html[: html.index('<span class="mark"')].endswith(name[-1]))
+                    self.assertEqual(texts(html, "code"), [name])
+                    self.assertEqual(text(html), f"Call {name}{mark} then stop")
+
     def test_prose_without_a_span_is_drawn_as_breakable_draws_it(self):
         self.assertEqual(text(code_spans("Lists every host.")), text(breakable("Lists every host.")))
 

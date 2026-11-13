@@ -46,6 +46,12 @@ PLANTS = {
         '<span style="white-space: nowrap">Example value far wider than its box</span></div>'
     ),
     "cells": Plant(_TABLE.format('<div style="inline-size: 20rem">Example</div>')),
+    # A row's button set on its cell's top, as a button taller than a line is
+    # without the row's rule.
+    "actions on the first line": Plant(
+        '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
+        '<button type="button" class="btn compact" style="translate: none">Example</button></td></tr></tbody></table>'
+    ),
     "broken words": Plant(
         _TABLE.format('<span style="display: block; inline-size: 3ch; word-break: break-all">Example</span>')
     ),
@@ -154,6 +160,13 @@ PLANTS = {
         css=".change-arrow { position: relative; inset-block-start: .2em; }",
     ),
     "chips": Plant('<p>Example words <code style="vertical-align: -.2em">example</code> and more words</p>'),
+    # A band's linked count set taller than the zero beside it, as the
+    # Agents card's counts were.
+    "fact rows": Plant(
+        '{% facts layout="band" %}{% fact "Example rules" value=0 %}'
+        '{% fact "Example refused" %}<a href="#" style="display: inline-block; vertical-align: baseline; line-height: 3rem">13</a>'
+        "{% endfact %}{% endfacts %}"
+    ),
     # A name cut where it overruns, set in a line on the bottom edge it clips at.
     "raised text": Plant(
         '<p>Example words <span style="display: inline-block; overflow: hidden">example-name</span> and more</p>'

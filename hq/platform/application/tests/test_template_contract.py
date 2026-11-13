@@ -40,14 +40,15 @@ OUTSIDE = {
         '{% post_button "Go" url color="red" %}'
     ),
     "templates/example/markup.html": (
-        '<div class="kv invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p></div>\n'
+        '<div class="compact invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p></div>\n'
         '<span class="muted" style="--part: {{ width }}">x</span>'
     ),
     "templates/example/parts.html": (
         '{% card %}{% section "A" %}B{% aside %}C{% endsection %}{% aside %}C{% endcard %}\n'
         "{% aside %}D\n"
         '{% card css="kv invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
-        '{% post_button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}'
+        '{% post_button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
+        '{% facts %}{% fact "A" value=n %}{% detail %}B{% endfacts %}'
     ),
     "templatetags/example_tags.py": (
         "from django import template\n\nregister = template.Library()\n\n\n"
@@ -87,6 +88,7 @@ class TemplateValidationTests(SimpleTestCase):
             "parts.html:3": "invented-card",
             "parts.html:4": "invented-button",
             "parts.html:5": "invented-note",
+            "parts.html:6": "detail",
         }
         for place, name in expected.items():
             with self.subTest(place=place):
@@ -100,7 +102,9 @@ DRAWN = (
     "<section>\n<h2>A</h2>\n<details>\n<table></table>\n"
     '<form method="post">\n<ul class="list-rows">\n<div class="kpi">\n<p class="msg">\n'
     '<form class="filter-bar">\n<svg aria-hidden="true">\n<span class="tone-good">\n<dl class="kv">\n'
+    "<strong>{{ refused_count }}</strong> refused\n"
     '<div class="empty">\n<p class="muted">No notes yet.</p>\n'
+    '<td>{% post_button "A" "/a/" %}</td>\n'
     '{% comment %}<section>{% endcomment %}{% table_region "A" %}<table class="data-table"></table>'
     "{% endtable_region %}"
 )
@@ -120,8 +124,10 @@ class HandDrawnTests(SimpleTestCase):
         "an icon",
         "a toned value",
         "label and value facts",
+        "a count split from its words",
         "an empty state",
         "an empty line",
+        "a row's actions",
     )
 
     def test_each_shape_drawn_by_hand_is_refused_naming_the_part_to_write(self):

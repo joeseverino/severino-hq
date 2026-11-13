@@ -149,9 +149,6 @@ _EXTENT_POLL = 100
 
 # Every dialog the page declares, by the id after `modal-` (partials/_modal.html).
 _DIALOGS = """() => [...document.querySelectorAll('dialog.modal[id^="modal-"]')].map((dialog) => dialog.id.slice(6))"""
-# The controls that open a dialog: a link the page's wiring intercepts, or a
-# control that says it opens a dialog and names it.
-_OPENERS = '[data-modal-open="{id}"], [aria-haspopup="dialog"][aria-controls="modal-{id}"]'
 # Which of a dialog's openers a reader can press, as its place among them: one
 # shown, or one inside closed menus they open first, by their summaries. The
 # menus opened are kept to close once the dialog is done; -1 for none.
@@ -1113,7 +1110,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         disclosure in it open too. The page's own wiring opens it, so that is
         looked at as well. Whether it opened."""
 
-        openers = _OPENERS.format(id=dialog)
+        openers = SELECTORS["dialog_opener"].format(id=dialog)
         place = self.page.evaluate(_REACH, openers)
         if place < 0:
             print(f"{name} at {width}: no control a reader can reach opens dialog {dialog!r}", flush=True)

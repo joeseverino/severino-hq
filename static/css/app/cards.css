@@ -201,10 +201,6 @@ a.kpi:hover { background: var(--surface-2); }
 /* One of HQ's modals; what it lists sits flat inside it. */
 .origin-panel { --surface-border: 0 none; --surface-radius: 0; --surface-bg: transparent; --surface-shadow: none; --surface-inset: 0; }
 /* What was read that shows it: each label once, its values beside it. */
-.attention-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-1) var(--space-6); margin: var(--space-3) 0 0; font-size: var(--text-xs); color: var(--ink-2); }
-.attention-facts > div { display: contents; }
-.attention-facts dt { color: var(--muted); }
-.attention-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 /* The queue's table: the title leads since it is what a reader presses, the urgency is one quiet word after it only when urgent (the pill keeps its word for a screen reader and its tip), the meaning wraps under it to the buttons, and the buttons end the row. */
 .queue-table > tbody > tr > :is(.queue-mark, .queue-what) { font-size: var(--text-md); line-height: 1.5; }
 /* The gutter is the queue's at every width, so the title and everything the
@@ -389,7 +385,7 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    (`--frame-inset`), so their words stand where the frame's prose does. */
 /* A form in the body that lays out no fields of its own (not .form) adds no box: what it holds reaches the sides as the body's own part would. */
 :is(.section > .section-body, .section > .section-body > form:not(.form)) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
-  .fact-band, .service-band, .control-summary, .insight-grid, .connection-control-grid, .sweep-grid,
+  .facts-band, .control-summary, .insight-grid, .connection-control-grid, .sweep-grid,
   .month-grid, .list-rows, .setup-list, .day-panel-entry, .search-hits, .conn-rows) {
   --frame-inset: var(--section-side);
   margin-inline: calc(-1 * var(--section-side));
@@ -402,7 +398,7 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    or a month, whose outer rows draw no edge there, keeps the frame's padding
    above and below it. */
 :is(.section > .section-body, .section > .section-body > form:not(.form)) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
-  .fact-band, .service-band, .control-summary, .insight-grid, .connection-control-grid, .sweep-grid) {
+  .facts-band, .control-summary, .insight-grid, .connection-control-grid, .sweep-grid) {
   --section-corner: calc(var(--radius) - 1px);
   /* In a form that starts the body, its hidden fields draw nothing, so they
      do not count. */

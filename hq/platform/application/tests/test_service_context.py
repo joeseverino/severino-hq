@@ -130,7 +130,7 @@ class PageTests(TestCase):
         self.assertFalse(select(response, "id", "delivery"))
         service = response.context["service"]
         # Health once, first in the band, its tile in its tone.
-        facts = with_class(response, "band-fact")
+        facts = with_class(response, "fact")
         self.assertEqual(len([fact for fact in facts if f"tone-{service.status}" in fact.classes]), 1)
         self.assertIn(service.status_label, facts[0].words)
 

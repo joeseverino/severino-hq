@@ -14,11 +14,12 @@
       {% words "agent.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
     {% endif %}
   </div>
-  <div class="agent-state-facts">
-    <span>{{ rule_count|counted:"rule" }}</span>
-    {% if awaiting_count %}<a href="{% url 'core:audit_list' %}?awaiting=1"><strong>{{ awaiting_count|breakable }}</strong> held for approval</a>{% endif %}
-    <a href="{% url 'core:audit_list' %}?action=denied"><strong>{{ refused_count|breakable }}</strong> refused in the last day</a>
-  </div>
+  {% url 'core:audit_list' as audit_url %}
+  {% facts layout="band" %}
+    {% fact "Rules" value=rule_count %}
+    {% if awaiting_count %}{% fact "Held for approval" value=awaiting_count url=audit_url|add:"?awaiting=1" %}{% endif %}
+    {% fact "Refused in the last day" value=refused_count url=audit_url|add:"?action=denied" %}
+  {% endfacts %}
 {% endcard %}
 
 {% comment %}
@@ -256,11 +257,11 @@ change. Asked for when opened: asking takes the server's SDK into the process.
 {% partialdef mcp_endpoint %}
 <div id="mcp-endpoint" class="mcp-endpoint">
   {% if endpoint %}
-    <dl class="kv">
-      <dt>Address</dt><dd><code>{{ endpoint.url|breakable }}</code></dd>
-      <dt>Sign-in</dt><dd>{% outside_link url=endpoint.sign_in %}{{ endpoint.sign_in|breakable }}{% endoutside_link %}</dd>
-      <dt>Protocol</dt><dd><code>{{ endpoint.protocol|breakable }}</code></dd>
-    </dl>
+    {% facts %}
+      {% fact "Address" %}<code>{{ endpoint.url|breakable }}</code>{% endfact %}
+      {% fact "Sign-in" %}{% outside_link url=endpoint.sign_in %}{{ endpoint.sign_in|breakable }}{% endoutside_link %}{% endfact %}
+      {% fact "Protocol" %}<code>{{ endpoint.protocol|breakable }}</code>{% endfact %}
+    {% endfacts %}
     {% if endpoint.told %}{% include "partials/_about.html" with id="mcp-told" title="Agent instructions" lede="Sent by the MCP server before an agent's first call." body_template="core/_mcp_told.html" %}{% endif %}
     {% table_region "MCP server" %}
       <table class="data-table">

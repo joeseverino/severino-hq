@@ -9,11 +9,14 @@ a dialog".
 `label` names the button where it should say less than the dialog's title.
 
 The button is the platform's `command="show-modal"` invoker, so opening it
-needs no script, and the dialog gives focus back to it on Escape. It is a
+needs no script, and the dialog gives focus back to it on Escape.
+`aria-haspopup` has a reader say the button opens a dialog. It carries no
+`aria-controls`: `commandfor` already names the dialog, and the modal pattern
+gives its opener none. It is a
 block of its own, so a grid or flex parent never stretches the button.
 `body_template` is rendered with the surrounding context.
 {% endcomment %}
 <div>
-  <button class="btn ghost compact" type="button" command="show-modal" commandfor="modal-{{ id }}" aria-haspopup="dialog" aria-controls="modal-{{ id }}">{% include "partials/_icon.html" with name="info" %}{{ label|default:title|breakable }}</button>
+  <button class="btn ghost compact" type="button" command="show-modal" commandfor="modal-{{ id }}" aria-haspopup="dialog">{% include "partials/_icon.html" with name="info" %}{{ label|default:title|breakable }}</button>
   {% include "partials/_modal.html" with id=id title=title lede=lede body_template=body_template %}
 </div>

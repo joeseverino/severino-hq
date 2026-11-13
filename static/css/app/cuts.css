@@ -79,7 +79,7 @@
 .data-table td strong > [data-entity],
 .data-table td strong > .cell-line { display: inline; overflow: visible; -webkit-line-clamp: none; line-clamp: none; }
 .data-table td .name-line > strong > [data-entity] { min-width: 0; padding-inline-end: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Any other one-token name, and a `.cell-line`, is cut inside a hyphenated part rather than broken there: a grid track asks for its whole length and holds out for none, down to `--cut-floor` (tables.css), cut by the box inside it (`.cut`, value_tags._token, value_tags.cell_line); an external link's arrow is a column of its own. */
+/* Any other one-token name, and a `.cell-line`, is cut inside a hyphenated part rather than broken there: a grid track asks for its whole length and holds out for none, down to `--cut-floor` (tables.css), cut by the box inside it (`.cut`, line_breaks._token, value_tags.cell_line); an external link's arrow is a column of its own. */
 .data-table td :is(
   [data-entity]:not(strong > *, .row-gutter > *):has(> .token[data-sole] > .cut),
   :is(.token[data-sole]:not([data-entity] *, .cell-line *), .cell-line:not(strong > *)):has(> .cut)
@@ -94,7 +94,7 @@
   /* A part longer than the track is cut inside itself, so the name keeps the lines its seams give it rather than losing every part after the cut. */
   & > :is(.token[data-sole], .cut) .whole { display: inline-block; max-width: 100%; white-space: nowrap; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }
-/* In a phrase a part is a box (`.part`, value_tags._whole) in a track that asks for its whole length and holds out for none: it moves whole, is cut only where longer than its cell, and never widens the table; an opened row (surfaces.css) and screen-reader text (cadence.css) make it text again. */
+/* In a phrase a part is a box (`.part`, line_breaks._whole) in a track that asks for its whole length and holds out for none: it moves whole, is cut only where longer than its cell, and never widens the table; an opened row (surfaces.css) and screen-reader text (cadence.css) make it text again. */
 .data-table td .token:not([data-sole]) > .whole:not([data-cell~=name] *, [data-cell~=prose] *, [data-cell~=data] *, code *, [data-entity] *, .cut *, .btn *, .table-clamp *, tr.is-expanded *, .visually-hidden *) {
   display: inline-grid; grid-template-columns: minmax(0, max-content); vertical-align: top;
   /* An engine may measure a part's max-content a fraction short of the text it draws (WebKit on Linux), so a float of no height asks the track for a pixel more and a part with room is never cut. */

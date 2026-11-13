@@ -11,14 +11,11 @@ and leads to the first.
 
 {% include "partials/_problems.html" with problems=hq.problems|urgent only %}
 
-<div class="fact-band">
+{% facts layout="band" %}
   {% for tile in hq.tiles %}
-  {% band_fact icon=tile.icon label=tile.label tone=tile.tone %}
-    <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value|breakable }}</a>{% else %}{{ tile.value|breakable }}{% endif %}</strong>
-    {% if tile.detail %}<small>{{ tile.detail|breakable }}</small>{% endif %}
-  {% endband_fact %}
+  {% fact tile.label value=tile.value url=tile.url detail=tile.detail icon=tile.icon tone=tile.tone %}
   {% endfor %}
-</div>
+{% endfacts %}
 
 {% comment %}
 Release is a list of facts, so it takes the width and its facts flow into

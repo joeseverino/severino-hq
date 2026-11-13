@@ -57,6 +57,23 @@ def _waiting_note(current: inbox.Inbox) -> str:
     return ""
 
 
+def _row_actions(submission: dict) -> tuple[PageAction, ...]:
+    """What a message's row offers: the reviews it is not already in, and its
+    deletion, which asks first on a page of its own."""
+
+    status_url = reverse("contacts:set_status", args=[submission["id"]])
+    status = submission.get("status")
+    return (
+        *(
+            [PageAction("Mark read", status_url, method="post", value="read", field="status")]
+            if status == "unread"
+            else []
+        ),
+        *([PageAction("Spam", status_url, method="post", value="spam", field="status")] if status != "spam" else []),
+        PageAction("Delete", reverse("contacts:delete", args=[submission["id"]]), danger=True),
+    )
+
+
 def contact_list(request):
     selected_status = request.GET.get("status", "").strip()
     if selected_status not in STATUS_LABELS:
@@ -73,7 +90,7 @@ def contact_list(request):
         "contacts/contact_list.html",
         {
             "not_read": current.state == inbox.NOT_READ,
-            "submissions": submissions,
+            "submissions": [{**each, "actions": _row_actions(each)} for each in submissions],
             "status_tabs": status_tabs,
             "selected_status": selected_status,
             "q": q,

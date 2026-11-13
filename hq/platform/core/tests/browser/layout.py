@@ -44,6 +44,7 @@ from hq.platform.core.tests.browser.survey import (
     CHANGES_READ,
     CHIPS_READ,
     EVIDENCE_READ,
+    FACT_ROWS_READ,
     SUMMARIES_READ,
 )
 from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDTHS
@@ -177,6 +178,7 @@ class LayoutBrowserTests(BrowserGate):
             self.an_items_words_run_to_its_buttons,
             self.a_change_reads_on_one_line_and_baseline,
             self.a_chip_sits_on_the_baseline_of_its_line,
+            self.a_bands_values_share_their_rows_baseline,
             self.code_and_cards_keep_inside_the_gutter,
             self.nothing_is_drawn_into_its_neighbor,
             self.the_chrome_is_as_tall_as_its_insets_say,
@@ -427,6 +429,13 @@ class LayoutBrowserTests(BrowserGate):
         """A chip (an identifier, a tag) set in a line sits on the baseline
         of the words, pills and links around it, on the line it starts on and
         the line it ends on."""
+
+        self.assertEqual(found, [])
+
+    @reads(FACT_ROWS_READ)
+    def a_bands_values_share_their_rows_baseline(self, _name, found):
+        """The facts of a band that share a row stand on one baseline, a
+        zero beside a linked count alike."""
 
         self.assertEqual(found, [])
 

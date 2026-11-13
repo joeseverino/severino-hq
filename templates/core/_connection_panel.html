@@ -69,6 +69,8 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     {% endsection %}
   {% endif %}
 
+  {% comment %}Who you are, the link and the path to HQ: as many side by side as the panel holds.{% endcomment %}
+  <div class="section-flow">
   {% section "Identity" %}
     <dl class="kv">
       <dt>Signed in</dt>
@@ -285,6 +287,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     </ol>
   {% aside %}<span class="count">{{ request_path.proof|breakable }}</span>
   {% endsection %}
+  </div>
 
   <div class="conn-aside">
   {% section "Addresses" fold=True open=True lede="Yours and HQ's" %}

@@ -6,28 +6,34 @@ connected, what it read and when, when it reads next, and the changes waiting
 for it. Nothing here asks it anything.
 {% endcomment %}
 {% with standing=controller.standing %}
-<div class="fact-band" role="group" aria-label="Controller status">
-  {% band_fact icon="activity" label="Controller" tone=controller.standing_tone %}
-    {% if not standing.known %}<strong>Never run</strong><small>No controller has connected to this HQ yet.</small>
-    {% elif standing.silent %}<strong>Not heard from for {{ standing.seen_at|when:"length" }}</strong><small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>
-    {% else %}<strong>Running</strong><small>Last connected {{ standing.seen_at|when:"ago" }}.</small>{% endif %}
-  {% endband_fact %}
-  {% band_fact icon="eye" label="Last read" tone=controller.failing_tone %}
-    {% if controller.swept_at %}<strong>{{ controller.swept_at|when:"ago" }}</strong><small>{% if controller.failing %}{{ controller.failing|breakable }} of {{ controller.readings|length }} readings failed.{% else %}All {{ controller.readings|length }} readings are current.{% endif %}</small>
-    {% else %}<strong>Never</strong><small>Nothing has been read yet.</small>{% endif %}
-  {% endband_fact %}
-  {% band_fact icon="clock" label="Next read" tone=controller.overdue_tone %}
-    {% if not standing.known %}<strong>After the first run</strong><small>Everything is read every {{ controller.sweep_every|breakable }} once it runs.</small>
-    {% elif controller.overdue %}<strong>Overdue</strong><small>{{ controller.oldest.label|breakable }}{% dot %}{% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
-    {% elif controller.sweep_due %}<strong>Shortly</strong><small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
-    {% elif controller.next_sweep_at %}<strong>In {{ controller.next_sweep_at|when:"length" }}</strong><small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
-    {% else %}<strong>After the first run</strong><small>Nothing has been read yet.</small>{% endif %}
-  {% endband_fact %}
-  {% band_fact icon="layers" label="Pending changes" tone=controller.queue_tone %}
-    <strong>{% if controller.queue %}{{ controller.queue|length|counted:"change" }}{% else %}Nothing{% endif %}</strong>
-    <small>{% if controller.asked %}{% words "infrastructure.controller.refresh" %} asked for {% for read in controller.asked %}{% with mark=forloop.last|then:".|," %}{{ read.subject|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}{% elif controller.queue %}{% waiting %}{% endif %}</small>
-  {% endband_fact %}
-</div>
+{% facts layout="band" label="Controller status" %}
+  {% fact "Controller" icon="activity" tone=controller.standing_tone %}
+    {% if not standing.known %}Never run{% elif standing.silent %}Not heard from for {{ standing.seen_at|when:"length" }}{% else %}Running{% endif %}
+  {% detail %}
+    {% if not standing.known %}<small>No controller has connected to this HQ yet.</small>
+    {% elif standing.silent %}<small>Last connected {{ standing.seen_at|when }}. Nothing has been read or changed since.</small>
+    {% else %}<small>Last connected {{ standing.seen_at|when:"ago" }}.</small>{% endif %}
+  {% endfact %}
+  {% fact "Last read" icon="eye" tone=controller.failing_tone %}
+    {% if controller.swept_at %}{{ controller.swept_at|when:"ago" }}{% else %}Never{% endif %}
+  {% detail %}
+    {% if controller.swept_at %}<small>{% if controller.failing %}{{ controller.failing|breakable }} of {{ controller.readings|length }} readings failed.{% else %}All {{ controller.readings|length }} readings are current.{% endif %}</small>
+    {% else %}<small>Nothing has been read yet.</small>{% endif %}
+  {% endfact %}
+  {% fact "Next read" icon="clock" tone=controller.overdue_tone %}
+    {% if not standing.known %}After the first run{% elif controller.overdue %}Overdue{% elif controller.sweep_due %}Shortly{% elif controller.next_sweep_at %}In {{ controller.next_sweep_at|when:"length" }}{% else %}After the first run{% endif %}
+  {% detail %}
+    {% if not standing.known %}<small>Everything is read every {{ controller.sweep_every|breakable }} once it runs.</small>
+    {% elif controller.overdue %}<small>{{ controller.oldest.label|breakable }}{% dot %}{% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
+    {% elif controller.sweep_due or controller.next_sweep_at %}<small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
+    {% else %}<small>Nothing has been read yet.</small>{% endif %}
+  {% endfact %}
+  {% fact "Pending changes" icon="layers" tone=controller.queue_tone %}
+    {% if controller.queue %}{{ controller.queue|length|counted:"change" }}{% else %}Nothing{% endif %}
+  {% detail %}
+    {% if controller.asked %}<small>{% words "infrastructure.controller.refresh" %} asked for {% for read in controller.asked %}{% with mark=forloop.last|then:".|," %}{{ read.subject|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% elif controller.queue %}<small>{% waiting %}</small>{% endif %}
+  {% endfact %}
+{% endfacts %}
 {% comment %}
 Never run: what the controller is, and how to start it and see why it has not
 arrived, from the unit HQ ships (deploy/systemd/severino-hq-controller.*).

@@ -4,6 +4,9 @@
 # test_browser_selectors to markup a template or tag library writes: CSS
 # selectors only (no `xpath=`), and never an attribute only a script sets.
 SELECTORS = {
+    # A row's actions cell ({% row_actions %}) and any cell of a column of
+    # controls, whose controls sit on the row's first line.
+    "row_actions_cell": 'main td.row-actions, main td[data-kind="control"]',
     # A device on the Agents page waiting for the reader's approval.
     "device_prompt": "[data-prompt]",
     # An agent's update streams: a full set warned of in its row's cell, and
@@ -216,8 +219,11 @@ SELECTORS = {
     # beside a calendar's legend.
     "one_line": ".calendar-legend > .count",
     # One fact of a band, and the label that names its value.
-    "band_fact": ".fact-band > *",
-    "band_label": ".band-label",
+    "band_fact": ".facts-band > .fact",
+    "band_label": ".fact-label",
+    "fact_band": ".facts-band",
+    "band_fact_cell": ".fact",
+    "fact_value": ".fact-value",
     # A tab of a tabbed chart, the radio inside it, and the panels they choose.
     "chart_tab": ".chart-tablist > .chart-tab",
     "chart_tab_input": ".chart-tab-input",
@@ -226,5 +232,12 @@ SELECTORS = {
     # aside.
     "drawing": "main svg:not(.icon), table.activity-calendar",
     "dialog": 'dialog.modal[id^="modal-"]',
-    "dialog_opener": '[data-modal-open], [aria-haspopup="dialog"][aria-controls]',
+    # The controls that open the dialog `modal-{id}`, once `{id}` is filled
+    # in (partials/_modal.html states the contract): a link the page's wiring
+    # intercepts, a control that says it opens a dialog and names it, and the
+    # platform's own invoker.
+    "dialog_opener": (
+        '[data-modal-open="{id}"], [aria-haspopup="dialog"][aria-controls="modal-{id}"],'
+        ' [command="show-modal"][commandfor="modal-{id}"]'
+    ),
 }

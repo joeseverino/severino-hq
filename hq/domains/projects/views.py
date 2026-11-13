@@ -141,6 +141,9 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
             repository = repository_for(project.repository_url)
             project.repository = repository
             project.pushed_at = moment(str(repository.pushed_at or "")) if repository is not None else None
+            project.row_actions = (
+                PageAction(capability_words("project.update"), reverse("projects:edit", args=[project.slug])),
+            )
         return context
 
 

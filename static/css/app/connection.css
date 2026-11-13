@@ -158,7 +158,12 @@ textarea.code {
 
 /* The panel is read in a dialog and on a page of its own, so what it does when
    it is narrow is asked of the panel, not the screen. */
-.conn { display: grid; gap: var(--stack-gap); container: conn / inline-size; }
+.conn { container: conn / inline-size; }
+/* Its parts a stack gap apart. Margins rather than a grid's gap, so the
+   bottom margin a flow of its sections keeps collapses into the gap instead
+   of adding to it. */
+.conn > * { margin-block: 0 var(--stack-gap); }
+.conn > :last-child { margin-block-end: 0; }
 .conn-pending { padding: var(--space-10) 0; }
 .conn-note { color: var(--muted); font-size: var(--text-xs); margin: calc(var(--space-2) * -1) 0 var(--space-5); }
 .conn-note-after { margin: var(--space-3) 0 0; }
@@ -178,7 +183,9 @@ textarea.code {
 .conn-verdict-unconfirmed .conn-link:not(.conn-link-relayed) .conn-link-line { background: var(--line); }
 .conn-headline { display: inline-flex; align-items: center; gap: var(--space-3); font-size: var(--text-lg); font-weight: 650; margin: 0; }
 .conn-sub { margin: 0; color: var(--muted); font-size: var(--text-xs); text-align: center; }
-.conn-path { display: grid; gap: var(--space-4); align-content: start; container: path / inline-size; }
+/* In a flow, the route asks for room for a hop's kind, its value and its
+   checks on one line before it shares a row. */
+.conn-path { --flow-basis: 30rem; display: grid; gap: var(--space-4); align-content: start; container: path / inline-size; }
 .conn-path .conn-layer-label { overflow-wrap: normal; }
 /* A hop: its kind, what it is with what HQ read about it, and what opening it
    shows. Every part starts on one line of a set height, so the tick's center
@@ -438,7 +445,9 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
    line sizes to their content, so the value is the width they measure. */
 .conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; container: conn-rows / inline-size; }
 .conn-carriage .conn-rows { container-type: normal; }
-.conn .kv .conn-more > summary { padding: 0; }
+/* A disclosure in a fact is a target of the least size on its own, so one
+   wrapped under another keeps it whatever the column's width. */
+.conn .kv .conn-more > summary { padding: calc((var(--target-min) - 1lh) / 2) 0; }
 .conn-carriage > details { display: contents; }
 .conn-carriage > details > :not(summary) { flex-basis: 100%; }
 .conn-carriage > strong { font-weight: 600; }

@@ -147,6 +147,28 @@ def _month():
     )
 
 
+def _flow(*sections):
+    """A run of sections in the flow (`.section-flow`), each named and holding
+    what it is given."""
+
+    return (
+        '<div class="section-flow">'
+        + "".join(f'{{% section "{heading}" %}}{body}{{% endsection %}}' for heading, body in sections)
+        + "</div>"
+    )
+
+
+# A narrow section: a few facts, as the connection panel's identity draws them.
+_NARROW = '<dl class="kv"><dt>Example name</dt><dd>example-01</dd><dt>Example state</dt><dd>Online</dd></dl>'
+# A wide one: a table of four columns, which takes the whole row.
+_WIDE = (
+    '{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
+    '<th scope="col">Name</th><th scope="col">State</th><th scope="col">Address</th><th scope="col">Seen</th>'
+    "</tr></thead><tbody><tr><td>example-01</td><td>Online</td><td>192.0.2.10</td><td>Today</td></tr></tbody>"
+    "</table>{% endtable_region %}"
+)
+
+
 CATALOG = {
     # A section's heading with a long name, the line under it, and states beside it.
     "part/section-head": Entry(
@@ -169,6 +191,22 @@ CATALOG = {
         '<table class="data-table"><tbody><tr><td>Example</td></tr></tbody></table>'
         "{% endtable_region %}{% endcard %}"
     ),
+    # Sibling sections in the flow: two, three and four narrow ones share a
+    # row as far as the box holds them, and a wide one takes the row ahead of
+    # the narrow ones it was written among.
+    "part/flow-two": Entry(_flow(("Example identity", _NARROW), ("Example link", _NARROW))),
+    "part/flow-three": Entry(
+        _flow(("Example identity", _NARROW), ("Example link", _NARROW), ("Example path", _NARROW))
+    ),
+    "part/flow-four": Entry(
+        _flow(
+            ("Example identity", _NARROW),
+            ("Example link", _NARROW),
+            ("Example path", _NARROW),
+            ("Example device", _NARROW),
+        )
+    ),
+    "part/flow-wide": Entry(_flow(("Example identity", _NARROW), ("Example hosts", _WIDE), ("Example link", _NARROW))),
     # The section part ({% section %}) in each state a page can give it; a new
     # option of the tag comes with an entry here (test_catalog's source check).
     "part/section-bare": Entry(
@@ -225,13 +263,11 @@ CATALOG = {
     # does, the prose after it in the frame's padding; as a project's GitHub
     # panel draws one.
     "part/section-band": Entry(
-        '{% section "Example repository" %}<div class="fact-band">'
-        '{% band_fact icon="commit" label="Example commit" %}<strong>Example</strong>'
-        "<small>An example detail</small>{% endband_fact %}"
-        '{% band_fact icon="check-circle" label="Example checks" tone="good" %}<strong>Passing</strong>'
-        "<small>An example detail</small>{% endband_fact %}"
-        '{% band_fact icon="shield" label="Example alerts" %}<strong>Clear</strong>{% endband_fact %}'
-        "</div><p>An example line after the band.</p>{% endsection %}"
+        '{% section "Example repository" %}{% facts layout="band" %}'
+        '{% fact "Example commit" value="Example" detail="An example detail" icon="commit" %}'
+        '{% fact "Example checks" value="Passing" detail="An example detail" icon="check-circle" tone="good" %}'
+        '{% fact "Example alerts" value="Clear" icon="shield" %}'
+        "{% endfacts %}<p>An example line after the band.</p>{% endsection %}"
     ),
     "part/section-fold": Entry(
         '{% section "Example readings" count=3 fold=True lede="An example lede of a folded section."'
@@ -400,6 +436,34 @@ CATALOG = {
         "<tr><td><strong>example-02</strong></td><td>Another example note</td></tr></tbody></table>"
         "{% endtable_region %}{% endsection %}"
     ),
+    # A row's actions ({% row_actions %}): a POST and a destructive link side
+    # by side, a link alone, one refused, and a row whose note takes several
+    # lines, each set on its row's first line.
+    "table/row-actions": Entry(
+        '{% section "Example messages" %}{% table_region "Example messages" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "From" "identifier" gutter=True %}{% table_heading "Note" %}'
+        '{% table_heading "Actions" css="actions-col" hidden=True drop=1 %}</tr></thead><tbody>'
+        "{% for row in rows %}<tr><td><strong>{{ row.0 }}</strong></td><td>{{ row.1 }}</td>"
+        "{% row_actions row.2 %}</tr>{% endfor %}</tbody></table>{% endtable_region %}{% endsection %}",
+        {
+            "rows": (
+                (
+                    "example-01",
+                    "An example note.",
+                    (
+                        PageAction("Read", "/example/1/status/", method="post", value="read", field="status"),
+                        PageAction("Delete", "/example/1/delete/", danger=True),
+                    ),
+                ),
+                ("example-02", "Another example note.", (PageAction("Open", "/example/2/"),)),
+                (
+                    "example-03",
+                    "An example note that wraps on a phone.",
+                    (PageAction("Spam", "/example/3/", method="post", disabled=True, title="An example reason."),),
+                ),
+            )
+        },
+    ),
     # A status as its words in its tone, among figures, as a change is drawn.
     "status/toned": Entry(
         '{% section "Example changes" %}<p>{% status "+$120.00" tone="good" pill=False %}'
@@ -457,6 +521,52 @@ CATALOG = {
                 (PageAction("Upgrade plan for example-app", "/example/app/"),),
             )
         },
+    ),
+    # Facts ({% facts %}) in each layout and with each option; a new layout
+    # or option of the tags comes with an entry here (test_facts_tags). A
+    # zero beside a linked count stands on its value's line, as the Agents
+    # card's counts do.
+    "part/facts-band": Entry(
+        '{% facts layout="band" label="Example status" %}'
+        '{% fact "Example rules" value=0 %}'
+        '{% fact "Example held for approval" value=2 url="/example/?held=1" tone="attention" %}'
+        '{% fact "Example refused in the last day" value=13 url="/example/?refused=1" detail="An example detail" %}'
+        "{% endfacts %}"
+    ),
+    "part/facts-band-icons": Entry(
+        '{% facts layout="band" %}'
+        '{% fact "Example running" icon="container" %}12{% detail %}<small>on 3 example machines</small>{% endfact %}'
+        '{% fact "Example version" icon="layers" %}<code>example-1.2.3</code>{% detail %}'
+        "<small>example.com/example/image</small><small>Tag only</small>{% endfact %}"
+        '{% fact "An example label long enough to wrap in its cell" icon="shield" tone="serious" %}'
+        '<a href="/example/">2 example findings</a>{% detail %}<small>An example detail</small>{% endfact %}'
+        '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
+        "{% endfacts %}"
+    ),
+    # A few short pairs, one of them a long address, which keep to their
+    # content's width however wide the page is.
+    "part/facts-list": Entry(
+        '{% facts layout="list" %}'
+        '{% fact "Address" %}<code>https://hq.example.com/mcp/</code>{% endfact %}'
+        '{% fact "Sign-in" %}<a href="/example/">https://auth.example.com/application/o/example-hq-agent/'
+        ".well-known/openid-configuration</a>{% endfact %}"
+        '{% fact "Protocol" %}<code>2025-06-18</code>{% endfact %}'
+        "{% endfacts %}"
+    ),
+    "part/facts-list-many": Entry(
+        "{% facts %}"
+        '{% fact "Example name" value="example-01" %}'
+        '{% fact "Example address" value="192.0.2.10" detail="Read an example minute ago" %}'
+        '{% fact "Example owner" value=none %}'
+        '{% fact "Example count" value=0 %}'
+        '{% fact "Example link" value="example.com" url="/example/" %}'
+        '{% fact "An example label long enough to take its column\'s room" value="Example value" %}'
+        '{% fact "Example list" %}<ul class="dot-list"><li>example-one</li><li>example-two</li>'
+        "<li>example-three</li></ul>{% endfact %}"
+        '{% fact "Example prose" %}An example value that is a sentence long enough to wrap onto a second '
+        "line at the narrower widths, as a reading's note does.{% endfact %}"
+        "{% endfacts %}",
+        {"none": None},
     ),
     # The notice ({% notice %}) in each tone and with each option; a new tone
     # or option of the tag comes with an entry here (test_notice_tags).

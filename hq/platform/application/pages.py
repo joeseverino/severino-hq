@@ -78,6 +78,9 @@ class PageAction:
     title: str = ""
     # Shown but not usable, with ``title`` saying why.
     disabled: bool = False
+    # The field a POST action's ``value`` is sent as, for a view that reads
+    # its own ("status") rather than the button's default.
+    field: str = "action"
 
     def __post_init__(self):
         if self.method not in {"get", "post"}:

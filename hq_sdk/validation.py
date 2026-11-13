@@ -2,7 +2,8 @@
 
 Each read without importing the plugin or configuring Django: its templates
 use only the public pieces of the host's (``contract.json``'s ``templates``
-section), and no page sentence closes on a value by hand. What its Python
+section), no page sentence closes on a value by hand, and no label is a
+sentence (``plain_words``' label rule, the host's own). What its Python
 imports is Ruff's to hold (tools/pipeline/extension-imports.toml), and the
 host's ast-grep rules the plugin check names hold the rest
 (tools/pipeline/check-plugin.sh).
@@ -17,6 +18,8 @@ from pathlib import Path
 from typing import Any
 
 lazy from django.template.base import Lexer, TokenType
+
+lazy from hq.platform.core import plain_words
 
 # Sentence checks ------------------------------------------------------------
 
@@ -203,6 +206,20 @@ def sentence_closes(source_root: str | Path) -> list[str]:
             continue
         found.extend(f"{relative}:{line}: {value}" for line, value in sorted(_closes_by_hand(tree)))
     return found
+
+
+# Label checks ---------------------------------------------------------------
+
+
+def sentence_labels(source_root: str | Path) -> list[str]:
+    """Return stable ``path:line: Label: why`` lines for each label (a heading,
+    a column, a button, a link) a package's templates or Python write as a
+    sentence: the host's own label rule (docs/Design.md), which ``lint:prose``
+    holds the host to."""
+
+    root = Path(source_root).resolve()
+    pieces = plain_words.template_labels([root]) + plain_words.python_labels([root])
+    return sorted(plain_words.label_findings((where.removeprefix(f"{root}/"), text) for where, text in pieces))
 
 
 # Template checks -----------------------------------------------------------
@@ -421,8 +438,10 @@ class _Template:
             literal = _LITERAL.fullmatch(value)
             if option in host["classes"] and literal:
                 self._classes(literal.group(2).split(), line)
-        # A later part ({% aside %}) is written only inside its own tag.
-        if host["parts"]:
+        # A later part ({% aside %}) is written only inside its own tag, and a
+        # tag given the option that makes it stand alone encloses nothing.
+        bare = host.get("bare_with") and any(bit.partition("=")[0] == host["bare_with"] for bit in bits)
+        if host["parts"] and not bare:
             self.enclosing.append(tag)
 
     def _classes(self, words: list[str], line: int) -> None:
@@ -567,7 +586,8 @@ def _report(heading: str, violations: list[str]) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Reject templates outside the public template contract and page sentences closed on a value by hand."
+            "Reject templates outside the public template contract, page sentences closed on a value by hand"
+            " and labels written as sentences."
         )
     )
     parser.add_argument("source_root", type=Path)
@@ -586,10 +606,15 @@ def main() -> int:
             " from hq_sdk.ui, which keeps a value's own period:",
             sentence_closes(args.source_root),
         ),
+        _report(
+            "Labels written as sentences; a label is the thing's plain name in one to three words, and what it"
+            " holds goes in the lede (docs/Design.md):",
+            sentence_labels(args.source_root),
+        ),
     ]
     if any(refused):
         return 1
-    print("HQ SDK template and sentence boundaries passed.")
+    print("HQ SDK template, sentence and label boundaries passed.")
     return 0
 
 

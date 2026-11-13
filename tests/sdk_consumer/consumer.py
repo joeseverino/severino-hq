@@ -125,6 +125,7 @@ def sentences(registrar: str) -> None:
     assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)
     ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
     assert_type(validation.sentence_closes("src"), list[str])
+    assert_type(validation.sentence_labels("src"), list[str])
 
 
 def the_demo(due: date, at: datetime) -> None:
@@ -346,6 +347,9 @@ def a_page() -> None:
     assert_type(pages.PageAction("Open", "/example/", primary=True).css, str)
 
     pages.PageAction("Open")  # type: ignore[call-arg]
+    # A POST action names the field its value is sent as, for a row's actions.
+    assert_type(pages.PageAction("Mark read", "/example/1/", method="post", value="read", field="status").field, str)
+    pages.PageAction("Mark read", "/example/1/", field=1)  # type: ignore[arg-type]
     pages.page_context("Example", actions=["Open"])  # type: ignore[list-item]
     assert_type(pages.page_context("Example", reads=("example.things",)), dict[str, pages.Page])
     pages.page_context("Example", reads=1)  # type: ignore[arg-type]

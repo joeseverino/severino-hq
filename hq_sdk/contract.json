@@ -919,7 +919,8 @@
           "modal=",
           "value=",
           "title=",
-          "disabled="
+          "disabled=",
+          "field="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2464,6 +2465,12 @@
           "source_root"
         ]
       },
+      "sentence_labels": {
+        "kind": "function",
+        "parameters": [
+          "source_root"
+        ]
+      },
       "template_violations": {
         "kind": "function",
         "parameters": [
@@ -3003,6 +3010,10 @@
         "pattern": "<section\\b",
         "write": "{% section \"Heading\" %}body{% endsection %}, or a <div> for one that only groups a layout"
       },
+      "a count split from its words": {
+        "pattern": "<strong>\\{\\{\\s*(?:(?:[\\w.]*[._])?(?:count|counts|total)\\b[\\w.]*|[\\w.]*[a-z][^\\Wsu]s|[\\w.]+\\|length)(?:\\|(?!counted)\\w+(?::\\S+)?)*\\s*\\}\\}</strong>\\s+[a-z]",
+        "write": "{{ n|counted:\"thing\" }}, the figure and its words as one, or {% fact \"Label\" value=n %}"
+      },
       "a figure": {
         "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:kpi|kpi-grid)(?![\\w-])",
         "write": "{% include \"partials/_kpi_grid.html\" %} from hq_sdk.ui.Kpi"
@@ -3031,6 +3042,10 @@
         "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:msg|notice)(?![\\w-])",
         "write": "{% notice %}, the part to come (hq-1766)"
       },
+      "a row's actions": {
+        "pattern": "(?s)<td\\b[^>]*>(?:(?!</td>).)*?(?:\\{%\\s*post_button\\b(?![^%]*\\bcss=)|\\b(?:class|css)=\"(?:[^\"]*\\s)?btn(?![\\w-]))",
+        "write": "{% row_actions actions %} from hq_sdk.pages.PageAction, which draws the row's cell"
+      },
       "a table outside its region": {
         "outside": "table_region",
         "pattern": "<table\\b",
@@ -3053,8 +3068,8 @@
         "write": "{% include \"partials/_icon.html\" with name=\"...\" %}; a drawing that says something is role=\"img\""
       },
       "label and value facts": {
-        "pattern": "<dl\\b[^>]*\\bclass=\"(?:[^\"]*[\\s}])?(?:kv)(?![\\w-])",
-        "write": "{% facts %}, the part to come (hq-1770)"
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:kv|fact-band|service-band|control-summary|control-metric|boxed-facts|github-facts|vitals-strip|glance-metrics|agent-state-facts|attention-facts)(?![\\w-])",
+        "write": "{% facts %} around each {% fact \"Label\" value=... %}, or {% facts layout=\"band\" %} for a band"
       }
     },
     "hooks": [
@@ -3312,6 +3327,31 @@
         ],
         "parts": []
       },
+      "fact": {
+        "bare_with": "value",
+        "classes": [],
+        "parameters": [
+          "label",
+          "*",
+          "detail=",
+          "icon=",
+          "tone=",
+          "url=",
+          "value="
+        ],
+        "parts": [
+          "detail"
+        ]
+      },
+      "facts": {
+        "classes": [],
+        "parameters": [
+          "*",
+          "label=",
+          "layout="
+        ],
+        "parts": []
+      },
       "outside_link": {
         "classes": [
           "css"
@@ -3359,6 +3399,15 @@
           "thing",
           "identity=",
           "cards="
+        ],
+        "parts": []
+      },
+      "row_actions": {
+        "classes": [],
+        "parameters": [
+          "actions=",
+          "*",
+          "gap="
         ],
         "parts": []
       },

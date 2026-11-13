@@ -38,7 +38,15 @@ outside HQ". Comments and identifiers keep the internal vocabulary.
 a button say the plainest name a stranger would understand at a glance:
 "Devices", "Apps", "Rules", "Setup", "Permissions", "Approve". Two things on
 one page never share a name. The sentence that explains it, if one is needed,
-is the lede or the help text under it, never the title itself.
+is the lede or the help text under it, never the title itself. A label (a
+heading, a tab, a fold's title, a column, a row group, a dialog's title, a
+button, a link to another page) is one to three words in sentence case, the
+term GitHub, Stripe, Cloudflare, Vercel or Tailscale's dashboards use:
+"Access", "History", "Source", "Defaults", "Installed on", "Unmanaged names".
+It never opens with a question word and holds no pronoun, no
+everything/each/every and no clause saying what the part holds. A name that
+must break it is in `PROPER_NAMES` in `hq/platform/core/plain_words.py` with
+its reason; `lint:prose` refuses the rest.
 
 The Vale style `tools/lint/vale/styles/Plain` holds each word that is never
 shown with what to say instead, and each label that was retired for one name
@@ -179,7 +187,12 @@ script they all show. A group folded away is `row_group ... folds=<id>`, its
 rows naming that id.
 
 A row reads from its first line: the toggle stands there, so every cell is set
-at the top, and no page sets its table's cells otherwise.
+at the top, and no page sets its table's cells otherwise. What can be done to
+a row's record ends the row as `{% row_actions actions %}`, each a
+`PageAction` drawn as a compact control with its middle on the first line's,
+under a heading of kind `control`; a page never draws a button in a cell
+(*Gate:* the survey's `actions on the first line`, and `a row's actions` in
+`HAND_DRAWN`).
 *Gates:* `a_table_fits_its_box_at_every_width`,
 `test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`,
 `only_a_table_scrolls_sideways`, and the page crawl, which fails any
@@ -366,7 +379,19 @@ A band is listed once, in the band rule in `css/app/figures.css`; its cells
 keep their own padding. Too narrow for two cells, a band reads as a list:
 label left, value right.
 
-What names a value (`.band-label`, a tile's label, a `<dt>`) is sentence case
+Every label and its value is a fact: `{% fact "Label" value=n url=... detail=... %}`
+inside `{% facts %}`, or the block form `{% fact "Label" %}markup{% detail %}lines{% endfact %}`
+for a value that is markup. A band (`{% facts layout="band" %}`) is the few
+facts that sum up a page or a part, each a cell with its icon, its label over
+its value over its detail; the facts of a row share their lines, so every
+value stands on one baseline, a zero beside a linked count alike. A list, the
+default, is the facts about one thing, each label beside its value, its label
+column as wide as its longest label, so a few short pairs never spread across
+a wide page. A label with several values holds them as a list inside one fact.
+A fact drawn by hand (`.kv`, a page's own band) is a shape `test_hand_drawn`
+counts, and so is a figure set bold apart from the words that count it.
+
+What names a value (`.fact-label`, a tile's label, a `<dt>`) is sentence case
 in the muted voice. Capitals are for a kicker over a group (`.eyebrow`), never
 a value's name, a state or a tag; `lint:css` holds every selector to the
 kickers listed in `tools/lint/stylelint.config.mjs`.

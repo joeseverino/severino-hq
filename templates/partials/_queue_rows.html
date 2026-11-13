@@ -33,7 +33,8 @@ dismissed row is its title and the way back.
       {% if item.detail %}<p class="attention-detail cell-prose">{{ item.detail|breakable }}</p>{% endif %}
       {% if item.facts or item.advice or item.steps or item.reason or item.links %}
       <div class="row-below queue-more">
-        {% if item.facts %}{% include "partials/_facts.html" with facts=item.facts only %}{% endif %}
+        {% comment %}What was read that shows a problem (application.decisions): each label once, with every value it was given.{% endcomment %}
+        {% if item.facts %}{% facts %}{% for fact in item.facts %}{% fact fact.label %}<ul class="dot-list">{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}</ul>{% endfact %}{% endfor %}{% endfacts %}{% endif %}
         {% if item.advice %}<p class="attention-advice">{{ item.advice|breakable }}</p>{% endif %}
         {% include "partials/_resolution_workflow.html" with steps=item.steps label=item.label only %}
         {% if item.reason %}<p class="attention-reason">{{ item.reason|breakable }}</p>{% endif %}

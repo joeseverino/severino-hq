@@ -389,6 +389,20 @@ def row_group(label: str, count: int | None = None, *, folds: str = "", href: st
     return {"label": label, "count": count, "folds": folds, "href": href}
 
 
+@register.inclusion_tag("partials/_row_actions.html")
+def row_actions(actions: Any = (), *, gap: Any = None) -> dict[str, Any]:
+    """The cell that ends a row with what can be done to its record: each of
+    ``actions`` (a ``PageAction``, as a ``ListRow``'s are) a compact control
+    drawn by ``_page_action.html``, so a row's buttons look like every other
+    and only a destructive one differs. Under a heading of kind ``control``
+    (``css="actions-col"``), so the region sizes the column to what it holds
+    and a narrow box moves it to the row's open line. ``gap``, an
+    ``adoption.WriteGap``, stands in for every action when the connection
+    cannot make the change."""
+
+    return {"actions": tuple(actions or ()), "gap": gap}
+
+
 @register.inclusion_tag("partials/_row_toggle.html")
 def row_toggle() -> dict[str, Any]:
     """The toggle that opens a row to all it holds, last in the cell that names

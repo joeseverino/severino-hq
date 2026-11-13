@@ -471,6 +471,41 @@ CHIPS_OFF_THEIR_LINE = (
 )
 
 
+# The facts of a band that share a row share a baseline: each value's first
+# line has its baseline where the first value of its row has it, a zero beside a linked
+# count alike. A row is the facts whose cells start level.
+VALUES_OFF_THEIR_ROW = (
+    "([band, fact, value, unseen]) => {"
+    + DESCRIBE
+    + BASELINES
+    + r"""
+  const found = [];
+  for (const each of document.querySelectorAll(band)) {
+    if (!each.checkVisibility()) continue;
+    const rows = new Map();
+    for (const cell of each.querySelectorAll(`:scope > ${fact}`)) {
+      const held = cell.querySelector(value);
+      if (!held || !drawn(held).length) continue;
+      const top = Math.round(cell.getBoundingClientRect().top);
+      if (!rows.has(top)) rows.set(top, []);
+      // The baseline of the value's own first line, where a box of no size
+      // lands first in it: a chip in that line is the chips check's.
+      rows.get(top).push([held, baseline(held.firstChild, false)]);
+    }
+    for (const row of rows.values()) {
+      const [[first, at]] = row;
+      for (const [held, its] of row.slice(1)) {
+        if (Math.abs(its - at) > 0.5) {
+          found.push(`${describe(each)} "${held.textContent.trim().slice(0, 40)}" sits ${(its - at).toFixed(1)}px off the baseline of "${first.textContent.trim().slice(0, 40)}"`);
+        }
+      }
+    }
+  }
+  return found;
+}"""
+)
+
+
 # A block box set in a line that clips what it holds takes its bottom margin
 # edge as its baseline (CSS 2.1 §10.8.1), so on the line's baseline its text
 # rides a descent above the words beside it. That is an inline block (and

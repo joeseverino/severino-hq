@@ -16,8 +16,8 @@
       <div class="topology-fact">
         <dt>Traffic{% dot %}{{ traffic_window_days|counted:"day" }}</dt>
         <dd>
-          <strong>{{ item.node.pageviews|breakable }}</strong> pageviews from
-          <strong>{{ item.node.visits|breakable }}</strong> visits.
+          <strong>{{ item.node.pageviews|counted:"pageview" }}</strong> from
+          <strong>{{ item.node.visits|counted:"visit" }}</strong>.
         </dd>
       </div>
     {% endif %}

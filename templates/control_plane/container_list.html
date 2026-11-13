@@ -9,24 +9,24 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
 {% endcomment %}
 {% block page %}
 {% if containers %}
-  <div class="fact-band">
-    {% band_fact icon="container" label="Running" %}
-      <strong>{{ tally.running|breakable }}</strong>
-      <small>on {{ machines|counted:"machine" }}</small>
-    {% endband_fact %}
-    {% band_fact icon="shield" label="Known vulnerabilities" tone=tally.vulnerable_tone %}
-      <strong>{% if tally.vulnerable %}{{ tally.vulnerable|counted:"container" }}{% else %}None serious{% endif %}</strong>
+  {% facts layout="band" %}
+    {% fact "Running" icon="container" %}{{ tally.running|breakable }}{% detail %}<small>on {{ machines|counted:"machine" }}</small>{% endfact %}
+    {% fact "Known vulnerabilities" icon="shield" tone=tally.vulnerable_tone %}
+      {% if tally.vulnerable %}{{ tally.vulnerable|counted:"container" }}{% else %}None serious{% endif %}
+    {% detail %}
       <small>{% if tally.vulnerable %}in {{ tally.vulnerable_images|counted:"image" }}{% endif %}{% if tally.unchecked %}{% if tally.vulnerable %}{% dot %}{% endif %}{{ tally.unchecked|breakable }} of {{ tally.running|breakable }} cannot be checked{% endif %}</small>
-    {% endband_fact %}
-    {% band_fact icon="deploy" label="Updates" tone=tally.updates_tone %}
-      <strong>{% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.running %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date|breakable }} of {{ tally.running|breakable }} up to date{% else %}Unknown{% endif %}</strong>
+    {% endfact %}
+    {% fact "Updates" icon="deploy" tone=tally.updates_tone %}
+      {% if tally.update_available %}{{ tally.update_available|counted:"has an update,have an update" }}{% elif tally.up_to_date == tally.running %}All up to date{% elif tally.up_to_date %}{{ tally.up_to_date|breakable }} of {{ tally.running|breakable }} up to date{% else %}Unknown{% endif %}
+    {% detail %}
       <small>{% if tally.update_available and tally.up_to_date %}{{ tally.up_to_date|breakable }} up to date{% if tally.update_unknown and tally.up_to_date != tally.running %}, {% endif %}{% endif %}{% if tally.update_unknown and tally.up_to_date != tally.running %}{{ tally.update_unknown|breakable }} unknown{% endif %}{% if tally.update_available and tally.up_to_date or tally.update_unknown and tally.up_to_date != tally.running %}{% dot %}{% endif %}{% include "partials/_reading_age.html" with at=read_at only %}</small>
-    {% endband_fact %}
-    {% band_fact icon="lock" label="Pinned" tone=tally.pinned_tone %}
-      <strong>{{ tally.pinned|breakable }} of {{ tally.running|breakable }}</strong>
+    {% endfact %}
+    {% fact "Pinned" icon="lock" tone=tally.pinned_tone %}
+      {{ tally.pinned|breakable }} of {{ tally.running|breakable }}
+    {% detail %}
       <small>{% if tally.pinned == tally.running %}None change on a pull.{% else %}The rest run a tag, which can point at a different build on the next pull.{% endif %}</small>
-    {% endband_fact %}
-  </div>
+    {% endfact %}
+  {% endfacts %}
 
   {% for need in need_sections %}
     {% section need.heading count=need.groups|length|counted:"image" lede=need.lede %}

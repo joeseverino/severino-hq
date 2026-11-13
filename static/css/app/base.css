@@ -97,7 +97,7 @@ pre code { background: transparent; padding: 0; color: inherit; }
    for, so the name would run into the cell's padding. */
 th[scope=row] > code { display: inline-block; max-width: 100%; }
 :is(td, th) [data-entity] > .token, :is(td, th) [data-entity] > .token > .whole { display: contents; }
-/* Where the filter lets a token break (value_tags._SEAM): a zero-width space,
+/* Where the filter lets a token break (line_breaks._SEAM): a zero-width space,
    so `white-space` governs it as it does any text, kept out of the name a
    reader hears. */
 .seam::after { content: "\200B" / ""; }
@@ -105,7 +105,7 @@ th[scope=row] > code { display: inline-block; max-width: 100%; }
    It holds its neighbor with no box of its own, so nothing about it can reach
    past a cell or open a break where the part around it is held whole. */
 .joined { display: contents; white-space: nowrap; }
-/* The sentence's mark after a name (value_tags.breakable) sits inside the
+/* The sentence's mark after a name (line_breaks.breakable) sits inside the
    name's box so it keeps to the name's last line. In code it is no part of
    the value, so copying the value leaves it behind. */
 code .mark { -webkit-user-select: none; user-select: none; }

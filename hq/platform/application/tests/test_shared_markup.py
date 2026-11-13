@@ -101,44 +101,6 @@ class SectionHeadTests(SimpleTestCase):
         self.assertEqual(elements(html, "hgroup"), [])
 
 
-class BandFactTests(SimpleTestCase):
-    PARTIAL = "partials/_band_fact.html"
-
-    def test_a_fact_is_its_label_its_value_and_its_tone(self):
-        html = _render(
-            '{% band_fact icon="shield" label=label tone=tone %}<strong>{{ n }} open</strong>'
-            "<small>example-repo</small>{% endband_fact %}",
-            label="Security",
-            tone="serious",
-            n=2,
-        )
-
-        (fact,) = with_class(html, "band-fact")
-        (named,) = with_class(html, "band-label")
-        self.assertIn("tone-serious", fact.classes)
-        self.assertEqual(named.words, "Security")
-        self.assertEqual(len(with_class(html, "band-icon")), 1)
-        self.assertEqual(texts(html, "strong"), ["2 open"])
-        self.assertEqual(texts(html, "small"), ["example-repo"])
-
-    def test_without_a_tone_or_an_icon_it_has_neither(self):
-        html = _render('{% band_fact label="Running" tone=tone %}<strong>3</strong>{% endband_fact %}', tone="")
-
-        (fact,) = with_class(html, "band-fact")
-        self.assertEqual(fact.classes, {"band-fact"})
-        self.assertEqual(with_class(html, "band-icon"), [])
-
-    def test_a_page_cannot_decide_a_tone_in_the_template(self):
-        # The fact's projection says its tone; the tag has no part for it.
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% band_fact label="A" %}<strong>1</strong>{% tone %}good{% endband_fact %}')
-
-    def test_a_label_from_data_is_escaped(self):
-        html = _render("{% band_fact label=label %}<strong>1</strong>{% endband_fact %}", label="<b>x</b>")
-
-        self.assertEqual(elements(html, "b"), [])
-
-
 class CardTests(SimpleTestCase):
     PARTIAL = "partials/_card.html"
 
@@ -271,10 +233,6 @@ class SharedMarkupTemplateTests(SimpleTestCase):
         found = _written_by_hand(r'\bclass="(?:[^"]*[\s}])?card[\s"{]', CardTests.PARTIAL)
         self.assertEqual(found, [], "write {% card %} instead")
 
-    def test_only_the_tag_draws_a_band_fact(self):
-        found = _written_by_hand(r'class="band-fact[" {]', BandFactTests.PARTIAL)
-        self.assertEqual(found, [], "write {% band_fact %} instead")
-
     def test_no_template_decides_a_fact_s_tone(self):
         # The tag refuses the part when a page renders; this reads every
         # template, rendered by a test or not.
@@ -284,7 +242,7 @@ class SharedMarkupTemplateTests(SimpleTestCase):
             for number, line in enumerate(text.splitlines(), 1)
             if re.search(r"\{%\s*tone\s*%\}", line)
         ]
-        self.assertFalse(found, "give the fact's projection a tone and write tone=<it> on {% band_fact %}")
+        self.assertFalse(found, "give the fact's projection a tone and write tone=<it> on {% fact %}")
 
     def test_only_the_outside_link_partial_writes_an_outside_link(self):
         # An anchor to a web address, or one that leaves in a new tab.

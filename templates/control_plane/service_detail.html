@@ -7,17 +7,16 @@ The summary first: what it is, where it runs, and whether it is healthy. Each
 value comes from application.service_context.service_summary, walked from the
 readings. The path is the next section, drawn once.
 {% endcomment %}
-<div class="service-band">
+{% facts layout="band" %}
   {% for item in summary %}
-    {% band_fact icon=item.icon label=item.label tone=item.tone %}
-      <strong>{% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}</strong>
-      {% if item.detail %}<small>{{ item.detail|breakable }}</small>{% endif %}
-    {% endband_fact %}
+    {% fact item.label icon=item.icon tone=item.tone detail=item.detail %}
+      {% if item.link and item.link.url %}{% entity item.link label=item.value %}{% else %}{{ item.value|breakable }}{% endif %}
+    {% endfact %}
   {% endfor %}
   {% if service.aliases %}
-    <p class="band-meta"><span>Also at {% for alias in service.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></p>
+    {% fact "Also at" icon="globe" %}{% for alias in service.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}
   {% endif %}
-</div>
+{% endfacts %}
 {% comment %}
 What is wrong with this name, as the queue says it. The card about its setup
 carries the faults as its sentence, so they are listed here only when no card

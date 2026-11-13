@@ -37,17 +37,25 @@
 /* The wide column second. A drawing sized to itself beside a table of six
    columns wants the narrow half, and reading order puts the drawing first. */
 .two-col > * { min-width: 0; }
-/* The sections at the end of a thing's page (what else HQ holds, how it
-   relates, what names it) are mostly short: each is a card holding its own
-   heading, two to a row where both fit, the two at one height so the shorter
-   leaves no hole beside the taller, and one that is wide (a table of four
-   columns or more, a folded section) takes the whole row. */
-.section-flow { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 34rem), 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
-/* Short sections collect at the end, so they pair with each other rather than
-   each sitting beside the gap a wide one leaves. */
-.section-flow > * { min-width: 0; margin: 0; order: 1; }
-.section-flow > :not(section, figure.section),
-.section-flow > section:has(table > thead th:nth-child(4)) { grid-column: 1 / -1; order: 0; }
+/* The flow: a run of sibling sections or cards, as many to a row as keep
+   each at least --flow-basis wide, and one to a row where that is the whole
+   width. Flex rather than a grid of auto-fit tracks, so a row's last ones
+   share what the row leaves: three sections where two fit put the third
+   across the row, never in a track beside an empty one. The basis is read
+   against the box the flow sits in, so the same sections pair in a dialog
+   and on a page with no breakpoint. Each on a row is as tall as the tallest,
+   so a short one leaves no hole beside a long one. A run of narrower cards
+   sets a narrower basis on its flow; `.domain-charts`, which extensions
+   write, is the flow at the width a chart keeps its scale. */
+.section-flow, .domain-charts { --flow-basis: 22rem; display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+.domain-charts { --flow-basis: 30rem; }
+.section-flow > *, .domain-charts > * { flex: 1 1 var(--flow-basis); min-width: 0; margin: 0; order: 1; }
+/* What is not a section or a card (a fold, a paragraph) and a section holding
+   a table of four columns or more take the whole row, ahead of the short
+   ones, which collect after them to share rows rather than each sitting
+   beside the gap a wide one leaves. */
+.section-flow > :not(section, article, figure.section),
+.section-flow > section:has(table > thead > tr > :nth-child(4)) { flex-basis: 100%; order: 0; }
 /* Sections stacked in one column of a pair, at the pair's own gap. */
 .stack { display: grid; gap: var(--layout-gap); align-content: start; min-width: 0; }
 /* Panels that flow rather than pair. Assigning cards to a fixed left and right
@@ -197,18 +205,6 @@
 .domain-head-copy .eyebrow { display: block; margin-bottom: var(--space-2); }
 .domain-head-copy p { margin: var(--space-2) 0 0; }
 .domain-head > a { flex: 0 0 auto; }
-
-/* A domain's featured analysis: the chart and the calendar beside it. Two
-   explicit columns rather than .two-col's auto-fit, so the pair stays paired.
-   A chart alone in this row either sits in a card twice its width or scales
-   its viewBox across the row, so the other half holds something worth reading. */
-.domain-charts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr));
-  gap: var(--layout-gap);
-  margin: 0 0 var(--stack-gap);
-}
-.domain-charts > * { min-width: 0; margin: 0; }
 
 /* Activity calendar: one month of plan against execution. */
 /* The calendar. A source's color is one custom property, so a dot, a line, a
@@ -556,19 +552,23 @@ td > .subtle-link:not(:only-child) { display: table; }
 .empty p { margin: 0; }
 .empty .empty-cta { color: var(--accent-2); font-weight: 500; white-space: nowrap; }
 
-/* ── KV grid ────────────────────────────────────────────────────── */
+/* ── Facts as a list ────────────────────────────────────────────── */
 
-/* Facts: each label beside its value, and as many pairs to a row as the
-   width holds, so seven short facts are two rows rather than seven. A label
-   wraps inside its own column; a value takes what is left of its pair. */
-.kv { display: grid; grid-template-columns: repeat(auto-fill, minmax(5rem, 8rem) minmax(min(13rem, 100% - 5rem - var(--space-6)), 1fr)); gap: var(--space-4) var(--space-6); padding: var(--surface-inset, var(--space-6) var(--space-8)); font-size: var(--text-sm); }
-.kv dt { color: var(--muted); font-weight: 500; }
-.kv dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
-/* A pair whose value is a list of names (a machine's addresses, who a port is
-   open to) takes a row of its own: wrapped beside other pairs, it would make
-   their row as tall as itself and leave them a gap. */
-.kv > dt:has(+ dd > :is(.code-list, .address-list) > :nth-child(2)) { grid-column: 1; }
-.kv > dd:has(> :is(.code-list, .address-list) > :nth-child(2)) { grid-column: 2 / -1; }
+/* A list of facts (`{% facts %}`, and `.kv` until each moves onto it): each
+   label beside its value, one pair to a row, so a few short pairs never
+   spread across a wide page. The label column is as wide as its longest
+   label, up to two fifths of the list; the values take the rest, so a long
+   address keeps to one line where the width allows it. */
+:is(.facts-list, .kv) { display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-4) var(--space-6); font-size: var(--text-sm); }
+.facts-list { margin: 0 0 var(--stack-gap); }
+.kv { padding: var(--surface-inset, var(--space-6) var(--space-8)); }
+:is(.facts-list, .kv) dt { color: var(--muted); font-weight: 500; }
+:is(.facts-list, .kv) dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
+/* Each fact is a row of the list's two columns, its detail under its value. */
+.facts-list > .fact { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; row-gap: var(--space-1); }
+.facts-list .fact-detail { grid-column: 2; color: var(--muted); }
+/* In a table's row, facts are the row's small print. */
+td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); }
 /* Addresses, one to a line, each beside its network: the networks in one
    column and the addresses in the next. */
 .address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; margin: 0; padding: 0; list-style: none; }

@@ -14,12 +14,8 @@
   .gh-identity { flex: 1 1 260px; min-width: 0; }
   .gh-identity p { margin: 0; }
   .gh-name { font-size: var(--text-xl); font-weight: 650; }
-  /* Four to a row, then two, then one: never three over one. */
-  .fact-band { --band-cell: var(--tracks-4-2-1); }
-  /* The band's lower half: the same repository's settings, under a hairline. */
-  .github-facts { flex-basis: 100%; display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) var(--space-9); font-size: var(--text-sm); }
-  /* A divider under the row it continues; framed on its own, its frame is its edge. */
-  .github-facts:not(.boxed-facts) { border-top: 1px solid var(--line-2); }
+  /* Under the band, the same repository's settings; framed on its own, its frame is its edge. */
+  .github-facts { display: grid; gap: var(--space-4); margin: 0; padding: var(--space-7) 0 0; font-size: var(--text-sm); }
   .github-facts > div { display: grid; grid-template-columns: minmax(0, clamp(7rem, 30%, 160px)) minmax(0, 1fr); gap: var(--space-6); }
   .github-facts dt { color: var(--muted); }
   .github-facts dd { margin: 0; }
@@ -56,9 +52,6 @@
   .container-standing.is-current .icon { color: var(--ok); }
 
   /* A container's upgrade: four facts, then its steps beside what stands in the way. */
-  .upgrade-band { margin-bottom: var(--space-6); }
-  /* Three facts across the band's full width, not three narrow tiles and a gap. */
-  .fact-band.readiness-band { --band-cell: var(--tracks-3-1); }
   /* align-content: start, or the grid spreads the steps to the height of the
      column beside it. */
   .upgrade-steps { margin: 0; padding-left: var(--space-10); display: grid; gap: var(--space-2); align-content: start; font-size: var(--text-sm); }
@@ -79,7 +72,7 @@
   /* Facts on their own raised surface, as every other section sits. */
   .boxed-facts { margin: 0 0 var(--space-8); padding: var(--surface-inset, var(--space-5) var(--space-7)); }
   /* Why not on its own: the band's own bottom row, a line each. */
-  .upgrade-reasons { list-style: none; margin: 0; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+  .upgrade-reasons { display: grid; justify-items: start; gap: var(--space-2); margin: 0; padding: 0; list-style: none; color: var(--muted); font-size: var(--text-sm); }
   .upgrade-reasons li::before { content: "·" / ""; margin-right: var(--space-3); color: var(--muted-2); }
 
   /* The compose change that meets its unmet checks: one block to paste, then

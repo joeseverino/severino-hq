@@ -61,7 +61,7 @@ PARTS = {
     ("partials/_icon.html", "an icon"): "the icon part itself",
     ("partials/_line_chart.html", "an icon"): "a chart part's own drawing",
     ("partials/_stacked_bar_chart.html", "an icon"): "a chart part's own drawing",
-    ("partials/_band_fact.html", "a toned value"): "the fact part, toned by its projection",
+    ("partials/_fact.html", "a toned value"): "the fact part, toned by its projection",
     ("partials/_outside_link.html", "a toned value"): "the outside-link part, toned by its caller",
     ("partials/_activity_calendar.html", "a table outside its region"): "a month drawn as a grid, a chart part",
     ("calendars/_month_grid.html", "a table outside its region"): "a month drawn as a grid of days, not a data table",
@@ -106,3 +106,45 @@ class HandDrawnTests(SimpleTestCase):
     def test_every_shape_and_entry_is_one_the_table_names(self):
         self.assertEqual({shape for _, shape in [*PARTS, *BASELINE]} - set(HAND_DRAWN), set())
         self.assertEqual(set(PARTS) & set(BASELINE), set())
+
+
+# The bold runs of the host's templates at the census the count shape was read
+# from: each figure set apart from the words that count it, and the bolded
+# names of prose and of rows, which a count shape must leave alone.
+SPLIT_COUNTS = (
+    '<a href="?awaiting=1"><strong>{{ awaiting_count|breakable }}</strong> held for approval</a>',
+    '<a href="?action=denied"><strong>{{ refused_count|breakable }}</strong> refused in the last day</a>',
+    "<strong>{{ item.node.pageviews|breakable }}</strong> pageviews from",
+    "<strong>{{ item.node.visits|breakable }}</strong> visits.",
+    ", <strong>{{ finding_counts.serious|breakable }}</strong> urgent{% endif %}",
+    ", <strong>{{ finding_counts.attention|breakable }}</strong> need attention{% endif %}",
+    "<strong>{{ rules|length }}</strong> grants",
+)
+BOLD_PROSE = (
+    "<p><strong>{{ name|breakable }}</strong> stops running, and whatever it serves stops answering</p>",
+    "Served by <strong>{{ service.origin.headline|breakable }}</strong> from <code>{{ a }}</code>",
+    "<p>Removes <strong>{{ record.title|breakable }}</strong> (<code>{{ record.doc_id }}</code>)</p>",
+    "<strong>{{ hop.label|breakable }}</strong> {{ hop.check.detail|breakable }}",
+    '<strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail }}</span>',
+    "<strong>{{ switch.state|breakable }}</strong></p>",
+    "<strong>{{ connection.status }}</strong> since today",
+    "<strong>{{ row.address }}</strong> answers",
+    '<strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if one %}, urgent{% endif %}',
+    '<strong>{{ item.node.pageviews|counted:"pageview" }}</strong> from',
+    "Total <strong>{{ totals.total|money }}</strong>{% if narrowed %} total{% endif %}",
+    "<strong>{{ account.name }}</strong> signs in",
+)
+
+
+@tag("source")
+class SplitCountShapeTests(SimpleTestCase):
+    SHAPE = "a count split from its words"
+
+    def _drawn(self, line: str) -> bool:
+        return any(shape == self.SHAPE for _, shape in hand_drawn(line, HAND_DRAWN))
+
+    def test_each_count_set_apart_from_its_words_is_refused(self):
+        self.assertEqual([line for line in SPLIT_COUNTS if not self._drawn(line)], [])
+
+    def test_bold_names_in_prose_are_left_alone(self):
+        self.assertEqual([line for line in BOLD_PROSE if self._drawn(line)], [])

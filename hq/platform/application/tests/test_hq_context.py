@@ -374,7 +374,7 @@ class PageTests(TestCase):
         self.assertIn("1 urgent problem", text(response))
         page = all_elements(response)
         framed = next(index for index, element in enumerate(page) if element.attrs.get("id") == "problems-here")
-        facts = next(index for index, element in enumerate(page) if "fact-band" in element.classes)
+        facts = next(index for index, element in enumerate(page) if "facts-band" in element.classes)
         self.assertLess(framed, facts)
         rows = [element for element in page if "data-attention-item" in element.attrs]
         self.assertTrue(rows)

@@ -47,7 +47,7 @@ REFUSED = [
     (APP, ".a { column-gap: 12px; }", "declaration-property-value-disallowed-list"),
     (APP, ".a { margin-inline-start: 24px; }", "declaration-property-value-disallowed-list"),
     (APP, ".facts dt { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
-    (APP, ".band-label, .x { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
+    (APP, ".fact-label, .x { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
     (APP, ".kpi .label { text-transform: uppercase; }", "rule-selector-property-disallowed-list"),
     (APP, ".job-state { text-transform: uppercase; }", CASE),
     (APP, ".a { text-transform: none; }", CASE),

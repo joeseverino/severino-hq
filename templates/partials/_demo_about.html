@@ -7,12 +7,15 @@ Each thing to try is a fact band's cell that leads to the page it names.
 <p class="modal-lede">HQ is the app one person runs a homelab from, shown here with sample data. Its own pages are saved as static files, so nothing you do here saves beyond this browser.</p>
 <div class="demo-about-part">
   <h3 class="eyebrow" id="demo-about-try">Things to try</h3>
-  <div class="fact-band">
-    {% band_fact icon="shield" label="Approval" %}<strong><a href="{% url 'core:audit_list' %}?awaiting=1">Agent DNS change</a></strong>{% endband_fact %}
-    {% band_fact icon="container" label="Containers" %}<strong><a href="{% url 'control_plane:containers' %}">Trace to host</a></strong>{% endband_fact %}
-    {% band_fact icon="check-circle" label="Needs you" %}<strong><a href="{% url 'action_items' %}">Triage the queue</a></strong>{% endband_fact %}
-    {% band_fact icon="search" label="Search" %}<strong><a href="{% url 'search' %}" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">Find anything</a></strong>{% endband_fact %}
-  </div>
+  {% facts layout="band" %}
+    {% url 'core:audit_list' as audit_url %}
+    {% fact "Approval" value="Agent DNS change" url=audit_url|add:"?awaiting=1" icon="shield" %}
+    {% url 'control_plane:containers' as containers_url %}
+    {% fact "Containers" value="Trace to host" url=containers_url icon="container" %}
+    {% url 'action_items' as needs_url %}
+    {% fact "Needs you" value="Triage the queue" url=needs_url icon="check-circle" %}
+    {% fact "Search" icon="search" %}<a href="{% url 'search' %}" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">Find anything</a>{% endfact %}
+  {% endfacts %}
 </div>
 <nav class="demo-about-part" aria-labelledby="demo-about-behind">
   <h3 class="eyebrow" id="demo-about-behind">Built with</h3>

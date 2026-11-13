@@ -7,24 +7,28 @@ standard, with what it uses beside its limits. Each said once; the band above ha
 {% load nav_tags %}
 {% if plan %}
 {% section "Upgrade" id="upgrade" %}
-  <div class="fact-band upgrade-band">
-    {% band_fact icon="deploy" label="To" %}
-      <strong>{% entity plan.release.url|outside label=plan.target_tag code=True %}</strong>
+  {% facts layout="band" %}
+    {% fact "To" icon="deploy" %}
+      {% entity plan.release.url|outside label=plan.target_tag code=True %}
+    {% detail %}
       <small>{% if plan.target_digest %}<span tabindex="0" data-tip="{{ plan.target_digest }}">{{ plan.target_digest|slice:":19"|breakable }}…</span>{% else %}Exact build not read yet{% endif %}{% if plan.release.published %}{% dot %}released {{ plan.release.published|ago_short }}{% endif %}</small>
-    {% endband_fact %}
-    {% band_fact icon="shield" label="Fixes" tone=plan.fixes_tone %}
-      <strong>{% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}</strong>
+    {% endfact %}
+    {% fact "Fixes" icon="shield" tone=plan.fixes_tone %}
+      {% if plan.fixes %}{{ plan.fixes|length|counted:"known vulnerability,known vulnerabilities" }}{% elif item.standing.source %}None known{% else %}Cannot check{% endif %}
+    {% detail %}
       {% if plan.fixes %}<span class="band-note">{% for advisory in plan.fixes|slice:":2" %}{% entity advisory.url|outside label=advisory.id %}{% if not forloop.last %} {% endif %}{% endfor %}</span>{% else %}<small>{% if item.standing.source %}Nothing known against the running version.{% else %}The image does not say where its source is.{% endif %}</small>{% endif %}
-    {% endband_fact %}
-    {% band_fact icon="layers" label="Data" tone=plan.data_tone %}
-      <strong>{% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
+    {% endfact %}
+    {% fact "Data" icon="layers" tone=plan.data_tone %}
+      {% if plan.stateful %}{{ plan.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}
+    {% detail %}
       <small>{% for mount in plan.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}It has no writable mount.{% endfor %}</small>
-    {% endband_fact %}
-    {% band_fact icon="check-circle" label="Checked afterwards by" tone=plan.verified_tone %}
-      <strong>{% if plan.verified_by %}{{ plan.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
+    {% endfact %}
+    {% fact "Checked afterwards by" icon="check-circle" tone=plan.verified_tone %}
+      {% if plan.verified_by %}{{ plan.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}
+    {% detail %}
       <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
-    {% endband_fact %}
-  </div>
+    {% endfact %}
+  {% endfacts %}
   <div class="upgrade-detail boxed-facts">
     <ol class="upgrade-steps">
       {% for step in plan.steps %}<li><strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail|breakable }}</span></li>{% endfor %}
@@ -72,21 +76,24 @@ standard, with what it uses beside its limits. Each said once; the band above ha
 
 {% if not plan and readiness %}
 {% section "Upgrade" id="upgrade" %}
-  <div class="fact-band upgrade-band readiness-band">
-    {% band_fact icon="check-circle" label="Checked afterwards by" tone=readiness.verified_tone %}
-      <strong>{% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}</strong>
+  {% facts layout="band" %}
+    {% fact "Checked afterwards by" icon="check-circle" tone=readiness.verified_tone %}
+      {% if readiness.verified_by %}{{ readiness.verified_by.0|capfirst|breakable }}{% else %}Nothing{% endif %}
+    {% detail %}
       <small>{% for what in readiness.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not readiness.verified_by %}Add a health check to change that.{% endif %}{% endfor %}</small>
-    {% endband_fact %}
-    {% band_fact icon="layers" label="Data" %}
-      <strong>{% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}</strong>
+    {% endfact %}
+    {% fact "Data" icon="layers" %}
+      {% if readiness.data %}{{ readiness.data|length|counted:"mount,mounts" }} to snapshot first{% else %}Keeps no data{% endif %}
+    {% detail %}
       <small>{% for mount in readiness.data %}<code>{{ mount.source|breakable }}</code>{% if not forloop.last %} {% endif %}{% empty %}Nothing to restore on a rollback.{% endfor %}</small>
-    {% endband_fact %}
-    {% band_fact icon="deploy" label="Automatic upgrades" tone=readiness.automatic_tone %}
-      <strong>{% if readiness.automatic %}Patch updates apply{% else %}Not yet{% endif %}</strong>
-      <small>{% if readiness.not_automatic %}{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below{% endif %}</small>
-    {% endband_fact %}
-    <ul class="band-meta upgrade-reasons">{% for blocker in readiness.not_automatic %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}</ul>
-  </div>
+    {% endfact %}
+    {% fact "Automatic upgrades" icon="deploy" tone=readiness.automatic_tone %}
+      {% if readiness.automatic %}Patch updates apply{% else %}Not yet{% endif %}
+    {% detail %}
+      {% if readiness.not_automatic %}<small>{{ readiness.not_automatic|length|counted:"reason,reasons" }}, listed below</small>{% endif %}
+    {% endfact %}
+  {% endfacts %}
+  {% if readiness.not_automatic %}<ul class="upgrade-reasons">{% for blocker in readiness.not_automatic %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}</ul>{% endif %}
 {% aside %}<span class="muted">{% if readiness.automatic %}Upgrades automatically{% else %}Waits for you{% endif %}</span>
 {% endsection %}
 {% endif %}

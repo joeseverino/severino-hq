@@ -1,6 +1,10 @@
 /* Tables: the filter bar, the data table and its regions, allocation rows,
    and how a table gives way in a narrow box. */
 
+/* A length rather than the words that make it, so `1lh` is read on the cell
+   that declares it and inherited as that cell's line. */
+@property --row-line { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
 @layer components {
 
 /* ── Filter bar ─────────────────────────────────────────────────── */
@@ -65,7 +69,7 @@
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the table's corners clip its rows' fill, not their text */
   width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);
 }
-/* A value no longer than the floor (`data-short`, value_tags._short) holds out for all of it and no more, so no gulf follows it; the floor is on the box that cuts it. */
+/* A value no longer than the floor (`data-short`, line_breaks._short) holds out for all of it and no more, so no gulf follows it; the floor is on the box that cuts it. */
 .data-table tr:not(.is-expanded) td :is(:has(> .token[data-short]), .cell-line:has(> .cut > .token[data-short]), .name-line > strong:has(> [data-entity] > .token[data-short])):not(.muted *) { --cut-floor: max-content; }
 .data-table th, .data-table td { padding: var(--row-pad) var(--space-6); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); }
 .data-table thead th { background: var(--surface-2); font-size: var(--text-xs); line-height: var(--heading-line); color: var(--muted); font-weight: 600; }
@@ -221,8 +225,11 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* A match is part of the word it is found in, so it adds no room inside it, and reads in the ink of what it names. */
 .search-snippet mark { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--ink); border-radius: 3px; font-weight: 600; }
 .search-hit .row-meta { flex-shrink: 0; }
-.row-actions a { font-size: var(--text-sm); }
 .actions-col { width: 1%; text-align: right; white-space: nowrap; }
+/* A row's actions (`{% row_actions %}`) end its line side by side, each with its middle on the middle of the row's first line, as the words beside it are set, however much taller than a line a button stands. `--row-line` carries the cell's line down to each control, whose own is its label's. */
+.data-table td.row-actions { --row-line: 1lh; text-align: right; white-space: nowrap; }
+.data-table td.row-actions > * { translate: 0 calc(var(--row-line) / 2 - 50%); }
+.data-table td.row-actions > * + * { margin-inline-start: var(--space-4); }
 
 /* A pill fits the cell's line, so a row holding one is no taller than one without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
@@ -251,7 +258,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 .data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::before {
   overflow-wrap: normal;
-  /* No piece holds out for more than half its region: one longer breaks where it must (value_tags.breakable), so the table still fits. */
+  /* No piece holds out for more than half its region: one longer breaks where it must (line_breaks.breakable), so the table still fits. */
   max-width: 50cqi;
 }
 .data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::after { overflow-wrap: anywhere; }

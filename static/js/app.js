@@ -110,7 +110,7 @@ document.addEventListener("change", (event) => {
 // button posts as it would without script, and the row answers at once
 // instead of the whole queue being composed and drawn again. A dismissed row
 // becomes one quiet line with the way back; the counts over it and the
-// header's follow. "Dismiss all" and a family's "Dismiss these" stay ordinary
+// header's follow. "Dismiss all" and a family's "Dismiss" stay ordinary
 // posts, since what they cover is the server's to say.
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-triage] button[formaction]");
