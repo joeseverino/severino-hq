@@ -343,10 +343,10 @@
           "rule": null,
           "schema_version": 2,
           "summary": {
-            "findings": 5,
-            "returned": 5,
+            "findings": 6,
+            "returned": 6,
             "severities": {
-              "attention": 2,
+              "attention": 3,
               "neutral": 1,
               "serious": 2
             },
@@ -1318,7 +1318,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 10,
+          "count": 11,
           "items": [
             {
               "action": "Review docs",
@@ -1331,7 +1331,7 @@
             }
           ],
           "next": null,
-          "total": 10,
+          "total": 11,
           "truncated": false
         },
         "ok": true
@@ -2073,7 +2073,7 @@
             "never_read": 1,
             "not_connected": [],
             "out_of_date": 0,
-            "read": 41,
+            "read": 42,
             "readings": [
               {
                 "error": "",
@@ -2349,7 +2349,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 42,
+          "count": 43,
           "items": [
             {
               "error": "",
@@ -2362,7 +2362,7 @@
             }
           ],
           "next": null,
-          "total": 42,
+          "total": 43,
           "truncated": false
         },
         "ok": true
@@ -3232,7 +3232,7 @@
           "summary": {
             "edges": 306,
             "kinds": {
-              "ability": 59,
+              "ability": 60,
               "connection": 10,
               "controller": 1,
               "machine": 3,
@@ -3242,7 +3242,7 @@
               "target": 2,
               "zone": 1
             },
-            "nodes": 127
+            "nodes": 128
           },
           "trace": null
         },

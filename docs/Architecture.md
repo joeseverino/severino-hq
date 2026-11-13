@@ -576,7 +576,8 @@ mise run manage --scratch -- rebuild_search_index
 
 `hq.platform.application.tables.TableListMixin` composes indexed search with
 multi-value filters, workflow toggles, allowlisted ordering and database
-pagination. The browser enhances that GET contract with debounced, cancelable
+pagination, over a model's queryset or a projection's rows
+(`get_table_rows`, as Jobs lists HQ's jobs and automation runs as one). The browser enhances that GET contract with debounced, cancelable
 requests; plain links and forms remain the complete fallback.
 
 ## Emit once, derive everywhere

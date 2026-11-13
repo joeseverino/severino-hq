@@ -17,10 +17,16 @@ from ..filesystem_findings import FilesystemSpace
 from ..findings import RULES, derive_findings
 from ..moments import when
 from ..reading_facts import FactRow
+from ..reboot_findings import RebootState
 from ..render_status_findings import Rendering
 from ..topology import derive_topology
 from ..unit_findings import UnitState
-from . import test_filesystem_findings as filesystems, test_render_status as render, test_unit_findings as units
+from . import (
+    test_filesystem_findings as filesystems,
+    test_reboot_findings as reboots,
+    test_render_status as render,
+    test_unit_findings as units,
+)
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 
 # Past the slowest the controller ever reads, so nothing it says is current.
@@ -103,10 +109,15 @@ def _aged_filesystems() -> None:
     filesystems.sweep(filesystems.filesystem(free=59 * 1000 * 1000, read_at=units.stamp(AGED)), age=AGED)
 
 
+def _aged_reboot() -> None:
+    reboots.sweep(reboots.reading(read_at=units.stamp(AGED)), age=AGED)
+
+
 READINGS = {
     Rendering: (RENDER_STATUS_KIND, _aged_render_status),
     UnitState: (UNIT_KIND, _aged_units),
     FilesystemSpace: (filesystems.KIND, _aged_filesystems),
+    RebootState: (reboots.KIND, _aged_reboot),
 }
 KINDS = frozenset(kind for kind, _store in READINGS.values())
 
@@ -141,7 +152,15 @@ class AgedReadingGuardTests(TestCase):
         fired = {rule for rule, _subject, _kind in said(min(self.taken.values()) + timedelta(minutes=1))}
 
         self.assertLessEqual(
-            {"render-failing", "connect-sync-stalled", "unit-failed", "timer-stalled", "filesystem-nearly-full"}, fired
+            {
+                "render-failing",
+                "connect-sync-stalled",
+                "unit-failed",
+                "timer-stalled",
+                "filesystem-nearly-full",
+                "reboot-pending",
+            },
+            fired,
         )
 
     def test_no_rule_measures_an_aged_reading_from_now(self):

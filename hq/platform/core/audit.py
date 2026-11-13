@@ -32,7 +32,6 @@ from . import speculation
 from .attribution import OperationContext, bound, operation_context
 from .audit_words import REDACTED, changes_said
 from .facets import as_metadata as facet_metadata
-from .logging import get_request_id
 from .models import AuditLog
 lazy from .facets import Facet
 
@@ -589,7 +588,6 @@ def emit_line(event: str, line: dict[str, Any]) -> None:
     or a shipper of it, holds even if the database is lost or rewritten.
     """
 
-    line = {**line, "request_id": get_request_id()}
     transaction.on_commit(
         lambda: logger.info("%s %s", event, line["id"], extra={"event": event, "audit": line}),
         robust=True,

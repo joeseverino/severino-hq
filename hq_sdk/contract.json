@@ -1633,6 +1633,23 @@
       }
     },
     "tables": {
+      "Projected": {
+        "bases": [],
+        "constructor": [
+          "rows",
+          "read"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "count": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          }
+        }
+      },
       "Remedy": {
         "bases": [],
         "constructor": [
@@ -1696,6 +1713,12 @@
               "**kwargs"
             ]
           },
+          "get_queryset": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
           "get_table_empty": {
             "kind": "method",
             "parameters": [
@@ -1712,6 +1735,13 @@
             "kind": "method",
             "parameters": [
               "self"
+            ]
+          },
+          "get_table_rows": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "query"
             ]
           },
           "get_table_sorts": {
@@ -1756,6 +1786,12 @@
             "kind": "attribute",
             "type": "tuple"
           },
+          "table_query": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
           "table_room": {
             "kind": "attribute",
             "type": "str"
@@ -1796,6 +1832,25 @@
             ]
           },
           "table_values": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "name"
+            ]
+          }
+        }
+      },
+      "TableQuery": {
+        "bases": [],
+        "constructor": [
+          "filters",
+          "search",
+          "sort"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "chosen": {
             "kind": "method",
             "parameters": [
               "self",

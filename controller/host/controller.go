@@ -56,6 +56,11 @@ type Controller struct {
 	// Statfs what asks a filesystem its space (hostcore.Statfs).
 	MountTable string
 	Statfs     func(path string) (free, total uint64, err error)
+	// RebootRequired is the flag an update leaves when it waits on a restart
+	// (hostcore.RebootRequired), and Born when a file was created
+	// (hostcore.Born).
+	RebootRequired string
+	Born           func(path string) (time.Time, error)
 	// Connections checks the connections document before it is read.
 	Connections func() error
 	// Lock holds the renderer's identity lock shared until the returned
@@ -496,6 +501,18 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 		}
 	}
 	args = append(args, "--env", "SEVERINO_HOST_FILESYSTEMS=/run/severino-hq/filesystems.json")
+
+	// Root reads the restart flag and asks logind what it has scheduled,
+	// since the container sees neither the host's /run nor its system bus.
+	// Named whether or not it could be taken, as filesystems are.
+	if scheduled, err := c.Command(ctx, hostcore.ScheduledShutdown[0], hostcore.ScheduledShutdown[1:]...).Output(); err == nil {
+		if reading, err := hostcore.ReadReboot(c.RebootRequired, c.Born, scheduled, c.Now()); err == nil {
+			if err := give("reboot.json", reading, "/run/severino-hq/reboot.json"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	args = append(args, "--env", "SEVERINO_HOST_REBOOT=/run/severino-hq/reboot.json")
 
 	// The last dependency run's outcome, once there has been one.
 	if info, err := os.Lstat(c.DependencyRun); err == nil && info.Mode().IsRegular() {

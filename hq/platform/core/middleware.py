@@ -9,7 +9,6 @@ import logging
 from contextlib import AbstractContextManager
 from time import monotonic
 from typing import override
-from uuid import uuid7
 
 from django.conf import settings
 from django.contrib.auth import middleware as auth_middleware
@@ -17,12 +16,11 @@ from django.core.exceptions import PermissionDenied
 from django.template.response import SimpleTemplateResponse
 from django.urls import Resolver404, resolve
 
-import hq.platform.core.logging as request_logging
 from hq.platform.application import request_context
 from hq.platform.application.arrivals import ARRIVALS, note as note_arrival
 from hq.platform.application.cadence import note_activity
 from hq.platform.application.demo import demo_scope
-from hq.platform.core import speculation
+from hq.platform.core import speculation, tracing
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.outbound import serving
 from hq.platform.core.write_bounds import NOTHING, Bound, writes
@@ -113,8 +111,13 @@ class RequestContextMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
-        request_id = uuid7().hex
-        request.request_id = request_id
+        with tracing.trace(
+            f"{request.method} {request.path}", **{"http.request.method": request.method, "url.path": request.path}
+        ) as request_id:
+            request.request_id = request_id
+            return self._answer(request, request_id)
+
+    def _answer(self, request, request_id):
         # How often the controller sweeps depends on whether anybody is here.
         # A stat on most requests and a small write on the first of each
         # interval; see `application.cadence`. A probe is not anybody: counting
@@ -125,7 +128,6 @@ class RequestContextMiddleware:
             note_arrival(request)
         started = monotonic()
         with (
-            request_logging.set_request_id(request_id),
             request_context.bind(request),
             request_operation(request.path_info, operation_id=request_id),
         ):
@@ -135,7 +137,6 @@ class RequestContextMiddleware:
             # see `core.speculation`.
             with serving(request):
                 response = speculation.answer(request, self.get_response)
-            response["X-Request-ID"] = request_id
             # Django has settings for the other browser-boundary headers but
             # not these three. HQ uses none of these APIs, and an operator
             # console holding provider credentials has no reason to leave them
@@ -162,6 +163,7 @@ class RequestContextMiddleware:
             # The application's own time, where the operator is already
             # looking: the browser's network panel shows it beside the request.
             response["Server-Timing"] = f"app;dur={duration_ms}"
+            tracing.note(**{"http.response.status_code": response.status_code})
             slow = duration_ms >= SLOW_REQUEST_MS
             if slow or not _is_health_probe(request) or response.status_code >= 500:
                 _request_logger.log(

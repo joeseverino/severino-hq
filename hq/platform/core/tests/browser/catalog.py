@@ -6,11 +6,14 @@ one entry here."""
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
-from typing import Any, override
+from typing import Any, Literal, override
 from unittest import mock
 from uuid import UUID
 
 from django import forms
+from django.contrib.auth import get_user_model
+from django.contrib.messages import ERROR, INFO, SUCCESS, WARNING
+from django.contrib.messages.storage.base import Message
 from django.core.paginator import Paginator
 from django.template import Context, Template
 from django.template.loader import render_to_string
@@ -20,16 +23,19 @@ from django.utils.html import escape
 from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
 from hq.platform.application.adoption import ONLY_READS, WriteGap
+from hq.platform.application.appearance import Theme
 from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
 from hq.platform.application.cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
+from hq.platform.application.command_center import DiscoveryItem
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.forms import ChoiceCards, SuffixedInput
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
+from hq.platform.application.request_channel import TAILNET_CHANNEL
 from hq.platform.application.tables import TableSort
 from hq.platform.application.ui import (
     ActivityCalendar,
@@ -58,12 +64,16 @@ class Entry:
     and its argument returning what falls short of it: a value meant to wrap
     that fits on one line holds nothing the survey could find wrong.
     ``heads_the_page`` says the part is a page's own head; any other is drawn
-    under one, as every HQ page is."""
+    under one, as every HQ page is. ``frame`` says the part is the page
+    frame's own, which base.html draws beside the page's main rather than in
+    it, ``"before"`` or ``"after"``, so it is drawn there, beside a main that
+    holds a page head alone."""
 
     template: str
     context: dict[str, Any] = field(default_factory=dict)
     premise: tuple[str, Any] | None = None
     heads_the_page: bool = False
+    frame: Literal["", "before", "after"] = ""
     # The address the part is drawn at, for a part that reads its request: a
     # page's query, or the row its address opens.
     address: str = ""
@@ -72,9 +82,19 @@ class Entry:
 
     def drawn(self, name):
         with override_settings(**self.settings):
-            head = "" if self.heads_the_page else render_to_string(HEAD, {"page": Page(title=name)})
+            head = "" if self.heads_the_page or self.frame else _head(name)
             context = _Asked(self.context, self.address) if self.address else Context(self.context)
             return head + Template(self.template).render(context)
+
+    def page(self, name):
+        """The entry on a page of its own: in its main, or beside it for a part of the frame."""
+
+        drawn = self.drawn(name)
+        return part_page(name, _head(name), **{self.frame: drawn}) if self.frame else part_page(name, drawn)
+
+
+def _head(name):
+    return render_to_string(HEAD, {"page": Page(title=name)})
 
 
 class _Asked(Context):
@@ -418,7 +438,92 @@ _INVENTORY = (
 )
 
 
+def _signed_in():
+    """What the page frame reads of a signed-in example operator's request,
+    as the context processors hand it to base.html: the sections, a group of
+    them among them, the theme and its choices, the connection's channel and
+    the queue's count."""
+
+    return {
+        "SITE_NAME": "Example HQ",
+        "user": get_user_model()(
+            username="example-operator", first_name="Example", last_name="Operator", is_staff=True
+        ),
+        "nav_entries": (
+            {"kind": "item", "label": "Dashboard", "url": "dashboard", "active": True},
+            {
+                "kind": "group",
+                "label": "Example section",
+                "active": False,
+                "items": (
+                    {"label": "Example search", "url": "search", "active": False},
+                    {"label": "Example queue", "url": "action_items", "active": False},
+                ),
+            },
+        ),
+        "THEME": Theme.SYSTEM,
+        "THEME_CHOICES": Theme.choices,
+        "CONNECTION_CHANNEL": TAILNET_CHANNEL,
+        "agents_paused": False,
+        "profile_action_count": 3,
+        "show_action_count": True,
+    }
+
+
+def _palette():
+    """Command Center's results for a term, as the search page hands them to
+    the palette: the estate first, a group of records found by their words,
+    then the commands, with more matches than it shows."""
+
+    def found(kind, label, summary, destination, *badges):
+        return DiscoveryItem(kind, label, label, summary, "/example/", destination, badges)
+
+    return {
+        "q": "example",
+        "palette_estate": [
+            {
+                "key": "estate",
+                "label": "Machines, services and domains",
+                "items": (
+                    found("machine", "example-host-01", "An example machine", "Machine", "Online"),
+                    found("service", "example.example.com", "An example service", "Service", "Public", "Proxied"),
+                ),
+            }
+        ],
+        "palette_search_groups": [
+            {
+                "scope": "projects",
+                "label": "Projects",
+                "items": (
+                    {
+                        "title": "Example project with a long descriptive name",
+                        "badge": "example-01",
+                        "url": "/example/",
+                        "timestamp": datetime(2026, 3, 2, 9, 30, tzinfo=UTC),
+                        "snippet": (("An ", False), ("example", True), (" line the search found.", False)),
+                    },
+                ),
+            }
+        ],
+        "palette_groups": [
+            {
+                "key": "commands",
+                "label": "Commands",
+                "items": (found("command", "Example restart", "Restart an example service", "Command"),),
+            }
+        ],
+        "palette_count": 4,
+        "palette_total": 9,
+    }
+
+
 CATALOG = {
+    # The page frame's header, as every signed-in page draws it: the sections,
+    # the doorway to search, the queue's count and the person's menu, whose
+    # popovers the survey opens.
+    "part/site-header": Entry(
+        '{% include "partials/_site_header.html" %}', _signed_in(), address="/example/", frame="before"
+    ),
     # A section's heading with a long name, the line under it, and states beside it.
     "part/section-head": Entry(
         "{% card %}"
@@ -1118,10 +1223,22 @@ CATALOG = {
     ),
     # Among the page's messages, as a post's outcome is said: each a toast.
     "part/notice-messages": Entry(
-        '<ul class="messages">{% for tone in tones %}<li>{% notice tone=tone %}An example {{ tone }} message.'
-        "{% endnotice %}</li>{% endfor %}</ul>",
-        {"tones": ("success", "info", "warning", "error")},
+        '{% include "partials/_messages.html" %}',
+        {
+            "messages": [
+                Message(level, f"An example {name} message.")
+                for level, name in ((SUCCESS, "success"), (INFO, "info"), (WARNING, "warning"), (ERROR, "error"))
+            ]
+        },
     ),
+    # A saved copy's footer, which says from the page's corner what it is.
+    "part/demo-foot": Entry('{% include "partials/_demo_foot.html" %}', frame="after"),
+    # Command Center's palette as its dialog opens on it, waiting for its
+    # results; its results for a term, each kind of group with more than it
+    # shows; and a term nothing answers.
+    "part/command-center": Entry('{% include "partials/_command_center.html" %}'),
+    "part/command-center-results": Entry('{% include "partials/_command_center.html#results" %}', _palette()),
+    "part/command-center-empty": Entry('{% include "partials/_command_center.html#results" %}', {"q": "example-none"}),
     # The form page's card (form_page.html) with fields and what saving does,
     # one with no fields, which is its closing row alone, and a form that asks
     # (partials/_form.html method="get"), one question on its button's line,
@@ -1625,14 +1742,15 @@ CATALOG = {
 }
 
 
-def part_page(name, markup):
-    """A page titled ``name``, of HQ's stylesheets, with ``markup`` alone in its main."""
+def part_page(name, markup, before="", after=""):
+    """A page titled ``name``, of HQ's stylesheets, with ``markup`` alone in
+    its main, and the frame's parts base.html draws before and after it."""
 
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{escape(name)}</title>{stylesheets()}</head>"
-        f'<body><main class="content">{markup}</main></body></html>'
+        f'<body>{before}<main class="content" id="content">{markup}</main>{after}</body></html>'
     )
 
 
@@ -1644,7 +1762,7 @@ class CatalogLayoutTests(LayoutBrowserTests):
     @classmethod
     @override
     def render(cls):
-        return {name: part_page(name, entry.drawn(name)) for name, entry in CATALOG.items()}
+        return {name: entry.page(name) for name, entry in CATALOG.items()}
 
     def test_every_entry_keeps_the_layout_rules_without_script(self):
         for name in CATALOG:

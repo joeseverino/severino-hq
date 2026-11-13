@@ -31,6 +31,9 @@ EAGER = (
     # The test suite's: each strategy registers as its module loads, and the package checks, as it
     # loads, that every one it exports did.
     "hypothesis.strategies",
+    # Each generated _pb2 module adds its file to protobuf's descriptor pool as it loads, after the
+    # files it imports, which must be in the pool first; the span exporter encodes through them.
+    "opentelemetry.proto",
 )
 
 

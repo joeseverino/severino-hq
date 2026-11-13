@@ -83,7 +83,7 @@ class ActionItemsView(PageMixin, TemplateView):
 
 
 class ActionItemCountView(View):
-    """The header's count, the part ``base.html`` draws, fetched after the page rather than during it.
+    """The header's count, the part ``partials/_site_header.html`` draws, fetched after the page rather than during it.
 
     The count is its own revision, so a browser holding the answer is told
     "not modified" for as long as the count is the same, whatever was written
@@ -93,7 +93,7 @@ class ActionItemCountView(View):
     def get(self, request):
         count = int(waiting(web_principal(request.user), request.user.pk))
         context = {"profile_action_count": count, "show_action_count": True}
-        return fragments.render(request, "base.html#action_count", context, revision=count)
+        return fragments.render(request, "partials/_site_header.html#action_count", context, revision=count)
 
 
 class ActionItemAsideView(View):

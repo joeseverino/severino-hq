@@ -9,6 +9,7 @@ from django.db import transaction
 from pydantic import ConfigDict, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation
+from hq.platform.core.tracing import note, span
 lazy from hq.platform.core.doorbell import ask_soon
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
@@ -42,7 +43,7 @@ from .integration_specs import (
 from .integrations import integration_graph
 from .labels import human_label
 from .projection import QueryRefusal
-from .refusal_status import Refusal, next_call, refusal_of, refuse
+from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
 from .security import (
     CLI_INTERFACE,
     Capability,
@@ -254,6 +255,32 @@ def run_capability(
     key sent in the command.
     """
 
+    with span(f"capability {name}", **{"hq.capability": name, "hq.interface": principal.interface}):
+        ran = _named_run(
+            name,
+            payload,
+            principal=principal,
+            target=target,
+            expected_updated_at=expected_updated_at,
+            idempotency_key=idempotency_key,
+        )
+        failed = refused(ran.answer)
+        note(
+            **{"hq.ok": not failed, "hq.replayed": ran.replayed},
+            **({"error.type": refusal_of(ran.answer).code} if failed else {}),
+        )
+        return ran
+
+
+def _named_run(
+    name: str,
+    payload: dict[str, Any],
+    *,
+    principal: Principal,
+    target: str | int | None,
+    expected_updated_at: str | None,
+    idempotency_key: str | None,
+) -> Ran:
     spec = capability_registry().get(name)
     if spec is None:
         return Ran(

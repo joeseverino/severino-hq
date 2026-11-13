@@ -4,7 +4,6 @@ import json
 import logging
 import sys
 from collections.abc import Mapping
-from contextvars import ContextVar, Token
 from datetime import UTC, datetime
 from functools import cache
 from types import TracebackType
@@ -12,17 +11,7 @@ from typing import TypeIs, override
 
 lazy from pydantic import ValidationError as PydanticValidationError
 
-_request_id = ContextVar("severino_request_id", default="-")
-
-
-def get_request_id() -> str:
-    return _request_id.get()
-
-
-def set_request_id(value: str) -> Token[str]:
-    """Carry ``value`` as the request id for the length of a ``with`` block."""
-
-    return _request_id.set(value)
+from .tracing import NO_TRACE, trace_id
 
 
 def _invalid(value: object) -> TypeIs[PydanticValidationError]:
@@ -90,10 +79,12 @@ class JsonFormatter(logging.Formatter):
 
     @override
     def format(self, record: logging.LogRecord) -> str:
-        request_id = get_request_id()
+        request_id = trace_id()
         request = getattr(record, "request", None)
-        if request_id == "-" and request is not None:
-            request_id = getattr(request, "request_id", "-")
+        # Django logs a response a view returned once every middleware has
+        # finished with it, past the trace, and hands the request beside it.
+        if request_id == NO_TRACE and request is not None:
+            request_id = getattr(request, "request_id", NO_TRACE)
         payload = {
             "timestamp": datetime.now(UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname.lower(),

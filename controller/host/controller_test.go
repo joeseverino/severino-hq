@@ -32,7 +32,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
-	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS", "SEVERINO_HOST_FILESYSTEMS",
+	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS", "SEVERINO_HOST_FILESYSTEMS", "SEVERINO_HOST_REBOOT",
 	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET", "HQ_CONTROLLER_GRANTS",
 }
 
@@ -92,23 +92,25 @@ func newLaunch(t *testing.T) *launch {
 				}
 			}
 		}
-		if name == "nft" || name == "systemctl" {
+		if name == "nft" || name == "systemctl" || name == "busctl" {
 			return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 1")
 		}
 		return program(ctx, name, args...)
 	}
 	l.controller = &Controller{
-		Machine:       f.machine,
-		SecretDir:     secrets,
-		ACME:          filepath.Join(f.root, "acme"),
-		CertStore:     filepath.Join(f.root, "certs"),
-		Tailscaled:    filepath.Join(f.root, "absent.sock"),
-		UnitSocket:    filepath.Join(f.root, "unit", "unit.sock"),
-		Grants:        []Grant{relocated(DependencyUpdates, f.root)},
-		DependencyRun: filepath.Join(f.root, "state", "renovate", "dependency-run.json"),
-		MountTable:    filepath.Join(f.root, "absent-mounts"),
-		Statfs:        func(string) (free, total uint64, err error) { return 59 << 20, 29 << 30, nil },
-		Connections:   func() error { return nil },
+		Machine:        f.machine,
+		SecretDir:      secrets,
+		ACME:           filepath.Join(f.root, "acme"),
+		CertStore:      filepath.Join(f.root, "certs"),
+		Tailscaled:     filepath.Join(f.root, "absent.sock"),
+		UnitSocket:     filepath.Join(f.root, "unit", "unit.sock"),
+		Grants:         []Grant{relocated(DependencyUpdates, f.root)},
+		DependencyRun:  filepath.Join(f.root, "state", "renovate", "dependency-run.json"),
+		MountTable:     filepath.Join(f.root, "absent-mounts"),
+		Statfs:         func(string) (free, total uint64, err error) { return 59 << 20, 29 << 30, nil },
+		RebootRequired: filepath.Join(f.root, "reboot-required"),
+		Born:           func(string) (time.Time, error) { return time.Date(2029, 12, 31, 18, 0, 0, 0, time.UTC), nil },
+		Connections:    func() error { return nil },
 		Lock: func(context.Context) (func(), error) {
 			l.locked = true
 			l.order = append(l.order, "lock")
@@ -299,6 +301,7 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 		"SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting",
 		"SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json",
 		"SEVERINO_HOST_FILESYSTEMS=/run/severino-hq/filesystems.json",
+		"SEVERINO_HOST_REBOOT=/run/severino-hq/reboot.json",
 	} {
 		if !slices.Contains(envs, want) {
 			t.Errorf("%s is not named: %v", want, envs)
@@ -307,7 +310,7 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	for target := range l.mounted {
 		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || slices.Contains([]string{
 			"/run/severino-hq/units", "/run/severino-hq/units-restarting",
-			"/run/severino-hq/tailnet-lock.json", "/run/severino-hq/filesystems.json",
+			"/run/severino-hq/tailnet-lock.json", "/run/severino-hq/filesystems.json", "/run/severino-hq/reboot.json",
 		}, target) {
 			t.Errorf("%s was mounted with nothing to mount", target)
 		}
@@ -340,6 +343,39 @@ func TestEachFilesystemsSpaceIsMountedAsAReading(t *testing.T) {
 	}
 	if joined := strings.Join(l.args, "\n"); strings.Contains(joined, "/dev/sda2") || strings.Contains(joined, "source="+l.controller.MountTable) {
 		t.Errorf("the mount table reached the container: %v", l.args)
+	}
+}
+
+// Root reads the restart flag and asks logind, and hands the container what
+// they said, never the flag's directory or the bus it asked on.
+func TestAWaitingRestartIsMountedAsAReading(t *testing.T) {
+	l := newLaunch(t)
+	if err := os.WriteFile(l.controller.RebootRequired, []byte("*** System restart required ***\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.controller.RebootRequired+".pkgs", []byte("linux-image-example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	faked := l.controller.Command
+	l.controller.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		if name == "busctl" {
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' '{"type":"(st)","data":["reboot",1893466800000000]}'`)
+		}
+		return faked(ctx, name, args...)
+	}
+
+	l.run(t, Plan)
+
+	var reading hostcore.RebootReading
+	if err := json.Unmarshal(l.mounted["/run/severino-hq/reboot.json"], &reading); err != nil {
+		t.Fatalf("no restart reading was mounted: %v", err)
+	}
+	if !reading.Pending || reading.Since != "2029-12-31T18:00:00Z" || !slices.Equal(reading.Packages, []string{"linux-image-example"}) ||
+		reading.ScheduledAction != "reboot" || reading.ScheduledAt != "2030-01-01T03:00:00Z" {
+		t.Errorf("mounted %+v", reading)
+	}
+	if joined := strings.Join(l.args, "\n"); strings.Contains(joined, "source="+l.controller.RebootRequired) || strings.Contains(joined, "dbus") {
+		t.Errorf("the flag or the bus reached the container: %v", l.args)
 	}
 }
 

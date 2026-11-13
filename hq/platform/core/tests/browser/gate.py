@@ -23,6 +23,7 @@ from django.urls import reverse
 from django.utils.csp import CSP
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.application.tests.example_procedures import supplied
 from hq.platform.core.csp_views import _blocked, _csp_violations, _directive
 from hq.platform.core.speculation import rules_document
 from hq.platform.core.stylesheets import stylesheet
@@ -409,6 +410,10 @@ class BrowserGate(SimpleTestCase):
         # The policy first: a render may leave settings that refuse the test
         # client's host until the class is done (dev:look's estate).
         cls.policy = policy()
+        # The example procedures are composed for every page the browser
+        # draws, so an estate holds automation runs in every state and each
+        # procedure's command exists, as on a server that supplies them.
+        cls.enterClassContext(supplied())
         cls.pages = cls.render()
         cls.served = named_by_every_page()
         try:

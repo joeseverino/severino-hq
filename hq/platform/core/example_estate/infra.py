@@ -216,7 +216,21 @@ def proxy():
 
 
 def host():
-    """What the host reports of itself: its firewall, perimeter, disks and load."""
+    """What the host reports of itself: its firewall, perimeter, disks, restart and load."""
+
+    # A kernel and a library installed two days ago wait on a restart, which is
+    # scheduled for a quiet hour.
+    store(
+        "host.reboot",
+        {
+            "pending": True,
+            "since": stamp(timedelta(days=2)),
+            "packages": ["linux-image-generic", "libc6"],
+            "scheduled_action": "reboot",
+            "scheduled_at": stamp(-timedelta(hours=7)),
+            "read_at": stamp(),
+        },
+    )
 
     # A root a build has all but filled, beside a roomy boot partition.
     store(

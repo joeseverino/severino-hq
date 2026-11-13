@@ -293,6 +293,12 @@ def work_kinds(*, now: datetime | None = None) -> list[WorkKind]:
     return sorted(latest.values(), key=lambda found: found.title.casefold())
 
 
+def run_hosts() -> list[str]:
+    """Each machine a run has acted on, by its canonical name, A to Z."""
+
+    return list(OperationHost.objects.order_by("host").values_list("host", flat=True).distinct())
+
+
 def hydrated(rows: Iterable[Sequence[Any]]) -> list[WorkRun]:
     """A page of ``work_rows`` as ``WorkRun`` rows, in its order, read with one query per source."""
 

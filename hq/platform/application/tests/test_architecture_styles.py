@@ -344,8 +344,8 @@ class StyleContractTests(SimpleTestCase):
         """
 
         root = Path(__file__).resolve().parents[4]
-        template = (root / "templates" / "base.html").read_text(encoding="utf-8")
-        panel = template.split('<div class="user-menu-panel"', 1)[1].split("</header>", 1)[0]
+        template = (root / "templates" / "partials" / "_user_menu.html").read_text(encoding="utf-8")
+        panel = template.split('<div class="user-menu-panel"', 1)[1]
         rows = re.findall(r"<(?:a|button)\b[^>]*>", panel, re.DOTALL)
 
         self.assertTrue(rows)
@@ -702,14 +702,7 @@ HAND_ROLLED: dict[str, str] = {
     "500.html": "notice-body notice-code notice-page",
     "analytics/overview.html": "bar-label bar-list bar-row bar-track bar-value chip reading-note window-switch",
     "auth/login.html": "auth-card auth-logo auth-note auth-sso",
-    "base.html": (
-        "action-badge brand content demo-about demo-about-dot demo-flag demo-foot global-search "
-        "menu-identity menu-identity-picture menu-identity-when menu-identity-who menu-item menu-item-note "
-        "menu-item-split menu-item-status menu-places menu-setting menu-settings menu-theme menu-theme-label "
-        "menu-theme-option menu-theme-options messages nav-group nav-group-label nav-group-panel nav-toggle "
-        "primary-nav role-mark search-key search-label site-header skip-link switch-knob switch-track user-avatar "
-        "user-menu user-menu-panel user-name"
-    ),
+    "base.html": "content",
     "calendars/_entry_fields.html": "field-range",
     "calendars/calendar.html": (
         "calendar-aside calendar-layout calendar-month calendar-source calendar-source-failure calendar-source-note "
@@ -754,7 +747,7 @@ HAND_ROLLED: dict[str, str] = {
     "control_plane/service_detail.html": "control-origin exposure exposure-*",
     "control_plane/tools.html": "tool-summary tool-tabs",
     "control_plane/topology.html": (
-        "scope-chip topology-detail topology-hint topology-kind-* topology-kind-filters topology-kind-mark "
+        "topology-detail topology-hint topology-kind-* topology-kind-filters topology-kind-mark "
         "topology-lane topology-lens-note topology-map topology-node topology-node-* topology-node-degree "
         "topology-node-link topology-node-list topology-node-select topology-node-title topology-relations "
         "topology-search topology-stage topology-toolbar topology-trace-bar topology-trace-controls topology-view "
@@ -764,19 +757,6 @@ HAND_ROLLED: dict[str, str] = {
     "control_plane/zone_mail.html": (
         "control-label mail-record-value mail-records mail-stage-head mail-stage-question mail-stage-warning "
         "mail-stages"
-    ),
-    "core/_command_center_group.html": (
-        "command-center-arrow command-center-copy command-center-destination command-center-evidence "
-        "command-center-group command-center-option command-center-title scope-chip"
-    ),
-    "core/_command_center_modal.html": (
-        "command-center-enter-hint command-center-footer command-center-loading command-center-palette "
-        "command-center-query command-center-results"
-    ),
-    "core/_command_center_results.html": (
-        "command-center-arrow command-center-copy command-center-destination command-center-empty "
-        "command-center-evidence command-center-group command-center-more command-center-option command-center-options "
-        "command-center-results command-center-title"
     ),
     "core/_command_fields.html": "command-state command-target field-label",
     "core/_connection_loading.html": "conn-pending",
@@ -810,7 +790,7 @@ HAND_ROLLED: dict[str, str] = {
     "list_page.html": "select-column",
     "page.html": "page-foot",
     "partials/_demo_about.html": "demo-about-foot ext-arrow ext-links",
-    "partials/_discovery_catalog.html": "discovery-link discovery-list discovery-main discovery-meta scope-chip",
+    "partials/_discovery_catalog.html": "discovery-link discovery-list discovery-main discovery-meta",
     "partials/_linked_text.html": "linked-text",
     "partials/_operator_step.html": "operator-step",
     "partials/_posture.html": "posture-checks step-list",
@@ -826,7 +806,7 @@ HAND_ROLLED: dict[str, str] = {
     "projects/watching.html": "gh-avatar gh-identity gh-name gh-profile gh-verified",
     "receipts/receipt_detail.html": "document-picture",
     "search.html": (
-        "command-hint scope-chip search-badge search-group search-hit search-hit-main search-hit-title search-hits "
+        "command-hint search-badge search-group search-hit search-hit-main search-hit-title search-hits "
         "search-scopes search-snippet search-summary"
     ),
 }

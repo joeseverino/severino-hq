@@ -31,6 +31,7 @@ from django.test.utils import CaptureQueriesContext, setup_databases, teardown_d
 from django.urls import URLPattern, reverse
 from jwt.algorithms import RSAAlgorithm
 
+from hq.platform.application.automation_runs import capability_name
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.outbound_work import SUBJECT_FIELD
 from hq.platform.application.projects import REFRESH
@@ -40,6 +41,7 @@ from hq.platform.application.security import host_capabilities
 from hq.platform.application.tokens import KEYS
 from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
+from hq.platform.core.example_estate import automation
 lazy from hq.domains.jobs.testing import held_jobs
 lazy from hq.platform.core.models import LinkedAccount
 
@@ -118,6 +120,22 @@ VARIANTS: dict[str, tuple[str, ...]] = {
     "core:audit_list": ("q=expense", "page=50"),
     "control_plane:list": ("q=app1",),
     "control_plane:topology_node": ("id=machine:lab-1",),
+    "jobs:list": ("q=example", "state=failed", "host=lab-1", "sort=-created_at", "page=3"),
+}
+
+
+def _run_command(_seeded: Seeded) -> dict[str, Any] | None:
+    """The command the bench's runs on lab-1 are asked through, where example procedures are supplied."""
+
+    supplied = automation.procedures()
+    return {"name": capability_name(supplied[0].id)} if supplied else None
+
+
+# A route asked again of another record, under a name of its own: (route, its
+# arguments, or None where the bench holds no such record).
+ALSO: dict[str, tuple[str, Callable[[Seeded], dict[str, Any] | None]]] = {
+    # A procedure's command, whose page lists its runs.
+    "command:run": ("command", _run_command),
 }
 
 
@@ -213,6 +231,9 @@ def _pages(seeded: Seeded) -> tuple[list[tuple[str, str]], list[tuple[str, str]]
             url = reverse(name, kwargs=SAMPLES[name](seeded) if name in SAMPLES else None)
             pages.append((name, url))
             pages.extend((f"{name}?{query}", f"{url}?{query}") for query in VARIANTS.get(name, ()))
+    for name, (route, sample) in ALSO.items():
+        if (kwargs := sample(seeded)) is not None:
+            pages.append((name, reverse(route, kwargs=kwargs)))
     return pages, left
 
 

@@ -252,21 +252,23 @@ const cosign = "/usr/local/lib/severino-hq-verifier/cosign"
 
 func controller(stdout, stderr io.Writer) *host.Controller {
 	return &host.Controller{
-		Machine:       machine(stdout),
-		SecretDir:     hostcore.SecretDir,
-		ACME:          host.ACMEDir,
-		CertStore:     "/usr/local/share/ca-certificates",
-		Tailscaled:    host.TailscaledSocket,
-		UnitSocket:    host.UnitSocket,
-		Grants:        hostGrants(stderr),
-		DependencyRun: host.DependencyRunFile,
-		MountTable:    hostcore.MountTable,
-		Statfs:        hostcore.Statfs,
-		Connections:   requireConnections,
-		Lock:          host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
-		LookPath:      exec.LookPath,
-		Now:           time.Now,
-		Stdout:        stdout, Stderr: stderr,
+		Machine:        machine(stdout),
+		SecretDir:      hostcore.SecretDir,
+		ACME:           host.ACMEDir,
+		CertStore:      "/usr/local/share/ca-certificates",
+		Tailscaled:     host.TailscaledSocket,
+		UnitSocket:     host.UnitSocket,
+		Grants:         hostGrants(stderr),
+		DependencyRun:  host.DependencyRunFile,
+		MountTable:     hostcore.MountTable,
+		Statfs:         hostcore.Statfs,
+		RebootRequired: hostcore.RebootRequired,
+		Born:           hostcore.Born,
+		Connections:    requireConnections,
+		Lock:           host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
+		LookPath:       exec.LookPath,
+		Now:            time.Now,
+		Stdout:         stdout, Stderr: stderr,
 	}
 }
 

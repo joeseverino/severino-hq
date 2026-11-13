@@ -518,6 +518,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `DJANGO_WHITENOISE_AUTOREFRESH` | development | serves static files from the source trees, uncached; refused with `DJANGO_DEBUG` off in a deployment check |
 | `SEVERINO_DEBUG_TOOLBAR` | development | `1` with `DJANGO_DEBUG` shows Django Debug Toolbar |
 | `SEVERINO_DEBUG_TOOLBAR_IPS` | development | who sees the toolbar; loopback by default |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | development | the OTLP/HTTP collector spans are sent to ([Tracing](Development.md#tracing)); unset, as in every image, nothing is traced |
 | `SEVERINO_CONTROLLER_HEARTBEAT` | development | where HQ records that the controller reached it; beside the database when unset |
 | `SEVERINO_ACTIVITY_MARKER` | development | where HQ marks itself in use; beside the database when unset |
 | `SEVERINO_TEST_RUN` | development | a test run's own temporary directory, which it names to every process it starts as `TMPDIR` and removes when it ends; set by the process that starts the run, and a process started with it joins that run |

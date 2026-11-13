@@ -85,6 +85,10 @@ DEP004 = [
     # hq/platform/core/test_runner.py registers the Hypothesis profiles when
     # the suite starts, and does nothing in the image, which has no Hypothesis.
     "hypothesis",
+    # hq/platform/core/tracing.py and hq_runner/tracing.py load the SDK and
+    # its exporter only while OTEL_EXPORTER_OTLP_ENDPOINT is set, which
+    # development alone sets; no image installs them.
+    "opentelemetry",
 ]
 
 # Which module may import which, read by lint:imports from every import,
@@ -179,6 +183,11 @@ default-groups = ["dev", "tools", "source-tests"]
 [dependency-groups]
 dev = [
     "django-debug-toolbar==8.0.0",
+    # Spans for a trace viewer on this machine (hq/platform/core/tracing.py,
+    # hq_runner/tracing.py), sent only while OTEL_EXPORTER_OTLP_ENDPOINT is
+    # set; no image installs them. OTLP over HTTP, which needs no grpcio.
+    "opentelemetry-exporter-otlp-proto-http==1.45.2",
+    "opentelemetry-sdk==1.45.2",
     "watchfiles==1.3.0",
 ]
 # What the source tests import beyond the runtime requirements; an extension's

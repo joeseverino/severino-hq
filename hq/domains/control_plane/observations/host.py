@@ -264,12 +264,50 @@ class HostFilesystemRecord(ObservationRecord):
     read_at: UnitInstant = Field(description="When root asked the kernel.")
 
 
+# A package as dpkg names one (Debian Policy 5.6.1): lowercase letters,
+# digits, plus, minus and dots, two or more, from a letter or digit. The
+# controller reads the pattern and the count from this record's schema in the
+# bridge contract and passes over a name it does not admit.
+REBOOT_PACKAGE = r"^[a-z0-9][a-z0-9+.-]{1,99}$"
+REBOOT_PACKAGES = 64
+
+
+class HostRebootRecord(ObservationRecord):
+    """Whether the controller's machine waits on a restart: the
+    host.reboot reading's one record. Root reads the flag the packaging
+    system leaves in /run/reboot-required and the packages it lists beside it,
+    and asks logind for the shutdown scheduled, if one is; no other file or
+    property.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
+
+    pending: bool = Field(description="Whether /run/reboot-required is there: an update waits on a restart.")
+    since: OptionalUnitInstant = Field(
+        default="", description="When the flag was first written, when one is there; empty when none is."
+    )
+    packages: tuple[Annotated[str, Field(pattern=REBOOT_PACKAGE)], ...] = Field(
+        default=(),
+        max_length=REBOOT_PACKAGES,
+        description="The packages /run/reboot-required.pkgs names as waiting on it, each once.",
+    )
+    scheduled_action: OptionalUnitWord = Field(
+        default="",
+        description="What logind's ScheduledShutdown will do (reboot, poweroff, halt); empty when nothing is scheduled.",
+    )
+    scheduled_at: OptionalUnitInstant = Field(
+        default="", description="When logind will do it; empty when nothing is scheduled."
+    )
+    read_at: UnitInstant = Field(description="When root read the flag and asked logind.")
+
+
 FIREWALL_KIND = "host.firewall"
 PERIMETER_KIND = "host.perimeter"
 RENDER_STATUS_KIND = "host.render_status"
 UNIT_KIND = "host.unit"
 TAILNET_LOCK_KIND = "host.tailnet_lock"
 FILESYSTEM_KIND = "host.filesystem"
+REBOOT_KIND = "host.reboot"
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
@@ -320,5 +358,13 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         HostFilesystemRecord,
         title=lambda record: str(record.get("mount", "")),
         relation="Disk space on",
+    ),
+    ObservationSpec(
+        REBOOT_KIND,
+        "host",
+        "Pending restart",
+        HostRebootRecord,
+        title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
+        relation="Restart state of",
     ),
 )

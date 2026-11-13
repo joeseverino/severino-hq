@@ -59,6 +59,9 @@ type Environment struct {
 	// HostFilesystems is root's statfs of each real filesystem on the
 	// machine (hostcore.FilesystemReading).
 	HostFilesystems string `env:"SEVERINO_HOST_FILESYSTEMS"`
+	// HostReboot is root's reading of whether the machine waits on a
+	// restart, and the shutdown logind has scheduled (hostcore.RebootReading).
+	HostReboot string `env:"SEVERINO_HOST_REBOOT"`
 	// UnitSocket is where root's `hq-host unit --serve` answers on the
 	// machine the controller runs on: the one way a run asks a container's
 	// systemd unit to stop, start or restart.

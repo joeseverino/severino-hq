@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from . import tracing
 from .bridge import BridgeError
 from .claim import CAPABILITY, Claimed, Procedure, Refused, Run, bind, claimed
 from .events import Event, bounded, from_ansible, learned, strike
@@ -71,6 +72,8 @@ class _Hold:
         self._renewed = start
         self._deadline = start + run.timeout_seconds
         self.stopped: tuple[str, str] | None = None
+        # The run's span, which ansible-runner's thread asks this on.
+        self.span: Any = None
 
     def should_stop(self) -> bool:
         if self.stopped is not None:
@@ -91,6 +94,7 @@ class _Hold:
             self.stopped = ("LeaseLost", strike(f"Its lease could not be renewed: {exc}", self._secrets))
             return
         self._renewed = now
+        tracing.event(self.span, "lease renewed")
         if answer.get("continue") is not True:
             reason = answer.get("reason")
             if reason == "Cancelled":
@@ -148,9 +152,17 @@ def run_claimed(
         found = from_ansible(event, secrets)
         if found is not None:
             events.append(found)
+            # The struck event's host, task and outcome; never its message.
+            tracing.event(hold.span, found.outcome, **{"ansible.host": found.host, "ansible.task": found.task})
 
-    status = runner(run, on_event=on_event, should_stop=hold.should_stop)
-    return _finish(run, status, hold, events)
+    with tracing.span("ansible-runner", **{"hq.procedure": run.procedure_id, "hq.hosts": len(run.hosts)}) as ran:
+        hold.span = ran
+        status = runner(run, on_event=on_event, should_stop=hold.should_stop)
+        tracing.note(**{"ansible.status": status})
+    report = _finish(run, status, hold, events)
+    if hold.stopped is not None:
+        tracing.note(**{"hq.stopped": hold.stopped[0]})
+    return report
 
 
 def work_once(
@@ -164,6 +176,24 @@ def work_once(
 ) -> Outcome | None:
     """Claim one run and see it through to its report; None when nothing waits."""
 
+    with tracing.span("automation run", **{"hq.capability": CAPABILITY}):
+        outcome = _pass(
+            bridge, controller_id=controller_id, installed=installed, journal=journal, runner=runner, clock=clock
+        )
+        if outcome is not None:
+            tracing.note(**{"hq.operation.id": outcome.operation, "hq.ok": outcome.report["success"] is True})
+        return outcome
+
+
+def _pass(
+    bridge: Bridge,
+    *,
+    controller_id: str,
+    installed: Mapping[str, Procedure],
+    journal: Journal,
+    runner: Runner,
+    clock: Callable[[], float],
+) -> Outcome | None:
     entry = journal.begin()
     pending = bridge.claim(controller_id, capability=CAPABILITY, lease_seconds=LEASE_SECONDS, attempt=entry.attempt)
     try:

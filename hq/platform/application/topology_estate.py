@@ -40,6 +40,7 @@ lazy from . import (
     docker_estate,
     filesystem_findings,
     reading_facts,
+    reboot_findings,
     reference_findings,
     render_status_findings,
     tailnet,
@@ -488,13 +489,14 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     """What provider-specific joins add: container edges, and image, render
-    status, unit, filesystem, refused report and certificate facts."""
+    status, unit, filesystem, restart, refused report and certificate facts."""
 
     if estate.machine_ids:
         docker_estate.add(nodes, estate.machine)
     render_status_findings.add(nodes, estate.machine)
     unit_findings.add(nodes, estate.machine)
     filesystem_findings.add(nodes, estate.machine)
+    reboot_findings.add(nodes, estate.machine)
     reading_facts.add_refusals(nodes, estate.machine)
     reference_findings.add(nodes, resources)
     by_ref, by_provider = _reader_index(nodes)

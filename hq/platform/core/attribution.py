@@ -16,7 +16,7 @@ from uuid import uuid7
 
 lazy from hq.platform.application.security import CLI_ACTOR, CLI_INTERFACE
 
-from .logging import set_request_id
+from . import tracing
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,9 +172,10 @@ class BoundDoor:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-        request_id = uuid7().hex
         with (
-            set_request_id(request_id),
+            tracing.trace(
+                f"{scope['method']} {scope['path']}", **{"http.request.method": scope["method"]}
+            ) as request_id,
             operation_context(interface=self.interface, actor="", operation=self.operation, operation_id=request_id),
         ):
             await self.app(scope, receive, send)

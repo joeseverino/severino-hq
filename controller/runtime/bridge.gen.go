@@ -657,6 +657,7 @@ const (
 	ResourceKindHostFilesystem               ResourceKind = "host.filesystem"
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
 	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
+	ResourceKindHostReboot                   ResourceKind = "host.reboot"
 	ResourceKindHostRenderStatus             ResourceKind = "host.render_status"
 	ResourceKindHostTailnetLock              ResourceKind = "host.tailnet_lock"
 	ResourceKindHostUnit                     ResourceKind = "host.unit"
@@ -747,6 +748,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindHostFirewall:
 		return true
 	case ResourceKindHostPerimeter:
+		return true
+	case ResourceKindHostReboot:
 		return true
 	case ResourceKindHostRenderStatus:
 		return true
@@ -873,6 +876,7 @@ const (
 	SweptHostFilesystem               SweptKind = "host.filesystem"
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
+	SweptHostReboot                   SweptKind = "host.reboot"
 	SweptHostRenderStatus             SweptKind = "host.render_status"
 	SweptHostTailnetLock              SweptKind = "host.tailnet_lock"
 	SweptHostUnit                     SweptKind = "host.unit"
@@ -944,6 +948,8 @@ func (e SweptKind) Valid() bool {
 	case SweptHostFirewall:
 		return true
 	case SweptHostPerimeter:
+		return true
+	case SweptHostReboot:
 		return true
 	case SweptHostRenderStatus:
 		return true
@@ -1721,6 +1727,27 @@ type HostPerimeterRecord struct {
 	PublicAddresses  []string `json:"public_addresses,omitempty"`
 	ReadAt           string   `json:"read_at,omitempty"`
 	Record           string   `json:"record"`
+}
+
+// HostRebootRecord Whether the controller's machine waits on a restart: the host.reboot reading's one record. Root reads the flag the packaging system leaves in /run/reboot-required and the packages it lists beside it, and asks logind for the shutdown scheduled, if one is; no other file or property.
+type HostRebootRecord struct {
+	// Packages The packages /run/reboot-required.pkgs names as waiting on it, each once.
+	Packages []string `json:"packages,omitempty"`
+
+	// Pending Whether /run/reboot-required is there: an update waits on a restart.
+	Pending bool `json:"pending"`
+
+	// ReadAt When root read the flag and asked logind.
+	ReadAt string `json:"read_at"`
+
+	// ScheduledAction What logind's ScheduledShutdown will do (reboot, poweroff, halt); empty when nothing is scheduled.
+	ScheduledAction string `json:"scheduled_action,omitempty"`
+
+	// ScheduledAt When logind will do it; empty when nothing is scheduled.
+	ScheduledAt string `json:"scheduled_at,omitempty"`
+
+	// Since When the flag was first written, when one is there; empty when none is.
+	Since string `json:"since,omitempty"`
 }
 
 // HostRenderStatusRecord One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.

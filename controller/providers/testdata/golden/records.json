@@ -612,6 +612,18 @@
       "read_at": "example"
     }
   ],
+  "host.reboot": [
+    {
+      "packages": [
+        "example"
+      ],
+      "pending": true,
+      "read_at": "2030-01-01T00:00:00Z",
+      "scheduled_action": "reboot",
+      "scheduled_at": "2030-01-01T00:00:00Z",
+      "since": "2030-01-01T00:00:00Z"
+    }
+  ],
   "host.render_status": [
     {
       "renderer": "example",

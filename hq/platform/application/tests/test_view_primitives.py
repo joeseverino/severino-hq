@@ -192,6 +192,87 @@ class TableTotalsTests(TestCase):
         self.assertEqual(view.table_totals_for(None), {})
 
 
+class ProjectedListTests(TestCase):
+    """A list a projection fills: what its address asks reaches the projection
+    as its parameters, and a page is cut in the database and read back whole."""
+
+    def setUp(self):
+        from hq.domains.jobs.models import Job
+
+        for index in range(5):
+            Job.objects.create(kind=f"example.work-{index}", label=f"Example {index}", state="succeeded")
+
+    def _view(self, query=""):
+        from django.test import RequestFactory
+        from django.views.generic import ListView
+
+        from hq.domains.jobs.models import Job
+        from hq.platform.application.tables import (
+            Projected,
+            TableColumn,
+            TableFilter,
+            TableListMixin,
+            TableSort,
+        )
+
+        asked = []
+
+        class View(TableListMixin, ListView):
+            paginate_by = 2
+            table_columns = (TableColumn("Job", kind="identifier"),)
+            table_filters = (TableFilter("kind", "Job", "never-read", ()),)
+            table_sorts = (TableSort("newest", "Newest first", "never-read"), TableSort("oldest", "Oldest", ""))
+            table_default_sort = "newest"
+
+            def get_table_rows(self, query):
+                asked.append(query)
+                rows = Job.objects.order_by("kind" if query.sort == "oldest" else "-kind")
+                if query.chosen("kind"):
+                    rows = rows.filter(kind__in=query.chosen("kind"))
+                return Projected(rows.values_list("kind", flat=True), lambda page: [f"read {kind}" for kind in page])
+
+        view = View()
+        view.setup(RequestFactory().get(f"/example/?{query}"))
+        view.object_list = view.get_queryset()
+        return view, asked
+
+    def test_the_address_reaches_the_projection_as_its_parameters(self):
+        _view, asked = self._view("kind=example.work-1&kind=example.work-2&q=+example+&sort=oldest")
+
+        (query,) = asked
+        self.assertEqual(query.chosen("kind"), ("example.work-1", "example.work-2"))
+        self.assertEqual((query.search, query.sort, query.chosen("state")), ("example", "oldest", ()))
+
+    def test_a_sort_the_list_does_not_declare_is_its_default(self):
+        _view, asked = self._view("sort=-kind")
+
+        self.assertEqual(asked[0].sort, "newest")
+
+    def test_a_page_is_counted_cut_and_read_back(self):
+        view, _asked = self._view("sort=oldest")
+
+        context = view.get_context_data()
+
+        self.assertEqual(context["paginator"].count, 5)
+        self.assertEqual(list(context["object_list"]), ["read example.work-0", "read example.work-1"])
+        self.assertEqual([column.kind for column in context["table"]["columns"]], ["identifier"])
+
+    def test_a_list_of_the_model_s_queryset_is_as_it_was(self):
+        from django.test import RequestFactory
+        from django.views.generic import ListView
+
+        from hq.domains.jobs.models import Job
+        from hq.platform.application.tables import TableListMixin
+
+        class View(TableListMixin, ListView):
+            model = Job
+
+        view = View()
+        view.setup(RequestFactory().get("/example/"))
+
+        self.assertEqual(view.get_queryset().count(), 5)
+
+
 class WriteSpineContractTests(TestCase):
     """What a write view must declare, enforced where the fix is obvious.
 

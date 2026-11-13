@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 {% comment %}The palette's results: the part this page answers to the header's search.{% endcomment %}
-{% partialdef palette %}{% include "core/_command_center_results.html" %}{% endpartialdef %}
+{% partialdef palette %}{% include "partials/_command_center.html#results" %}{% endpartialdef %}
 {% filter_bar verb="Search" data_table_toolbar=True %}
   <input type="search" name="q" value="{{ q }}" placeholder="Find anything" aria-label="Find anything" autofocus>
 {% endfilter_bar %}

@@ -434,6 +434,24 @@ class Things(tables.TableListMixin, pages.PageMixin):
     table_room = "shared"
 
 
+class Projections(tables.TableListMixin):
+    table_columns = (tables.TableColumn("Name", kind="identifier"),)
+    notes: models.QuerySet[Note]
+
+    @override
+    def get_table_rows(self, query: tables.TableQuery) -> tables.Projected:
+        rows = self.notes.filter(about_name__in=query.chosen("name")).values_list("pk", flat=True)
+        return tables.Projected(rows, lambda page: [str(pk) for pk in page])
+
+
+def a_projected_list(view: Projections, query: tables.TableQuery) -> None:
+    assert_type(view.get_table_rows(query), tables.Projected)
+    assert_type(query.chosen("state"), tuple[str, ...])
+    assert_type(query.search, str)
+    assert_type(view.get_table_rows(query)[0:40], list[Any])
+    tables.Projected([], lambda page: page)  # type: ignore[arg-type]
+
+
 class Refreshed(pages.PageMixin):
     """A page action may be an ``ask``, the control that asks for declared work."""
 

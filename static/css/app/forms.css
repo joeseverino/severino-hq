@@ -261,7 +261,7 @@
 }
 .command-center-results[aria-busy="true"] { opacity: .62; }
 .command-center-options { display: grid; gap: var(--space-5); }
-.command-center-group h3 {
+.command-center-group-label {
   position: sticky;
   z-index: 1;
   top: 0;

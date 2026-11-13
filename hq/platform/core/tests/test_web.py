@@ -24,7 +24,7 @@ from hq.domains.receipts.models import Receipt
 from hq.platform.application import request_context
 from hq.platform.application.tests.markup import hrefs
 from hq.platform.core.audit import record_event
-from hq.platform.core.logging import JsonFormatter, set_request_id
+from hq.platform.core.logging import JsonFormatter
 from hq.platform.core.oidc import TAILSCALE_PRINCIPAL_SESSION_KEY, HQOIDCAuthenticationBackend
 
 from .signed_in_case import User, _AuthedTestCase
@@ -114,7 +114,8 @@ class AuthGateTests(TestCase):
     def test_login_page_is_accessible(self):
         response = self.client.get("/accounts/login/")
         self.assertEqual(response.status_code, 200)
-        self.assertRegex(response["X-Request-ID"], r"^[0-9a-f]{32}$")
+        # A W3C trace id: 32 lowercase hex digits.
+        self.assertRegex(response.wsgi_request.request_id, r"^[0-9a-f]{32}$")
 
     def test_every_response_says_how_long_the_application_took(self):
         with self.assertLogs("severino.request", "INFO") as logged:
@@ -241,7 +242,9 @@ class SecurityBoundaryTests(TestCase):
                 self.assertEqual(row.user, expected)
 
     def test_json_logs_carry_request_correlation_without_query_strings(self):
-        with set_request_id("request-123"):
+        from hq.platform.core import tracing
+
+        with tracing.trace("GET /search/") as minted:
             record = logging.LogRecord(
                 "severino.request",
                 logging.INFO,
@@ -258,7 +261,7 @@ class SecurityBoundaryTests(TestCase):
             record.duration_ms = 4.2
             payload = json.loads(JsonFormatter().format(record))
 
-        self.assertEqual(payload["request_id"], "request-123")
+        self.assertEqual(payload["request_id"], minted)
         self.assertEqual(payload["path"], "/search/")
         self.assertEqual(payload["duration_ms"], 4.2)
 

@@ -74,7 +74,6 @@ class SearchPageTests(_AuthedTestCase):
                 HTTP_X_FRAGMENT="palette",
             )
 
-        self.assertTemplateUsed(response, "core/_command_center_results.html")
         self.assertTrue(select(response, "data-command-center-results"))
         self.assertFalse(elements(response, "html"))
         records.assert_called_once()

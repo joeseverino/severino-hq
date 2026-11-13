@@ -3977,6 +3977,54 @@
         "type": "object",
         "description": "One host.perimeter record: Open-port test."
       },
+      "HostRebootRecord": {
+        "additionalProperties": false,
+        "description": "Whether the controller's machine waits on a restart: the host.reboot reading's one record. Root reads the flag the packaging system leaves in /run/reboot-required and the packages it lists beside it, and asks logind for the shutdown scheduled, if one is; no other file or property.",
+        "properties": {
+          "pending": {
+            "description": "Whether /run/reboot-required is there: an update waits on a restart.",
+            "type": "boolean"
+          },
+          "since": {
+            "default": "",
+            "description": "When the flag was first written, when one is there; empty when none is.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "packages": {
+            "default": [],
+            "description": "The packages /run/reboot-required.pkgs names as waiting on it, each once.",
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9+.-]{1,99}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "scheduled_action": {
+            "default": "",
+            "description": "What logind's ScheduledShutdown will do (reboot, poweroff, halt); empty when nothing is scheduled.",
+            "pattern": "^(?:|[a-z][a-z0-9-]{0,31})$",
+            "type": "string"
+          },
+          "scheduled_at": {
+            "default": "",
+            "description": "When logind will do it; empty when nothing is scheduled.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "read_at": {
+            "description": "When root read the flag and asked logind.",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pending",
+          "read_at"
+        ],
+        "type": "object"
+      },
       "HostRenderStatusRecord": {
         "description": "One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.",
         "properties": {
@@ -5268,6 +5316,7 @@
           "host.filesystem",
           "host.firewall",
           "host.perimeter",
+          "host.reboot",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -5330,6 +5379,7 @@
           "ResourceKindHostFilesystem",
           "ResourceKindHostFirewall",
           "ResourceKindHostPerimeter",
+          "ResourceKindHostReboot",
           "ResourceKindHostRenderStatus",
           "ResourceKindHostTailnetLock",
           "ResourceKindHostUnit",
@@ -5394,6 +5444,7 @@
           "host.filesystem",
           "host.firewall",
           "host.perimeter",
+          "host.reboot",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -5440,6 +5491,7 @@
           "SweptHostFilesystem",
           "SweptHostFirewall",
           "SweptHostPerimeter",
+          "SweptHostReboot",
           "SweptHostRenderStatus",
           "SweptHostTailnetLock",
           "SweptHostUnit",

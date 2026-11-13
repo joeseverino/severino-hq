@@ -44,8 +44,8 @@ class RequestDoorTests(TestCase):
 
         refused = AuditLog.objects.get(action=AuditLog.Action.LOGIN_FAILED)
         login = AuditLog.objects.get(action=AuditLog.Action.LOGIN)
-        self.assertEqual(refused.operation_id, failed["X-Request-ID"])
-        self.assertEqual(login.operation_id, signed_in["X-Request-ID"])
+        self.assertEqual(refused.operation_id, failed.wsgi_request.request_id)
+        self.assertEqual(login.operation_id, signed_in.wsgi_request.request_id)
         self.assertEqual(refused.metadata["interface"], "web")
         self.assertEqual(login.metadata["interface"], "web")
         # Nobody had signed in when the attempt failed; joe had once it succeeded.
@@ -60,7 +60,7 @@ class RequestDoorTests(TestCase):
 
         denied = AuditLog.objects.get(action=AuditLog.Action.DENIED)
         self.assertEqual(denied.metadata["interface"], "api")
-        self.assertEqual(denied.operation_id, response["X-Request-ID"])
+        self.assertEqual(denied.operation_id, response.wsgi_request.request_id)
 
 
 class MCPDoorTests(TestCase):

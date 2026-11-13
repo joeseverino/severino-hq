@@ -996,6 +996,27 @@ It shows to loopback clients, or the addresses in
 directives are dropped from the CSP, because its panels use `innerHTML`
 (`hq/config/devtools.py`).
 
+### Tracing
+
+A request, the capability it runs and an automation worker's pass can be
+read as traces in otel-tui, a terminal viewer pinned in `mise.toml`. The
+OpenTelemetry SDK and its OTLP exporter are in the `dev` group and never in
+the image, and nothing of them loads unless `OTEL_EXPORTER_OTLP_ENDPOINT` is
+set. Start the viewer on loopback in one terminal, then the server with the
+endpoint in another:
+
+```sh
+otel-tui --host 127.0.0.1
+OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318 mise run dev:scratch
+```
+
+The same variable on `mise run smoke:runner` sends the worker's pass. A web
+or MCP request is one trace whose id is its request id, the operation id of
+every audit row it writes, with a span for each capability it runs
+(`hq/platform/core/tracing.py`). A worker's pass is a trace of its own: its
+claim to its report, with each task outcome and lease renewal as an event
+(`hq_runner/tracing.py`). No span carries who acted.
+
 ## Repository layout
 
 HQ is an unpackaged Django application managed by uv; the Go controller is

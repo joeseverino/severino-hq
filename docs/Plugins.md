@@ -866,6 +866,14 @@ A `TableListMixin` list declares the same through `TableColumn(kind=)`, its
 ranks derived from the columns unless one says `drop=`, and its region's
 `room=` as `table_room`.
 
+A list whose rows come from a projection rather than a model's queryset
+overrides `get_table_rows(query)`, which is handed the address's filters,
+search and sort as a `TableQuery` (`query.chosen("state")`, `query.search`,
+`query.sort`) and answers `Projected(rows, read)`: `rows` a queryset the
+paginator counts and slices in the database, `read` the function that turns
+one page of it into the rows the template draws. Its columns declare their
+`kind=`, there being no model to read it from, and it sums no totals.
+
 A form renders as `{{ form }}`, and one field as `{{ field.as_field_group }}`.
 HQ's form renderer draws every field in its own markup, with the help text and
 errors the control's `aria-describedby` names, and a checkbox inside its label.

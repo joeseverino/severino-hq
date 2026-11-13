@@ -181,7 +181,7 @@ credential and a 403 a missing permission (`runtime.StatusFailure`).
 
 ### The controller's own machine
 
-Five readings are of the machine a controller runs on and need no credential:
+Six readings are of the machine a controller runs on and need no credential:
 root reads a fact on the host and `hq-host controller` mounts the answer into
 the controller read-only, naming it in an environment variable. The controller
 never holds the ruleset or directory the fact came from. A fact the launcher
@@ -287,6 +287,33 @@ Both a floor and a share must be crossed: a share alone flags a large disk with
 plenty left, and a floor alone flags every small partition, such as a 1 GiB
 `/boot`, for good. Its steps show the mount's space with `df -h`, then what
 fills it with `du -xh --max-depth=1`.
+
+`host.reboot` is whether the machine waits on a restart
+(`SEVERINO_HOST_REBOOT`), one record: whether `/run/reboot-required` is
+there, when it was created (statx's birth time), the packages
+`/run/reboot-required.pkgs` names, each once, and the shutdown logind has
+scheduled, if any. Debian's and Ubuntu's packaging writes the two files when
+an update needs a restart to take effect. The scheduled shutdown is logind's
+`ScheduledShutdown` property, which `org.freedesktop.login1(5)` documents
+and `shutdown -r <time>` sets: root asks `busctl --json=short get-property`
+for it, since the container reaches neither the host's `/run` nor its system
+bus, and a `dry-` action, which does nothing when its time comes, is nothing
+scheduled. `hostcore.ReadReboot` (`controller/internal/hostcore/reboot.go`)
+reads both, sending no path or file contents beyond the package names, which
+the contract admits only as dpkg spells them, at most 64. The launcher names
+the file whether or not it could be taken, and a logind that did not answer is
+a failed read that keeps the last one.
+
+`hq/platform/application/reboot_findings.py` raises, on the same node:
+
+| Finding | When | Severity |
+|---|---|---|
+| `reboot-pending` | the machine waited on a restart, or had one scheduled, when read | attention |
+
+It says since when, for which packages, and when the restart is scheduled.
+Its steps read the package list, then schedule the restart with
+`shutdown -r 03:00`, or, when one is scheduled, show it with
+`shutdown --show`, which `shutdown -c` cancels.
 
 ## Facts about a subject
 

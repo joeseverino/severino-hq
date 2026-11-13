@@ -11,7 +11,7 @@ if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
   const CLOSE_DELAY_MS = 240;
   // The panels hover opened and no press has kept since.
   const hovered = new WeakSet();
-  document.querySelectorAll(".nav-group").forEach((group) => {
+  document.querySelectorAll(".primary-nav [data-menu]").forEach((group) => {
     const panel = group.querySelector(":scope > [popover]");
     const button = group.querySelector(":scope > [popovertarget]");
     let timer;
