@@ -1,4 +1,4 @@
-"""Command, identity, and capability primitives shared by every adapter."""
+"""For what an extension can do: declare its capabilities and strict commands, and run a write."""
 
 from pydantic import BaseModel, ConfigDict
 

@@ -78,7 +78,7 @@ class QueuedRunTests(RunTestCase):
         self.ask(run_payload())
 
         readout = {label: value for label, _, value in OPERATION.readout(ManagedResource.objects.get().spec, {})}
-        self.assertEqual(readout["Playbook"], "playbooks/service_restart.yml")
+        self.assertEqual(readout["Playbook file"], "playbooks/service_restart.yml")
 
     def test_hosts_are_resolved_to_the_machine_each_is(self):
         from ..machines import Machine

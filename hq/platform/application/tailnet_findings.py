@@ -85,7 +85,7 @@ class _GrantedToNobody:
 
 
 _EMPTY_GROUP = (
-    "A rule for an empty group lets nobody in. Remove the group from the policy, or add the members it was meant for."
+    "A rule for an empty group grants nothing. Remove the group from the policy, or add the members it was meant for."
 )
 _EMPTY_GROUP_GRANTED = _GrantedToNobody(
     rule="empty-group-granted",

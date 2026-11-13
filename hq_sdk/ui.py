@@ -1,4 +1,4 @@
-"""Stable view models and chart builders for host-rendered plugin UI."""
+"""For an extension's pages: the view models and charts the host's shared templates draw."""
 
 from hq.platform.application.cadence_chart import (
     Cadence,

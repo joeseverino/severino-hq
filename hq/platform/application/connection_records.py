@@ -182,8 +182,8 @@ class Tailnet(TypedDict):
     funnel: Annotated[
         list[str] | None,
         Describe(
-            "Each node attribute target holding funnel, which a node needs to publish to the internet; "
-            "empty when none does, null when the reading does not say."
+            "The targets of node attributes that grant funnel, which a node needs to publish to the internet. "
+            "Empty when none does; null when the reading does not say."
         ),
     ]
     tests: Annotated[list[AsRead], Describe("The policy's tests, as written.")]
@@ -202,7 +202,7 @@ class ConnectionStandingRow(TypedDict):
     connection_ref: Annotated[
         str | None,
         Describe(
-            "The ref its controller and HQ's audit log name it by, which a read of one names it by; null for none."
+            "The ref its controller and HQ's audit log name it by, which a read of one also takes. Null for none."
         ),
     ]
     label: Annotated[str, Describe("The connection's name, as its row heads it.")]
@@ -297,7 +297,7 @@ class CredentialFixPart(TypedDict):
     permissions: Annotated[list[str], Describe("Every permission the replacement is issued with.")]
     steps: Annotated[
         list[Annotated[dict[str, Any], Written(finding_model.OperatorStep)]],
-        Describe("What a person does to replace it, in order."),
+        Describe("What you do to replace it, in order."),
     ]
 
 
@@ -354,9 +354,7 @@ class ConnectionStandingRecord(ConnectionStandingRow):
     read_now: WrittenAction | None
     read_requested_at: Annotated[
         str | None,
-        Describe(
-            "When a refresh of it was asked for that has not run yet, an ISO 8601 date-time; null when none waits."
-        ),
+        Describe("When a refresh still waiting to run was asked for, an ISO 8601 date-time; null when none waits."),
     ]
 
 

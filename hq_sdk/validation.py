@@ -1,11 +1,11 @@
-"""Static conformance checks for plugin source trees.
+"""For an extension's source tree: the static checks it must pass.
 
-Each read without importing the plugin or configuring Django: its templates
+Each read without importing the extension or configuring Django: its templates
 use only the public pieces of the host's (``contract.json``'s ``templates``
 section), no page sentence closes on a value by hand, and no label is a
 sentence (``plain_words``' label rule, the host's own). What its Python
 imports is Ruff's to hold (tools/pipeline/extension-imports.toml), and the
-host's ast-grep rules the plugin check names hold the rest
+host's ast-grep rules ``plugin:check`` names hold the rest
 (tools/pipeline/check-plugin.sh).
 """
 

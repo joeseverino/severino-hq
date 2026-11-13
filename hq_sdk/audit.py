@@ -1,4 +1,4 @@
-"""Adapter-neutral audit attribution for plugin operations."""
+"""For an extension's writes: register a model's audit, and record an event or a bulk operation."""
 
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -27,7 +27,7 @@ AuditAction = AuditLog.Action
 # The two bindings are the host's without its doors' powers: writing a change
 # as someone other than whoever started the operation (``rebinds``) is the
 # host's approvals' alone, and opening a door that starts afresh (an empty
-# actor) the host's doors', so a plugin's nested binding keeps the actor in force.
+# actor) the host's doors', so an extension's nested binding keeps the actor in force.
 @contextmanager
 def audit_operation(*, operation: str, principal: object | None = None, operation_id: str = "") -> Iterator[None]:
     """Attribute an operation to the principal that made it, or to the bound caller without one."""
@@ -42,7 +42,7 @@ def operation_context(*, interface: str, actor: str, operation: str, operation_i
 
     # An empty actor is a door awaiting sign-in, which only the host's doors open.
     if not actor:
-        raise ValueError(f"{operation!r} names nobody: a plugin's binding names who acts.")
+        raise ValueError(f"{operation!r} names nobody: an extension's binding names who acts.")
     with audit.operation_context(interface=interface, actor=actor, operation=operation, operation_id=operation_id):
         yield
 

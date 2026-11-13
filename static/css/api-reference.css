@@ -270,8 +270,7 @@
 @media print {
   /* Paper has no navigation: the sidebar and the bar that opens it are not
      printed, and the content takes the sheet. */
-  .api-reference .scalar-app .t-doc__sidebar,
-  .api-reference .scalar-app .references-header { display: none; }
+  .api-reference .scalar-app .t-doc__sidebar { display: none; }
 }
 
 /* Without script nothing is loading; the page says where the document is. */

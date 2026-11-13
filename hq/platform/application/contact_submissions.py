@@ -44,7 +44,7 @@ DELETE = "contact.submission.delete"
 # A submission's review fields as its command writes them and its row reads them back, each said once.
 type ReviewStatus = Annotated[ContactStatus, Choices(STATUS_CHOICES), Describe("Where its review stands.")]
 type Assignee = Annotated[
-    str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it.", api="Empty for nobody.")
+    str, Field(max_length=ASSIGNEE_LENGTH), Describe("Who is handling it.", api="Empty when unassigned.")
 ]
 type AdminNotes = Annotated[str, Describe("The notes kept on it, for HQ only.", api="Empty for none.")]
 

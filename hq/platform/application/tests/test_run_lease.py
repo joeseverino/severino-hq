@@ -258,7 +258,7 @@ class ObserveFirstLapsedRunTests(LeasedRunTestCase):
             (operation.state, operation.result["reason"]), (OperationRequest.State.FAILED, "OutcomeUnknown")
         )
         self.assertEqual(operation.result["retry"], "observe_first")
-        self.assertIn("observes", operation.result["message"])
+        self.assertIn("checks the machines", operation.result["message"])
 
 
 class SafeLapsedRunTests(LeasedRunTestCase):

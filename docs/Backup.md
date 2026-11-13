@@ -13,13 +13,14 @@ HQ's state is four things:
 ## The backup
 
 `hq-host backup` ([`controller/host/backup.go`](../controller/host/backup.go))
-asks docker where HQ's volumes are, snapshots the live database with SQLite's
-`VACUUM INTO`, so a write in progress cannot tear it, checks the snapshot's
-integrity, and archives it with the uploads, the exports and the sealing seed
-as `severino.sqlite3`, `media/`, `exports/` and `seal/`. A host whose
-controller has made no seed yet has no `seal/`. The archive is encrypted as it is written, in process
-with [age](https://age-encryption.org)'s own library, so no plaintext archive
-is written. The archive is `severino-hq-<UTC timestamp>.tar.gz.age` in
+asks Docker where HQ's volumes are. It snapshots the live database with
+SQLite's `VACUUM INTO`, so a write in progress cannot tear it, and checks the
+snapshot's integrity. It then archives the snapshot with the uploads, the
+exports and the sealing seed as `severino.sqlite3`, `media/`, `exports/` and
+`seal/`. A host whose controller has made no seed yet has no `seal/`. The
+archive is encrypted as it is written, in process with
+[age](https://age-encryption.org)'s own library, so no plaintext archive is
+written. The archive is `severino-hq-<UTC timestamp>.tar.gz.age` in
 `SEVERINO_BACKUP_DIR` (`/srv/severino-hq/backups` by default), mode `0600`,
 and appears whole or not at all. The host needs `sqlite3`.
 
@@ -30,11 +31,11 @@ secrets.
 
 `severino-hq-backup.timer` runs it nightly as root and keeps 30 days of
 archives. Every archive is encrypted, and only to post-quantum hybrid
-recipients (`age1pq1...`, ML-KEM-768 with X25519): a run with no recipient,
+recipients (`age1pq1...`, ML-KEM-768 with X25519). A run with no recipient,
 or with a classic `age1...` X25519 one, is refused before anything is
 written. Make the key on the operator's machine with `age-keygen -pq` (age
-1.3 or later), keep the identity off the host, and set its recipient
-(comma-separated for more than one), and any other override, in
+1.3 or later) and keep the identity off the host. Set its recipient
+(comma-separated for more than one) and any other override in
 `/etc/severino-hq/backup.env`, root-owned, mode `0600`:
 
 ```sh
@@ -50,8 +51,8 @@ A missing database fails the run instead of skipping it.
 `controller/host/backup_test.go` is the restore drill. It builds a database
 with media, exports and a sealing seed, and runs the backup for a freshly
 generated post-quantum identity. It then decrypts the archive with it, extracts
-it with `tar`, queries the restored database and compares the files. CI runs it on every
-pull request.
+it with `tar`, queries the restored database and compares the files. CI
+runs it on every pull request.
 
 A local archive is not an off-host backup. Replicate `SEVERINO_BACKUP_DIR` to
 separate storage (restic, or another reviewed mechanism) and watch the
@@ -71,8 +72,8 @@ Copy `severino.sqlite3`, `media/` and `exports/` into the volumes
 (`docker volume inspect --format '{{.Mountpoint}}' severino-hq_severino_data`,
 and `_media`, `_exports`), owned by the image's account (`10001:10001`).
 Copy `seal/` to `/opt/apps/severino-hq/secrets/seal/`, the directory mode
-`0700` and each seed `0400`, owned by the same account, first removing any
-seed a new host already made: a pass refuses to choose between two. The next
+`0700` and each seed `0400`, owned by the same account. First remove any seed
+a new host already made, since a pass refuses to choose between two. The next
 controller pass writes the public key from it. Then:
 
 ```sh

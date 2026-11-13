@@ -235,10 +235,10 @@ class Investigation:
 INVESTIGATIONS = {
     investigation.name: investigation
     for investigation in (
-        Investigation("topology", "See it on the map", "What this is connected to."),
+        Investigation("topology", "Map neighborhood", "What this is connected to."),
         Investigation(
             "impact",
-            "See what depends on it",
+            "Impact",
             "Everything that stops working if this does.",
             direction="outbound",
             depth=3,

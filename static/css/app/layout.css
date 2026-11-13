@@ -39,14 +39,15 @@
    share what the row leaves: three sections where two fit put the third
    across the row, never in a track beside an empty one. The basis is read
    against the box the flow sits in, so the same sections pair in a dialog
-   and on a page with no breakpoint. Each on a row is as tall as the tallest,
-   so a short one leaves no hole beside a long one. Every member grows and
+   and on a page with no breakpoint. Each on a row starts where the row does
+   and is as tall as what it holds, as a pair is: stretched to a taller
+   neighbor, a short card is a frame around nothing. Every member grows and
    none caps its width, so each row ends at the flow's end whatever its
    members hold: a card of a few facts keeps them at its start inside a
    frame that fills its share. A run of narrower cards
    sets a narrower basis on its flow; `.domain-charts` is the flow at the
    width a chart keeps its scale. */
-.section-flow, .domain-charts { --flow-basis: 22rem; display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+.section-flow, .domain-charts { --flow-basis: 22rem; display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .domain-charts { --flow-basis: 30rem; }
 .section-flow > *, .domain-charts > * { flex: 1 1 var(--flow-basis); min-width: 0; margin: 0; }
 /* What is not a section or a card (a fold, a paragraph) and a section holding
@@ -538,25 +539,52 @@ td > .subtle-link:not(:only-child) { display: table; }
 
 /* ── Facts as a list ────────────────────────────────────────────── */
 
-/* A list of facts (`{% facts %}`): each
-   label beside its value, one pair to a row, so a few short pairs never
-   spread across a wide page. The label column is as wide as its longest
-   label, up to two fifths of the list; the values take the rest, so a long
-   address keeps to one line where the width allows it. */
+/* A list of facts (`{% facts %}`): each label beside its value, one pair to
+   a row, the label column as wide as its longest label, up to two fifths of
+   the list, the values taking the rest. */
 .facts-list { display: grid; grid-template-columns: fit-content(40%) minmax(0, 1fr); align-items: baseline; gap: var(--space-4) var(--space-6); margin: 0 0 var(--stack-gap); font-size: var(--text-sm); }
-.facts-list dt { color: var(--muted); font-weight: 500; }
+.facts-list dt { color: var(--muted); font-weight: 500; overflow-wrap: break-word; }
 .facts-list dd { min-width: 0; margin: 0; color: var(--ink); overflow-wrap: anywhere; }
-/* Each fact is a row of the list's two columns, its detail under its value. */
-.facts-list > .fact { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; row-gap: var(--space-1); }
+/* Each fact is a row of the list's columns, its detail under its value, its
+   label held to its value by the narrow gap. */
+.facts-list > .fact { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: baseline; gap: var(--space-1) var(--space-6); }
 .facts-list .fact-detail { grid-column: 2; color: var(--muted); }
+/* On the page, a list lays as many pairs to a row as keep each a short label
+   and a short value wide, as a description list does at width (Ant Design's
+   Descriptions, Tailwind's description lists), so a few short facts fill a
+   wide frame rather than stacking down its start beside an empty end. The
+   pairs of a row share their columns, so every row's labels and values line
+   up, and stand apart by more than the gap that holds a label to its value.
+   Narrower than two pairs (`--facts-across`) it is one pair to a row, as
+   above. The switch is asked of the list's own width through its tracks, as
+   the band's `--fact-min` is, so no query or script measures it: under it a
+   value's least width is three fifths of the list, room for one pair only.
+   Opened to read more (a disclosure, a popover, a dialog), set above what a
+   form changes, or a table row's small print, a list is a few short pairs
+   under what it serves and keeps one pair to a row. A folded section on the
+   page is a part of the page, so its list is the page's; one folded inside a
+   frame (a resource's other settings) is opened to read more. */
+.facts-list:not(:where(tbody, details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) *) {
+  --facts-across: 42rem;
+  --fact-label-least: clamp(0px, (100% - var(--facts-across)) * 999, 6rem);
+  --fact-value-least: clamp(min(12rem, 60% - var(--space-6)), (var(--facts-across) - 100%) * 999, 60% - var(--space-6));
+  /* stylelint-disable-next-line hq/flow-grid -- a list's pairs, each a label's track and a value's */
+  grid-template-columns: repeat(auto-fit, minmax(var(--fact-label-least), max-content) minmax(var(--fact-value-least), 1fr));
+  column-gap: clamp(var(--space-6), (100% - var(--facts-across)) * 999, var(--space-16));
+  & > .fact { grid-column: span 2; }
+}
+/* A value that is a list of several (names, addresses, links) wraps onto
+   lines of its own, so its fact takes the row: beside other pairs it would
+   make their row as tall as itself. */
+.facts-list > .fact:has(> .fact-value > :is(.code-list, .address-list, ul, ol) > :nth-child(2)) {
+  grid-column: 1 / -1;
+  & > dd { grid-column: 2 / -1; }
+}
 /* In a table's row, facts are the row's small print. */
 td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); }
-/* Opened to read more (a disclosure, a popover, a dialog) or set above what a
-   form changes, a list is a few short pairs under what it serves: its pairs
-   sit closer, and it ends where what holds it ends. A folded section on the
-   page is a part of the page, so its list is the page's; one folded inside a
-   frame (a resource's other settings) is opened to read more. Where only, so
-   a table's row in any of them keeps its own small print. */
+/* Opened to read more or set above what a form changes, its pairs sit closer,
+   and it ends where what holds it ends. Where only, so a table's row in any
+   of them keeps its own small print. */
 :where(details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) .facts-list { row-gap: var(--space-2); }
 :where(details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) .facts-list:last-child { margin-bottom: 0; }
 /* Addresses, one to a line, each beside its network: the networks in one

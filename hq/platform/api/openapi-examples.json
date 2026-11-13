@@ -268,7 +268,7 @@
                 {
                   "capability": "",
                   "effect": "read",
-                  "label": "See it on the map",
+                  "label": "Map neighborhood",
                   "method": "GET",
                   "name": "topology",
                   "reason": "What this is connected to.",
@@ -2646,7 +2646,7 @@
                     {
                       "capability": "",
                       "effect": "read",
-                      "label": "See it on the map",
+                      "label": "Map neighborhood",
                       "method": "GET",
                       "name": "topology",
                       "reason": "What this is connected to.",

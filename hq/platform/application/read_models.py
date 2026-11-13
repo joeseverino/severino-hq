@@ -87,7 +87,7 @@ class ActivityRow(TypedDict):
 
 
 class ActivityEvent(TypedDict):
-    """One audit-log event: the newest of the rows it changed, how many more there are, and the page of them all."""
+    """One audit-log event: the newest row it changed, a count of the rest, and the page that lists them."""
 
     id: int | None
     title: str

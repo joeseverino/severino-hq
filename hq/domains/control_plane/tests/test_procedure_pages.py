@@ -109,7 +109,7 @@ class ProceduresPageTests(TestCase):
     def test_a_refused_commit_s_own_page_says_in_its_lede_why_nothing_can_be_done(self):
         refused = SourceProposal.objects.order_by("-pk").first()
         said = text(self.page(self.proposal_url(refused.pk)))
-        self.assertIn("HQ can't adopt this commit, so there is nothing to do here.", said)
+        self.assertIn("HQ can't adopt this commit.", said)
         self.assertNotIn("Fix it in the repository, then Refresh.", said)
 
     def test_each_commit_says_who_committed_it(self):

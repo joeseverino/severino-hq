@@ -753,40 +753,121 @@ TITLES_OFF_THEIR_START = (
 
 
 # A frame is filled by what it holds, or shares its row (Design, "A frame is
-# filled" and "Sibling sections flow"). A frame holding a list of facts
-# (``lists``, in a frame ``frames`` selects), as wide as two flow members
-# (``least`` rem) and next to a frame or a run of them, does not take a row
-# alone while all it draws below its head (``head``) ends short of half its
-# width. A frame with nothing beside it has nothing to share a row with, and
-# spans its column (``frames span their column``). A member of a flow (a row
-# that wraps) is laid out by the flow, whose members each grow into their
-# row and whose own checks say which share one (``flows share their rows``),
-# so one the flow sets on a row alone is across it by design.
-LISTS_ACROSS_AN_EMPTY_FRAME = (
-    "([lists, frames, head, least]) => {"
+# filled", "Dense, never empty"), and the probe reads three ways it is not.
+#
+# A frame (``frames``) at any width whose lower half or more, ``tall`` px or
+# more, stands empty below the last of what it draws: a short card a row has
+# stretched to the height of a tall one beside it. What a frame holds here is
+# every word and painted box of it, a form's fields included, and a section
+# and its body are one frame, read as the one of them that paints it.
+#
+# A frame (``frames``, a card or a section's body) as wide as two flow
+# members (``least`` rem) whose lines, from its first to its last, stack
+# down its start: what it draws below its head (``head``) is grouped into
+# the lines a reader sees, each the words, controls and painted boxes that
+# share it, and a run of lines each ending short of ``part`` of its width
+# that stands ``tall`` px or more is a column of content beside an empty
+# one. A line that reaches across (a table's row, a notice, a chart) ends
+# the run, so a short list above a table counts on its own. What a closed
+# fold holds is laid out but not drawn, so it is no line. A form's fields
+# are no line either: they stand one above another at the width each takes,
+# since a form read down one column is filled faster than one whose fields
+# sit side by side, so a field never asks for the room beside it.
+# ``part`` and ``tall`` come from every frame on every page measured: a fair
+# stack (a sentence-long empty state, a note of two lines) stays under them.
+#
+# And a frame holding a list of facts (``lists``) beside a frame or a run of
+# them does not take a row alone while all it draws ends short of half its
+# width, however short. A frame with nothing beside it spans its column
+# (``frames span their column``); a member of a flow (a row that wraps) is
+# laid out by the flow, whose own checks say which share a row (``flows
+# share their rows``), so one the flow sets on a row alone is across it by
+# design.
+FRAMES_LEFT_EMPTY = (
+    "([lists, frames, head, body, least, part, tall]) => {"
     + DESCRIBE
     + """
-  const words = (el) => {
+  const seen = (color) => color && !/^(transparent|rgba\\(.*,\\s*0\\))$/.test(color);
+  const paints = (style) => seen(style.backgroundColor) || style.backgroundImage !== 'none'
+    || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
+      && style[`border${side}Style`] !== 'none' && seen(style[`border${side}Color`]));
+  const drawn = 'svg, canvas, img, video, iframe, input, select, textarea, button, progress, meter';
+  const away = '[popover], dialog, .visually-hidden';
+  const words = (el, skip = away) => {
     const found = [];
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-      if (!node.data.trim() || node.parentElement.closest(head)) continue;
+      if (!node.data.trim() || node.parentElement.closest(head) || node.parentElement.closest(skip) || !node.parentElement.checkVisibility()) continue;
       const range = document.createRange();
       range.selectNodeContents(node);
-      found.push(...[...range.getClientRects()].filter((r) => r.width > 0 && r.height > 0));
+      found.push(...[...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1));
     }
     return found;
+  };
+  const boxes = (el, skip) => [...el.querySelectorAll('*')]
+    .filter((child) => !child.closest(skip) && !child.closest(head) && !child.parentElement.closest('svg')
+      && (child.matches(drawn) || paints(getComputedStyle(child))) && child.checkVisibility())
+    .map((child) => child.getBoundingClientRect())
+    .filter((r) => r.width > 1 && r.height > 1);
+  const inner = (el) => {
+    const style = getComputedStyle(el);
+    const at = box(el);
+    const start = at.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    return [start, at.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight) - start];
   };
   const overlaps = (a, b) => a.top < b.bottom - 1 && b.top < a.bottom - 1;
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
   const found = [];
+  const drawsIt = (el) => paints(getComputedStyle(el));
+  const heading = (frame) => {
+    const said = frame.closest('section')?.querySelector('h2, h3')?.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40);
+    return said ? ` under "${said}"` : '';
+  };
+  for (const frame of document.querySelectorAll(frames)) {
+    if (!frame.checkVisibility() || !frame.closest('main') || frame.closest(away)) continue;
+    const held = [...words(frame), ...boxes(frame, away)];
+    const outer = frame.querySelector(`:scope > ${body}`);
+    const inside = frame.matches(body) && frame.parentElement.matches(frames) && drawsIt(frame.parentElement);
+    if (held.length && !inside && (!outer || drawsIt(frame))) {
+      const style = getComputedStyle(frame);
+      const at = box(frame);
+      const top = at.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
+      const foot = at.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
+      const empty = foot - Math.max(...held.map((r) => r.bottom));
+      if (empty >= tall && empty * 2 >= foot - top) {
+        found.push(`${describe(frame)}${heading(frame)} stands ${Math.round(empty)}px below what it holds, of its ${Math.round(foot - top)}px`);
+      }
+    }
+    if (outer) continue;
+    const [start, room] = inner(frame);
+    if (room < least * rem) continue;
+    const lines = [];
+    const fields = `${away}, form`;
+    for (const r of [...words(frame, fields), ...boxes(frame, fields)].sort((a, b) => a.top - b.top)) {
+      const last = lines.at(-1);
+      if (last && r.top < last.bottom - 1) {
+        last.bottom = Math.max(last.bottom, r.bottom);
+        last.right = Math.max(last.right, r.right);
+      } else lines.push({top: r.top, bottom: r.bottom, right: r.right});
+    }
+    let run = null;
+    let worst = null;
+    for (const line of lines) {
+      if (line.right - start >= part * room) { run = null; continue; }
+      run = run ? {...run, bottom: line.bottom, right: Math.max(run.right, line.right)} : {...line};
+      if (run.bottom - run.top >= tall && (!worst || run.bottom - run.top > worst.bottom - worst.top)) worst = run;
+    }
+    if (worst) {
+      found.push(`${describe(frame)}${heading(frame)} stacks ${Math.round(worst.bottom - worst.top)}px of lines down its start, each ending within ${Math.round(worst.right - start)}px of its ${Math.round(room)}px`);
+    }
+  }
   for (const list of document.querySelectorAll(lists)) {
     if (!list.checkVisibility()) continue;
     // The frame it is drawn in, and the one that stands in the page's flow:
     // a section's body is a frame inside its section.
-    const inner = list.matches(frames) ? list : list.parentElement.closest(frames);
-    if (!inner || !inner.closest('main')) continue;
-    let frame = inner;
+    const within = list.matches(frames) ? list : list.parentElement.closest(frames);
+    if (!within || !within.closest('main')) continue;
+    let frame = within;
     while (frame.parentElement?.matches(frames)) frame = frame.parentElement;
     const r = box(frame);
     if (r.width < least * rem) continue;
@@ -797,13 +878,10 @@ LISTS_ACROSS_AN_EMPTY_FRAME = (
     if (flow.display.endsWith('flex') && flow.flexDirection.startsWith('row') && flow.flexWrap !== 'nowrap') continue;
     const row = [...frame.parentElement.children].filter((el) => el !== frame && el.checkVisibility());
     if (row.some((el) => overlaps(box(el), r))) continue;
-    const style = getComputedStyle(inner);
-    const at = box(inner);
-    const start = at.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
-    const room = at.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight) - start;
-    const drawn = words(inner);
-    if (!drawn.length) continue;
-    const reach = Math.max(...drawn.map((w) => w.right)) - start;
+    const [start, room] = inner(within);
+    const said = words(within);
+    if (!said.length) continue;
+    const reach = Math.max(...said.map((w) => w.right)) - start;
     if (reach < room / 2) {
       found.push(`${describe(frame)} takes a row of its own beside ${describe(siblings[0])}, and what it holds ends ${Math.round(reach)}px into its ${Math.round(room)}px`);
     }
@@ -811,6 +889,12 @@ LISTS_ACROSS_AN_EMPTY_FRAME = (
   return [...new Set(found)];
 }"""
 )
+
+# Where a run of lines down a frame's start is a frame left empty beside
+# them: ending short of ``part`` of its width and ``tall`` px high or more.
+# ``tall`` is also the least empty foot that leaves a frame empty below.
+STACKED_PART = 0.4
+STACKED_TALL = 120
 
 
 HEADS_READ = (
@@ -834,8 +918,16 @@ CHECKS = {
     # A card drawn alone is a page of its own, sized as a dialog is.
     "frames span their column": (FRAMES_SHORT_OF_THEIR_COLUMN, [PAGE_FRAMES, f"{SELECTORS['floating']}, [data-alone]"]),
     "titles at the head's start": (TITLES_OFF_THEIR_START, SELECTORS["section_head"]),
-    "lists across an empty frame": (
-        LISTS_ACROSS_AN_EMPTY_FRAME,
-        [SELECTORS["facts_list"], SELECTORS["list_frame"], SELECTORS["section_head"], 44],
+    "frames filled": (
+        FRAMES_LEFT_EMPTY,
+        [
+            SELECTORS["facts_list"],
+            SELECTORS["list_frame"],
+            SELECTORS["section_head"],
+            SELECTORS["section_body"],
+            44,
+            STACKED_PART,
+            STACKED_TALL,
+        ],
     ),
 }

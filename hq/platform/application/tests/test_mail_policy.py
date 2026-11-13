@@ -152,7 +152,7 @@ class ReceivingTests(SimpleTestCase):
     def test_a_null_mx_says_the_domain_takes_no_mail_on_purpose(self):
         section = _receiving((self.mx("."),))
 
-        self.assertEqual(section.answer, "Nobody, on purpose")
+        self.assertEqual(section.answer, "None, on purpose")
         self.assertNotIn("mail server", section.detail)
         self.assertTrue(section.null_mx)
         # No mail service set a record that says there is none.

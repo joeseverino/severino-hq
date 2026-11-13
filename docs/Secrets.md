@@ -16,11 +16,8 @@ service account because Connect's file API does not support uploads.
 The steps for a new host are in [Install](Install.md); this section is the
 rules they keep.
 
-The host's own values live in `/etc/severino-hq/host.json`
-([`deploy/host.example.json`](../deploy/host.example.json)): the vault, the
-application-environment item, the Connect unit and loopback URL, and the name of
-the encrypted credential holding the reader token.
-
+The host's own values live in `/etc/severino-hq/host.json`, field by field in
+[Install](Install.md#6-install-the-runner-and-write-hostjson).
 `hq-host bootstrap` renders them into drop-ins for
 `severino-hq-secrets.service` (`10-estate.conf`, `20-connect.conf`). It refuses
 a value systemd would read as something else, or a Connect that is not on
@@ -89,17 +86,11 @@ exception and stay out of that vault; see
 - The certificate writer runs `op` with its service-account token in that one
   child's environment, inside the controller container. It still requires
   cloud access.
-- The controller reaches HQ over one Unix socket, which HQ's web process
-  serves and nothing else listens on. HQ answers with declarations and queued
-  work, and is sent readings and results.
-- A secret crosses the socket only sealed to the controller, toward the
-  controller: an uploaded certificate's private key. The `material` action
-  hands it over as HQ stored it, and the controller opens it when it is about
-  to install it. No provider credential crosses it in either direction.
-- The socket's directory is a volume only the web account can enter, mounted
-  read-only into the controller's container. Each side checks the directory,
-  the socket and the peer's uid before a byte is exchanged
-  ([Architecture](Architecture.md#infrastructure-control-plane)).
+- The controller reaches HQ over one Unix socket, the bridge
+  ([Architecture](Architecture.md#infrastructure-control-plane)). No provider
+  credential crosses it in either direction. The one secret that does is an
+  uploaded certificate's private key, sealed to the controller
+  ([Sealing to the controller](#sealing-to-the-controller)).
 - The controller's container is given neither HQ's database nor its
   application environment. So the process that holds every provider credential
   holds none of HQ's, and the reverse.
@@ -115,8 +106,7 @@ per consumer and an emergency local shutdown procedure.
 copy in the root-owned tree, `/usr/local/lib/severino-hq/deploy/bin/hq-secrets`,
 which the image build compiles and `hq-host sync` installs. It holds no
 provider code. It reads through Connect and nothing else: there is no
-service-account read path and no fallback. A host still configured with
-`SEVERINO_SECRETS_BACKEND` set to anything but `connect` is refused.
+service-account read path and no fallback.
 
 Connect is read over its REST API with types generated from 1Password's
 published OpenAPI document (`controller/api/vendor/onepassword-connect`). The
@@ -263,9 +253,9 @@ A connection states its ref, the provider it is for, whether HQ may change
 things through it and where its credential is kept. It holds its settings
 under the one shape it arrived in.
 
-Each of these is an error on both sides: an unknown or repeated field, another
-`schema_version`, a connection with no shape or two, a setting its shape does
-not declare, a missing required setting, or a second value.
+Both sides refuse an unknown or repeated field and another `schema_version`.
+They also refuse a connection with no shape or two, a setting its shape does
+not declare, a missing required setting, and a second value.
 
 ```json
 {
@@ -552,15 +542,15 @@ is about to connect to, after resolution.
 **The lock keeps one read whole.** Two renderers interleaving their installs is how
 a host ends up holding files from two different reads of the vault.
 
-**Installs preserve the inode deliberately.** Replacing it breaks single-file
-bind mounts: the running container keeps the old file indefinitely. The cost is
-that this is not an atomic swap, as stated above. A generation-directory layout
-would make it transactional and requires moving the mounts first.
+**Installs keep the inode.** Replacing it breaks single-file bind mounts: the
+running container keeps the old file indefinitely. The cost is that this is
+not an atomic swap, as stated above. A generation-directory layout would make
+it transactional and requires moving the mounts first.
 
-**Each validator has a failure it stops.** Each rejects a specific way a
-render can succeed while producing something unusable: an unresolved reference,
-an empty file, a variable with no value, a missing required variable, or a
-vault that resolves no connection after holding one.
+**Each validator has a failure it stops.** Each rejects one way a render could
+succeed and still produce something unusable. Those are an unresolved
+reference, an empty file, a variable with no value, a missing required
+variable, and a vault that resolves no connection after holding one.
 
 **The skip is verified.** A matching content version only skips
 the read when every installed file still matches its recorded digest. The state
@@ -570,10 +560,9 @@ lives on the tmpfs, so the first run of every boot is a full read.
 random check bytes, so the same key encodes differently on every render.
 
 **The certificate publisher runs `op`.** 1Password's Go SDK runs a
-closed-source WebAssembly core in process, is pre-1.0, and would put a vault
-client inside the image the web container shares; lending the host's `op` to
-one run avoids all three. The SDK at 1.0, or file upload in Connect, would
-change this.
+closed-source WebAssembly core in process and would put a vault client inside
+the image the web container shares. Lending the host's `op` to one run avoids
+both. File upload in Connect would let the publisher use Connect instead.
 
 ## Checking the renderer on a host
 

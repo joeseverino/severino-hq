@@ -53,7 +53,7 @@ OUTCOME_TONES = {
     "unreachable": "serious",
 }
 # What a claimed run whose lease ran out says until the next claim ends it.
-LAPSED = "Its worker stopped renewing its lease, so whether it finished is not known."
+LAPSED = "The run stopped reporting, so HQ can't tell whether it finished."
 # A kind of work whose latest run ended so is one to look at.
 ENDED_BADLY = (JobState.FAILED, JobState.LOST)
 

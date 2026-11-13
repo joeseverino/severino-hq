@@ -90,23 +90,20 @@ class TopologyNode:
     id: Annotated[
         str,
         Describe(
-            "Names this node for the rest of the answer and later reads: an edge's source and target, "
-            "a trace's focus, a problem's subject. Stable while the thing it stands for exists."
+            "Names this node across the answer and later reads, such as an edge's source or a problem's "
+            "subject. Stable while the thing it stands for exists."
         ),
     ]
     kind: Annotated[str, Describe(ended(f"What sort of thing it is: {listed(NODE_KIND_ORDER)}"))]
     label: Annotated[
         str,
-        Describe(
-            "The key HQ files it under, which a command or a record's page is addressed by: "
-            "a record's key, a machine's name, a hostname."
-        ),
+        Describe("The key commands and pages address it by: a record's key, a machine's name or a hostname."),
     ]
     subtitle: Annotated[str, Describe("What it is, in a few words under its name, such as the service it reads.")]
     name: Annotated[
         str,
         Describe(
-            "What a person calls it, where that differs from `label`: the name a record stands for. "
+            "The name it goes by, where that differs from `label`: the name a record stands for. "
             "Empty when `label` already reads as that name."
         ),
     ] = ""
@@ -164,7 +161,7 @@ class TopologyNode:
         int,
         Describe(
             "Which version of HQ's copy of the record HQ last asked for, counting up from 1 as the copy "
-            "changes; 0 on a node HQ keeps no copy of."
+            "changes. It is 0 on a node HQ keeps no copy of."
         ),
     ] = 0
     observed_revision: Annotated[
@@ -177,8 +174,8 @@ class TopologyNode:
     reason: Annotated[
         str,
         Describe(
-            "The reason on its current condition, verbatim: set by a live read, or by applying HQ's copy "
-            "and not yet confirmed."
+            "The reason on its current condition, verbatim. A live read sets it, or applying HQ's copy "
+            "before a read confirms it."
         ),
     ] = ""
     # A disabled declaration is not a finding: nobody asked for it to be true.
@@ -195,8 +192,8 @@ class TopologyNode:
     unconfirmed_fields: Annotated[
         tuple[str, ...],
         Describe(
-            "Fields HQ's copy sets that the last read did not report back, leaving out those the service "
-            "cannot report: set, but never checked."
+            "Fields HQ's copy sets that the last read did not report back: set, but never checked. "
+            "Fields the service cannot report are left out."
         ),
     ] = ()
     # A findings rule derives from this topology and is not allowed a query of

@@ -133,7 +133,7 @@ DAILY = timedelta(days=1)
 # (``units.read``, through ``OnFailure=``), or by HQ through ``start`` when it
 # learns something is due sooner than the timer would find it.
 SCHEDULED: tuple[ScheduledWork, ...] = (
-    ScheduledWork("audit.prune", "Delete old routine log entries and proposals", prune_audit, every=DAILY),
+    ScheduledWork("audit.prune", "Delete old routine log entries and scan results", prune_audit, every=DAILY),
     ScheduledWork("content.sync", "Fetch the site's content list", _content_index, every=DAILY),
     ScheduledWork("due", "Do the work that is due", _due),
     ScheduledWork("registry.refresh", "Read domain registration and image data", _public_registry, every=DAILY),

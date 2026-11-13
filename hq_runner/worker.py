@@ -209,7 +209,7 @@ def scan_claimed(claim: Claimed, scan: Scan, secrets: Collection[str] = ()) -> d
             message = strike(refused.message, secrets)
             return _report(claim.generation, success=False, message=message, reason=refused.reason)
         tracing.note(**{"hq.procedures": len(catalog["procedures"])})
-    message = f"Read {catalog['revision'][:12]} on {catalog['branch']}; procedures found: {len(catalog['procedures'])}."
+    message = f"Read commit {catalog['revision'][:12]} on {catalog['branch']}: {len(catalog['procedures'])} playbooks."
     report = _report(claim.generation, success=True, message=strike(message, secrets))
     report["catalog"] = _struck(dict(catalog), secrets)
     return report

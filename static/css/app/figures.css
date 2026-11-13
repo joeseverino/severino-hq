@@ -304,6 +304,10 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   container: band / inline-size;
   flex: 1 1 100%;
 }
+/* Four facts are one row or two of two, as a band of readings is, never three and one alone beside an empty two thirds: short of the room four tracks take, each track is half the band (a pixel under, so two always fit). */
+.facts-band:has(> .fact:nth-child(4):last-child) {
+  --fact-min: clamp(12rem, (48rem + 3 * var(--space-20) - 100%) * 999, clamp((100% - var(--space-20)) / 2 - 1px, (27.5rem - 100%) * 999, 100%));
+}
 /* Each fact takes three of the band's rows (label, value, detail), so the facts of a row share their lines: every label starts level and every value stands on one baseline, however many lines a label wraps to, a link or a zero alike. */
 .facts-band > .fact {
   display: grid;

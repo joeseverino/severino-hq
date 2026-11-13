@@ -18,34 +18,13 @@ and leads to the first.
 {% endfacts %}
 
 {% comment %}
-Release, where HQ runs and how it was reached are each a few short lines, so
-they share rows; any one alone takes the row. A card says only what the band
+Where HQ runs, how it was reached and its release are each a few short
+lines, so they share rows. The release goes last: alone on its row, its facts
+go across it, which a route down its start cannot. A card says only what the band
 above does not: the band names the commit, the machine, the container's
 uptime and how the request came.
 {% endcomment %}
 <div class="section-flow">
-{% section "Release" id="hq-release" %}
-  {% include "partials/_problems.html#rest" with rest=hq.problems_in.release|not_urgent only %}
-  {% facts %}
-    {% if release.repository %}{% with repository=release.repository %}
-    {% fact repository.default_branch|default:"Branch"|capfirst %}<span class="prose">
-        {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
-        {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7"|breakable }}</code>
-        {% else %}<span class="muted">Not read</span>{% endif %}
-        <br>{% entity repository.url|outside label=repository.name %}<span class="muted">{% dot %}{% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
-      </span>{% endfact %}
-    {% endwith %}{% endif %}
-    {% if release.image %}
-    {% fact "Image" %}
-        <code title="{{ release.image }}">{{ container.standing.image.short|breakable }}</code>{% if release.digest %} <span class="muted" tabindex="0" data-tip="{{ release.digest }}">pinned by digest</span>{% endif %}
-        {% if release.built %}<br><span class="muted">Built {{ release.built|when:"ago" }}</span>{% endif %}
-    {% endfact %}
-    {% fact "Signature" %}{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}{% endfact %}
-    {% fact "Vulnerabilities" %}<span class="prose">{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}
-    {% endif %}
-    {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
-  {% endfacts %}
-{% endsection %}
 {% if machine %}
 {% section "Runs on" id="hq-where" %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.where|not_urgent only %}
@@ -73,6 +52,28 @@ uptime and how the request came.
   {% if found.findings %}{% include "partials/_work_queue.html" with items=found.finding_rows grouped=True here=True dense=True only %}{% endif %}
 {% endsection %}
 {% endwith %}{% endif %}
+{% section "Release" id="hq-release" %}
+  {% include "partials/_problems.html#rest" with rest=hq.problems_in.release|not_urgent only %}
+  {% facts %}
+    {% if release.repository %}{% with repository=release.repository %}
+    {% fact repository.default_branch|default:"Branch"|capfirst %}<span class="prose">
+        {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
+        {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7"|breakable }}</code>
+        {% else %}<span class="muted">Not read</span>{% endif %}
+        <br>{% entity repository.url|outside label=repository.name %}<span class="muted">{% dot %}{% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
+      </span>{% endfact %}
+    {% endwith %}{% endif %}
+    {% if release.image %}
+    {% fact "Image" %}
+        <code title="{{ release.image }}">{{ container.standing.image.short|breakable }}</code>{% if release.digest %} <span class="muted" tabindex="0" data-tip="{{ release.digest }}">pinned by digest</span>{% endif %}
+        {% if release.built %}<br><span class="muted">Built {{ release.built|when:"ago" }}</span>{% endif %}
+    {% endfact %}
+    {% fact "Signature" %}{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}{% endfact %}
+    {% fact "Vulnerabilities" %}<span class="prose">{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}
+    {% endif %}
+    {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
+  {% endfacts %}
+{% endsection %}
 </div>
 
 {% comment %}

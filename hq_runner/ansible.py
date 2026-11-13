@@ -235,10 +235,10 @@ def entry_point(role: str, response: Any) -> Mapping[str, Any] | None:
     """
 
     if not isinstance(response, Mapping) or not response:
-        raise Refused("NoArgumentSpec", f"No role {role} is in the project's roles/ or beside the playbook.")
+        raise Refused("NoArgumentSpec", f"Role {role} is missing. Add it at roles/{role}/ in the repository.")
     found = response.get(role)
     if not isinstance(found, Mapping):
-        raise Refused("NoArgumentSpec", f"ansible-doc answered about another role than {role}.")
+        raise Refused("NoArgumentSpec", f"Ansible described another role in place of {role}. Refresh to try again.")
     points = found.get("entry_points")
     main = points.get("main") if isinstance(points, Mapping) else None
     if not isinstance(main, Mapping):

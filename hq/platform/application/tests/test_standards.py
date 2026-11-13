@@ -40,7 +40,7 @@ class GapTests(SimpleTestCase):
             results=(
                 CheckResult(_check("Alerts on", "Alerts are off"), UNMET),
                 CheckResult(_check("Port kept", "A host port is open"), INTENDED, "It answers DNS."),
-                CheckResult(replace(_check("Only you", "Someone else has access"), serious=True), UNMET),
+                CheckResult(replace(_check("Only you", "Others have access"), serious=True), UNMET),
                 CheckResult(_check("Main protected", "Main is unprotected"), MET),
             ),
         )
@@ -50,7 +50,7 @@ class GapTests(SimpleTestCase):
         self.assertEqual(
             [(row["label"], row["status"]) for row in rows],
             [
-                ("Someone else has access", "serious"),
+                ("Others have access", "serious"),
                 ("Alerts are off", "attention"),
                 ("A host port is open by design", "good"),
             ],

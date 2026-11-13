@@ -29,16 +29,14 @@ standard, with what it uses beside its limits. Each said once; the band above ha
       <small>{% for what in plan.verified_by|slice:"1:" %}{{ what|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% if not plan.verified_by %}HQ can only see that it stays running.{% endif %}{% endfor %}</small>
     {% endfact %}
   {% endfacts %}
-  <div class="split">
-    {% steps numbered=True %}
-      {% for step in plan.steps %}{% step %}<strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail|breakable }}</span>{% endstep %}{% endfor %}
-    {% endsteps %}
-    {% if plan.viable %}
-      {% notice tone="success" title="Ready" %}{% endnotice %}
-    {% else %}
-      {% notice tone="warning" title="Not yet, because:" %}{% stack_list %}{% for blocker in plan.blockers %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}{% endstack_list %}{% endnotice %}
-    {% endif %}
-  </div>
+  {% if plan.viable %}
+    {% notice tone="success" title="Ready" %}{% endnotice %}
+  {% else %}
+    {% notice tone="warning" title="Not yet, because:" %}{% stack_list %}{% for blocker in plan.blockers %}<li>{{ blocker.reason|breakable }}</li>{% endfor %}{% endstack_list %}{% endnotice %}
+  {% endif %}
+  {% steps numbered=True %}
+    {% for step in plan.steps %}{% step %}<strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail|breakable }}</span>{% endstep %}{% endfor %}
+  {% endsteps %}
 {% aside %}<span class="muted">{{ plan.change_label|breakable }}{% dot %}{{ plan.risk|breakable }} risk</span>
 {% endsection %}
 {% endif %}

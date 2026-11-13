@@ -437,7 +437,8 @@ share its width in equal tracks, as many to a row as keep each at least
 `--fact-min` wide, so a few facts spread across a wide card rather than
 collecting at its start beside an empty end; past that they wrap. That floor
 lets a narrow band hold fewer facts to a row, and the facts of a row still
-share their lines. *Gate:* `facts across their band` in the layout survey. Standing alone the band is a surface with its own inset. In a card or a
+share their lines. Four facts are one row or two of two, never three beside
+one alone. *Gate:* `facts across their band` in the layout survey. Standing alone the band is a surface with its own inset. In a card or a
 section, the frame's padding is its inset. Under 27.5rem it reads as a list,
 each fact laying out its own rows.
 
@@ -447,15 +448,19 @@ for a value that is markup. A band (`{% facts layout="band" %}`) is the few
 facts that sum up a page or a part, each a cell with its icon, its label over
 its value over its detail; the facts of a row share their lines, so every
 value stands on one baseline, a zero beside a linked count alike. A list, the
-default, is the facts about one thing, each label beside its value, its label
-column as wide as its longest label, so a few short pairs never spread across
-a wide page. A label with several values holds them as a list inside one fact.
+default, is the facts about one thing, each label beside its value, as many
+pairs to a row as keep each a short label and a short value wide, so a few
+short facts fill a wide frame rather than stacking down its start; the pairs
+of a row share their columns, and a value that is a list of several takes its
+row. Narrower than two pairs it is one pair to a row, its label column as wide
+as its longest label. A label with several values holds them as a list inside one fact.
 An identifier in a value (code, a `|breakable` name) runs inline, code a chip
 on each line it wraps to, so a value's first line stands on its label's line
 in every engine. A list opened to read more (in a disclosure, a popover, a
-dialog) or set above what a form changes sits closer and ends with what holds
-it; that is where it stands, never an option, so the same summary drawn on a
-page and in a dialog takes each one's spacing.
+dialog) or set above what a form changes keeps one pair to a row, sits closer
+and ends with what holds it, and a table row's small print keeps one pair to a
+row too; that is where it stands, never an option, so the same summary drawn
+on a page and in a dialog takes each one's spacing.
 A line (`{% facts layout="inline" %}`) is a card's summary: each fact its bold
 value, then its words ("3 rules"). Its facts stand a fixed gap apart, under a
 rule when they follow the card's head. Its labels read on from the value, so
@@ -477,8 +482,9 @@ A list of short steps (`{% steps %}`) is read down its columns, so its columns
 end within a step of each other. Each step is `{% step icon=... %}`: its icon,
 then what it says; `tone` colors the icon by how a check stands, `done`
 draws a finished step quiet, and `title` is its tooltip. Steps done in order
-are `{% steps numbered=True %}`: one column, each step's number where its
-icon would be, so its steps take no icon.
+are `{% steps numbered=True %}`: read down wider columns, as many as fit up
+to three, so a short run fills a wide frame; each step's number stands where
+its icon would be, so its steps take no icon.
 
 A plain list read down (a row's notes, a record's statuses, a section's
 records) is `{% stack_list %}`, its `<li>`s each running their parts inline a
@@ -663,8 +669,14 @@ was counted.
 loud, make it compact (one row, tighter padding, an urgent tone only when
 urgent), never bare on the page background. A verdict sits where it belongs (on
 the link between two ends), evidence beside its value, one line per check with
-detail on demand, side-by-side cards of similar height. A card that is mostly
-empty, or a row with a gulf in it, is a layout to redesign, not padding to trim.
+detail on demand, like beside like in a row. A card that is mostly
+empty, or a row with a gulf in it, is a layout to redesign, not padding to trim:
+short facts go across the frame (`{% facts %}` does it), a short list beside
+what it describes, and a card beside a taller one is as tall as what it holds,
+never stretched around nothing. *Gate:* `frames filled` in the layout survey
+fails a frame whose lines stack down its start, each ending short of two
+fifths of its width, for long enough to matter, and a frame whose lower half
+or more stands empty below what it holds.
 
 **A card is drawn by `{% card %}`.** `{% card css="example" heading="example-heading" %}...{% endcard %}`
 frames what it encloses (`partials/_card.html`). It draws a section unless
@@ -1094,7 +1106,7 @@ and read from there, so a page and the button it describes cannot disagree.
 
 A press answers "Refresh requested." (`integration_specs.requested`).
 Asked-for work waiting its turn says `{% waiting %}`. A saved change says when
-it goes live with `{% applies_shortly %}` (`asks.APPLIES_SHORTLY`), beside the
+it goes live with `asks.APPLIES_SHORTLY`, beside the
 save button, so a field's note says only what the change does.
 *Gate:* `hq/platform/application/tests/test_action_words.py`, and the
 lint:ast-grep rules it names.
@@ -1180,13 +1192,12 @@ has one: "Last read 3 hours ago", and "out of date" beside it past the line
 **A frame is filled.** A frame across the page is filled by what it holds,
 or narrowed to it.
 
-A list of facts (`{% facts %}`) is as wide as its longest pair, so its card
-shares a row with the sections beside it rather than crossing the page with
-its values ending a third of the way in. A record page's facts are a
-`{% card %}` that opens its `.section-flow`, beside its notes and related
-records. In a flow, a frame of facts grows into its row as every member does;
-inside it the label column is as wide as the longest label and the values take
-the rest. *Gate:* `lists across an empty frame` in the layout survey.
+A list of facts (`{% facts %}`) lays its pairs across its frame, and a card
+of only a pair or two shares a row with the sections beside it rather than
+crossing the page with its values ending a third of the way in. A record
+page's facts are a `{% card %}` that opens its `.section-flow`, beside its
+notes and related records. In a flow, a frame of facts grows into its row as
+every member does. *Gate:* `frames filled` in the layout survey.
 
 A row of a record list (`.list-rows`) reads as one line: its meta follows its
 name a gap after, never at the row's far side across an empty middle. What can
@@ -1650,9 +1661,10 @@ Alignment:
 - A route is one row or one column, its hops spaced evenly, its line running
   from the first stop's mark to the last's, each mark holding its glyph in its
   middle.
-- Paired sections end each row together, and so do cards drawn side by side,
-  the dashboard's included. Sections that share a row start their frames
-  together too, whatever their heads hold (the survey's `frames in a row`).
+- Sections and cards that share a row start their frames together, whatever
+  their heads hold (the survey's `frames in a row`), and each ends where what
+  it holds does: a row never stretches a short one to a tall one's height
+  (`frames filled`).
 - A band of readings or choices lays out as whole even rows, and each of its
   cells keeps its padding; so does any filled box. A band of facts shares
   its width in equal tracks.

@@ -357,7 +357,7 @@ class _Procedure:
             self.problem(f"Its plays name the role {role!r} by something other than a role's name.")
             roles.remove(role)
         if len(roles) > MOST_ROLES:
-            self.problem(f"Its plays list {len(roles)} roles; a procedure takes the inputs of {MOST_ROLES} at most.")
+            self.problem(f"Its plays list {len(roles)} roles. A playbook can use {MOST_ROLES} at most.")
         return roles[:MOST_ROLES]
 
     def read_roles(self, roles: list[str], project_dir: Path, role_spec: RoleSpec) -> None:
@@ -440,11 +440,11 @@ def scan(
 
     tip = procedures.tip(project, scratch=scratch, token=token)
     if len(tip.files) > MOST_FILES:
-        raise Refused("TooLarge", f"The project holds {len(tip.files)} files; a scan reads {MOST_FILES} at most.")
+        raise Refused("TooLarge", f"The repository has {len(tip.files)} files, over the limit of {MOST_FILES}.")
     paths = tuple(path for path, _ in tip.files)
     sidecars = [path for path in paths if path.endswith(SIDECAR) and procedures.safe_path(path, suffix=SIDECAR)]
     if len(sidecars) > MOST_PROCEDURES:
-        raise Refused("TooLarge", f"The project declares {len(sidecars)} procedures; a scan reads {MOST_PROCEDURES}.")
+        raise Refused("TooLarge", f"The repository has {len(sidecars)} playbooks, over the limit of {MOST_PROCEDURES}.")
     files = frozenset(paths)
     return {
         "branch": tip.branch,
@@ -464,7 +464,7 @@ def verification(payload: Any) -> dict[str, Any]:
     commit = payload.get("commit") if isinstance(payload, Mapping) else None
     verified = commit.get("verification") if isinstance(commit, Mapping) else None
     if not isinstance(verified, Mapping) or not isinstance(verified.get("verified"), bool):
-        raise Refused("VerificationUnread", "GitHub's answer for the commit says nothing of its signature.")
+        raise Refused("VerificationUnread", "GitHub didn't say whether the commit is signed.")
     reason = verified.get("reason")
     committer = payload.get("committer")
     login = committer.get("login") if isinstance(committer, Mapping) else None
@@ -499,16 +499,18 @@ def github_verify(project: procedures.Project, token: str, *, host: str = GITHUB
             answer = connection.getresponse()
             raw = answer.read(API_BYTES + 1)
         except (OSError, http.client.HTTPException) as exc:
-            raise Refused("VerificationUnread", "GitHub did not say whether the commit is signed (no answer).") from exc
+            raise Refused("VerificationUnread", "GitHub didn't answer whether the commit is signed.") from exc
         finally:
             connection.close()
         if answer.status != http.HTTPStatus.OK:
-            raise Refused("VerificationUnread", f"GitHub did not say whether the commit is signed ({answer.status}).")
+            raise Refused(
+                "VerificationUnread", f"GitHub answered {answer.status} when asked whether the commit is signed."
+            )
         if len(raw) > API_BYTES:
-            raise Refused("VerificationUnread", "GitHub's answer for the commit is too large.")
+            raise Refused("VerificationUnread", "GitHub's answer about the commit was too large to read.")
         try:
             return verification(json.loads(raw))
         except ValueError as exc:
-            raise Refused("VerificationUnread", "GitHub's answer for the commit is not JSON.") from exc
+            raise Refused("VerificationUnread", "GitHub's answer about the commit wasn't JSON.") from exc
 
     return verify

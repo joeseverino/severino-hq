@@ -54,18 +54,11 @@ fork changes them in every place listed.
 ### `host.json`
 
 `/etc/severino-hq/host.json` on the host, in the shape of
-[`deploy/host.example.json`](../deploy/host.example.json). `hq-host
-bootstrap` renders it ([Secrets](Secrets.md#bootstrap-and-ownership)).
-
-| Field | Is |
-| :--- | :--- |
-| `vault` | the 1Password vault every credential is read from |
-| `env_item` | the item holding the application environment |
-| `connect.unit` | the systemd service running Connect; the renderer requires it |
-| `connect.url` | Connect's address, `http://127.0.0.1:PORT`, with a port below 1024, such as `880` |
-| `connect.credential` | the encrypted credential in `/etc/credstore.encrypted/` holding the reader token |
-| `runner.unit` | the Actions runner's service unit |
-| `runner.user` | the account the runner runs as; not root |
+[`deploy/host.example.json`](../deploy/host.example.json), holds the vault,
+Connect, the runner and any grants.
+[Install](Install.md#6-install-the-runner-and-write-hostjson) says what each
+field is set to, and `hq-host bootstrap` renders the host's drop-ins from it
+([Secrets](Secrets.md#bootstrap-and-ownership)).
 
 ### The vault
 

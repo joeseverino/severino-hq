@@ -1,4 +1,4 @@
-"""Conformance helpers for plugin test suites."""
+"""For an extension's test suite: synthetic siblings, held jobs, frozen time and the host's style checks."""
 
 import re
 import time

@@ -102,8 +102,8 @@ type Scalar = Literal["str", "path", "int", "float", "bool"]
 
 
 class AdoptedInput(BaseModel):
-    """One input of a procedure, as adopted: its argument spec's terms with
-    the sidecar's bound on a text input beside them."""
+    """One input of a playbook, as adopted: its argument spec's terms, and
+    the sidecar's limit on a text input."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -429,7 +429,7 @@ def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> lis
     if before.hosts and (not after.hosts or set(after.hosts) - set(before.hosts)):
         gained.append(f"{named} can run on more machines.")
     if set(after.target_kinds) - set(before.target_kinds):
-        gained.append(f"{named} can run on more kinds of record.")
+        gained.append(f"{named} can run on more types of record.")
     if EFFECT_RANK[after.effect] > EFFECT_RANK[before.effect]:
         gained.append(ended(f"{named} now {_does(after.effect)}, where before it {_does(before.effect)}"))
     if after.privilege and after.privilege != before.privilege:
@@ -581,20 +581,20 @@ def plan(proposal_id: int) -> AdoptionPlan:
 
 
 class Adopted(TypedDict):
-    """What an adoption did: whether the catalog moved, and how it widened."""
+    """What an adoption did: whether the adopted playbooks changed, and what runs may now do."""
 
     ok: Literal[True]
-    adopted: Annotated[bool, Describe("False when the proposal was the catalog adopted already.")]
-    digest: Annotated[str, Describe("The adopted catalog's digest, which names it.")]
-    widened: Annotated[list[str], Describe("What it lets a run do that the catalog before did not.")]
+    adopted: Annotated[bool, Describe("False when this scan result was already adopted.")]
+    digest: Annotated[str, Describe("The digest that names the adopted playbooks.")]
+    widened: Annotated[list[str], Describe("What runs may now do that they could not before.")]
 
 
 class AdoptProposal(BaseModel):
-    """The proposal to adopt, and why."""
+    """The scan result to adopt, and why."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    proposal: Annotated[StrictInt, Field(ge=1), Describe("The scan result a Refresh kept, by its ID.")]
+    proposal: Annotated[StrictInt, Field(ge=1, title="Scan result"), Describe("The scan result's ID.")]
     reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is adopted, kept with the adoption.")] = ""
 
 

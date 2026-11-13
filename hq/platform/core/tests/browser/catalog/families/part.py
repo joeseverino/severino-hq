@@ -585,7 +585,7 @@ _EXAMPLE_RUNS = (
             ),
         ),
     ),
-    ("Refresh the procedures", "Queued", "paused", "Waiting for the automation worker.", RunEvidence()),
+    ("Refresh playbooks", "Queued", "paused", "Waiting for HQ to start it.", RunEvidence()),
     (
         "Run example.package_upgrade",
         "Failed",
@@ -670,6 +670,20 @@ ENTRIES = {
         )
     ),
     "part/flow-wide": Entry(_flow(("Example hosts", _WIDE), ("Example identity", _NARROW), ("Example link", _NARROW))),
+    # A section of two facts beside one of a dozen, as a machine's expenses
+    # sit beside its tailnet: the short one is as tall as what it holds, never
+    # stretched to its neighbor's height around nothing.
+    "part/flow-short-beside-tall": Entry(
+        _flow(
+            ("Example identity", _NARROW),
+            (
+                "Example tailnet",
+                "{% facts %}"
+                + "".join(f'{{% fact "Example fact {n}" value="example-{n:02}" %}}' for n in range(1, 13))
+                + "{% endfacts %}",
+            ),
+        )
+    ),
     # The section part ({% section %}) in each state a page can give it; a new
     # option of the tag comes with an entry here (test_catalog's source check).
     "part/section-bare": Entry(
@@ -1300,15 +1314,15 @@ ENTRIES = {
         '{% fact "example agents blocked" value=0 %}'
         "{% endfacts %}{% endcard %}"
     ),
-    # A few short pairs, one of them a long address, which keep to their
-    # content's width however wide the page is.
+    # A few short pairs, one of them a long address that wraps in its own
+    # value's track as the pairs go across the page.
     "part/facts-list": Entry(
         '{% facts layout="list" %}'
         '{% fact "Address" %}<code>https://hq.example.com/mcp/</code>{% endfact %}'
-        '{% fact "Sign-in" %}<a href="/example/">https://auth.example.com/application/o/example-hq-agent/'
-        ".well-known/openid-configuration</a>{% endfact %}"
+        '{% fact "Sign-in" %}<a href="/example/">{{ sign_in|breakable }}</a>{% endfact %}'
         '{% fact "Protocol" %}<code>2025-06-18</code>{% endfact %}'
-        "{% endfacts %}"
+        "{% endfacts %}",
+        {"sign_in": "https://auth.example.com/application/o/example-hq-agent/.well-known/openid-configuration"},
     ),
     # Identifiers that wrap in a list held narrow, code, a bare path, an
     # entity's name and one linked outside, each under a fact of one line:
@@ -1334,6 +1348,28 @@ ENTRIES = {
             "url": "https://example.com/releases/2024.11.3",
         },
         premise=(_ONE_LINE, f".fact:nth-child(even) > {SELECTORS['fact_value']}"),
+    ),
+    # Short facts in a section across the page, one with its detail under
+    # its value, as a proposal's commit is drawn: the pairs go across the
+    # frame rather than down its start. Then seven, which wrap onto a second
+    # row whose pairs keep the first row's columns.
+    "part/facts-list-across": Entry(
+        '{% section "Example proposal" %}{% facts %}'
+        '{% fact "Commit" %}<code>0123456789ab</code>{% detail %}<small>on main</small>{% endfact %}'
+        '{% fact "Committer" value="example-maintainer" %}'
+        '{% fact "Signature" value="Verified by an example" %}'
+        '{% fact "Scanned" value="Nov 11, 10:31 PM" %}'
+        "{% endfacts %}{% endsection %}"
+        '{% section "Example record" %}{% facts %}'
+        '{% fact "Example name" value="example-01" %}'
+        '{% fact "Example address" value="192.0.2.10" detail="Read an example minute ago" %}'
+        '{% fact "Example kind" value="Container" %}'
+        '{% fact "Example owner" value=none %}'
+        '{% fact "Example port" value="8123" %}'
+        '{% fact "Example state" value="Running" %}'
+        '{% fact "Example image" %}<code>registry.example.com/example-team/example-image:2024.11.3</code>{% endfact %}'
+        "{% endfacts %}{% endsection %}",
+        {"none": None},
     ),
     "part/facts-list-many": Entry(
         "{% facts %}"

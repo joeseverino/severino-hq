@@ -28,8 +28,9 @@ from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
-lazy from . import machines
+lazy from . import automation_adoption, machines
 lazy from .action_links import command_url
+lazy from .automation_runs import capability_name
 lazy from .containers import standings_on
 lazy from .github_estate import repository_for
 lazy from .infrastructure import RESOURCE_TONES
@@ -212,7 +213,7 @@ def recent_work(
 ) -> ServiceSection | None:
     """The latest ``runs`` as a section, each state in its word and tone; None
     when there are none. A machine's page names what each run was
-    (``by_machine``), a procedure's page the machines each acted on, and
+    (``by_machine``), a playbook's page the machines each acted on, and
     ``more_url`` is every run of the two on Jobs.
 
     Who asked for each run and its evidence are Jobs' to show, so only a
@@ -220,9 +221,10 @@ def recent_work(
     """
 
     shows = principal is not None and principal_opens(principal, urls.resolve(reverse("jobs:list")).func)
+    titles = _playbook_titles() if by_machine else {}
     records = tuple(
         (
-            _procedure(run) if by_machine else _machines(run.evidence.hosts),
+            _playbook(run, titles) if by_machine else _machines(run.evidence.hosts),
             Cell(run.word, tone=run.tone),
             Cell(ago(run.created_at), muted=True),
             Cell(str(seconds(run.duration)) if run.duration is not None else ""),
@@ -236,7 +238,7 @@ def recent_work(
     return ServiceSection(
         id="runs",
         label="Recent runs",
-        columns=("Procedure" if by_machine else "Machines", "State", "Started", "Duration", "Result", "By"),
+        columns=("Playbook" if by_machine else "Machines", "State", "Started", "Duration", "Result", "By"),
         records=records,
         more_label="All runs",
         more_url=more_url,
@@ -244,10 +246,17 @@ def recent_work(
     )
 
 
-def _procedure(run: WorkRun) -> Cell:
-    """A run's procedure, linked to the command it is run through."""
+def _playbook_titles() -> dict[str, str]:
+    """Each adopted playbook's title, by the command it is run through."""
 
-    return Cell(run.title, command_url(run.kind))
+    return {capability_name(playbook.id): playbook.title for playbook in automation_adoption.procedures()}
+
+
+def _playbook(run: WorkRun, titles: dict[str, str]) -> Cell:
+    """A run's playbook by its title, linked to the command it is run through;
+    a playbook no longer adopted keeps the run's own title."""
+
+    return Cell(titles.get(run.kind, run.title), command_url(run.kind))
 
 
 def _machines(hosts: Sequence[str]) -> Cell:

@@ -313,7 +313,7 @@ class SourceChoiceCommand:
 
 
 class SourcesChosen(TypedDict):
-    """Which calendar sources the person shows, as the call left them."""
+    """Which calendar sources you show, as the call left them."""
 
     ok: Literal[True]
     choices: Annotated[dict[str, bool], Describe("Whether each calendar source is shown, by its name.")]

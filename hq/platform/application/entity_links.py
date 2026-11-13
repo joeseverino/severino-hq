@@ -31,7 +31,7 @@ lazy from .projection import read_once
 class EntityLink:
     """A name, and the page it opens, when there is one."""
 
-    label: Annotated[str, Describe("The name a person reads; never matched on, since `identity` is what addresses it.")]
+    label: Annotated[str, Describe("The name shown; never matched on, since `identity` is what addresses it.")]
     url: Annotated[str, Describe("The page the name opens: a path in HQ, or an outside address. Empty for none.")] = ""
     external: Annotated[bool, Describe("Whether `url` leaves HQ, such as for a service's console.")] = False
     kind: Annotated[

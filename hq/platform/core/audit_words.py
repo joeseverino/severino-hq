@@ -95,7 +95,7 @@ TITLES: dict[str, str] = {
     "infrastructure.start.request": "Asked the controller for a start",
     "infrastructure.stop.request": "Asked the controller for a stop",
     "infrastructure.restart.request": "Asked the controller for a restart",
-    "automation.run.request": "Asked to run a procedure",
+    "automation.run.request": "Asked to run a playbook",
     "infrastructure.resource.forget": "Stopped managing a record",
     "tailnet.routes.approve.request": "Asked to approve a machine's routes",
     "certificate.renew.request": "Asked to renew a certificate",

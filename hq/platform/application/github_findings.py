@@ -22,8 +22,8 @@ FINGERPRINT_COMMAND = "openssl rsa -in PATH_TO_PEM_FILE -pubout -outform DER | o
 STEPS = (
     OperatorStep(
         label=(
-            "Open the App's settings on GitHub and count the keys under Private keys: "
-            "each one listed can sign for the App."
+            "Open the App's settings on GitHub and count the keys under Private keys. "
+            "Each one listed can sign for the App."
         ),
     ),
     OperatorStep(

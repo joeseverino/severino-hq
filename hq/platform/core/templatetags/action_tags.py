@@ -239,13 +239,6 @@ def show_newer():
 
 
 @register.simple_tag
-def applies_shortly():
-    """``{% applies_shortly %}``: what a saved change says of when it goes live."""
-
-    return asks.APPLIES_SHORTLY
-
-
-@register.simple_tag
 def ask_button(ask, extra=""):
     """The button of an ``application.asks.Ask``: a ``post_button`` the page's
     script may answer in place. Busy is ``aria-disabled``, which keeps focus."""

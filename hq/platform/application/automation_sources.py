@@ -1,5 +1,5 @@
-"""Refresh: asking the automation worker what procedures the repository it
-holds declares, and storing what it found as a proposal HQ judged.
+"""Refresh: asking HQ's runner which playbooks the repository it holds
+declares, and storing what it found as a scan result HQ judged.
 
 Nothing is fetched here. A Refresh queues one scan of the automation source
 (``automation.source:scan``) and rings the worker's doorbell; the worker reads
@@ -323,19 +323,18 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
             REFRESH,
-            "Ask the automation worker which procedures its repository holds, and keep what it finds as a "
-            "proposal. Nothing it finds can run until it is adopted.",
+            "Scan your repository for playbooks and keep the scan result. Nothing in it runs until you adopt it.",
             "remote_write",
             Capability.MANAGE_INFRASTRUCTURE,
             RefreshCommand,
             refresh,
             execution_notes=(
-                "Queue one scan for the automation worker, or answer the one already waiting.",
-                "The worker reads the tip of the repository's default branch and runs nothing of it.",
-                "Keep what it reports as a proposal, with each way a procedure falls short.",
+                "Queue one scan, or answer the one already waiting.",
+                "HQ reads the newest commit on the default branch and runs none of it.",
+                "Keep the scan result, with each way a playbook falls short.",
             ),
-            label="Refresh the procedures",
+            label="Refresh playbooks",
             verb=models.OperationRequest.Action.SCAN.label,
-            wants="read which procedures the automation repository holds",
+            wants="scan your repository for playbooks",
         ),
     )

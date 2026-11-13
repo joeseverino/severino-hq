@@ -284,13 +284,17 @@ PLANTS = {
     "lists of facts": Plant(
         '{% facts %}{% fact "Names" %}<span class="code-list"><code>example-one</code><code>example-two</code>'
         '<code>example-three</code></span>{% endfact %}{% fact "Other" value="Example" %}{% endfacts %}',
-        css=".facts-list { grid-template-columns: 5rem 6rem 5rem 6rem } .facts-list > .fact { grid-column: span 2 }",
+        css=".facts-list { grid-template-columns: 5rem 6rem 5rem 6rem } .facts-list > .fact { grid-column: span 2 !important }",
     ),
     # A card of a few facts across the page, a section beside it in the
-    # page's column rather than sharing its row.
-    "lists across an empty frame": Plant(
+    # page's column rather than sharing its row; and a section whose short
+    # lines stack down its start under a table, beside an empty frame.
+    "frames filled": Plant(
         '{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}{% endfacts %}{% endcard %}'
         '{% section "Example" %}<p>Example</p>{% endsection %}'
+        '{% section "Example stack" %}<ul>' + "<li>Example</li>" * 8 + "</ul>"
+        '<table class="data-table"><tbody><tr><td>Example</td><td>Example</td><td>Example</td></tr></tbody></table>'
+        "{% endsection %}"
     ),
     # A folded section whose steps sit bare on the page, closed as most are.
     "bare folds": Plant(
@@ -433,12 +437,18 @@ PASSES = {
         '<div class="card">Example</div><div class="card">Example</div></div>'
     ),
     # The same card and section sharing a row in the flow, then the card
-    # alone in a flow of its own, across it as every member is.
-    "lists across an empty frame": Plant(
+    # alone in a flow of its own, across it as every member is; a section of
+    # two short lines, and one whose tall lines reach across it.
+    "frames filled": Plant(
         '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
         '{% endfacts %}{% endcard %}{% section "Example" %}<p>Example</p>{% endsection %}</div>'
         '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
         "{% endfacts %}{% endcard %}</div>"
+        '{% section "Example short" %}<p>Example</p><p>Example</p>{% endsection %}'
+        '{% section "Example across" %}' + f"<p>{_LINES * 4}</p>" * 4 + "{% endsection %}"
+        # A short section beside a tall one in the flow, as tall as it holds.
+        '<div class="section-flow">{% section "Example beside" %}<p>Example</p>{% endsection %}'
+        '{% section "Example tall" %}' + "<p>Example</p>" * 12 + "{% endsection %}</div>"
     ),
     "titles at the head's start": Plant(
         '{% section "Example" %}<p>Example</p>{% aside %}<a href="#">Example</a>{% endsection %}'
@@ -505,6 +515,13 @@ _LEFT_BEHIND = _TABLE.format('on <span style="display: inline-block">example-nam
 # A member of a flow capped at a width, the rest of its row left empty.
 _CAPS = "planted/caps"
 _CAPPED = '<div class="section-flow"><section style="max-inline-size: 12rem"><p>Example</p></section></div>'
+
+# A short section its row stretches to the height of the tall one beside it.
+_STRETCH = "planted/stretched"
+_STRETCHED = (
+    '<div class="section-flow" style="align-items: stretch">{% section "Example short" %}<p>Example</p>{% endsection %}'
+    '{% section "Example tall" %}' + "<p>Example</p>" * 12 + "{% endsection %}</div>"
+)
 
 # A run of parts whose rest asks its column for nothing and shows one line
 # (`line_list`, written out so it stands without the stylesheet): one held
@@ -576,6 +593,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
             _LIFTED: probe(_OUTRANKED),
             _LEFT: probe(_LEFT_BEHIND),
             _CAPS: probe(_CAPPED),
+            _STRETCH: probe(_STRETCHED),
             _RESTS: probe(_RESTED),
             **{name: probe(markup) for name, markup in _SHIFTS.items()},
         }
@@ -619,6 +637,11 @@ class PlantedBrowserTests(LayoutBrowserTests):
     def test_a_flow_member_that_caps_its_width_leaves_its_row_short(self):
         found = self.found(_CAPS, Plant("")).get("flows share their rows", [])
         self.assertTrue([said for said in found if "caps its width" in said], found)
+
+    def test_a_frame_its_row_stretches_past_what_it_holds_is_left_empty(self):
+        found = self.found(_STRETCH, Plant("")).get("frames filled", [])
+        self.assertTrue([said for said in found if 'under "Example short"' in said], found)
+        self.assertFalse([said for said in found if 'under "Example tall"' in said], found)
 
     def test_a_rest_that_asks_for_nothing_is_cut_beside_its_own_cell_s_room_only(self):
         found = self.found(_RESTS, Plant("")).get("cut beside room", [])

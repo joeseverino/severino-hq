@@ -118,10 +118,10 @@ def _as_its_own(operation: OperationRequest) -> AbstractContextManager[None]:
 # retry its manifest declares (``OperationManifest.retry``), pinned in its
 # record's spec when it was asked for. ``safe`` alone queues it again.
 _UNKNOWN_OUTCOME = {
-    "never": "Its lease ran out before it reported, so whether it ran is unknown, and it is never run twice.",
+    "never": "It stopped reporting before finishing, so what it changed is unknown, and it is not run again.",
     "observe_first": (
-        "Its lease ran out before it reported, so whether it ran is unknown, and its procedure "
-        "observes the machines before it is run again."
+        "It stopped reporting before finishing, so what it changed is unknown; "
+        "its playbook checks the machines before running again."
     ),
 }
 
@@ -185,7 +185,7 @@ def _release_lapsed(now) -> None:
                 then=Value(
                     {
                         "ok": False,
-                        "message": "The record was switched off in HQ, and its lease ran out before it reported.",
+                        "message": "The record was switched off in HQ before its controller finished.",
                         "reason": "SwitchedOff",
                     },
                     output_field=JSONField(),
@@ -601,11 +601,11 @@ def report_operation(
         raise ValueError("Only a run reports events.")
     scan = operation.action == OperationRequest.Action.SCAN
     if report.catalog is not None and not scan:
-        raise ValueError("Only a scan reports a catalog.")
+        raise ValueError("Only a scan reports the playbooks it found.")
     if scan and report.status:
-        raise ValueError("A scan reports what it found as a catalog, never a status for its record.")
+        raise ValueError("A scan reports the playbooks it found, never a status for its record.")
     if scan and report.success and report.catalog is None:
-        raise ValueError("A scan that succeeded reports the catalog it found.")
+        raise ValueError("A scan that succeeded reports the playbooks it found.")
 
     with _as_its_own(operation):
         if run:

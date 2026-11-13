@@ -377,7 +377,7 @@ def _senders(spf: SpfPolicy) -> str:
 def _receiving(mx: tuple[Any, ...]) -> MailSection:
     null_mx = is_null_mx(mx)
     if null_mx:
-        answer = "Nobody, on purpose"
+        answer = "None, on purpose"
         detail = "A null MX tells senders at once that this domain takes no mail."
     elif mx:
         answer = ", ".join(sorted({r.content for r in mx}))

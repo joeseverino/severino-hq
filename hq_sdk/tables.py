@@ -1,4 +1,4 @@
-"""Declarative list and table primitives."""
+"""For an extension's list page: its columns, filters, sorts, toggles and totals."""
 
 from hq.platform.application.page_reads import Remedy
 from hq.platform.application.tables import (

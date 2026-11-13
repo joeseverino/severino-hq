@@ -104,7 +104,7 @@ def _git(checkout: Path, environment: Mapping[str, str], *arguments: str) -> str
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        raise Refused("FetchFailed", f"git {arguments[0]} did not finish.") from exc
+        raise Refused("FetchFailed", f"git {arguments[0]} timed out.") from exc
     if done.returncode != 0:
         raise Refused("FetchFailed", f"git {arguments[0]} failed: {' '.join(done.stderr.split())[:300]}")
     return done.stdout.strip()
@@ -125,10 +125,10 @@ def _checked(project: Project) -> str:
     """The transport ``project`` is reached by, once it is one a fetch may use."""
 
     if not _REPOSITORY.fullmatch(project.repository):
-        raise Refused("Unrunnable", "This worker's repository is not an owner/name.")
+        raise Refused("Unrunnable", "The repository host.json names isn't owner/name. Fix it in host.json.")
     transport = _TRANSPORTS.get(project.origin.partition("://")[0])
     if transport is None:
-        raise Refused("Unrunnable", "This worker's repository is reached by no transport it allows.")
+        raise Refused("Unrunnable", "The repository host.json names isn't an https address. Fix it in host.json.")
     return transport
 
 
@@ -215,7 +215,7 @@ def tip(project: Project, *, scratch: Path, token: str = "") -> Tip:
     pointed = [line.partition("\t")[0] for line in said.splitlines() if line.endswith("\tHEAD")]
     revision = next((name for name in pointed if _REVISION.fullmatch(name)), "")
     if branch is None or not revision:
-        raise Refused("FetchFailed", "The repository names no default branch.")
+        raise Refused("FetchFailed", "The repository has no default branch. Set one on GitHub.")
     directory = _at(project, revision, checkout, environment)
     return Tip(branch[1], revision, directory, _files(checkout, environment))
 

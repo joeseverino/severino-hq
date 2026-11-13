@@ -672,8 +672,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Jobs",
         description="HQ's background jobs and their runs.",
         navigation=(NavigationItem("Background jobs", "jobs:list", "jobs", 132, "Infrastructure"),),
-        # Refresh queues a scan for the automation worker, listed with the
-        # rest of its work, and Adopt makes what a scan found the catalog.
+        # Refresh queues a scan for HQ's runner, listed with the rest of its
+        # work, and Adopt makes a scan result the adopted playbooks.
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.automation_adoption:capability_specs"),
         ),
@@ -683,8 +683,8 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.procedures",
         label="Playbooks",
-        description="What the automation worker may run, and the scans of its repository a person adopts.",
-        # Beside the jobs that run them: the work a procedure is, before it runs.
+        description="The playbooks HQ can run, and the scans of your repository you adopt them from.",
+        # Beside the jobs that run them: the work a playbook is, before it runs.
         navigation=(NavigationItem("Playbooks", "control_plane:procedures", "control_plane", 132, "Infrastructure"),),
     ),
     DomainDescriptor(
@@ -697,7 +697,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.approvals",
         label="Waiting for approval",
-        description="Changes held until a person approves them.",
+        description="Changes held until an operator approves them.",
         # No page in the navigation: a held change is decided on its
         # approval's page, which each item opens, and all of them in the
         # audit log's approval queue, which the queue's heading opens.

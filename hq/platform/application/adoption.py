@@ -48,12 +48,11 @@ ADOPT_SERVICE = "infrastructure.service.adopt"
 
 
 NO_CONNECTION: Sentence = (
-    "No connection this change is made through has reported, so HQ cannot make it. "
-    "The Connections page says how to set one up."
+    "No connection for this change has reported, so HQ cannot make it. The Connections page says how to set one up."
 )
 ONLY_READS: Sentence = (
-    "HQ only reads through the connection this change is made through: its 1Password item does not let "
-    "HQ make changes through it. The Connections page says how to let it, and which permissions a change needs."
+    "The connection for this change only lets HQ read: its 1Password item allows no changes. "
+    "The Connections page says how to allow them and which permissions a change needs."
 )
 
 

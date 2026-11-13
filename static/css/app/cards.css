@@ -268,9 +268,11 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
   margin: 0; padding: 0; list-style: none; font-size: var(--text-sm);
 }
 .step-list li { display: flex; align-items: flex-start; gap: var(--space-5); break-inside: avoid; padding-bottom: var(--space-5); }
-/* Steps done in order ({% steps numbered=True %}) read down one column, each
-   step's number where an icon would be. */
-.step-list.is-numbered { columns: auto; counter-reset: step; }
+/* Steps done in order ({% steps numbered=True %}) read down their columns,
+   wider ones since a step says more, each step's number where an icon would
+   be: a short run of them fills a wide frame rather than stacking down its
+   start. */
+.step-list.is-numbered { columns: 22rem 3; counter-reset: step; }
 .step-list.is-numbered > li { gap: var(--space-3); counter-increment: step; }
 .step-list.is-numbered > li:last-child { padding-bottom: 0; }
 .step-list.is-numbered > li::before { content: counter(step) "."; min-inline-size: 1.5em; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }

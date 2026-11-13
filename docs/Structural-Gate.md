@@ -1,7 +1,9 @@
 # Structural Gate
 
 The gate fails a near-duplicate pair of executable code that its baseline
-does not list. File size is `FileSizeTests`, held to the ceiling, the files it covers (`SEVERINO_FILE_LINE_HELD`) and the exemptions `mise.toml` declares (`SEVERINO_FILE_LINE_*`).
+does not list. File size is `FileSizeTests`' job: the ceiling, the files it
+covers (`SEVERINO_FILE_LINE_HELD`) and the exemptions `mise.toml` declares
+(`SEVERINO_FILE_LINE_*`).
 
 The forms below, classified from the source, leave the pair check. There is no
 list of exempt pairs, symbols or paths.
@@ -153,8 +155,8 @@ A run on inputs already read answers from there and compares that answer with
 the baseline. So the verdict is the one a fresh graph gives.
 
 On other inputs the graph indexes the tree into its own store, kept in
-`var/structural/graph` between runs, so the graph's incremental route
-reindexes only the files that changed and those that read what they declare.
+`var/structural/graph` between runs. Its incremental route then reindexes
+only the files that changed and those that read what they declare.
 It rebuilds the whole store when it cannot bound a change, when the store
 fails its integrity check, and when its index format moves. A lock holds a
 second run in the same checkout until the first is done.

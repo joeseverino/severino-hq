@@ -56,10 +56,11 @@ Renovate moves that workflow's own action and image too.
 
 The Dependency Dashboard issue lists what is pending, held for age or
 blocked. A release still inside its 7 days is listed under Pending Status
-Checks, each with a box that opens its pull request at once; for a pin
-`mise outdated --bump` does not read (an npm tool, an image digest, a workflow's
-action, a regex pin), that list is where an update now starts. A Renovate pull request is worked like any other: push the code a
-major needs onto its branch. To vendor a new API reference bundle by hand,
+Checks, each with a box that opens its pull request at once. For a pin
+`mise outdated --bump` does not read (an npm tool, an image digest, a
+workflow's action, a regex pin), that list is where an update now starts. A
+Renovate pull request is worked like any other: push the code a major needs
+onto its branch. To vendor a new API reference bundle by hand,
 change `version:` in `static/vendor/scalar/UPSTREAM` and run
 `node tools/dev/vendor-scalar.mjs`.
 
@@ -80,8 +81,8 @@ to their jobs:
 Both query their advisory service, so the gate fails offline.
 `mise run lint:govulncheck` runs govulncheck over the controller, its tests
 included, and queries vuln.go.dev, so it too is left to `mise run check` and
-CI's lint job rather than `fast`. The image gates
-scan the built image with Trivy. When an advisory lands against a transitive
+CI's lint job rather than `fast`. The image gates scan the built image with
+Trivy. When an advisory lands against a transitive
 dependency, move only that package:
 
 ```sh

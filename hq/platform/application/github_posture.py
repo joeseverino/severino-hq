@@ -121,7 +121,7 @@ STANDARD: tuple[Check, ...] = (
         "Anyone else with access can read private code or push to it.",
         "Remove the collaborator in the repository's access settings.",
         serious=True,
-        unmet="Someone else has access",
+        unmet="Others have access",
     ),
     Check(
         "keys-read-only",

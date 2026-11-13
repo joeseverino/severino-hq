@@ -782,7 +782,7 @@ def _dangling_item(field: ReferenceField, row: models.Model, source: Callable[[m
     name = getattr(row, field.name_attname) or getattr(row, field.attname)
     return Insight(
         status="attention",
-        eyebrow="Links",
+        eyebrow="Records",
         title=f"{source(row)} links to {name}, which HQ does not have",
         value="",
         body="Choose something else for it, or clear the link.",

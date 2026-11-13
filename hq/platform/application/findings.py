@@ -649,7 +649,7 @@ class SerializedFinding(TypedDict):
     rule: Annotated[str, Describe("The rule that found it, as the `rule` filter takes it.")]
     subject: Annotated[
         str | None,
-        Describe("The id of the map node it is about; null when it is about a type or a check as a whole."),
+        Describe("The id of the map node it is about. Null when it is about a whole type or check."),
     ]
     scope: Annotated[
         str | None,
@@ -675,7 +675,7 @@ class SerializedFinding(TypedDict):
     ]
     operator_steps: Annotated[
         list[Annotated[dict[str, Any], Written(OperatorStep)]],
-        Describe("What a person does by hand to resolve it, in order. HQ never runs these."),
+        Describe("What you do by hand to resolve it, in order. HQ never runs these."),
     ]
     no_help_reason: Annotated[
         str | None,

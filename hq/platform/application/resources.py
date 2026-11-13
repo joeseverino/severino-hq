@@ -384,8 +384,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "upgrades",
             "Upgrades",
-            "Every running container with a newer release: the target by digest, what it fixes, "
-            "its data and verification, what blocks it, and its steps. Read-only.",
+            "Every running container with a newer release. For each: the target digest, its fixes, "
+            "data and verification, blockers and steps. Read-only.",
             Capability.READ,
             container_reads.list_upgrades,
             BoundedQuery,
@@ -432,8 +432,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "hq",
             "HQ",
-            "HQ itself: its release and whether its branch is ahead, its machine and container, "
-            "background jobs, what it reads, open problems.",
+            "HQ itself: its release and branch, machine and container, background jobs, "
+            "what it reads and open problems.",
             Capability.READ,
             hq_context.read_hq,
             EmptyQuery,
@@ -483,7 +483,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "connections",
             "Connection status",
             "Each connection with what its credential sees, how fresh each reading is, what "
-            "was refused and the fix; the summary counts, the security posture and HQ's path.",
+            "was refused and the fix. It also gives the counts, the security posture and HQ's path.",
             Capability.READ,
             connection_context.list_connection_standing,
             EmptyQuery,
@@ -522,8 +522,8 @@ def connections() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "request.path",
             "Request path",
-            "How the calling request reached HQ: HQ's own path hop by hop, each hop "
-            "checked against what the request shows, with the admission layers decided there.",
+            "How the calling request reached HQ, hop by hop. Each hop is checked against what "
+            "the request shows, with the admission layers decided there.",
             Capability.READ,
             derived_reads.list_request_path,
             EmptyQuery,
@@ -674,7 +674,7 @@ class ResourceDescription(TypedDict):
     """One registry entry as every adapter describes it."""
 
     name: Annotated[str, Describe("The resource's name, which `list_resource` and `get_resource` take.")]
-    label: Annotated[str, Describe("What a person calls the resource.")]
+    label: Annotated[str, Describe("The name a page gives the resource.")]
     summary: Annotated[str, Describe("What the resource holds, in a sentence.")]
     web_route: WebRoute
     required_capabilities: RequiredPermissions

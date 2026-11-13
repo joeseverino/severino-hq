@@ -29,8 +29,8 @@ only by a merged pull request.
 
 - [ ] After the merge, CI promotes the proven image and starts Compose.
 - [ ] The commit's `production` deployment is *queued*, waiting for
-      approval. Approve the Deploy run in the `production` environment. A newer release waiting
-      supersedes an older one; reject a stale one rather than approving it.
+      approval. Approve the Deploy run in the `production` environment. A
+      newer release waiting supersedes an older one: reject the stale one.
 - [ ] The deploy rehearses the release before it touches anything live
       (step 5 of [A deploy](Deployment.md#a-deploy)); its `Rehearsal:` line in
       the Deploy job's log says `result=pass`, or which check refused it.

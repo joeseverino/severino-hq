@@ -452,7 +452,7 @@ class ConnectionDescription(TypedDict):
     """One connection family as every adapter describes it."""
 
     name: Annotated[str, Describe("The name of this type of connection.")]
-    label: Annotated[str, Describe("What a person calls this type of connection.")]
+    label: Annotated[str, Describe("The name a page gives this type of connection.")]
     summary: Annotated[str, Describe("What this type of connection lets HQ reach, in a sentence.")]
     required_capabilities: RequiredPermissions
     web_route: WebRoute

@@ -130,8 +130,8 @@ def _closed(model: type[BaseModel], seen: set[type[BaseModel]]) -> None:
 
 
 class ProcedureTerms(BaseModel):
-    """What a procedure's manifest and its sidecar both say of it: where it
-    may run, what it does, and how a failed run is recovered."""
+    """What a playbook's manifest and its sidecar both say of it: where it
+    may run, what it does, and how to recover from a failed run."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -149,12 +149,12 @@ class ProcedureTerms(BaseModel):
     @model_validator(mode="after")
     def _read_needs_no_privilege(self) -> Self:
         if self.effect == "read" and self.privilege is not None:
-            raise ValueError("A read runs without privilege, so it names no privilege profile.")
+            raise ValueError("A read takes no privilege, so remove it.")
         return self
 
 
 class OperationManifest(ProcedureTerms):
-    """One reviewed automation procedure, as HQ may run it."""
+    """One reviewed playbook, as HQ may run it."""
 
     revision: Annotated[str, StringConstraints(pattern=REVISION)]
     playbook: Annotated[str, StringConstraints(pattern=PLAYBOOK, max_length=PLAYBOOK_LONGEST)]
@@ -173,7 +173,7 @@ class OperationManifest(ProcedureTerms):
     @model_validator(mode="after")
     def _a_change_says_how_it_is_checked(self) -> Self:
         if self.effect != "read" and not (self.preconditions and self.verification):
-            raise ValueError("A change asserts what it needs before it runs and what shows it worked.")
+            raise ValueError("A change needs preconditions and verification: its play's pre_tasks and post_tasks.")
         return self
 
     def admits(self, kind: str, host: str) -> bool:

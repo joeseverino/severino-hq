@@ -1,5 +1,5 @@
-"""The procedures page: the catalog the automation worker runs from, when
-its repository was last read, and the one commit there is to decide on.
+"""The Playbooks page: the playbooks HQ runs from, when their repository
+was last read, and the one commit there is to decide on.
 
 Every value is the catalog's or a scan's (``automation_sources.standing``);
 the host names no procedure, machine or repository, and the source's
@@ -88,10 +88,7 @@ class ProceduresView(PageMixin, TemplateView):
             return self.page_lede
         found = self.sources.proposal
         if found is not None and found.refused:
-            return (
-                "HQ can't adopt this commit, so there is nothing to do here. "
-                "Fix what is listed below in the repository, then Refresh to scan the new commit."
-            )
+            return "HQ can't adopt this commit. Fix what's listed below in the repository, then Refresh."
         return ""
 
     @override
@@ -176,7 +173,7 @@ def _said(commit, revision: str, done: str) -> str:
 
 
 class RefreshView(View):
-    """Ask the automation worker to scan its repository now: the scan is
+    """Ask HQ's runner to scan the repository now: the scan is
     queued and the request answers at once, and ``ScanStatusView`` says how
     it stands."""
 
@@ -212,8 +209,8 @@ class ScanStatusView(View):
 
 
 class ProposalAdoptView(View):
-    """Adopt one proposal: its procedures become the catalog every
-    procedure's command is built from, through the command itself, so a
+    """Adopt one scan result: its playbooks become the ones every
+    playbook's command is built from, through the command itself, so a
     press is authorized, held and recorded as the same call through the API."""
 
     http_method_names: ClassVar[list[str]] = ["post"]
@@ -225,7 +222,7 @@ class ProposalAdoptView(View):
         if refused(request, result) is not None:
             return redirect("control_plane:procedures_proposal", pk=pk)
         if is_held(result):
-            messages.info(request, "Adopting this commit needs your approval first.")
+            messages.info(request, "Adopting this commit waits for approval.")
         elif result.get("adopted"):
             messages.success(request, "Adopted. HQ now runs this commit's playbooks.")
         else:

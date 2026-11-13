@@ -232,7 +232,7 @@ WIDENED_REVISION = _commit("Escalate the cache flush; add a disk cleanup.")
 UNREADY = (
     _FLUSH,
     _REPORT,
-    _moved(_UPGRADE, problems=["No role packages_v2 is in the project's roles/ or beside the playbook."]),
+    _moved(_UPGRADE, problems=["Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."]),
 )
 UNREADY_REVISION = _commit("Move the upgrade onto a new role.")
 
@@ -261,7 +261,7 @@ def adopted(person: Principal) -> None:
     """The example repository refreshed by ``person``, scanned by its worker,
     and what it found adopted by ``person``."""
 
-    scan = _scanned(person, "example-refresh", catalog(), "Read the procedures.")
+    scan = _scanned(person, "example-refresh", catalog(), "Read the playbooks.")
     with doors.page("command", name="automation.source.adopt"):
         adopt(AdoptProposal(proposal=scan.result["proposal"]), principal=person)
     # A seed's transaction has not committed, so this process reads what it adopted now.
@@ -273,14 +273,14 @@ def proposed(person: Principal, agent: Principal) -> None:
     that widens what a run may do, which ``agent`` asks to adopt and so waits
     for a person; one whose procedures HQ cannot adopt; and a scan that failed."""
 
-    widened = _scanned(person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the procedures.")
+    widened = _scanned(person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the playbooks.")
     with doors.mcp():
         held = run_capability(
             ADOPT, {"proposal": widened.result["proposal"]}, principal=agent, idempotency_key="example-agent-adopt"
         ).answer
     if not is_held(held):
         raise RuntimeError(f"The agent's adoption was not held for a person: {held}")
-    _scanned(person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the procedures.")
+    _scanned(person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the playbooks.")
     _scanned(person, "example-refresh-failed", None, "HQ couldn't reach your repository's host.")
 
 
@@ -288,7 +288,7 @@ def rescanned(owner) -> None:
     """A Refresh by ``owner`` after the estate's that found the commit adopted
     now, so nothing waits to be adopted."""
 
-    _scanned(web_principal(owner), "example-refresh-again", catalog(), "Read the procedures.")
+    _scanned(web_principal(owner), "example-refresh-again", catalog(), "Read the playbooks.")
 
 
 def scanning(owner) -> None:

@@ -127,7 +127,7 @@ def _title(node: TopologyNode, rows: tuple[RebootState, ...]) -> str:
 def _explanation(rows: tuple[RebootState, ...]) -> str:
     (row, *_) = rows
     waiting = (
-        "An update installed on the machine takes effect only once it restarts; until then it runs the code the "
+        "An installed update takes effect only once the machine restarts. Until then it runs the code the "
         "update replaced."
     )
     if not row.scheduled:

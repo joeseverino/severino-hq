@@ -573,7 +573,7 @@ def _cell(text: str) -> str:
 def hand_drawn_rules() -> list[dict[str, str]]:
     """Each rule that refuses a shape a shared part draws, drawn by hand in a
     template (``tools/lint/ast-grep/rules/hand-drawn-*.yml``), which the host's
-    lint and an extension's plugin check both run."""
+    lint and an extension's ``plugin:check`` both run."""
 
     return [
         yaml.safe_load(path.read_text(encoding="utf-8"))

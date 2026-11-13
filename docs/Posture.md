@@ -10,8 +10,9 @@ enabled**, with a lock.
 
 ## Turning it on
 
-Add `SEVERINO_POSTURE=advanced` to the env item in 1Password. HQ refuses to
-start on any other value.
+Set `SEVERINO_POSTURE=advanced` in HQ's settings
+([Deployment](Deployment.md#configuration)). HQ will not start on any other
+value.
 
 ## Every HQ
 

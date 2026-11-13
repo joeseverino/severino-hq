@@ -89,6 +89,9 @@ class AutomationRunPageTests(TestCase):
             if element.attrs.get("href") == reverse("command", args=[RUN])
         ]
         self.assertTrue(procedure)
+        # Each run is named by its playbook's title, the name the Playbooks page gives it.
+        title = next(found["title"] for found in PROCEDURES if found["declaration"]["id"] == CACHE_FLUSH)
+        self.assertEqual({element.words for element in procedure}, {title})
 
     def test_a_command_with_nothing_to_say_of_itself_draws_no_more_than_its_form(self):
         html = self.page(reverse("command", args=["infrastructure.controller.refresh"]))

@@ -298,7 +298,7 @@
                   {
                     "capability": "",
                     "effect": "read",
-                    "label": "See it on the map",
+                    "label": "Map neighborhood",
                     "method": "GET",
                     "name": "topology",
                     "reason": "What this is connected to.",
@@ -2654,7 +2654,7 @@
                       {
                         "capability": "",
                         "effect": "read",
-                        "label": "See it on the map",
+                        "label": "Map neighborhood",
                         "method": "GET",
                         "name": "topology",
                         "reason": "What this is connected to.",
@@ -5394,7 +5394,7 @@
           },
           "refusal": {
             "default": "",
-            "description": "Why its command would be refused if asked for now, in the command's words: set, the link is shown unusable with it. Empty when it would run.",
+            "description": "Why its command would be refused now, in the command's words. When set, the link shows as unusable with it. Empty when it would run.",
             "type": "string"
           },
           "target": {
@@ -5461,18 +5461,18 @@
       },
       "Adopted": {
         "additionalProperties": false,
-        "description": "What an adoption did: whether the catalog moved, and how it widened.",
+        "description": "What an adoption did: whether the adopted playbooks changed, and what runs may now do.",
         "properties": {
           "adopted": {
-            "description": "False when the proposal was the catalog adopted already.",
+            "description": "False when this scan result was already adopted.",
             "type": "boolean"
           },
           "digest": {
-            "description": "The adopted catalog's digest, which names it.",
+            "description": "The digest that names the adopted playbooks.",
             "type": "string"
           },
           "widened": {
-            "description": "What it lets a run do that the catalog before did not.",
+            "description": "What runs may now do that they could not before.",
             "items": {
               "type": "string"
             },
@@ -5700,7 +5700,7 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "The theme to draw this person's pages in.",
+            "description": "The theme to draw your pages in.",
             "properties": {
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
@@ -6261,7 +6261,7 @@
         "type": "string"
       },
       "Assignee": {
-        "description": "Who is handling it. Empty for nobody.",
+        "description": "Who is handling it. Empty when unassigned.",
         "maxLength": 120,
         "type": "string"
       },
@@ -6278,14 +6278,15 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "The proposal to adopt, and why.",
+            "description": "The scan result to adopt, and why.",
             "properties": {
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "proposal": {
-                "description": "The scan result a Refresh kept, by its ID.",
+                "description": "The scan result's ID.",
                 "minimum": 1,
+                "title": "Scan result",
                 "type": "integer"
               },
               "reason": {
@@ -7323,7 +7324,7 @@
             "description": "The service's own documentation for it; null for none."
           },
           "label": {
-            "description": "What a person calls this type of connection.",
+            "description": "The name a page gives this type of connection.",
             "type": "string"
           },
           "management_route": {
@@ -7573,7 +7574,7 @@
                 "type": "null"
               }
             ],
-            "description": "When a refresh of it was asked for that has not run yet, an ISO 8601 date-time; null when none waits."
+            "description": "When a refresh still waiting to run was asked for, an ISO 8601 date-time; null when none waits."
           },
           "reads": {
             "description": "What its credential reads.",
@@ -7655,7 +7656,7 @@
                 "type": "null"
               }
             ],
-            "description": "The ref its controller and HQ's audit log name it by, which a read of one names it by; null for none."
+            "description": "The ref its controller and HQ's audit log name it by, which a read of one also takes. Null for none."
           },
           "detail": {
             "description": "A line on what it last reported, such as how much it holds; empty when there is nothing to add.",
@@ -7984,7 +7985,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/name"
           },
           "posture": {
-            "description": "How it meets the container standard: checks met, each check's state, each unmet one's reason and fix, and what is off by design.",
+            "description": "How it meets the container standard: the checks met and each check's state. An unmet check has its reason and fix; a check off by design says so.",
             "type": "object"
           },
           "project": {
@@ -8026,7 +8027,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/serves"
           },
           "standing": {
-            "description": "Whether what it runs is current and safe: a state and summary, newer tags, the latest release, advisories, and when the registry and upstream were last read.",
+            "description": "Whether what it runs is current and safe: its state and summary, newer tags, the latest release and advisories. It also says when the registry and upstream were last read.",
             "type": "object"
           },
           "state": {
@@ -8036,7 +8037,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/status"
           },
           "supply_chain": {
-            "description": "Where its image comes from: source, provenance, packages, SBOM, attestations, known vulnerabilities and when read, and how it meets the supply chain standard.",
+            "description": "Where its image comes from: source, provenance, packages, SBOM, attestations, and known vulnerabilities with when they were read. It also says how it meets the supply chain standard.",
             "type": "object"
           },
           "url": {
@@ -8576,7 +8577,7 @@
             "description": "The service's words when it refused the credential; null when it did not."
           },
           "steps": {
-            "description": "What a person does to replace it, in order.",
+            "description": "What you do to replace it, in order.",
             "items": {
               "$ref": "#/components/schemas/OperatorStep"
             },
@@ -9676,7 +9677,7 @@
             "type": "string"
           },
           "label": {
-            "description": "The name a person reads; never matched on, since `identity` is what addresses it.",
+            "description": "The name shown; never matched on, since `identity` is what addresses it.",
             "type": "string"
           },
           "title": {
@@ -9734,7 +9735,7 @@
             "$ref": "#/components/schemas/CalendarEntryRepeat"
           },
           "repeat_label": {
-            "description": "How it repeats, as a person says it, such as `Every 2 weeks on Mon`; empty for once.",
+            "description": "How it repeats, in words, such as `Every 2 weeks on Mon`; empty for once.",
             "type": "string"
           },
           "repeat_until": {
@@ -10634,7 +10635,7 @@
         "additionalProperties": false,
         "properties": {
           "address": {
-            "description": "The address a person reaches the machine at there.",
+            "description": "The address you reach the machine at there.",
             "type": "string"
           },
           "holder": {
@@ -10761,7 +10762,7 @@
             "type": "string"
           },
           "step": {
-            "description": "What a person does to settle a disagreement; empty for none.",
+            "description": "What you do to settle a disagreement; empty for none.",
             "type": "string"
           }
         },
@@ -12000,7 +12001,7 @@
             "type": "string"
           },
           "header_addresses": {
-            "description": "The addresses a person reaches it at, tailnet then LAN then public.",
+            "description": "The addresses you reach it at, tailnet then LAN then public.",
             "items": {
               "$ref": "#/components/schemas/HeaderAddressPart"
             },
@@ -12166,7 +12167,7 @@
             "$ref": "#/components/schemas/ManagedResourceRow/properties/last_observed_at"
           },
           "observed_generation": {
-            "description": "Which version of HQ's copy was last applied and confirmed back; it equals the current version when no change waits to apply.",
+            "description": "Which version of HQ's copy was last applied and confirmed back. It equals the current version when no change waits to apply.",
             "type": "integer"
           },
           "public_effect": {
@@ -12216,8 +12217,8 @@
         "type": "string",
         "x-enumDescriptions": {
           "adguard.rewrite": "Internal DNS record",
-          "automation.operation": "Automation procedure",
-          "automation.source": "Automation source",
+          "automation.operation": "Playbook",
+          "automation.source": "Playbooks",
           "caddy.route": "Caddy route",
           "cloudflare.contact_inbox": "Contact inbox",
           "cloudflare.dns_record": "Public DNS record",
@@ -12241,7 +12242,7 @@
         "description": "One managed record, what HQ derives from it, and the operations run on it.",
         "properties": {
           "derived": {
-            "description": "What HQ makes of the record: health, allowed actions, machines and services, expected beside live, certificate expiry, pending approvals, and what uses it.",
+            "description": "What HQ derives from the record. It holds health, allowed actions, machines and services, expected beside live, certificate expiry, pending approvals and what uses it.",
             "type": "object"
           },
           "operations": {
@@ -13010,7 +13011,7 @@
             "type": "boolean"
           },
           "by": {
-            "description": "Who asked for it, as a person reads it: `Automatic` for the controller.",
+            "description": "Who asked for it, as HQ shows it: `Automatic` for the controller.",
             "type": "string"
           },
           "completed_at": {
@@ -13486,7 +13487,7 @@
       },
       "PinsChanged": {
         "additionalProperties": false,
-        "description": "Which type of thing the call changed the person's pins of.",
+        "description": "Which type of thing the call changed your pins of.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/PinKind"
@@ -15395,7 +15396,7 @@
         "description": "One registry entry as every adapter describes it.",
         "properties": {
           "label": {
-            "description": "What a person calls the resource.",
+            "description": "The name a page gives the resource.",
             "type": "string"
           },
           "name": {
@@ -15875,7 +15876,7 @@
             "type": "array"
           },
           "operator_steps": {
-            "description": "What a person does by hand to resolve it, in order. HQ never runs these.",
+            "description": "What you do by hand to resolve it, in order. HQ never runs these.",
             "items": {
               "$ref": "#/components/schemas/OperatorStep"
             },
@@ -15927,7 +15928,7 @@
                 "type": "null"
               }
             ],
-            "description": "The id of the map node it is about; null when it is about a type or a check as a whole."
+            "description": "The id of the map node it is about. Null when it is about a whole type or check."
           },
           "title": {
             "description": "The problem, in a line.",
@@ -16212,7 +16213,7 @@
       },
       "SourcesChosen": {
         "additionalProperties": false,
-        "description": "Which calendar sources the person shows, as the call left them.",
+        "description": "Which calendar sources you show, as the call left them.",
         "properties": {
           "choices": {
             "additionalProperties": {
@@ -16353,7 +16354,7 @@
                 "type": "null"
               }
             ],
-            "description": "Each node attribute target holding funnel, which a node needs to publish to the internet; empty when none does, null when the reading does not say."
+            "description": "The targets of node attributes that grant funnel, which a node needs to publish to the internet. Empty when none does; null when the reading does not say."
           },
           "grants": {
             "description": "The policy's grants as written.",
@@ -16571,7 +16572,7 @@
       },
       "ThemeSet": {
         "additionalProperties": false,
-        "description": "The theme the person's pages are drawn in, as the call left it.",
+        "description": "The theme your pages are drawn in, as the call left it.",
         "properties": {
           "theme": {
             "description": "The theme now set: `system`, `light` or `dark`.",
@@ -16777,7 +16778,7 @@
           },
           "declared_revision": {
             "default": 0,
-            "description": "Which version of HQ's copy of the record HQ last asked for, counting up from 1 as the copy changes; 0 on a node HQ keeps no copy of.",
+            "description": "Which version of HQ's copy of the record HQ last asked for, counting up from 1 as the copy changes. It is 0 on a node HQ keeps no copy of.",
             "type": "integer"
           },
           "detail": {
@@ -16804,7 +16805,7 @@
             "type": "array"
           },
           "id": {
-            "description": "Names this node for the rest of the answer and later reads: an edge's source and target, a trace's focus, a problem's subject. Stable while the thing it stands for exists.",
+            "description": "Names this node across the answer and later reads, such as an edge's source or a problem's subject. Stable while the thing it stands for exists.",
             "type": "string"
           },
           "kind": {
@@ -16817,7 +16818,7 @@
             "type": "string"
           },
           "label": {
-            "description": "The key HQ files it under, which a command or a record's page is addressed by: a record's key, a machine's name, a hostname.",
+            "description": "The key commands and pages address it by: a record's key, a machine's name or a hostname.",
             "type": "string"
           },
           "managed": {
@@ -16827,7 +16828,7 @@
           },
           "name": {
             "default": "",
-            "description": "What a person calls it, where that differs from `label`: the name a record stands for. Empty when `label` already reads as that name.",
+            "description": "The name it goes by, where that differs from `label`: the name a record stands for. Empty when `label` already reads as that name.",
             "type": "string"
           },
           "observed_at": {
@@ -16871,7 +16872,7 @@
           },
           "reason": {
             "default": "",
-            "description": "The reason on its current condition, verbatim: set by a live read, or by applying HQ's copy and not yet confirmed.",
+            "description": "The reason on its current condition, verbatim. A live read sets it, or applying HQ's copy before a read confirms it.",
             "type": "string"
           },
           "status": {
@@ -16895,7 +16896,7 @@
           },
           "unconfirmed_fields": {
             "default": [],
-            "description": "Fields HQ's copy sets that the last read did not report back, leaving out those the service cannot report: set, but never checked.",
+            "description": "Fields HQ's copy sets that the last read did not report back: set, but never checked. Fields the service cannot report are left out.",
             "items": {
               "type": "string"
             },
@@ -17404,7 +17405,7 @@
             "type": "array"
           },
           "not_automatic": {
-            "description": "Why it would not apply on its own, though a person may approve it: every blocker, then the bar a patch must clear.",
+            "description": "Why it would not apply on its own, though an operator may approve it. Every blocker comes first, then the bar a patch must clear.",
             "items": {
               "$ref": "#/components/schemas/BlockerPart"
             },
@@ -17530,7 +17531,7 @@
                 "type": "null"
               }
             ],
-            "description": "The CPU it used since the read before, as a percentage of one core; null until two reads have sampled one run of it."
+            "description": "The CPU it used since the read before, as a percentage of one core. Null until two reads have sampled one run of it."
           },
           "memory_bytes": {
             "description": "The memory it uses, in bytes.",
@@ -17787,7 +17788,7 @@
             "type": "string"
           },
           "state": {
-            "description": "Where it stands: `recommended` to do now, `after_action` once the step before is done, `available` at any time, `operator` for a person to do by hand, `blocked` where it cannot be done.",
+            "description": "Where it stands: `recommended` to do now, `after_action` once the step before is done, `available` at any time, `operator` for you to do by hand, `blocked` where it cannot be done.",
             "type": "string"
           },
           "summary": {
@@ -18655,7 +18656,7 @@
     },
     "/api/v2/capabilities/automation.source.refresh/": {
       "post": {
-        "description": "Ask the automation worker which procedures its repository holds, and keep what it finds as a proposal. Nothing it finds can run until it is adopted.",
+        "description": "Scan your repository for playbooks and keep the scan result. Nothing in it runs until you adopt it.",
         "operationId": "automationSourceRefreshV2",
         "parameters": [
           {
@@ -18713,7 +18714,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Refresh the procedures",
+        "summary": "Refresh playbooks",
         "tags": [
           "hq.jobs"
         ],
@@ -24086,7 +24087,7 @@
     },
     "/api/v2/resources/connections/": {
       "get": {
-        "description": "Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.",
+        "description": "Each connection with what its credential sees, how fresh each reading is, what was refused and the fix. It also gives the counts, the security posture and HQ's path.",
         "operationId": "listConnectionsV2",
         "parameters": [
           {
@@ -25373,7 +25374,7 @@
     },
     "/api/v2/resources/hq/": {
       "get": {
-        "description": "HQ itself: its release and whether its branch is ahead, its machine and container, background jobs, what it reads, open problems.",
+        "description": "HQ itself: its release and branch, machine and container, background jobs, what it reads and open problems.",
         "operationId": "listHqV2",
         "parameters": [
           {
@@ -26507,7 +26508,7 @@
     },
     "/api/v2/resources/request.path/": {
       "get": {
-        "description": "How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.",
+        "description": "How the calling request reached HQ, hop by hop. Each hop is checked against what the request shows, with the admission layers decided there.",
         "operationId": "listRequestPathV2",
         "parameters": [
           {
@@ -26979,7 +26980,7 @@
     },
     "/api/v2/resources/upgrades/": {
       "get": {
-        "description": "Every running container with a newer release: the target by digest, what it fixes, its data and verification, what blocks it, and its steps. Read-only.",
+        "description": "Every running container with a newer release. For each: the target digest, its fixes, data and verification, blockers and steps. Read-only.",
         "operationId": "listUpgradesV2",
         "parameters": [
           {

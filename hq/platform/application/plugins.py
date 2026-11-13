@@ -618,7 +618,7 @@ def source_attention(
         lambda: (
             Insight(
                 status="attention",
-                eyebrow=label,
+                eyebrow="HQ",
                 title=f"{label} could not be read",
                 value="",
                 body="What it reports is missing from this queue until it reads again. The failure is logged.",

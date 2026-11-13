@@ -76,7 +76,9 @@ ruleset before they can publish anything.
 ## 3. Publish a composition
 
 **For:** the host runs the composed image your repository publishes, pinned by
-digest. For this repository that is `ghcr.io/joeseverino/severino-hq/composition`.
+digest: `ghcr.io/OWNER/REPO/composition`, with your repository's owner and
+name in lowercase, as GHCR names them. The commands below keep `OWNER/REPO`
+for you to fill in.
 
 Merge to `main`. CI's **Release** starts **Compose**, which publishes and signs
 the composition. To run it by hand: Actions, **Compose**, Run workflow, on
@@ -89,12 +91,11 @@ Find the digest of what Compose published. Either read it on the package's
 page on GitHub, or, from any machine with Docker Buildx:
 
 ```sh
-docker buildx imagetools inspect ghcr.io/joeseverino/severino-hq/composition:COMMIT_SHA
+docker buildx imagetools inspect ghcr.io/OWNER/REPO/composition:COMMIT_SHA
 ```
 
 **Check:** you have a reference of the form
-`ghcr.io/joeseverino/severino-hq/composition@sha256:<64 hex>`, with your
-repository's owner and name in place of these, lowercase, as GHCR names them.
+`ghcr.io/OWNER/REPO/composition@sha256:<64 hex>`.
 
 ## 4. Run 1Password Connect
 
@@ -186,6 +187,8 @@ everything about this host the repository does not hold.
 
    An unknown field, a non-loopback URL, or a value with quotes, `%`, `$` or a
    backslash is refused.
+   `grants` and `automation` are optional
+   ([Tokens on the host](Deployment.md#tokens-on-the-host)).
 
 **Check:** the runner shows as idle under the repository's Actions runners,
 and the file parses:
@@ -226,9 +229,11 @@ values, and no name appears twice.
 ## 8. Add the first connection
 
 **For:** what HQ reads. This step is optional: HQ starts without a
-connection, and you can add one now or later from the Connections page. Once
-the host has a connection, a vault that holds none is refused and the
-installed connections are kept ([Secrets](Secrets.md#renderer-behavior)).
+connection, and you can add one now or later. For each provider not yet
+connected, HQ's Connections page says what token to create, the permissions
+it needs and the fields its item takes. Once the host has a connection, a
+vault that holds none is refused and the installed connections are kept
+([Secrets](Secrets.md#renderer-behavior)).
 
 A connection is a vault item with three text fields the renderer reads:
 `connection_ref` (a name you choose), `projection` (the shape of the
@@ -249,7 +254,11 @@ Then create an **API Credential** item in the vault:
 | `projection` | `oauth_client` |
 | `env_prefix` | `TAILSCALE` |
 
-Leave `manages` off. Without it the connection only reads.
+Leave `manages` off until you want HQ to change things through it. Without it
+the connection only reads ([Derived Facts](Derived-Facts.md#adoption)).
+
+An item is read at the next render (hourly, or at once with `systemctl start
+severino-hq-secrets.service`) and probed at the controller's next pass.
 
 **Check:** the item is in the vault `host.json` names, not another one.
 If you skip this step, step 11 has nothing to show until you add one.
@@ -262,14 +271,14 @@ starts them. Every later release arrives through Deploy.
 Name the image once for this shell, with the reference from step 3:
 
 ```sh
-export IMAGE='ghcr.io/joeseverino/severino-hq/composition@sha256:DIGEST'
+export IMAGE='ghcr.io/OWNER/REPO/composition@sha256:DIGEST'
 ```
 
 Verify its signature against your Compose workflow on `main`. Run this here
 or on any machine with [cosign](https://docs.sigstore.dev/cosign/system_config/installation/):
 
 ```sh
-cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/joeseverino/severino-hq/\.github/workflows/compose\.yml@refs/heads/main$' "$IMAGE"
+cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/OWNER/REPO/\.github/workflows/compose\.yml@refs/heads/main$' "$IMAGE"
 ```
 
 Pull it. If the package is private, `docker login ghcr.io` first.
@@ -420,23 +429,6 @@ Open **Connections** (`/infrastructure/connections/`). Your connection is
 listed with what answered and what it can see.
 
 HQ is installed.
-
-## Where connections fit
-
-A connection is a vault item and nothing else. Nothing in this repository or
-in HQ's database holds the credential; HQ stores what the controller reported
-about it.
-
-HQ's Connections page lists every provider HQ can read. For one not yet
-connected, it says what token to create, the permissions it needs and the
-fields to put on its vault item. Add the item, and it is read at the next
-render (hourly, or at once with `systemctl start severino-hq-secrets.service`)
-and probed at the controller's next pass. The same, for every provider, is in
-[Connections](Connections.md).
-
-A connection only reads until its item carries `manages` set to `1`. Leave it
-off until you want HQ to change things through it
-([Derived Facts](Derived-Facts.md#adoption)).
 
 ## What happens next
 
