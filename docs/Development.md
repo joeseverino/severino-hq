@@ -13,10 +13,6 @@ with the other tools `fast` and `check` run.
 A tool only a heavier gate needs (CodeQL, age) is `lazy` in `mise.toml`: its
 first use installs it, checked against `mise.lock` like the rest.
 
-`fast` and `fix` first run `setup:git`, which defines the merge drivers
-`.gitattributes` names in the repository's git config, shared by every
-worktree; a clone that has not run it merges those files as text.
-
 Go is the one tool `mise.toml` does not pin itself. It reads the release from
 `controller/go.mod`'s `toolchain` line, which Renovate moves, so mise loads
 `mise.toml` only beside that file.
@@ -85,7 +81,6 @@ write as they measure, so they run outside it. A `.venv` out of sync with
 | `audit:ast [globs]...` | per file, the docstrings over 8 lines and the `getattr` calls of a literal name with a default (`tools/audit/ast-grep.yml`) | `mise run audit:ast 'hq/**'` |
 | `audit:dead` | the names `hq/` and `hq_sdk/` define that nothing outside tests reads (a test-support module's, `testing.py` or `*_testing.py`, that nothing reads at all), as vulture finds them, with what it cannot see handed to it as uses (`[tool.vulture]`, `tools/lint/vulture-whitelist.py`) | `mise run audit:dead --fields` |
 | `audit:layers [importer] [imported]` | the imports between core, application and domains, counted per pair both ways, or one pair's listed by module (grimp) | `mise run audit:layers core domains` |
-| `audit:hand-rolled` | the page-class check's count: the classes host templates hand-roll instead of drawing a shared part, as totals, per template, and any difference from its baseline, `tools/lint/hand-rolled.txt`; the number a UI report gives before and after (`test_host_templates_draw_only_the_shared_parts_classes` reads the same) | `mise run audit:hand-rolled` |
 | `audit:imports <path>` | the files that import one, string imports included | `mise run audit:imports hq/platform/core/static.py` |
 | `audit:churn <since>` | each tracked source file's commits since a date, most first, generated and vendored files left out (`.gitattributes`); reach for it before a refactor or split | `mise run audit:churn 2026-10-01` |
 | `audit:go [linters]` | golangci-lint's findings, counted per linter | `mise run audit:go nilerr,gocritic` |
@@ -235,7 +230,11 @@ one that found anything or judged nothing fails. A `--base` look is a survey
 too, so its verdict replaces the record and names only the pages it was asked.
 Landing a change to
 `templates/`, `static/css` or `static/js` reads both engines' records for the
-tip's tree.
+tip's tree. A host survey's record also names its `inputs:`, the git pathspecs
+of every path it can read (`SURVEY_INPUTS` in
+`hq/platform/core/tests/look.py`), so a passing survey holds for a tip that
+differs from the tree it judged only outside them, such as a commit to a shell
+test or a doc; landing names each input the tip changed when it does not.
 
 The suite runs one worker per core (per performance core on Apple silicon);
 `DJANGO_TEST_PROCESSES` overrides it. `mise run fast --parallel 1` rules
@@ -453,12 +452,6 @@ It then lowers each count in `tools/lint/stylelint-suppressions.json` and
 (`fix:suppressions`), so a change that removes a suppressed problem leaves its
 count right. A count that rose is a new problem: `fix` leaves it, and
 `lint:css` or `lint:js` refuses it.
-
-The same way, it drops from `tools/lint/hand-rolled.txt` each template and
-class the page-class check no longer finds (`fix:hand-rolled`), so a page
-moved onto the shared parts leaves no line to delete by hand. A pair the check
-finds and the file lacks is a new hand-rolled class: `fix` never adds it, and
-`test_host_templates_draw_only_the_shared_parts_classes` refuses it.
 
 Each `lint:drift-*` gate checks one against its source without writing. Its
 failure names the command that rewrites that file alone, in seconds; `fast`

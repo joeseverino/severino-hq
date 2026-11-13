@@ -17,7 +17,3 @@ controller/**/*.gen.go linguist-generated
 docs/Connections.md linguist-generated
 hq/platform/application/hq-procedure.schema.json linguist-generated
 static/fonts/inter/inter-variable-latin.woff2 linguist-generated
-# The page-class baseline only loses rows (mise run fix lowers it from the
-# tree), so two branches that each lowered it merge to the rows both kept,
-# where a text merge conflicts on adjacent drops. setup:git defines the driver.
-tools/lint/hand-rolled.txt merge=intersect-lines

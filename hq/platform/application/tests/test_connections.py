@@ -279,33 +279,23 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         (tr,) = [element for element in page if element.tag == "tr" and "a-portainer" in element.attrs.get("id", "")]
         reads_cell = [element for element in page if element.tag == "td" and element.ancestors[-1:] == (tr,)][1]
 
-        # A read past the row's first few is an item of the list's rest. Elements
-        # compare by their markup, so a holder is matched by identity.
-        def held_by(element, holders):
-            parents = element.ancestors[-2:-1]
-            return bool(parents) and any(parents[0] is holder for holder in holders)
-
-        rests = [
-            element
-            for element in page
-            if element.tag == "li"
-            and "line-rest" in element.attrs.get("class", "").split()
-            and held_by(element, [reads_cell])
-        ]
+        # Every item of the cell's lists, a read past the first few in the
+        # list's rest included. Elements compare by their markup, so the cell
+        # is matched by identity.
         items = [
             element
             for element in page
             if element.tag == "li"
-            and not any(element is rest for rest in rests)
-            and held_by(element, [reads_cell, *rests])
+            and "line-rest" not in element.attrs.get("class", "").split()
+            and any(ancestor is reads_cell for ancestor in element.ancestors)
         ]
-        # Each item's name is its first element; a state word may follow it.
+        changes = [item.words for item in items if any(a.attrs.get("data-label") == "Changes" for a in item.ancestors)]
+        # Each read's name is its first element; a state word may follow it.
         named = [
             next(element for element in page if element.ancestors[-1:] == (item,)).words
             for item in items
-            if item.ancestors[-1].attrs.get("data-label") != "Changes"
+            if item.words not in changes
         ]
-        changes = [item.words for item in items if item.ancestors[-1].attrs.get("data-label") == "Changes"]
 
         self.assertTrue(named)
         self.assertEqual(sorted(named), sorted(sight.label for sight in row.sight.sights))

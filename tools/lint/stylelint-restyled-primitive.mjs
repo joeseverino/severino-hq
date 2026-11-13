@@ -47,14 +47,19 @@ const rule = (primary) => (root, result) => {
   const valid = validateOptions(result, ruleName, {
     actual: primary,
     possible: {
-      primitives: [(each) => typeof each?.name === "string" && typeof each?.classes === "string" && Array.isArray(each?.sheets)],
+      primitives: [(each) => typeof each?.name === "string" && typeof each?.classes === "string" && Array.isArray(each?.sheets) && (each.parts === undefined || Array.isArray(each.parts))],
       sheet: [(value) => typeof value === "string"],
     },
   });
   if (!valid) return;
   const { primitives, sheet = "" } = primary;
-  // Any class but a primitive's own and a state (`is-*`, `has-*`) is a page's.
-  const vocabulary = [...primitives.map((each) => each.classes), String.raw`is-[\w-]+`, String.raw`has-[\w-]+`].join("|");
+  // Any class but a primitive's own, a part one declares, and a state
+  // (`is-*`, `has-*`) is a page's.
+  const vocabulary = [
+    ...primitives.flatMap((each) => [each.classes, ...(each.parts ?? [])]),
+    String.raw`is-[\w-]+`,
+    String.raw`has-[\w-]+`,
+  ].join("|");
   const pageClass = String.raw`${notInside}\.(?!(?:${vocabulary})(?![-\w]))[a-zA-Z_][\w-]*`;
   const checked = primitives
     .filter((each) => !each.sheets.includes(sheet))

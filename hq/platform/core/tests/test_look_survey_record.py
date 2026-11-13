@@ -5,10 +5,13 @@ var/gate/look-survey-<engine>.txt, says FAILED."""
 
 import io
 import os
+import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
 
+from django.conf import settings
 from django.test import SimpleTestCase, override_settings, tag
 
 from . import look
@@ -100,3 +103,84 @@ class SurveyRecordTests(SimpleTestCase):
         failed, said, _ = self.close({}, {}, ("template:example/_none.html",))
         self.assertEqual(failed, [])
         self.assertIn("undrawn: template:example/_none.html\njudged: none", said)
+
+    def test_a_survey_record_holds_across_a_change_outside_its_inputs_and_not_across_a_template(self):
+        found = {("example/one", 402): []}
+        _, said, _ = self.close(found, found)
+        inputs = next(line for line in said.splitlines() if line.startswith("inputs: ")).split()[1:]
+        with tempfile.TemporaryDirectory() as folder:
+            env = {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1", "PATH": os.environ.get("PATH", "")}
+
+            def git(*args, check=True):
+                return subprocess.run(
+                    ["git", "-C", folder, *args], check=check, env=env, capture_output=True, text=True
+                )
+
+            def tree(**files):
+                for name, text in files.items():
+                    Path(folder, name).parent.mkdir(parents=True, exist_ok=True)
+                    Path(folder, name).write_text(text, encoding="utf-8")
+                git("add", "--all")
+                return git("write-tree").stdout.strip()
+
+            git("init", "--quiet")
+            judged = tree(
+                **{"templates/example/page.html": "a", "tests/shell/test-example.sh": "a", "docs/Example.md": "a"}
+            )
+            outside = tree(**{"tests/shell/test-example.sh": "b", "docs/Example.md": "b"})
+            drawn = tree(**{"templates/example/page.html": "b"})
+
+            kept = git("diff", "--quiet", judged, outside, "--", *inputs, check=False)
+            self.assertEqual(kept.returncode, 0, f"a shell test and a doc are no input of a survey: {kept.stderr}")
+            moved = git("diff", "--name-only", "-z", judged, drawn, "--", *inputs)
+            named = moved.stdout.rstrip("\0").split("\0")
+            self.assertEqual(named, ["templates/example/page.html"], "a template is an input, named")
+
+    def test_another_checkouts_survey_names_no_inputs_of_this_one(self):
+        found = {("example/one", 402): []}
+        _, said, _ = self.close(found, found, HQ_GATE_TREE=tempfile.gettempdir())
+        self.assertNotIn("inputs:", said, "an extension's record holds only for the tree it judged")
+
+
+# Every module of HQ's checkout the look and the pages it draws load: the look
+# itself, every view the URLs reach and every template library, in a fresh
+# interpreter so no other test's imports count.
+_LOADED = """
+import sys, django
+django.setup()
+from django.template import engines
+from django.urls import get_resolver
+from hq.platform.core.tests import look
+
+def walk(patterns):
+    for pattern in patterns:
+        walk(getattr(pattern, "url_patterns", ()))
+
+walk(get_resolver().url_patterns)
+engines["django"].engine.template_libraries
+print("\\n".join(sorted({getattr(m, "__file__", None) or "" for m in list(sys.modules.values())})))
+"""
+
+
+@tag("source", "tree")
+class SurveyInputsTests(SimpleTestCase):
+    """A survey's inputs leave out no file the look or a page loads, so a
+    survey landing keeps across a change never covers a change it read."""
+
+    def test_every_module_the_look_and_its_pages_load_is_an_input(self):
+        root = Path(settings.BASE_DIR).resolve()
+
+        def tracked(*pathspecs):
+            listed = subprocess.run(
+                ["git", "-C", root, "ls-files", "-z", "--", *pathspecs], check=True, capture_output=True
+            )
+            return set(listed.stdout.decode().split("\0")) - {""}
+
+        env = os.environ | {"DJANGO_SETTINGS_MODULE": settings.SETTINGS_MODULE}
+        run = [sys.executable, "-c", _LOADED]
+        loaded = subprocess.run(run, check=False, cwd=root, env=env, capture_output=True, text=True)
+        self.assertEqual(loaded.returncode, 0, loaded.stderr)
+        files = {Path(path).resolve() for path in loaded.stdout.splitlines() if path}
+        ours = {str(path.relative_to(root)) for path in files if path.is_relative_to(root)} & tracked()
+        self.assertTrue(ours, "the look loads modules of this checkout")
+        self.assertEqual(sorted(ours - tracked(*look.SURVEY_INPUTS)), [], "a module a page loads is outside the inputs")

@@ -104,20 +104,23 @@ def remedies(context, actions):
 
 
 @register.simple_tag
-def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False, pressed=None):
+def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False, pressed=None, hit=False):
     # A button of words is named by them, so its title only describes it; a
     # glyph (an arrow, a star) says nothing aloud and is named by its title.
-    # A toggle (`pressed`, true or false) says aloud which way it stands.
+    # A toggle (`pressed`, true or false) says aloud which way it stands. A
+    # control drawn smaller than a target asks for its hit area (`hit`,
+    # page.css).
     glyph = not any(character.isalnum() for character in str(label))
     attributes = {"name": name, "value": value, "title": title, "aria-label": title if glyph else ""}
     if pressed is not None:
         attributes["aria-pressed"] = "true" if pressed else "false"
     return format_html(
-        '<button type="submit" form="{}" formaction="{}" class="{}"{}{}>{}</button>',
+        '<button type="submit" form="{}" formaction="{}" class="{}"{}{}{}>{}</button>',
         POST_FORM_ID,
         url,
         css,
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
+        mark_safe(" data-hit") if hit else "",
         mark_safe(" disabled") if disabled else "",
         breakable(label),
     )

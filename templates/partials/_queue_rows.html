@@ -2,7 +2,7 @@
 The queue's rows, one per item, for the queue's table (`_work_queue.html`,
 `_queue_groups.html`). Its face is `application.decisions`: how urgent, as a
 word after the title when it is urgent; what is wrong, its one line of meaning and since when; then what can
-be pressed (the first two; any more, `queue-later`, wait in the opened line),
+be pressed (the first two; any more, `row-later`, wait in the opened line),
 and where the reader sorts their own queue (`triage`) Dismiss or Restore at
 the row's end. Everything taller (the meaning in full, facts, advice, the
 steps and their commands, the reason it cannot be done from here, the pages
@@ -52,7 +52,7 @@ whole.
   <!-- ast-grep-ignore: hand-drawn-row-actions --> the queue row itself: Dismiss and Restore are the reader's own triage of an item, posted by its key
   {% endcomment %}<td class="queue-act">
     {% if item.actions and not item.aside or triage %}<div class="queue-buttons">{% endif %}
-    {% remedies item.actions as shown %}{% if shown and not item.aside %}<div class="attention-actions narrow-more">{% include "partials/_action_links.html" with actions=shown|slice:":2" only %}</div>{% if shown|length > 2 %}<div class="attention-actions narrow-more queue-later">{% include "partials/_action_links.html" with actions=shown|slice:"2:" only %}</div>{% endif %}{% endif %}
+    {% remedies item.actions as shown %}{% if shown and not item.aside %}<div class="attention-actions narrow-more">{% include "partials/_action_links.html" with actions=shown|slice:":2" only %}</div>{% if shown|length > 2 %}<div class="attention-actions narrow-more row-later">{% include "partials/_action_links.html" with actions=shown|slice:"2:" only %}</div>{% endif %}{% endif %}
     {% if triage %}
     <div data-triage>
       {% if item.aside %}

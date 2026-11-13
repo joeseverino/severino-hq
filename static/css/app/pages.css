@@ -121,10 +121,6 @@
 .bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: 4px; background: var(--bg-tint); }
 .bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
 
-/* A held request: who asks, what would happen, the decision. Their own words, a field of their own the card's padding holds. */
-.approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); color: var(--ink-2); font-size: var(--text-sm); }
-.approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
-
 .policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; color: var(--muted-2); }
 .policy-effect.effect-destructive { color: var(--danger); }
 .policy-effect.effect-infrastructure_change { color: var(--warn); }

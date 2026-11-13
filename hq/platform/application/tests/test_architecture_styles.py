@@ -9,7 +9,7 @@ from django.test import SimpleTestCase, tag
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
 
-from .hand_rolled import BASELINE, hand_rolled_classes, held, literal_classes, lowered, written
+from .hand_rolled import hand_rolled_classes, literal_classes
 from .source import template_files
 
 
@@ -602,49 +602,15 @@ class TemplateClassStyleTests(SimpleTestCase):
 
     def test_host_templates_draw_only_the_shared_parts_classes(self):
         """A host page is drawn from the shared parts, so a class of its own is
-        a hand-rolled part the survey never sees and an extension cannot draw.
-        The baseline holds the pages not yet moved onto parts, and only
-        shrinks: ``mise run fix`` drops each pair the reader no longer finds."""
+        a hand-rolled part the survey never sees and an extension cannot draw."""
 
-        found = hand_rolled_classes()
-        baseline = held(BASELINE.read_text(encoding="utf-8"))
         self.assertEqual(
-            sorted(f"templates/{name}: .{word}" for name, word in found - baseline),
+            sorted(f"templates/{name}: .{word}" for name, word in hand_rolled_classes()),
             [],
             "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a template "
             "the component catalog draws); a widget with no part becomes one, with its own entry in "
             "hq/platform/core/tests/browser/catalog/families/",
         )
-        self.assertEqual(
-            sorted(f"templates/{name}: .{word}" for name, word in baseline - found),
-            [],
-            "no longer hand-rolled: mise run fix drops it from the baseline",
-        )
-
-    def test_the_baseline_is_as_fix_writes_it(self):
-        """Sorted, one pair a line, with no merge conflict left in it, so two
-        branches' drops merge."""
-
-        text = BASELINE.read_text(encoding="utf-8")
-        self.assertEqual(text, written(held(text)), "tools/lint/hand-rolled.txt: run mise run fix, which writes it")
-
-    def test_fix_drops_each_pair_no_longer_found_and_adds_none(self):
-
-        text = written({("a.html", "gone"), ("a.html", "kept"), ("b.html", "gone")})
-        lowered_text = lowered(text, {("a.html", "kept"), ("a.html", "new")})
-        self.assertEqual(held(lowered_text), {("a.html", "kept")})
-        self.assertEqual(lowered_text, written({("a.html", "kept")}))
-
-    def test_fix_settles_a_merge_conflict_from_both_sides(self):
-        """Two branches that each drop a pair conflict on neighboring lines; the
-        baseline reads as both sides' pairs, so fix keeps what is still found."""
-
-        conflicted = "<<<<<<< HEAD\na.html one\n=======\na.html two\n>>>>>>> theirs\nb.html three\n"
-        self.assertEqual(
-            lowered(conflicted, {("a.html", "two"), ("b.html", "three")}),
-            written({("a.html", "two"), ("b.html", "three")}),
-        )
-        self.assertNotEqual(conflicted, written(held(conflicted)), "a conflict left in the file fails the check")
 
     def test_literal_classes_reads_attributes_and_tag_options(self):
 

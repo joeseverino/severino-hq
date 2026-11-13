@@ -171,13 +171,6 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
    of a page about something else: a line of the table's own size and weight,
    so the section's own rows stay what it is about. */
 .queue-table.is-dense .attention-title { font-size: var(--text-sm); font-weight: 500; }
-/* A table with no headings is read as one column, so the queue counts its own two for the share; with no script in a narrow box the title and the buttons share one. */
-.data-table.queue-table { --columns: 2; }
-@media (scripting: none) {
-  @container table-region (width < 640px) {
-    .data-table.queue-table { --columns: 1; }
-  }
-}
 .queue-table .queue-what { min-width: 10rem; }
 .queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: var(--space-4); }
 /* What a row offers, then the reader's own dismiss, side by side on one line whatever the cell's white-space says, so the column asks for that line and the other columns give way; the dismiss is one word and never gives way. */
@@ -189,9 +182,6 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
    narrow table, gives the title the room its padding would keep. */
 .queue-table .queue-act:not(:has(> *)) { padding: 0; }
 @media (scripting: enabled) {
-  /* Past the first two, a row's buttons wait in the line beneath at any
-     width, with the rest of what it holds. */
-  .queue-table > tbody > tr:not(.row-detail) .queue-later { display: none; }
   @container style(--box: narrow) {
     .queue-table .queue-act:not(:has(> :not(.narrow-more, .queue-buttons), .queue-buttons > :not(.narrow-more))) { padding: 0; }
     /* On a phone the title has the row: Dismiss is a mark at its end, still
@@ -200,25 +190,8 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
     .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss::before { content: "\00d7" / ""; font-size: var(--text-lg); line-height: 1; }
   }
 }
-/* The opened line (table_tags._detail_row): what the row holds back, then one place for every button the row holds, each the line's width on a phone, in one track that asks the line for no width (`minmax(0, 1fr)`) so a long label never widens the table. A contained button (`contain: inline-size`) in a column would do the same, but WebKit measures its height at no width and draws it hundreds of pixels tall. */
+/* The opened line (table_tags._detail_row) is flat (`data-line`, tables.css): what the row holds back, then one place for every button the row holds. */
 .queue-more > :first-child { margin-top: 0; }
-.queue-table .row-detail .row-columns { padding: 0; background: none; }
-/* One column: each part spans both of the line's tracks. */
-.queue-table .row-detail .row-columns > * { grid-column: 1 / -1; }
-.queue-table .row-detail .row-columns > dd { display: flex; flex-wrap: wrap; gap: var(--space-4); }
-.queue-table .row-detail .row-columns > dd > .attention-actions { display: contents; }
-/* The buttons past the first two wait in the line at any width, so in a whole
-   box the line keeps them and lets the first two stay in the row. */
-@container style(--box: whole) {
-  .queue-table .row-columns:has(> dd[data-narrow] > .queue-later) { display: grid; }
-  .queue-table .row-columns > dd[data-narrow]:has(> .queue-later) { display: flex; }
-  .queue-table .row-columns > dd[data-narrow] > .narrow-more:not(.queue-later) { display: none; }
-}
-@container style(--box: narrow) {
-  /* stylelint-disable-next-line rule-selector-property-disallowed-list -- one track that asks the line for no width, in place of a contained button, which WebKit draws hundreds of pixels tall */
-  .queue-table .row-detail .row-columns > dd { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .queue-table .row-detail .row-columns > dd .btn { justify-content: center; white-space: normal; text-align: center; }
-}
 /* A family: how bad, what kind and how many, opening to its rows (set in
    under it as any folded row is, tables.css). Its name heads them, so it
    reads below a title. */

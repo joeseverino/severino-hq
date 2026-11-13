@@ -174,10 +174,10 @@ class SheetTests(SimpleTestCase):
             and not CLIPPED.search(body)
         ]
 
-        # An opened queue row on a phone stands its buttons one to a line
-        # across the row, so a label longer than the phone has nothing left
-        # to give way and wraps.
-        spans_the_line = "cards.css: .queue-table .row-detail .row-columns > dd .btn"
+        # A flat line beneath an opened row on a phone stands its buttons one
+        # to a line across it, so a label longer than the phone has nothing
+        # left to give way and wraps.
+        spans_the_line = 'tables.css: .data-table[data-line="flat"] .row-columns > dd .btn'
         wrapped = [
             f"{name}: {selector}"
             for name, selector, body in rules

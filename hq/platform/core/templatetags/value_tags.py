@@ -716,6 +716,9 @@ slotted("steps", "partials/_steps.html", ("content",), frozenset(("numbered",)))
 slotted("step", "partials/_step.html", ("content",), frozenset(("icon", "tone", "done", "title")))
 # A row of links, each a chip of its own.
 slotted("link_chips", "partials/_link_chips.html", ("content",), frozenset())
+# The content column of the page frame, which base.html and the component
+# catalog draw in.
+slotted("page_main", "partials/_page_main.html", ("content",), frozenset())
 slotted(
     "card",
     "partials/_card.html",

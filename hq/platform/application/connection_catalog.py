@@ -80,6 +80,9 @@ EVIDENCE_DETAILS = {
 # Evidence that settles the question: the ability may be performed and HQ can
 # say why. The rest either cannot be performed or has not been shown.
 PROVEN_EVIDENCE = frozenset({"verified", "coarse", "not_applicable"})
+# Evidence that says the ability cannot be performed, drawn as a fault; the
+# rest of what is unproven is said quietly.
+FAILED_EVIDENCE = frozenset({"missing", "revoked"})
 
 # What HQ can say about the credential's permissions, as the one line under
 # the state. Blank where the owner can do nothing about it: a connection type
@@ -207,6 +210,10 @@ class ConnectionAbilityState:
     @property
     def proven(self) -> bool:
         return self.evidence in PROVEN_EVIDENCE
+
+    @property
+    def evidence_tone(self) -> str:
+        return "serious" if self.evidence in FAILED_EVIDENCE else ""
 
 
 # Actions derived from the family's spec rather than from one connection.

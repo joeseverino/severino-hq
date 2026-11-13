@@ -111,6 +111,27 @@ REPORT = "report.txt"
 # mise-tasks/dev/look runs a survey so, kept as `look-survey-<engine>`.
 GATE_DETAIL = "HQ_GATE_DETAIL"
 GATE_RERUN = "HQ_GATE_RERUN"
+# The checkout the gate judges when it is not this one, as an extension's
+# survey names its own (tools/gate/verdict.py's JUDGED_FOLDER).
+GATE_TREE = "HQ_GATE_TREE"
+# What a survey's verdict can read, as the git pathspecs of its record's
+# `inputs:` line: landing keeps a passing survey for a tree that differs from
+# the one it judged only outside them. It is the whole tree less what no page,
+# seed, probe or this look reads, since a path missed by an exclusion costs a
+# rerun while a path missed by an inclusion keeps a survey that should run
+# again. The Go controller is a separate program; its JSON contracts, which
+# pages read, stay in. Every module the look and the pages load is held inside
+# by test_look_survey_record.py.
+SURVEY_INPUTS = (
+    ".",
+    ":(exclude)docs",
+    ":(exclude)tests/shell",
+    ":(exclude)tests/fuzz",
+    ":(exclude).github",
+    ":(exclude,glob)controller/**/*.go",
+    ":(exclude,glob)*.md",
+    ":(exclude)LICENSE",
+)
 # A rule's verdict when it judged no page at any width: none matched, or none drew.
 JUDGED_NOTHING = "{} judged no page: none matched, or none drew"
 # The flags that change what a run draws or reads, named in what it says it judged.
@@ -1240,6 +1261,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             f"at: {', '.join(dict.fromkeys(str(width) for _, width in self.judged_at)) or 'none'}",
             f"with: {' '.join(drawn) or 'the defaults'}",
         ]
+        # The inputs name this checkout's paths, so another checkout's record
+        # holds only for the tree it judged.
+        judged = os.environ.get(GATE_TREE)
+        if not judged or Path(judged).resolve() == Path(settings.BASE_DIR).resolve():
+            lines.append(f"inputs: {' '.join(SURVEY_INPUTS)}")
         Path(into).write_text("\n".join(lines) + "\n", encoding="utf-8")
         pages = list(dict.fromkeys(blamed)) or list(asked.repeated(_ASKED))
         engine = asked.text("engine") or "webkit"

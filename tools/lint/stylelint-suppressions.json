@@ -1,14 +1,4 @@
 {
-  "static/css/app/cards.css": {
-    "hq/restyled-primitive": {
-      "count": 12
-    }
-  },
-  "static/css/app/connection.css": {
-    "hq/restyled-primitive": {
-      "count": 2
-    }
-  },
   "static/css/app/cuts.css": {
     "hq/restyled-primitive": {
       "count": 2

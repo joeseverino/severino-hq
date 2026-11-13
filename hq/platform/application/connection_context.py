@@ -187,6 +187,13 @@ class ConnectionRow:
     def state_line_quiet(self) -> bool:
         return not self._permissions_missing and self.connection.state_line_quiet
 
+    @property
+    def state_line_tone(self) -> str:
+        """The tone of ``state_line``: a fault when a permission is missing,
+        else none, and the line reads as context."""
+
+        return "serious" if self._permissions_missing or self.connection.authority == "missing" else ""
+
     def as_dict(self) -> dict[str, Any]:
         # Every ability and every sight is under ``reads`` or ``changes``, the
         # lists the page draws, so no client rebuilds them from the parts.

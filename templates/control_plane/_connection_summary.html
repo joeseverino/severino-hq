@@ -1,0 +1,5 @@
+{% comment %}
+How HQ's connections stand, the head's line of facts (`page_facts`): how
+many, how many need attention, where the secrets live, the oldest reading,
+and a read of everything still waiting.
+{% endcomment %}{{ connections.connection_count|counted:"connection" }}{% for count, state in connections.attention_states %}{% dot %}{% status count state tone="attention" pill=False %}{% endfor %}{% if connections.all_custodied %}{% dot %}No secrets stored in HQ{% endif %}{% if connections.oldest %}{% dot %}Oldest reading <a href="#{{ connections.oldest.label|connection_anchor }}">{{ connections.oldest_name|breakable }}</a>{% dot %}{% include "partials/_reading_age.html" with at=connections.oldest.observed_at only %}{% endif %}{% if connections.reading_everything_since %}{% dot %}{% words "infrastructure.controller.refresh" "all" %} asked {{ connections.reading_everything_since|ago }}. {% waiting %}{% endif %}

@@ -13,10 +13,11 @@ from django.contrib.messages.storage.base import Message
 from django.core.paginator import Paginator
 from django.template import Template
 
+from hq.domains.control_plane.models import ApprovalRequest
 from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
 from hq.platform.application.appearance import Theme
-from hq.platform.application.approval_review import SUMMARY, ChangePreview, compare, grouped
+from hq.platform.application.approval_review import SUMMARY, Asked, ChangePreview, compare, grouped
 from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
@@ -35,6 +36,7 @@ from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHA
 from hq.platform.application.request_connection import Connection, Peering
 from hq.platform.application.request_identity import Identity
 from hq.platform.application.request_layers import Layer
+from hq.platform.application.security import MCP_INTERFACE
 from hq.platform.application.tables import TableSort
 from hq.platform.application.tailnet import Device
 from hq.platform.application.tailnet_presence import Presence
@@ -261,6 +263,33 @@ _WIDE = (
 
 # What a part that says how long ago is drawn against.
 _NOW = datetime.now(UTC)
+
+
+def _approval(state, **decided):
+    """An approval card's entry (approvals.review()) for a request an agent
+    asked with its reason, in ``state``, with what its decision said."""
+
+    held = ApprovalRequest(
+        id=UUID("00000000-0000-4000-8000-000000000001"),
+        state=state,
+        requested_interface=MCP_INTERFACE,
+        reason="Adopt the example playbooks so the example-host-01 upgrade can run in tonight's window.",
+        created_at=_NOW - timedelta(minutes=12),
+        expires_at=_NOW + timedelta(hours=23),
+        **decided,
+    )
+    pending = state == ApprovalRequest.State.PENDING
+    return {
+        "entry": {
+            "held": held,
+            "tone": "attention" if pending else "",
+            "asked": Asked("example-agent", "wants to adopt the playbooks of ", "a commit", " from your repository"),
+            "preview": compare({}, _CHANGED_AFTER, label="Would change"),
+            "warnings": ("Example run gains the privilege example.cache_admin.",) if pending else (),
+            "resource_url": "/example/",
+            "resource_label": "Playbooks",
+        }
+    }
 
 
 def _route():
@@ -1505,6 +1534,21 @@ ENTRIES = {
     # A change's before and after ({% change_table %}), each state its two
     # callers draw: an approval card's preview and an audit event's changes.
     # An empty one draws nothing beside what its section already says.
+    # A held request (partials/approval_card.html): one waiting, its reason
+    # among its facts and its decision's two buttons, and one decided, with
+    # the note its decider wrote.
+    "part/approval-pending": Entry(
+        '{% include "partials/approval_card.html" %}', _approval(ApprovalRequest.State.PENDING)
+    ),
+    "part/approval-decided": Entry(
+        '{% include "partials/approval_card.html" %}',
+        _approval(
+            ApprovalRequest.State.REJECTED,
+            decided_actor="example-person",
+            decided_at=_NOW - timedelta(minutes=3),
+            decision_note="The upgrade waits for the example-host-02 backup to finish; ask again tomorrow.",
+        ),
+    ),
     "part/change-table-empty": Entry(
         '{% section "Example request" %}<p>An example start, which changes no field.</p>'
         "{% change_table preview %}{% endsection %}",

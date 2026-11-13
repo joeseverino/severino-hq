@@ -1,13 +1,13 @@
 {% if is_paginated %}
 <nav class="pagination" aria-label="Pages">
   {% if page_obj.has_previous %}
-    <a href="{% querystring page=page_obj.previous_page_number %}"><span aria-hidden="true">←</span>&nbsp;Prev</a>
+    <a data-hit href="{% querystring page=page_obj.previous_page_number %}"><span aria-hidden="true">←</span>&nbsp;Prev</a>
   {% else %}
     <span class="muted"><span aria-hidden="true">←</span>&nbsp;Prev</span>
   {% endif %}
   <span class="muted">Page {{ page_obj.number|breakable }}{% if paginator.counted is not False %} of {{ paginator.num_pages|breakable }}{% endif %}</span>
   {% if page_obj.has_next %}
-    <a href="{% querystring page=page_obj.next_page_number %}">Next{% arrow %}</a>
+    <a data-hit href="{% querystring page=page_obj.next_page_number %}">Next{% arrow %}</a>
   {% else %}
     <span class="muted">Next{% arrow %}</span>
   {% endif %}

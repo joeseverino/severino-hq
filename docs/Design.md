@@ -162,6 +162,10 @@ but the names over its column, and its cells stand closer in a narrow box
 and where it shares a row with a chart (`data-marks="compact"`). Its older
 periods are `wide-only`, so a narrow box keeps the newest three.
 
+A table with no headings has none to count, so it says how many columns its
+rows hold (`data-columns="2"` on the table), and the share is counted from
+that.
+
 A table still wider in a narrow box is tight (`data-tight`). Its headings,
 times, statuses and a value's parts wrap at their spaces, and the name gives up
 the room it holds out for. Its row's controls stand one above another (only
@@ -256,6 +260,12 @@ first, then each part under its column's name (`dl.row-columns`).
   height.
 - The line holds a copy of what the row holds back, so the row's own cells
   stay as they were.
+- A narrow part also marked `row-later` waits in the line at any width, and
+  its row opens at any width for it: a row's buttons past the first few.
+- A table whose line is the rest of what a row says and does
+  (`data-line="flat"` on the table) draws it flat: one column on no panel,
+  the buttons of its parts side by side, and on a phone each the line's
+  width, one to a line.
 - The browser's find reaches a closed row's line: `tables.js` hides its parts
   `until-found` (never the server, since a browser without it would hide the
   line for good), and a match opens the row through `beforematch`.
@@ -273,7 +283,7 @@ it, last in the row's cell under the heading that keeps the gutter
 (`table_heading ... gutter=True`), and marks that column's cells `row-gutter`;
 a toggle written by hand there is refused. Only a table with no headings to
 name its gutter draws its own (`{% row_toggle %}`). It shows only where the row holds something back now: a
-column that left with something in it, a `narrow-more` or `row-below` part, a
+column that left with something in it, a `narrow-more`, `row-later` or `row-below` part, a
 fold, or a value `tables.js` found cut (`data-cut`).
 
 A run of short parts in a cell (a project's technologies, what a connection
@@ -688,6 +698,13 @@ nothing. *Gate:* `frames filled` in the layout survey fails a frame whose lines
 stack down its start, each ending short of two fifths of its width, for long
 enough to matter. It also fails a frame whose lower half or more stands empty
 below what it holds.
+
+**The content column is drawn by `{% page_main %}`.** base.html draws every
+page's content in it (`partials/_page_main.html`), and the component catalog
+draws each of its entries in the same part, so an entry stands where a page's
+content does. A page's own sheet that lays the column out for one page (the
+API reference's) reaches it as `.content`, the class the part writes. It is the
+host's frame; an extension's page is drawn in it and never writes it.
 
 **A card is drawn by `{% card %}`.** `{% card css="example"
 heading="example-heading" %}...{% endcard %}` frames what it encloses
@@ -1604,8 +1621,12 @@ page and fails on one that writes.
 
 **A control is big enough to hit.** A target is hit through at least 24 by 24
 CSS px (`--target-min`, WCAG 2.5.8 Target Size Minimum). That counts the area
-its `::before` or `::after` hangs over the space beside it. A smaller target
-passes only through one of the criterion's exceptions:
+its `::before` or `::after` hangs over the space beside it. A control drawn
+smaller asks for that area in its own partial with `data-hit` (`hit=True` on
+`{% post_button %}`), or with `data-hit="coarse"` where it is packed too close
+to its neighbors for one under a mouse; page.css hangs it, and the quiet link
+(`.subtle-link`) always has one. A smaller target passes only through one of
+the criterion's exceptions:
 
 - Spacing: "if a 24 CSS pixel diameter circle is centered on the bounding box
   of each, the circles do not intersect another target or the circle for

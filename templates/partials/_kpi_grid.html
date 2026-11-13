@@ -14,7 +14,7 @@
     {% endcomment %}<a class="kpi {% if item.is_zero %}is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi {% if item.is_zero %}is-zero{% endif %}">{% endif %}
       <span class="label">{% if item.icon %}{% include "partials/_icon.html" with name=item.icon only %}{% endif %}{{ item.label|breakable }}</span>
       <span class="kpi-figure">
-        {% if item.url and item.holds_links %}<a class="value" href="{{ item.url }}">{% else %}<span class="value">{% endif %}{% if item.tone %}{% status item.value tone=item.tone pill=False %}{% else %}{{ item.value|breakable }}{% endif %}{% if item.url and item.holds_links %}</a>{% else %}</span>{% endif %}
+        {% if item.url and item.holds_links %}<a class="value" data-hit href="{{ item.url }}">{% else %}<span class="value">{% endif %}{% if item.tone %}{% status item.value tone=item.tone pill=False %}{% else %}{{ item.value|breakable }}{% endif %}{% if item.url and item.holds_links %}</a>{% else %}</span>{% endif %}
         {% comment %}
         What the figure looks like: dots for a part of a whole, a line for a
         direction. Either repeats what the value and its note already say, so a

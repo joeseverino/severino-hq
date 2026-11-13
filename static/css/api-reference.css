@@ -17,16 +17,16 @@
    loading line, the mount and the line said without script share one cell,
    which takes the window under the header from the first paint. The viewer
    draws into that cell as the line goes, so nothing of the page moves. */
-.content:has(> .api-reference) {
+.content:has(> [data-vendored]) {
   display: grid;
   grid-template: minmax(calc(100dvh - var(--site-header-height)), auto) / minmax(0, 1fr);
   max-width: none; padding: 0; overflow-x: visible; isolation: isolate;
 }
-.content > :is(.api-reference-status, .api-reference, noscript) { grid-area: 1 / 1; margin: 0; }
+.content > :is(.notice, [data-vendored], noscript) { grid-area: 1 / 1; margin: 0; }
 
 /* The viewer pins its sidebar and section bars this far down, under HQ's
    header, which is one row of one height at every width. */
-.api-reference {
+[data-vendored] {
   --scalar-custom-header-height: var(--site-header-height);
   /* The longest path the document serves, set by api-reference.js from what
      the page counts (hq/platform/api/reference.py); without it a list is as
@@ -39,16 +39,17 @@
    margin of its own; the page's scroll padding for HQ's header would be added
    on top, and land each entry that much lower, under the end of the one
    before it. */
-:root:has(.api-reference) { scroll-padding-block-start: 0; }
+:root:has([data-vendored]) { scroll-padding-block-start: 0; }
 
 /* Said until the viewer has mounted; one that has not mounted after a while
-   is said to have failed, with the document itself. Both lines share one
-   cell, and the change is a delayed step of the stylesheet, not a timer. */
-.api-reference-status { display: grid; align-content: start; padding: var(--content-pad); color: var(--muted); }
-.api-reference-status > p { grid-area: 1 / 1; margin: 0; }
-.api-reference-status:has(~ .api-reference:not(:empty)) { display: none; }
-.api-reference-loading { animation: api-reference-gone 0s 10s forwards; }
-.api-reference-failed { visibility: hidden; animation: api-reference-late 0s 10s forwards; }
+   is said to have failed, with the document itself. The notice's two lines
+   share one cell, and the change is a delayed step of the stylesheet, not a
+   timer. */
+.content > .notice { display: grid; align-self: start; margin: var(--content-pad); }
+.content > .notice > p { grid-area: 1 / 1; margin: 0; }
+.content > .notice:has(~ [data-vendored]:not(:empty)) { display: none; }
+.content > .notice > p:first-child { animation: api-reference-gone 0s 10s forwards; }
+.content > .notice > p:last-child { visibility: hidden; animation: api-reference-late 0s 10s forwards; }
 @keyframes api-reference-late { to { visibility: visible; } }
 @keyframes api-reference-gone { to { visibility: hidden; } }
 
@@ -169,26 +170,26 @@
    levels deep; for every other section the viewer falls back to the first
    such trail in the document, which describes nothing on screen. The sidebar
    already marks the section in view, so the bar is not drawn. */
-.api-reference .scalar-app .context-bar { display: none; }
+[data-vendored] .scalar-app .context-bar { display: none; }
 
 /* What is left of the sidebar's foot once its controls are configured away is
    a link out to the vendor. */
-.api-reference .scalar-app .darklight-reference { display: none; }
+[data-vendored] .scalar-app .darklight-reference { display: none; }
 
 /* A group has no operations of its own: its section is its heading, over the
    domains it holds, with no empty list beside it. */
-.api-reference .scalar-app .section-column:has(> .endpoints-card:not(:has(a))) { display: none; }
+[data-vendored] .scalar-app .section-column:has(> .endpoints-card:not(:has(a))) { display: none; }
 
 /* A tag's list of operations sits beside its description only where each path
    in it fits on one line; elsewhere it takes the row under the description.
    The list asks for its widest line and the description for a reading
    measure, and the row wraps when both do not fit, so the browser decides
    from what each holds, at any width the viewer's own breakpoint misses. */
-.api-reference .scalar-app .section-columns:has(> .section-column > .endpoints-card) {
+[data-vendored] .scalar-app .section-columns:has(> .section-column > .endpoints-card) {
   flex-flow: row wrap;
   gap: var(--space-12) var(--space-24);
 }
-.api-reference .scalar-app .section-columns:has(> .section-column > .endpoints-card) > .section-column {
+[data-vendored] .scalar-app .section-columns:has(> .section-column > .endpoints-card) > .section-column {
   flex: 1 1 20rem;
   padding-block-start: 0;
   &:has(> .endpoints-card) { flex: 0 1 max-content; }
@@ -199,7 +200,7 @@
    paths the page serves), so every list is one width and its edges
    line up from section to section; narrower than that, a list stacks under
    its description and a path wraps only where the row itself is narrower. */
-.api-reference .scalar-app .endpoints .endpoint-path {
+[data-vendored] .scalar-app .endpoints .endpoint-path {
   display: block;
   inline-size: var(--longest-path);
   max-inline-size: 100%;
@@ -210,16 +211,16 @@
 /* Every heading the viewer draws takes one size, its `--font-size`; each
    level of the tree is given a step of its own: a section at the top (a group
    or a domain outside one), a domain inside a group, then an operation. */
-.api-reference .scalar-app .section-header:has(h2) { --font-size: var(--text-4xl); }
-.api-reference .scalar-app .tag-section-nested .section-header:has(h2) { --font-size: var(--text-2xl); }
-.api-reference .scalar-app .operation-title { --font-size: var(--text-xl); }
+[data-vendored] .scalar-app .section-header:has(h2) { --font-size: var(--text-4xl); }
+[data-vendored] .scalar-app .tag-section-nested .section-header:has(h2) { --font-size: var(--text-2xl); }
+[data-vendored] .scalar-app .operation-title { --font-size: var(--text-xl); }
 
 /* A path in a section's list of operations wraps at the card's edge rather
    than running under it, ending a line where api-reference.js marks a path
    may end one. Its parts are lines of one box: as a flex box of its own, the
    viewer's, each part between two marks would be a box beside the next
    (the path rule above). */
-.api-reference .scalar-app .endpoints .endpoint { white-space: normal; }
+[data-vendored] .scalar-app .endpoints .endpoint { white-space: normal; }
 
 /* The viewer cuts a long value to one line behind an ellipsis: a property's
    type and the values it takes, its default and example, an operation's path,
@@ -228,7 +229,7 @@
    what a reader came to read, so it wraps at the column's edge and is read
    whole; a name with no break in it breaks where it meets the edge. The box
    around a property's type clips too, so it is let go with the type. */
-.api-reference .scalar-app :is(
+[data-vendored] .scalar-app :is(
   .property-detail-truncate,
   .property-detail-truncate > .property-detail-value,
   .property-example-value span,
@@ -239,41 +240,41 @@
 
 /* A response's description is clamped to one line beside its status; it is
    what the status means here, so it is read whole. */
-.api-reference .scalar-app .markdown-summary { display: block; white-space: normal; overflow: visible; }
+[data-vendored] .scalar-app .markdown-summary { display: block; white-space: normal; overflow: visible; }
 
 /* A code sample keeps its lines but wraps each at the column's edge, so a
    reader on a phone reads the whole request and answer without scrolling
    sideways; copying it still copies the lines as written. Its highlighting
    sets each token's own spacing, so the tokens are told too. */
-.api-reference .scalar-app .scalar-code-block :is(pre, pre *) { white-space: pre-wrap; overflow-wrap: anywhere; }
+[data-vendored] .scalar-app .scalar-code-block :is(pre, pre *) { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* A hyphen in a path is held to the character after it, so a line ends
    before the hyphen, where api-reference.js marks it may, and never after.
    It is a token of a sample too, so it names the sample's box to outrank the
    rule above. */
-.api-reference .scalar-app :is(.scalar-code-block pre, *) [data-path-hyphen] { text-wrap-mode: nowrap; }
+[data-vendored] .scalar-app :is(.scalar-code-block pre, *) [data-path-hyphen] { text-wrap-mode: nowrap; }
 
 /* An answer's statuses take a second row rather than run past the card. */
-.api-reference .scalar-app .tab-list { flex-wrap: wrap; }
+[data-vendored] .scalar-app .tab-list { flex-wrap: wrap; }
 
 /* Where the viewer stacks an operation into one column, its heading leads and
    the badges and actions follow it. */
 @container references-container (width <= 900px) {
-  .api-reference .scalar-app .operation-layout {
+  [data-vendored] .scalar-app .operation-layout {
     grid-template-areas: "heading" "badge" "description" "examples" "details";
   }
 }
 
 /* One sample language is offered, so there is nothing to choose between. */
-.api-reference .scalar-app .scalar-reference-intro-clients { display: none; }
+[data-vendored] .scalar-app .scalar-reference-intro-clients { display: none; }
 
 @media print {
   /* Paper has no navigation: the sidebar and the bar that opens it are not
      printed, and the content takes the sheet. */
-  .api-reference .scalar-app .t-doc__sidebar { display: none; }
+  [data-vendored] .scalar-app .t-doc__sidebar { display: none; }
 }
 
 /* Without script nothing is loading; the page says where the document is. */
 @media (scripting: none) {
-  .api-reference-status { display: none; }
+  .content > .notice { display: none; }
 }

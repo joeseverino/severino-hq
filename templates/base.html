@@ -56,16 +56,11 @@
 <body data-sign-in="{% url 'login' %}" data-ask-newer="{% newer_reading %}" data-ask-show="{% show_newer %}">
   {% include "partials/_site_header.html" %}
 
-  {% comment %}
-  The page's content is a region (static/js/fragment.js), so a post_button
-  pressed in it is answered in place from the page the post returns to,
-  messages included. It answers no link or form of its own.
-  {% endcomment %}
-  <main class="content" id="content" tabindex="-1" data-fragment>
+  {% page_main %}
     {% include "partials/_messages.html" %}
 
     {% block content %}{% endblock %}
-  </main>
+  {% endpage_main %}
   {# What the head's expect link waits for: the content above is parsed. #}
   <template id="parsed"></template>
   {% include "partials/_notice_frames.html" %}

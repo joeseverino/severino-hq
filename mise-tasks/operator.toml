@@ -62,16 +62,6 @@ run = [
   "eslint --config tools/lint/eslint.config.mjs --suppressions-location tools/lint/eslint-suppressions.json --prune-suppressions 'static/js/**/*.js' >/dev/null || echo 'fix:suppressions: lint:js finds a problem; mise run lint:js names it'",
 ]
 
-# The page-class check's baseline (tools/lint/hand-rolled.txt) only falls the
-# same way: a pair found and not held is a new hand-rolled class, which the
-# check refuses, so this step only drops. It is a task apart from the linters'
-# since its reader is HQ's own, on Django's env, where theirs are Node's.
-["fix:hand-rolled"]
-description = "Drop from the page-class check's baseline each template and class it no longer finds; a new one is left for the check to refuse"
-hide = true
-extends = "django"
-run = "uv run python -m tools.audit_hand_rolled --lower"
-
 # A docs figure is drawn from its source beside it by brand, the renderer its
 # source line names. brand lives on an operator's machine only, so this is no
 # step of fix.

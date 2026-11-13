@@ -337,6 +337,14 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
    margin on the next. */
 .page-head > .btn, .page-head > form { margin-left: auto; }
 .page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
+/* A head's control in its overflow menu (connection.css draws the panel): a
+   row like the others, whatever kind of button it was beside the title.
+   Destructive keeps only its color. */
+.overflow-menu-panel :is(a, button, span).btn {
+  display: flex; width: 100%; justify-content: flex-start; min-height: 0;
+  border: 0; background: none; box-shadow: none;
+}
+.overflow-menu-panel .btn.danger { color: var(--danger); }
 
 /* ── Sections menu ──────────────────────────────────────────────── */
 /* The button belongs to the narrow layout only; a wide screen sets the
@@ -392,23 +400,25 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 
 /* ── Hit areas ──────────────────────────────────────────────────── */
 
-/* A control drawn smaller than 24px square (a sort heading, a "view all"
-   link, a day of the month, the favorite star and the arrows that move it,
-   a dot that leads to a record)
-   is hit through an area at least that size (WCAG 2.5.8) without moving
-   anything: the area is the control's own, hung over the space beside it,
-   where no other control is. The browser gate measures every control
-   (docs/Design.md, "A control is big enough to hit"). A finger is not a cursor: where
-   the pointer is coarse the area grows, and a calendar's marks and bars,
-   packed too close for one under a mouse, are given one too. */
-:is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, .pin-move button, a.kpi-dot, .kpi a.value, .posture-meter) { position: relative; }
-:is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, .pin-move button, a.kpi-dot, .kpi a.value, .posture-meter)::after {
+/* A control drawn smaller than 24px square is hit through an area at least
+   that size (WCAG 2.5.8) without moving anything: the area is the control's
+   own, hung over the space beside it, where no other control is. A control
+   asks for one in its own partial with `data-hit`; the quiet link
+   (`.subtle-link`) is small wherever it is written, so it always has one. The
+   browser gate measures every control (docs/Design.md, "A control is big
+   enough to hit"). A finger is not a cursor: where the pointer is coarse the
+   area grows, and a control packed too close to its neighbors for one under
+   a mouse (a calendar's marks and bars) asks for one there only, with
+   `data-hit="coarse"`. A control positioned in its own sheet keeps that
+   position, which holds its area as well. */
+:is([data-hit]:not([data-hit=coarse]), .subtle-link) { position: relative; }
+:is([data-hit]:not([data-hit=coarse]), .subtle-link)::after {
   content: ""; position: absolute; inset: min(0px, calc(50% - var(--target-min) / 2));
 }
 @media (pointer: coarse) {
-  :is(.month-mark, .month-span),
+  [data-hit=coarse],
   main summary { position: relative; }
-  :is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, .pin-move button, a.kpi-dot, .kpi a.value, .posture-meter, .month-mark, .month-span)::after {
+  :is([data-hit], .subtle-link)::after {
     content: ""; position: absolute;
     inset: min(calc(-1 * var(--space-5)), calc(50% - var(--target-min) / 2)) min(calc(-1 * var(--space-3)), calc(50% - var(--target-min) / 2));
   }

@@ -8,6 +8,7 @@ from django.template import Context, Template
 from django.template.loader import render_to_string
 from django.test import RequestFactory, override_settings
 from django.utils.html import escape
+from django.utils.safestring import mark_safe
 
 from hq.platform.application.pages import Page
 lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
@@ -64,15 +65,18 @@ class _Asked(Context):
 
 
 HEAD = "partials/_page_head.html"
+MAIN = "partials/_page_main.html"
 
 
 def part_page(name, markup, before="", after=""):
     """A page titled ``name``, of HQ's stylesheets, with ``markup`` alone in
-    its main, and the frame's parts base.html draws before and after it."""
+    the content column base.html draws, and the frame's parts it draws before
+    and after it."""
 
+    main = render_to_string(MAIN, {"content": mark_safe(markup)})  # noqa: S308 - the catalog's own rendered markup
     return (
         '<!doctype html><html lang="en"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f"<title>{escape(name)}</title>{stylesheets()}</head>"
-        f'<body>{before}<main class="content" id="content">{markup}</main>{after}</body></html>'
+        f"<body>{before}{main}{after}</body></html>"
     )

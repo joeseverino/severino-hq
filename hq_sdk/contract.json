@@ -3452,7 +3452,8 @@
           "css=",
           "title=",
           "disabled=",
-          "pressed="
+          "pressed=",
+          "hit="
         ],
         "parts": []
       },

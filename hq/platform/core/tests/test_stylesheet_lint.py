@@ -137,6 +137,7 @@ REFUSED = [
     (APP, ".a-page { .card { margin: 0; } }", RESTYLED),
     (APP, ".a-page { & > .notice { margin: 0; } }", RESTYLED),
     (TABLES, ".a-page .btn { color: var(--ink); }", RESTYLED),
+    (CUTS, ".data-table td .btn > .token > .a-page { max-width: 100%; }", RESTYLED),
 ]
 
 PASSED = [
@@ -191,6 +192,7 @@ PASSED = [
         ),
     ),
     ("static/css/app/page.css", ".btn.a-variant { color: var(--ink); }"),
+    (CUTS, ".data-table td .btn > .token:not([data-sole]) > .whole { overflow: hidden; }"),
     (REFERENCE, ".scalar-app .section-header { color: var(--ink); }"),
     (APP, ".a { overflow: auto; } .b { overflow-x: visible; overflow-y: scroll; }"),
     (APP, ".a { max-width: 100%; max-inline-size: 24rem; inline-size: 16ch; } .b { max-width: max-content; }"),

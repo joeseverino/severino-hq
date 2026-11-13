@@ -73,7 +73,7 @@ class AuditTaskTests(SimpleTestCase):
         with tempfile.TemporaryDirectory(dir=ROOT / "var") as kept:
             environment = Path(kept) / "venv"
             run = subprocess.run(
-                ["mise", "run", "audit:hand-rolled"],
+                ["mise", "run", "audit:layers"],
                 cwd=ROOT,
                 env=os.environ | {"UV_PROJECT_ENVIRONMENT": str(environment)},
                 capture_output=True,

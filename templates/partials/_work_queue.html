@@ -10,7 +10,7 @@ something else: one line each, its meaning in the line beneath with the rest.
 {% endcomment %}
 {% if items %}
 {% table_region "Queue" %}
-  <table class="data-table queue-table{% if dense %} is-dense{% endif %}">
+  <table class="data-table queue-table{% if dense %} is-dense{% endif %}" data-columns="2" data-line="flat">
     <tbody>{% with folding=fold|default:False %}{% include "partials/_queue_entries.html" with entries=items|families:folding prefix="problem" %}{% endwith %}</tbody>
   </table>
 {% endtable_region %}

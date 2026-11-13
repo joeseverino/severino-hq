@@ -43,13 +43,6 @@
 /* A link's row keeps its line as a button's does (page.css). */
 .overflow-menu-panel :is(a, span) { white-space: nowrap; }
 .overflow-menu-panel a:hover, .overflow-menu-panel button:hover { color: var(--ink); background: var(--bg-tint); text-decoration: none; }
-/* A control from a page head, in the menu: a row like the others, whatever
-   kind of button it was beside the title. Destructive keeps only its color. */
-.overflow-menu-panel :is(a, button, span).btn {
-  display: flex; width: 100%; justify-content: flex-start; min-height: 0;
-  border: 0; background: none; box-shadow: none;
-}
-.overflow-menu-panel .btn.danger { color: var(--danger); }
 
 .name-list { display: flex; flex-direction: column; gap: var(--space-3); align-items: flex-start; max-width: 40rem; }
 /* Every editable row keeps a column for its Remove, so inputs line up whether

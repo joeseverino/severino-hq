@@ -398,59 +398,10 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--warn) 7%, var(--surface));
 }
-.connection-summary {
-  display: flex;
-  gap: var(--space-4) var(--space-9);
-  flex-wrap: wrap;
-  margin: 0 0 var(--layout-gap);
-  color: var(--muted);
-  font-size: var(--text-xs);
-}
-.connection-summary strong { color: var(--ink); }
-.connection-summary .is-attention strong { color: var(--attn); }
-/* A line of its own size: inline after a <br>, its links would align to the
-   cell's larger line and sit above the words beside them. */
-.connection-row-meta { display: block; color: var(--muted); font-size: var(--text-2xs); }
-/* Where a connection is reached from. Asking no width of its own (`contain`), it
-   never widens its column. With a machine, its words keep their
-   length and the machine's name moves to a line of its own where the two do
-   not fit, cut only where it alone is longer than the cell (figures.css);
-   with none, the words are one line, cut as any context line's are. */
-.connection-reach { display: flex; flex-wrap: wrap; gap: 0 .3em; contain: inline-size; white-space: nowrap; }
-.connection-more-scope { margin-top: var(--space-2); }
-/* Styled by their own class: opened, they move to the line beneath the row,
-   out of the cell they were written in. */
-.connection-sight-list { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
-.connection-sight-list > li { font-size: var(--text-xs); }
-/* Opened beneath the row (`--cell: open`, tables.css), what it reads and
-   what it would also see fill the line, row by row, over the lists' own
-   rules (routes.css), which they name by both classes to outweigh. */
-@container style(--cell: open) {
-  :is(.connection-sight-list, .connection-ability-list.connection-read-list) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
-  :is(.connection-sight-list, .connection-ability-list.connection-read-list) > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
-  /* Each reading carries its state's color, so what needs reading again shows. */
-  :is(.connection-sight-list, .connection-ability-list.connection-read-list) > li::before { content: ""; align-self: center; block-size: 7px; aspect-ratio: 1; border-radius: 50%; background: var(--ok); }
-  .connection-read-list > li.connection-sight-partial::before { background: var(--warn); }
-  .connection-read-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
-  .connection-read-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
-  /* What it lets HQ change, as chips. They sit on the opened row's tinted
-     panel, which `--accent-tint` all but matches in light, so the chip is a
-     wash of the accent over whatever is behind it: darker than the panel in
-     light, lighter in dark. */
-  .connection-ability-list.connection-ability-all > li { display: block; padding: 1px var(--space-4); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
-  .connection-ability-list.connection-ability-all > li::before { content: none; }
-}
-.connection-sight-state { font-weight: 600; }
-.connection-sight-refused .connection-sight-state,
-.connection-sight-unreadable .connection-sight-state,
-.connection-sight-refusal { color: var(--danger); }
-/* Lines under a connection's name share `.connection-row-meta`'s size. */
-.connection-sight-refusal { margin: var(--space-2) 0 0; font-size: var(--text-2xs); }
-.connection-sight-partial .connection-sight-state { color: var(--warn); }
 /* A command and its copy button, which sits in its corner rather than on a
    line of its own; the command leaves room for it. */
 .command { position: relative; width: fit-content; max-width: 100%; min-width: 0; }
-.command > .command-copy { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); min-height: 0; padding: var(--space-1) var(--space-3); font-size: var(--text-2xs); color: var(--code-muted); border-color: transparent; background: transparent; }
+.command > .command-copy { position: absolute; inset-block: 0; margin-block: auto; height: fit-content; inset-inline-end: var(--space-2); color: var(--code-muted); border-color: transparent; background: transparent; }
 .command > .command-copy:is(:hover, :focus-visible) { color: var(--code-ink); }
 .command > .operator-command { margin: 0; padding-inline-end: 4.5rem; }
 /* A command wraps rather than scrolling: selecting it copies it whole. It
@@ -465,8 +416,6 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   user-select: all;
   font-size: var(--text-xs);
 }
-.connection-sight-never_swept .connection-sight-state,
-.connection-sight-not_connected .connection-sight-state { color: var(--muted); }
 
 /* ── Filter bar ─────────────────────────────────────────────────── */
 

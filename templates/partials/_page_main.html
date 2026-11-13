@@ -1,0 +1,7 @@
+{% comment %}
+The content column every page is drawn in, by {% page_main %}...{% endpage_main %}:
+base.html draws each page's content in it, and the component catalog each of
+its entries. It is a region (static/js/fragment.js), so a post_button pressed
+in it is answered in place from the page the post returns to, messages
+included. It answers no link or form of its own.
+{% endcomment %}<main class="content" id="content" tabindex="-1" data-fragment>{{ content|safe }}</main>

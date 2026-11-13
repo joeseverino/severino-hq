@@ -1,8 +1,7 @@
-"""The page-class check's reader, and the baseline of what it still holds.
+"""The page-class check's reader.
 
-A support module rather than part of the check, so ``tools/audit_hand_rolled.py``
-reads the same pairs, and ``mise run test --at`` holds a change to the reader
-to the check at a ref.
+A support module rather than part of the check, so ``mise run test --at``
+holds a change to the reader to the check at a ref.
 """
 
 import re
@@ -19,15 +18,6 @@ from .test_style_usage import TEMPLATE_PREFIX
 
 # The host's own templates, which no extension's check reads.
 TEMPLATES = STATIC.parent / "templates"
-# One template and class a line, sorted, so two branches that each drop a pair
-# merge cleanly, and a conflict between them still reads as both sides' pairs.
-BASELINE = STATIC.parent / "tools" / "lint" / "hand-rolled.txt"
-_HEADER = (
-    "# The classes each host template draws that no shared part declares yet, one\n"
-    "# template and class a line. mise run fix drops a pair once its page draws\n"
-    "# from the shared parts, and nothing adds one.\n"
-)
-_CONFLICT = re.compile(r"^(?:<{7}|\|{7}|={7}|>{7})(?:\s|$)")
 
 _INTERPOLATED = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
 # A variable is decided at render time, so a word joined to one is not a
@@ -82,7 +72,7 @@ def _drawn_by_the_catalog() -> dict[str, set[str]]:
     template_rendered.connect(record)
     try:
         for name, entry in CATALOG.items():
-            entry.drawn(name)
+            entry.page(name)
     finally:
         template_rendered.disconnect(record)
     return drawn
@@ -120,29 +110,3 @@ def hand_rolled_classes() -> set[tuple[str, str]]:
         for word in literal_classes(text) | built_prefixes(text)
         if word not in shared
     }
-
-
-def held(text: str) -> set[tuple[str, str]]:
-    """The pairs a baseline's text holds; a merge conflict's are both sides'."""
-
-    pairs = set()
-    for line in text.splitlines():
-        if not line.strip() or line.startswith("#") or _CONFLICT.match(line):
-            continue
-        name, word = line.split()
-        pairs.add((name, word))
-    return pairs
-
-
-def written(pairs: set[tuple[str, str]]) -> str:
-    """The baseline's text as ``mise run fix`` writes it."""
-
-    return _HEADER + "".join(f"{name} {word}\n" for name, word in sorted(pairs))
-
-
-def lowered(text: str, found: set[tuple[str, str]]) -> str:
-    """The baseline's text with every pair the reader no longer finds dropped.
-    A pair found and not held is a new hand-rolled class, which the check
-    refuses, so it is never added."""
-
-    return written(held(text) & found)

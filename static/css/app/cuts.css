@@ -197,10 +197,6 @@
 }
 
 /* A context line, a relation's ends, a bar's label: one line each. */
-.connection-reach:not(:has([data-entity])) { display: block; overflow: hidden; text-overflow: ellipsis; }
-/* Here the name is one line, like the endpoint under it: the name leads five
-   more facts in the same cell. */
-.connection-table td > [data-cell~=name] > [data-entity] { display: -webkit-inline-box; overflow: hidden; -webkit-line-clamp: 1; line-clamp: 1; }
 .relation-other {
   grid-area: 2 / 2 / 3 / 3;
   white-space: nowrap; color: var(--ink); overflow: hidden; text-overflow: ellipsis;
@@ -250,8 +246,14 @@
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
 }
+/* A cell's run of links (`line_list`) wraps where its line is full and
+   stands over the next run, so each of its lines is a target tall, as links
+   one to a line are (figures.css). */
+.data-table td .line-list:has(a) { line-height: var(--target-min); }
 @media (scripting: enabled) {
-  .data-table > tbody > tr.is-expanded > td .line-rest { flex: 1 1 auto; inline-size: auto; }
+  /* Open, the rest's parts join the first ones in one run, which wraps as
+     any run does: a separator that would open a line is clipped there. */
+  .data-table :is(tr.is-expanded > td, .row-columns) :is(.line-rest, .line-run) { display: contents; }
   .data-table > tbody > tr:not(.is-expanded, .row-detail) > td .line-rest { flex: 1 1 0; inline-size: 0; max-block-size: calc(1lh + .5em); overflow: clip; }
   .data-table > tbody > tr:not(.is-expanded, .row-detail) > td .line-run { flex: 1 1 0; row-gap: 1lh; overflow-x: clip; }
   /* A link the clip hides shows them all once the keyboard reaches it. */
@@ -261,9 +263,10 @@
 /* An open row lifts every cut in it, and in the line beneath it, at once;
    the cuts it lifts are each specific to a column, so this one outranks
    them on purpose. A panel a cell shows (a popover, drawn over the page) is
-   no part of the column, so what it says is never cut, open row or not. */
+   no part of the column, so what it says is never cut, open row or not. A
+   run's clip hides only the separator that would open a line, so it stays. */
 .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
-.data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *),
+.data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *, .line-list),
 .data-table :is(td, th) [popover] *:not(.visually-hidden, .visually-hidden *) {
   overflow: visible !important;
   text-overflow: clip !important;

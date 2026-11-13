@@ -7,7 +7,7 @@
    One chronological primitive for every domain. A two-column horizon uses the
    desktop canvas without turning eight dates into a full page of vertical rail;
    source order remains chronological and collapses to one column on phones.
-   The list reaches its frame's sides (cards.css) and each item keeps the
+   The list reaches its frame's sides (surfaces.css) and each item keeps the
    frame's inset, so two columns' dividers meet as one rule across the frame
    and the inset on either side of their seam is the columns' gap. */
 .timeline-list {

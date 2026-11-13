@@ -375,6 +375,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 @container style(--box: narrow) {
   .data-table > tbody > tr:not(.row-detail) .narrow-more { display: none; }
 }
+/* `row-later`: a narrow part that waits in the line beneath at any width (a row's buttons past the first few), so its row opens at any width too. */
+.data-table > tbody > tr:not(.row-detail) .row-later { display: none; }
+.data-table > tbody > tr:not(.row-detail):has(> * .row-later) > * > [data-row-toggle] { display: inline-grid; }
+.data-table:has(> tbody > tr > * .row-later) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* The server draws a toggle in every row that can open; the stylesheet shows it only where the row holds something back now (a dropped column, a part, a cut value, or open already). */
 .data-table tr.is-expanded > * > [data-row-toggle],
 .data-table tr:has(> * .row-more) > * > [data-row-toggle],
@@ -423,6 +427,13 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
     .data-table { --box: narrow; --tight: given; --break: given; }
   }
 }
+/* A table with no headings has none to count, so it says how many columns its rows hold (`data-columns`). With no script a phone's box opens no line beneath, so every part stays beside the name and the row shares the region as one column. */
+.data-table[data-columns="2"] { --columns: 2; }
+@media (scripting: none) {
+  @container table-region (width < 640px) {
+    .data-table[data-columns] { --columns: 1; }
+  }
+}
 /* Tight, kept lines wrap at their spaces and cells stand closer, so a phone's narrowest screen holds the table. */
 @container style(--tight: given) {
   .data-table > * > tr > * { padding-inline: var(--space-3); }
@@ -465,13 +476,17 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .row-columns > [data-column]:not([data-dropped]) { display: none; }
 .row-columns:not(:has(> dd[data-dropped], > dd[data-label], > dd[data-narrow])) { display: none; }
 @container style(--box: whole) {
-  .row-columns > [data-narrow] { display: none; }
-  .row-columns:not(:has(> dd[data-dropped], > dd[data-label])) { display: none; }
+  /* A part that waits at any width (`row-later`) keeps its place in a whole box, without the narrow parts beside it, which stay in the row there. */
+  .row-columns > [data-narrow]:not(:has(> .row-later)) { display: none; }
+  .row-columns:not(:has(> dd[data-dropped], > dd[data-label], > dd > .row-later)) { display: none; }
+  .row-columns > dd[data-narrow] > .narrow-more:not(.row-later) { display: none; }
 }
 .row-columns { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-6); margin: 0; }
 .row-columns dt { color: var(--muted); font-size: var(--text-2xs); }
 /* A value under its column's name has the line to itself, not the share its column had in the row, less the em a list's separator takes before a name. */
 .row-columns dd { min-width: 0; margin: 0; overflow-wrap: break-word; --hold: calc(100% - 1em); --name-hold: min(28ch, 100%); }
+/* A narrow part opens its own line in the cell (`<span class="narrow-more"><br>…`); copied under its column's name it already has one. */
+.row-columns dd > .narrow-more:first-child > br:first-child { display: none; }
 /* Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or in the line beneath an open row (`open`, above). */
 .data-table > tbody > tr:not(.row-detail) > td { --cell: line; }
 /* What a row keeps for that line at any width (`row-below`): its tall parts, on the name's edge. */
@@ -503,6 +518,15 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 @container row-columns (width < 18rem) {
   .row-columns > :is(dt, dd) { grid-column: 1 / -1; }
   .row-columns > dt:not(.visually-hidden) + dd { margin-block-start: calc(var(--space-1) - var(--space-5)); }
+}
+/* A flat line (`data-line="flat"` on the table): what a row holds back, in one column on no panel, the buttons of its parts side by side, and on a phone each the line's width, one to a line. One track that asks the line for no width (`minmax(0, 1fr)`) keeps a long label from widening the table; a contained button (`contain: inline-size`) would too, but WebKit measures its height at no width and draws it hundreds of pixels tall. Its displays are `:where()`, so a part the line hides stays hidden. */
+.data-table[data-line="flat"] .row-detail .row-columns { padding: 0; background: none; }
+.data-table[data-line="flat"] .row-detail .row-columns > * { grid-column: 1 / -1; }
+:where(.data-table[data-line="flat"]) .row-columns > dd { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+:where(.data-table[data-line="flat"]) .row-columns > dd > .narrow-more { display: contents; }
+@container style(--box: narrow) {
+  :where(.data-table[data-line="flat"]) .row-columns > dd { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .data-table[data-line="flat"] .row-columns > dd .btn { justify-content: center; white-space: normal; text-align: center; }
 }
 .data-table .row-detail:hover { background: none; }
 

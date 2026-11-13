@@ -1,9 +1,8 @@
 {% comment %}
-One thing a connection's credential lets HQ do. A permission note stands
-beside it only when it differs from its neighbors or cannot be used: the
-state column says it once for the connection.
+One thing a connection's credential lets HQ do, an item of a `.dot-list`. A
+permission note stands beside it only when it differs from its neighbors or
+cannot be used: the state column says it once for the connection. One HQ
+cannot use is said quietly, and its note in its tone (`#evidence`, which the
+read beside it draws too).
 {% endcomment %}
-<li class="cell-part{% if not state.available %} is-unavailable{% endif %}"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>
-  <span>{{ state.ability.label|breakable }}</span>
-  {% if not state.proven and connection.mixed_evidence or state.available is False %}<small class="connection-evidence-{{ state.evidence }}" title="{{ state.evidence_detail }}">{{ state.evidence_label|breakable }}</small>{% endif %}
-</li>
+<li class="cell-part{% if not state.available %} muted{% endif %}"{% if state.ability.summary %} title="{{ state.ability.summary }}"{% endif %}>{{ state.ability.label|breakable }}{% partialdef evidence inline %}{% if state and not state.proven and connection.mixed_evidence or state.available is False %} {% if state.evidence_tone %}{% status state.evidence_label tone=state.evidence_tone pill=False title=state.evidence_detail %}{% else %}<small class="muted" title="{{ state.evidence_detail }}">{{ state.evidence_label|breakable }}</small>{% endif %}{% endif %}{% endpartialdef %}</li>

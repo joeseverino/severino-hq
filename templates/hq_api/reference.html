@@ -10,11 +10,12 @@ document's title, and the page is still named before it mounts or where it fails
 {% comment %}
 <!-- ast-grep-ignore: hand-drawn-heading --> the API reference stands outside the page frame; its title is spoken
 {% endcomment %}<h1 class="visually-hidden">API reference</h1>
-<div class="api-reference-status" role="status">
-  <p class="api-reference-loading">Loading the reference.</p>
-  <p class="api-reference-failed">The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p>
-</div>
-<div class="api-reference" id="api-reference-root" data-vendored data-url="{{ document_url }}" data-longest-path="{{ longest_path }}"></div>
+{% comment %}What is said until the viewer mounts, then where it did not: two lines of one notice, which the page's sheet swaps.{% endcomment %}
+{% notice %}
+  <p>Loading the reference.</p>
+  <p>The reference did not load. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p>
+{% endnotice %}
+<div id="api-reference-root" data-vendored data-url="{{ document_url }}" data-longest-path="{{ longest_path }}"></div>
 <noscript><p>The reference needs JavaScript. The document itself is at <a href="{{ document_url }}">{{ document_url|breakable:"." }}</a></p></noscript>
 {% endblock %}
 {% comment %}The reference fills the page under the header; its pinned sidebar runs to the bottom.{% endcomment %}

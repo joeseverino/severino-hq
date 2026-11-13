@@ -9,8 +9,12 @@ Decisions only while pending.
     {% else %}{% dot %}<strong>{{ entry.held.get_state_display|breakable }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor|breakable }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
     {% endif %}
   </p>
-  {% if entry.held.reason %}<blockquote class="approval-reason">{{ entry.held.reason|breakable }}</blockquote>{% endif %}
-  {% if entry.held.decision_note %}<p class="approval-reason">{{ entry.held.decision_note|breakable }}</p>{% endif %}
+  {% if entry.held.reason or entry.held.decision_note %}
+    {% facts %}
+      {% if entry.held.reason %}{% fact "Reason" value=entry.held.reason|breakable %}{% endif %}
+      {% if entry.held.decision_note %}{% fact "Decision note" value=entry.held.decision_note|breakable %}{% endif %}
+    {% endfacts %}
+  {% endif %}
 
   {% if entry.warnings %}
     {% notice tone="warning" title="Impact" %}
@@ -21,9 +25,9 @@ Decisions only while pending.
 
   {% if entry.held.state == 'pending' %}
     {% url 'control_plane:approval_decision' entry.held.id as decision_url %}
-    <div class="approval-actions">
+    <p class="form-actions">
       {% post_button "Approve" decision_url name="decision" value="approve" css="btn primary" %}
       {% post_button "Reject" decision_url name="decision" value="reject" %}
-    </div>
+    </p>
   {% endif %}
 {% endsection %}

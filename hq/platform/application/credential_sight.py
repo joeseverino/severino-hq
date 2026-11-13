@@ -43,6 +43,9 @@ STATE_LABELS = {
     NOT_CONNECTED: "Not connected",
     NEVER_SWEPT: "Never read",
 }
+# The tone a state's word is drawn in where it stands beside the kind; a
+# state with none (never read, not connected) is said quietly.
+STATE_TONES = {READABLE: "good", PARTIAL: "attention", REFUSED: "serious", UNREADABLE: "serious"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +71,10 @@ class Sight:
     @property
     def state_label(self) -> str:
         return STATE_LABELS[self.state]
+
+    @property
+    def tone(self) -> str:
+        return STATE_TONES.get(self.state, "")
 
     @property
     def missing(self) -> tuple[str, ...]:
