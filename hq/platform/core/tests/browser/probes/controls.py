@@ -13,7 +13,12 @@ const paints = (style) => seen(style.backgroundColor) || style.backgroundImage !
   || style.boxShadow !== 'none'
   || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
     && style[`border${side}Style`] !== 'none' && seen(style[`border${side}Color`]));
-const drawn = (el) => !el.matches('summary:has(h1, h2, h3, h4, h5, h6, hgroup)')
+// A disclosure's face: what a reader presses to open it is the thing it
+// discloses, drawn as itself, never a label: a heading that opens its section,
+// a reading that opens its panel (partials/_reading.html), tinted while open
+// and holding its lead, its quiet lines and its standing, which wrap as text.
+const DISCLOSURE_FACE = 'summary:has(h1, h2, h3, h4, h5, h6, hgroup), .reading-head';
+const drawn = (el) => !el.matches(DISCLOSURE_FACE)
   && (el.matches('select') || paints(getComputedStyle(el)));
 // The words a control says itself, a control inside it left out.
 const ownWords = (el, controls) => {

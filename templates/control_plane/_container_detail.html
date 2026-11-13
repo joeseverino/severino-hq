@@ -37,7 +37,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
   {% steps numbered=True %}
     {% for step in plan.steps %}{% step %}<strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail|breakable }}</span>{% endstep %}{% endfor %}
   {% endsteps %}
-{% aside %}<span class="muted">{{ plan.change_label|breakable }}{% dot %}{{ plan.risk|breakable }} risk</span>
+{% aside %}<span class="muted">{{ plan.change_label|breakable:"·" }}{{ plan.risk|breakable }} risk</span>
 {% endsection %}
 {% endif %}
 
@@ -98,7 +98,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% if item.serves %}{% fact "Serves" %}{% for hostname in item.serves %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
     {% if item.mounts %}{% with shared=item.shared_mounts %}{% fact "Mounts" %}{% for mount in item.mounts %}{% include "partials/_change.html" with from=mount.source to=mount.destination code=True word="mounted at" only %}{% if mount.read_only %} <span class="muted"><span class="whole">read-only</span></span>{% endif %}{% with others=shared|dictkey:mount.source %}{% if others %}<span class="muted">{% dot %}also</span> {% for other in others %}<a href="{{ other.url }}">{{ other.running.name|breakable:forloop }}</a>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% endwith %}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% endfact %}{% endwith %}{% endif %}
     {% with usage=item.usage %}{% if usage %}
-    {% fact "Memory" %}<span data-usage="memory">{{ usage.memory|bytes }} <span class="muted">{{ usage.memory_basis|breakable }}{% dot %}{% if usage.memory_limit %}{{ usage.memory_of_limit|floatformat:"-1" }}% of its {{ usage.memory_limit|bytes }} limit{% else %}no limit{% endif %}</span></span>{% endfact %}
+    {% fact "Memory" %}<span data-usage="memory">{{ usage.memory|bytes }} <span class="muted">{{ usage.memory_basis|breakable:"·" }}{% if usage.memory_limit %}{{ usage.memory_of_limit|floatformat:"-1" }}% of its {{ usage.memory_limit|bytes }} limit{% else %}no limit{% endif %}</span></span>{% endfact %}
     {% fact "CPU" %}<span data-usage="cpu">{% if usage.cpu_percent is not None %}{{ usage.cpu_percent|floatformat:"-1" }}% of one core <span class="muted">since the read before{% dot %}{% else %}<span class="muted">Measured once HQ has read it twice{% dot %}{% endif %}{% if usage.cpu_limit %}limit {{ usage.cpu_limit|floatformat:"-2"|measured:"CPUs" }}{% else %}no limit{% endif %}</span></span>{% endfact %}
     {% endif %}{% endwith %}
     {% if posture.measured < posture.results|length %}{% fact "Checks not read" %}<span tabindex="0" data-tip="{% for result in posture.results %}{% if result.state == 'unavailable' %}{{ result.check.label }}&#10;{% endif %}{% endfor %}">{{ posture.unread|breakable }}</span> <span class="muted">until its runtime is read</span>{% endfact %}{% endif %}

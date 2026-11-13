@@ -116,7 +116,7 @@ const primitives = [
     parts: [
       "btn", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "is-expanded", "kept-line", "line-rest", "line-run", "muted",
       "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
-      "row-less", "row-more", "strut", "table-clamp", "table-scroll", "token", "visually-hidden", "whole",
+      "row-less", "row-more", "select-column", "strut", "table-clamp", "table-scroll", "token", "visually-hidden", "whole",
     ],
   },
   { name: "button", classes: "btn", sheets: ["page"] },
@@ -141,6 +141,14 @@ const cellRoles = [
   // Any class inside a cell but the primitive's own and its parts: a role is its mark.
   `/(?:${cell})[\\s\\S]*\\.(?!(?:${[table.classes, ...table.parts].join("|")})(?![-\\w]))[a-zA-Z][\\w-]*/`,
 ];
+
+// A table's narrow box is a property, `--box`, which the script's mark
+// (`data-narrow`, tables.js) sets and a phone's region with no script sets
+// too, so a rule reads the property (`@container style(--box: narrow)`): one
+// that read the mark would miss the box no script measures.
+const narrowMark = String.raw`/\.data-table(?![-\w])[^\s,>+~]*\[data-narrow\]/`;
+const narrowMessage = "a table's narrow box is `--box` (`@container style(--box: narrow)` or `whole`), never the script's `[data-narrow]` mark, which a page with no script never gets";
+const selectorRule = (patterns, message) => [patterns, { splitList: true, message: (selector) => (new RegExp(narrowMark.slice(1, -1)).test(selector) ? narrowMessage : message(selector)) }];
 
 // A sheet that draws a primitive may write that one's variants. Today's
 // instances are counted in stylelint-suppressions.json beside it, a count
@@ -197,6 +205,7 @@ export default {
     "declaration-property-value-allowed-list": { "font-display": ["optional"] },
     "property-disallowed-list": disallowedProperties(caseProperties),
     "rule-selector-property-disallowed-list": { [`/${inTable}/`]: boxWidth },
+    "selector-disallowed-list": selectorRule([narrowMark], () => narrowMessage),
   },
   overrides: [
     {
@@ -204,14 +213,11 @@ export default {
       files: tablePrimitive,
       rules: {
         "rule-selector-property-disallowed-list": null,
-        "selector-disallowed-list": [
-          cellRoles,
-          {
-            splitList: true,
-            message: (selector) =>
-              `"${selector}" tells a cell's part by a page's class or its tags: key it on its role (\`[data-cell~=name|prose|data]\`, table_tags.mark_cells) or a part the table primitive draws`,
-          },
-        ],
+        "selector-disallowed-list": selectorRule(
+          [...cellRoles, narrowMark],
+          (selector) =>
+            `"${selector}" tells a cell's part by a page's class or its tags: key it on its role (\`[data-cell~=name|prose|data]\`, table_tags.mark_cells) or a part the table primitive draws`,
+        ),
       },
     },
     ...restyledBySheet,

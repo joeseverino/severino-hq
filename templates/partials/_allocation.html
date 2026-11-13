@@ -16,7 +16,7 @@ another for a narrow column.
 {% if legend %}
   <div class="allocation-legend{% if stacked %} stacked{% endif %}" data-allocation-legend>
     {% for part, percent in allocation.legend %}
-      {% if part.url %}<a href="{{ part.url }}">{% else %}<span>{% endif %}<i class="chart-series-{{ part.slot }}"></i>{% if part.detail %}<b>{% if part.tone %}{% status part.detail tone=part.tone pill=False %}{% else %}{{ part.detail|breakable }}{% endif %}</b> {% endif %}<span>{{ part.label|breakable }}{% dot %}{{ percent|breakable }}</span>{% if part.url %}</a>{% else %}</span>{% endif %}
+      {% if part.url %}<a href="{{ part.url }}">{% else %}<span>{% endif %}<i class="chart-series-{{ part.slot }}"></i>{% if part.detail %}<b>{% if part.tone %}{% status part.detail tone=part.tone pill=False %}{% else %}{{ part.detail|breakable }}{% endif %}</b> {% endif %}<span>{{ part.label|breakable:"·" }}{{ percent|breakable }}</span>{% if part.url %}</a>{% else %}</span>{% endif %}
     {% endfor %}
   </div>
 {% endif %}

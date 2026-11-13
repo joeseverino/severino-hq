@@ -19,14 +19,6 @@
 .table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
 /* A trailing margin inside a padded box is a band of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
-/* With no script nothing is held back for a toggle, so a table in a wide region is read whole, sized to its content, inside its region; in a phone's it takes every give at once (below) and scrolls only once it has none left. */
-@media (scripting: none) {
-  @container table-region (width >= 640px) {
-    .table-scroll > .data-table:has(tbody td:not([colspan])) { width: max-content; min-width: 100%; max-width: 1400px; }
-    /* A compare table's values wrap in their shares of the region (below), so it is as wide as the region. */
-    .table-scroll.is-compare > .data-table:has(tbody td:not([colspan])) { width: 100%; }
-  }
-}
 /* Refreshes pin column widths (fixed layout), so an unbroken token must wrap in its cell rather than bleed across them. */
 .table-scroll td { overflow-wrap: break-word; }
 .data-table {
@@ -142,7 +134,9 @@
 .data-table > tbody > tr > [data-kind="control"] :is(select, input:not([type="checkbox"], [type="radio"])) { inline-size: auto; max-inline-size: none; }
 /* A long line (`data-long`, table_tags.LONG) holds out for a floor up to its column's share, as a box inside the cell both engines size, and for a few words a line however small the share, so its column leaves before it wraps a word a line; in a narrow box no column is left to leave, so there the share alone bounds it. A status asks a pixel and a cut sentence almost nothing, and Chromium shares the rest in proportion. */
 .data-table > tbody td[data-long]::before { content: ""; display: block; inline-size: min(16ch, max(var(--hold), 14ch)); }
-.data-table[data-narrow] > tbody td[data-long]::before { inline-size: min(16ch, var(--hold)); }
+@container style(--box: narrow) {
+  .data-table > tbody td[data-long]::before { inline-size: min(16ch, var(--hold)); }
+}
 /* Outside a narrow box the columns showing have the room they ask (tables.js), so such a line keeps it. */
 @container style(--box: whole) {
   /* The region wraps what such a cell says in one `.kept-line`, as wide as its line up to the share and the icon it opens with (`--hang`, figures.css); an identifier in it breaks past the share, a pill or a time never wraps. */
@@ -255,10 +249,14 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   max-width: 50cqi;
 }
 .data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::after { overflow-wrap: anywhere; }
-/* A narrow box has no width to hold out with (`--cut-floor`), read from the table's mark since a style query does not reach a pseudo-element in every engine. */
-.data-table[data-narrow] td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *) > .token[data-sole] > .strut::before { display: none; }
+/* A narrow box has no width to hold out with (`--cut-floor`). */
+@container style(--box: narrow) {
+  .data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *) > .token[data-sole] > .strut::before { display: none; }
+}
 /* Outside it a closed row's chip holds out for its whole name, up to half the region, so it is cut only once its table has no column left to give way. One in a context line (`.muted`) holds out only for its longest piece, as a name there does (figures.css): the row's name sizes the column. */
-.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *, .muted *) > .token[data-sole] > .strut::before { white-space: nowrap; }
+@container style(--box: whole) {
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *, .muted *) > .token[data-sole] > .strut::before { white-space: nowrap; }
+}
 /* With its cuts lifted an opened row lays an identifier out as a page does (base.css): a part that fits moves whole, and breaks inside only when longer than its line. */
 .data-table > tbody > tr.is-expanded > td .whole:not([data-cell~=name] *, [data-cell~=data] *, .visually-hidden *) { display: inline-block; }
 /* In a chip such a part is set by its top, so a part that wraps leaves the chip's first line on the baseline its line shares (a change's arrow beside it): an inline block's baseline is its last line, and WebKit has no `baseline-source`. The chip's token sets every part in its own face, so the top puts the first line where the baseline would. */
@@ -272,17 +270,19 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 }
 .data-table th[scope=row] > code > .token[data-sole], .data-table th[scope=row] > code > .token[data-sole] .whole { display: contents; }
 /* Outside a narrow box a closed row's header holds out for its name up to its column's hold (`--hold`, a share of the region) through its strut, as a cell's chip does: one copy holds out, one asks for the whole name, and the name itself asks nothing. */
-.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > th[scope=row] > code:has(> .token[data-sole]) {
-  grid-template-columns: minmax(min-content, max-content);
-  & > .token[data-sole] > .cut { grid-area: 1 / 1; contain: inline-size; justify-self: stretch; }
-  & > .token[data-sole] > .strut { display: contents; }
-  & > .token[data-sole] > .strut::before, & > .token[data-sole] > .strut::after {
-    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
-    content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden;
-    padding-inline: var(--space-2) calc(var(--space-2) + 1px);
+@container style(--box: whole) {
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > th[scope=row] > code:has(> .token[data-sole]) {
+    grid-template-columns: minmax(min-content, max-content);
+    & > .token[data-sole] > .cut { grid-area: 1 / 1; contain: inline-size; justify-self: stretch; }
+    & > .token[data-sole] > .strut { display: contents; }
+    & > .token[data-sole] > .strut::before, & > .token[data-sole] > .strut::after {
+      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
+      content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden;
+      padding-inline: var(--space-2) calc(var(--space-2) + 1px);
+    }
+    & > .token[data-sole] > .strut::before { grid-area: 2 / 1; white-space: nowrap; max-width: min(var(--identifier-max), var(--hold)); }
+    & > .token[data-sole] > .strut::after { grid-area: 3 / 1; white-space: normal; overflow-wrap: anywhere; }
   }
-  & > .token[data-sole] > .strut::before { grid-area: 2 / 1; white-space: nowrap; max-width: min(var(--identifier-max), var(--hold)); }
-  & > .token[data-sole] > .strut::after { grid-area: 3 / 1; white-space: normal; overflow-wrap: anywhere; }
 }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line, so its column can give way without hiding any of it. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
@@ -383,12 +383,28 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 }
 }
 /* A column let go while the table was wider than its region, and a narrow box (tables.js): a row with something there shows its toggle and its table keeps the gutter. */
+/* stylelint-disable-next-line selector-disallowed-list -- where the script's mark becomes the property every rule reads */
 .data-table[data-narrow] { --box: narrow; }
 /* A table still wider than its region in a narrow box is tight (`data-tight`, tables.js), and then breaks its identifiers (`data-break`); each give is a property the rules below read, so a box no script measures can take them too. */
 .data-table[data-tight] { --tight: given; }
 .data-table[data-break] { --break: given; }
-/* With no script nothing measures the table, so a phone's box is narrow by its width alone, and takes every give at once: the table wraps all it can before its region scrolls. */
+/* With no script nothing measures the table, so a phone's box is narrow by its width alone, and takes every give at once: the table wraps all it can before its region scrolls. No column leaves, so the columns that share the region (`--showing`) are every heading drawn, counted here as tables.js counts them. */
 @media (scripting: none) {
+  .data-table:has(> thead > tr:last-child > th:nth-child(2 of :not(.select-column, [data-blank-column]))) { --showing: 2; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(3 of :not(.select-column, [data-blank-column]))) { --showing: 3; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(4 of :not(.select-column, [data-blank-column]))) { --showing: 4; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(5 of :not(.select-column, [data-blank-column]))) { --showing: 5; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(6 of :not(.select-column, [data-blank-column]))) { --showing: 6; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(7 of :not(.select-column, [data-blank-column]))) { --showing: 7; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(8 of :not(.select-column, [data-blank-column]))) { --showing: 8; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(9 of :not(.select-column, [data-blank-column]))) { --showing: 9; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(10 of :not(.select-column, [data-blank-column]))) { --showing: 10; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(11 of :not(.select-column, [data-blank-column]))) { --showing: 11; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(12 of :not(.select-column, [data-blank-column]))) { --showing: 12; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(13 of :not(.select-column, [data-blank-column]))) { --showing: 13; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(14 of :not(.select-column, [data-blank-column]))) { --showing: 14; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(15 of :not(.select-column, [data-blank-column]))) { --showing: 15; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(16 of :not(.select-column, [data-blank-column]))) { --showing: 16; }
   @container table-region (width < 640px) {
     .data-table { --box: narrow; --tight: given; --break: given; }
   }

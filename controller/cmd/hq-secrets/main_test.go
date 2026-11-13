@@ -28,8 +28,6 @@ func TestConfigurationRefusals(t *testing.T) {
 		args   []string
 		want   string
 	}{
-		"a retired backend":           {func(e map[string]string) { e["SEVERINO_SECRETS_BACKEND"] = "service-account" }, 0, nil, "no longer exists"},
-		"an unknown backend":          {func(e map[string]string) { e["SEVERINO_SECRETS_BACKEND"] = "unknown" }, 0, nil, "no longer exists"},
 		"a Connect token in the env":  {func(e map[string]string) { e["OP_CONNECT_TOKEN"] = sentinel }, 0, nil, "Remove OP_CONNECT_TOKEN"},
 		"a service token in the env":  {func(e map[string]string) { e["OP_SERVICE_ACCOUNT_TOKEN"] = sentinel }, 0, nil, "Remove OP_SERVICE_ACCOUNT_TOKEN"},
 		"the legacy override":         {func(e map[string]string) { e["SEVERINO_CONTROLLER_ENV"] = "/run/severino-hq/severino_controller_env" }, 0, nil, "Remove SEVERINO_CONTROLLER_ENV"},
@@ -70,21 +68,10 @@ func TestConfigurationRefusals(t *testing.T) {
 	}
 }
 
-func TestTheBackendSwitchAcceptsOnlyConnect(t *testing.T) {
-	for _, backend := range []string{"", "connect"} {
-		env := complete()
-		env["SEVERINO_SECRETS_BACKEND"] = backend
-		if _, _, err := configure(nil, environment(env), &bytes.Buffer{}); err != nil {
-			t.Fatalf("backend %q was refused: %v", backend, err)
-		}
-	}
-}
-
 // A host configured for the shell renderer, once Connect is on a privileged
 // port: what its drop-ins still set is either read or ignored, never refused.
 func TestAHostConfiguredForTheShellRendererIsAccepted(t *testing.T) {
 	env := complete()
-	env["SEVERINO_SECRETS_BACKEND"] = "connect"
 	env["SEVERINO_MCP_SECRET_REF"] = "op://Example Vault/Example MCP/credential"
 	env["OP_CONFIG_DIR"] = "/run/severino-hq-op"
 	config, _, err := configure(nil, environment(env), &bytes.Buffer{})

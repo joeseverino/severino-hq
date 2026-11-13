@@ -51,7 +51,7 @@ is open.
     <p>{{ hop.phrase|breakable:":" }} {% entity hop.link %}{% if hop.source %}<span class="muted">{% dot %}{{ hop.source.phrase|breakable }}{% if hop.source.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=hop.source.observed_at only %}{% endif %}</span>{% endif %}</p>
   {% endfor %}
 {% endfor %}
-{% aside %}<span class="muted">{% if routes|length == 1 %}via {{ routes.0.via_phrase|breakable }}{% dot %}{% endif %}<span class="exposure exposure-{{ exposure.level }}">{{ exposure.label|breakable }}</span>{% if exposure.worst.path_gates %}{% dot %}login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% if topology_url %} <a class="btn ghost compact" href="{{ topology_url }}">View on map</a>{% endif %}
+{% aside %}<span class="muted">{% if routes|length == 1 %}via {{ routes.0.via_phrase|breakable:"·" }}{% endif %}<span class="exposure exposure-{{ exposure.level }}">{{ exposure.label|breakable }}</span>{% if exposure.worst.path_gates %}{% dot %}login only at {% for path in exposure.worst.path_gates %}<code>{{ path|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% if topology_url %} <a class="btn ghost compact" href="{{ topology_url }}">View on map</a>{% endif %}
 {% endsection %}
 
 {% if missing_facets or service.origin.parked or service.origin and not service.origin.external and not service.origin.known %}

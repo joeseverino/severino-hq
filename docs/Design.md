@@ -1087,7 +1087,8 @@ fill, `--muted` on a surface, `--code-muted` beside code.
 
 **Buttons.** Primary for the one thing a page is for; default for the rest;
 `ghost` for link-like actions that sit inline; `danger` in red text on the same
-surface as its neighbors, loud only in its confirmation. A label keeps its
+surface as its neighbors, loud only in its confirmation; `compact` for one
+that stands in a row, a list or a head, a line tall. A label keeps its
 line, from the button rule alone (`page.css`); only a tight table lets one
 wrap. A label too long for a phone is shortened where it is declared.
 *Gate:* `test_a_controls_label_keeps_its_line_from_the_button_rule_alone`, and

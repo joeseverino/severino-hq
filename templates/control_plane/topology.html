@@ -8,7 +8,7 @@
   {% comment %}What a trace shows, and the switches that follow it another way or to another depth; every link from a trace lands here.{% endcomment %}
   <div id="trace" tabindex="-1">
   {% notice tone="info" %}
-    <p class="muted">{{ topology_trace_label|breakable }}{% dot %}{{ topology_trace.depth|counted:"step" }}</p>
+    <p class="muted">{{ topology_trace_label|breakable:"·" }}{{ topology_trace.depth|counted:"step" }}</p>
     {% switch label="Direction" %}{% for item in trace_direction_links %}{% choice url=item.url current=item.current %}{{ item.label|breakable }}{% endchoice %}{% endfor %}{% endswitch %}
     {% switch label="Steps" %}{% for item in trace_depth_links %}{% choice url=item.url current=item.current %}{{ item.depth|counted:"step" }}{% endchoice %}{% endfor %}{% endswitch %}
     <a class="btn ghost compact" href="{{ trace_reset_url }}">Clear</a>

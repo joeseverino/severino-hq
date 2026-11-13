@@ -8,7 +8,7 @@ of its repository instead: the production deploy, and the repository's alerts.
   {% fact running.state|capfirst|default:"Unknown" icon="activity" tone=running.state_tone %}
     {{ container.item.uptime|default:running.uptime|default:running.status|default:"No status"|breakable }}
   {% detail %}
-    <small>{% if running.check %}{{ running.check|capfirst|breakable }}{% dot %}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
+    <small>{% if running.check %}{{ running.check|capfirst|breakable:"·" }}{% endif %}{% if machine %}on {% entity machine.link %}{% endif %}</small>
   {% endfact %}
   {% fact "Version" icon="layers" %}
     {% if standing.tag %}<code>{{ standing.tag|breakable }}</code>{% else %}No version tag{% endif %}

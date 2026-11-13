@@ -479,13 +479,13 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
   padding: var(--surface-inset, var(--space-5));
   margin: 0 0 var(--space-6);
 }
-/* The controls wrap in a box of their own, and the button that sends them, with Clear, stands in a column beside it at the controls' last line, so it never takes a line alone. The count follows, its own margin carrying it to the row's end. */
+/* The controls wrap in a box of their own, and the button that sends them, with Clear, stands in a column beside it at the controls' last line, so it never takes a line alone. That column takes no more than a share of a narrow bar, Clear wrapping under the button, so the controls keep the room their words need. The count follows, its own margin carrying it to the row's end. */
 .filter-bar-query {
   flex: 1 1 auto; min-width: 0;
-  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-4);
+  display: grid; grid-template-columns: minmax(0, 1fr) fit-content(40%); align-items: end; gap: var(--space-4);
 }
 .filter-bar-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); min-width: 0; }
-.filter-bar-send { display: flex; align-items: center; gap: var(--space-4); }
+.filter-bar-send { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 /* The search alone grows, taking what its line leaves: it asks first for its whole placeholder, or what is typed in it (`field-sizing`), so the controls beside it wrap before it is cut. Every other control is as wide as what it says, as a native control is. */
 .filter-bar-controls > input[type=search] { flex: 1 1 auto; field-sizing: content; min-width: 0; }
 /* A choice is as wide as its longest option, so the bar holds still as the choice changes (never `field-sizing`, which follows the option chosen), and narrower only in a bar too narrow for it. */

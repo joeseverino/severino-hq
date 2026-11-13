@@ -143,7 +143,6 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
    the attention tone once out of date. */
 .attention-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); color: var(--muted); font-size: var(--text-xs); }
 .attention-meta > a { overflow-wrap: anywhere; }
-.reading-age { white-space: nowrap; }
 .reading-age.is-stale { color: var(--tone-caution-ink); }
 .attention-title { min-width: 0; max-width: 100%; font-size: var(--text-md); font-weight: 650; color: var(--ink); letter-spacing: -.005em; overflow-wrap: anywhere; }
 /* What it means, then what to do, then the reason it cannot be done from

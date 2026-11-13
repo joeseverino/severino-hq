@@ -57,7 +57,7 @@
 @container style(--box: whole) {
   .data-table td [data-entity]:not(strong > *, .row-gutter > *, .muted *):has(> .token[data-sole]):not(:has(> .token > .cut .whole)) { width: max-content; max-width: var(--name-hold); }
 }
-/* A name the cell cuts (cuts.css) sizes its track by its unseen strut (value_tags), never by the box that draws it: the box asks nothing and fills the track, and the strut's one run of text asks for the whole name and a pixel more, which the parts, each a box of its own, may measure a fraction past. So however an engine measures the box, the box is as wide as the name wherever its row has room. Outside a narrow box a second copy holds out for the name up to its column's hold, as code's chip does (tables.css); one in a context line (`.muted`) or a kept line (`.kept-line`, which keeps no floor for an identifier) holds out for nothing. Read from the table's mark, since a style query does not reach a pseudo-element in every engine. */
+/* A name the cell cuts (cuts.css) sizes its track by its unseen strut (value_tags), never by the box that draws it: the box asks nothing and fills the track, and the strut's one run of text asks for the whole name and a pixel more, which the parts, each a box of its own, may measure a fraction past. So however an engine measures the box, the box is as wide as the name wherever its row has room. Outside a narrow box a second copy holds out for the name up to its column's hold, as code's chip does (tables.css); one in a context line (`.muted`) or a kept line (`.kept-line`, which keeps no floor for an identifier) holds out for nothing. */
 .data-table > tbody > tr:not(.is-expanded, .row-detail) > td :is(
   [data-entity]:not(strong > *, .row-gutter > *, .row-gutter > br + .muted > *):has(> .token[data-sole] > .cut .whole),
   .token[data-sole]:not([data-entity] *, .cell-line *):has(> .cut .whole),
@@ -70,12 +70,14 @@
     content: attr(data-strut); display: block; grid-area: 3 / 1; visibility: hidden; block-size: 0; overflow: hidden;
     padding-inline-end: 1px; white-space: normal; overflow-wrap: anywhere;
   }
-  .data-table:not([data-narrow]) > tbody > tr > td &:not(.muted *, .kept-line *) {
-    grid-template-columns: minmax(min-content, max-content);
-    & > .strut::before, & > .token[data-sole] > .strut::before {
-      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
-      content: attr(data-strut); display: block; grid-area: 2 / 1; visibility: hidden; block-size: 0; overflow: hidden;
-      padding-inline-end: 1px; white-space: nowrap; max-width: var(--name-hold);
+  @container style(--box: whole) {
+    &:not(.muted *, .kept-line *) {
+      grid-template-columns: minmax(min-content, max-content);
+      & > .strut::before, & > .token[data-sole] > .strut::before {
+        /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
+        content: attr(data-strut); display: block; grid-area: 2 / 1; visibility: hidden; block-size: 0; overflow: hidden;
+        padding-inline-end: 1px; white-space: nowrap; max-width: var(--name-hold);
+      }
     }
   }
 }
@@ -258,13 +260,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
    share their first baseline, whatever face and size a page sets its chips in
    and whatever wraps after it; beside chips the arrow is set in their face. */
 .change { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) .35em; max-width: 100%; }
-/* With no script a wide region's table is as wide as its cells ask (tables.css),
-   and a wrapping row asks for both values side by side, so a cell's own pair
-   asks for its longer value alone, the new under the old, and the table fits
-   its region. A pair in a cell's sentence stays in its line. */
-@media (scripting: none) {
-  .data-table .change:not(:is(p, li) *) { display: inline-grid; grid-template-columns: minmax(min-content, max-content); justify-items: start; }
-}
 .change-to { display: flex; align-items: baseline; column-gap: .35em; }
 .change > *, .change-to > * { min-width: 0; }
 .change-arrow { flex: none; color: var(--muted-2); font-weight: 400; }

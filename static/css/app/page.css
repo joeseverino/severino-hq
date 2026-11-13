@@ -10,7 +10,7 @@
    `reachable` and `success` cannot become three different greens.
 
    A component decides which fill level it reads (`--tone-bg` for a chip,
-   `--tone-wash` for a banner, `--tone-tint` for a mark carrying strong ink);
+   `--tone-wash` for a banner);
    this section decides only what the tone *is*. Adding a status means adding
    its class to one of these lists. Adding a component means reading the
    contract, not restating the colors. */
@@ -19,15 +19,12 @@
 .pill-replied, .pill-reachable, .pill-good, .notice-success, .tone-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
-  --tone-tint: var(--tone-positive-tint);
   --tone-ink: var(--tone-positive-ink);
   --tone-line: var(--tone-positive-line);
 }
-.pill-paused, .pill-editing, .pill-drafting, .pill-researching,
-.pill-internal, .pill-attention, .notice-warning, .tone-attention {
+.pill-paused, .pill-internal, .pill-attention, .notice-warning, .tone-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
-  --tone-tint: var(--tone-caution-tint);
   --tone-ink: var(--tone-caution-ink);
   --tone-line: var(--tone-caution-line);
 }
@@ -36,7 +33,6 @@
 .pill-unreachable, .notice-error {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
-  --tone-tint: var(--tone-critical-tint);
   --tone-ink: var(--tone-critical-ink);
   --tone-line: var(--tone-critical-line);
 }
@@ -243,7 +239,6 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* How it stands, the one line of a reading that may take two: an age and its
    verdict are long beside a narrow reading, and the reading stays inside the page. */
 .reading-standing { color: var(--muted-2); font-size: var(--text-3xs); }
-.reading-standing .reading-age { white-space: normal; }
 .reading-standing.is-stale { color: var(--warn); }
 .reading-standing.is-attention { color: var(--attn); font-weight: 650; }
 .reading-panel { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
@@ -381,6 +376,9 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 .btn.primary, button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
 .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .btn.danger, button.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
+/* A control in a row or a head among words, a line's height rather than a
+   form's. */
+.btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
 /* A control that would be refused stands as a span, focusable for its reason
    (partials/_page_action.html), and looks as a disabled button does. */
 .btn:disabled, button:disabled, span.btn[aria-disabled="true"] { cursor: not-allowed; opacity: .52; }

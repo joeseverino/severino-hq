@@ -189,6 +189,20 @@ class BreakableTests(SimpleTestCase):
         # Its unit inside its box, since the line breaks at a box's edge.
         self.assertEqual(wholes(printed), ["10.5–12.5 mi"])
 
+    def test_a_value_ended_by_a_dot_holds_it_inside_its_last_box(self):
+        """A box is a place a line may break even before a no-break space,
+        so the dot that follows a value is drawn inside the value's last
+        box, hidden from a reader, and the line breaks only after it."""
+
+        printed = str(breakable("Relayed via example-region", "·"))
+        (dot,) = [element for element in all_elements(printed) if element.attrs.get("aria-hidden") == "true"]
+        self.assertEqual(dot.text, "·")
+        self.assertIn("token", {name for box in dot.ancestors for name in box.classes})
+        # Held to the word by a no-break space, and the line breaks after it.
+        self.assertIn("region&nbsp;<span", printed)
+        self.assertTrue(printed.endswith(" ") and not printed.endswith("&nbsp; "))
+        self.assertEqual(text(printed), "Relayed via example-region ·")
+
     def test_a_figure_and_the_word_it_counts_never_part_at_a_line(self):
         """A figure and its unit or counted word are one run, held by a
         no-break space, so the word never opens a line alone below its
@@ -198,6 +212,7 @@ class BreakableTests(SimpleTestCase):
             ("Due in 80 days", "80 days"),
             ("+0.01 m / 90 days", "90 days"),
             ("+0.01 m / 90 days", "+0.01 m /"),
+            ("Commit › Revision", "Commit ›"),
             ("−2.5 km since", "−2.5 km"),
             ("used 3 GB of", "3 GB"),
             ("over 1 month", "1 month"),

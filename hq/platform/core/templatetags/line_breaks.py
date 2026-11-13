@@ -208,7 +208,8 @@ def breakable(value, mark=""):
     The one way a template writes an identifier (``<code>{{ x|breakable }}</code>``,
     or bare as a link's text). ``mark`` is the punctuation the sentence puts
     after the value (``{{ x|breakable:"." }}``), or given a list's ``forloop``,
-    the comma between its items.
+    the comma between its items. A mark of ``DOT_MARK`` is the dot ``{% dot %}``
+    draws between the value and the next part of its line.
     """
 
     mark = mark_text(mark)
@@ -217,8 +218,18 @@ def breakable(value, mark=""):
     # Django renders it. It passes as it is: what built it held the names in
     # it, and a seam inside a tag would break the tag.
     if hasattr(value, "__html__"):
-        return conditional_escape(value) + conditional_escape(mark)
+        after = mark_safe(DOT_MARKUP) if mark == DOT_MARK else conditional_escape(mark)  # noqa: S308 - HQ's own literal markup
+        return conditional_escape(value) + after
+    if mark == DOT_MARK:
+        return mark_safe("".join([*_inside_last(_line(value), DOT_MARKUP.rstrip()), " "]))  # noqa: S308 - each word is escaped as it is drawn
     return mark_safe("".join(_marked(_line(value), mark)))  # noqa: S308 - each word is escaped as it is drawn
+
+
+# The mark that ends a value with ``{% dot %}``'s dot (``{{ x|breakable:"·" }}``),
+# drawn inside the value's last box as ``labels.dotted`` parts are: a box is a
+# place a line may break even before a no-break space (WebKit, as CSS Text
+# says), so a dot written after it could open the next line.
+DOT_MARK = "·"
 
 
 def _marked(drawn: list[str], mark: str) -> list[str]:
@@ -283,9 +294,10 @@ def _line(value, *, sole: bool | None = None) -> list[str]:
 # it ("12" above "days"): a word of letters, perhaps hyphenated ("sign-ins")
 # or per another ("m/s"), or a percent sign, with the sentence's mark after it.
 _UNIT = re.compile(r"(?:[^\W\d_]+(?:-[^\W\d_]+)*(?:/[^\W\d_]+)?|%)[.,;:!?)]*")
-# A separator standing between two words ("+0.01 m / 90 days"), which a line
-# never opens on: the separators the survey reads as a stray.
-_SEPARATOR = re.compile(r"[·•|/\u2013\u2014]")
+# A separator standing between two words ("+0.01 m / 90 days", "Spec › Hosts"),
+# which a line never opens on or holds alone: the separators the survey reads
+# as a stray.
+_SEPARATOR = re.compile(r"[·•|/›\u2013\u2014]")
 
 
 def _figure(word: str) -> bool:

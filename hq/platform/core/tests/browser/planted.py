@@ -39,6 +39,19 @@ class Plant:
 
 _LINES = "Example words enough to run over several lines of a narrow box"
 
+# Two readings open, each head tinted as its open panel tints it, beside each
+# other at different heights, one's quiet line wrapping: a disclosure's face,
+# never a label.
+_OPEN_READINGS = (
+    '<div style="display: flex; align-items: start; gap: 1rem">'
+    + "".join(
+        '<div class="reading"><button type="button" class="reading-head" '
+        f'style="inline-size: 10rem; background: var(--bg-tint)">{words}</button></div>'
+        for words in ("Example", _LINES)
+    )
+    + "</div>"
+)
+
 _TABLE = '<table class="data-table" style="table-layout: fixed; inline-size: 10rem"><tbody><tr><td>{}</td></tr></tbody></table>'
 
 # Each check of the survey, by name, and its smallest defect.
@@ -462,7 +475,7 @@ PASSES = {
     ),
     "control words on one line": Plant(
         '<select aria-label="Example"><option>Example group name</option></select>'
-        '<button type="button" class="btn">Example label words</button>'
+        '<button type="button" class="btn">Example label words</button>' + _OPEN_READINGS
     ),
     # A value cut at its cell's edge beside a sentence that wraps: its row has
     # no room left. The second fills a padded box, whose padding is no room;
@@ -484,6 +497,7 @@ PASSES = {
     "one height to a row of controls": Plant(
         '<div style="display: flex; gap: 1rem"><button type="button" class="btn">Example</button>'
         '<input type="search" aria-label="Example"><select aria-label="Example"><option>Example</option></select></div>'
+        + _OPEN_READINGS
     ),
     # A filter bar's choice in a bar too narrow for its option, shrunk to it.
     "filter choices as wide as their options": Plant(

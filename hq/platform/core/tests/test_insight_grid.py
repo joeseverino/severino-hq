@@ -1,4 +1,4 @@
-"""The insight grid's eyebrow says only what the cards around it do not."""
+"""The insight grid's eyebrow, which carries each card's state, is left out only as a repeat."""
 
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
@@ -27,7 +27,9 @@ class InsightEyebrowTests(SimpleTestCase):
         # A new state is news, so its pill says it.
         self.assertIn("Example source", heads[2])
 
-    def test_an_eyebrow_its_own_title_holds_is_not_drawn(self):
-        (head,) = _eyebrows([Insight("neutral", "Example pace", "Example pace this month", "", "An example body.")])
+    def test_a_card_whose_title_holds_its_eyebrow_still_says_its_state(self):
+        # The pill is the only place a card says its state, so a title that
+        # repeats its words never takes it away.
+        (head,) = _eyebrows([Insight("attention", "Example pace", "Example pace this month", "", "An example body.")])
 
-        self.assertNotIn("Example pace", head)
+        self.assertIn("Example pace", head)

@@ -24,7 +24,7 @@ for it. Nothing here asks it anything.
     {% if not standing.known %}After the first run{% elif controller.overdue %}Overdue{% elif controller.sweep_due %}Shortly{% elif controller.next_sweep_at %}In {{ controller.next_sweep_at|when:"length" }}{% else %}After the first run{% endif %}
   {% detail %}
     {% if not standing.known %}<small>Everything is read every {{ controller.sweep_every|breakable }} once it runs.</small>
-    {% elif controller.overdue %}<small>{{ controller.oldest.label|breakable }}{% dot %}{% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
+    {% elif controller.overdue %}<small>{{ controller.oldest.label|breakable:"·" }}{% include "partials/_reading_age.html" with at=controller.oldest.attempted_at only %}. Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
     {% elif controller.sweep_due or controller.next_sweep_at %}<small>Everything is read every {{ controller.sweep_every|breakable:"." }}</small>
     {% else %}<small>Nothing has been read yet.</small>{% endif %}
   {% endfact %}

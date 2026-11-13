@@ -1474,7 +1474,7 @@ ENTRIES = {
         '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
         '{% table_heading "Procedure" gutter=True %}{% table_heading "State" "status" %}'
         '{% table_heading "Result" %}</tr></thead><tbody>'
-        "{% for title, word, tone, note, evidence in runs %}<tr><td><strong>{{ title }}</strong></td>"
+        "{% for title, word, tone, note, evidence in runs %}<tr><td><strong>{{ title|breakable }}</strong></td>"
         "<td>{% status word tone=tone %}</td><td>{{ note }}{% run_evidence evidence %}</td></tr>{% endfor %}"
         "</tbody></table>{% endtable_region %}{% endsection %}",
         {"runs": _EXAMPLE_RUNS},
@@ -1483,19 +1483,24 @@ ENTRIES = {
     # container's compose change): a title naming a long path, the code with a
     # line longer than a phone's, the words under it and its notes.
     "part/patch": Entry(
-        '{% section "Example runtime" %}{% patch id="example-patch" %}services:\n'
-        "  example-service-with-a-long-name:\n"
-        "    volumes:\n"
-        '      - "/opt/example-applications/an-example-application-with-a-long-name/configuration:/srv/configuration:ro"\n'
-        '    user: "1000:1000"'
-        "{% title %}Add to <code>/opt/example-applications/an-example-application/compose.production.yaml</code>"
+        '{% section "Example runtime" %}{% patch id="example-patch" %}{{ yaml|breakable }}'
+        "{% title %}Add to <code>{{ compose_file|breakable }}</code>"
         "{% detail %}Where its service already has one of these keys, replace it. Then run "
-        "<code>docker compose up -d example-service-with-a-long-name</code> in that directory."
+        "<code>docker compose up -d {{ service|breakable }}</code> in that directory."
         "{% notes %}<li><strong>Remove</strong> <code>pid: host</code></li>"
         '<li><code>user</code> <span class="muted">Its files must be readable by 1000:1000.</span></li>'
         '<li class="prose"><strong>Not included</strong> <span class="muted">An example reason it leaves out,'
         ' with <a href="/example/">an example link</a>.</span></li>'
-        "{% endpatch %}{% endsection %}"
+        "{% endpatch %}{% endsection %}",
+        {
+            "yaml": "services:\n"
+            "  example-service-with-a-long-name:\n"
+            "    volumes:\n"
+            '      - "/opt/example-applications/an-example-application-with-a-long-name/configuration:/srv/configuration:ro"\n'
+            '    user: "1000:1000"',
+            "compose_file": "/opt/example-applications/an-example-application/compose.production.yaml",
+            "service": "example-service-with-a-long-name",
+        },
     ),
     # A change's before and after ({% change_table %}), each state its two
     # callers draw: an approval card's preview and an audit event's changes.
