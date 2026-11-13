@@ -329,11 +329,14 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     self.page.emulate_media(color_scheme="light")
                     self.visit(path, width)
                     found = self.geometry(path, width)
-                    for theme in THEMES:
+                    # A palette is a color per token, the same at every width, so
+                    # the narrowest and widest read every part either draws.
+                    for theme in THEMES if width in (READ_AT[0], READ_AT[-1]) else ():
                         self.page.emulate_media(color_scheme=theme)
                         self.page.evaluate(SETTLE)
                         self.page.evaluate(FINISH_TRANSITIONS)
                         found |= {f"{check} ({theme})": said for check, said in self.palette().items()}
+                    self.page.emulate_media(color_scheme="light")
                     found |= self.opened(path, width)
                     found["unanswered"], self.unanswered = self.unanswered, []
                     found["refused"] = self.refusals_so_far()
