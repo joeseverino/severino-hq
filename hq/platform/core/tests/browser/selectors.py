@@ -244,8 +244,8 @@ SELECTORS = {
     # A dialog a page declares (partials/_modal.html), and the controls that
     # open one: a link the page's wiring intercepts, or a control that says
     # it opens a dialog and names it.
-    # The flow of sibling sections or cards (layout.css).
-    "flow": ".section-flow",
+    # The flow of sibling sections or cards, and of charts (layout.css).
+    "flow": ".section-flow, .domain-charts",
     # A section's heading (partials/_section_head.html).
     "section_head": ".section-head",
     # A section's body, the frame what it holds is drawn in (partials/_part_section.html).

@@ -9,7 +9,7 @@ as HQ; no page is made for the demo alone.
 | Command | What it does |
 | --- | --- |
 | `mise run demo:build [seed]` | Seeds a throwaway database, signs in, follows every link from the dashboard and saves each page to `var/demo` (another seed: `var/demo-<seed>`). |
-| `mise run browser:demo` | Builds, then serves `var/demo` over plain HTTP and checks it in WebKit (below). Part of the `browser` gate, so every pull request runs it. |
+| `mise run browser:demo` | Builds, then serves `var/demo` over plain HTTP and checks it in WebKit (below), or in the engine `HQ_BROWSER_ENGINE` names. Part of the `browser` gate, so every pull request runs it, and in Chromium as `browser:demo-chromium`. |
 | `mise run dev:scratch --demo [seed]` | Builds that seed and serves it on loopback, on a port the system picks; the log names the address. |
 | `mise run dev:look --docs` | Builds the showcase and redraws every screenshot in the docs from it in WebKit, each framed as `SHOTS` in `demo/screenshot.py` declares, so none shows a real HQ. Run it after a change to a page one shows. |
 
@@ -36,9 +36,12 @@ The example estate holds every state a page can draw, for development and the
 tests: failed scans and runs, held requests, findings. The demo's first glance
 is a healthy homelab, so `first_glance.py` has the estate's owner settle it
 after it is seeded and before a page is saved, through the same capabilities
-HQ's pages use. A later Refresh reads the adopted commit, the agent's held
-requests other than its DNS change are declined, the worker finishes what
-waits, each playbook whose newest run did not finish runs again and finishes,
+and controller reports HQ's pages and its controller use. A later Refresh reads
+the adopted commit, the agent's held requests other than its DNS change are
+declined, the worker finishes what waits, each playbook whose newest run did
+not finish runs again and finishes, the controller's next sweep finds the
+machine restarted for its updates, room on its root and the service systemd
+kept restarting fixed, the receipt dropped in is filed against its expense,
 and everything on Needs you but the four things left on purpose is
 dismissed. Their history stays: a failed run is still in Jobs and on its
 machine, and what was dismissed is under Dismissed on Needs you. Only the
@@ -116,8 +119,8 @@ so Scalar does not offer GitHub Pages as one.
   typing in the list's own search says the demo can't, leaving the page and
   what was typed in place.
 - Every page that draws a class or script hook no earlier page drew (so
-  each template is loaded at least once), and the main pages, load in WebKit
-  with no console error and nothing from another site. On the main pages
+  each template is loaded at least once), and the main pages, load with no
+  console error and nothing from another site. On the main pages
   Reset demo is in the user menu and the Demo data switch is locked on.
 - Every page is drawn in the reader's color scheme.
 - Every script on every page is a same-origin file its policy runs: a static
@@ -127,7 +130,8 @@ so Scalar does not offer GitHub Pages as one.
   the connection panel passing, and only the four things left to do on
   purpose (an image update, an image run by tag alone, a certificate to
   renew and an agent's request held for approval), each offering a way to do
-  it, and nothing else waiting on Needs you.
+  it, and nothing else waiting on Needs you. A machine's page names no
+  finding but those four.
 - Playbooks and Jobs show no warning, error or failed scan, and a playbook
   Playbooks links has a run a person approved that finished, each task's
   outcome beside it.

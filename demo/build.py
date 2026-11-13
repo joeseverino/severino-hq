@@ -359,9 +359,9 @@ class DemoBuild(TestCase):
             _hashed_static() as collected,
         ):
             kept = first_glance.settle(owner) if seed in first_glance.ESTATES else []
-            # Where each thing left to do on purpose is on Needs you, for the checks.
+            # Each thing left to do on purpose by where it is on Needs you, for the checks.
             (OUT / "__fragments__").mkdir()
-            (OUT / "__fragments__" / "on-purpose.json").write_text(json.dumps([item_anchor(key) for key in kept]))
+            (OUT / "__fragments__" / "on-purpose.json").write_text(json.dumps({item_anchor(key): key for key in kept}))
             client = _Browser(**REQUEST)
             client.force_login(owner, backend=SSO)
             # Demo data on for every page; demo.js keeps the switch from turning it off.
@@ -508,6 +508,7 @@ class DemoBuild(TestCase):
             "nothing": _NOTHING,
             "sorts": offered.sorts,
             "refused": offered.refused,
+            "most_pages": _MOST_PAGES_OF_A_LIST,
         }
 
     def _save_reads(self, client: Client, offered: _Offered, read: set[str], fragments: dict[str, str]) -> list[str]:

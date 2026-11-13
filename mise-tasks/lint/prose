@@ -1,11 +1,10 @@
 #!/bin/sh
-#MISE description="Vale holds the wording to tools/lint/vale: no history in source, no em dash or hedged plural, none of HQ's own words on a page, no long or narrating sentence, no 'a person', no sentence for a label or a link and no kicker repeating its heading, past the baseline"
+#MISE description="Vale holds the wording to tools/lint/vale's swaps: no em dash, and the one name a page gives each thing, in place of HQ's own words or a retired label"
 #MISE hide=true
 #MISE tags=["fast"]
 #MISE sources=["**/*.py", "**/*.html", "**/*.md", "**/*.js", "**/*.css", "**/*.go", "**/*.sh", "tools/lint/vale/**", "pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env"]
 #MISE outputs=[]
-# plain_words has Vale read the tree (plain_words.TREE), hands it the template
-# attributes and tag literals it cannot read, reads the labels and kickers
-# itself, and holds every finding to the baseline in
-# hq/platform/core/prose_baseline.py, so one report names them all.
+# plain_words has Vale read the tree (plain_words.TREE) and hands it the
+# template attributes and tag literals it cannot read, so one report names
+# every finding.
 exec uv run python -m hq.platform.core.plain_words --whole

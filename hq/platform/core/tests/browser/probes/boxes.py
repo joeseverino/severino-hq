@@ -753,13 +753,7 @@ TITLES_OFF_THEIR_START = (
 
 
 # A frame is filled by what it holds, or shares its row (Design, "A frame is
-# filled", "Dense, never empty"), and the probe reads three ways it is not.
-#
-# A frame (``frames``) at any width whose lower half or more, ``tall`` px or
-# more, stands empty below the last of what it draws: a short card a row has
-# stretched to the height of a tall one beside it. What a frame holds here is
-# every word and painted box of it, a form's fields included, and a section
-# and its body are one frame, read as the one of them that paints it.
+# filled", "Dense, never empty"), and the probe reads two ways it is not.
 #
 # A frame (``frames``, a card or a section's body) as wide as two flow
 # members (``least`` rem) whose lines, from its first to its last, stack
@@ -818,27 +812,9 @@ FRAMES_LEFT_EMPTY = (
   const overlaps = (a, b) => a.top < b.bottom - 1 && b.top < a.bottom - 1;
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
   const found = [];
-  const drawsIt = (el) => paints(getComputedStyle(el));
-  const heading = (frame) => {
-    const said = frame.closest('section')?.querySelector('h2, h3')?.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40);
-    return said ? ` under "${said}"` : '';
-  };
   for (const frame of document.querySelectorAll(frames)) {
     if (!frame.checkVisibility() || !frame.closest('main') || frame.closest(away)) continue;
-    const held = [...words(frame), ...boxes(frame, away)];
-    const outer = frame.querySelector(`:scope > ${body}`);
-    const inside = frame.matches(body) && frame.parentElement.matches(frames) && drawsIt(frame.parentElement);
-    if (held.length && !inside && (!outer || drawsIt(frame))) {
-      const style = getComputedStyle(frame);
-      const at = box(frame);
-      const top = at.top + parseFloat(style.borderTopWidth) + parseFloat(style.paddingTop);
-      const foot = at.bottom - parseFloat(style.borderBottomWidth) - parseFloat(style.paddingBottom);
-      const empty = foot - Math.max(...held.map((r) => r.bottom));
-      if (empty >= tall && empty * 2 >= foot - top) {
-        found.push(`${describe(frame)}${heading(frame)} stands ${Math.round(empty)}px below what it holds, of its ${Math.round(foot - top)}px`);
-      }
-    }
-    if (outer) continue;
+    if (frame.querySelector(`:scope > ${body}`)) continue;
     const [start, room] = inner(frame);
     if (room < least * rem) continue;
     const lines = [];
@@ -858,7 +834,8 @@ FRAMES_LEFT_EMPTY = (
       if (run.bottom - run.top >= tall && (!worst || run.bottom - run.top > worst.bottom - worst.top)) worst = run;
     }
     if (worst) {
-      found.push(`${describe(frame)}${heading(frame)} stacks ${Math.round(worst.bottom - worst.top)}px of lines down its start, each ending within ${Math.round(worst.right - start)}px of its ${Math.round(room)}px`);
+      const heading = frame.closest('section')?.querySelector('h2, h3')?.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40);
+      found.push(`${describe(frame)}${heading ? ` under "${heading}"` : ''} stacks ${Math.round(worst.bottom - worst.top)}px of lines down its start, each ending within ${Math.round(worst.right - start)}px of its ${Math.round(room)}px`);
     }
   }
   for (const list of document.querySelectorAll(lists)) {
@@ -892,7 +869,6 @@ FRAMES_LEFT_EMPTY = (
 
 # Where a run of lines down a frame's start is a frame left empty beside
 # them: ending short of ``part`` of its width and ``tall`` px high or more.
-# ``tall`` is also the least empty foot that leaves a frame empty below.
 STACKED_PART = 0.4
 STACKED_TALL = 120
 

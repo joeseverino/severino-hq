@@ -286,6 +286,7 @@ class HeldAdoptionTests(AdoptionTestCase):
                 procedure("check"), changed="group_vars/all.yml", unpinned=[{"path": "group_vars", "kind": "variables"}]
             ),
             "a collection": catalog(procedure("check"), changed="requirements.yml"),
+            "a read's files": catalog(procedure("check"), changed="roles/check/tasks/main.yml"),
         }
 
         for index, (widening, found) in enumerate(widenings.items()):

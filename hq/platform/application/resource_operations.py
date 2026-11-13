@@ -81,9 +81,7 @@ class OperationItem(TypedDict):
     ]
     attempt_count: AttemptCount
     result: Annotated[dict[str, Any], Describe("What the controller reported of its run; empty until it has run.")]
-    correlation: Annotated[
-        str, Describe("The asker's own id for finding it later; empty for none.")
-    ]
+    correlation: Annotated[str, Describe("The asker's own id for finding it later; empty for none.")]
 
 
 # The reconcile a save queues, which every answer built on a save carries.

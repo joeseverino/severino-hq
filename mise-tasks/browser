@@ -38,7 +38,7 @@ done
 
 if [ "${usage_linux:-}" != true ]; then
     if [ "$#" -eq 0 ]; then
-        exec env MISE_TASK_SKIP=browser:layout-chromium-1,browser:layout-chromium-2 \
+        exec env MISE_TASK_SKIP=browser:layout-chromium-1,browser:layout-chromium-2,browser:demo-chromium \
             uv run python -m tools.gate.verdict browser mise run -c -j 1 'browser:*'
     fi
     # The gates named, joined as mise runs several.

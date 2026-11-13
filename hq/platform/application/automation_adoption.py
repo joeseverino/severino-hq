@@ -21,7 +21,7 @@ Security properties:
 - Adoption is a person's act. A caller without a person behind it waits for
   one; an agent's own rule may let it adopt a narrow change without asking,
   and a widening (a write gains its ground, a new write, a changed file a
-  write runs, a file every procedure may read) waits whatever its rule says.
+  playbook runs, a file every procedure may read) waits whatever its rule says.
 - Each input is closed: a text input has its choices or a sidecar's pattern
   and length, and a free-form type is refused, so a run's parameters can
   name no execution field (``automation_manifest._closed``).
@@ -441,7 +441,9 @@ def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> lis
         gained.append(ended(f"{named} now {_does(after.effect)}, where before it {_does(before.effect)}"))
     if after.privilege and after.privilege != before.privilege:
         gained.append(ended(f"{named} gains the privilege {after.privilege}"))
-    if after.effect != "read" and after.files != before.files:
+    # A read's files too: a read held only by its declaration could be made to
+    # read anything its login can by a change no person looked at.
+    if after.files != before.files:
         gained.append(f"{named} runs different files.")
     return gained
 

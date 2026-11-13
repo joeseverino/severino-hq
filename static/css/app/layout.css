@@ -39,17 +39,26 @@
    share what the row leaves: three sections where two fit put the third
    across the row, never in a track beside an empty one. The basis is read
    against the box the flow sits in, so the same sections pair in a dialog
-   and on a page with no breakpoint. Each on a row starts where the row does
-   and is as tall as what it holds, as a pair is: stretched to a taller
-   neighbor, a short card is a frame around nothing. Every member grows and
-   none caps its width, so each row ends at the flow's end whatever its
-   members hold: a card of a few facts keeps them at its start inside a
-   frame that fills its share. A run of narrower cards
+   and on a page with no breakpoint. The cards of a row start and end
+   together, each stretched to the tallest, its contents at its top and its
+   foot at its bottom; so a page puts a card much shorter than its peers on
+   a row with short ones, never beside a tall one.
+   Every member grows and none caps its width, so each row ends at the
+   flow's end whatever its members hold: a card of a few facts keeps them at
+   its start inside a frame that fills its share. A run of narrower cards
    sets a narrower basis on its flow; `.domain-charts` is the flow at the
    width a chart keeps its scale. */
-.section-flow, .domain-charts { --flow-basis: 22rem; display: flex; flex-wrap: wrap; align-items: flex-start; gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+.section-flow, .domain-charts { --flow-basis: 22rem; display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .domain-charts { --flow-basis: 30rem; }
 .section-flow > *, .domain-charts > * { flex: 1 1 var(--flow-basis); min-width: 0; margin: 0; }
+/* A section whose frame says how to read it keeps that foot at the frame's
+   bottom however far its row stretches it. */
+.section-flow > section.section:has(> .section-body > .section-foot) {
+  display: flex; flex-direction: column;
+  & > .section-body { flex-grow: 1; display: flex; flex-direction: column; }
+  & > .section-body > .section-foot { margin-block-start: auto; padding-block-start: var(--space-6); }
+}
+
 /* What is not a section or a card (a fold, a paragraph) and a section holding
    a table of four columns or more (a month is seven days, not columns) take
    the whole row. The markup puts them

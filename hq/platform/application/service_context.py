@@ -222,7 +222,7 @@ def recent_work(
     shows = principal is not None and principal_opens(principal, urls.resolve(reverse("jobs:list")).func)
     records = tuple(
         (
-            _playbook(run) if by_machine else _machines(run.evidence.hosts),
+            _playbook(run) if by_machine else machines_cell(run.evidence.hosts),
             Cell(run.word, tone=run.tone),
             Cell(ago(run.created_at), muted=True),
             Cell(str(seconds(run.duration)) if run.duration is not None else ""),
@@ -250,7 +250,7 @@ def _playbook(run: WorkRun) -> Cell:
     return Cell(run.title, command_url(run.kind))
 
 
-def _machines(hosts: Sequence[str]) -> Cell:
+def machines_cell(hosts: Sequence[str]) -> Cell:
     """The machines a run acted on: the one by its link, several by name."""
 
     if len(hosts) == 1:

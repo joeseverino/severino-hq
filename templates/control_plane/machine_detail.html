@@ -41,14 +41,15 @@
 {% endif %}
 
 {% comment %}
-  What HQ holds about the machine and how it stands on the tailnet, in one
-  flow so a short section stands beside another. The registry's bands are
-  sections rendered through the shared renderer, so a section HQ gains later
-  appears here without this template learning anything about it. The ones
-  that take the whole row come first, then the tailnet and the short ones,
-  which share rows in the order they are read. How it relates comes last: it
-  is the tallest of the short ones, so it is the one left to take a row of
-  its own rather than standing beside a short card.
+  What HQ holds about the machine and how it stands on the tailnet. The
+  registry's bands are sections rendered through the shared renderer, so a
+  section HQ gains later appears here without this template learning
+  anything about it. The ones that take the whole row come first, then the
+  tailnet, whose dozen facts would hold a short card beside it to their
+  height, so it closes the first flow and lays them across its row. The
+  short ones share rows of a flow of their own in the order they are read.
+  How it relates comes last, under that flow: it is far taller than a card
+  of a record or two, so it never shares their row.
 {% endcomment %}
 <div class="section-flow">
 {% include "partials/_page_sections.html" with spans_row=True %}
@@ -128,6 +129,8 @@
     <a class="btn" href="{% url 'control_plane:tailnet' %}?source={{ asked.source|urlencode }}&amp;target={{ asked.target|urlencode }}" data-modal-open="whatif">Policy test</a>
   {% endif %}
 {% endsection %}
+</div>
+<div class="section-flow">
 
   {% if machine.presence.peered %}
     {% comment %}
@@ -161,8 +164,8 @@
 
 {% include "partials/_page_sections.html" with spans_row=False %}
 {% referenced_by "machine" machine.name cards=True %}
-{% include "partials/_relationships.html" %}
 </div>
+{% include "partials/_relationships.html" %}
 
 {% if device_names %}
   {% include "partials/_modal.html" with id="whatif" title="Policy test" lede="Check whether the policy allows a connection." body_template="control_plane/_whatif_form.html" %}

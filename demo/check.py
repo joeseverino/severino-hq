@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from demo.serve import serving
 from hq.platform.core.tests.browser.uncaught import Uncaught
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDTHS
 
 # Where demo:build saved it. This file doesn't import Django.
 OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(__file__).resolve().parents[1] / "var" / "demo")
@@ -28,8 +28,8 @@ _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
 _ALARMS = ("No reading yet", "Not configured", "not fully set up", "not answering", " failed", "not confirmed")
-# Where each thing the demo leaves to do on purpose is on Needs you, as
-# demo/first_glance.py declares them and demo/build.py saves them.
+# Each thing the demo leaves to do on purpose, its queue key by where it is on
+# Needs you, as demo/first_glance.py declares them and demo/build.py saves them.
 _ON_PURPOSE = OUT / "__fragments__" / "on-purpose.json"
 
 
@@ -99,10 +99,24 @@ def _anchors(page: str) -> list[tuple[dict[str, str], tuple[str, ...]]]:
 
 
 _ROOT = Path(__file__).resolve().parents[1]
-# The pages of a list demo/build.py saves, from its first (its _MOST_PAGES_OF_A_LIST).
-_MOST_PAGES_OF_A_LIST = 6
-# The widths HQ's browser gate reads (WIDTHS in core/tests/browser/widths.py), and a small phone's.
-_WIDTHS = (390, 402, 820, 1360)
+# The engine the demo is drawn in, named as HQ's browser gates name it.
+_ENGINE = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
+
+
+def _engine(playwright):
+    if _ENGINE not in {"chromium", "firefox", "webkit"}:
+        raise ValueError("HQ_BROWSER_ENGINE must be chromium, firefox, or webkit.")
+    return getattr(playwright, _ENGINE)
+
+
+def _most_pages() -> int:
+    """The pages of a list demo/build.py saves, from its first."""
+
+    return json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["most_pages"]
+
+
+# The widths HQ's browser gate reads, and a small phone's.
+_WIDTHS = (390, *WIDTHS)
 # About the demo floats in the bottom left corner, over some of the page at
 # almost every scroll stop; what it promises is to leave none of it there.
 # Read at the page's end: the room below the content, against the room the
@@ -165,7 +179,7 @@ def _queries_linked(here: str, page: str) -> set[str]:
         asked = dict(pairs)
         if not pairs or "sort" in asked or not asked.get("page", "1").isdigit():
             continue
-        if int(asked.get("page", "1")) > _MOST_PAGES_OF_A_LIST or (OUT / address.path.lstrip("/")).is_file():
+        if int(asked.get("page", "1")) > _most_pages() or (OUT / address.path.lstrip("/")).is_file():
             continue
         keys.add(f"{address.path}?{urlencode(pairs)}")
     return keys
@@ -188,7 +202,7 @@ def _pages_linked(here: str, page: str) -> list[str]:
         for href in re.findall(r'href="([^"]+)"', nav):
             address = urlsplit(urljoin(here, unescape(href)))
             pairs = sorted((name, value) for name, value in parse_qsl(address.query) if value)
-            if pairs and int(dict(pairs).get("page", "1")) <= _MOST_PAGES_OF_A_LIST:
+            if pairs and int(dict(pairs).get("page", "1")) <= _most_pages():
                 keys.append(f"{address.path}?{urlencode(pairs)}")
     return keys
 
@@ -278,6 +292,18 @@ class DemoSiteTests(unittest.TestCase):
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
         self.assertEqual(re.findall(r'class="ladder-rung" data-state="(?!holds")([\w-]+)"', connection), [])
 
+    def test_a_machine_s_page_shows_only_what_is_left_on_purpose(self):
+        # Each finding a machine's page names, by the queue key it draws, is
+        # one of the things the demo leaves to do.
+        kept = set(json.loads(_ON_PURPOSE.read_text(encoding="utf-8")).values())
+        machines = sorted((OUT / "infrastructure" / "machines").glob("*/index.html"))
+        self.assertTrue(machines, "the demo has machines")
+        for page in machines:
+            with self.subTest(machine=page.parent.name):
+                lines = _visible_lines(page.read_text(encoding="utf-8"))
+                found = {line for line in lines if re.fullmatch(r"hq\.[\w.]+:finding:\S+", line)}
+                self.assertEqual(sorted(found - kept), [])
+
     def test_the_playbooks_open_healthy_with_an_approved_run_finished(self):
         # Playbooks and Jobs say nothing failed or alarming at first glance:
         # no warning or error notice and no failed scan. A playbook Playbooks
@@ -317,7 +343,7 @@ class DemoSiteTests(unittest.TestCase):
         lists = json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["sorts"]
         self.assertTrue(lists, "the demo has lists with a toolbar")
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 900})
             for path in sorted(lists):
                 with self.subTest(path=path):
@@ -374,7 +400,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 900})
             page.goto(self.origin + "/infrastructure/connections/", wait_until="networkidle")
             row = page.locator("tbody [data-ask]").first
@@ -478,7 +504,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page()
             errors, elsewhere = [], []
             at = [""]
@@ -535,7 +561,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             for width in _WIDTHS:
                 page = browser.new_page(viewport={"width": width, "height": 700})
                 page.goto(self.origin + "/", wait_until="load")
@@ -562,7 +588,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             for width in _WIDTHS:
                 page = browser.new_page(viewport={"width": width, "height": 700})
                 for path in ("/", "/infrastructure/containers/", "/action-items/"):
@@ -579,7 +605,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             for width, height in ((1360, 800), PHONE_SCREEN):
                 page = browser.new_page(viewport={"width": width, "height": height})
                 page.goto(self.origin + "/", wait_until="load")
@@ -609,7 +635,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 800})
             page.goto(self.origin + "/", wait_until="networkidle")
             for opening in ("about", "keys"):
@@ -678,7 +704,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page()
             page.goto(self.origin + "/", wait_until="networkidle")
             homelab = page.locator('.reading[data-fragment-part^="machine-"]')
@@ -716,7 +742,7 @@ class DemoSiteTests(unittest.TestCase):
         )
         self.assertTrue(machines)
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             for width in (402, 1360):
                 page = browser.new_page(viewport={"width": width, "height": 900})
                 for path in machines:
@@ -756,7 +782,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page()
             page.goto(self.origin + "/action-items/", wait_until="load")
             row = page.locator("[data-attention-item]:has([data-triage] button)").first

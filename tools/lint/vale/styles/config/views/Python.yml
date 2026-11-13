@@ -212,8 +212,8 @@ scopes:
        (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))
 
   # What an agent or a client's author reads as a description, under its own
-  # scope, so only the rules for every reader (Plain.Person, Long, Narrate
-  # and Parts) read it and the API keeps its own nouns: the docstring of a
+  # scope, so only Parts and Shown read it and the API keeps its own
+  # nouns: the docstring of a
   # schema the API document and an MCP tool's answer describe (a TypedDict, a
   # model, a command), and of an MCP tool or an API view, whose first line is
   # its description.

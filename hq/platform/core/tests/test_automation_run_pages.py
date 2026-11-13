@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 from django.test import SimpleTestCase, TestCase, tag
 from django.urls import reverse
 
-from hq.platform.application.tests.markup import links, select, texts, within
+from hq.platform.application.tests.markup import links, select, text, texts, with_class, within
 from hq.platform.application.tests.source import source_files, template_files
 from hq.platform.application.tests.tree import ROOT
 from hq.platform.core import seeds
@@ -68,7 +68,8 @@ class AutomationRunPageTests(TestCase):
         for statement in (*manifest.preconditions, *manifest.verification, *manifest.recovery):
             with self.subTest(statement=statement):
                 self.assertIn(statement, about)
-        self.assertIn(manifest.revision, about)
+        # The commit adopted, as short as Playbooks says it.
+        self.assertIn(f"Adopted commit {manifest.revision[:12]}", about)
 
     def test_a_procedure_s_page_lists_its_latest_runs_in_their_words_and_tones(self):
         html = self.page(reverse("command", args=[RUN]))
@@ -92,6 +93,22 @@ class AutomationRunPageTests(TestCase):
         # Each run is named by its playbook's title, the name the Playbooks page gives it.
         title = next(found["title"] for found in PROCEDURES if found["declaration"]["id"] == CACHE_FLUSH)
         self.assertEqual({element.words for element in procedure}, {title})
+
+    def test_a_procedure_s_page_links_each_of_its_runs_waiting_for_approval(self):
+        from hq.domains.control_plane.models import ApprovalRequest
+
+        held = ApprovalRequest.objects.filter(
+            state=ApprovalRequest.State.PENDING, capability__startswith="automation.", capability__endswith=".run"
+        )
+        self.assertTrue(held)
+        for request in held:
+            with self.subTest(capability=request.capability):
+                html = self.page(reverse("command", args=[request.capability]))
+                decided_at = reverse("core:approval_entry", kwargs={"approval_id": request.id})
+                self.assertIn(
+                    ("Waiting for approval", decided_at),
+                    [(element.words, element.attrs.get("href")) for element in within(html, "id", "held-runs")],
+                )
 
     def test_a_command_with_nothing_to_say_of_itself_draws_no_more_than_its_form(self):
         html = self.page(reverse("command", args=["infrastructure.controller.refresh"]))
@@ -128,22 +145,21 @@ class ProcedurePageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return response.content.decode()
 
-    def test_each_procedure_s_page_lists_the_inputs_its_argument_spec_declares(self):
+    def test_each_procedure_s_inputs_are_its_form_s_fields_said_once(self):
+        """Each input its argument spec declares is a field of the run's
+        form, its description said once on the page: no table beside the
+        form repeats them under their raw names."""
+
         from hq.platform.application.automation_adoption import procedures
 
-        adopted = procedures()
+        adopted = [procedure for procedure in procedures() if procedure.inputs]
         self.assertTrue(adopted)
         for procedure in adopted:
             html = self.page(procedure.id)
-            rows = [element.words for element in within(html, "id", "inputs") if element.tag == "tr"]
             for name, spec in procedure.inputs.items():
                 with self.subTest(procedure=procedure.id, input=name):
-                    (row,) = [row for row in rows if row.split()[:1] == [name]]
-                    for said in (spec.description, *map(str, spec.choices)):
-                        self.assertIn(said, row)
-                    if spec.bound is not None:
-                        self.assertIn(spec.bound.pattern, row)
-                        self.assertIn(str(spec.bound.max_length), row)
+                    self.assertTrue(select(html, "name", f"parameters.{name}"))
+                    self.assertEqual(text(html).count(spec.description), 1)
 
     def test_each_procedure_s_page_is_named_by_its_playbook_s_title(self):
         """The heading and the button say the title Playbooks gives the
@@ -166,6 +182,51 @@ class ProcedurePageTests(TestCase):
                 self.assertEqual(buttons, [title])
                 self.assertIn(title, capability_registry()[f"automation.{operation_id}.run"].wanted())
 
+    def test_each_procedure_s_lede_says_whether_an_agent_s_run_waits_for_a_person(self):
+        from hq.platform.application.approvals import no_rule_allows
+        from hq.platform.application.automation_adoption import playbook_titles
+        from hq.platform.application.capabilities import capability_registry
+
+        said = {
+            True: "It changes a live system, so when an agent asks, it waits for an operator's approval.",
+            False: "It only reads, so no one approves it, whether you or an agent asks.",
+        }
+        waits = set()
+        for operation_id, title in playbook_titles().items():
+            with self.subTest(procedure=operation_id):
+                spec = capability_registry()[f"automation.{operation_id}.run"]
+                waits.add(no_rule_allows(spec))
+                (lede,) = [element.words for element in with_class(self.page(operation_id), "page-lede")]
+                self.assertIn(f"“{title}”", lede)
+                self.assertIn(said[no_rule_allows(spec)], lede)
+        self.assertEqual(waits, {True, False})
+
+    def test_a_held_run_s_card_says_what_approving_it_runs(self):
+        """The card names the playbook by its title, and shows the machines,
+        what the run does, its access and the commit adopted."""
+
+        from hq.domains.control_plane.models import ApprovalRequest
+        from hq.platform.application.approval_review import review
+        from hq.platform.application.automation_adoption import playbook_titles
+        from hq.platform.application.automation_runs import operation_registry
+
+        held = ApprovalRequest.objects.filter(
+            state=ApprovalRequest.State.PENDING, capability__startswith="automation.", capability__endswith=".run"
+        )
+        self.assertTrue(held)
+        for request in held:
+            with self.subTest(capability=request.capability):
+                operation = request.baseline["spec"]["operation"]
+                manifest = operation_registry()[operation]
+                card = review(request)
+                self.assertIn(f"“{playbook_titles()[operation]}”", str(card["asked"]))
+                shown = {row.label: row.after for row in card["preview"].rows}
+                for host in request.baseline["hosts"]:
+                    self.assertIn(host, shown["Machines"])
+                self.assertEqual(shown["Adopted commit"], manifest.revision[:12])
+                self.assertIn("Effect", shown)
+                self.assertIn("sudo", shown["Access"])
+
     def test_each_procedure_s_page_leads_back_to_playbooks(self):
         from hq.platform.application.automation_adoption import procedures
 
@@ -177,16 +238,23 @@ class ProcedurePageTests(TestCase):
                 self.assertEqual(trail, [home])
                 self.assertEqual([href for words, href in links(html) if words == "Cancel"], [home])
 
-    def test_each_procedure_s_page_names_its_privilege(self):
+    def test_each_procedure_s_page_says_its_access_in_plain_words(self):
+        """Whether a run escalates, and through which profile, as sudo."""
+
         from hq.platform.application.automation_runs import operation_registry
 
-        for manifest in operation_registry().values():
+        manifests = operation_registry().values()
+        self.assertEqual({manifest.privilege is None for manifest in manifests}, {True, False})
+        for manifest in manifests:
             with self.subTest(procedure=manifest.id):
-                about = select(self.page(manifest.id), "id", "command-about")
-                self.assertIn(manifest.privilege or "None", " ".join(element.words for element in about))
+                about = " ".join(element.words for element in select(self.page(manifest.id), "id", "command-about"))
+                self.assertIn("Access", about)
+                if manifest.privilege is None:
+                    self.assertIn("no sudo", about.lower())
+                else:
+                    self.assertIn(f"sudo, as the {manifest.privilege} profile allows", about)
 
     def test_a_procedure_runs_on_the_machines_it_names_each_by_its_link_and_else_on_any(self):
-        from hq.platform.application.automation_adoption import generation
         from hq.platform.application.automation_runs import about, operation_registry
         from hq.platform.application.entity_links import entity_link
         from hq.platform.application.security import Capability, Principal
@@ -195,7 +263,7 @@ class ProcedurePageTests(TestCase):
         reader = Principal("example-reader", "web", frozenset({Capability.READ}))
 
         def runs_on(manifest):
-            (fact,) = [fact for fact in about(manifest, generation(), reader).facts if fact.label == "Runs on"]
+            (fact,) = [fact for fact in about(manifest, reader).facts if fact.label == "Runs on"]
             return fact
 
         named = declared.model_copy(update={"hosts": (MACHINE,)})

@@ -61,7 +61,6 @@ class ProceduresView(PageMixin, TemplateView):
     proposal's id, that commit instead."""
 
     template_name = "control_plane/procedures.html"
-    page_lede = "HQ runs only the commit you adopt."
 
     @cached_property
     def sources(self) -> SourceStanding:
@@ -83,10 +82,8 @@ class ProceduresView(PageMixin, TemplateView):
 
     @override
     def get_page_lede(self) -> str:
-        # A commit's own page is about that commit; its title and sections say which.
-        if "pk" not in self.kwargs:
-            return self.page_lede
-        found = self.sources.proposal
+        # Only a refused commit's own page says more than its title and sections.
+        found = self.sources.proposal if "pk" in self.kwargs else None
         if found is not None and found.refused:
             return "HQ can't adopt this commit. Fix what's listed below in your repository."
         return ""

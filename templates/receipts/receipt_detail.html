@@ -1,5 +1,11 @@
 {% extends "page.html" %}
 {% block page %}
+{% comment %}
+The receipt's facts, its notes and a file that is a line share rows. A
+picture of it is far taller than they are, so it stands on a row of its own
+under them.
+{% endcomment %}
+{% url "receipts:edit" receipt.pk as edit_url %}
 <div class="section-flow">
 {% card label="Receipt" %}{% facts %}
   {% fact "Date" %}{{ receipt.date|when }}{% endfact %}
@@ -8,9 +14,7 @@
   {% if receipt.related_asset %}{% fact "Asset" %}{% entity "asset"|entity_of:receipt.related_asset.slug label=receipt.related_asset.item_name %}{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
 
-{% url "receipts:edit" receipt.pk as edit_url %}
-{% if file_picture %}
-{% section "File" figure=True lede=file_line data_receipt_file="picture" %}{% url 'receipts:picture' receipt.pk as picture_url %}{% firstof receipt.original_filename "as uploaded" as named %}{% include "partials/_document_picture.html" with src=picture_url alt="The receipt, "|add:named only %}{% endsection %}
+{% if file_picture %}{% comment %}Under the flow.{% endcomment %}
 {% elif file_stored %}
 {% section "File" data_receipt_file="link" %}<p><a href="{% url 'receipts:file' receipt.pk %}">{{ receipt.original_filename|default:"The receipt's file"|breakable }}</a>{% if file_line %} <span class="muted">{{ file_line|breakable }}</span>{% endif %}</p>{% endsection %}
 {% elif file_missing %}
@@ -21,4 +25,8 @@
 
 {% if receipt.notes %}{% section "Notes" %}<p>{{ receipt.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 </div>
+
+{% if file_picture %}
+{% section "File" figure=True lede=file_line data_receipt_file="picture" %}{% url 'receipts:picture' receipt.pk as picture_url %}{% firstof receipt.original_filename "as uploaded" as named %}{% include "partials/_document_picture.html" with src=picture_url alt="The receipt, "|add:named only %}{% endsection %}
+{% endif %}
 {% endblock %}

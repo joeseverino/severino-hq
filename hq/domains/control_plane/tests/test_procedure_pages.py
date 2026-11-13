@@ -92,12 +92,11 @@ class ProceduresPageTests(TestCase):
                     self.assertIn("Any of your machines", said)
         self.assertNotIn("–", said)
 
-    def test_a_commit_s_own_page_carries_no_lede_of_the_whole_page(self):
-        from hq.domains.control_plane.procedure_views import ProceduresView
-
+    def test_only_a_refused_commit_s_page_carries_a_lede(self):
         pk = self.held().payload["proposal"]
-        self.assertNotIn(ProceduresView.page_lede, text(self.page(self.proposal_url(pk))))
-        self.assertIn(ProceduresView.page_lede, text(self.page()))
+        for html in (self.page(), self.page(self.proposal_url(pk))):
+            with self.subTest():
+                self.assertFalse(select(html, "class", "page-lede"))
 
     def test_a_commit_s_own_page_draws_only_that_commit(self):
         held = self.held().payload["proposal"]

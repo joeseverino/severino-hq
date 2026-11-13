@@ -1,8 +1,9 @@
-extends: existence
-message: "'%s' is HQ's own word; say 'config'"
+extends: substitution
+message: "Say '%s' in place of '%s', HQ's own word"
 level: error
 ignorecase: true
 nonword: true
 scope: [shown, ~comment & ~code]
-tokens:
-  - '(?<![\w-])(?:specs?)(?![\w-])'
+swap:
+  '(?<![\w-])specs(?![\w-])': configs
+  '(?<![\w-])spec(?![\w-])': config

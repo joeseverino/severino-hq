@@ -12,7 +12,7 @@ from typing import Any
 from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, WARNINGS
+from .approvals import COMPARED, DECLARATIONS, DESTRUCTIVE_EFFECT, WARNINGS, shown_by
 from .payload_words import STEP, ChangeRow, changed_words, document, field_words, held_words, value_words
 from .ui import counted
 lazy from . import capabilities
@@ -229,6 +229,9 @@ def preview(held: ApprovalRequest) -> ChangePreview:
         # A handler that measures its own subject says what it compares.
         return grouped(compared["before"], compared["after"], label="Would change")
     spec = capabilities.capability_registry().get(held.capability)
+    if spec is not None and (shown := shown_by(spec)) is not None:
+        # A handler that measures its own subject may say how it reads.
+        return shown(held)
     if spec is not None and spec.subject_resource != DECLARATIONS:
         return _record_preview(spec, held)
     declared = dict(held.baseline.get("spec") or {})

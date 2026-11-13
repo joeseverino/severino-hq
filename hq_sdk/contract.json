@@ -2556,12 +2556,6 @@
           "source_root"
         ]
       },
-      "sentence_labels": {
-        "kind": "function",
-        "parameters": [
-          "source_root"
-        ]
-      },
       "template_violations": {
         "kind": "function",
         "parameters": [

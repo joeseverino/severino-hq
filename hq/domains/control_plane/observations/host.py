@@ -195,12 +195,12 @@ class HostUnitRecord(ObservationRecord):
     main_code: int = Field(
         default=0,
         ge=0,
-        description="ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
+        description="ExecMainCode: how the last run's main process ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
     )
     main_status: int = Field(
         default=0,
         ge=0,
-        description="ExecMainStatus: the exit status or signal number of the main process of the last run.",
+        description="ExecMainStatus: the exit status or signal of the last run's main process.",
     )
     started_at: OptionalUnitInstant = Field(
         default="", description="InactiveExitTimestamp: when the last start began, on this boot."

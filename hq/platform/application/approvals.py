@@ -180,22 +180,38 @@ def _baseline_of(resource: ManagedResource) -> dict[str, Any]:
     }
 
 
-# Where ``measured_by`` puts a handler's own reading of what it acts on.
+# Where ``measured_by`` puts a handler's own reading of what it acts on, and
+# what a person deciding it is shown of that reading.
 _MEASURED = "measured"
+_SHOWN = "shown"
 
 
 def measured_by[Handler: Callable[..., Any]](
     subject: Callable[[Any], ApprovalSubject],
+    *,
+    shown: Callable[[ApprovalRequest], Any] | None = None,
 ) -> Callable[[Handler], Handler]:
     """Declare what a held call of a handler is about, read from its validated
     command, for a command that decides more than its target and payload say:
-    a run's hosts resolve through HQ's facts, which move while it waits."""
+    a run's hosts resolve through HQ's facts, which move while it waits.
+
+    ``shown`` reads a held call back as the comparison its card shows
+    (``approval_review.ChangePreview``), from the baseline ``subject`` measured.
+    """
 
     def declare(handler: Handler) -> Handler:
         setattr(handler, _MEASURED, subject)
+        if shown is not None:
+            setattr(handler, _SHOWN, shown)
         return handler
 
     return declare
+
+
+def shown_by(spec) -> Callable[[ApprovalRequest], Any] | None:
+    """The handler's own reading of a held call for its card, when it declares one."""
+
+    return vars(spec.handler).get(_SHOWN) if hasattr(spec.handler, "__dict__") else None
 
 
 # Where ``waits_for_a_person`` puts a handler's test of a call too wide for a standing rule.
@@ -524,8 +540,9 @@ def reads_every_hold(principal: Principal) -> bool:
     return principal.interface in OPERATOR_INTERFACES or principal.interface == INTERNAL_INTERFACE
 
 
-def pending(*, principal: Principal, limit: int | None = 50) -> tuple[ApprovalRequest, ...]:
-    """Every request still waiting for a person that ``principal`` may read, oldest first.
+def pending(*, principal: Principal, limit: int | None = 50, capability: str = "") -> tuple[ApprovalRequest, ...]:
+    """Every request still waiting for a person that ``principal`` may read,
+    oldest first: only those of ``capability``, when one is named.
 
     A read: one past its expiry is left out whether or not the sweep has
     marked it lapsed (``lapse_expired``), so it is never offered for a
@@ -534,6 +551,8 @@ def pending(*, principal: Principal, limit: int | None = 50) -> tuple[ApprovalRe
 
     principal.require(Capability.READ)
     waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING, expires_at__gt=derivations.clock())
+    if capability:
+        waiting = waiting.filter(capability=capability)
     if not reads_every_hold(principal):
         waiting = waiting.filter(
             requested_actor=principal.actor,

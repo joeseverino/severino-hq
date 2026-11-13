@@ -1913,10 +1913,10 @@ type HostUnitRecord struct {
 	// Load LoadState: loaded, or why systemd holds no configuration for it (not-found, masked, error, bad-setting).
 	Load string `json:"load"`
 
-	// MainCode ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).
+	// MainCode ExecMainCode: how the last run's main process ended, as the kernel's code (1 exited, 2 killed, 3 dumped).
 	MainCode int `json:"main_code,omitempty"`
 
-	// MainStatus ExecMainStatus: the exit status or signal number of the main process of the last run.
+	// MainStatus ExecMainStatus: the exit status or signal of the last run's main process.
 	MainStatus int `json:"main_status,omitempty"`
 
 	// NextElapseAt NextElapseUSecRealtime: when a timer with a calendar schedule next elapses.

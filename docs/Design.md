@@ -36,8 +36,17 @@ tempted to measure.
 **The owner's words, not HQ's.** One person reads this interface. He knows his
 machines and does not know how HQ is built, so a page never says the names HQ
 has for its own parts. A thing is called by its own noun ("DNS record",
-"certificate"), HQ "reads" and "applies", and what differs was "changed
-outside HQ". Comments and identifiers keep the internal vocabulary.
+"certificate", "service", "record"), never kind, resource, provider,
+capability, consumer, claim, finding, generation, revision, standing, facet,
+projection or lineage. HQ "reads" and "applies", never observes, reconciles,
+converges or renders; what HQ expects is never "declared" or "desired"; and
+what differs was "changed outside HQ", never drift. A job that stops
+heartbeating "stopped reporting", never lost its lease, and the work is HQ's,
+or Ansible's where Ansible acts, never the automation worker's. A page never
+asks the owner to type a setting's name or a credential's field value: it
+says what the setting lets HQ do, and the connection's guide says how. A held
+request says the change the agent asked for and its target. Comments and
+identifiers keep the internal vocabulary.
 
 **A title is a short noun.** A section heading, a column heading, a label and a
 button say the plainest name a stranger would understand at a glance:
@@ -49,13 +58,11 @@ button, a link to another page) is one to three words in sentence case. It is
 the term GitHub, Stripe, Cloudflare, Vercel or Tailscale's dashboards use:
 "Access", "History", "Source", "Defaults", "Installed on", "Unmanaged names".
 It never opens with a question word and holds no pronoun, no
-everything/each/every and no clause saying what the part holds. A name that
-must break it is in `PROPER_NAMES` in `hq/platform/core/plain_words.py` with
-its reason; `lint:prose` refuses the rest.
+everything/each/every and no clause saying what the part holds. A kicker over
+a heading names the group, never a word the heading says again.
 
-The Vale style `tools/lint/vale/styles/Plain` holds each word that is never
-shown with what to say instead, and each label that was retired for one name
-per thing:
+The Vale style `tools/lint/vale/styles/Plain` swaps each retired name for the
+one name per thing:
 
 | Thing | Its one name |
 | --- | --- |
@@ -74,13 +81,19 @@ A capability and the button that runs it say the same words.
 **A sentence says what is true, in a few plain words.** A value HQ does not
 have is left out, and its row with it: never "Not known yet", never an
 explanation of why. A detail is one short sentence the reader needs in order to
-act, or nothing, and deleting a line is the first fix. No sentence argues with
-itself, hedges, explains HQ's machinery, or narrates the page, as "Open one to
-see" does. `Plain.Long` refuses a sentence past twenty words and
-`Plain.Narrate` the narrating lede. A file that still breaks either is counted
-in `hq/platform/core/prose_baseline.py`, which only falls. No sentence chains
-"of" phrases ("the procedures of the commit of its repository"): name the
-thing once, by what owns it ("the playbooks you adopted").
+act, or nothing, and deleting a line is the first fix; past about twenty words
+it is carrying a second thought. No sentence argues with itself, hedges,
+explains HQ's machinery, or narrates the page, as "Open one to see" or "Each
+connection is a 1Password item" does. No sentence chains "of" phrases ("the
+procedures of the commit of its repository"): name the thing once, by what
+owns it ("the playbooks you adopted"). The reader is "you" when the reader
+acts, and anyone else is named or named by role ("an admin", "the agent"),
+never "a person" or "someone". A count agrees with its noun through
+`counted`, never "account(s)". No sentence praises ("seamless", "blazing
+fast") or knocks down a reading nobody held ("not X, but Y"): say what the
+thing does. What an agent or a client's author reads (an API or MCP
+description, an error) is held to the same. A comment says what the code does
+now, in the present tense; how it came to be is the commit message's.
 
 **No page writes a style.** A page's look comes only from HQ's own sheets.
 The policy's `style-src-elem 'self'` refuses a `<style>` element, and HQ
@@ -698,11 +711,10 @@ the link between two ends), evidence beside its value, one line per check with
 detail on demand, like beside like in a row. A card that is mostly empty, or a
 row with a gulf in it, is a layout to redesign. Short facts go across the frame
 (`{% facts %}` does it), and a short list beside what it describes. A card
-beside a taller one is as tall as what it holds, never stretched around
-nothing. *Gate:* `frames filled` in the layout survey fails a frame whose lines
+much shorter than its peers shares a row with short ones, never with a tall
+one. *Gate:* `frames filled` in the layout survey fails a frame whose lines
 stack down its start, each ending short of two fifths of its width, for long
-enough to matter. It also fails a frame whose lower half or more stands empty
-below what it holds.
+enough to matter.
 
 **The content column is drawn by `{% page_main %}`.** base.html draws every
 page's content in it (`partials/_page_main.html`), and the component catalog
@@ -1716,9 +1728,9 @@ Alignment:
   from the first stop's mark to the last's, each mark holding its glyph in its
   middle.
 - Sections and cards that share a row start their frames together, whatever
-  their heads hold (the survey's `frames in a row`). Each ends where what it
-  holds does: a row never stretches a short one to a tall one's height (`frames
-  filled`).
+  their heads hold (the survey's `frames in a row`), and in a flow they end
+  together too, the dashboard's included (`flows share their rows`). Each
+  holds its contents at its top and its foot at its bottom.
 - A band of readings or choices lays out as whole even rows, and each of its
   cells keeps its padding; so does any filled box. A band of facts shares
   its width in equal tracks.

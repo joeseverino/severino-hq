@@ -459,9 +459,6 @@ PASSES = {
         "{% endfacts %}{% endcard %}</div>"
         '{% section "Example short" %}<p>Example</p><p>Example</p>{% endsection %}'
         '{% section "Example across" %}' + f"<p>{_LINES * 4}</p>" * 4 + "{% endsection %}"
-        # A short section beside a tall one in the flow, as tall as it holds.
-        '<div class="section-flow">{% section "Example beside" %}<p>Example</p>{% endsection %}'
-        '{% section "Example tall" %}' + "<p>Example</p>" * 12 + "{% endsection %}</div>"
     ),
     "titles at the head's start": Plant(
         '{% section "Example" %}<p>Example</p>{% aside %}<a href="#">Example</a>{% endsection %}'
@@ -530,11 +527,14 @@ _LEFT_BEHIND = _TABLE.format('on <span style="display: inline-block">example-nam
 _CAPS = "planted/caps"
 _CAPPED = '<div class="section-flow"><section style="max-inline-size: 12rem"><p>Example</p></section></div>'
 
-# A short section its row stretches to the height of the tall one beside it.
-_STRETCH = "planted/stretched"
-_STRETCHED = (
-    '<div class="section-flow" style="align-items: stretch">{% section "Example short" %}<p>Example</p>{% endsection %}'
+# A short section ending above the tall one its row holds: a row that packs
+# its members at its start, and a row of charts that does.
+_UNEVEN = "planted/uneven"
+_UNEVENED = (
+    '<div class="section-flow" style="align-items: flex-start">{% section "Example short" %}<p>Example</p>{% endsection %}'
     '{% section "Example tall" %}' + "<p>Example</p>" * 12 + "{% endsection %}</div>"
+    '<div class="domain-charts" style="align-items: flex-start">{% card label="Example chart" %}<p>Example</p>{% endcard %}'
+    '{% card label="Example taller chart" %}' + "<p>Example</p>" * 6 + "{% endcard %}</div>"
 )
 
 # A run of parts whose rest asks its column for nothing and shows one line
@@ -607,7 +607,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
             _LIFTED: probe(_OUTRANKED),
             _LEFT: probe(_LEFT_BEHIND),
             _CAPS: probe(_CAPPED),
-            _STRETCH: probe(_STRETCHED),
+            _UNEVEN: probe(_UNEVENED),
             _RESTS: probe(_RESTED),
             **{name: probe(markup) for name, markup in _SHIFTS.items()},
         }
@@ -652,10 +652,9 @@ class PlantedBrowserTests(LayoutBrowserTests):
         found = self.found(_CAPS, Plant("")).get("flows share their rows", [])
         self.assertTrue([said for said in found if "caps its width" in said], found)
 
-    def test_a_frame_its_row_stretches_past_what_it_holds_is_left_empty(self):
-        found = self.found(_STRETCH, Plant("")).get("frames filled", [])
-        self.assertTrue([said for said in found if 'under "Example short"' in said], found)
-        self.assertFalse([said for said in found if 'under "Example tall"' in said], found)
+    def test_a_flow_member_that_ends_above_its_row_s_tallest_is_found(self):
+        found = self.found(_UNEVEN, Plant("")).get("flows share their rows", [])
+        self.assertEqual(len([said for said in found if "px above" in said]), 2, found)
 
     def test_a_rest_that_asks_for_nothing_is_cut_beside_its_own_cell_s_room_only(self):
         found = self.found(_RESTS, Plant("")).get("cut beside room", [])

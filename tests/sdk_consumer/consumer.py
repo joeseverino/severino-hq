@@ -140,7 +140,6 @@ def sentences(registrar: str) -> None:
     ui.ListRow("Backup host", url="/x/", chips=("Running",))
     ui.ListRow("Backup host", chips="Running")  # type: ignore[arg-type]
     assert_type(validation.sentence_closes("src"), list[str])
-    assert_type(validation.sentence_labels("src"), list[str])
 
 
 def the_demo(due: date, at: datetime) -> None:

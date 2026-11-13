@@ -699,16 +699,15 @@ ENTRIES = {
         )
     ),
     "part/flow-wide": Entry(_flow(("Example hosts", _WIDE), ("Example identity", _NARROW), ("Example link", _NARROW))),
-    # A section of two facts beside one of a dozen, as a machine's expenses
-    # sit beside its tailnet: the short one is as tall as what it holds, never
-    # stretched to its neighbor's height around nothing.
-    "part/flow-short-beside-tall": Entry(
+    # A section that says how to read it beside a taller one: the row ends
+    # both together, and the foot stands at the bottom of its frame.
+    "part/flow-foot": Entry(
         _flow(
-            ("Example identity", _NARROW),
+            ("Example identity", _NARROW + "{% foot %}Example of how to read it."),
             (
-                "Example tailnet",
+                "Example link",
                 "{% facts %}"
-                + "".join(f'{{% fact "Example fact {n}" value="example-{n:02}" %}}' for n in range(1, 13))
+                + "".join(f'{{% fact "Example fact {n}" value="example-{n:02}" %}}' for n in range(1, 7))
                 + "{% endfacts %}",
             ),
         )

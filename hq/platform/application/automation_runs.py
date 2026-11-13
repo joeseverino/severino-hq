@@ -40,25 +40,25 @@ from .command_fields import Among, Describe, Names
 from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
-lazy from . import automation_adoption
+lazy from . import approvals, automation_adoption
+lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
-lazy from .automation_adoption import AdoptedInput, AdoptedProcedure
-lazy from .automation_sources import PLAYBOOKS
+lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ring_automation_doorbell
 lazy from .controller import release_lapsed
 lazy from .entity_links import entity_link, kind_label
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
-lazy from .json_schemas import json_schema
+lazy from .json_schemas import fields as whole_fields, json_schema
 lazy from .labels import effect_label, lower_first
 lazy from .machines import machine_catalog
-lazy from .moments import when
-lazy from .payload_words import value_words
+lazy from .moments import ago, when
+lazy from .payload_words import ChangeRow, field_words, value_words
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
 lazy from .routes import reverse
-lazy from .service_context import Cell, ServiceSection, recent_work
+lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
 lazy from .timestamps import moment
-lazy from .ui import counted, ended
+lazy from .ui import ended
 lazy from .work_runs import recent_runs
 
 
@@ -472,17 +472,6 @@ def _statements(statements: tuple[str, ...]) -> str:
     return " ".join(ended(statement) for statement in statements)
 
 
-# What each input type of an argument spec takes, in a page's words.
-INPUT_TYPE_WORDS = {
-    "str": "Text",
-    "path": "Path",
-    "int": "Whole number",
-    "float": "Number",
-    "bool": "Yes or no",
-    "list": "List",
-}
-
-
 def _runs_on(manifest: OperationManifest) -> CommandFact:
     """The machines a procedure runs on: each it names by its link, else any
     of the kinds it is written for."""
@@ -492,65 +481,88 @@ def _runs_on(manifest: OperationManifest) -> CommandFact:
     return CommandFact("Runs on", f"Any {' or '.join(lower_first(kind_label(kind)) for kind in manifest.target_kinds)}")
 
 
-def _type_words(spec: AdoptedInput) -> str:
-    if spec.type == "list" and spec.elements is not None:
-        return f"List of {lower_first(INPUT_TYPE_WORDS[spec.elements])}"
-    return INPUT_TYPE_WORDS[spec.type]
+def access_words(privilege: str | None, effect: str) -> str:
+    """What a run may do on a machine beyond its login, in a page's words."""
+
+    if not privilege:
+        return "Read only, no sudo" if effect == "read" else "No sudo"
+    return f"sudo, as the {privilege} profile allows"
 
 
-def _inputs(procedure: AdoptedProcedure | None) -> ServiceSection | None:
-    """A procedure's inputs as its argument spec declares them, with the bound
-    its sidecar sets on a text input; None when it takes none, or when its
-    manifest was supplied without the adoption that declares them."""
+def _held_runs(manifest: OperationManifest, principal: Principal) -> ServiceSection | None:
+    """The runs of ``manifest`` waiting for a person's approval that
+    ``principal`` may read, each linked to the request it is decided on; None
+    when none waits."""
 
-    if procedure is None:
-        return None
     records = tuple(
         (
-            Cell(name),
-            Cell(_type_words(spec)),
-            Cell("Yes" if spec.required else ""),
-            Cell(value_words(spec.default)),
-            Cell(value_words(spec.choices)),
-            Cell(spec.bound.pattern if spec.bound else ""),
-            Cell(counted(spec.bound.max_length, "character") if spec.bound else ""),
-            Cell(spec.description),
+            machines_cell([str(host) for host in held.baseline.get("hosts") or ()]),
+            Cell(
+                "Waiting for approval",
+                reverse("core:approval_entry", kwargs={"approval_id": held.id}),
+                tone="attention",
+            ),
+            Cell(ago(held.created_at), muted=True),
+            Cell(held.requested_actor),
         )
-        for name, spec in procedure.inputs.items()
+        for held in approvals.pending(principal=principal, capability=capability_name(manifest.id))
     )
     if not records:
         return None
     return ServiceSection(
-        id="inputs",
-        label="Inputs",
-        columns=("Input", "Type", "Required", "Default", "Choices", "Pattern", "Longest", "Description"),
-        records=records,
+        id="held-runs", label="Waiting for approval", columns=("Machines", "State", "Asked", "By"), records=records
     )
 
 
-def about(manifest: OperationManifest, generation: str, principal: Principal) -> CommandAbout:
+def about(manifest: OperationManifest, principal: Principal) -> CommandAbout:
     """What a procedure's command page says of it to ``principal``: what its
-    adopted catalog declares, reviewed, the inputs its argument spec takes,
-    and how its latest runs went, with their evidence where they may read Jobs."""
+    adopted catalog declares, its runs waiting for approval, and how its
+    latest runs went, with their evidence where they may read Jobs. Its
+    inputs are the form's own fields."""
 
     facts = (
         _runs_on(manifest),
         CommandFact("Effect", effect_label(manifest.effect)),
-        CommandFact("Privilege", manifest.privilege or "None"),
+        CommandFact("Access", access_words(manifest.privilege, manifest.effect)),
         CommandFact("Timeout", str(seconds(manifest.timeout_seconds))),
         CommandFact("Preconditions", _statements(manifest.preconditions)),
         CommandFact("Verification", _statements(manifest.verification)),
         CommandFact("Recovery", _statements(manifest.recovery)),
         CommandFact("Retry", RETRY_WORDS[manifest.retry]),
-        CommandFact("Reviewed commit", manifest.revision),
+        CommandFact("Adopted commit", manifest.revision[:SHORT_REVISION]),
         CommandFact("Playbook file", manifest.playbook),
     )
     every = f"{reverse('jobs:list')}?{urlencode({'kind': capability_name(manifest.id)})}"
     sections = (
+        _held_runs(manifest, principal),
         recent_work(recent_runs(manifest.id), by_machine=False, more_url=every, principal=principal),
-        _inputs(next((row for row in automation_adoption.procedures(generation) if row.id == manifest.id), None)),
     )
     return CommandAbout(label="Playbook", facts=facts, sections=tuple(section for section in sections if section))
+
+
+def run_preview(manifest: OperationManifest, held: ApprovalRequest) -> ChangePreview:
+    """What a held run would do, as its card shows it: its machines and its
+    inputs, each by its form's label, then what it does, its access and the
+    commit adopted. Read from what the run was measured against
+    (``run_subject``), so it shows what approving it applies; only the
+    inputs' labels come from ``manifest``, the catalog adopted now."""
+
+    pinned = dict(held.baseline.get("spec") or {})
+    inputs = whole_fields(json_schema(manifest.input_type))
+    hosts = [str(host) for host in held.baseline.get("hosts") or ()]
+    said = (
+        (str(MACHINES.title), get_text_list(hosts, "and")),
+        *(
+            (field_words(name, inputs.get(name)), value_words(value, inputs.get(name)))
+            for name, value in dict(held.baseline.get("parameters") or {}).items()
+        ),
+        ("Effect", effect_label(str(pinned.get("effect", "")))),
+        ("Access", access_words(str(pinned.get("privilege", "")), str(pinned.get("effect", "")))),
+        ("Adopted commit", str(pinned.get("revision", ""))[:SHORT_REVISION]),
+        (field_words("correlation"), str(held.payload.get("correlation") or "")),
+    )
+    rows = tuple(ChangeRow(label=label, before="", after=value, change="added") for label, value in said if value)
+    return ChangePreview(label="Asked with", rows=rows, lines=())
 
 
 def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
@@ -566,7 +578,16 @@ def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
     return tuple(f"{lead} {_statements(statements)}" for lead, statements in said if statements)
 
 
-def _capability(manifest: OperationManifest, generation: str, title: str) -> CapabilitySpec:
+def _approval_words(manifest: OperationManifest) -> str:
+    """Whether a run waits for anyone, said before it is asked, as
+    ``waits_for_a_person`` below holds it."""
+
+    if manifest.effect == "read":
+        return "It only reads, so no one approves it, whether you or an agent asks."
+    return "It changes a live system, so when an agent asks, it waits for an operator's approval."
+
+
+def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> CapabilitySpec:
     name = capability_name(manifest.id)
     longest = ApprovalRequest._meta.get_field("capability").max_length
     if longest is not None and len(name) > longest:
@@ -574,14 +595,16 @@ def _capability(manifest: OperationManifest, generation: str, title: str) -> Cap
             f"Operation {manifest.id!r} has an id too long to be run: {name!r} is over {longest} characters."
         )
 
-    run = measured_by(partial(run_subject, manifest))(partial(_run, manifest))
+    # The playbook by its title in quotes, or by its id where it has none.
+    named = f"“{titles[manifest.id]}”" if titles.get(manifest.id) else manifest.id
+    run = measured_by(partial(run_subject, manifest), shown=partial(run_preview, manifest))(partial(_run, manifest))
     if manifest.effect != "read":
         # A procedure that changes a machine is a person's to approve each time
         # an agent asks; a person's own click is their consent.
         run = waits_for_a_person(every_call)(run)
     return CapabilitySpec(
         name,
-        f"Run the reviewed playbook {manifest.id} on the machines named.",
+        f"Run the adopted playbook {named} on the machines you name. {_approval_words(manifest)}",
         manifest.effect,
         Capability.READ if manifest.effect == "read" else Capability.MANAGE_INFRASTRUCTURE,
         command_type(manifest),
@@ -592,13 +615,13 @@ def _capability(manifest: OperationManifest, generation: str, title: str) -> Cap
             "Queue it once, and HQ runs it with Ansible outside this request.",
             *_reviewed_notes(manifest),
         ),
-        label=title,
+        label=run_title(manifest.id, titles),
         verb=OperationRequest.Action.RUN.label,
         # Read on a held run's card, where the procedure is what was asked for.
-        wants=f"run the playbook “{title}”",
+        wants=f"carry out the playbook {named}",
         # A run belongs to Playbooks, where its playbook is listed.
         home=PLAYBOOKS,
-        about=partial(about, manifest, generation),
+        about=partial(about, manifest),
     )
 
 
@@ -607,6 +630,4 @@ def capability_specs(generation: str | None = None) -> tuple[CapabilitySpec, ...
 
     digest = automation_adoption.generation() if generation is None else generation
     titles = automation_adoption.playbook_titles(digest)
-    return tuple(
-        _capability(manifest, digest, run_title(manifest.id, titles)) for manifest in operation_registry(digest).values()
-    )
+    return tuple(_capability(manifest, titles) for manifest in operation_registry(digest).values())

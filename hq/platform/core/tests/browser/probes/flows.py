@@ -43,6 +43,10 @@ FLOWS_IN_READING_ORDER = (
 # (a flex-grow under one) leaves the rest of any row it ends empty. Read from
 # its computed style rather than from where its row ends, so a cap is found
 # at any width, not only at one where the row is wide enough to reach it.
+# The frames of a row end together as they start: a member that draws no
+# frame of its own (a stack of cards) ends where the lowest of what it holds
+# does, so a row that packs its members at the start, or a stack whose cards
+# stop short of the row, is found at whatever width it happens.
 FLOWS_SHARE_THEIR_ROWS = (
     "(flow) => {"
     + DESCRIBE
@@ -77,6 +81,19 @@ FLOWS_SHARE_THEIR_ROWS = (
       const alone = members.every((o, j) => j === i || Math.abs(o.r.top - m.r.top) > 1);
       const later = alone && members.slice(i + 1).find((o) => !wide(o) && pair(m, o));
       if (later) found.push(`${describe(m.member)} sits alone on its row in ${describe(el)}, where ${describe(later.member)} after it would share it`);
+    });
+    const seen = (color) => color && !/^(transparent|rgba\\(.*,\\s*0\\))$/.test(color);
+    const frames = ({member, style, r}) => seen(style.backgroundColor) || parseFloat(style.borderBottomWidth) > 0
+      ? r.bottom
+      : Math.max(r.top, ...inFlow(member).map(([, , kid]) => kid.bottom));
+    members.forEach((m, i) => {
+      const peer = members.slice(i + 1).find((o) => Math.abs(o.r.top - m.r.top) <= 1);
+      if (!peer) return;
+      const apart = frames(peer) - frames(m);
+      if (Math.abs(apart) > 1) {
+        const [short, tall] = apart > 0 ? [m, peer] : [peer, m];
+        found.push(`${describe(short.member)} ends ${Math.round(Math.abs(apart))}px above ${describe(tall.member)} on its row in ${describe(el)}`);
+      }
     });
   }
   return found;

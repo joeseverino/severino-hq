@@ -456,15 +456,14 @@ test carries the `tree` tag (`test_tree_tag.py`).
 
 The wording rules are Vale's, in `tools/lint/vale`: `.vale.ini` there says
 which files each style reads, `styles` holds the rules, and `lint:prose` runs
-them. `hq/platform/core/plain_words.py` hands Vale the template attributes and
-tag literals it cannot read, and itself reads every label, link and kicker,
-in a template or in Python. `uv run python -m hq.platform.core.plain_words
---list <paths>` prints every finding in those paths at its line, Vale's on the
-text and its own on the rest, before the baseline in `prose_baseline.py` holds
-any; `vale --output=line` alone sees only the text. `mise run
+them. Each rule swaps one word or character for another; a wording rule that
+would ask for a rewrite is a line in [Design](Design.md#rules), never a check.
+`hq/platform/core/plain_words.py` hands Vale the template attributes and tag
+literals it cannot read. `uv run python -m hq.platform.core.plain_words
+<paths>` prints every finding in those paths at its line, on the text and the
+attributes; `vale --output=line` alone sees only the text. `mise run
 audit:prose-strings` prints every line of text the rules read, at its file
-and line (`--by-file` counts them), to measure prose before and after a
-rewrite.
+and line (`--by-file` counts them).
 
 A finding names its rule and what to say instead. A word that must stand in
 one file is turned off for that file in that `.vale.ini`, with the reason
@@ -792,8 +791,9 @@ host name outside the reserved and shared ranges it names.
 | a failure only CI's Linux shows | `mise run browser --linux` with a leg (`layout-chromium-1`) or test labels |
 
 CI runs the layout gate in two legs side by side (`browser:layout-1`,
-`browser:layout-2`) and runs them in Chromium as well
-(`browser:layout-chromium-1`, `-2`), which `mise run browser` leaves to CI.
+`browser:layout-2`) and runs them and the demo in Chromium as well
+(`browser:layout-chromium-1`, `-2`, `browser:demo-chromium`), which `mise run
+browser` leaves to CI.
 
 `browser --linux` draws in Chromium unless `--engine` names another. It runs
 on this checkout inside the Playwright image `ci.yml` gives the browser job, as

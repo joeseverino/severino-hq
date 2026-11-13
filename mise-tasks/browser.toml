@@ -10,6 +10,16 @@ depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m unittest demo.check -v"
 
+# The public demo in Chromium, the engine most of its visitors read it in. A
+# CI leg, which mise run browser leaves out, as the Chromium layout legs.
+["browser:demo-chromium"]
+description = "browser:demo in Chromium: a CI leg, which mise run browser leaves out"
+hide = true
+env = { HQ_BROWSER_ENGINE = "chromium" }
+depends = [{ task = "setup:browser", args = ["chromium"] }, "demo:build"]
+extends = "heavy"
+run = "uv run --group browser python -m unittest demo.check -v"
+
 # The layout invariants over the stress estate, in two legs that CI runs side
 # by side, the classes split so each leg holds about half their time in CI,
 # in WebKit and in Chromium.

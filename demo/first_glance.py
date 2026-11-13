@@ -1,7 +1,11 @@
 """The example estate settled for a first-time visitor, as the demo's healthy
 first glance promises; what it does and why is in ``demo/README.md``."""
 
-from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
+from hq.domains.control_plane.bridge_actions import CONTROLLER
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest, ProviderInventory
+from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, FILESYSTEM_KIND, REBOOT_KIND, UNIT_KIND
+from hq.domains.expenses.models import Expense
+from hq.domains.receipts.models import Receipt
 from hq.platform.application.action_items import SET_ASIDE
 from hq.platform.application.approvals import REJECT
 from hq.platform.application.attention import readable_by
@@ -11,8 +15,13 @@ from hq.platform.application.controller import ControllerReport, claim_next_oper
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
 from hq.platform.application.projection import projection_scope
-from hq.platform.application.security import web_principal
+from hq.platform.application.receipts import UPDATE as RECEIPT_UPDATE, serialize_receipt
+from hq.platform.application.refused_reports import READINGS_ACTION
+from hq.platform.application.security import internal_principal, web_principal
+from hq.platform.application.sweep import record_sweep
 from hq.platform.core.example_estate import automation, doors
+from hq.platform.core.example_estate.names import stamp
+from hq.platform.core.example_estate.sweep import CONTROLLER as CONTROLLER_ID
 
 # The sets that are the example estate; the empty one has nothing to settle.
 ESTATES = ("showcase", "standard")
@@ -36,6 +45,8 @@ def settle(owner) -> list[str]:
     automation.rescanned(owner)
     _finish_waiting()
     _run_again_what_did_not_finish(person)
+    _swept_since()
+    _file_dropped_receipts(person)
     return _set_aside_the_rest(person)
 
 
@@ -106,6 +117,51 @@ def _run_again_what_did_not_finish(person) -> None:
         with doors.request(f"/commands/{capability_name(manifest.id)}/"):
             request_run(manifest, command, principal=person, idempotency_key=key)
     _finish_waiting()
+
+
+def _swept_since() -> None:
+    """The controller's next sweep, after the machine restarted for its
+    updates, a build's leftovers were cleared from its root and the service
+    systemd kept restarting was fixed, which leaves it off the reading."""
+
+    now = stamp()
+    restarted = {"pending": False, "since": "", "packages": [], "scheduled_action": "", "scheduled_at": ""}
+    healthy = {
+        REBOOT_KIND: lambda record: {**record, **restarted},
+        EDGE_REBOOT_KIND: lambda record: {**record, **restarted},
+        FILESYSTEM_KIND: lambda record: {**record, "free_bytes": max(record["free_bytes"], record["total_bytes"] // 2)},
+        UNIT_KIND: lambda record: None if record.get("foreign") else record,
+    }
+    payload = {}
+    for kind, settled in healthy.items():
+        records = ProviderInventory.objects.filter(kind=kind).values_list("records", flat=True).first() or []
+        kept = (settled(record) for record in records)
+        payload[kind] = {"ok": True, "records": [{**record, "read_at": now} for record in kept if record]}
+    with doors.controller(READINGS_ACTION):
+        record_sweep(payload, principal=internal_principal(CONTROLLER), controller_id=CONTROLLER_ID)
+
+
+def _file_dropped_receipts(person) -> None:
+    """Each receipt dropped in and not yet filed, linked to the expense of its
+    amount and vendor without a receipt, as its match page links one."""
+
+    for receipt in Receipt.objects.filter(related_expense__isnull=True, related_asset__isnull=True):
+        expense = Expense.objects.filter(
+            total_cost=receipt.amount, vendor=receipt.vendor, receipts__isnull=True
+        ).first()
+        if expense is None:
+            continue
+        details = serialize_receipt(receipt)
+        fields = ("vendor", "date", "amount", "notes", "related_asset")
+        with doors.page("receipts:match", pk=receipt.pk):
+            answer = run_capability(
+                RECEIPT_UPDATE,
+                {field: details[field] for field in fields} | {"related_expense": expense.pk},
+                principal=person,
+                target=receipt.pk,
+                idempotency_key=f"demo-file-receipt-{receipt.pk}",
+            ).answer
+        _refused(answer)
 
 
 def _set_aside_the_rest(person) -> list[str]:

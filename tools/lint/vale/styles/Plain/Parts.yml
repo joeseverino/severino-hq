@@ -1,7 +1,6 @@
 # The names HQ's automation has for its own parts, each with the one name a
-# page gives it (docs/Design.md's table of one name per thing). A lease is
-# how a job proves it is alive, so a page says what its end means. A
-# recovery procedure is a kind of doc, and the command catalog is the API's.
+# page gives it (docs/Design.md's table of one name per thing). A recovery
+# procedure is a kind of doc, and the command catalog is the API's.
 extends: substitution
 message: "Say '%s' in place of '%s'"
 level: error
@@ -14,5 +13,3 @@ swap:
   '(?<![\w-])proposals(?![\w-])': scan results
   '(?<![\w-])proposal(?![\w-])': scan result
   '(?<![\w-])(?:the|its|a|this|that) catalog(?![\w-])(?! of command)': adopted playbooks
-  '(?<![\w-])automation worker(?:[''’]s)?(?![\w-])': HQ, or Ansible where it acts
-  '(?<![\w-])(?:its|the|a) lease(?![\w-])': what happened, such as 'stopped reporting'

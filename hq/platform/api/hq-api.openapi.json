@@ -13139,7 +13139,7 @@
             "$ref": "#/components/schemas/CompletedAt"
           },
           "correlation": {
-            "description": "The asker's own id for finding it later, such as an investigation's; empty for none.",
+            "description": "The asker's own id for finding it later; empty for none.",
             "type": "string"
           },
           "created_at": {

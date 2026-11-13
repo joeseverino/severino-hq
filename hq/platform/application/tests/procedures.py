@@ -61,6 +61,8 @@ class Supply:
             patch(
                 "hq.platform.application.automation_adoption.manifests", side_effect=lambda _generation: self.manifests
             ),
+            # Supplied without the adoption that titles them, so none has a title.
+            patch("hq.platform.application.automation_adoption.playbook_titles", side_effect=lambda *_: {}),
             patch("hq.platform.application.automation_runs.machine_catalog", side_effect=lambda: self.machines),
             patch("hq.platform.application.automation_runs.runner_reaches", side_effect=self._reaches),
         ):

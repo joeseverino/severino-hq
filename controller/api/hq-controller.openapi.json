@@ -4597,13 +4597,13 @@
           },
           "main_code": {
             "default": 0,
-            "description": "ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
+            "description": "ExecMainCode: how the last run's main process ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
             "minimum": 0,
             "type": "integer"
           },
           "main_status": {
             "default": 0,
-            "description": "ExecMainStatus: the exit status or signal number of the main process of the last run.",
+            "description": "ExecMainStatus: the exit status or signal of the last run's main process.",
             "minimum": 0,
             "type": "integer"
           },

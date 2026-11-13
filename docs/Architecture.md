@@ -1394,7 +1394,10 @@ it on Jobs (`automation_runs.held_words`). A
 held run is measured against the manifest as supplied, its parameters as
 validated and its hosts as they resolve then (`approvals.measured_by`). So a
 new revision, a parameter that validates to another value, or a host that now
-resolves elsewhere stales the approval.
+resolves elsewhere stales the approval. Its card reads that baseline back
+(`automation_runs.run_preview`, declared as `measured_by`'s `shown`): the
+machines, the inputs by their form's labels, what it does, its access and the
+adopted commit, so a person approves what applying it runs.
 
 A queued run is stored, then announced: once its transaction commits, HQ
 rings the automation worker's doorbell (`cadence.ring_automation_doorbell`),
@@ -1539,7 +1542,7 @@ every reason at once, in `details.refused`:
 A commit it would adopt is compared with the catalog adopted now, playbook by
 playbook and file by file, and each way it lets a run do more is a widening. A
 widening is a playbook that may run on more machines or kinds of record, a
-raised effect, a new privilege, or a write whose files change. So is a new
+raised effect, a new privilege, or a playbook whose files change. So is a new
 playbook that does more than read, and a changed file every playbook may read
 or that names the collections a run may use. Adopting is a person's act: a
 person adopts at once, an agent's ask waits for a person, and a widening waits
