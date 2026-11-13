@@ -6,10 +6,11 @@ from annotationlib import Format
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
-from typing import Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
+from typing import TYPE_CHECKING, Any, TypeAliasType, Union, get_args, get_origin, is_typeddict
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
+from .display_words import display
 from .json_schemas import fields, json_schema
 from .search_contracts import SearchDefinition
 from .security import Capability
@@ -17,6 +18,9 @@ from .ui import ended
 lazy from . import records
 lazy from .labels import human_label, lower_first
 lazy from .refusal_status import RefusalEnvelope
+
+if TYPE_CHECKING:
+    from .service_context import ServiceSection
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +216,30 @@ def capability_fields(spec: CapabilitySpec) -> dict[str, dict[str, Any]]:
     return fields(capability_schema(spec))
 
 
+@display
+class CommandFact:
+    """One thing a command's page states about what the command is."""
+
+    label: str
+    value: str
+    # Lines under the value, one each.
+    detail: tuple[str, ...] = ()
+
+
+@display
+class CommandAbout:
+    """What a command's page shows beside its form: the facts of what it is,
+    under ``label``, and the sections of how it has gone (its recent runs)."""
+
+    label: str = ""
+    facts: tuple[CommandFact, ...] = ()
+    sections: tuple[ServiceSection, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.facts and not self.label.strip():
+            raise ValueError("A command's facts are drawn under a heading: give CommandAbout a label.")
+
+
 @dataclass(frozen=True, slots=True)
 class CapabilitySpec:
     name: str
@@ -252,6 +280,9 @@ class CapabilitySpec:
     # called with its target when it takes one, else with nothing. The command
     # page says it and offers only the button that changes it.
     state: Callable[..., bool] | None = None
+    # What the command's page says of it beside its form, read when the page
+    # is drawn, so what it lists (a run that just ended) is current.
+    about: Callable[[], CommandAbout] | None = None
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:

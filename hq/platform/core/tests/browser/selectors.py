@@ -153,6 +153,11 @@ SELECTORS = {
     # links at every width as a row of tabs is, so a section added never
     # makes the page taller before its content begins.
     "sideways": ".table-scroll, pre, .page-nav-list",
+    # A page's map of its sections: the row that scrolls, a link in it, and
+    # the link of the section being read.
+    "page_nav_list": "[data-page-navigation] .page-nav-list",
+    "page_nav_link": "[data-page-nav-link]",
+    "page_nav_current": '[data-page-nav-link][aria-current="location"]',
     # A table whose rows can be chosen, which the table script wires up last.
     "selectable_table": "[data-selectable-table]",
     # What a parser leaves where a <p> was closed early by a block inside it.

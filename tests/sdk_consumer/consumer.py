@@ -327,6 +327,22 @@ def a_command_that_starts_somewhere() -> None:
     capabilities.CapabilitySpec(
         "example.quiet", "Quiet notes.", "local_write", "example.write", Noting, noting, state=lambda: False
     )
+    # What its page says of it beside its form, read as the page is drawn.
+    about = capabilities.CommandAbout("Notes", (capabilities.CommandFact("Kept for", "A year", ("Then archived.",)),))
+    described = capabilities.CapabilitySpec(
+        "example.tidy", "Tidy notes.", "local_write", "example.write", Noting, noting, about=lambda: about
+    )
+    assert_type(described.about, Callable[[], capabilities.CommandAbout] | None)
+    assert_type(about.facts[0].detail, tuple[str, ...])
+    capabilities.CapabilitySpec(
+        "example.tidy",
+        "Tidy notes.",
+        "local_write",
+        "example.write",
+        Noting,
+        noting,
+        about=lambda: "Notes",  # type: ignore[arg-type, return-value]
+    )
     capabilities.CapabilitySpec(
         "example.pin",
         "Pin a note.",

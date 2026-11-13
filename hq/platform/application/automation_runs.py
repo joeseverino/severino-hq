@@ -11,6 +11,7 @@ import json
 import secrets
 from functools import cache, partial
 from typing import Annotated, Any
+from urllib.parse import urlencode
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
@@ -22,19 +23,26 @@ lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
 lazy from hq.platform.core.audit import audit_operation
+lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .automation_manifest import OperationManifest, OperationRegistry
 from .command_fields import Describe
-from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec
+from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import plugins
 lazy from .approvals import ApprovalSubject, measured_by
+lazy from .entity_links import kind_label
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import json_schema
+lazy from .labels import effect_label, lower_first
 lazy from .machines import machine_catalog
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
+lazy from .routes import reverse
+lazy from .service_context import recent_work
+lazy from .ui import ended
+lazy from .work_runs import recent_runs
 
 
 @cache
@@ -321,6 +329,40 @@ def _run(manifest: OperationManifest, command: RunCommand, *, principal: Princip
     return request_run(manifest, command, principal=principal, idempotency_key=key)
 
 
+# What a manifest's ``retry`` lets a run that stopped without a known
+# outcome do, in the words its command's page says it.
+RETRY_WORDS = {
+    "never": "Never: a run whose outcome is not known is left failed",
+    "observe_first": "Only once the machines are looked at",
+    "safe": "Safe to run again",
+}
+
+
+def _statements(statements: tuple[str, ...]) -> str:
+    return " ".join(ended(statement) for statement in statements)
+
+
+def about(manifest: OperationManifest) -> CommandAbout:
+    """What a procedure's command page says of it: what the manifest declares,
+    reviewed, and how its latest runs went."""
+
+    kinds = " or ".join(lower_first(kind_label(kind)) for kind in manifest.target_kinds)
+    facts = (
+        CommandFact("Runs on", ", ".join(manifest.hosts) or f"Any {kinds}"),
+        CommandFact("Effect", effect_label(manifest.effect)),
+        CommandFact("Privilege", manifest.privilege or "None"),
+        CommandFact("Timeout", str(seconds(manifest.timeout_seconds))),
+        CommandFact("Preconditions", _statements(manifest.preconditions)),
+        CommandFact("Verification", _statements(manifest.verification)),
+        CommandFact("Recovery", _statements(manifest.recovery)),
+        CommandFact("Retry", RETRY_WORDS[manifest.retry]),
+        CommandFact("Reviewed commit", manifest.revision),
+    )
+    every = f"{reverse('jobs:list')}?{urlencode({'kind': capability_name(manifest.id)})}"
+    runs = recent_work(recent_runs(manifest.id), by_machine=False, more_url=every)
+    return CommandAbout(label="Procedure", facts=facts, sections=(runs,) if runs else ())
+
+
 def _capability(manifest: OperationManifest) -> CapabilitySpec:
     name = capability_name(manifest.id)
     longest = ApprovalRequest._meta.get_field("capability").max_length
@@ -346,6 +388,7 @@ def _capability(manifest: OperationManifest) -> CapabilitySpec:
         verb=OperationRequest.Action.RUN.label,
         # Read on a held run's card, where the procedure is what was asked for.
         wants=f"carry out the procedure {manifest.id}",
+        about=partial(about, manifest),
     )
 
 

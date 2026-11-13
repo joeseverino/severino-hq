@@ -7,7 +7,7 @@ name a project publishes at, a document describes, an audit entry changed:
 every side already carries it, and storing the tie again would make two answers.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from typing import Any
 from urllib.parse import urlparse
@@ -18,6 +18,7 @@ from hq.platform.application.routes import reverse
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.projects.models import Project
 lazy from hq.platform.core.network import split_host_port
+lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .display_words import display
@@ -26,6 +27,7 @@ from .moments import ago
 from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
 lazy from . import machines
+lazy from .action_links import command_url
 lazy from .containers import standings_on
 lazy from .github_estate import repository_for
 lazy from .infrastructure import RESOURCE_TONES
@@ -37,6 +39,7 @@ lazy from .paths import hq_path
 lazy from .reach import network_of
 lazy from .service_facets import CERTIFICATE_FACET
 lazy from .services import served_here
+lazy from .work_runs import WorkRun
 
 
 @display
@@ -51,6 +54,8 @@ class Cell:
     muted: bool = False
     # An entity mention, rendered through the link builder's answer.
     link: EntityLink | None = None
+    # A state: ``text`` is its word and this its tone, drawn as a status.
+    tone: str = ""
 
     @classmethod
     def of(cls, link: EntityLink, *, muted: bool = False) -> Cell:
@@ -86,6 +91,10 @@ class ServiceSection:
     renders: tuple[str, ...] = ()
     # Reference rather than a glance: shown folded, its size in the heading.
     folded: bool = False
+    # The way to everything the rows are the latest of, as the heading's
+    # quiet link ("All runs").
+    more_label: str = ""
+    more_url: str = ""
 
     def __post_init__(self) -> None:
         if not PAGE_SECTION_ID.fullmatch(self.id):
@@ -178,6 +187,49 @@ def recent_changes(keys: list[str], *, what: str, limit: int) -> ServiceSection 
         columns=(what, "Change", "Time"),
         records=records,
     )
+
+
+def recent_work(runs: Sequence[WorkRun], *, by_machine: bool, more_url: str) -> ServiceSection | None:
+    """The latest ``runs`` as a section, each state in its word and tone; None
+    when there are none. A machine's page names what each run was
+    (``by_machine``), a procedure's page the machines each acted on, and
+    ``more_url`` is every run of the two on Jobs."""
+
+    records = tuple(
+        (
+            _procedure(run) if by_machine else _machines(run.hosts),
+            Cell(run.word, tone=run.tone),
+            Cell(ago(run.created_at), muted=True),
+            Cell(str(seconds(run.duration)) if run.duration is not None else ""),
+            Cell(run.note),
+            Cell(run.by),
+        )
+        for run in runs
+    )
+    if not records:
+        return None
+    return ServiceSection(
+        id="runs",
+        label="Recent runs",
+        columns=("Procedure" if by_machine else "Machines", "State", "Started", "Duration", "Result", "By"),
+        records=records,
+        more_label="All runs",
+        more_url=more_url,
+    )
+
+
+def _procedure(run: WorkRun) -> Cell:
+    """A run's procedure, linked to the command it is run through."""
+
+    return Cell(run.title, command_url(run.kind))
+
+
+def _machines(hosts: Sequence[str]) -> Cell:
+    """The machines a run acted on: the one by its link, several by name."""
+
+    if len(hosts) == 1:
+        return Cell.of(entity_link("machine", hosts[0]))
+    return Cell(", ".join(hosts))
 
 
 def _traffic(service) -> SummaryItem | None:

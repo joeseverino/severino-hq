@@ -970,6 +970,11 @@
             "$ref": "#/components/schemas/Verification",
             "description": "The operation's action's verification policy, when it declares one.",
             "x-go-type-skip-optional-pointer": false
+          },
+          "input": {
+            "$ref": "#/components/schemas/RunInput",
+            "description": "What a claimed run binds to; a claim of any other work, and a peek, carry none.",
+            "x-go-type-skip-optional-pointer": false
           }
         },
         "additionalProperties": false,
@@ -977,7 +982,56 @@
           "ok",
           "operation"
         ],
-        "description": "The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one."
+        "description": "The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one; input is what a claimed run binds to."
+      },
+      "RunInput": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The procedure record's generation the run was asked of, which its report names."
+          },
+          "operation": {
+            "type": "string",
+            "description": "The manifest's id."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$",
+            "description": "The reviewed commit the run was asked of."
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The run's parameters, as the manifest's input type validated them."
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The machines it runs on, as HQ resolved them."
+          },
+          "correlation": {
+            "type": "string",
+            "description": "The asker's own id for finding it later; empty for none."
+          },
+          "approved_by": {
+            "type": "string",
+            "description": "The person who approved a held run; absent for one nobody held."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "generation",
+          "operation",
+          "revision",
+          "parameters",
+          "hosts",
+          "correlation"
+        ],
+        "description": "What a claimed run binds to, as it was asked for and approved."
       },
       "Material": {
         "type": "object",

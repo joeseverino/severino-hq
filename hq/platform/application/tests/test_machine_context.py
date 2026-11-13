@@ -203,6 +203,7 @@ class RegistryTests(TestCase):
                 "_networks",
                 "_data",
                 "_images",
+                "_runs",
                 "_activity",
             ],
         )

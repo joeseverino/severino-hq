@@ -12,6 +12,7 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 
 from . import look
+from .browser import survey
 
 ASKED = {"usage_pages": "part/example"}
 
@@ -28,7 +29,7 @@ class _Unscripted:
 
     # What a predicate the look polls reads at its one reading: --open's
     # regions have all answered, since without script none is loading.
-    FIRST_READING = {look._ANSWERED: True}
+    FIRST_READING = {survey.ANSWERED: True}
 
     def evaluate(self, script, _arg=None):
         if "requestAnimationFrame" in script or "setTimeout" in script:

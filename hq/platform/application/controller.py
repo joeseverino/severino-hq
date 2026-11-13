@@ -229,11 +229,16 @@ def _verification(operation: OperationRequest) -> dict[str, int] | None:
     }
 
 
-def _pending(operation: OperationRequest) -> dict[str, Any]:
+def _pending(operation: OperationRequest, *, claimed: bool = False) -> dict[str, Any]:
     pending: dict[str, Any] = {"ok": True, "operation": serialize_operation(operation)}
     verification = _verification(operation)
     if verification is not None:
         pending["verification"] = verification
+    # A run's worker learns what to run from its claim alone: the parameters
+    # and hosts it was asked and approved for. A peek leases nothing, so it
+    # is told none of it.
+    if claimed and operation.action == OperationRequest.Action.RUN:
+        pending["input"] = operation.input
     return pending
 
 
@@ -437,7 +442,7 @@ def claim_next_operation(
             .first()
         )
         if held is not None:
-            result = _pending(held)
+            result = _pending(held, claimed=True)
             result.update(controller_contract(held.resource))
             return result
     operations = (
@@ -471,7 +476,7 @@ def claim_next_operation(
                 "updated_at",
             )
         )
-    result = _pending(operation)
+    result = _pending(operation, claimed=True)
     result.update(contract)
     return result
 

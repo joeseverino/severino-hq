@@ -59,7 +59,7 @@ from hq.platform.core.tests.browser.reference import (
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
-from hq.platform.core.tests.browser.survey import palette_probes, survey_checks
+from hq.platform.core.tests.browser.survey import BUSY, CLOSE_OPENED, open_every_fold, palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
 from hq.platform.core.tests.look_records import EstatePages
@@ -118,6 +118,7 @@ DRAWN_WITH = (
     "dark",
     "fallback_face",
     "open",
+    "open_folds",
     "expand",
     "no_script",
     "deep",
@@ -145,30 +146,10 @@ _LINKS = """(notANavigation) => [...document.querySelectorAll('main a[href]')]
   .filter((a) => a.origin === location.origin && !a.matches(notANavigation))
   .map((a) => a.pathname + a.search)"""
 
-# A region waiting on its answer: fragment.js marks one busy until then, and a
-# live ask is busy for as long as its job runs.
-_BUSY = "[data-fragment][aria-busy=true]:not([data-ask])"
-# Every disclosure not yet open, opened, and how many: an exclusive group's
-# name is dropped, so opening one closes no other.
-_OPEN_ONCE = """(busy) => {
-  // A region already waiting is not one this round brings in.
-  document.querySelectorAll(busy).forEach((region) => { region.lookWaiting = true; });
-  let opened = 0;
-  document.querySelectorAll('details:not([open])').forEach((details) => {
-    details.removeAttribute('name');
-    details.open = true;
-    opened += 1;
-  });
-  return opened;
-}"""
-# No region a round of opening brought in is waiting on its answer.
-_ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => region.lookWaiting)"
 # The rows a reader opens: the folds first, then each row on its own.
 _FOLD_TOGGLES = "main button[data-fold-toggle]"
 ROW_TOGGLES = "main button[data-row-toggle]:not([data-fold-toggle])"
 _PRESS_SHOWN = "(toggles) => document.querySelectorAll(toggles).forEach((t) => t.checkVisibility() && t.click())"
-# Rounds of opening, each after what the last one brought in has arrived.
-_OPEN_ROUNDS = 10
 # The page's extent once it has held still for three polls running: a shot
 # and its bands are cut from one reading, so a page still laying itself out
 # (a viewer drawing what nears the view) would leave a band outside the image.
@@ -1298,6 +1279,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         said = self.judged(name, width, rule) if rule else []
         if rule and _asked().switch("open"):
             said += self.with_each_popover(name, width, rule, said)
+        said += self.with_every_fold_open(name, width, rule, said)
         said += self.with_each_dialog(name, width, rule, said)
         if self.on_reference and _asked().switch("open"):
             said += self.with_each_tag_opened(name, width, rule, said)
@@ -1415,7 +1397,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         at = self.page.evaluate(_WINDOW_AT)
         self.page.locator(openers).nth(place).click()
         try:
-            self.page.wait_for_function(_DIALOG_READY, arg=[dialog, _BUSY])
+            self.page.wait_for_function(_DIALOG_READY, arg=[dialog, BUSY])
             # The page beneath as it was judged on its own: the press scrolled
             # the opener into view and left the pointer on it, hovered.
             self.page.evaluate(_WINDOW_TO, at)
@@ -1526,21 +1508,33 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.as_a_reader(_PRESS_SHOWN, ROW_TOGGLES)
         self.settle()
 
-    def open_everything(self, name, width):
-        """Every disclosure open, round after round until none is
-        left closed: a disclosure a region brings in when another opens is
-        opened once the region's answer has arrived. A region that never
-        answers is said, and the page is looked at as it stands."""
+    def open_everything(self, name, width) -> int:
+        """Every disclosure open, nested ones and those a region brings in
+        once it has answered (``open_every_fold``), and how many it opened.
+        What kept it short is said, and the page is looked at as it stands."""
 
-        for _round in range(_OPEN_ROUNDS):
-            if not self.as_a_reader(_OPEN_ONCE, _BUSY):
-                return
-            self.settle()
-            try:
-                self.page.wait_for_function(_ANSWERED, arg=_BUSY)
-            except BrowserError as waited:
-                print(f"{name} at {width}: --open left a region loading ({str(waited).splitlines()[0]})", flush=True)
-                return
+        opened, short = open_every_fold(self)
+        if short:
+            print(f"{name} at {width}: opening every fold stopped short: {short}", flush=True)
+        return opened
+
+    def with_every_fold_open(self, name, width, rule, beneath) -> list[str]:
+        """What the survey finds with every fold open, past what it finds on
+        the page ``beneath``, when ``--open-folds`` asks, shot so
+        (``.folds-open``) when the run shoots; the folds closed again after,
+        so a dialog is opened from the page as it loaded. A page with no fold
+        closed is not judged twice."""
+
+        if rule != "survey" or not _asked().switch("open_folds") or not self.open_everything(name, width):
+            return []
+        stall_watch.mark(f"dev:look {name} at {width} with every fold open")
+        shows = "with every fold open"
+        part = "folds-open"
+        self.take_shot(name, width, functools.partial(self.screenshot, name, width, part, shows), part, shows)
+        found = [f"{shows}: {line}" for line in unmatched(self.judged(name, width, rule), beneath)]
+        self.page.evaluate(CLOSE_OPENED)
+        self.settle()
+        return found
 
     def screenshot(self, name, width, part="", shows="") -> list[Band]:
         """The whole page, or a ``part`` of it open that ``shows`` says, and,

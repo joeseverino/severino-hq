@@ -19,14 +19,18 @@ from ..controller import ControllerReport, claim_next_operation, report_operatio
 from ..resource_operations import operation_summary
 from ..security import Capability, Principal
 from ..work_runs import (
+    BY_TITLE,
+    FAILED_FIRST,
     JOB,
     LAPSED,
+    OUTCOME_TONES,
     RUN,
     TONES,
     hydrated,
     job_seen_state,
     recent_runs,
     runs_on,
+    work_kinds,
     work_rows,
 )
 from .procedures import APP, DB, EDGE, RESTART, RESTART_RUN, Supply, manifest, run_payload
@@ -172,16 +176,16 @@ class SameWordsTests(WorkRunsTestCase):
         OperationRequest.objects.filter(pk=run.pk).update(lease_expires_at=timezone.now() - timedelta(seconds=1))
 
         (row,) = self.listed()
-        (stopped,) = self.listed(state=JobState.LOST)
+        (stopped,) = self.listed(state=(JobState.LOST,))
 
         self.assertEqual((row.word, row.note), ("Stopped early", LAPSED))
         self.assertEqual(stopped.id, str(run.pk))
-        self.assertEqual(self.listed(state=JobState.RUNNING), [])
+        self.assertEqual(self.listed(state=(JobState.RUNNING,)), [])
 
     def test_a_working_run_is_running(self):
         self.claimed(self.run_of(APP))
 
-        (row,) = self.listed(state=JobState.RUNNING)
+        (row,) = self.listed(state=(JobState.RUNNING,))
 
         self.assertEqual(row.word, "Running")
 
@@ -217,7 +221,7 @@ class FilterTests(WorkRunsTestCase):
         self.job()
 
         self.assertEqual([row.id for row in runs_on(DB)], [str(on_app.pk)])
-        self.assertEqual({row.id for row in self.listed(host=APP)}, {str(on_app.pk)})
+        self.assertEqual({row.id for row in self.listed(host=(APP,))}, {str(on_app.pk)})
         self.assertEqual([row.id for row in runs_on(EDGE)], [str(on_edge.pk)])
 
     def test_an_operation_s_recent_runs_are_its_own(self):
@@ -230,9 +234,9 @@ class FilterTests(WorkRunsTestCase):
         job = self.job()
         run = self.run_of(APP)
 
-        self.assertEqual([row.id for row in self.listed(kind="example.work")], [str(job.pk)])
-        self.assertEqual([row.id for row in self.listed(kind=RESTART_RUN)], [str(run.pk)])
-        self.assertEqual(self.listed(kind="automation.example.unknown.run"), [])
+        self.assertEqual([row.id for row in self.listed(kind=("example.work",))], [str(job.pk)])
+        self.assertEqual([row.id for row in self.listed(kind=(RESTART_RUN,))], [str(run.pk)])
+        self.assertEqual(self.listed(kind=("automation.example.unknown.run",)), [])
 
     def test_a_state_filters_both_sources(self):
         failed_job = self.job(JobState.FAILED)
@@ -240,7 +244,7 @@ class FilterTests(WorkRunsTestCase):
         self.job()
 
         self.assertEqual(
-            {(row.source, row.id) for row in self.listed(state=JobState.FAILED)},
+            {(row.source, row.id) for row in self.listed(state=(JobState.FAILED,))},
             {(JOB, str(failed_job.pk)), (RUN, str(failed_run.pk))},
         )
 
@@ -266,6 +270,113 @@ class FilterTests(WorkRunsTestCase):
 
         self.assertEqual([row.id for row in self.listed(order="created_at")], [str(first.pk), str(second.pk)])
         self.assertEqual([row.state for row in self.listed(order="state")], ["failed", "succeeded"])
+
+
+class ManyValuesTests(WorkRunsTestCase):
+    def test_a_filter_of_several_values_keeps_what_matches_any(self):
+        failed = self.job(JobState.FAILED, kind="example.failed")
+        lost = self.job(JobState.LOST, kind="example.lost")
+        self.job(kind="example.done")
+
+        listed = {row.id for row in self.listed(state=(JobState.FAILED, JobState.LOST))}
+        kinds = {row.id for row in self.listed(kind=("example.failed", "example.lost"))}
+
+        self.assertEqual(listed, {str(failed.pk), str(lost.pk)})
+        self.assertEqual(kinds, listed)
+
+    def test_a_run_on_two_of_the_machines_asked_for_is_one_row(self):
+        run = self.run_of(APP, DB)
+
+        self.assertEqual([row.id for row in self.listed(host=(APP, DB))], [str(run.pk)])
+
+
+class OrderTests(WorkRunsTestCase):
+    def ago(self, record, hours):
+        type(record).objects.filter(pk=record.pk).update(created_at=timezone.now() - timedelta(hours=hours))
+        return record
+
+    def test_what_ended_badly_on_its_kind_s_latest_run_leads(self):
+        recovered = self.ago(self.job(JobState.FAILED, kind="example.sync"), 5)
+        self.ago(self.job(kind="example.sync"), 1)
+        failed = self.ago(self.job(JobState.FAILED, kind="example.read"), 3)
+        failed_run = self.ago(self.reported(self.run_of(APP), success=False), 4)
+        newest = self.job(kind="example.other")
+
+        order = [row.id for row in self.listed(order=FAILED_FIRST)]
+
+        self.assertEqual(order[:3], [str(failed.pk), str(failed_run.pk), str(newest.pk)])
+        self.assertGreater(order.index(str(recovered.pk)), 2)
+
+    def test_a_run_that_failed_before_a_later_one_does_not_lead(self):
+        self.ago(self.reported(self.run_of(APP), success=False), 4)
+        later = self.reported(self.run_of(APP))
+        job = self.ago(self.job(), 1)
+
+        self.assertEqual([row.id for row in self.listed(order=FAILED_FIRST)][:2], [str(later.pk), str(job.pk)])
+
+    def test_a_to_z_reads_what_each_is_called(self):
+        zebra = self.job(label="zebra work", kind="example.zebra")
+        alpha = self.job(label="Alpha work", kind="example.alpha")
+        run = self.run_of(APP)
+
+        self.assertEqual([row.id for row in self.listed(order=BY_TITLE)], [str(alpha.pk), str(run.pk), str(zebra.pk)])
+
+    def test_a_declared_job_is_called_by_its_declaration_and_other_work_by_what_it_stored(self):
+        from ..scheduled_work import named
+
+        declared = self.job(kind="sessions.clear", label="sessions.clear")
+        gone = self.job(kind="example.gone", label="")
+
+        titles = {row.id: row.title for row in self.listed()}
+
+        self.assertEqual(titles, {str(declared.pk): named("sessions.clear").label, str(gone.pk): "example.gone"})
+
+
+class WorkKindsTests(WorkRunsTestCase):
+    def test_each_kind_is_named_by_its_latest_run(self):
+        Job.objects.filter(pk=self.job(JobState.FAILED, label="Old name").pk).update(
+            created_at=timezone.now() - timedelta(hours=1)
+        )
+        self.job(label="Example work")
+        self.reported(self.run_of(APP), success=False)
+
+        kinds = {found.kind: (found.title, found.state) for found in work_kinds()}
+
+        self.assertEqual(kinds["example.work"], ("Example work", JobState.SUCCEEDED))
+        self.assertEqual(kinds[RESTART_RUN][1], JobState.FAILED)
+        self.assertIn(RESTART, kinds[RESTART_RUN][0])
+        self.assertEqual([row.title for row in self.listed(kind=(RESTART_RUN,))], [kinds[RESTART_RUN][0]])
+
+
+class EvidenceTests(WorkRunsTestCase):
+    def test_a_claimed_run_names_its_worker_and_its_lease_and_a_finished_one_neither(self):
+        run = self.claimed(self.run_of(APP))
+
+        (working,) = self.listed()
+        report_operation(
+            str(run.pk),
+            ControllerReport(success=True, observed_generation=run.input["generation"], message="Done."),
+            controller_id=WORKER,
+        )
+        (done,) = self.listed()
+
+        self.assertEqual((working.worker, working.lease_until), (WORKER, run.lease_expires_at))
+        self.assertEqual((done.worker, done.lease_until), ("", None))
+
+    def test_each_task_outcome_is_said_in_a_tone(self):
+        outcomes = ("ok", "changed", "skipped", "failed", "unreachable")
+        self.reported(
+            self.run_of(APP),
+            events=[
+                {"host": APP, "task": f"Task {outcome}", "outcome": outcome, "message": ""} for outcome in outcomes
+            ],
+        )
+
+        (row,) = self.listed()
+
+        self.assertEqual(set(OUTCOME_TONES), set(outcomes))
+        self.assertEqual([event["tone"] for event in row.events], [OUTCOME_TONES[outcome] for outcome in outcomes])
+        self.assertEqual(set(OUTCOME_TONES.values()) - set(TONES.values()), set())
 
 
 class WorkRunsBudgetTests(TestCase):

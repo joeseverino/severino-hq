@@ -967,7 +967,9 @@ A claim names the `kind:action` pairs its claimant has a handler for, and one
 naming none is offered nothing, so no worker takes work only another has a
 handler for. A claim may carry an `attempt` name: retried under the same
 name, as Amazon SQS's receive attempt id is, it is answered the operation it
-already leased rather than a second one.
+already leased rather than a second one. A claimed run's answer carries its
+`input` (`RunInput`), what it was asked and approved to run; a peek, and a
+claim of other work, carry none.
 
 Long work keeps its lease through `renew`, which only the claimant may call
 and only before the lease runs out. It answers `continue: false` once the
@@ -1329,3 +1331,22 @@ A held run is measured against the manifest as supplied, its parameters as
 validated and its hosts as they resolve then (`approvals.measured_by`), so a
 new revision, a parameter that validates to another value or a host that now
 resolves elsewhere stales the approval.
+
+### The automation worker
+
+`hq_runner/` is the worker that claims a run (`automation.operation:run`) and
+runs it. It imports nothing of HQ, ships in an image of its own (the web image
+holds neither it nor ansible-runner, its `runner` dependency group), and talks
+to HQ only over the bridge socket, trusted as the controller trusts it. What
+runs is the procedure its claim names, as the worker has it installed at the
+claim's reviewed revision; any other revision is refused before it runs. The
+playbook and project come from that installation, the hosts and extra-vars
+from the claim's `input`, and every ansible-runner argument is fixed in
+`hq_runner/ansible.py`, with its artifacts in a private directory removed when
+the run ends. While it runs the worker renews the lease, and stops when HQ
+answers stop, a renewal fails or the manifest's `timeout_seconds` passes. Its
+report carries one event per task and machine, built from Ansible's message
+alone and struck of secrets. A journal names each claim before it is sent and
+records a run once it starts, so a claim retried after a crash is answered the
+same run, which is reported as unknown and never run again. `mise run
+smoke:runner` runs a real playbook on the local machine through it.

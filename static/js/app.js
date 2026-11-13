@@ -61,8 +61,19 @@ document.addEventListener("change", (event) => {
     .map((link) => document.getElementById(link.hash.slice(1)))
     .filter(Boolean);
   let frame = null;
+  let shown = null;
 
-  /* eslint-disable no-restricted-syntax -- which section is under the reading line, and the current link scrolled into its list: CSS scroll markers (`:target-current`) answer this in Chromium alone, and WebKit has none */
+  // A link is brought into the row's view by the row alone: `container:
+  // "nearest"` never moves the page, which update() runs beside while a
+  // person scrolls it. Focus needs this too, since Chromium leaves a focused
+  // link that is partly in view where it is.
+  const reveal = (link) => link.scrollIntoView({ block: "nearest", inline: "nearest", container: "nearest" });
+  navigation.addEventListener("focusin", (event) => {
+    const link = event.target.closest("[data-page-nav-link]");
+    if (link) reveal(link);
+  });
+
+  /* eslint-disable no-restricted-syntax -- which section is under the reading line: CSS scroll markers (`:target-current`) answer this in Chromium alone, and WebKit has none */
   const update = () => {
     frame = null;
     // Where the nav sticks is the header's height, resolved by the stylesheet.
@@ -85,11 +96,8 @@ document.addEventListener("change", (event) => {
     links.forEach((link) => {
       if (current && link.hash === `#${current.id}`) {
         link.setAttribute("aria-current", "location");
-        const list = link.closest(".page-nav-list");
-        const linkRect = link.getBoundingClientRect();
-        const listRect = list.getBoundingClientRect();
-        if (linkRect.left < listRect.left) list.scrollLeft -= listRect.left - linkRect.left;
-        if (linkRect.right > listRect.right) list.scrollLeft += linkRect.right - listRect.right;
+        if (shown !== link) reveal(link);
+        shown = link;
       } else {
         link.removeAttribute("aria-current");
       }

@@ -9,7 +9,7 @@ from hq.platform.application.capabilities import (
     execute_capability,
 )
 from hq.platform.application.command_fields import Choices, Describe, Names, Refers
-from hq.platform.application.integration_specs import ON_ITS_PAGE
+from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact
 from hq.platform.application.security import (
     AuthorizationError,
     Capability,
@@ -33,6 +33,8 @@ __all__ = [
     "Capability",
     "CapabilitySpec",
     "Choices",
+    "CommandAbout",
+    "CommandFact",
     "Describe",
     "Names",
     "Principal",

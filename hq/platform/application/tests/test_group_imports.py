@@ -26,8 +26,14 @@ from hq.platform.application.tests.test_mise_config import context_admits
 from tests.mise_tasks import body, mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
-# The browser gates' package: every module in it runs under the browser group.
-GROUP_PACKAGES = {"browser": ROOT / "hq" / "platform" / "core" / "tests" / "browser"}
+# The packages each of whose modules runs under one group.
+GROUP_PACKAGES = {
+    # The browser gates' package.
+    "browser": ROOT / "hq" / "platform" / "core" / "tests" / "browser",
+    # The automation worker: every module of it runs in its image, which the
+    # runner group installs.
+    "runner": ROOT / "hq_runner",
+}
 # What a run with a group executes: the labels that open the arguments of
 # `-m unittest` or `manage.py test`, or the module of `python -m <module>`,
 # when it is this checkout's. A plain `manage.py` runs the command it is given.

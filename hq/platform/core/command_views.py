@@ -171,6 +171,8 @@ class CommandView(View):
             "starting_page": starting_page(self.spec),
             "starts_on_its_page": self.spec.reached_from == ON_ITS_PAGE,
             "saves_blanks": self._saves_blanks(schema),
+            # What the command says of itself beside its form, if it says anything.
+            "about": self.spec.about() if self.spec.about is not None else None,
         }
 
     def _saves_blanks(self, schema: dict) -> bool:

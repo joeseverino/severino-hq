@@ -18,7 +18,7 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 from hq.platform.core import seeds
 
 from . import look, look_report, look_tables
-from .browser import stress
+from .browser import stress, survey
 from .browser.probes import boxes
 from .browser.selectors import SELECTORS
 
@@ -233,7 +233,7 @@ class _Inputs:
         self.said.append(("key", key))
 
     def evaluate(self, script, arg=None):
-        if script == look._OPEN_ONCE:
+        if script == survey.OPEN_ONCE:
             self.rounds += 1
             self.said.append(("batch", "disclosures"))
             return self.rounds == 1
@@ -278,7 +278,7 @@ class _Drawing:
         pass
 
     def evaluate(self, script, _arg=None):
-        if script == look._OPEN_ONCE:
+        if script == survey.OPEN_ONCE:
             self.rounds += 1
             self.pressed.add("disclosures")
             return self.rounds == 1

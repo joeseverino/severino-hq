@@ -21,6 +21,7 @@ vars.classes = """\
   hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests \
   hq.platform.core.tests.browser.components.ComponentLayoutTests \
   hq.platform.core.tests.browser.folds.FoldBrowserTests \
+  hq.platform.core.tests.browser.page_navigation.PageNavigationBrowserTests \
   hq.platform.core.tests.browser.catalog.CatalogLayoutTests \
   hq.platform.core.tests.browser.accessibility.AccessibilityBrowserTests \
   hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests"""

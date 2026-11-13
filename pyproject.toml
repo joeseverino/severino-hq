@@ -34,12 +34,14 @@ dependencies = [
     "whitenoise==6.12.0",
 ]
 
-# lint:deptry: host code is hq/ and hq_sdk/, which the task names, less every
-# tests/ directory. The groups under [dependency-groups] are development
-# dependencies, which DEP002 leaves alone.
+# lint:deptry: the code is hq/, hq_sdk/ and hq_runner/, which the task names,
+# less every tests/ directory. The groups under [dependency-groups] are
+# development dependencies, which DEP002 leaves alone, all but the runner
+# group: the automation worker's own runtime, installed in its image alone.
 [tool.deptry]
-known_first_party = ["hq", "hq_sdk"]
+known_first_party = ["hq", "hq_sdk", "hq_runner"]
 extend_exclude = [".*/tests/"]
+non_dev_dependency_groups = ["runner"]
 [tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
 DEP002 = [
@@ -49,6 +51,9 @@ DEP002 = [
     # Django's parallel test runner pickles a failure's traceback with it, in
     # the image as well.
     "tblib",
+    # ansible-runner runs its ansible-playbook as a program; the worker
+    # imports none of it.
+    "ansible-core",
 ]
 # Transitive dependencies host code imports, each where its version belongs to
 # the dependency that installs it.
@@ -86,7 +91,19 @@ DEP004 = [
 # lazy or not, however it is spelled. A forbidden list names `hq.**` rather
 # than `hq`: import-linter skips a forbidden module that contains the source.
 [tool.importlinter]
-root_package = "hq"
+root_packages = ["hq", "hq_runner"]
+
+[[tool.importlinter.contracts]]
+name = "The automation worker imports nothing of HQ: it ships in an image of its own"
+type = "forbidden"
+source_modules = ["hq_runner"]
+forbidden_modules = ["hq"]
+
+[[tool.importlinter.contracts]]
+name = "HQ never imports the automation worker, which its image does not ship"
+type = "forbidden"
+source_modules = ["hq"]
+forbidden_modules = ["hq_runner"]
 
 [[tool.importlinter.contracts]]
 name = "The workflow contracts are a leaf: they import nothing of HQ"
@@ -193,6 +210,12 @@ tools = [
 ]
 browser = [
     "playwright==1.64.1",
+]
+# The automation worker's runtime (hq_runner), which no default group and no
+# web image installs: ansible-runner, and the ansible-playbook it runs.
+runner = [
+    "ansible-core==2.22.0",
+    "ansible-runner==2.4.3",
 ]
 # Generates the API cases of test:api-properties, the one task that installs it.
 fuzz = [
@@ -394,6 +417,7 @@ files = [
     "hq/platform/api",
     "hq/platform/mcp",
     "tests/sdk_consumer",
+    "hq_runner",
     "tools/credentials.py",
     "hq/platform/core/tests/browser",
     "hq/platform/core/tests/look.py",
@@ -436,10 +460,11 @@ disallow_untyped_decorators = false
 disallow_any_generics = false
 warn_return_any = false
 
-# Playwright is in the optional browser group, which lint:mypy does not
-# install; it reads as Any whether or not it is installed, so one result holds.
+# Playwright and ansible-runner are in optional groups, which lint:mypy does
+# not install; each reads as Any whether or not it is installed, so one result
+# holds. ansible-runner ships no types either way.
 [[tool.mypy.overrides]]
-module = ["playwright.*"]
+module = ["playwright.*", "ansible_runner.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

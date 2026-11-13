@@ -21,7 +21,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import prospects
 from ..ui import MISSING
-from .markup import select, with_class
+from .markup import select, with_class, within
 
 
 def a_service(hostname="probe.example.com"):
@@ -500,6 +500,44 @@ class SpansRowTests(SimpleTestCase):
 
     def test_a_table_of_three_columns_shares_a_row(self):
         self.assertFalse(_rows(3).spans_row)
+
+
+def _drawn(section) -> str:
+    from django.template.loader import render_to_string
+
+    return render_to_string("partials/_page_sections.html", {"sections": (section,), "spans_row": section.spans_row})
+
+
+class SectionPartTests(SimpleTestCase):
+    def test_a_cell_with_a_tone_is_drawn_as_its_state(self):
+        html = _drawn(
+            ServiceSection(
+                id="example",
+                label="Example",
+                columns=("Run", "State"),
+                records=((Cell("Nightly"), Cell("Failed", tone="serious")),),
+            )
+        )
+
+        (state,) = [element for element in within(html, "id", "example") if "pill" in element.classes]
+        self.assertEqual((state.words, "pill-serious" in state.classes), ("Failed", True))
+
+    def test_a_section_of_the_latest_links_to_the_rest_from_its_heading(self):
+        html = _drawn(
+            ServiceSection(
+                id="example",
+                label="Example",
+                columns=("Run",),
+                records=((Cell("Nightly"),),),
+                more_label="All runs",
+                more_url="/example/runs/",
+            )
+        )
+
+        self.assertIn(
+            ("All runs", "/example/runs/"),
+            [(element.words, element.attrs.get("href")) for element in within(html, "id", "example")],
+        )
 
 
 @tag("source")

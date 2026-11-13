@@ -362,6 +362,7 @@ sources = [
   "docs/**/*",
   "examples/**/*",
   "hq/**/*",
+  "hq_runner/**/*",
   "hq_sdk/**/*",
   "mise-tasks/**/*",
   "policy/**/*",

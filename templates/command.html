@@ -76,3 +76,23 @@ button named for what it does. How it is built belongs to the API reference.
   {% if hydrates_target %}{% firstof "data-command-form data-command-hydrate-target" as hooks %}{% else %}{% firstof "data-command-form" as hooks %}{% endif %}
   {% include "partials/_form.html" with form=form fields="core/_command_fields.html" hooks=hooks verb=command_label choices=switch.choices choice_field=switch.field cancel_url=cancel_url note="" %}
 {% endblock %}
+
+{% block page %}{{ block.super }}
+{% comment %}
+What the command says of itself, under the form, in one flow: how it has
+gone (its latest runs, wide, so first) and the facts of what it is.
+{% endcomment %}
+{% if about %}
+<div class="section-flow">
+{% include "partials/_page_sections.html" with sections=about.sections spans_row=True %}
+{% if about.facts %}
+{% section about.label id="command-about" %}
+  {% facts %}
+    {% for fact in about.facts %}{% fact fact.label value=fact.value detail=fact.detail %}{% endfor %}
+  {% endfacts %}
+{% endsection %}
+{% endif %}
+{% include "partials/_page_sections.html" with sections=about.sections spans_row=False %}
+</div>
+{% endif %}
+{% endblock %}

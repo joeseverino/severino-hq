@@ -125,6 +125,7 @@ tags = ["fast"]
 sources = [
   "hq/**/*.py",
   "hq_sdk/**/*.py",
+  "hq_runner/**/*.py",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -133,8 +134,8 @@ sources = [
   "tools/pipeline/toolchain.env",
 ]
 outputs = []
-# Host code is these two packages less their tests/ ([tool.deptry]).
-run = "uv run deptry hq hq_sdk"
+# The code is these three packages less their tests/ ([tool.deptry]).
+run = "uv run deptry hq hq_sdk hq_runner"
 
 ["lint:imports"]
 description = "Each module imports only what pyproject.toml's import contracts allow it"
@@ -142,6 +143,7 @@ hide = true
 tags = ["fast"]
 sources = [
   "hq/**/*.py",
+  "hq_runner/**/*.py",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",

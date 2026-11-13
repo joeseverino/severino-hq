@@ -15,6 +15,7 @@ select = ["TID251"]
 "demo".msg = "the host's implementation; import it from hq_sdk (docs/Plugins.md)."
 "tests".msg = "the host's implementation; import it from hq_sdk (docs/Plugins.md)."
 "tools".msg = "the host's implementation; import it from hq_sdk (docs/Plugins.md)."
+"hq_runner".msg = "the automation worker, which ships in an image of its own; an extension supplies a procedure through hq_sdk (docs/Plugins.md)."
 # A cache the host cannot see serves a stale answer: hq_sdk.reads.derivation
 # keeps a derived read (docs/Plugins.md, Derived reads).
 "django.core.cache".msg = "keep a derived read with hq_sdk.reads.derivation (docs/Plugins.md, Derived reads)."

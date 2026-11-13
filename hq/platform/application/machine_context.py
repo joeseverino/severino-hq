@@ -9,6 +9,7 @@ page's sections and cells, so a band renders identically on both.
 
 from collections.abc import Callable
 from dataclasses import replace
+from urllib.parse import urlencode
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.labels import dotted
@@ -21,7 +22,7 @@ from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .entity_links import entity_link, kind_label
 from .projection import projection_scope
 from .security import Principal
-from .service_context import Cell, ServiceSection, recent_changes
+from .service_context import Cell, ServiceSection, recent_changes, recent_work
 from .ui import MISSING
 lazy from . import connections, docker_estate, services
 lazy from .cadence import connection_providers
@@ -34,8 +35,10 @@ lazy from .policy_links import PolicyNames
 lazy from .problems import problems_about
 lazy from .public_registry import public_endpoints
 lazy from .reach import network_of
+lazy from .routes import reverse
 lazy from .tailnet import TAILNET_KIND
 lazy from .topology_model import RELATIONS
+lazy from .work_runs import runs_on
 
 
 def sections_for(machine) -> tuple[ServiceSection, ...]:
@@ -183,6 +186,17 @@ def _activity(machine) -> ServiceSection | None:
     return recent_changes(list(machine.resources), what="What", limit=8)
 
 
+def _runs(machine) -> ServiceSection | None:
+    """The latest automation runs that acted on this machine.
+
+    A run names its machines as they are canonically spelled, which is how
+    its page's name is matched; every run of them is on Jobs.
+    """
+
+    name = normalized_hostname(machine.name)
+    return recent_work(runs_on(name), by_machine=True, more_url=f"{reverse('jobs:list')}?{urlencode({'host': name})}")
+
+
 def serves_links(machine, relationships) -> tuple:
     """What the machine serves, read off the same relation query as its
     Relationships panel, so the header and the panel cannot disagree. HQ's
@@ -328,5 +342,6 @@ SECTIONS: tuple[Callable[[object], ServiceSection | None], ...] = (
     _identity,
     _names,
     *docker_sections.SECTIONS,
+    _runs,
     _activity,
 )

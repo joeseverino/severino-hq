@@ -2008,8 +2008,10 @@ type Operation struct {
 // PassMode Whether a pass only looked (plan) or claimed and executed work (apply).
 type PassMode string
 
-// Pending The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one.
+// Pending The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one; input is what a claimed run binds to.
 type Pending struct {
+	// Input What a claimed run binds to; a claim of any other work, and a peek, carry none.
+	Input         *RunInput  `json:"input,omitempty"`
 	OK            bool       `json:"ok"`
 	Operation     *Operation `json:"operation"`
 	Resource      Resource   `json:"resource,omitempty"`
@@ -2261,6 +2263,30 @@ type RunEvent struct {
 
 // RunEventOutcome defines model for RunEvent.Outcome.
 type RunEventOutcome string
+
+// RunInput What a claimed run binds to, as it was asked for and approved.
+type RunInput struct {
+	// ApprovedBy The person who approved a held run; absent for one nobody held.
+	ApprovedBy string `json:"approved_by,omitempty"`
+
+	// Correlation The asker's own id for finding it later; empty for none.
+	Correlation string `json:"correlation"`
+
+	// Generation The procedure record's generation the run was asked of, which its report names.
+	Generation int64 `json:"generation"`
+
+	// Hosts The machines it runs on, as HQ resolved them.
+	Hosts []string `json:"hosts"`
+
+	// Operation The manifest's id.
+	Operation string `json:"operation"`
+
+	// Parameters The run's parameters, as the manifest's input type validated them.
+	Parameters map[string]interface{} `json:"parameters"`
+
+	// Revision The reviewed commit the run was asked of.
+	Revision string `json:"revision"`
+}
 
 // StepFailure Work one pass could not finish; subject is the connection ref it used.
 type StepFailure struct {

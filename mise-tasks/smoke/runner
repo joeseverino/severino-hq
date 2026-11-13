@@ -1,0 +1,8 @@
+#!/bin/sh
+#MISE description="To see the automation worker run a real playbook: one run through ansible-runner and ansible-playbook on this machine alone (connection local), over a fake bridge, with the runner group installed; outside check, since no gate installs that group"
+#MISE hide=true
+set -eu
+# Its own environment under var/, so the checkout's .venv keeps the default
+# groups CI tests with. uv run puts that environment's bin, where
+# ansible-runner finds ansible-playbook, first on PATH.
+UV_PROJECT_ENVIRONMENT=var/runner/venv uv run --group runner python -m hq_runner.tests.smoke

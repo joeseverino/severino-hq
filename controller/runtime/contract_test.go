@@ -100,6 +100,11 @@ func TestPendingResponses(t *testing.T) {
 	}
 	unresolvable := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 0, "correlation": "", "claimed_by": "", "completed_at": null, "created_at": "2026-10-03T12:00:00+00:00", "id": "8", "lease_expires_at": null, "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-b", "result": null, "state": "queued"}, "unresolvable": "Missing delivery target."}`
 	conforms(t, "Pending", []byte(unresolvable))
+	run := `{"ok": true, "operation": {"action": "run", "attempt_count": 1, "correlation": "example-ask", "claimed_by": "worker-1", "completed_at": null, "created_at": "2026-10-03T12:00:00+00:00", "id": "9", "lease_expires_at": "2026-10-03T12:05:00+00:00", "reason": "", "requested_actor": "example-agent", "requested_interface": "mcp", "resource": "automation-example-restart", "result": null, "state": "claimed"}, "resource": {"enabled": true, "generation": 2, "key": "automation-example-restart", "kind": "automation.operation", "observed": {}, "spec": {}}, "schema_version": 1, "input": {"generation": 2, "operation": "example.restart", "revision": "0123456789abcdef0123456789abcdef01234567", "parameters": {"service": "web"}, "hosts": ["app.example.com"], "correlation": "example-ask", "approved_by": "example-person"}}`
+	conforms(t, "Pending", []byte(run))
+	if input := strict[Pending](t, run).Input; input == nil || input.Hosts[0] != "app.example.com" || input.Generation != 2 {
+		t.Fatalf("a claimed run's input decoded wrong: %+v", input)
+	}
 }
 
 func TestGlancePlanResponse(t *testing.T) {

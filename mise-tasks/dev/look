@@ -25,6 +25,7 @@
 #USAGE flag "--dark" help="In the dark palette"
 #USAGE flag "--fallback-face" help="With Inter withheld, in the next face of the font stack"
 #USAGE flag "--open" help="With every disclosure open; --rule runs again with one popover of each kind shown, and shoots it"
+#USAGE flag "--open-folds" help="With --rule survey, judge each page again with every fold open, a fold within a fold and one a region brings in included, and say only what that adds; the folds close again before a dialog opens"
 #USAGE flag "--expand" help="With every table row a reader can open opened: a row offers its toggle only when a value in it is cut, so a row that shows whole stays closed"
 #USAGE flag "--no-script" help="As the server drew it, before any script runs"
 #USAGE flag "--deep" help="Also every page the estate pages link to: each record and the command forms it opens"

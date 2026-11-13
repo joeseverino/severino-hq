@@ -287,6 +287,9 @@ class RuntimeDependencyTests(SimpleTestCase):
 
         root = Path(__file__).resolve().parents[4]
         ignored = tomllib.loads((root / "pyproject.toml").read_text())["tool"]["deptry"]["per_rule_ignores"]
+        # The packages lint:deptry reads, as its run line names them.
+        task = tomllib.loads((root / "mise-tasks" / "lint.toml").read_text())["lint:deptry"]["run"]
+        packages = task.split("deptry", 1)[1].split()
         with TemporaryDirectory() as scratch:
             report = Path(scratch) / "deptry.json"
             # A --per-rule-ignores replaces the table, so every rule runs with no ignore.
@@ -295,8 +298,7 @@ class RuntimeDependencyTests(SimpleTestCase):
                     sys.executable,
                     "-m",
                     "deptry",
-                    "hq",
-                    "hq_sdk",
+                    *packages,
                     "--per-rule-ignores",
                     "DEP001=",
                     "--json-output",

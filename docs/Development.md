@@ -851,7 +851,10 @@ or reach out is refused and reported instead.
 what it finds on a page the gates read is what they fail on. Markup a vendored
 script draws (`data-vendored` on its mount, `SELECTORS["vendored"]`: the API
 reference's viewer) is styled by its own rules alone, and held by its own
-tests instead.
+tests instead. With `--open-folds`, a page with a fold closed is surveyed
+again with every fold open, a fold within a fold and one a region brings in
+included (`survey.open_every_fold`), and only what that adds is said, under
+"with every fold open"; the folds close again before a dialog opens.
 
 A run that judges takes no screenshots, since a shot and its bands cost more
 than the rule that reads the page: `--shots` takes them too, and `--base`,

@@ -386,7 +386,8 @@
           "variants=",
           "reached_from=",
           "wants=",
-          "state="
+          "state=",
+          "about="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -426,6 +427,28 @@
         "bases": [],
         "constructor": [
           "options"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "CommandAbout": {
+        "bases": [],
+        "constructor": [
+          "label=",
+          "facts=",
+          "sections="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "CommandFact": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "value",
+          "detail="
         ],
         "fields": [],
         "kind": "dataclass",

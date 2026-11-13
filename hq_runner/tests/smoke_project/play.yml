@@ -1,0 +1,12 @@
+# The smoke run's procedure: it acts on the machine it runs on alone.
+- name: Smoke
+  hosts: all
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Say which service
+      ansible.builtin.debug:
+        msg: "service {{ service }}"
+    - name: Change something
+      ansible.builtin.command: "true"
+      changed_when: true

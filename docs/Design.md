@@ -1071,7 +1071,12 @@ its short ones, which collect after them to share rows rather than one
 standing beside the gap a wide one leaves. Registry sections say which they
 are (`ServiceSection.spans_row`), and `partials/_page_sections.html` draws one
 kind per pass, `spans_row=True` ahead of a page's short sections and `False`
-among them. *Gate:* `flows in reading order` and `flows share their rows` in
+among them. A cell that is a state carries its tone (`Cell(word, tone=...)`)
+and is drawn by `{% status %}`; a section whose rows are the latest of more
+names the rest as its `more_label` and `more_url`, the heading's quiet link.
+A command's page draws what the command says of itself (`CapabilitySpec.about`,
+a `CommandAbout` of facts and sections) under its form through the same
+parts. *Gate:* `flows in reading order` and `flows share their rows` in
 the layout survey. No page
 writes an auto-fit grid of its own for this: `lint:css` refuses
 `repeat(auto-fit` and `repeat(auto-fill` outside the parts that lay out

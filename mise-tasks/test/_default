@@ -10,7 +10,7 @@
 #MISE sources=[
 #MISE   ".github/**/*", "composition/**/*", "controller/**/*", "demo/**/*", "deploy/**/*",
 #MISE   "Dockerfile", "Dockerfile.dockerignore", "entrypoint.sh", "examples/**/*",
-#MISE   "hq/**/*", "hq_sdk/**/*", "manage.py", "mise-tasks/**/*", "mise.fast.toml", "mise.lock", "mise.toml",
+#MISE   "hq/**/*", "hq_sdk/**/*", "hq_runner/**/*", "manage.py", "mise-tasks/**/*", "mise.fast.toml", "mise.lock", "mise.toml",
 #MISE   "policy/**/*", "pyproject.toml", "static/**/*", "templates/**/*", "tests/**/*", "tools/**/*", "uv.lock",
 #MISE ]
 #MISE outputs=[]

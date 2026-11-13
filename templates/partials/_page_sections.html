@@ -10,6 +10,9 @@
   templates drift the moment one gains a column, and the difference shows up as
   one page quietly missing what the other shows.
 
+  A cell with a tone is a state, drawn as its status. A section whose rows
+  are the latest of more links to the rest from its heading (`more_url`).
+
   Expects: `sections`: an iterable of ServiceSection; `spans_row`, True for
   the ones that take a flow's whole row, False for the short ones. A page
   draws the first ahead of its short sections and the second among them, so
@@ -21,7 +24,7 @@
 Folded, the heading is the toggle and its count says what is behind it. A
 separate "Show all" under the heading reads as a control belonging to nothing.
 {% endcomment %}
-{% section section.label id=section.id count=section.records|length fold=section.folded %}
+{% section section.label id=section.id count=section.records|length fold=section.folded more_label=section.more_label more_url=section.more_url %}
   {% table_region section.label %}
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
       <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=True gutter=True %}{% elif forloop.length > 2 %}{% table_heading column local_sort=True drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=True %}{% endif %}{% endfor %}</tr></thead>
@@ -30,7 +33,9 @@ separate "Show all" under the heading reads as a control belonging to nothing.
           <tr>
             {% for cell in record %}
               <td>
-                {% if cell.link %}
+                {% if cell.tone %}
+                  {% status cell.text tone=cell.tone href=cell.url %}
+                {% elif cell.link %}
                   {% entity cell.link %}
                 {% elif cell.url %}
                   {% if cell.external %}{% entity cell.url|outside label=cell.text %}{% else %}<a href="{{ cell.url }}">{{ cell.text|breakable }}</a>{% endif %}

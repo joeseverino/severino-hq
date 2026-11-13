@@ -167,6 +167,44 @@ class ClaimTests(LeasedRunTestCase):
             claim_next_operation("example-other", capabilities=RUNS, attempt="example-attempt-1")["operation"]
         )
 
+    def test_a_claimed_run_carries_what_it_was_asked_to_run_and_a_peek_does_not(self):
+        from hq.domains.control_plane.bridge_contract import departs
+
+        from ..controller import peek_next_operation
+        from .procedures import RESTART, REVISION
+
+        self.assertNotIn("input", peek_next_operation(capabilities=RUNS))
+
+        claimed = bridge_client.call(
+            "claim", controller_id=WORKER, capability=["automation.operation:run"], attempt="example-attempt-1"
+        )
+        again = bridge_client.call(
+            "claim", controller_id=WORKER, capability=["automation.operation:run"], attempt="example-attempt-1"
+        )
+
+        for answer in (claimed, again):
+            self.assertIsNone(departs("Pending", answer))
+            self.assertEqual(answer["input"]["operation"], RESTART)
+            self.assertEqual(answer["input"]["revision"], REVISION)
+            self.assertEqual(answer["input"]["parameters"], {"service": "web"})
+            self.assertEqual(answer["input"]["hosts"], [APP])
+            self.assertEqual(answer["input"]["generation"], self.operation().input["generation"])
+
+    def test_a_claim_of_other_work_carries_no_run_input(self):
+        from ..resource_operations import enqueue
+
+        rewrite = ManagedResource.objects.create(
+            key="example-dns", kind="adguard.rewrite", spec={"domain": "app.example.com", "answer": "192.0.2.10"}
+        )
+        enqueue(
+            rewrite, OperationRequest.Action.RECONCILE, idempotency_key="example-reconcile", input={"generation": 1}
+        )
+
+        answer = claim_next_operation(WORKER, capabilities=(("adguard.rewrite", "reconcile"),))
+
+        self.assertEqual(answer["operation"]["resource"], "example-dns")
+        self.assertNotIn("input", answer)
+
     def test_a_duplicate_report_is_refused(self):
         self.claim()
         self.report(events=[event()])
