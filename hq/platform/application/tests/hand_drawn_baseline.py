@@ -93,6 +93,5 @@ BASELINE: dict[tuple[str, str], int] = {
     ("projects/_updates.html", "an empty line"): 2,
     ("projects/project_list.html", "a toned value"): 1,
     ("receipts/receipt_match.html", "a notice"): 1,
-    ("receipts/receipt_match.html", "label and value facts"): 1,
     ("reports/reports.html", "a list of rows"): 4,
 }

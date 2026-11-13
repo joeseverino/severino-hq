@@ -78,6 +78,16 @@ class ToldApartTests(SimpleTestCase):
     def test_one_held_in_two_places_by_where(self):
         self.assertToldApart(holding(certificate("example.com", 4), holders=("edge-a", "edge-b")), "edge-a", "edge-b")
 
+    def test_one_issued_and_one_uploaded_by_how_each_came(self):
+        self.assertToldApart(
+            holding(
+                certificate("example.com", -3, issuer="Let's Encrypt"),
+                certificate("example.com", -3, issuer="uploaded"),
+            ),
+            "from Let's Encrypt",
+            "Uploaded edge certificate example.com expired",
+        )
+
     def test_a_certificate_no_other_reads_like_names_only_itself(self):
         (finding,) = expiring(holding(certificate("example.com", 4, issuer="Let's Encrypt")))
 
@@ -127,5 +137,35 @@ class ExampleEstateTests(TestCase):
         self.assertEqual(len(edge), 2, titles)
         self.assertEqual(len(set(titles)), len(titles), titles)
         # Each draws on the findings page, whose queue keys hold no stamp.
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(reverse("control_plane:findings")).status_code, 200)
+
+    def test_a_certificate_uploaded_to_the_proxy_reads_as_uploaded(self):
+        # NPM holds one name twice, as issued through it and as uploaded to it.
+        lapsed = timezone.now() - timedelta(days=3, hours=12)
+        store(
+            "npm.certificate",
+            *(
+                {
+                    "connection_ref": "example-npm",
+                    "id": number,
+                    "name": "lapsed.example.com",
+                    "provider": provider,
+                    "domains": ["lapsed.example.com"],
+                    "expires_on": (lapsed + timedelta(hours=number)).isoformat(),
+                    "serves": [],
+                }
+                for number, provider in ((1, "letsencrypt"), (2, "other"))
+            ),
+        )
+
+        with projection_scope():
+            found = findings(principal=web_principal(self.user), rule="certificate-expiring")["findings"]
+        titles = sorted(finding["title"] for finding in found if "lapsed.example.com" in finding["title"])
+
+        self.assertEqual(len(titles), 2, titles)
+        self.assertIn("NPM certificate lapsed.example.com from Let's Encrypt", titles[0])
+        self.assertIn("Uploaded NPM certificate lapsed.example.com expired", titles[1])
+        # The page draws them.
         self.client.force_login(self.user)
         self.assertEqual(self.client.get(reverse("control_plane:findings")).status_code, 200)

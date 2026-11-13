@@ -159,8 +159,9 @@ def records():
     make), the zone, a message with the page that deletes it, HQ's project
     (the one every other kind is about), the server as an asset and its
     expense and receipt, the switch nothing else is about, the receipt not
-    yet filed and the expense its match page offers, a runbook and a writeup;
-    then each one an installed extension's demo names (``seeds.demo_pages``)."""
+    yet filed (a picture) and the expense its match page offers, a runbook
+    and a writeup; then each one an installed extension's demo names
+    (``seeds.demo_pages``)."""
 
     hostname, container, *_ = max(SERVICES, key=lambda service: len(service[0]))
     return [
@@ -175,6 +176,7 @@ def records():
         reverse("expenses:detail", args=[1]),
         reverse("receipts:detail", args=[1]),
         reverse("assets:detail", kwargs={"slug": SWITCH_ASSET}),
+        reverse("receipts:detail", args=[UNFILED_RECEIPT]),
         reverse("receipts:match", args=[UNFILED_RECEIPT]),
         reverse("docs_index:detail", kwargs={"doc_id": RUNBOOKS[0][0]}),
         reverse("content:detail", kwargs={"slug": WRITEUPS[0][0]}),

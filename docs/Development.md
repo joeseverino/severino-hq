@@ -813,7 +813,12 @@ a new one does.
 
 `--base <ref>` looks at the same pages at `<ref>` first, in a temporary
 worktree with this checkout's test files laid over it as `test --at` does, and
-judges both by this checkout's rules. The base's screenshots are kept in
+judges both by this checkout's rules. A test file laid over that does not
+import there, as an estate walk naming a seed record the base lacks does not,
+is put back as the base has it, and the closing line names it. A page the
+base cannot draw, such as a record its estate lacks, is said there and looked
+at only here. The base's
+screenshots are kept in
 `base/` inside the run's folder, under the same names as this checkout's
 beside them, so the two sides of a change can be compared once the worktree is
 gone and after later runs.
@@ -877,7 +882,9 @@ font, image). A load whose stylesheets and scripts all came uncompressed, as a
 live server sends them, shows no byte figure.
 
 A page asked that answers anything but 200 fails the run. The stress sets live
-in the test tree, so no server can serve them to `--seed`.
+in the test tree, so no server can serve them to `--seed`. Like `dev:look`,
+perf refuses a page or data set it cannot serve, with the nearest names, before
+it waits for the heavy turn.
 
 Each run is kept as `var/perf/<run>.json`, saved after each measurement. A
 failed one is recorded with its error and the rest go on, and each step says

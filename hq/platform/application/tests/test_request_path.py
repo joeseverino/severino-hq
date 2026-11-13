@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.tests.forwarding import arrived
+from hq_sdk.testing import plain
 
 from ..path_model import Hop
 from ..paths import hq_path
@@ -371,7 +372,7 @@ class ReadParityTests(TestCase):
         self.assertContains(response, "data-connection-hop=", count=len(found.hops))
         self.assertContains(response, "data-connection-layer=", count=len(found.connection.layers))
         self.assertContains(response, "Path to HQ")
-        self.assertContains(response, found.proof)
+        self.assertIn(found.proof, plain(response.content))
         # The link's facts come from the caller's presence, and still show.
         self.assertIn("198.51.100.7:41641", [value.text.strip() for value in elements(response, "code")])
         self.assertContains(response, "Last handshake")

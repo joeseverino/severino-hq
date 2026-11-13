@@ -213,7 +213,9 @@ class WalkedStatesTests(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        with throwaway_media(), seeds.built("showcase") as owner:
+        # The receipts' files stay where the seed wrote them, so a page finds them.
+        cls.enterClassContext(throwaway_media())
+        with seeds.built("showcase") as owner:
             cls.user = owner
 
     def setUp(self):
@@ -243,6 +245,17 @@ class WalkedStatesTests(TestCase):
 
         self.assertEqual([match for match, _actions in page.context["matches"]], [expense])
         self.assertIn(str(expense.pk), [field.attrs.get("value") for field in select(page, "name", "expense_id")])
+
+    def test_the_photographed_receipt_s_page_draws_its_picture(self):
+        from hq.platform.core.example_estate.records import UNFILED_RECEIPT
+
+        page = self.walked(reverse("receipts:detail", args=[UNFILED_RECEIPT]))
+
+        (part,) = select(page, "data-receipt-file")
+        self.assertEqual(part.attrs["data-receipt-file"], "picture")
+        picture = self.client.get(reverse("receipts:picture", args=[UNFILED_RECEIPT]))
+        self.assertEqual(picture["Content-Type"], "image/png")
+        self.assertTrue(b"".join(picture.streaming_content).startswith(b"\x89PNG\r\n\x1a\n"))
 
     def test_an_asset_with_nothing_beside_it_is_its_facts_alone(self):
         from hq.platform.core.example_estate.records import SWITCH_ASSET

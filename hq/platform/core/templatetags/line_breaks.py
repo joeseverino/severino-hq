@@ -151,7 +151,7 @@ def _token(word: str, *, sole: bool) -> str:
 
     if not (_INNER_SEAM.search(word) or _kept(word)):
         return word
-    if not sole and len(unescape(word)) <= _UNBROKEN and _FIGURE.fullmatch(unescape(word)):
+    if not sole and _figure(word):
         # A browser breaks after a dash, so a range is a part of its own:
         # it moves to the next line whole and breaks at its dash only when it
         # alone is longer than its line.
@@ -273,17 +273,52 @@ def _line(value, *, sole: bool | None = None) -> list[str]:
     return drawn
 
 
+# What a figure counts or measures, which the line never leaves alone below
+# it ("12" above "days"): a word of letters, perhaps per another ("m/s"), or a
+# percent sign, with the sentence's mark after it.
+_UNIT = re.compile(r"(?:[^\W\d_]+(?:/[^\W\d_]+)?|%)[.,;:!?)]*")
+# A separator standing between two words ("+0.01 m / 90 days"), which a line
+# never opens on: the separators the survey reads as a stray.
+_SEPARATOR = re.compile(r"[·•|/\u2013\u2014]")
+
+
+def _figure(word: str) -> bool:
+    """Whether a word of a phrase reads as one figure (``_FIGURE``)."""
+
+    return len(unescape(word)) <= _UNBROKEN and bool(_FIGURE.fullmatch(unescape(word)))
+
+
+def _held_back(words: list[str], at: int) -> bool:
+    """Whether the word at ``at`` stays on the line of the word before it: the
+    unit or counted word after a figure, as typesetting sets them, or a
+    separator."""
+
+    word = unescape(words[at])
+    return bool(_SEPARATOR.fullmatch(word) or (_figure(words[at - 2]) and _UNIT.fullmatch(word)))
+
+
 def _words(value, *, sole: bool | None = None) -> list[str]:
     """``value``'s words as ``breakable`` draws them, a word standing alone as a
     name unless ``sole`` says otherwise."""
 
     # Escaped first, so the only markup in the result is what is added here.
     words = _WORDS.split(str(conditional_escape(value)))
+    # Every second piece is the whitespace between two words.
+    held = [at for at in range(2, len(words), 2) if _held_back(words, at)]
     # A token that fits on its line moves to the next one whole; one longer than
     # its line wraps at its seams; a part longer than its line alone breaks
     # wherever it must.
     alone = len(words) == 1 if sole is None else sole
-    return [_token(word, sole=alone) for word in words]
+    drawn = [_token(word, sole=alone) for word in words]
+    # A word held back joins the one before it with a no-break space, inside
+    # that word's innermost box (a range's): a box's edge is a place the line
+    # breaks whatever space follows it. From the end, so each join leaves the
+    # places of the ones before it.
+    # A separator after a name's token stays outside it, clear of the parts
+    # of it a cell cuts.
+    for at in (at for at in reversed(held) if 'class="token"' not in drawn[at - 2]):
+        drawn[at - 2 : at + 1] = _inside_last(drawn[at - 2 : at - 1], f"\xa0{drawn[at]}")
+    return drawn
 
 
 # A Markdown code span: the text between a pair of backticks.

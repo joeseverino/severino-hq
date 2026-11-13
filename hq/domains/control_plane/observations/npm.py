@@ -11,7 +11,7 @@ from typing import Any
 
 from hq.platform.core.network import is_address
 
-from ..certificate_authorities import authority_name
+from ..certificate_authorities import npm_issuer
 from ..names import normalized_hostname
 from .cloudflare import redirect_target
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
@@ -156,7 +156,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         facet="certificate",
         short_label="NPM",
         expires=lambda record: str(record.get("expires_on", "")),
-        issuer=lambda record: authority_name(record.get("provider")),
+        issuer=lambda record: npm_issuer(record.get("provider")),
     ),
     ObservationSpec(
         REDIRECT_KIND,

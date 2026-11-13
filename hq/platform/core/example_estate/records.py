@@ -1,6 +1,8 @@
 """What the operator keeps by hand: projects, runbooks, the calendar, and what
 running the homelab costs."""
 
+import struct
+import zlib
 from datetime import time, timedelta
 from decimal import Decimal
 
@@ -28,6 +30,26 @@ _RECEIPT = (
     b"4 0 obj<</Length 44>>stream\nBT /F1 14 Tf 20 60 Td (Example receipt) Tj ET\nendstream endobj\n"
     b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
 )
+
+
+def _png(width, height):
+    """A slip of paper photographed, a line of print every eighth row, as a
+    grayscale PNG written here so the repository holds no binary for it."""
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    paper, ink = b"\xff", b"\x60"
+    rows = b"".join(
+        b"\0" + ((ink * (width // 2)).center(width, paper) if row % 8 == 4 and 4 < row < height - 8 else paper * width)
+        for row in range(height)
+    )
+    header = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+
+
+# A receipt photographed rather than scanned, so a receipt's page draws its picture.
+_PICTURE = _png(60, 80)
 # Name, slug, repository, public address, what it is.
 PROJECTS = (
     (
@@ -204,9 +226,10 @@ SPENDING = (
     # A refund is a negative cost.
     (100, "Newegg", "2 TB backup drive return", "hardware", "-79.99", 50, False, "offsite-backups"),
 )
-# A bill paid this week whose receipt was dropped in and not yet filed against
-# it, so the receipt's match page offers the expense of its amount. The
-# receipt follows every filed one, numbered as an empty database numbers them.
+# A bill paid this week whose receipt was photographed, dropped in and not yet
+# filed against it, so the receipt's match page offers the expense of its
+# amount and its own page draws the picture. The receipt follows every filed
+# one, numbered as an empty database numbers them.
 UNFILED = (3, "APC", "Replacement UPS battery", "hardware", "54.99", 80)
 UNFILED_RECEIPT = len(SPENDING) + 1
 # A switch handed down by a friend: no cost, no expense, nothing written about
@@ -238,7 +261,7 @@ def money():
         expense = _expense(*fields, project=project, asset=asset if bought else None)
         _receipt(expense.vendor, expense.date, expense.total_cost, related_expense=expense)
     expense = _expense(*UNFILED)
-    _receipt(expense.vendor, expense.date, expense.total_cost)
+    _receipt(expense.vendor, expense.date, expense.total_cost, picture=True)
     days, name, category = SWITCH
     Asset.objects.create(
         item_name=name, slug=SWITCH_ASSET, category=category, purchase_date=today - timedelta(days=days)
@@ -262,11 +285,13 @@ def _expense(days, vendor, item, category, cost, business_use, *, project=None, 
     )
 
 
-def _receipt(vendor, date, amount, **filed):
+def _receipt(vendor, date, amount, *, picture=False, **filed):
+    content, extension, kind = (_PICTURE, "png", "image/png") if picture else (_RECEIPT, "pdf", "application/pdf")
     return Receipt.objects.create(
-        file=ContentFile(_RECEIPT, name=f"receipt-{vendor.lower()}-{date.isoformat()}.pdf"),
-        original_filename=f"{vendor} receipt.pdf",
-        content_type="application/pdf",
+        file=ContentFile(content, name=f"receipt-{vendor.lower()}-{date.isoformat()}.{extension}"),
+        original_filename=f"{vendor} receipt.{extension}",
+        content_type=kind,
+        size_bytes=len(content),
         vendor=vendor,
         date=date,
         amount=amount,

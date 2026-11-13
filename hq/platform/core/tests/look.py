@@ -505,7 +505,58 @@ def _relay(command: list[str], sink, ref: str, **options) -> None:
             raise
 
 
-def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found]:
+# Run at a base, each module named on its stdin imported and every name it
+# imports read, so a lazy import of a name the base lacks fails here rather than
+# mid-look; each that fails is printed after `_UNIMPORTABLE`.
+_UNIMPORTABLE = "unimportable: "
+_IMPORTS = f"""
+import importlib, sys
+for name in sys.stdin.read().split():
+    try:
+        module = importlib.import_module(name)
+        for each in list(vars(module)):
+            getattr(module, each)
+    except ImportError:
+        print({_UNIMPORTABLE!r} + name, flush=True)
+"""
+
+
+def _module(path: str) -> str:
+    return ".".join(Path(path).with_suffix("").parts).removesuffix(".__init__")
+
+
+def kept_own(tree: Path, commit: str, laid: list[str], python: list[str], env: dict[str, str]) -> list[str]:
+    """Each Python file of ``laid``, laid over the worktree ``tree`` of
+    ``commit``, that does not import there against the base's own code (a seed
+    constant the base lacks), put back as the base has it, until every one left
+    imports: the files put back. A file the base lacks stays. ``python`` is the
+    command that runs Python there with its settings."""
+
+    checked = [path for path in laid if path.endswith(".py") and task.git("ls-tree", commit, "--", path, root=tree)]
+    kept: list[str] = []
+    while checked:
+        done = subprocess.run(
+            [*python, "-c", _IMPORTS],
+            input="\n".join(map(_module, checked)),
+            cwd=tree,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        failed = {
+            line.removeprefix(_UNIMPORTABLE) for line in done.stdout.splitlines() if line.startswith(_UNIMPORTABLE)
+        }
+        back = [path for path in checked if _module(path) in failed]
+        if not back:
+            break
+        task.git("checkout", commit, "--", *back, root=tree)
+        kept += back
+        checked = [path for path in checked if path not in back]
+    return sorted(kept)
+
+
+def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found, list[str]]:
     """What this run finds, measures and hears go wrong, looked for at ``ref``: the same
     task's run, in a worktree of it with this checkout's test files and lens
     (`LENS`) laid over it as `test --at` lays them, so a base older than a test
@@ -538,6 +589,9 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
         }
         if script := _asked().text("eval"):
             env[f"{PREFIX}eval"] = str(Path(settings.BASE_DIR, script).resolve())
+        shell = ["uv", "run", "--group", "browser", "python", "manage.py", "shell", "--no-imports", "-v", "0"]
+        if kept := kept_own(tree, commit, present, shell, env):
+            print(f"{ref}: {_its_own(kept)}", flush=True)
         print(f"Looking at {ref} first, in {tree}", flush=True)
         # The run there is watched by its own stall watch.
         with log.open("w", encoding="utf-8") as sink, stall_watch.paused():
@@ -546,7 +600,11 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
         if not found.is_file():
             said = log.read_text(encoding="utf-8").splitlines()[-40:]
             raise AssertionError(f"The look at {ref} did not finish:\n" + "\n".join(said))
-        return _read_found(found)
+        return (*_read_found(found), kept)
+
+
+def _its_own(kept: list[str]) -> str:
+    return f"drawn with its own {', '.join(kept)}, as this tree's does not import there"
 
 
 def _address(url: str) -> str:
@@ -723,6 +781,29 @@ def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
     return [page if page in named or page in posts else estate_name(page) for page in found]
 
 
+# What a look at a base says of a page it does not have.
+NOT_AT_BASE = "not at this ref, so looked at only in the tree that asked"
+
+
+def _served(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
+    """``_pages``'s pages; at a base, whose asker already took every name, a
+    name the base cannot draw (a record its estate lacks, a page it predates)
+    is said and left out, so the base draws the rest."""
+
+    try:
+        return _pages(asked, records)
+    except AssertionError:
+        if not _asked().text(_FINDINGS):
+            raise
+    pages = []
+    for name in asked:
+        try:
+            pages += _pages((name,), records)
+        except AssertionError:
+            print(f"{name}: {NOT_AT_BASE}", flush=True)
+    return pages
+
+
 @dataclass(frozen=True, slots=True)
 class Asked:
     """What the run was asked, each name in it checked: the pages, and the probe with its argument."""
@@ -744,7 +825,7 @@ def _checked(records: task.Records | None) -> Asked:
         seeds.get(given.text("seed"))
     except LookupError as unknown:
         raise AssertionError(f"--seed: {unknown}") from None
-    pages = _pages(given.repeated("pages"), records)
+    pages = _served(given.repeated("pages"), records)
     if (rule := Look.rule_asked()) and rule not in _rules():
         raise AssertionError(no_rule(rule))
     probe, probe_source = _probe(given.text("probe"))
@@ -823,6 +904,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     base: Found | None
     base_measured: Measured
     base_errors: Found
+    # The test files the base drew with its own copy of (`kept_own`).
+    base_kept: list[str]
     # The probe --probe names, its source, and the argument --arg gives it.
     probe = probe_source = ""
     probe_arg: object = None
@@ -850,7 +933,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         rule = cls.rule_asked()
         # The base next, while nothing of this run's holds memory but Django.
         ref = _asked().text("base")
-        cls.base, cls.base_measured, cls.base_errors = _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {})
+        cls.base, cls.base_measured, cls.base_errors, cls.base_kept = (
+            _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {}, [])
+        )
         super().setUpClass()
 
     @override
@@ -1032,6 +1117,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             for name, status in self.unanswered_pages.items()
         ]
         base = f", the base's in {_shown(this_run() / BASE_OUT)}/" if self.base is not None else ""
+        if self.base is not None and self.base_kept:
+            base += f", {_its_own(self.base_kept)}"
         shots = f"Screenshots in {_shown(this_run())}/{base}"
         if not self.shooting:
             shots = f"Findings in {_shown(this_run())}/, no screenshots: --shots takes them"

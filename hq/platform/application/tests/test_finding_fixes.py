@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
 from ..finding_model import FindingRule
@@ -364,7 +365,7 @@ class CleanPageTests(TestCase):
         response = self.page(timezone.now())
 
         self.assertContains(response, "The checks found no problems.")
-        self.assertContains(response, f"{len(RULES)} checks over 1 machine and 0 services, from readings")
+        self.assertIn(f"{len(RULES)} checks over 1 machine and 0 services, from readings", plain(response.content))
 
     def test_a_clean_page_names_what_else_waits_on_the_reader(self):
         from unittest import mock

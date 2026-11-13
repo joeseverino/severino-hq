@@ -202,6 +202,13 @@ class PathTests(TestCase):
         self.assertEqual((certificate.role, certificate.name), ("Served", "example wildcard"))
         self.assertEqual(certificate.issuer, "Let's Encrypt")
 
+    def test_a_certificate_uploaded_to_the_proxy_is_said_to_be_uploaded(self):
+        # NPM's code for an uploaded certificate is no authority's name.
+        (host,) = ProviderInventory.objects.get(kind="npm.proxy_host").records
+        store("npm.proxy_host", {**host, "certificate": {**host["certificate"], "provider": "other"}})
+
+        self.assertEqual(self.walk("app.example.com").certificate.issuer, "uploaded")
+
     def test_a_declared_certificate_is_shown_as_hq_knows_it_and_attested(self):
         # NPM names HQ's upload by its own label with no authority; HQ knows better.
         declare_certificate()

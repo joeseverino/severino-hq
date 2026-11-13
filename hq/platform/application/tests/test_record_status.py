@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.github import COMPOSE_WORKFLOW, CURRENT, KIND
+from hq_sdk.testing import plain
 
 from ..entity_links import entity_link, record_name
 from ..inventory import confirm_observed
@@ -249,7 +250,7 @@ class ReportedFieldTests(TestCase):
 
         self.assertEqual(page.count("data-record-status="), 1)
         self.assertTrue(select(response, "data-record-status", "degraded"))
-        self.assertContains(response, "Deploy run 9 finished without deploying it.")
+        self.assertIn("Deploy run 9 finished without deploying it.", plain(response.content))
         for dead_end in (
             "Keep the live version",
             "Apply HQ's config",

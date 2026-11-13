@@ -18,6 +18,7 @@ from hq.domains.control_plane.dns_lookup import LookupNotFound, LookupUnavailabl
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, DOMAIN_KIND
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
+from hq_sdk.testing import plain
 
 from ..facts import Subject, readings
 from ..inventory import inventory_state
@@ -263,7 +264,7 @@ class DomainCardTests(TestCase):
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
         for insight in self.zone.insights:
-            self.assertContains(response, escape(insight.value))
+            self.assertIn(escape(insight.value), plain(response.content))
 
 
 class RegistrationFallbackTests(TestCase):

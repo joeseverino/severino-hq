@@ -18,6 +18,7 @@ from hq.platform.core.tests.estate_sizes import (
     assert_subject_cost_does_not_grow,
     distinct,
 )
+from hq_sdk.testing import plain
 
 from ..entity_links import NODE_KINDS, EntityLink, entity_link, kind_label
 from ..facts import Subject, readings, unreadable_labels
@@ -620,7 +621,7 @@ class DomainCardTests(TestCase):
         response = self.client.get(reverse("zones:detail", args=["example.net"]))
 
         # The domain's own count, not the sweep's total.
-        self.assertContains(response, "2 records")
+        self.assertIn("2 records", plain(response.content))
 
 
 class MachineServesAgreesTests(TestCase):

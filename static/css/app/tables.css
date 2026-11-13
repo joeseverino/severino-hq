@@ -35,9 +35,11 @@
 .table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
 /* A trailing margin inside a padded box is a band of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
-/* With no script nothing is held back for a toggle, so every table is read whole, sized to its content, inside its region. */
+/* With no script nothing is held back for a toggle, so a table in a wide region is read whole, sized to its content, inside its region; in a phone's it takes every give at once (below) and scrolls only once it has none left. */
 @media (scripting: none) {
-  .table-scroll > .data-table:has(tbody td:not([colspan])) { width: max-content; min-width: 100%; max-width: 1400px; }
+  @container table-region (width >= 640px) {
+    .table-scroll > .data-table:has(tbody td:not([colspan])) { width: max-content; min-width: 100%; max-width: 1400px; }
+  }
 }
 /* Refreshes pin column widths (fixed layout), so an unbroken token must wrap in its cell rather than bleed across them. */
 .table-scroll td { overflow-wrap: break-word; }
@@ -293,7 +295,9 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line, so its column can give way without hiding any of it. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.data-table:not([data-break]) td code.cell-whole .whole { white-space: nowrap; }
+@container not style(--break: given) {
+  .data-table td code.cell-whole .whole { white-space: nowrap; }
+}
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
   display: inline-flex;
@@ -413,23 +417,31 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 /* A column let go while the table was wider than its region, and a narrow box (tables.js): a row with something there shows its toggle and its table keeps the gutter. */
 .data-table[data-narrow] { --box: narrow; }
-/* With no script nothing measures the table, so a phone's box is narrow by its width alone. */
+/* A table still wider than its region in a narrow box is tight (`data-tight`, tables.js), and then breaks its identifiers (`data-break`); each give is a property the rules below read, so a box no script measures can take them too. */
+.data-table[data-tight] { --tight: given; }
+.data-table[data-break] { --break: given; }
+/* With no script nothing measures the table, so a phone's box is narrow by its width alone, and takes every give at once: the table wraps all it can before its region scrolls. */
 @media (scripting: none) {
   @container table-region (width < 640px) {
-    .data-table { --box: narrow; }
+    .data-table { --box: narrow; --tight: given; --break: given; }
   }
 }
-/* A table still wider than its region in a narrow box is tight (`data-tight`, tables.js): kept lines wrap at their spaces and cells stand closer, so a phone's narrowest screen holds it. */
-.data-table[data-tight] > * > tr > * { padding-inline: var(--space-3); }
-.data-table[data-tight] :is(.table-sort-link, time, .date-col, .nowrap, .cell-part, .pill) { white-space: normal; }
-/* A tight table still wider than its region breaks its identifiers where they must (`data-break`, tables.js), its last give before it scrolls: a name broken is read where a name past the card is not. */
-.data-table[data-break] :is(td, th) .whole { white-space: normal; }
-.data-table[data-break] :is(td, th) :is(code, .token, .whole, [data-entity]) { overflow-wrap: anywhere; }
-/* A pill that wraps (tight, or in an opened row) flows as text: as a flex box its words and an identifier among them are items side by side, each squeezed until it breaks inside a word. Its corners round by half of one line, so it is a capsule on one line and a rounded box on several. */
-.data-table[data-tight] td .pill, .data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
-/* A row's controls side by side are a kept line too, so tight they wrap where the cell is too narrow for them all, each line ending the cell. */
+/* Tight, kept lines wrap at their spaces and cells stand closer, so a phone's narrowest screen holds the table. */
+@container style(--tight: given) {
+  .data-table > * > tr > * { padding-inline: var(--space-3); }
+  .data-table :is(.table-sort-link, time, .date-col, .nowrap, .cell-part, .pill) { white-space: normal; }
+  /* A pill that wraps (tight, or in an opened row, below) flows as text: as a flex box its words and an identifier among them are items side by side, each squeezed until it breaks inside a word. Its corners round by half of one line, so it is a capsule on one line and a rounded box on several. */
+  .data-table td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
+}
+/* A row's controls side by side are a kept line too, so tight they wrap where the cell is too narrow for them all, each line ending the cell. Only a table the script measured lets them go: in one no script measures, the words beside them wrap first, so controls with room stay on one line. */
 .data-table[data-tight] > tbody > tr > :is(td.row-actions, [data-kind="control"]) { white-space: normal; }
 .data-table[data-tight] td > span.row-actions { flex-wrap: wrap; justify-content: end; }
+.data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
+/* Broken, its identifiers break where they must, the last give before it scrolls: a name broken is read where a name past the card is not. */
+@container style(--break: given) {
+  .data-table :is(td, th) .whole { white-space: normal; }
+  .data-table :is(td, th) :is(code, .token, .whole, [data-entity]) { overflow-wrap: anywhere; }
+}
 .data-table > * > tr > [data-dropped] { display: none; }
 .data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }
 .data-table:has(> tbody > tr > td[data-dropped]:not([data-blank])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }

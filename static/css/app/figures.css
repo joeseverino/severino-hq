@@ -154,6 +154,10 @@ td > .readout { flex-wrap: nowrap; white-space: nowrap; overflow-wrap: normal; }
 /* A cell that leads with the row's name keeps room to show it, rather than standing several lines tall. */
 /* Never more than its column's share (`--share`, tables.css, plus half for the name), so the columns that keep their line still fit beside it. */
 .data-table td:has(> [data-cell~=name]) { min-width: min(11rem, 40cqi, 1.5 * var(--share)); }
+/* A tight table (tables.css) is one still wider than its box, so the name gives that room back too and asks only for what it holds. */
+@container style(--tight: given) {
+  .data-table td:has(> [data-cell~=name]) { min-width: 0; }
+}
 /* A name in the muted line under the row's name is context the row shares with its neighbors: one line, cut at the cell's edge, holding out for none of it (`--cut-floor`). */
 .data-table td .muted { --cut-lines: 1; --cut-floor: 0px; }
 /* A value quoted in a cell can hold a run with no seam (a link, a digest), so it breaks wherever it must and never widens its column; marked on the cell when the whole cell is such text. */
@@ -200,6 +204,20 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .chart-labels .chart-category { text-anchor: middle; transform: translateY(-.5em); }
 /* A figure an extension frames as a card of its own: <figure> carries a UA margin of 1em 40px, which would inset it from the grid. */
 .chart-card { margin: 0 0 var(--stack-gap); }
+/* A picture of a document (a receipt's scan or photo), whose size HQ does not
+   store: its box is a page's shape at most most of a screen tall, drawn
+   before the picture arrives so nothing moves when it does, and the picture
+   fits inside it whatever its own shape, from the top as a page is read. */
+.document-picture {
+  display: block;
+  inline-size: 100%;
+  aspect-ratio: 3 / 4;
+  max-block-size: 70svh;
+  object-fit: contain;
+  object-position: top;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tint);
+}
 .chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: var(--space-6) 0 var(--space-1); color: var(--muted); font-size: var(--text-xs); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
 .chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
@@ -343,8 +361,8 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .facts-band .band-icon { grid-row: 1 / -1; grid-column: 1; }
 /* What names a value is sentence case in the muted voice; capitals are for a kicker over a group (`.eyebrow`), never a value's name. */
 .facts-band .fact-label { grid-row: 1; grid-column: -2; min-width: 0; color: var(--muted); font-size: var(--text-xs); }
-/* The value's line is a target tall (`--target-min`) whatever it holds, and a link in it is a box of that line's height set by its top, so a linked value is a target and stands on the baseline an unlinked one does, a zero beside a count of 13 alike. An inline block's baseline is its last line, so one set on the baseline would rise above its fact as it wraps. */
-.facts-band .fact-value { grid-row: 2; grid-column: -2; min-width: 0; margin: 0; font-size: var(--text-lg); font-weight: 650; line-height: max(var(--target-min), 1.3em); overflow-wrap: anywhere; }
+/* The value's line is a target tall (`--target-min`) whatever it holds, and a link in it is a box of that line's height set by its top, so a linked value is a target and stands on the baseline an unlinked one does, a zero beside a count of 13 alike. An inline block's baseline is its last line, so one set on the baseline would rise above its fact as it wraps. A word longer than its line breaks where it overflows (`break-word`), which leaves the fact's least width at its longest word: `anywhere` would size it to a letter, splitting a count from its noun. */
+.facts-band .fact-value { grid-row: 2; grid-column: -2; min-width: 0; margin: 0; font-size: var(--text-lg); font-weight: 650; line-height: max(var(--target-min), 1.3em); overflow-wrap: break-word; }
 .facts-band .fact-value :is(a, [tabindex]) { display: inline-block; vertical-align: top; }
 /* Code in a value is set in its own face, whose line would sit the line half a pixel off the plain value beside it; at one line of its size it stays inside the value's line. */
 .facts-band .fact-value :is(code, kbd, samp) { line-height: 1; }

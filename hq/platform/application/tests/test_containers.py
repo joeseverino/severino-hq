@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
+from hq_sdk.testing import plain
 
 from ..containers import BEHIND, CURRENT, UNKNOWN, VULNERABLE, Running, Tally, attention, containers, tally
 from ..exposure import OPEN, PRIVATE, Exposure, RouteExposure, front_door_names, listening_ports
@@ -499,7 +500,7 @@ class PageTests(TestCase):
 
         self.assertEqual(response.context["standings"]["kuma"].latest, "2")
         self.assertIn("2 available", text(response))
-        self.assertContains(response, "1 known")
+        self.assertIn("1 known", plain(response.content))
 
     def test_a_container_running_an_image_by_id_stays_listed_and_says_why(self):
         inventory("portainer.container", [running("orphan", "sha256:0123456789abcdef0123")])

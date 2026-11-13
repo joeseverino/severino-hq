@@ -5,6 +5,7 @@ from hq.platform.application.tables import ranked
 from hq.platform.application.tests.markup import elements
 from hq.platform.core.audit_views import AuditLogListView
 from hq.platform.core.models import AuditLog
+from hq_sdk.testing import plain
 
 from .signed_in_case import _AuthedTestCase
 
@@ -27,8 +28,8 @@ class AuditWhatTests(_AuthedTestCase):
         only in a narrow box."""
 
         page = self.client.get(reverse("core:audit_list")).content.decode()
-        (row,) = [row for row in elements(page, "tr") if record in row.text]
-        cell = next(cell for cell in elements(page, "td") if row in cell.ancestors and record in cell.text)
+        (row,) = [row for row in elements(page, "tr") if record in plain(row.text)]
+        cell = next(cell for cell in elements(page, "td") if row in cell.ancestors and record in plain(cell.text))
         narrow = [
             part.words for part in elements(page, "span") if "narrow-only" in part.classes and cell in part.ancestors
         ]

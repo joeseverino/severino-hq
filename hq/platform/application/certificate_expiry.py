@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import replace
 from typing import Any
 
+from hq.domains.control_plane.certificate_authorities import UPLOADED
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.providers import PROVIDERS
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
@@ -18,6 +19,7 @@ lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 from .expiry import days_until
 from .facts import Joined, inventory_records
 from .finding_model import THEN_CHECK_AGAIN, FindingRule, built_findings
+from .labels import lower_first
 from .moments import expiry_words
 from .timestamps import moment
 
@@ -81,7 +83,7 @@ def _served(holders) -> Found:
     the nodes the proxy was read through. HQ neither issued nor manages one
     loaded from a file on the proxy's host, so no other reading lists it."""
 
-    found: dict[tuple[str, str, str], tuple[set[str], tuple[str, ...]]] = {}
+    found: dict[tuple[str, ...], tuple[set[str], tuple[str, ...], str]] = {}
     for kind, provider in PROVIDERS.items():
         if provider.served_certificate is None:
             continue
@@ -94,9 +96,9 @@ def _served(holders) -> Found:
                 continue
             for node_id in holders(provider, record):
                 key = (kind, str(served.certificate.get("name", "")), expires)
-                found.setdefault((node_id, *key), (set(), key))[0].update(served.hostnames)
-    for (node_id, *_), (names, key) in found.items():
-        yield (CERTIFICATE_EXPIRES, "|".join((*key, ",".join(sorted(names))))), (node_id,)
+                found.setdefault((node_id, *key), (set(), key, served.issuer))[0].update(served.hostnames)
+    for (node_id, *_), (names, key, issuer) in found.items():
+        yield (CERTIFICATE_EXPIRES, "|".join((*key, ",".join(sorted(names)), issuer))), (node_id,)
 
 
 def _parts(value: str) -> list[str]:
@@ -127,7 +129,9 @@ def expiring(estate: Any) -> tuple[dict[str, Any], ...]:
     found = []
     for group in alike.values():
         said = _telling(group) if len(group) > 1 else None
-        found += [_finding(node, value, days, apart=said(node, value) if said else "") for node, value, days in group]
+        found += [
+            _finding(node, value, days, apart=said(node, value) if said else ("", "")) for node, value, days in group
+        ]
     return tuple(sorted(found, key=lambda item: item["title"]))
 
 
@@ -156,17 +160,25 @@ def _reads_as(value: str, days: int) -> tuple[str, str, str]:
     return _label(kind), title, expiry_words(days)
 
 
+def _issued(_node, value: str) -> tuple[str, str]:
+    issuer = _parts(value)[4]
+    # An uploaded one has no issuer to name, so the word leads the title.
+    return (UPLOADED.capitalize(), "") if issuer == UPLOADED else ("", f"from {issuer or 'an unnamed issuer'}")
+
+
 # What tells two certificates of one title apart, in the order tried: two for
 # one name (a zone's edge certificate and its backup) by who issued them or
-# what they serve, and one held in two places by where.
-_TELLINGS: tuple[Callable[[Any, str], str], ...] = (
-    lambda _node, value: f"from {_parts(value)[4] or 'an unnamed issuer'}",
-    lambda _node, value: f"for {_parts(value)[3].replace(',', ', ') or 'no name'}",
-    lambda node, _value: f"in {node.label}",
+# what they serve, and one held in two places by where. Each says the words
+# that lead the title and those that follow the certificate's name.
+Telling = Callable[[Any, str], tuple[str, str]]
+_TELLINGS: tuple[Telling, ...] = (
+    _issued,
+    lambda _node, value: ("", f"for {_parts(value)[3].replace(',', ', ') or 'no name'}"),
+    lambda node, _value: ("", f"in {node.label}"),
 )
 
 
-def _telling(group: list[tuple[Any, str, int]]) -> Callable[[Any, str], str]:
+def _telling(group: list[tuple[Any, str, int]]) -> Telling:
     """The first telling that says each of ``group`` differently, else the last."""
 
     for telling in _TELLINGS:
@@ -175,17 +187,19 @@ def _telling(group: list[tuple[Any, str, int]]) -> Callable[[Any, str], str]:
     return _TELLINGS[-1]
 
 
-def _finding(node, value: str, days: int, apart: str = "") -> dict[str, Any]:
+def _finding(node, value: str, days: int, apart: tuple[str, str] = ("", "")) -> dict[str, Any]:
     """The finding for one certificate fact with ``days`` left, ``apart``
     saying what tells it from another whose title would read the same."""
 
     kind, title, stamp, names, issuer = _parts(value)
     label, _title, said = _reads_as(value, days)
+    lead, tail = apart
+    label = f"{lead} {lower_first(label)}" if lead else label
     day = when.date().isoformat() if (when := moment(stamp)) else stamp
     return {
         "rule": "certificate-expiring",
         "subject": node.id,
-        "title": " ".join(filter(None, (label, title, apart, said))),
+        "title": " ".join(filter(None, (label, title, tail, said))),
         # One connection can hold several certificates for one name, each its
         # own matter in the queue. The day stands for the expiry, since a key
         # holds no time stamp (display_words).

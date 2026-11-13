@@ -11,6 +11,7 @@ from django.test import RequestFactory, SimpleTestCase, tag
 
 from hq.platform.application.tests.markup import elements, select, with_class
 from hq.platform.core.tests.test_part_tags import _catalog_templates
+from hq_sdk.testing import plain
 
 # A tone's look is its class, which the stylesheet's tone assignment colors.
 LOOKS = {"": None, "info": "notice-info", "success": "notice-success", "warning": "notice-warning"}
@@ -51,7 +52,7 @@ class NoticeTagTests(SimpleTestCase):
         self.assertEqual(title.words, "2 jobs failed")
         self.assertIn(notice, title.ancestors)
         self.assertIn(notice, body.ancestors)
-        self.assertLess(html.index("2 jobs failed"), html.index("backup, sync"))
+        self.assertLess(plain(html).index("2 jobs failed"), plain(html).index("backup, sync"))
 
     def test_a_pages_class_and_data_attributes_ride_on_it(self):
         html = _render(

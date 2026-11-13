@@ -11,7 +11,6 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from hq.domains.control_plane.certificate_authorities import authority_name
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
@@ -676,7 +675,7 @@ def _served_certificate(name: str, row: _Row, role: str) -> Certificate:
             return Certificate(
                 role,
                 name=str(certificate.get("name", "") or ""),
-                issuer=authority_name(certificate.get("provider")),
+                issuer=served.issuer,
                 expiry=expiry_phrase(str(certificate.get("expires_on", "") or "")),
                 source=row.source,
                 left=_days_left(str(certificate.get("expires_on", "") or "")),

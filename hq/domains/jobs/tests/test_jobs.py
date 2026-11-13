@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AuditLog
+from hq_sdk.testing import plain
 
 from ..models import HEARTBEAT_GRACE, Job
 from ..runner import Failed, JobConflict, Progress, reap, run, start
@@ -363,7 +364,7 @@ class JobListOrderTests(TestCase):
         order = [job.pk for job in page.context["object_list"]]
         self.assertEqual(order[:3], [self.failed.pk, self.lost.pk, self.newest.pk])
         self.assertGreater(order.index(self.recovered.pk), 2)
-        self.assertContains(page, "2 jobs failed on their last run")
+        self.assertIn("2 jobs failed on their last run", plain(page.content))
         self.assertContains(page, "Index the example, Read the example")
 
     def test_newest_first_is_still_one_choice_away(self):

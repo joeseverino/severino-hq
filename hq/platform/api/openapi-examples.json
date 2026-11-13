@@ -2375,18 +2375,18 @@
           "count": 10,
           "items": [
             {
-              "amount": "389.00",
-              "content_type": "application/pdf",
-              "date": "2024-11-11",
-              "id": 1,
+              "amount": "54.99",
+              "content_type": "image/png",
+              "date": "2026-01-12",
+              "id": 10,
               "notes": "",
-              "original_filename": "eBay receipt.pdf",
+              "original_filename": "APC receipt.png",
               "related_asset": null,
-              "related_expense": 1,
-              "size_bytes": 0,
-              "updated_at": "2024-11-11T17:33:00+00:00",
+              "related_expense": null,
+              "size_bytes": 121,
+              "updated_at": "2026-01-12T15:34:00+00:00",
               "uploaded_at": "2026-01-15T09:30:00+00:00",
-              "vendor": "eBay"
+              "vendor": "APC"
             }
           ],
           "next": null,

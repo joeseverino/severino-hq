@@ -31,6 +31,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.markup import elements, hrefs, select, text
+from hq_sdk.testing import plain
 
 from .signed_in_case import _AuthedTestCase
 
@@ -350,7 +351,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         badge = next(
             each
             for each in select(page, "data-modal-open", "connection")
-            if all(part in each.text for part in found.summary.split(DOT))
+            if all(plain(part) in plain(each.text) for part in found.summary.split(DOT))
         )
         self.assertEqual(badge.attrs["href"], reverse("connection"))
         self.assertIn(found.transport, badge.text)

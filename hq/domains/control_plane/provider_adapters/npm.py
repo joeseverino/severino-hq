@@ -7,6 +7,7 @@ from pydantic import Field
 from hq.platform.application.ui import ended
 from hq.platform.core.network import split_host_port
 
+from ..certificate_authorities import npm_issuer
 from ..connection_shapes import LOGIN
 from ..names import normalized_hostname
 from ..provider_spec import ConnectionKind, ProviderModel, ProviderSpec, applies
@@ -49,7 +50,7 @@ def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
     certificate = record.get("certificate") or {}
     if not isinstance(certificate, dict) or not certificate.get("name"):
         return None
-    return ServedCertificate(_names(record), certificate)
+    return ServedCertificate(_names(record), certificate, issuer=npm_issuer(certificate.get("provider")))
 
 
 class NPMProxyHostSpec(ProviderModel):

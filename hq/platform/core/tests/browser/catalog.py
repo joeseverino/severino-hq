@@ -579,7 +579,7 @@ CATALOG = {
         '{% fact "Example version" icon="layers" %}<code>example-1.2.3</code>{% detail %}'
         "<small>example.com/example/image</small><small>Tag only</small>{% endfact %}"
         '{% fact "An example label long enough to wrap in its cell" icon="shield" tone="serious" %}'
-        '<a href="/example/">2 example findings</a>{% detail %}<small>An example detail</small>{% endfact %}'
+        '<a href="/example/">{{ "2\u00a0example findings"|breakable }}</a>{% detail %}<small>An example detail</small>{% endfact %}'
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
         "{% endfacts %}"
     ),
@@ -640,7 +640,7 @@ CATALOG = {
     # entity's name and one linked outside, each under a fact of one line:
     # every value stands on its label's line, clear of the fact above it.
     "part/facts-list-identifiers": Entry(
-        '<div style="inline-size: 300px">{% facts %}'
+        '<div style="max-inline-size: 300px">{% facts %}'
         '{% fact "Example name" value="example-01" %}'
         '{% fact "Example image" %}<code>{{ image|breakable }}</code>{% endfact %}'
         '{% fact "Example kind" value="Renewal" %}'

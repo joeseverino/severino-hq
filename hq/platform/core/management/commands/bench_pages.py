@@ -62,6 +62,7 @@ SKIPPED = {
     "oidc_backchannel_logout": "the identity provider's server posts it",
     "avatar": "image bytes",
     "receipts:file": "file bytes, none are stored by the seed",
+    "receipts:picture": "image bytes, none are stored by the seed",
     "control_plane:certificate_download": "file bytes",
     "control_plane:upload_certificate": "the seed uploads no certificate",
     "contacts:detail": "read from Cloudflare D1, not this database",

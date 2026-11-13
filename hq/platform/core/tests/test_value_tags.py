@@ -160,7 +160,35 @@ class BreakableTests(SimpleTestCase):
 
         printed = str(breakable("10.5–12.5 mi"))
         self.assertNotIn('class="token"', printed)
-        self.assertEqual(wholes(printed), ["10.5–12.5"])
+        # Its unit inside its box, since the line breaks at a box's edge.
+        self.assertEqual(wholes(printed), ["10.5–12.5 mi"])
+
+    def test_a_figure_and_the_word_it_counts_never_part_at_a_line(self):
+        """A figure and its unit or counted word are one run, held by a
+        no-break space, so the word never opens a line alone below its
+        number; the line still breaks between the other words."""
+
+        for phrase, run in (
+            ("Due in 80 days", "80 days"),
+            ("+0.01 m / 90 days", "90 days"),
+            ("+0.01 m / 90 days", "+0.01 m /"),
+            ("−2.5 km since", "−2.5 km"),
+            ("used 3 GB of", "3 GB"),
+            ("over 1 month", "1 month"),
+            ("Moved 1 account.", "1 account."),
+            ("up 12 % today", "12 %"),
+            ("$12.00 each", "$12.00 each"),
+            ("10.5–12.5 mi", "12.5 mi"),
+            ("at 4.2 m/s", "4.2 m/s"),
+        ):
+            with self.subTest(phrase=phrase):
+                drawn = re.sub(r"<[^>]*>", "", str(breakable(phrase)))
+                self.assertIn(run.replace(" ", "\xa0"), drawn)
+                self.assertEqual(text(breakable(phrase)), phrase)
+        drawn = str(breakable("Due in 80 days"))
+        self.assertIn("Due in ", drawn)
+        self.assertEqual(str(breakable("12 of example.com")).count("\xa0"), 1)
+        self.assertNotIn("\xa0", str(breakable("80 example.com")))
 
     def test_it_is_marked_a_token_and_nothing_is_one(self):
         self.assertIn('class="token"', breakable("example.com"))

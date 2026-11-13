@@ -247,7 +247,9 @@ class HopSourcePart(TypedDict):
 class CertificatePart(TypedDict):
     role: Annotated[str, Describe("What the certificate is at the hop, such as the edge's or the origin's.")]
     name: Annotated[str, Describe("The name the certificate is for; empty when not read.")]
-    issuer: Annotated[str, Describe("Who issued it; empty when not read.")]
+    issuer: Annotated[
+        str, Describe("Who issued it, or 'uploaded' for one uploaded to the proxy that serves it; empty when not read.")
+    ]
     expiry: Annotated[str, Describe("When it runs out, as read; empty when not read.")]
     source: Annotated[HopSourcePart | None, Describe("Where HQ read the certificate; null when nothing says.")]
     unread: Annotated[str, Describe("Why HQ cannot say what certificate the hop presents; empty when it can.")]

@@ -4,11 +4,20 @@
 {% card label="Receipt" %}{% facts %}
   {% fact "Date" %}{{ receipt.date|when }}{% endfact %}
   {% fact "Amount" %}{{ receipt.amount|money }}{% endfact %}
-  {% if receipt.file_type %}{% fact "File type" value=receipt.file_type %}{% endif %}
-  {% if receipt.size_bytes %}{% fact "Size" %}{{ receipt.size_bytes|bytes }}{% endfact %}{% endif %}
   {% if receipt.related_expense %}{% fact "Expense" %}<span class="prose">{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label %} <span class="muted">{{ receipt.related_expense.date|when:"day" }}</span></span>{% endfact %}{% endif %}
   {% if receipt.related_asset %}{% fact "Asset" %}{% entity "asset"|entity_of:receipt.related_asset.slug label=receipt.related_asset.item_name %}{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
+
+{% url "receipts:edit" receipt.pk as edit_url %}
+{% if file_picture %}
+{% section "File" figure=True lede=file_line data_receipt_file="picture" %}<img class="document-picture" src="{% url 'receipts:picture' receipt.pk %}" alt="The receipt, {{ receipt.original_filename|default:'as uploaded' }}" decoding="async">{% endsection %}
+{% elif file_stored %}
+{% section "File" data_receipt_file="link" %}<p><a href="{% url 'receipts:file' receipt.pk %}">{{ receipt.original_filename|default:"The receipt's file"|breakable }}</a>{% if file_line %} <span class="muted">{{ file_line|breakable }}</span>{% endif %}</p>{% endsection %}
+{% elif file_missing %}
+{% section "File" data_receipt_file="missing" remedy_label="Replace the file" remedy_url=edit_url %}{% empty %}{{ receipt.original_filename|default:"This receipt's file"|breakable }} is no longer in HQ's storage.{% endsection %}
+{% else %}
+{% section "File" data_receipt_file="none" remedy_label="Add a file" remedy_url=edit_url %}{% empty %}No file is stored for this receipt.{% endsection %}
+{% endif %}
 
 {% if receipt.notes %}{% section "Notes" %}<p>{{ receipt.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 </div>

@@ -205,6 +205,12 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   - The `receipts:file` view requires authentication, streams the file, sets
     `X-Content-Type-Options: nosniff` and `Cache-Control: private, no-store`,
     and audits the view.
+  - The `receipts:picture` view, the `<img>` a receipt's page draws, answers
+    the same way but only for a file stored as an image type a browser draws
+    (`PICTURE_CONTENT_TYPES`), inline, and is not audited: it is part of the
+    page view, which HQ does not record. A PDF is a link to `receipts:file`,
+    never framed, since `frame-ancestors 'none'` and `X-Frame-Options: DENY`
+    refuse HQ framing its own responses.
 - Uploads are content-type-filtered (`hq/domains/receipts/forms.py`) and size-capped
   (15 MB by default).
 - Audit log on every create / update / delete (via signals), plus login,

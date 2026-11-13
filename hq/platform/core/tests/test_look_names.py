@@ -9,7 +9,7 @@ holds it."""
 
 import io
 import os
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
@@ -49,6 +49,28 @@ class RefusedNamesTests(SimpleTestCase):
                 self.assertLessEqual(expected, set(offers))
                 for offer in offers:
                     self.assertEqual(len(_named(offer)), 1, offer)
+
+
+class AtBaseNamesTests(SimpleTestCase):
+    """At a base, every name was already taken by the run that asked, so a page
+    the base cannot draw (one it predates) is said and left out, and the rest
+    are drawn."""
+
+    def checked(self, **asked):
+        environ = {**ASKED, "usage_pages": "/dashboard/ dashboard", **asked}
+        printed = io.StringIO()
+        with mock.patch.dict(os.environ, environ, clear=True), redirect_stdout(printed):
+            return look._checked(None).pages, printed.getvalue()
+
+    def test_a_page_the_base_cannot_draw_is_said_and_the_rest_are_drawn(self):
+        pages, said = self.checked(usage_found_into="found.json")
+
+        self.assertEqual(pages, ["dashboard"])
+        self.assertIn("/dashboard/", said)
+
+    def test_the_run_that_asks_still_refuses_it(self):
+        with self.assertRaises(AssertionError):
+            self.checked()
 
 
 class CatalogNamesTests(SimpleTestCase):

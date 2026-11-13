@@ -10,6 +10,7 @@ function takes a Zone and returns one insight or None, registered by name in
 import re
 from functools import partial
 
+from hq.domains.control_plane.certificate_authorities import UPLOADED
 from hq.domains.control_plane.credential_reads import REGISTRAR_READ
 from hq.domains.control_plane.names import in_zone, normalized_hostname
 from hq.domains.control_plane.provider_adapters.cloudflare import caa_parts
@@ -20,7 +21,7 @@ from hq.domains.control_plane.provider_adapters.tls import (
 )
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS, read_spec
-from hq.platform.application.labels import dotted
+from hq.platform.application.labels import dotted, lower_first
 from hq.platform.application.routes import reverse
 
 from .card_items import ListRow
@@ -118,13 +119,7 @@ def _overlays(joined) -> str:
         if item.facet or not item.spec.joins_hostnames:
             continue
         counts.setdefault(item.relation, set()).update(item.hostnames)
-    return dotted(*(f"{len(names)} {_mid_sentence(relation)}" for relation, names in sorted(counts.items())))
-
-
-def _mid_sentence(phrase: str) -> str:
-    """A phrase as it reads after a number: "Behind Access" lowercased, "DNS lookups" kept."""
-
-    return phrase if phrase[1:2].isupper() else phrase[:1].lower() + phrase[1:]
+    return dotted(*(f"{len(names)} {lower_first(relation)}" for relation, names in sorted(counts.items())))
 
 
 def certificates(zone) -> ZoneInsight | None:
@@ -305,12 +300,15 @@ def _edge_certificates(edge) -> ZoneInsight:
     """Edge certificates covering the zone: how many, the earliest expiry, who issued them."""
 
     earliest = _earliest(item.expires for item in edge)
-    issuers = sorted({item.issuer for item in edge if item.issuer})
+    issuers = sorted({item.issuer for item in edge if item.issuer and item.issuer != UPLOADED})
+    uploaded = sum(item.issuer == UPLOADED for item in edge)
     detail = []
     if earliest:
         detail.append(f"Earliest expires {expiry_phrase(earliest)}.")
     if issuers:
         detail.append(ended(f"Issued by {', '.join(issuers)}"))
+    if uploaded:
+        detail.append(f"{counted(uploaded, 'certificate')} {UPLOADED}.")
     return ZoneInsight(
         label="Certificates",
         value=counted(len(edge), "edge certificate", "edge certificates"),

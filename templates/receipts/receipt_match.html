@@ -2,7 +2,15 @@
 {% block page %}
 {% if already_linked %}
   <div class="msg msg-info">Already linked to {% include "receipts/_linked_to.html" %}.</div>
-{% else %}
+{% endif %}
+<div class="section-flow">
+{% card label="Receipt" %}{% facts %}
+  {% fact "Vendor" %}{{ receipt.vendor|or_empty }}{% endfact %}
+  {% fact "Date" %}{{ receipt.date|when }}{% endfact %}
+  {% fact "Amount" %}{{ receipt.amount|money }}{% endfact %}
+  {% fact "Original file" %}{{ receipt.original_filename|breakable }}{% endfact %}
+{% endfacts %}{% endcard %}
+{% if not already_linked %}
   {% words "expense.create" as add_expense %}
   {% section "Matching expenses" lede="Expenses without a receipt that match this vendor or amount." remedy_label=add_expense remedy_url=new_expense %}
     {% if matches %}
@@ -34,13 +42,5 @@
   {% empty %}None match.
   {% endsection %}
 {% endif %}
-
-{% section "Receipt details" %}
-  <dl class="kv">
-    <dt>Vendor</dt><dd>{{ receipt.vendor|or_empty }}</dd>
-    <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
-    <dt>Amount</dt><dd>{{ receipt.amount|money }}</dd>
-    <dt>Original file</dt><dd>{{ receipt.original_filename|breakable }}</dd>
-  </dl>
-{% endsection %}
+</div>
 {% endblock %}

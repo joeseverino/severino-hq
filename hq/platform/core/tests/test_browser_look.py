@@ -859,7 +859,7 @@ class WorktreeTests(SimpleTestCase):
                 mock.patch.object(look, "_relay", relay),
                 mock.patch("sys.stdout", new_callable=io.StringIO),
             ):
-                self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}))
+                self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}, []))
             self.assertEqual(seen["test"], "new\n")
             self.assertIsNone(seen["database"], "the base migrates a database of its own")
             self.assertEqual(seen["css"], "", "the base is drawn as its tree draws, without --css")

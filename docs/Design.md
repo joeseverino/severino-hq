@@ -115,8 +115,9 @@ transitions from nothing, so every button fades in on load.
 
 **A table fits its box, at every width.** No screen width is asked anywhere
 in the table primitive. A table takes its box's width and wraps, the browser
-sizing each column from what it holds. With no script nothing leaves and the
-table scrolls in its region.
+sizing each column from what it holds. With no script nothing leaves: in a
+phone's region the table takes every give below at once, and it scrolls in
+its region only once it has none left.
 
 Each column that may leave has a rank, 1 first
 (`{% table_heading ... drop=N %}`). A list's ranks are derived by `ranked`:
@@ -150,9 +151,10 @@ row, standing in for the columns that left (the audit log's action under its
 name).
 
 A table still wider in a narrow box is tight (`data-tight`). Its headings,
-times, statuses and a value's parts wrap at their spaces, its row's controls
-stand one above another, each label whole on its line, and its cells stand
-closer. Still wider, its identifiers break where they must (`data-break`).
+times, statuses and a value's parts wrap at their spaces, the name gives up
+the room it holds out for, its row's controls stand one above another (only
+where the script measured the table), each label whole on its line, and its
+cells stand closer. Still wider, its identifiers break where they must (`data-break`).
 A table wider than its region even then scrolls in it (`data-scrolls`), so no
 table runs past its card at any width, and the gates fail it: the narrowest
 phone (320px) and every width above it hold every table the gates draw.
