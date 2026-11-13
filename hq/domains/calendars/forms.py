@@ -69,10 +69,11 @@ class EntryForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # What the entry is and what to remember about it take the whole row.
-        # The form's two columns pair its fields in order, so the days it runs
-        # read across as one row and the times as the next.
+        # The days it runs read across as one row, and the times as the next.
         for name in ("title", "notes"):
             self.fields[name].wide = True
+        for name in ("starts_on", "starts_at"):
+            self.fields[name].starts_pair = True
         self.fields["title"].widget.attrs.update(autofocus=True, placeholder="What is it?")
         if self.instance.pk:
             self.initial["weekdays"] = [str(day) for day in self.instance.weekday_numbers]

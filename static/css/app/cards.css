@@ -23,16 +23,6 @@
 
 /* ── Contact submissions ────────────────────────────────────────── */
 
-.status-tabs { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-6); }
-.status-tab {
-  display: inline-flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-6); border-radius: 999px; font-size: var(--text-sm);
-  border: 1px solid var(--line); background: var(--surface); color: var(--ink-2);
-}
-.status-tab:hover { background: var(--surface-2); text-decoration: none; }
-.status-tab[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.status-tab .count { color: var(--muted); font-size: var(--text-2xs); font-variant-numeric: tabular-nums; }
-.status-tab[aria-current] .count { color: inherit; }
 .row-unread td { background: var(--accent-tint); }
 .row-unread .msg-preview a, .row-unread td:first-child a { font-weight: 650; }
 /* A control that posts a form of its own (`post_form`) stands where a button would. */
@@ -66,10 +56,12 @@
    whatever wraps grows to fill its row instead, at every width. */
 .kpi-grid { display: flex; flex-wrap: wrap; margin: 0 0 var(--stack-gap); }
 .kpi { flex: 1 1 150px; min-width: 0; padding: var(--space-7) var(--space-8); display: flex; flex-direction: column; gap: var(--space-2); }
-/* A linked KPI is a whole tile target, so it should not also wear inline-link
-   underlines on its label and value. */
+/* A linked figure reads as one target by its tile, which tints under the
+   pointer and the focus, so it wears no underline on its label or value. A
+   figure whose value is its link (it holds links of its own) tints the same
+   way while its value is pointed at or focused. */
 a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
-a.kpi:hover { background: var(--surface-2); }
+:is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) { background: var(--surface-2); }
 .kpi .label { color: var(--muted); font-size: var(--text-xs); }
 /* A mark for what the figure counts: quieter than the label it sits before.
    The label is a row, so a label too long for its column wraps beside its
@@ -280,6 +272,13 @@ a.kpi:hover { background: var(--surface-2); }
   margin: 0; padding: 0; list-style: none; font-size: var(--text-sm);
 }
 .step-list li { display: flex; align-items: flex-start; gap: var(--space-5); break-inside: avoid; padding-bottom: var(--space-5); }
+/* Steps done in order ({% steps numbered=True %}) read down one column, each
+   step's number where an icon would be. */
+.step-list.is-numbered { columns: auto; counter-reset: step; }
+.step-list.is-numbered > li { gap: var(--space-3); counter-increment: step; }
+.step-list.is-numbered > li:last-child { padding-bottom: 0; }
+.step-list.is-numbered > li::before { content: counter(step) "."; min-inline-size: 1.5em; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
+.step-list .command { margin-top: var(--space-2); }
 .step-list li.is-done { color: var(--muted); }
 .step-list li.is-done .band-icon { background: var(--surface-2); color: var(--muted); }
 .step-list li:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }

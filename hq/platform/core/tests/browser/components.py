@@ -750,21 +750,27 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """The hit area a small control hangs beside itself widens what it
         scrolls, never what it says; a word wider than its control spills."""
 
-        self.open(next(iter(PAGES)), WIDE)
-        widened = self.page.evaluate("""() => {
-          const star = document.createElement('button');
-          star.className = 'pin-toggle example-star';
-          star.textContent = '☆';
+        from hq.platform.core.tests.browser.catalog import CATALOG
+
+        self.pages = {**self.pages, "pin-probe": CATALOG["part/service-pin"].page("part/service-pin")}
+        self.open("pin-probe", WIDE)
+        star = SELECTORS["favorite_star"]
+        widened = self.page.evaluate(
+            """(star) => {
           const word = document.createElement('button');
           word.className = 'example-word';
           word.textContent = 'example label';
           word.style.setProperty('width', '2rem');
           word.style.setProperty('white-space', 'nowrap');
-          document.querySelector('main').append(star, word);
-          return star.scrollWidth > star.clientWidth;
-        }""")
+          const main = document.querySelector('main');
+          main.append(word);
+          const drawn = main.querySelector(star);
+          return drawn.scrollWidth > drawn.clientWidth;
+        }""",
+            star,
+        )
         self.assertTrue(widened)
-        found = self.page.evaluate(SPILLED_LABELS, "main :is(.example-star, .example-word)")
+        found = self.page.evaluate(SPILLED_LABELS, f"main :is({star}, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
 
     def test_a_word_before_a_name_in_a_cell_shares_the_name_s_line(self):

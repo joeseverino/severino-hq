@@ -11,7 +11,7 @@
   },
   "static/css/app/connection.css": {
     "hq/restyled-primitive": {
-      "count": 16
+      "count": 15
     }
   },
   "static/css/app/cuts.css": {
@@ -26,7 +26,7 @@
   },
   "static/css/app/forms.css": {
     "hq/restyled-primitive": {
-      "count": 13
+      "count": 9
     }
   },
   "static/css/app/layout.css": {

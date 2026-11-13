@@ -9,13 +9,11 @@ explain and the whole set is visible at a glance. A select would hide three of
 four domains behind a click and then need a second one to go anywhere.
 {% endcomment %}
 {% if zones|length > 1 %}
-  <nav class="zone-switch" aria-label="Domains">
+  {% switch label="Domains" %}
     {% for other in zones %}
-      <a href="{{ other.url }}"{% if other.zone == zone.zone %} aria-current="page"{% endif %}>
-        {% if other.pinned %}<span aria-hidden="true">★</span> {% endif %}{{ other.zone|breakable }}{% if not other.managed %} <span class="zone-switch-note">not managed</span>{% endif %}
-      </a>
+      {% choice url=other.url current=other.current mark=other.pinned|yesno:"★," note=other.managed|yesno:",not managed" %}{{ other.zone|breakable }}{% endchoice %}
     {% endfor %}
-  </nav>
+  {% endswitch %}
 {% endif %}
 
 {% problems_about as problems %}{% include "partials/_problems.html" %}

@@ -64,11 +64,16 @@
      level, however many lines one label wraps to. */
   :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) > .kpi {
     padding: 0;
-    background: none;
     display: grid;
     grid-row: span 3;
     grid-template-rows: subgrid;
     row-gap: var(--space-2);
+  }
+  /* A stat here has no padding of its own, so a linked one's tint (cards.css)
+     reaches into the gap around it as a shadow, which moves nothing. */
+  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) > :is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
+    border-radius: var(--radius-sm);
+    box-shadow: 0 0 0 var(--space-3) var(--surface-2);
   }
   /* What a figure looks like, beside it: dots for a part of a whole, a line
      for a direction. A filled dot is solid and an empty one is a ring, so the
@@ -97,8 +102,7 @@
      so dots that lead somewhere are set a square apart. */
   .kpi-dots:has(> a) { gap: calc(var(--target-min) - 10px); }
   a.kpi-dot:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .kpi a.value { color: inherit; text-decoration: none; }
-  .kpi a.value:hover { text-decoration: underline; }
+  .kpi a.value, .kpi a.value:hover { color: inherit; text-decoration: none; }
   .kpi-trend { flex: 1 1 6rem; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
   .kpi-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   .kpi-trend-hit { fill: transparent; }
@@ -126,6 +130,12 @@
     margin-inline: calc(-1 * var(--section-side));
     padding-inline: var(--section-side);
   }
+  /* A linked lead reaching the frame's sides tints a band across it, its
+     shadow above only, so nothing is drawn past the frame. */
+  .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child:is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
+    border-radius: 0;
+    box-shadow: 0 calc(-1 * var(--space-3)) 0 0 var(--surface-2);
+  }
   .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child .value {
     font-size: var(--text-display);
     letter-spacing: -.04em;
@@ -147,6 +157,10 @@
     .kpi-grid.is-featured:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
     .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { grid-column: auto; padding-bottom: 0; border-bottom: 0; }
     .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { margin-inline: 0; padding-inline: 0; }
+    .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child:is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
+      border-radius: var(--radius-sm);
+      box-shadow: 0 0 0 var(--space-3) var(--surface-2);
+    }
   }
 
   /* The last thing in a card ends the card: its own bottom margin would be

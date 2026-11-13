@@ -39,11 +39,11 @@
   .form.is-question > .field > :not(label, input, select) { order: 0; }
   .form.is-question > .form-actions { margin-top: var(--space-4); }
 }
-/* A range's start and end (`field-range`) begin a row together, in the form's
-   own columns, so a third column never takes one and leaves the other; on a
-   phone they stack in order. */
-.form > .field-range { display: grid; grid-template-columns: subgrid; align-items: start; }
-.field-range > .field { margin-bottom: 0; }
+/* A pair (a range's start and its end, the start marked `starts_pair`)
+   reads across one row of its own: the start begins a row, the end follows
+   it, and what comes after begins the next, so a third column never takes
+   one and leaves the other. On a phone they stack in order. */
+.form > .field.is-pair-start, .form > .field.is-pair-start + .field + * { grid-column-start: 1; }
 /* A lone checkbox sits beside its label, the help under both, rather than
    alone on a line under its own question. */
 .field:has(> input[type=checkbox]) { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: var(--space-4); }
@@ -406,7 +406,6 @@ a.discovery-link:hover strong { color: var(--accent); }
    out of the cell they were written in. */
 .connection-sight-list { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .connection-sight-list > li { font-size: var(--text-xs); }
-.connection-credential-steps { font-size: var(--text-xs); }
 /* Opened beneath the row, what it reads and what it would also see fill the
    line, row by row. */
 .row-detail :is(.connection-sight-list, .connection-read-list) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
@@ -416,15 +415,6 @@ a.discovery-link:hover strong { color: var(--accent); }
 .row-detail .connection-read-list > li.connection-sight-partial::before { background: var(--warn); }
 .row-detail .connection-read-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
 .row-detail .connection-read-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
-/* The fix is the one thing to do, so it reads as a callout, its notes
-   numbered steps, each number hung in the step's margin. */
-.row-detail .connection-credential-steps {
-  padding: var(--space-3) var(--space-5); border-left: 3px solid var(--warn); border-radius: var(--radius-sm);
-  background: var(--tone-caution-tint); counter-reset: fix-step;
-}
-.row-detail .connection-credential-steps .operator-step:first-child { margin-top: 0; }
-.row-detail .connection-credential-steps .operator-step p { margin-top: var(--space-2); padding-inline-start: 1.5em; color: var(--ink-2); }
-.row-detail .connection-credential-steps .operator-step p::before { float: inline-start; margin-inline-start: -1.5em; counter-increment: fix-step; content: counter(fix-step) "."; color: var(--warn); font-weight: 650; }
 /* What it lets HQ change, as chips. They sit on the opened row's tinted
    panel, which `--accent-tint` all but matches in light, so the chip is a
    wash of the accent over whatever is behind it: darker than the panel in
@@ -438,10 +428,6 @@ a.discovery-link:hover strong { color: var(--accent); }
 /* Lines under a connection's name share `.connection-row-meta`'s size. */
 .connection-sight-refusal { margin: var(--space-2) 0 0; font-size: var(--text-2xs); }
 .connection-sight-partial .connection-sight-state { color: var(--warn); }
-.connection-credential-fix { margin-top: var(--space-2); font-size: var(--text-2xs); }
-.connection-credential-fix-headline { display: block; color: var(--warn); }
-.operator-step { margin-top: var(--space-2); }
-.operator-step p { margin: var(--space-1) 0 0; }
 /* A command and its copy button, which sits in its corner rather than on a
    line of its own; the command leaves room for it. */
 .command { position: relative; width: fit-content; max-width: 100%; min-width: 0; }

@@ -28,26 +28,7 @@ alphabetical is the order and there is nothing to move.
       {% for service in rows %}
         <tr>
           <td>
-            <div class="service-name name-line">
-              {% url 'control_plane:service_pin' service.hostname as pin_url %}
-              {% if service.pinned %}
-                {% post_button "★" pin_url css="pin-toggle pinned" title="Remove "|add:service.hostname|add:" from favorites" %}
-              {% else %}
-                {% post_button "☆" pin_url css="pin-toggle" title="Add "|add:service.hostname|add:" to favorites" %}
-              {% endif %}
-              <strong>{% entity "service"|entity_of:service.hostname %}</strong>
-              {% if reorderable %}
-                <span class="pin-move">
-                  {% url 'control_plane:service_move' service.hostname as move_url %}
-                  {% if not forloop.first %}
-                    {% post_button "↑" move_url name="direction" value="up" css="" title="Move "|add:service.hostname|add:" up" %}
-                  {% endif %}
-                  {% if not forloop.last %}
-                    {% post_button "↓" move_url name="direction" value="down" css="" title="Move "|add:service.hostname|add:" down" %}
-                  {% endif %}
-                </span>
-              {% endif %}
-            </div>
+            {% include "control_plane/_service_pin.html" with service=service reorderable=reorderable first=forloop.first last=forloop.last only %}
           </td>
           {% with exposure=service.exposure %}
             <td><span class="exposure exposure-{{ exposure.level }}" title="{{ exposure.sentence }}">{{ exposure.short|breakable }}</span></td>

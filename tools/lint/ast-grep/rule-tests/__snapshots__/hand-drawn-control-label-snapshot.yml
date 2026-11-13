@@ -1,0 +1,30 @@
+id: hand-drawn-control-label
+snapshots:
+  <label class="control-label" for="example">From</label>:
+    labels:
+    - source: <label class="control-label" for="example">From</label>
+      style: primary
+      start: 0
+      end: 55
+    - source: class="control-label"
+      style: secondary
+      start: 7
+      end: 28
+    - source: <label class="control-label" for="example">
+      style: secondary
+      start: 0
+      end: 43
+  <span class="muted control-label">Stage</span>:
+    labels:
+    - source: <span class="muted control-label">Stage</span>
+      style: primary
+      start: 0
+      end: 46
+    - source: class="muted control-label"
+      style: secondary
+      start: 6
+      end: 33
+    - source: <span class="muted control-label">
+      style: secondary
+      start: 0
+      end: 34

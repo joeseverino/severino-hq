@@ -30,9 +30,9 @@ standard, with what it uses beside its limits. Each said once; the band above ha
     {% endfact %}
   {% endfacts %}
   <div class="split">
-    <ol class="upgrade-steps">
-      {% for step in plan.steps %}<li><strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail|breakable }}</span></li>{% endfor %}
-    </ol>
+    {% steps numbered=True %}
+      {% for step in plan.steps %}{% step %}<strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail|breakable }}</span>{% endstep %}{% endfor %}
+    {% endsteps %}
     <div class="upgrade-blockers">
       {% if plan.viable %}
         <p><strong>Ready</strong></p>

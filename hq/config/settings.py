@@ -433,6 +433,8 @@ TEMPLATES = [
                 "hq.platform.core.templatetags.facts_tags",
                 "hq.platform.core.templatetags.stack_tags",
                 "hq.platform.core.templatetags.title_tags",
+                "hq.platform.core.templatetags.label_tags",
+                "hq.platform.core.templatetags.switch_tags",
             ],
         },
     },

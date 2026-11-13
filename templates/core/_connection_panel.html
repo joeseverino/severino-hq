@@ -12,42 +12,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   {% include "partials/_example_connection.html" with notice=True %}
   {% if request_path.findings %}{% card css="problems" %}{% include "partials/_work_queue.html" with items=request_path.finding_rows grouped=True here=True dense=True only %}{% endcard %}{% endif %}
 
-  {% comment %}
-  The two ends and the link between them, with the verdict on the link.
-  {% endcomment %}
-  <div class="conn-peering conn-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}">
-    <div class="conn-peer">
-      <span class="conn-peer-role">You</span>
-      {% if connection.peer_label and connection.machine_url %}
-        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label|breakable }}</a>
-      {% elif connection.peer_label %}
-        <strong>{{ connection.peer_label|breakable }}</strong>
-      {% endif %}
-      <code>{{ connection.peer_address|breakable }}</code>
-      {% if connection.reported_device %}
-        <span class="conn-row-note">From the proxy's header</span>
-      {% elif connection.identity.tailnet_user %}
-        <span class="conn-row-note">{{ connection.identity.tailnet_user|breakable }}</span>
-      {% endif %}
-    </div>
-    <div class="conn-link conn-link-{{ connection.path }}">
-      <p class="conn-headline">{% status connection.channel.label tone=connection.tone dot=True ink="context" %}</p>
-      <span class="conn-link-line" aria-hidden="true"></span>
-      <p class="conn-sub">This request: {{ connection.tally|lower|breakable }}{% if connection.path_label %}{% dot %}{{ connection.path_label|breakable }}{% endif %}{% dot %}{{ connection.transport|breakable }}</p>
-      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line|breakable }}</p>
-      {% endif %}
-    </div>
-    <div class="conn-peer">
-      <span class="conn-peer-role">HQ</span>
-      {% if connection.serves_url %}
-        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.label|default:connection.host|breakable }}</a>
-      {% else %}
-        <strong>{{ connection.serves.label|default:connection.host|breakable }}</strong>
-      {% endif %}
-      {% if connection.serves %}<code>{{ connection.serves.addresses.0|breakable }}</code>{% endif %}
-      <span class="conn-row-note">{{ connection.host|breakable }}</span>
-    </div>
-  </div>
+  {% include "partials/_connection_peering.html" with connection=connection posture=posture only %}
 
   {% comment %}Each posture check HQ could not judge, with why: folded, since the line above already counts them.{% endcomment %}
   {% if posture.unread_count %}
@@ -123,23 +88,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% endif %}
       {% comment %}Named as Tailscale names a connection type, and left out where the reading names no path.{% endcomment %}
       {% if connection.peering %}
-        {% fact "Connection" %}<div class="conn-carriage conn-carriage-{{ connection.peering.id }}">
-          <strong>{{ connection.peering.label|breakable }}</strong>
-          {% if connection.peering.public %}
-            {% comment %}
-            <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
-            {% endcomment %}<details class="conn-more" data-peering-detail>
-              <summary>
-                About <code>{{ connection.peering.address|breakable }}</code>
-              </summary>
-              <div data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
-                   data-fragment-load
-                   data-fragment-failure="Lookup failed.">
-                <p class="muted">Loading…</p>
-              </div>
-            </details>
-          {% endif %}
-        </div>{% endfact %}
+        {% fact "Connection" %}{% include "partials/_connection_peering.html#carriage" with peering=connection.peering only %}{% endfact %}
       {% endif %}
       {% if connection.presence.direct_endpoint %}{% fact "WireGuard endpoint" %}<code>{{ connection.presence.direct_endpoint|breakable }}</code>{% endfact %}{% endif %}
       {% if connection.presence %}{% fact "Last handshake" value=connection.handshake %}{% endif %}

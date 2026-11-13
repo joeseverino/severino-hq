@@ -1,0 +1,9 @@
+{% comment %}
+A control's name, drawn by {% control_label "From" control="whatif-source" %}:
+a <label> for the control whose id control names, or with no control the same
+small muted words naming what follows them.
+<!-- ast-grep-ignore: hand-drawn-control-label --> the part itself
+{% endcomment %}{% if control %}<label class="control-label" for="{{ control }}">{{ words|breakable }}</label>{% else %}
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-control-label --> the part itself
+{% endcomment %}<span class="control-label">{{ words|breakable }}</span>{% endif %}

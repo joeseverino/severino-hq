@@ -37,6 +37,9 @@ SELECTORS = {
     "section_frame": ".section",
     "choice": "select",
     "quiet_link": ".subtle-link",
+    # A service's favorite star (control_plane/_service_pin.html), a control
+    # smaller than a finger that hangs its hit area beside it.
+    "favorite_star": ".pin-toggle",
     "calendar_period": "#calendar-month > .section-head h2",
     "calendar_next": '#calendar a[rel="next"]',
     "decisions": "[data-attention-item]",

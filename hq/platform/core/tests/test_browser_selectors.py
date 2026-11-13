@@ -103,10 +103,13 @@ def _template_markup(source: str, classes: set[str], ids: set[str], text: list[s
         classes.update(re.sub(r"\{%.*?%\}|\{\{.*?\}\}", " ", value).split())
     ids.update(re.findall(r'\bid="([^"{}]+)"', source))
     ids.update(generated_ids(source))
+    # A tag's css= option is the class it draws (a post_button's, a part's).
+    for options in re.findall(r"\{%\s*\w+\s([^%]*)%\}", source):
+        classes.update(" ".join(re.findall(r'\bcss="([^"]*)"', options)).split())
     # A card's, a filter bar's, a section's or a status's class, id and data-
     # attributes are its tag's options.
     for part, options in re.findall(r"\{%\s*(card|filter_bar|section|status)\s([^%]*)%\}", source):
-        classes.update((part.replace("_", "-"), *" ".join(re.findall(r'\bcss="([^"]*)"', options)).split()))
+        classes.add(part.replace("_", "-"))
         ids.update(re.findall(r'\bid="([^"{}]+)"', options))
         drawn = (name.replace("_", "-") for name in re.findall(r"\b(data_\w+)=", options))
         text.append(f"<div {' '.join(drawn)}>")

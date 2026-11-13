@@ -493,6 +493,20 @@ class ControllerStandingTests(TestCase):
         self.assertFalse(standing.silent)
         self.assertEqual(standing.tone, "neutral")
 
+    def test_a_reported_read_that_failed_is_an_arrival(self):
+        """A failed first read stores no moment it was read, and only a
+        controller reports one, so it says a controller has run."""
+
+        from ..sweep import record_sweep
+
+        record_sweep(
+            {"tailscale.policy": {"ok": False, "records": [], "error": "Tailscale refused the token."}},
+            principal=cli_principal(),
+            controller_id="example-controller",
+        )
+
+        self.assertTrue(cadence.controller_standing().known)
+
     def test_a_controller_that_just_arrived_is_not_silent(self):
         cadence.note_controller()
         standing = cadence.controller_standing()

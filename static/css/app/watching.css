@@ -20,9 +20,6 @@
   .container-standing.is-current .icon { color: var(--ok); }
 
   /* A container's upgrade: four facts, then its steps beside what stands in the way. */
-  /* align-content: start, or the grid spreads the steps to the height of the
-     column beside it. */
-  .upgrade-steps { margin: 0; padding-left: var(--space-10); display: grid; gap: var(--space-2); align-content: start; font-size: var(--text-sm); }
   .upgrade-blockers { font-size: var(--text-sm); }
   .upgrade-blockers p { margin: 0 0 var(--space-3); }
   .upgrade-blockers ul { margin: 0; padding-left: var(--space-9); display: grid; gap: var(--space-2); }

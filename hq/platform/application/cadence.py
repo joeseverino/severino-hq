@@ -184,10 +184,11 @@ class ControllerStanding:
 
 
 def controller_standing(now: datetime | None = None) -> ControllerStanding:
-    """The controller's last arrival: its heartbeat, else the newest reading,
-    since only a controller writes one (a database copied from another host
-    has readings and no heartbeat here). Never seen is unknown, not silent: an
-    installation with no controller has nothing to be late."""
+    """The controller's last arrival: its heartbeat, else the newest read it
+    reported, answered or failed, since only a controller writes one (a
+    database copied from another host has readings and no heartbeat here).
+    Never seen is unknown, not silent: an installation with no controller has
+    nothing to be late."""
 
     marker = _path("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat")
     seen_at: datetime | None
@@ -202,9 +203,11 @@ def controller_standing(now: datetime | None = None) -> ControllerStanding:
 
 
 def newest_reading() -> datetime | None:
-    """When the newest stored reading was taken, whichever controller took it."""
+    """When a controller last reported a read, whichever controller and
+    whether or not it answered: a failed first read stores no ``observed_at``
+    and is still a report."""
 
-    times = [row.observed_at for rows in stored_snapshots().values() for row in rows if row.observed_at]
+    times = [attempted_at(row.observed_at, row.updated_at) for rows in stored_snapshots().values() for row in rows]
     return max(times, default=None)
 
 

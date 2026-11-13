@@ -81,8 +81,14 @@ def contact_list(request):
     q = request.GET.get("q", "").strip()
     current = inbox.current()
     submissions = list_contact_submissions(status=selected_status, query=q, limit=MOST_SHOWN)["items"]
+    # Everything first, then each status; a value of None is the list with no
+    # status asked, and the one current is the one the page shows.
     status_tabs = [
-        {"value": value, "label": label, "count": current.counts.get(value, 0)} for value, label in STATUS_CHOICES
+        {"value": value, "label": label, "count": count, "current": (value or "") == selected_status}
+        for value, label, count in (
+            (None, "All", sum(current.counts.values())),
+            *((value, label, current.counts.get(value, 0)) for value, label in STATUS_CHOICES),
+        )
     ]
 
     return render(

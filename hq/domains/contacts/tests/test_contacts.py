@@ -25,7 +25,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
-from hq.platform.application.tests.markup import with_class
+from hq.platform.application.tests.markup import elements, select, with_class
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
@@ -146,8 +146,18 @@ class ContactViewTests(TestCase):
         response = self.client.get(reverse("contacts:list"))
         self.assertContains(response, "Jane Doe")
         self.assertContains(response, "Hello from the contact form.")
-        self.assertContains(response, "status-tab")
         self.assertContains(response, "Mark read")
+
+    def test_the_status_switch_marks_the_status_shown_and_keeps_the_search(self):
+        response = self.client.get(reverse("contacts:list"), {"status": "unread", "q": "Jane"})
+
+        (nav,) = select(response.content.decode(), "aria-label", "Message status")
+        switch = [link for link in elements(response.content.decode(), "a") if nav in link.ancestors]
+        (current,) = [link for link in switch if link.attrs.get("aria-current") == "page"]
+        self.assertTrue(current.words.startswith("Unread"))
+        self.assertIn("q=Jane", current.attrs["href"])
+        self.assertTrue(switch[0].words.startswith("All"))
+        self.assertNotIn("status=", switch[0].attrs["href"])
 
     def test_detail_renders_quick_actions(self):
         response = self.client.get(reverse("contacts:detail", args=[1]))

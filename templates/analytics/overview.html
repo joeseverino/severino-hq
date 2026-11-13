@@ -2,15 +2,12 @@
 {% block page %}
   {% comment %}A window is chosen over readings; with none there is nothing to window.{% endcomment %}
   {% if latest %}
-  <div>
-    <nav class="window-switch" aria-label="Reporting window">
-      {% for option in windows %}
-        <a class="chip"
-           href="?days={{ option.days }}"
-           {% if option.current %}aria-current="page"{% endif %}>{{ option.label|breakable }}</a>
-      {% endfor %}
-    </nav>
-  </div>
+  {% switch label="Reporting window" %}
+    {% for option in windows %}
+      {% querystring days=option.days as href %}
+      {% choice url=href current=option.current %}{{ option.label|breakable }}{% endchoice %}
+    {% endfor %}
+  {% endswitch %}
   {% endif %}
 
   {% if latest %}

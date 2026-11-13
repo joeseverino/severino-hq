@@ -192,13 +192,12 @@
 .series-8 { --source: var(--series-8); }
 .series-9 { --source: var(--series-9); }
 .series-10 { --source: var(--series-10); }
-/* The month takes the room; the list of calendars is as wide as its names and
-   never grows, wrapping under the month where both do not fit. */
-.calendar-layout > :first-child { flex: 999 1 36rem; }
-.calendar-layout > .calendar-aside { flex: 1 1 15rem; }
-/* A section holding a month is the box the month asks how much room it has;
-   the calendar page names its month's section by class. */
-.calendar-month, .section:has(> .section-body > .month-grid) { container: month / inline-size; }
+/* A section holding a month is the box the month asks how much room it has. */
+.section:has(> .section-body > .month-grid) { container: month / inline-size; }
+/* A month as a split's main takes the room: it grows a thousand times faster
+   than its companion, which holds its basis beside it and, wrapped under it,
+   is alone on its line and takes the width. */
+.split > .section:first-child:has(> .section-body > .month-grid) { flex: 999 1 36rem; }
 /* Seven equal columns: the one fixed grid here, because weeks must line up. */
 .month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
 /* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday row over a month grid's days */
@@ -270,19 +269,13 @@
 .month-item.is-all-day::before { content: none; }
 .month-more { display: block; color: var(--muted); font-size: var(--text-3xs); font-weight: 600; text-decoration: none; }
 .month-more:hover { color: var(--accent); }
-/* The aside: the chosen day over the list of calendars. Built from the
-   shared head, record rows and facts; only a source's swatch is the calendar's. */
-/* Beside the month it keeps its basis: the month's grow outweighs it a
-   thousand to one. Wrapped under the month it is alone on its line and takes
-   the width, its day and its list of calendars side by side. */
-/* stylelint-disable-next-line hq/flow-grid -- the calendar's aside: its day and its list of calendars side by side under the month */
-.calendar-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); align-items: start; gap: var(--layout-gap); }
-.calendar-swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
-.calendar-sources ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+/* A source's color alone (partials/_calendar_sources.html#swatch). */
+.calendar-swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
+.calendar-sources { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 /* A source is a toggle ({% post_button %} with `pressed`): the whole line is
    the button, its box drawn before the name and filled in its color when
    checked. What it shows and how it failed stand under the name, past the box. */
-.calendar-sources li { display: grid; --check: 14px; --check-gap: var(--space-3); --check-inset: var(--space-2); }
+.calendar-sources > li { display: grid; --check: 14px; --check-gap: var(--space-3); --check-inset: var(--space-2); }
 .calendar-source {
   display: flex;
   align-items: center;

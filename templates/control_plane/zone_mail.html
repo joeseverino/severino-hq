@@ -11,7 +11,7 @@ hostnames underneath says everything twice and is twice as tall for it.
   {% for section in mail.sections %}
     <article class="mail-stage{% if section.concern %} mail-stage-concern{% endif %}">
       <div class="mail-stage-head">
-        <span class="control-label">{{ section.label|breakable }}</span>
+        {% control_label section.label %}
         <strong>{{ section.answer|breakable }}</strong>
       </div>
       <p class="mail-stage-question">{{ section.question|breakable }}</p>

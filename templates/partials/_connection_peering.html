@@ -1,0 +1,63 @@
+{% comment %}
+How this request reaches HQ: You, the link and HQ, with the verdict on the
+link. Given ``connection`` (request_connection.Connection) and the estate's
+``posture``, if any. Its box is the container its narrow layout asks of, so
+it stacks wherever it is drawn.
+
+``#carriage``, given ``peering`` (request_connection.Peering), is a fact's
+value: which network the link rides over, and for a link that crosses the
+internet, a lookup of the address it crosses from.
+{% endcomment %}
+<div class="conn-peering-frame">
+  <div class="conn-peering conn-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}">
+    <div class="conn-peer">
+      <span class="conn-peer-role">You</span>
+      {% if connection.peer_label and connection.machine_url %}
+        <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label|breakable }}</a>
+      {% elif connection.peer_label %}
+        <strong>{{ connection.peer_label|breakable }}</strong>
+      {% endif %}
+      <code>{{ connection.peer_address|breakable }}</code>
+      {% if connection.reported_device %}
+        <span class="conn-row-note">From the proxy's header</span>
+      {% elif connection.identity.tailnet_user %}
+        <span class="conn-row-note">{{ connection.identity.tailnet_user|breakable }}</span>
+      {% endif %}
+    </div>
+    <div class="conn-link conn-link-{{ connection.path }}">
+      <p class="conn-headline">{% status connection.channel.label tone=connection.tone dot=True ink="context" %}</p>
+      <span class="conn-link-line" aria-hidden="true"></span>
+      <p class="conn-sub">This request: {{ connection.tally|lower|breakable }}{% if connection.path_label %}{% dot %}{{ connection.path_label|breakable }}{% endif %}{% dot %}{{ connection.transport|breakable }}</p>
+      {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line|breakable }}</p>
+      {% endif %}
+    </div>
+    <div class="conn-peer">
+      <span class="conn-peer-role">HQ</span>
+      {% if connection.serves_url %}
+        <a class="conn-peer-name" href="{{ connection.serves_url }}">{{ connection.serves.label|default:connection.host|breakable }}</a>
+      {% else %}
+        <strong>{{ connection.serves.label|default:connection.host|breakable }}</strong>
+      {% endif %}
+      {% if connection.serves %}<code>{{ connection.serves.addresses.0|breakable }}</code>{% endif %}
+      <span class="conn-row-note">{{ connection.host|breakable }}</span>
+    </div>
+  </div>
+</div>
+
+{% partialdef carriage %}<div class="conn-carriage conn-carriage-{{ peering.id }}">
+  <strong>{{ peering.label|breakable }}</strong>
+  {% if peering.public %}
+    {% comment %}
+    <!-- ast-grep-ignore: hand-drawn-fold --> a part of the carriage's own line: its summary stays on the line, what it holds takes the next
+    {% endcomment %}<details data-peering-detail>
+      <summary>
+        About <code>{{ peering.address|breakable }}</code>
+      </summary>
+      <div data-fragment="{% url 'tool_public_address' %}?address={{ peering.address|urlencode }}"
+           data-fragment-load
+           data-fragment-failure="Lookup failed.">
+        <p class="muted">Loading…</p>
+      </div>
+    </details>
+  {% endif %}
+</div>{% endpartialdef %}

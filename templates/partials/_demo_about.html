@@ -17,12 +17,12 @@ Each thing to try is a fact band's cell that leads to the page it names.
   {% endfacts %}
 {% endsection %}
 {% section "Built with" %}
-  <ul class="dot-list">
+  {% link_chips %}
     <li>{% entity "https://github.com/joeseverino/severino-hq"|outside label="Repository" %}</li>
     <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/demo/README.md"|outside label="Demo build" %}</li>
     <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/.github/workflows/demo.yml"|outside label="Workflow" %}</li>
     <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/docs/Development.md"|outside label="Developing HQ" %}</li>
     <li>{% entity "https://github.com/joeseverino/severino-hq/blob/main/docs/AI.md"|outside label="AI and HQ" %}</li>
-  </ul>
+  {% endlink_chips %}
 {% foot %}Made by {% entity "https://jseverino.com"|outside label="Joe Severino" %}{% dot %}saved {{ saved_copy|when:"day" }}
 {% endsection %}

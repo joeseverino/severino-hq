@@ -709,10 +709,13 @@ slotted(
     ("content",),
     frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
 )
-# A list of short steps or checks, read down its columns, and one step of it:
-# its icon, toned by how it stands, then what it says.
-slotted("steps", "partials/_steps.html", ("content",), frozenset())
+# A list of short steps or checks, read down its columns, or numbered when
+# they are done in order, and one step of it: its icon, toned by how it
+# stands, or its number, then what it says.
+slotted("steps", "partials/_steps.html", ("content",), frozenset(("numbered",)))
 slotted("step", "partials/_step.html", ("content",), frozenset(("icon", "tone", "done", "title")))
+# A row of links, each a chip of its own.
+slotted("link_chips", "partials/_link_chips.html", ("content",), frozenset())
 slotted(
     "card",
     "partials/_card.html",

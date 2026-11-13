@@ -171,36 +171,12 @@
 
 /* ----- Tools ------------------------------------------------------------ */
 
-/* One nav entry holds every tool, so the tabs are the only thing telling an
-   operator what else is in here. They are links with a real href rather than
-   scripted panels: a tool with a result is a URL worth keeping. */
-.tool-tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-3); }
-.tool-tab {
-  padding: var(--space-3) var(--space-7); border-radius: 8px; font-size: var(--text-sm); font-weight: 550;
-  color: var(--muted); text-decoration: none; border: 1px solid transparent;
-}
-.tool-tab:hover { background: var(--surface-2); color: var(--ink); }
-.tool-tab-current {
-  background: var(--surface-2); color: var(--ink); border-color: var(--line-2);
-}
-.tool-summary { margin: 0 0 var(--space-9); }
 /* Two tools side by side where there is room, stacked where there is not.
    Neither is primary, so neither takes the wider column. */
 /* stylelint-disable-next-line hq/flow-grid -- two tools whose intro, form and result share rows through subgrid, which a flex flow cannot hold */
 .lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 
 /* ---- Analytics ---------------------------------------------------------- */
-
-/* The window an operator is reading. Links rather than a control, so the
-   choice is in the URL and a reading can be sent to someone. */
-.window-switch { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0 0 var(--stack-gap); }
-.chip {
-  display: inline-block; padding: var(--space-2) var(--space-6); border: 1px solid var(--line);
-  border-radius: 999px; font-size: var(--text-sm); color: var(--muted);
-  text-decoration: none; background: var(--bg);
-}
-.chip:hover { color: var(--accent); border-color: var(--accent); }
-.chip[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 
 .reading-note { margin: calc(var(--space-3) * -1) 0 var(--stack-gap); font-size: var(--text-sm); }
 

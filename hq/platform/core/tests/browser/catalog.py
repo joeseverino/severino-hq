@@ -26,17 +26,25 @@ from hq.platform.application.adoption import ONLY_READS, WriteGap
 from hq.platform.application.appearance import Theme
 from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
 from hq.platform.application.cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
-from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
+from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
 from hq.platform.application.command_center import DiscoveryItem
+from hq.platform.application.credential_mint import CredentialFix
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
 from hq.platform.application.entity_links import EntityLink
+from hq.platform.application.finding_model import OperatorStep
 from hq.platform.application.forms import ChoiceCards, SuffixedInput
 from hq.platform.application.freshness import CURRENT, STALE, Freshness
 from hq.platform.application.pages import Page, PageAction, PageVisit
+from hq.platform.application.posture import CheckOutcome, CheckStanding, Posture, PostureCheck
 from hq.platform.application.relationships import RelationGroup, Relationship, Relationships
-from hq.platform.application.request_channel import TAILNET_CHANNEL
+from hq.platform.application.request_channel import NETWORK_CHANNEL, TAILNET_CHANNEL
+from hq.platform.application.request_connection import Connection, Peering
+from hq.platform.application.request_identity import Identity
+from hq.platform.application.request_layers import Layer
 from hq.platform.application.tables import TableSort
+from hq.platform.application.tailnet import Device
+from hq.platform.application.tailnet_presence import Presence
 from hq.platform.application.ui import (
     ActivityCalendar,
     CalendarDay,
@@ -53,6 +61,8 @@ from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
 lazy from hq.platform.application.dashboard import queue_item
+lazy from hq.platform.application.path_model import Certificate, Hop, Route
+lazy from hq.platform.application.request_path import CONTRADICTED, PROVEN, HopCheck
 lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 
 
@@ -253,6 +263,26 @@ class _ExampleChoices(forms.Form):
     )
 
 
+class _ExampleRange(forms.Form):
+    """A form of pairs (``starts_pair``): each range's start and end on a row
+    of their own, whatever columns the form has, and a field after them."""
+
+    starts_on = forms.DateField(label="Example start", widget=forms.DateInput(attrs={"type": "date"}))
+    ends_on = forms.DateField(
+        label="Example end", required=False, widget=forms.DateInput(attrs={"type": "date"}), help_text="An example end."
+    )
+    starts_at = forms.TimeField(label="Example from", required=False, widget=forms.TimeInput(attrs={"type": "time"}))
+    ends_at = forms.TimeField(label="Example to", required=False, widget=forms.TimeInput(attrs={"type": "time"}))
+    place = forms.CharField(label="Example place", required=False)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # An option field.html reads, which Django's Field does not declare.
+        fields: dict[str, Any] = dict(self.fields)
+        for name in ("starts_on", "starts_at"):
+            fields[name].starts_pair = True
+
+
 class _NoFields(forms.Form):
     """A command that takes nothing."""
 
@@ -386,6 +416,46 @@ def _matrix():
     )
 
 
+def _route():
+    """A route as ``application.paths`` hands it to the strip: a hop in each
+    state the strip draws, the first proven by the request."""
+
+    return Route(
+        via="example record",
+        hops=(
+            Hop("device", "Your device", name="example-laptop", check=HopCheck(PROVEN, "Example address 192.0.2.10.")),
+            Hop("dns", "Internal DNS", name="app.example.com", check=HopCheck(PROVEN, "Example answer 192.0.2.20.")),
+            Hop(
+                "ingress",
+                "Proxy",
+                name="example-proxy-host-with-a-long-name.example.com",
+                certificate=Certificate("Proxy", name="app.example.com", issuer="Example CA"),
+                check=HopCheck(CONTRADICTED, "The example request came another way."),
+            ),
+            Hop(
+                "machine",
+                "Machine",
+                link=EntityLink("example-host-01", "/example/host/", kind="machine", kind_label="machine"),
+            ),
+            Hop(
+                "container",
+                "Container",
+                name="example-app",
+                facts=(("Up 3 days", ""), ("0a1b2c3", "https://example.com/example/app/commit/0a1b2c3")),
+            ),
+            Hop("served", "Served", unread="the example controller has not read it"),
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class _Service:
+    """A row of the services table, as far as its name cell reads it."""
+
+    hostname: str
+    pinned: bool = False
+
+
 class _ExampleFiles(forms.Form):
     exports = forms.FileField(label="Example exports", help_text="An example of the files it takes.")
 
@@ -400,6 +470,53 @@ def _runs():
         ),
         ordered=True,
     )
+
+
+def _connection(channel=TAILNET_CHANNEL, *, path="direct", held=True, linked=True):
+    """A request as the connection panel reads it: from an example laptop to
+    an example HQ, over ``path`` (``direct``, ``relayed``, or ``""`` for no
+    tailnet reading), its checks confirmed when ``held`` and one not yet
+    read otherwise, each end leading to its machine when ``linked``."""
+
+    laptop = Device("example-laptop", addresses=("192.0.2.10",), user="example-person@example.com")
+    hq = Device("example-hq", addresses=("192.0.2.20",))
+    presence = (
+        Presence(
+            public_key="example-key",
+            last_handshake="2026-01-01T00:00:00Z",
+            direct_endpoint="198.51.100.40:41641" if path == "direct" else "",
+            relay="" if path == "direct" else "example-region",
+        )
+        if path
+        else None
+    )
+    tailnet = channel is TAILNET_CHANNEL
+    return Connection(
+        address="192.0.2.10",
+        channel=channel,
+        device=laptop if tailnet else None,
+        serves=hq if tailnet else None,
+        observer=None,
+        identity=Identity(username="example", tailnet_user=laptop.user if tailnet else ""),
+        layers=(Layer("example-check", "Example check", holds=True, detail="An example check.", conclusive=held),),
+        secure_transport=True,
+        host="hq.example.com",
+        machine_url="/example/machines/example-laptop/" if linked else "",
+        serves_url="/example/machines/example-hq/" if linked else "",
+        presence=presence,
+    )
+
+
+def _posture(met, *, advanced=True):
+    """The estate's posture, one example check for each reading in ``met``:
+    met, not met, or ``None`` for not read."""
+
+    def standing(index, held):
+        outcome = CheckOutcome(met=held, evidence="")
+        check = PostureCheck(f"example-{index}", f"Example check {index}", "", "", "", "", read=lambda inputs: outcome)
+        return CheckStanding(check, outcome)
+
+    return Posture(advanced, tuple(standing(index, held) for index, held in enumerate(met, 1)))
 
 
 def _paged(number):
@@ -982,6 +1099,39 @@ CATALOG = {
         '{% fact "Example image" value="example-1.2.3" %}'
         "{% endfacts %}{% endsection %}"
     ),
+    # Steps done in order, each numbered: said in words, and a command to run
+    # with its notes, as a credential's fix draws one.
+    "part/steps-numbered": Entry(
+        '{% section "Example upgrade" %}{% steps numbered=True %}'
+        '{% step %}<strong>Pull the example image</strong> <span class="muted">An example sentence that says what the step does.</span>{% endstep %}'
+        '{% include "partials/_operator_step.html" %}'
+        "{% step %}<strong>Check the example</strong>{% endstep %}"
+        "{% endsteps %}{% endsection %}",
+        {
+            "step": OperatorStep(
+                label="Make a new example token on your Mac",
+                command="example-mint --account example-01 --item example-token --permission example.read",
+                notes=("HQ could not tell which example account holds it.", "Then press Refresh."),
+            )
+        },
+    ),
+    # A connection whose credential lacks permissions: its headline in the
+    # row, its fix opened beneath it.
+    "part/credential-fix": Entry(
+        '{% section "Example connections" %}{% table_region "Example connections" %}<table class="data-table">'
+        '<thead><tr>{% table_heading "Name" "identifier" gutter=True %}{% table_heading "Provider" %}</tr></thead>'
+        '<tbody><tr><td>example-main{% include "control_plane/_credential_fix.html" %}</td><td>Example</td></tr>'
+        "</tbody></table>{% endtable_region %}{% endsection %}",
+        {
+            "fix": CredentialFix(
+                connection_ref="example-main",
+                provider="example",
+                missing=("example.read", "example.write"),
+                command="example-mint --account example-01 --item example-token",
+                by_hand="the example provider's console",
+            )
+        },
+    ),
     # Steps and checks side by side: met, unmet, done and plain.
     "part/steps": Entry(
         '{% section "Example standard" %}{% steps %}'
@@ -1014,6 +1164,41 @@ CATALOG = {
         "<li><strong>example-mail</strong>{% dot %}mail.example.com</li>{% endstack_list %}</td></tr>"
         "</tbody></table>{% endtable_region %}{% endsection %}"
     ),
+    # A calendar's sources, each a toggle in its color: one shown with what it
+    # shows, one hidden, one that could not be read; and a source's swatch.
+    "part/calendar-sources": Entry(
+        '{% section "Example calendars" %}{% include "partials/_calendar_sources.html" %}{% endsection %}'
+        '{% section "Example day" %}<p>An example line.</p>{% aside %}'
+        '{% include "partials/_calendar_sources.html#swatch" with source=sources.0 %}{% endsection %}',
+        {
+            "sources": (
+                SourceView(
+                    "example.shown",
+                    "Example shown",
+                    group="",
+                    slot=1,
+                    shown=True,
+                    description="Every example event, as it is planned.",
+                ),
+                SourceView(
+                    "example.hidden",
+                    "Example hidden",
+                    group="",
+                    slot=4,
+                    shown=False,
+                    description="Each example that ran.",
+                ),
+                SourceView(
+                    "example.failed",
+                    "Example unread",
+                    group="",
+                    slot=7,
+                    shown=True,
+                    failure="Example source did not answer in 5 s.",
+                ),
+            )
+        },
+    ),
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
     "part/month-gone-by": Entry(
@@ -1026,6 +1211,15 @@ CATALOG = {
         '<div class="section-flow">{% section "Example month" %}'
         '{% include "calendars/_month_grid.html" with compact=True %}{% endsection %}'
         '{% section "Example notes" %}<p>An example line of prose in the frame.</p>{% endsection %}</div>',
+        {"calendar": _month_gone_by()},
+    ),
+    # A month as the calendar page draws it, the main of a `.split` beside a
+    # flow of sections: the month takes the room, the sections keep their
+    # basis beside it and pair up once they wrap under it.
+    "part/month-split": Entry(
+        '<div class="split">{% section "Example month" %}{% include "calendars/_month_grid.html" %}'
+        '{% endsection %}<aside class="section-flow">{% section "Example identity" %}' + _NARROW + "{% endsection %}"
+        '{% section "Example link" %}' + _NARROW + "{% endsection %}</aside></div>",
         {"calendar": _month_gone_by()},
     ),
     # What the table region derives from its headings, each in a table of its
@@ -1400,6 +1594,9 @@ CATALOG = {
             )
         },
     ),
+    # A saved copy's About dialog body: what to try, its own pages as chips,
+    # and who made it.
+    "part/demo-about": Entry('{% include "partials/_demo_about.html" %}', {"saved_copy": _NOW}),
     # A saved copy's footer, which says from the page's corner what it is.
     "part/demo-foot": Entry('{% include "partials/_demo_foot.html" %}', frame="after"),
     # Command Center's palette as its dialog opens on it, waiting for its
@@ -1424,6 +1621,10 @@ CATALOG = {
     ),
     "form/page-fieldless": Entry(
         '{% include "form_page.html#form_card" %}', {"form": _NoFields(), "form_verb": "Run example", "cancel_url": "#"}
+    ),
+    "form/page-pairs": Entry(
+        '{% include "form_page.html#form_card" %}',
+        {"form": _ExampleRange(), "form_verb": "Add example", "cancel_url": "#"},
     ),
     # A form whose connection cannot make the change (`gap`): its verb drawn
     # unusable, with what it needs beside it.
@@ -1479,11 +1680,18 @@ CATALOG = {
     ),
     "form/filter-bar-labeled": Entry(
         '{% filter_bar verb="Check" action="#" css="example" data_example="example" %}'
-        '<label class="control-label" for="example-from">From</label>'
+        '{% control_label "From" control="example-from" %}'
         '<select id="example-from" name="from"><option>example-host-01</option></select>'
-        '<label class="control-label" for="example-to">To</label>'
+        '{% control_label "To" control="example-to" %}'
         '<select id="example-to" name="to"><option>example-host-02</option></select>'
         "{% endfilter_bar %}"
+    ),
+    # A control label ({% control_label %}) with no control, naming the answer
+    # that follows it; the filter bar above draws it for its controls
+    # (test_label_tags).
+    "part/control-label": Entry(
+        '{% card element="article" label="Example stage" %}{% control_label "Example receiving" %}'
+        "<p><strong>Example provider</strong></p>{% endcard %}"
     ),
     # A "do this now" control in a section's body: one never pressed, beside
     # one whose work ended and says how.
@@ -1586,6 +1794,16 @@ CATALOG = {
             )
         },
     ),
+    # A row of places to go, each a chip: one of HQ's own pages, outside ones
+    # with their arrow, and a name long enough to wrap on a phone.
+    "part/link-chips": Entry(
+        '{% section "Example links" %}{% link_chips %}'
+        '<li><a href="/example/" title="An example page of HQ">Example page</a></li>'
+        '<li>{% entity "https://example.com/"|outside label="Example site" %}</li>'
+        '<li>{% entity "https://docs.example.com/"|outside label="Example documentation" %}</li>'
+        '<li>{% entity "https://example.org/"|outside label="An example tool whose name runs long enough to wrap" %}</li>'
+        "{% endlink_chips %}{% endsection %}"
+    ),
     # Whether a thing happened, week by week: hits, a miss, a week counted
     # more than once, one nothing is known of, and a run up to now.
     "chart/cadence": Entry(
@@ -1685,6 +1903,46 @@ CATALOG = {
         {
             "long": "example-cli connect --config /etc/example/example-agent/config.toml "
             "--token-file /run/secrets/example-agent-token --name example-host-01.example.com"
+        },
+    ),
+    # Which network the link rides over, as the panel's Connection row says
+    # it: across the internet with the address to look up, through a relay,
+    # and on the reader's own network.
+    "part/connection-carriage": Entry(
+        '{% section "Example link" %}{% facts %}'
+        '{% fact "Connection" %}{% include "partials/_connection_peering.html#carriage" with peering=internet only %}'
+        "{% endfact %}"
+        '{% fact "Relayed" %}{% include "partials/_connection_peering.html#carriage" with peering=relay only %}'
+        "{% endfact %}"
+        '{% fact "Local" %}{% include "partials/_connection_peering.html#carriage" with peering=local only %}'
+        "{% endfact %}{% endfacts %}{% endsection %}",
+        {
+            "internet": Peering("internet", "Direct, over the internet", address="203.0.113.7"),
+            "relay": Peering("relay", "Relayed via DERP example-region"),
+            "local": Peering("local", "Direct, on your network", address="192.0.2.30"),
+        },
+    ),
+    # The connection dialog before its panel arrives.
+    "part/connection-loading": Entry('{% include "core/_connection_loading.html" %}'),
+    # You, the link and HQ: over the tailnet with every check confirmed and
+    # both ends leading to their machines, under Advanced HQ Posture.
+    "part/connection-peering": Entry(
+        '{% include "partials/_connection_peering.html" %}',
+        {"connection": _connection(), "posture": _posture((True, True))},
+    ),
+    # Off the tailnet with no reading of it: the address alone, and HQ by
+    # the name it was asked for.
+    "part/connection-peering-network": Entry(
+        '{% include "partials/_connection_peering.html" %}',
+        {"connection": _connection(NETWORK_CHANNEL, path="", linked=False)},
+    ),
+    # Relayed, a check not yet read, neither end a known machine, and a
+    # posture short of one check with another unread.
+    "part/connection-peering-relayed": Entry(
+        '{% include "partials/_connection_peering.html" %}',
+        {
+            "connection": _connection(path="relayed", held=False, linked=False),
+            "posture": _posture((True, False, None), advanced=False),
         },
     ),
     # Dots beside a figure, a part of a whole and a history whose dots lead
@@ -1831,6 +2089,23 @@ CATALOG = {
         "{% endsection %}",
         {"inventory": _INVENTORY},
     ),
+    # A switch ({% switch %}): siblings with one current, a mark and a note on
+    # some, and the summary of the current one under the row.
+    "part/switch": Entry(
+        '{% switch label="Example domains" %}'
+        '{% choice url="/example/one/" current=True mark="★" %}example.com{% endchoice %}'
+        '{% choice url="/example/two/" %}example.net{% endchoice %}'
+        '{% choice url="/example/three/" note="not managed" %}example-long-domain-name.example.org{% endchoice %}'
+        "{% summary %}An example line that says what the current choice answers.{% endswitch %}"
+    ),
+    # The same switch with a count beside each chip, nought included.
+    "part/switch-counted": Entry(
+        '{% switch label="Example status" %}'
+        '{% choice url="?" current=True count=128 %}All{% endchoice %}'
+        '{% choice url="?status=example-new" count=12 %}Example new{% endchoice %}'
+        '{% choice url="?status=example-read" count=0 %}Example read{% endchoice %}'
+        "{% endswitch %}"
+    ),
     # A page that asks for its readings when opened: the note that ends its
     # head's first line, and a region that fills itself holding its own.
     "part/visit-refresh": Entry(
@@ -1914,6 +2189,36 @@ CATALOG = {
                 ),
                 focus_url="/example/topology/",
             )
+        },
+    ),
+    # A request's route as its strip of hops, every state a hop takes: proven
+    # by the request (so the key under the strip says so), contradicted, not
+    # read, with a certificate, with facts under its name, and a name long
+    # enough to break.
+    "part/path-hops": Entry(
+        '{% section "Example path" %}{% include "control_plane/_path_hops.html" with route=route '
+        'label="Path via example record" %}{% endsection %}',
+        {"route": _route()},
+    ),
+    # The services table's name cell: favorites with the pair that moves them
+    # (the first with no way up, the last with no way down), and a service
+    # that is not one, which draws its star alone.
+    "part/service-pin": Entry(
+        '{% section "Example services" %}{% table_region "Example services" %}<table class="data-table"><thead>'
+        '<tr>{% table_heading "Service" "identifier" gutter=True %}{% table_heading "Open to" %}</tr></thead>'
+        "<tbody>{% for service in favorites %}<tr><td>"
+        '{% include "control_plane/_service_pin.html" with service=service reorderable=True '
+        "first=forloop.first last=forloop.last only %}</td><td>Example network</td></tr>{% endfor %}"
+        "{% for service in others %}<tr><td>"
+        '{% include "control_plane/_service_pin.html" with service=service only %}</td><td>Example network</td></tr>{% endfor %}'
+        "</tbody></table>{% endtable_region %}{% endsection %}",
+        {
+            "favorites": [
+                _Service("app.example.com", pinned=True),
+                _Service("example-dashboard-with-a-long-name.example.com", pinned=True),
+                _Service("home.example.com", pinned=True),
+            ],
+            "others": [_Service("shop.example.com")],
         },
     ),
     # A dense page's map, more links than a phone's row holds, over the

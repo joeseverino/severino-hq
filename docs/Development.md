@@ -13,6 +13,10 @@ with the other tools `fast` and `check` run.
 A tool only a heavier gate needs (CodeQL, age) is `lazy` in `mise.toml`: its
 first use installs it, checked against `mise.lock` like the rest.
 
+`fast` and `fix` first run `setup:git`, which defines the merge drivers
+`.gitattributes` names in the repository's git config, shared by every
+worktree; a clone that has not run it merges those files as text.
+
 Go is the one tool `mise.toml` does not pin itself. It reads the release from
 `controller/go.mod`'s `toolchain` line, which Renovate moves, so mise loads
 `mise.toml` only beside that file.

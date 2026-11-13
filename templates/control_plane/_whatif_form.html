@@ -8,19 +8,19 @@ start as that machine, which is the question most often being asked.
 {% endcomment %}
 {% url 'control_plane:tailnet' as tailnet_url %}
 {% filter_bar verb="Check" action=tailnet_url data_fragment_target="whatif-result" %}
-  <label class="control-label" for="whatif-source">From</label>
+  {% control_label "From" control="whatif-source" %}
   <select id="whatif-source" name="source">
     {% for name in device_names %}
       <option value="{{ name }}" {% if name == asked.source %}selected{% endif %}>{{ name }}</option>
     {% endfor %}
   </select>
-  <label class="control-label" for="whatif-target">To</label>
+  {% control_label "To" control="whatif-target" %}
   <select id="whatif-target" name="target">
     {% for name in device_names %}
       <option value="{{ name }}" {% if name == asked.target %}selected{% endif %}>{{ name }}</option>
     {% endfor %}
   </select>
-  <label class="control-label" for="whatif-port">Port</label>
+  {% control_label "Port" control="whatif-port" %}
   <select id="whatif-port" name="port">
     {% for port in ports %}
       <option value="{{ port }}" {% if port|stringformat:"s" == asked.port %}selected{% endif %}>{{ port }}</option>

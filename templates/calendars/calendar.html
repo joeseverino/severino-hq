@@ -6,8 +6,8 @@ region is a fragment (static/js/fragment.js): paging, checking a source and
 opening a day ask this page for the `calendar` part and take it in place.
 {% endcomment %}
 {% partialdef calendar inline %}
-<div class="split calendar-layout" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
-  {% section moment=calendar.month when="month" id="calendar-month" css="calendar-month" %}
+<div class="split" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
+  {% section moment=calendar.month when="month" id="calendar-month" %}
     {% include "calendars/_month_grid.html" %}
   {% aside %}
     <nav class="calendar-nav" aria-label="Change month">
@@ -17,7 +17,7 @@ opening a day ask this page for the `calendar` part and take it in place.
     </nav>
   {% endsection %}
 
-  <aside class="calendar-aside">
+  <aside class="section-flow">
     {% if day %}
       {% section day.name moment=day.day when="day" id="day-panel" %}
         {% if entry %}
@@ -33,7 +33,7 @@ opening a day ask this page for the `calendar` part and take it in place.
         {% for source, rows in day_groups %}
           {% section source.label %}
             {% include "partials/_record_list.html" with rows=rows label=source.label %}
-          {% aside %}<i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>
+          {% aside %}{% include "partials/_calendar_sources.html#swatch" %}
           {% endsection %}
         {% empty %}
           {% if not entry %}{% include "partials/_empty_state.html" with message="Nothing on this day." %}{% endif %}
@@ -54,20 +54,9 @@ opening a day ask this page for the `calendar` part and take it in place.
       {% endsection %}
     {% endif %}
 
-    {% partialdef sources %}
-      <ul>
-        {% for source in sources %}
-          <li class="series-{{ source.slot }}">
-            {% url 'calendar:source' source.id as source_url %}{% post_button source.label source_url name="shown" value=source.shown|yesno:"0,1" css="calendar-source" pressed=source.shown %}
-            {% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}
-            {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
-          </li>
-        {% endfor %}
-      </ul>
-    {% endpartialdef %}
-    {% section "Calendars" id="calendar-sources" css="calendar-sources" %}
+    {% section "Calendars" id="calendar-sources" %}
       {% for group, sources in calendar.groups %}
-        {% if group %}{% section group %}{% partial sources %}{% endsection %}{% else %}{% partial sources %}{% endif %}
+        {% if group %}{% section group %}{% include "partials/_calendar_sources.html" %}{% endsection %}{% else %}{% include "partials/_calendar_sources.html" %}{% endif %}
       {% endfor %}
     {% endsection %}
   </aside>

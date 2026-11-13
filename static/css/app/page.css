@@ -388,21 +388,22 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 /* ── Hit areas ──────────────────────────────────────────────────── */
 
 /* A control drawn smaller than 24px square (a sort heading, a "view all"
-   link, a day of the month, the favorite star, a dot that leads to a record)
+   link, a day of the month, the favorite star and the arrows that move it,
+   a dot that leads to a record)
    is hit through an area at least that size (WCAG 2.5.8) without moving
    anything: the area is the control's own, hung over the space beside it,
    where no other control is. The browser gate measures every control
    (docs/Design.md, "A control is big enough to hit"). A finger is not a cursor: where
    the pointer is coarse the area grows, and a calendar's marks and bars,
    packed too close for one under a mouse, are given one too. */
-:is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, a.kpi-dot, .kpi a.value, .posture-meter) { position: relative; }
-:is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, a.kpi-dot, .kpi a.value, .posture-meter)::after {
+:is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, .pin-move button, a.kpi-dot, .kpi a.value, .posture-meter) { position: relative; }
+:is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, .pin-move button, a.kpi-dot, .kpi a.value, .posture-meter)::after {
   content: ""; position: absolute; inset: min(0px, calc(50% - var(--target-min) / 2));
 }
 @media (pointer: coarse) {
   :is(.month-mark, .month-span),
   main summary { position: relative; }
-  :is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, a.kpi-dot, .kpi a.value, .posture-meter, .month-mark, .month-span)::after {
+  :is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, .pin-move button, a.kpi-dot, .kpi a.value, .posture-meter, .month-mark, .month-span)::after {
     content: ""; position: absolute;
     inset: min(calc(-1 * var(--space-5)), calc(50% - var(--target-min) / 2)) min(calc(-1 * var(--space-3)), calc(50% - var(--target-min) / 2));
   }

@@ -1,9 +1,10 @@
 {% comment %}
-A command an operator runs on their own machine. HQ offers it and never runs
-it; it is built from references, so it carries no secret.
+A command an operator runs on their own machine, as one step of a numbered
+{% steps %} list. HQ offers it and never runs it; it is built from
+references, so it carries no secret.
 {% endcomment %}
-<div class="operator-step">
+{% step %}
   <strong>{{ step.label|breakable }}</strong>
   {% if step.command %}{% include "partials/_command.html" with command=step.command only %}{% endif %}
-  {% for note in step.notes %}<p class="muted">{{ note|breakable }}</p>{% endfor %}
-</div>
+  {% for note in step.notes %}<span class="muted">{{ note|breakable }}</span>{% endfor %}
+{% endstep %}

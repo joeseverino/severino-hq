@@ -84,6 +84,7 @@ class _ExampleForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields["title"].wide = True
         self.fields["region"].change_effect = "Changing this moves the example."
+        self.fields["region"].starts_pair = True
 
 
 class FormRenderingTests(SimpleTestCase):
@@ -104,6 +105,9 @@ class FormRenderingTests(SimpleTestCase):
 
         group = group_of(page, "region")
         self.assertEqual(group.attrs["data-change-effect"], "Changing this moves the example.")
+        # forms.css starts a row at a pair's start, so its end reads beside it.
+        self.assertIn("is-pair-start", group.classes)
+        self.assertNotIn("is-pair-start", group_of(page, "title").classes)
         self.assertIn("check-row", label_of(page, "enabled").classes)
         self.assertEqual(unresolved_descriptions(page), [])
 

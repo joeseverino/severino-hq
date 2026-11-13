@@ -339,7 +339,9 @@ The bold a cell leads with, or its leading link's, is the row's `name`; free
 text (a message, a record's words) is declared `cell-data` and marked `data`;
 what a row means in words is declared `cell-prose`. A context line is the
 shared `.muted`, and a row's name set in one line with its controls (a star,
-a move) is a `.name-line`, where the name is cut rather than wrapped. A table
+a move) is a `.name-line`, where the name is cut rather than wrapped; a
+service's star and the pair that moves a favorite are one part,
+`control_plane/_service_pin.html` (*Catalog:* `part/service-pin`). A table
 written later sets as every other does by writing those, and
 `lint:css` refuses a table primitive rule that tells a cell's part by
 anything else. Free text breaks a run with no seam in it (a link, a digest)
@@ -444,7 +446,9 @@ anywhere but a kicker, whose rule says what it heads in its disable comment.
 A list of short steps (`{% steps %}`) is read down its columns, so its columns
 end within a step of each other. Each step is `{% step icon=... %}`: its icon,
 then what it says; `tone` colors the icon by how a check stands, `done`
-draws a finished step quiet, and `title` is its tooltip.
+draws a finished step quiet, and `title` is its tooltip. Steps done in order
+are `{% steps numbered=True %}`: one column, each step's number where its
+icon would be, so its steps take no icon.
 
 A plain list read down (a row's notes, a record's statuses, a section's
 records) is `{% stack_list %}`, its `<li>`s each running their parts inline a
@@ -473,9 +477,13 @@ Its line runs from the first stop's mark to the last one's, with any stop
 opened. A check names what it was read from right after its statement, or
 under it where the line is full, and that evidence is shown at every width.
 *Gates:* `a_checks_evidence_follows_its_statement`, `nothing_a_summary_names_is_hidden`.
+*Catalog:* `part/path-hops`.
 
 **One main-and-aside.** Content with a narrower companion (`.split`) shares a
 row while both keep a readable width and wraps to a column when they cannot.
+A month as the main takes the room, its companion keeping its basis beside
+it; a run of sections in a companion is a `.section-flow`, so wrapped under
+the main they pair up (*Catalog:* `part/month-split`).
 Pairs (`.two-col`) are at most two columns and pair like with like: a table
 beside a table, a chart beside a chart, so each row ends together.
 
@@ -483,8 +491,11 @@ beside a table, a chart beside a chart, so each row ends together.
 across as many columns as hold a field of 18rem, so a wide frame gains columns
 rather than stretching each input, and a phone's is one. A textarea, a group
 of choices, a field marked wide, errors, a command's confirmation and the
-actions take the row. A group of checkboxes reads across. A command's form is
-this grid too: `.form` is the one form layout.
+actions take the row. A group of checkboxes reads across. A field marked
+`starts_pair` (a range's start) begins a row and the field after it ends the
+pair there, so the two read across together and a third column never splits
+them. A command's form is this grid too: `.form` is the one form layout.
+*Catalog:* `form/page-pairs`.
 
 **Every form a page is about is drawn one way.** A page that is a record's
 form or a command's is the frame `form_page.html`: one card spanning its
@@ -506,7 +517,9 @@ A form whose verb can't be pressed because its connection can't make the
 change passes `gap`; the closing row draws the verb unusable and what it
 needs beside it. A form a script or test finds names its `data-` attributes
 as `hooks`. A form answered in another region's place gives that region's id
-as `in_place`. A toggle that posts is a `post_button` with `pressed`.
+as `in_place`. A toggle that posts is a `post_button` with `pressed`; the
+calendar's sources are a list of them, each in its series color
+(`partials/_calendar_sources.html`, *Catalog:* `part/calendar-sources`).
 *Catalog:* `form/write-gap`.
 *Gate:* `hq/platform/core/tests/test_form_actions.py`, which reads every form
 template, and `test_form_page.py`, which holds every routed create and edit
@@ -776,9 +789,17 @@ filters back to `clear` when anything is set, and the count of what shows
 (`{% summary %}`) at the row's end. A list's table toolbar is the same bar.
 The search takes the row's room; every other control is as wide as what it
 says, a select its longest option. No chip walls.
+A control's visible name is `{% control_label "From" control="id" %}`, the
+`<label>` of the control with that id; with no `control` it names what follows.
 *Gate:* the `hand-drawn-filter-bar` rule refuses `.filter-bar` written by hand; the
 survey's "filter choices as wide as their options" finds a choice stretched
 over its bar.
+
+**One switch.** `{% switch label=... %}{% choice url=... current=... %}...{% endchoice %}{% summary %}...{% endswitch %}`
+(`switch_tags.py`, drawn by `partials/_switch.html`): a row of links to the
+same view (a window, a status, a tab, a sibling), each a `scope-chip`, the
+current one `aria-current="page"`, a choice's `count` beside its chip and its
+`note` and `mark` inside it.
 
 **Values read as what they are.** `|readout` puts identifiers (keys, hosts,
 paths, ports) in `<code>` and leaves counts, words and phrases as text.
@@ -837,6 +858,13 @@ An external link's arrow (`.external-link`) is joined to its last word by a
 no-break space. A link whose name is one box (a cut token, a chip in a table)
 lays the name and the arrow out as one row, since a line may break after any
 box.
+
+A row of places to go (the dashboard's links, a saved copy's own pages) is
+`{% link_chips %}`, each item an `<li>` holding one link, `{% entity
+url|outside label=... %}` for a page outside HQ. Each link is a chip, a target
+by its frame and never underlined at rest, and an outside one's arrow sits
+quieter than its name. A run of names inside a line stays a `.dot-list`, and a
+choice of the view's state is a `.scope-chip`.
 
 **A change is one primitive.** A value and the one it changes into (a running
 version and the newer release, an installed package and the version that
@@ -1070,7 +1098,7 @@ that does.
 
 A value goes under its label only where the box cannot hold both on one line.
 The same holds for a node key beside its machine and a piece of evidence beside
-its kind (`.conn-rows` flows each row once it is too narrow for three columns).
+its kind.
 
 A thing's state sits on its title's line (`page_aside`), as words. A page about
 a day (the dashboard) names it with `page_dateline`, drawn over the title where
@@ -1211,6 +1239,13 @@ In a card, a row of figures shares its lines: labels start level and values
 stand level however a label wraps, and a label wraps beside its mark, never
 under it.
 
+A figure with a page reads as one target by its tile: in any figure grid the
+tile tints under the pointer and the focus, and its label and value are never
+underlined. One whose value is its link tints the same while the value is
+pointed at or focused. In a card or an overview the tint reaches into the gap
+as a shadow, so nothing moves, and a lead that spans the frame tints a band
+across it.
+
 A figure that is itself a change takes `tone`, a status tone its value is
 drawn in, featured or not, so a rise and a fall never read alike; a figure
 that is a level says how it moved in its line, which takes `detail_tone` the
@@ -1227,6 +1262,17 @@ HQ it renders nothing; on a saved copy (`SEVERINO_RENDERED_COPY`, set only in
 code by whatever renders the copy, as the demo does) it marks the line as an
 example connection, not the reader's. *Gate:* `hq/platform/core/tests/test_example_connection.py`, and
 `demo/check.py` on the built demo.
+
+**A connection is its two ends and the link between them.**
+`partials/_connection_peering.html` draws You, the link and HQ side by side,
+the link in its network's color and the verdict's, and stacks the three in
+one column when its own box is too narrow for them, wherever it is drawn. Its
+`#carriage` is a fact's value: which network the link rides over, with a
+lookup of the address a link across the internet comes from. The dialog's
+shell before the panel arrives (`core/_connection_loading.html`) is the
+panel's own box. *Catalog:* `part/connection-peering`,
+`part/connection-peering-network`, `part/connection-peering-relayed`,
+`part/connection-carriage`, `part/connection-loading`.
 
 **The dashboard says how you reached it.** Beside the at-a-glance readings
 sits one for the request itself: the channel, the path, the encryption and

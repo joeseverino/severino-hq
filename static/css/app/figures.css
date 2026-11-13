@@ -31,34 +31,6 @@
     & > :not(dialog) { flex-grow: 0; }
   }
 }
-/* Domain links, not a select: the set is small enough to show, and wrapping stacks them on a narrow screen instead of hiding the tail. */
-.zone-switch {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  margin: 0 0 var(--stack-gap);
-}
-.zone-switch a {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-6);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
-  color: var(--ink-2);
-  font-size: var(--text-sm);
-  font-weight: 550;
-  text-decoration: none;
-}
-.zone-switch a:hover { border-color: var(--ink-2); color: var(--ink); }
-.zone-switch a[aria-current] {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--surface);
-}
-.zone-switch-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 500; }
-.zone-switch a[aria-current] .zone-switch-note { color: inherit; }
 /* A status pill is a label: wrapped it grows its row, so it stays whole until its table is tight (tables.css). */
 .data-table .pill { white-space: nowrap; }
 /* A row's name set in one line with its controls (`name-line`): the controls and the name are a grid's columns, never a flex row, since WebKit keeps a flex row's min-content from before a row closes, so its column reopened narrower than the name it holds out for. */
@@ -246,6 +218,19 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .data-table .code-list code { white-space: nowrap; }
 /* The title says where the link goes, so the arrow is for the eye alone. */
 .external-link::after { content: "\00a0\2197" / ""; font-size: .85em; }
+/* A row of links, each a chip (partials/_link_chips.html): a place to go, so
+   it reads as a target by its frame, with no underline at rest. An outside
+   one's arrow sits in the chip's gap, quieter than the name. */
+.link-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.link-chips a {
+  display: inline-flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-2) var(--space-6);
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--surface); color: var(--ink-2); font-size: var(--text-sm); font-weight: 500;
+}
+.link-chips a:is(:hover, :focus-visible) { border-color: var(--line-strong); color: var(--ink); text-decoration: none; }
+.link-chips .external-link::after { content: "\2197" / ""; color: var(--muted-2); font-size: var(--text-xs); }
+.link-chips .external-link:is(:hover, :focus-visible)::after { color: var(--accent-2); }
 /* A value and the one it leads to (partials/_change.html). A narrow line
    breaks only between the two, the arrow going with the second. The parts
    share their first baseline, whatever face and size a page sets its chips in

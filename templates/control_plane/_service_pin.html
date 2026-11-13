@@ -1,0 +1,26 @@
+{% comment %}
+A service's name in its row, after the star that makes it a favorite and, among
+the favorites (`reorderable`), before the pair that moves it up or down. The
+first has nowhere up to go and the last nowhere down, so each drops that
+arrow. Drawn by the services table (_service_rows.html).
+{% endcomment %}
+<div class="name-line">
+  {% url 'control_plane:service_pin' service.hostname as pin_url %}
+  {% if service.pinned %}
+    {% post_button "★" pin_url css="pin-toggle pinned" title="Remove "|add:service.hostname|add:" from favorites" %}
+  {% else %}
+    {% post_button "☆" pin_url css="pin-toggle" title="Add "|add:service.hostname|add:" to favorites" %}
+  {% endif %}
+  <strong>{% entity "service"|entity_of:service.hostname %}</strong>
+  {% if reorderable %}
+    <span class="pin-move">
+      {% url 'control_plane:service_move' service.hostname as move_url %}
+      {% if not first %}
+        {% post_button "↑" move_url name="direction" value="up" css="" title="Move "|add:service.hostname|add:" up" %}
+      {% endif %}
+      {% if not last %}
+        {% post_button "↓" move_url name="direction" value="down" css="" title="Move "|add:service.hostname|add:" down" %}
+      {% endif %}
+    </span>
+  {% endif %}
+</div>

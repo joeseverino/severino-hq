@@ -36,7 +36,7 @@ class ToolsView(PageMixin, TemplateView):
         principal = security.web_principal(self.request.user)
         tabs = tabs_for(principal)
         current = tab_named(self.request.GET.get("tab", ""), principal)
-        context["tabs"] = tabs
+        context["tabs"] = [{"id": each.id, "label": each.label, "current": each == current} for each in tabs]
         context["tab"] = current
         if current is None:
             return context

@@ -5,18 +5,12 @@
 {% else %}
 {% if problem %}{% notice tone="warning" %}{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}{% endnotice %}{% endif %}
 {% if waiting_note %}{% notice tone="info" %}{{ waiting_note|breakable }}{% endnotice %}{% endif %}
-<div class="status-tabs">
-  <a class="status-tab"{% if not selected_status %} aria-current="page"{% endif %}
-     href="{% url 'contacts:list' %}{% if q %}?q={{ q|urlencode }}{% endif %}">
-    All <span class="count">{{ total_count|breakable }}</span>
-  </a>
+{% switch label="Message status" %}
   {% for tab in status_tabs %}
-    <a class="status-tab"{% if tab.value == selected_status %} aria-current="page"{% endif %}
-       href="?status={{ tab.value }}{% if q %}&q={{ q|urlencode }}{% endif %}">
-      {{ tab.label|breakable }} <span class="count">{{ tab.count|breakable }}</span>
-    </a>
+    {% querystring status=tab.value page=None as href %}
+    {% choice url=href current=tab.current count=tab.count %}{{ tab.label|breakable }}{% endchoice %}
   {% endfor %}
-</div>
+{% endswitch %}
 
 {% filter_bar verb="Search" filtered=q clear=search_cleared %}
   <input type="search" name="q" value="{{ q }}" placeholder="Search name, email, or message…" aria-label="Search name, email, or message">

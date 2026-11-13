@@ -114,11 +114,11 @@ is said here, over the ones most recently changed, and nowhere else on the page.
 {% if external_links %}
 {% section "Links" %}
   {% partialdef links inline %}
-  <ul class="dot-list" id="dashboard-links" data-fragment data-fragment-name="links">
+  <div id="dashboard-links" data-fragment data-fragment-name="links">{% link_chips %}
     {% for l in external_links %}
       <li>{% if l.where == "hq" %}<a href="{{ l.href }}" title="{{ l.sub }}">{{ l.label|breakable }}</a>{% else %}{% entity l.href|outside label=l.label %}{% endif %}</li>
     {% endfor %}
-  </ul>
+  {% endlink_chips %}</div>
   {% endpartialdef %}
 {% aside %}
   {% comment %}

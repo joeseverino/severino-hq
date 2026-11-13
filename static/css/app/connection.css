@@ -10,8 +10,6 @@
    instead'. Nothing here needs to outrank anything by specificity. */
 
 /* A starred domain reads as chosen, not as merely another control. */
-.btn.pinned { border-color: var(--accent); color: var(--accent); }
-.zone-switch a > span[aria-hidden] { color: var(--accent); }
 
 /* Overflow menu: the actions worth having, without a second row of buttons.
    The panel is the nav's dropdown (same box, same shadow, same radius) so
@@ -136,7 +134,10 @@ textarea.code {
    of adding to it. */
 .conn > * { margin-block: 0 var(--stack-gap); }
 .conn > :last-child { margin-block-end: 0; }
-.conn-pending { padding: var(--space-10) 0; }
+/* The dialog's shell is the panel before it arrives, so it is the same box;
+   its line's own margins, which the panel's stack takes, are kept in its
+   padding. */
+.conn-pending { padding: calc(var(--space-10) + 1em) 0; }
 .conn-note { color: var(--muted); font-size: var(--text-xs); margin: calc(var(--space-2) * -1) 0 var(--space-5); }
 
 .conn-peering.conn-tailnet { border-left: 3px solid var(--ok); }
@@ -271,10 +272,11 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 }
 
 @container conn (max-width: 36rem) {
-  .conn-verdict { flex-wrap: wrap; }
   .conn-layer-body { margin-left: var(--space-6); }
 }
-/* The two ends and the link between them. */
+/* The two ends and the link between them. Its frame is the box its narrow
+   layout asks of, so it stacks wherever it is drawn. */
+.conn-peering-frame { container: peering / inline-size; }
 .conn-peering {
   display: grid; grid-template-columns: minmax(min-content, 1fr) auto minmax(min-content, 1fr); gap: var(--space-7); align-items: center;
   padding: var(--space-7) var(--space-8); border: 1px solid var(--line); border-radius: var(--radius);
@@ -295,7 +297,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 .conn-link-relayed .conn-link-line { background: repeating-linear-gradient(
   90deg, var(--warn) 0 5px, transparent 5px 10px); }
 .conn-link-idle .conn-link-line { background: var(--line); }
-@container conn (max-width: 36rem) {
+@container peering (max-width: 36rem) {
   /* Stacked, the two ends read as one column rather than as two facing each
      other, so they share an axis instead of one hugging each edge. */
   .conn-peering { grid-template-columns: 1fr; text-align: center; }
@@ -324,7 +326,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
   }
 }
 
-.conn-more > summary {
+.conn-more > summary, .conn-carriage > details > summary {
   cursor: pointer; font-size: var(--text-xs); color: var(--muted); padding: var(--space-4) 0 var(--space-2);
 }
 .conn-opaque { border-left-color: var(--danger); }
@@ -333,15 +335,15 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 
 .conn-peer-name { font-size: var(--text-md); font-weight: 600; }
 
-/* Which network the link rides over, with Why and About on the same line.
-   Each disclosure lends its parts to the line, so opening one leaves its
-   summary where it was pressed and what it holds takes the line below. Words
+/* Which network the link rides over, with About on the same line. The
+   disclosure lends its parts to the line, so opening it leaves its summary
+   where it was pressed and what it holds takes the line below. Words
    wrap whole: the cell would otherwise inherit `overflow-wrap: anywhere` and
    fit-content would shrink to a letter. */
 .conn-carriage { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-4); overflow-wrap: normal; }
 /* A disclosure in a fact is a target of the least size on its own, so one
    wrapped under another keeps it whatever the column's width. */
-.conn .facts-list .conn-more > summary { padding: calc((var(--target-min) - 1lh) / 2) 0; }
+.conn .facts-list .conn-more > summary, .conn-carriage > details > summary { padding: calc((var(--target-min) - 1lh) / 2) 0; }
 .conn-carriage > details { display: contents; }
 .conn-carriage > details > :not(summary) { flex-basis: 100%; }
 .conn-carriage > strong { font-weight: 600; }
@@ -350,25 +352,21 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
    which is what the accent marks. */
 .conn-carriage-internet > strong { color: var(--accent); }
 .conn-carriage-relay > strong { color: var(--warn); }
-.conn-carriage-unknown > strong { color: var(--muted); }
-/* The verdict is the answer; the reasoning is available, not imposed. Prose
-   under every row would turn a scannable panel into an essay, and the
-   explanation is only wanted when the verdict is surprising. */
-.conn-why > p { margin: var(--space-1) 0 0; }
 
-/* ----- Favorites ------------------------------------------------------- */
+/* ----- Favorites (control_plane/_service_pin.html) ---------------------- */
 
 /* The star keeps a full touch target but hangs into the cell's padding, so
    the name starts on the line every other cell in the row starts on. */
-.service-name > .pin-toggle { margin-block: -7px; }
-.service-name > form { display: inline-flex; }
+.name-line > .pin-toggle { margin-block: -7px; }
 .pin-toggle {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
   font-size: var(--text-lg); line-height: 1; color: var(--muted);
 }
 .pin-toggle:hover { color: var(--ink-2); }
 .pin-toggle.pinned { color: var(--warn); }
-.pin-move { display: inline-flex; gap: var(--space-1); margin-left: auto; }
+/* Each arrow hangs its hit area beside it (page.css), so a pair sits far
+   enough apart that the two areas never share a pixel, at either pointer. */
+.pin-move { display: inline-flex; gap: var(--space-6); margin-left: auto; }
 .pin-move button {
   background: none; border: 0; box-shadow: none; padding: 0 var(--space-1); cursor: pointer;
   font-size: var(--text-xs); line-height: 1; color: var(--muted-2);

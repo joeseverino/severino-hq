@@ -209,7 +209,6 @@ CLASSES = (
     "section-period",
     "split",
     "stacked",
-    "status-tabs",
     "subtle-link",
     "table-clamp",
     "table-scroll",

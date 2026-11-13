@@ -1,0 +1,23 @@
+{% comment %}
+The calendar's list of sources, each a toggle that shows or hides it:
+
+  {% include "partials/_calendar_sources.html" with sources=sources %}
+
+`sources` are application.calendar.SourceView. Each is a `post_button` with
+`pressed`, the whole line the button, its box drawn before the name in the
+source's series color and filled while it is shown. What it shows and why it
+could not be read stand under the name, past the box. `#swatch` is a
+source's color alone, beside what of it a day holds:
+
+  {% include "partials/_calendar_sources.html#swatch" with source=source %}
+{% endcomment %}
+{% partialdef swatch %}<i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>{% endpartialdef %}
+<ul class="calendar-sources">
+  {% for source in sources %}
+    <li class="series-{{ source.slot }}">
+      {% url 'calendar:source' source.id as source_url %}{% post_button source.label source_url name="shown" value=source.shown|yesno:"0,1" css="calendar-source" pressed=source.shown %}
+      {% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}
+      {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
+    </li>
+  {% endfor %}
+</ul>

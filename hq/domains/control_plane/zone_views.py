@@ -260,7 +260,16 @@ class ZoneDetailView(View):
                 "zone": found,
                 # Every domain, so the switcher can reach an undeclared one
                 # without going back to a list to find it.
-                "zones": zones,
+                "zones": [
+                    {
+                        "url": each.url,
+                        "zone": each.zone,
+                        "pinned": each.pinned,
+                        "managed": each.managed,
+                        "current": each.zone == found.zone,
+                    }
+                    for each in zones
+                ],
                 "record_kind": RECORD_KIND,
                 "inventory": inventory_state(),
                 # A deployment can have changing public DNS switched off. Where
