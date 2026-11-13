@@ -1,7 +1,9 @@
 """Every finding carries its fix: an operation through the gated queue, or the
 exact thing a person does."""
 
+import inspect
 import json
+import typing
 
 from django.test import TestCase, override_settings
 
@@ -10,7 +12,7 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
-from ..finding_model import FindingRule
+from ..finding_model import Finding, FindingEstate, FindingRule
 from ..findings import RULES
 from ..inventory_testing import store
 from ..policy_fixes import policy_without_empty_groups, request_empty_groups_removal
@@ -53,6 +55,18 @@ class EveryRuleSaysHowTests(TestCase):
             self.assertTrue(rule.operator_action.strip(), rule.name)
             self.assertNotIn("\u2014", rule.operator_action, rule.name)
 
+    def test_every_rule_detects_through_a_function_that_builds_findings(self):
+        """One way to build a finding: a detector declared to take the estate and
+        return ``Finding``s, never a lambda turning a dict of its fields into one."""
+
+        for rule in RULES:
+            with self.subTest(rule=rule.name):
+                self.assertEqual(
+                    _detects_findings(rule.detect),
+                    rule.name not in _BUILT_FROM_FIELDS,
+                    f"{rule.name}'s detect is a function annotated (estate: FindingEstate) -> tuple[Finding, ...]",
+                )
+
     def test_a_finding_without_its_own_action_carries_the_rules(self):
         tailnet_connection()
         policy(settings={"devicesApprovalOn": False})
@@ -61,6 +75,21 @@ class EveryRuleSaysHowTests(TestCase):
 
         self.assertIn("Device approval", steps_text(finding))
         self.assertEqual(finding["remedies"], [])
+
+
+# certificate_expiry still words a certificate's expiry as a dict of a
+# Finding's fields; held here so the set empties once it builds Findings.
+_BUILT_FROM_FIELDS = {"certificate-expiring"}
+
+
+def _detects_findings(detect) -> bool:
+    """Whether a detector, a function or a callable declaration, is annotated to
+    take the estate and return findings. A lambda carries no annotations."""
+
+    called = detect if inspect.isfunction(detect) else type(detect).__call__
+    hints = typing.get_type_hints(called)
+    (estate, *rest) = inspect.signature(detect).parameters
+    return not rest and hints.get(estate) is FindingEstate and hints.get("return") == tuple[Finding, ...]
 
 
 class PolicyAmendmentTests(TestCase):

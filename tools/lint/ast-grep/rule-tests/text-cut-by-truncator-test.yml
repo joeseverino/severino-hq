@@ -1,0 +1,14 @@
+id: text-cut-by-truncator
+valid:
+  - 'said = Truncator(text).chars(200)'
+  - 'said = text[:200]'
+  - 'said = text[1:] + "…"'
+  - 'said = "…" + text[-20:]'
+  - 'lines = [*lines[:5], "..."]'
+  - 'said = f"{text[:12]} and more"'
+invalid:
+  - 'said = text if len(text) <= LIMIT else text[: LIMIT - 1] + "…"'
+  - 'said = said if len(said) <= 100 else said[:97] + "..."'
+  - 'said = words if len(words) <= chars else f"{words[: chars - 1]}…"'
+  - |
+    evidence = f"serves {str(item.get('fingerprint_sha256', ''))[:12]}…"

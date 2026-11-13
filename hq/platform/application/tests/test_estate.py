@@ -570,6 +570,16 @@ class ActionItemTests(TestCase):
                 self.assertEqual(item.subject.url, page)
                 self.assertNotIn("Someone", item.title)
 
+    def test_a_release_with_a_trailing_zero_is_the_same_release(self):
+        devices(
+            device("example-host", update_available=True, client_version="1.80"),
+            device("example-laptop", client_version="1.80.0"),
+        )
+
+        (item,) = [item for item in tailnet() if item.key == "tailnet-update:example-host"]
+
+        self.assertNotIn("1.80.0", item.body)
+
     def test_an_update_with_no_newer_device_says_what_runs(self):
         devices(device("example-host", update_available=True, client_version="1.102.3"))
 

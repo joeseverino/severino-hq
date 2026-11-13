@@ -10,6 +10,8 @@ said anything reads the same way.
 from dataclasses import dataclass
 from typing import Any
 
+from django.utils.text import Truncator
+
 from hq.platform.application.payload_words import STEP, ChangeRow, path_words, value_words
 from hq.platform.application.ui import counted
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
@@ -66,23 +68,19 @@ def changes_said(changes: Any) -> str:
     said = [_said(row) for row in rows[:FIELDS_SAID]]
     if len(rows) > FIELDS_SAID:
         said.append(counted(len(rows) - FIELDS_SAID, "more field", "more fields"))
-    return _cut("; ".join(said), MESSAGE_CHARS)
+    return Truncator("; ".join(said)).chars(MESSAGE_CHARS)
 
 
 def _said(row: ChangeRow) -> str:
     field = row.label
     if row.redacted or not (row.before or row.after):
         return f"{field} changed"
-    before, after = _cut(row.before, VALUE_WORDS), _cut(row.after, VALUE_WORDS)
+    before, after = Truncator(row.before).chars(VALUE_WORDS), Truncator(row.after).chars(VALUE_WORDS)
     if not before:
         return f"{field}: {after}"
     if not after:
         return f"{field}: cleared, was {before}"
     return f"{field}: {before} to {after}"
-
-
-def _cut(words: str, chars: int) -> str:
-    return words if len(words) <= chars else f"{words[: chars - 1]}…"
 
 
 # The operations HQ binds that no capability, job or controller action

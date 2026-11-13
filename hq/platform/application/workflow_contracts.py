@@ -11,6 +11,33 @@ from .describe import Describe
 _OWN_CONFIG = {"extra": "forbid"}
 
 
+# A plan's and a step's fields, as the API's links and MCP's tool calls both say them.
+type PlanId = Annotated[str, Describe("The plan's id, the same at every read of the problem it resolves.")]
+type PlanLabel = Annotated[str, Describe("The plan's heading, such as `Next steps`.")]
+type StepPhase = Annotated[
+    str,
+    Describe(
+        "What the step is: `act` runs a remedy, `verify` checks it worked, `run` is an exact command the "
+        "operator runs, `do` an instruction in words, `cannot` why it cannot be done from HQ."
+    ),
+]
+type StepLabel = Annotated[str, Describe("The step's heading; empty for an instruction its summary says alone.")]
+type StepSummary = Annotated[
+    str,
+    Describe(
+        "The step in full: the command of a `run` step, the instruction of a `do` step, the reason of "
+        "a `cannot` step. Empty when its label says it."
+    ),
+]
+type StepState = Annotated[
+    str,
+    Describe(
+        "Where it stands: `recommended` to do now, `after_action` once the step before is done, "
+        "`available` at any time, `operator` for you to do by hand, `blocked` where it cannot be done."
+    ),
+]
+
+
 @dataclass(frozen=True, slots=True)
 class ActionLink:
     """One safe route from observed state to an existing HQ use case."""
@@ -68,28 +95,10 @@ class WorkflowStep:
 
     __pydantic_config__ = _OWN_CONFIG
 
-    phase: Annotated[
-        str,
-        Describe(
-            "What the step is: `act` runs a remedy, `verify` checks it worked, `run` is an exact command the "
-            "operator runs, `do` an instruction in words, `cannot` why it cannot be done from HQ."
-        ),
-    ]
-    label: Annotated[str, Describe("The step's heading; empty for an instruction its summary says alone.")]
-    summary: Annotated[
-        str,
-        Describe(
-            "The step in full: the command of a `run` step, the instruction of a `do` step, the reason of "
-            "a `cannot` step. Empty when its label says it."
-        ),
-    ]
-    state: Annotated[
-        str,
-        Describe(
-            "Where it stands: `recommended` to do now, `after_action` once the step before is done, "
-            "`available` at any time, `operator` for you to do by hand, `blocked` where it cannot be done."
-        ),
-    ]
+    phase: StepPhase
+    label: StepLabel
+    summary: StepSummary
+    state: StepState
     actions: Annotated[
         tuple[ActionLink, ...],
         Describe("The links that carry it out, each through its command's own route."),
@@ -102,7 +111,7 @@ class WorkflowPlan:
 
     __pydantic_config__ = _OWN_CONFIG
 
-    id: Annotated[str, Describe("The plan's id, the same at every read of the problem it resolves.")]
-    label: Annotated[str, Describe("The plan's heading, such as `Next steps`.")]
+    id: PlanId
+    label: PlanLabel
     steps: Annotated[tuple[WorkflowStep, ...], Describe("Its steps, in the order they are taken.")]
     outcome: WorkflowOutcome

@@ -99,7 +99,7 @@ class EveryCallerTests(TestCase):
     def test_a_credential_finding(self):
         def read(when):
             (finding,) = credentials_expiring(estate(node(**{EXPIRES: when.isoformat()})))
-            return finding["title"]
+            return finding.title
 
         self.assertSays(read)
 

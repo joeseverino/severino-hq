@@ -9,7 +9,7 @@ the readings observing it say, and whether a DNS record names it.
 from dataclasses import dataclass
 from typing import Any
 
-from django.utils.text import get_text_list
+from django.utils.text import capfirst, get_text_list
 
 from hq.platform.application.labels import dotted
 
@@ -96,7 +96,7 @@ def _in_place(service: Any) -> Health:
         if any(claim in service.declared_claims for claim in facet.claims)
     ]
     checked = f"{get_text_list(parts, 'and')} {'is' if len(parts) == 1 else 'are'} in place" if parts else ""
-    checked = checked[:1].upper() + checked[1:]
+    checked = capfirst(checked)
     if parts == [_PART_NOUNS["dns"]]:
         return Health(UNKNOWN, "DNS record only", "A DNS record is in place. Nothing HQ set up answers at it.")
     behind = _behind_the_proxy(service)
@@ -126,7 +126,7 @@ def _running(running: Any, detail: str) -> Health:
     if check == "health check passing":
         return Health(GOOD, "Health check passing", detail)
     if check:
-        return Health(ATTENTION, check[:1].upper() + check[1:], detail)
+        return Health(ATTENTION, capfirst(check), detail)
     if running is not None and running.healthy:
         return Health(GOOD, "Running", detail)
     return Health(UNKNOWN, "In place", detail)

@@ -11,6 +11,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from django.utils.text import capfirst
+
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.provider_adapters.tailscale import TAILNET_KIND
@@ -406,7 +408,7 @@ def _tailnet_device_check(found: Connection) -> HopCheck:
         )
     gap = why_unread(TAILNET_KIND)
     if gap:
-        return HopCheck(UNPROVEN, ended(gap[:1].upper() + gap[1:]))
+        return HopCheck(UNPROVEN, ended(capfirst(gap)))
     # A device that joined or moved since an old reading is missing from it:
     # that is the reading's age, not a disagreement, until a current one says so.
     if not found.tailnet_current:
@@ -459,7 +461,7 @@ def _network(hop: Hop, context: _Context):
 def _machine(hop: Hop, context: _Context):
     own = context.answered_on
     if hop.unread:
-        return (), HopCheck(UNPROVEN, ended(hop.unread[:1].upper() + hop.unread[1:]))
+        return (), HopCheck(UNPROVEN, ended(capfirst(hop.unread)))
 
     served = ", ".join(served_at(context.request))
     port = served_port(context.request)
@@ -491,7 +493,7 @@ def _ingress(hop: Hop, context: _Context):
     chain = tuple(item for item in address_chain(request) if item.role == "proxy")
     evidence = chain + _forwarding_headers(hop, context)
     if hop.unread:
-        return evidence, HopCheck(UNPROVEN, ended(hop.unread[:1].upper() + hop.unread[1:]))
+        return evidence, HopCheck(UNPROVEN, ended(capfirst(hop.unread)))
     proxy = _proxy_name(hop)
     if not forwarded:
         return evidence, HopCheck(

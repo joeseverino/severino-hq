@@ -277,6 +277,24 @@ class RefusedRuleTests(SimpleTestCase):
         self.assertEqual(look.held_without_script_only("no_column_is_narrower_than_its_words"), [])
         self.assertEqual(look.held_without_script_only("no_block_breaks_a_paragraph"), [])
 
+    def test_naming_rules_reads_no_probe_the_survey_reads_only_as_it_runs(self):
+        """Such a probe reads what the image lacks (the lint tools), so the
+        image, and the composed suite, name every rule without it."""
+
+        from dataclasses import replace
+
+        from hq.platform.core.tests.browser import survey
+
+        def unread():
+            raise AssertionError("A probe the survey reads only as it runs was read to name a rule.")
+
+        lazy = {name: replace(check, probe=unread) for name, check in survey.CHECKS.items() if callable(check.probe)}
+        with mock.patch.dict(survey.CHECKS, lazy):
+            for rule in look._rules():
+                look.held_without_script_only(rule)
+            for check in [*survey.survey_checks("/", 0), "example-no-such-check"]:
+                look.no_rule(check)
+
     def test_a_name_that_is_no_check_names_no_gate_test(self):
         said = look.no_rule("example-no-such-check")
 

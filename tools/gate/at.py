@@ -576,7 +576,8 @@ def take_the_turn(typed: Typed) -> None:
         return
     # Whether it is narrow is asked in a process of its own, as tools/lib/heavy-turn.sh asks: the
     # settings it loads start a run, which the exec below would leave with nothing to remove it.
-    heavy = [sys.executable, "-m", "tools.gate.turn", *typed.args]
+    # It weighs the run this task makes: TEST's own options, then the developer's arguments.
+    heavy = [sys.executable, "-m", "tools.gate.turn", *TEST[2:], *typed.args]
     if typed.at is not None or typed.go or subprocess.call(heavy, cwd=ROOT):
         # A run at a ref builds a worktree and may run the suite there twice.
         command = [*in_turn("2h"), sys.executable, "-m", "tools.gate.at"]

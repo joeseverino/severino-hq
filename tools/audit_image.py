@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import IO, Any
 
+from django.utils.text import Truncator
+
 from tools.perf.table import aligned
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,7 +139,7 @@ def mb(size: float) -> str:
 def instruction(entry: dict[str, Any]) -> str:
     said = re.sub(r"\s+", " ", entry.get("created_by", "")).strip()
     said = re.sub(r"^/bin/sh -c (#\(nop\) )?", "", said).removesuffix(" # buildkit")
-    return said if len(said) <= 100 else said[:97] + "..."
+    return Truncator(said).chars(100, truncate="...")
 
 
 def run(command: list[str], timeout: int) -> str:

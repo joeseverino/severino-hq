@@ -12,7 +12,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 lazy from django.apps import apps
 lazy from django.urls import reverse
-lazy from django.utils.text import slugify
+lazy from django.utils.text import capfirst, slugify
 
 from hq.platform.application.roles import Role
 lazy from hq.platform.application.doors import Attribution
@@ -24,7 +24,7 @@ lazy from .audit import audited_labels
 
 @functools.cache
 def _model_labels() -> dict[str, str]:
-    return {model.__name__: _sentence(str(model._meta.verbose_name)) for model in reversed(apps.get_models())}
+    return {model.__name__: capfirst(str(model._meta.verbose_name)) for model in reversed(apps.get_models())}
 
 
 @functools.cache
@@ -36,7 +36,7 @@ def _model_plurals() -> dict[str, str]:
     """
 
     declared = {
-        model: _sentence(str(model._meta.verbose_name_plural))
+        model: capfirst(str(model._meta.verbose_name_plural))
         for model in reversed(apps.get_models())
         if "verbose_name_plural" in model._meta.original_attrs
     }
@@ -71,7 +71,7 @@ def object_type_label(stored: str) -> str:
     if words != stored:
         # Split from an identifier, so its later words are not proper nouns.
         words = words.lower()
-    return _sentence(words)
+    return capfirst(words)
 
 
 def object_type_plural(stored: str) -> str:
@@ -85,10 +85,6 @@ def object_type_plural(stored: str) -> str:
     if not stored:
         return ""
     return _model_plurals().get(stored) or plural(object_type_label(stored))
-
-
-def _sentence(text: str) -> str:
-    return text[:1].upper() + text[1:]
 
 
 class TimestampedModel(models.Model):

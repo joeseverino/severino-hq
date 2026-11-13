@@ -23,6 +23,7 @@ from pathlib import Path
 import django
 from django.conf import settings
 from django.core.management.commands.test import Command as TestCommand
+from django.test.runner import get_max_test_processes
 from django.test.utils import get_runner
 
 from hq.platform.core.test_runner import drives_a_browser, tests_in
@@ -127,9 +128,14 @@ def narrow(argv: list[str]) -> bool:
         # A serial run is one process however many tests it loads.
         if not serial and (not labels or any(map(names_a_tree, labels))):
             return False
-        # One suite, not a parallel run's partition of it, loaded without a word: the run says what it found.
-        runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": 1, "verbosity": 0}))
-        return not any(map(drives_a_browser, tests_in(runner.build_suite(labels))))
+        # The workers manage.py test asks for (its handle() resolves "auto" so),
+        # loaded without a word: the run says what it found.
+        workers = get_max_test_processes() if options["parallel"] == "auto" else options["parallel"]
+        runner = get_runner(settings, options["testrunner"])(**(options | {"parallel": workers, "verbosity": 0}))
+        suite = runner.build_suite(labels)
+        # build_suite cuts the workers to the test classes it found, as the run
+        # does, so more than one left is a parallel run, heavy however few its labels.
+        return runner.parallel <= 1 and not any(map(drives_a_browser, tests_in(suite)))
     except Exception, SystemExit:  # noqa: BLE001 - manage.py says what stopped it, in the turn
         # A serial run that cannot load its tests fails in one process, so it holds nothing heavy.
         return serial

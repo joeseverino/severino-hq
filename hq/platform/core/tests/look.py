@@ -61,8 +61,8 @@ from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
 from hq.platform.core.tests.browser.survey import (
     BUSY,
+    CHECKS,
     CLOSE_OPENED,
-    geometry_probes,
     open_every_fold,
     palette_probes,
     survey_checks,
@@ -869,7 +869,11 @@ def held_without_script_only(rule: str) -> list[int]:
     widths = LayoutBrowserTests.unscripted_rules().get(rule, [])
     if not widths or rule in _by_name():
         return []
-    surveyed = {source for source, _arg in [*geometry_probes().values(), *palette_probes().values()]}
+    # A rule's probes are fixed as its class is defined, so none is a probe
+    # the survey reads only when it runs (axe's, from the lint tools, which
+    # the image lacks): naming a rule reads none of those.
+    fixed = (check.probe for check in CHECKS.values() if not callable(check.probe))
+    surveyed = {probe[0] if isinstance(probe, tuple) else probe for probe in fixed}
     return widths if any(source not in surveyed for source, _arg in getattr(LayoutBrowserTests, rule).probes) else []
 
 

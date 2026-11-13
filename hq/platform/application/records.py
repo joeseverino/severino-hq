@@ -13,6 +13,7 @@ from typing import Any
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import transaction
 from django.forms import ModelForm
+from django.utils.text import capfirst
 
 from hq.platform.core.audit import audit_operation
 
@@ -150,7 +151,7 @@ def display_noun(records: Records) -> str:
     """What a message calls one record: "Content item", "Expense"."""
 
     name = records.title or records.noun
-    return f"{name[0].upper()}{name[1:]}"
+    return capfirst(name)
 
 
 @transaction.atomic
@@ -238,7 +239,7 @@ def _specs(records: Records) -> tuple[CapabilitySpec, ...]:
         ),
     )
     wording = {verb: (summary, label) for verb, summary, label in records.wording}
-    target_label = f"{title[0].upper()}{title[1:]} {_TARGET_NAMES[records.target]}"
+    target_label = f"{capfirst(title)} {_TARGET_NAMES[records.target]}"
     return tuple(
         CapabilitySpec(
             f"{records.noun}.{verb}",

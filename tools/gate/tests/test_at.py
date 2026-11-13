@@ -548,7 +548,15 @@ class MeasuredNarrowRunTests(GateTestCase):
             sub.call.return_value = 0 if narrow else 1
             at.take_the_turn(at.Typed(args=["example.tests"]))
             self.marker = os.environ.get(at.FOUND_NARROW)
+            self.asked = sub.call.call_args
         return execs, sub.call.called
+
+    def test_it_asks_of_the_run_it_makes(self):
+        """The run passes TEST's options before the developer's; weighed without its
+        --parallel, a run of a module reads as one process and skips the turn."""
+
+        self.take({"MISE_TASK_LOCKS": "", "HQ_MEASURED": ""})
+        self.assertEqual(self.asked.args[0][3:], [*at.TEST[2:], "example.tests"])
 
     def test_a_narrow_run_runs_again_under_the_measurer(self):
         environ = {"MISE_TASK_LOCKS": "", "HQ_MEASURED": ""}

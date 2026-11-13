@@ -1,11 +1,9 @@
 """Findings from what the AdGuard readings say: protection, filtering, upstreams, unused names.
 
 Read off the facts ``topology`` puts on each AdGuard connection node from
-``ObservationSpec.facts``. Detectors return a ``Finding``'s fields; ``RULES``
-declares each rule beside the detector that decides it.
+``ObservationSpec.facts``. ``RULES`` declares each rule beside the detector
+that decides it.
 """
-
-from typing import Any
 
 from hq.domains.control_plane.observations.adguard import (
     FILTERING_OFF,
@@ -15,74 +13,76 @@ from hq.domains.control_plane.observations.adguard import (
     UNUSED_AFTER_HOURS,
 )
 
-from .finding_model import FindingRule, built_findings
+from .finding_model import Finding, FindingEstate, FindingRule
+from .topology_model import TopologyNode
 from .ui import counted
 
 
-def _values(node: Any, key: str) -> tuple[str, ...]:
+def _values(node: TopologyNode, key: str) -> tuple[str, ...]:
     return tuple(dict.fromkeys(value for name, value in node.facts if name == key and value))
 
 
-def _connections(estate: Any):
+def _connections(estate: FindingEstate):
     return (node for node in estate.nodes() if node.kind == "connection")
 
 
-def _switched_off(fact: str, rule: str, setting: str, explanation: str):
-    """The detector for one AdGuard setting a connection reports off: a finding
-    per connection, named for the setting."""
+def _switched_off(estate: FindingEstate, fact: str, rule: str, setting: str, explanation: str) -> tuple[Finding, ...]:
+    """A finding per connection that reports one AdGuard setting off, named for the setting."""
 
-    def detect(estate: Any) -> tuple[dict[str, Any], ...]:
-        return tuple(
-            {
-                "rule": rule,
-                "subject": node.id,
-                "title": f"AdGuard {setting.lower()} is off on {node.label}",
-                "severity": "attention",
-                "explanation": explanation,
-                "evidence": ((setting, "Off"),),
-            }
-            for node in _connections(estate)
-            if _values(node, fact)
+    return tuple(
+        Finding(
+            rule=rule,
+            subject=node.id,
+            title=f"AdGuard {setting.lower()} is off on {node.label}",
+            severity="attention",
+            explanation=explanation,
+            evidence=((setting, "Off"),),
         )
-
-    return detect
-
-
-protection_off = _switched_off(
-    PROTECTION_OFF,
-    "dns-protection-off",
-    "Protection",
-    "AdGuard is answering every lookup without blocklists, safe browsing or client rules.",
-)
-filtering_off = _switched_off(FILTERING_OFF, "dns-filtering-off", "Filtering", "No blocklist applies to any lookup.")
+        for node in _connections(estate)
+        if _values(node, fact)
+    )
 
 
-def plain_upstream(estate: Any) -> tuple[dict[str, Any], ...]:
+def protection_off(estate: FindingEstate) -> tuple[Finding, ...]:
+    return _switched_off(
+        estate,
+        PROTECTION_OFF,
+        "dns-protection-off",
+        "Protection",
+        "AdGuard is answering every lookup without blocklists, safe browsing or client rules.",
+    )
+
+
+def filtering_off(estate: FindingEstate) -> tuple[Finding, ...]:
+    return _switched_off(estate, FILTERING_OFF, "dns-filtering-off", "Filtering", "No blocklist applies to any lookup.")
+
+
+def plain_upstream(estate: FindingEstate) -> tuple[Finding, ...]:
     found = []
     for node in _connections(estate):
         hosts = _values(node, PLAIN_UPSTREAM)
         if not hosts:
             continue
         found.append(
-            {
-                "rule": "dns-plain-upstream",
-                "subject": node.id,
-                "title": (
+            Finding(
+                rule="dns-plain-upstream",
+                subject=node.id,
+                title=(
                     f"AdGuard on {node.label} sends lookups to "
                     f"{', '.join(hosts) if len(hosts) <= 2 else counted(len(hosts), 'server')} "
                     "unencrypted"
                 ),
-                "severity": "neutral",
-                "explanation": (
+                severity="neutral",
+                explanation=(
                     "Your internet provider, and anyone else on the way, can see every name your devices look up."
                 ),
-                "evidence": tuple(("Unencrypted server", host) for host in hosts),
-            }
+                evidence=tuple(("Unencrypted server", host) for host in hosts),
+            )
         )
-    return tuple(sorted(found, key=lambda finding: finding["title"]))
+    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
-def unused_names(estate: Any) -> tuple[dict[str, Any], ...]:
+def unused_names(estate: FindingEstate) -> tuple[Finding, ...]:
     """A name AdGuard rewrites that no device looked up over the window.
 
     On the service's node when HQ lists the name as a service, else on the
@@ -90,23 +90,22 @@ def unused_names(estate: Any) -> tuple[dict[str, Any], ...]:
     """
 
     services = {node.label: node.id for node in estate.nodes() if node.kind == "service"}
-    found = []
-    for node in _connections(estate):
-        found.extend(
-            {
-                "rule": "dns-name-unused",
-                "subject": services.get(name, node.id),
-                "title": f"No device looked up {name}",
-                "severity": "neutral",
-                "explanation": (
-                    "AdGuard has a record for it, and no device asked for it in "
-                    f"the time AdGuard's query log covers, {UNUSED_AFTER_HOURS} hours or more."
-                ),
-                "evidence": (("Name", name), ("Read from", node.label)),
-            }
-            for name in _values(node, NAME_UNUSED)
+    found = [
+        Finding(
+            rule="dns-name-unused",
+            subject=services.get(name, node.id),
+            title=f"No device looked up {name}",
+            severity="neutral",
+            explanation=(
+                "AdGuard has a record for it, and no device asked for it in "
+                f"the time AdGuard's query log covers, {UNUSED_AFTER_HOURS} hours or more."
+            ),
+            evidence=(("Name", name), ("Read from", node.label)),
         )
-    return tuple(sorted(found, key=lambda finding: finding["title"]))
+        for node in _connections(estate)
+        for name in _values(node, NAME_UNUSED)
+    ]
+    return tuple(sorted(found, key=lambda finding: finding.title))
 
 
 _CANNOT_SWITCH_ON = "HQ cannot switch it on."
@@ -116,7 +115,7 @@ RULES: tuple[FindingRule, ...] = (
         name="dns-protection-off",
         title="DNS protection is off",
         severity="attention",
-        detect=lambda estate, detect=protection_off: built_findings(detect(estate)),
+        detect=protection_off,
         operator_action="Turn protection back on in AdGuard.",
         no_help_reason=_CANNOT_SWITCH_ON,
     ),
@@ -124,7 +123,7 @@ RULES: tuple[FindingRule, ...] = (
         name="dns-filtering-off",
         title="DNS filtering is off",
         severity="attention",
-        detect=lambda estate, detect=filtering_off: built_findings(detect(estate)),
+        detect=filtering_off,
         operator_action="Turn filtering on under Filters, DNS blocklists in AdGuard.",
         no_help_reason=_CANNOT_SWITCH_ON,
     ),
@@ -132,7 +131,7 @@ RULES: tuple[FindingRule, ...] = (
         name="dns-plain-upstream",
         title="DNS lookups sent unencrypted",
         severity="neutral",
-        detect=lambda estate, detect=plain_upstream: built_findings(detect(estate)),
+        detect=plain_upstream,
         operator_action=(
             "Replace each one with its DNS-over-TLS or DNS-over-HTTPS address under Settings, DNS settings in AdGuard."
         ),
@@ -142,7 +141,7 @@ RULES: tuple[FindingRule, ...] = (
         name="dns-name-unused",
         title="A name nothing looks up",
         severity="neutral",
-        detect=lambda estate, detect=unused_names: built_findings(detect(estate)),
+        detect=unused_names,
         operator_action=(
             "If nothing uses it, remove the service. If something should, check that device uses AdGuard for DNS."
         ),

@@ -143,10 +143,10 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", str(TAILNET[0])])
     def test_trusting_the_whole_range_is_reported_with_what_the_tailnet_uses(self):
-        from hq.platform.application.tailnet_findings import _trusted_wider_than_tailnet
+        from hq.platform.application.trusted_networks import wider_than_tailnet
 
         (finding,) = self._findings(
-            _trusted_wider_than_tailnet,
+            wider_than_tailnet,
             ("tailnet-address", "100.64.0.1"),
             ("tailnet-address", "100.64.0.2"),
             ("tailnet-route", "192.0.2.0/24"),
@@ -166,10 +166,10 @@ class TailnetClaimTests(TestCase):
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["127.0.0.0/8", "::1/128", *map(str, TAILNET)])
     def test_both_families_are_narrowed_to_device_hosts_and_loopback_is_kept(self):
-        from hq.platform.application.tailnet_findings import _trusted_wider_than_tailnet
+        from hq.platform.application.trusted_networks import wider_than_tailnet
 
         (finding,) = self._findings(
-            _trusted_wider_than_tailnet,
+            wider_than_tailnet,
             ("tailnet-address", "fd7a:115c:a1e0::2"),
             ("tailnet-address", "100.64.0.1"),
             ("tailnet-address", "fd7a:115c:a1e0::1"),
@@ -185,7 +185,7 @@ class TailnetClaimTests(TestCase):
         self.assertNotIn(str(TAILNET[1]), finding.steps[0].command)
 
     def test_only_a_wide_range_a_device_address_falls_in_is_narrowed(self):
-        from hq.platform.application.tailnet_findings import _trusted_wider_than_tailnet
+        from hq.platform.application.trusted_networks import wider_than_tailnet
 
         cases = (
             (["::1/128", str(TAILNET[1])], ("100.64.0.1", "fd7a:115c:a1e0::1"), "::1/128,fd7a:115c:a1e0::1/128"),
@@ -194,34 +194,34 @@ class TailnetClaimTests(TestCase):
         for trusted, addresses, narrowed in cases:
             with self.subTest(trusted=trusted), override_settings(SEVERINO_TRUSTED_NETWORKS=trusted):
                 (finding,) = self._findings(
-                    _trusted_wider_than_tailnet, *(("tailnet-address", address) for address in addresses)
+                    wider_than_tailnet, *(("tailnet-address", address) for address in addresses)
                 )
 
                 self.assertEqual(finding.steps[0].command, f"SEVERINO_TRUSTED_NETWORKS={narrowed}")
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=["not a network", str(TAILNET[0])])
     def test_an_invalid_trusted_entry_is_skipped_not_raised(self):
-        from hq.platform.application.tailnet_findings import _trusted_wider_than_tailnet
+        from hq.platform.application.trusted_networks import wider_than_tailnet
 
-        (finding,) = self._findings(_trusted_wider_than_tailnet, ("tailnet-address", "100.64.0.1"))
+        (finding,) = self._findings(wider_than_tailnet, ("tailnet-address", "100.64.0.1"))
 
         self.assertTrue(finding.steps[0].command.endswith("100.64.0.1/32"))
 
     def test_trust_already_narrowed_claims_nothing(self):
-        from hq.platform.application.tailnet_findings import _trusted_wider_than_tailnet
+        from hq.platform.application.trusted_networks import wider_than_tailnet
 
         for trusted, address in (
             (["127.0.0.0/8", "100.64.0.1/32"], "100.64.0.1"),
             (["::1/128", "fd7a:115c:a1e0::1/128"], "fd7a:115c:a1e0::1"),
         ):
             with self.subTest(trusted=trusted), override_settings(SEVERINO_TRUSTED_NETWORKS=trusted):
-                self.assertEqual(self._findings(_trusted_wider_than_tailnet, ("tailnet-address", address)), ())
+                self.assertEqual(self._findings(wider_than_tailnet, ("tailnet-address", address)), ())
 
     @override_settings(SEVERINO_TRUSTED_NETWORKS=[str(TAILNET[0])])
     def test_without_a_device_reading_nothing_is_claimed(self):
-        from hq.platform.application.tailnet_findings import _trusted_wider_than_tailnet
+        from hq.platform.application.trusted_networks import wider_than_tailnet
 
-        self.assertEqual(self._findings(_trusted_wider_than_tailnet), ())
+        self.assertEqual(self._findings(wider_than_tailnet), ())
 
 
 class TailnetFactTests(TestCase):

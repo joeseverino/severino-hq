@@ -10829,6 +10829,112 @@
         },
         "type": "object"
       },
+      "FindingFacts": {
+        "additionalProperties": false,
+        "description": "What a finding says the same at every door: what it is about, what it\nrests on, and what the operator does by hand. Each door adds its actions.",
+        "properties": {
+          "affected_scopes": {
+            "description": "Other record types or reading types it bears on.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "description": "What it rests on, a labeled line each.",
+            "items": {
+              "$ref": "#/components/schemas/FindingEvidence"
+            },
+            "type": "array"
+          },
+          "explanation": {
+            "description": "Why it matters and what it rests on, in sentences.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The problem's id, the same at every read while it is open; its workflow's outcome names it.",
+            "type": "string"
+          },
+          "no_help_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why HQ can neither run a fix nor name an exact command for it; null when it can do either."
+          },
+          "operator_steps": {
+            "description": "What you do by hand to resolve it, in order. HQ never runs these.",
+            "items": {
+              "$ref": "#/components/schemas/OperatorStep"
+            },
+            "type": "array"
+          },
+          "rule": {
+            "description": "The rule that found it, as the `rule` filter takes it.",
+            "type": "string"
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The record type, reading type or check it is about as a whole; null when it has none."
+          },
+          "severity": {
+            "description": "How serious it is: `serious`, `attention`, `neutral` or `good`, most severe first.",
+            "type": "string"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it was first seen open, an ISO 8601 instant; null where no read has recorded it."
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The id of the map node it is about. Null when it is about a whole type or check."
+          },
+          "title": {
+            "description": "The problem, in a line.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "rule",
+          "subject",
+          "scope",
+          "affected_scopes",
+          "title",
+          "severity",
+          "explanation",
+          "evidence",
+          "operator_steps",
+          "no_help_reason",
+          "since"
+        ],
+        "type": "object"
+      },
       "Findings": {
         "additionalProperties": false,
         "description": "What ``findings`` answers.",
@@ -13953,6 +14059,14 @@
         ],
         "type": "object"
       },
+      "PlanId": {
+        "description": "The plan's id, the same at every read of the problem it resolves.",
+        "type": "string"
+      },
+      "PlanLabel": {
+        "description": "The plan's heading, such as `Next steps`.",
+        "type": "string"
+      },
       "PlaybookFact": {
         "additionalProperties": false,
         "properties": {
@@ -15723,6 +15837,10 @@
         },
         "type": "object"
       },
+      "RemedyEffect": {
+        "description": "What running it does, in its command's own terms: `read`, `remote_write` or `infrastructure_change`. A `destructive` one is never suggested.",
+        "type": "string"
+      },
       "RenewalAllowed": {
         "additionalProperties": false,
         "description": "That the renewal is allowed, and why.",
@@ -16622,26 +16740,16 @@
         "description": "One finding as the API answers it; MCP's `get_findings` makes its actions tool calls.",
         "properties": {
           "affected_scopes": {
-            "description": "Other record types or reading types it bears on.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/FindingFacts/properties/affected_scopes"
           },
           "evidence": {
-            "description": "What it rests on, a labeled line each.",
-            "items": {
-              "$ref": "#/components/schemas/FindingEvidence"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/FindingFacts/properties/evidence"
           },
           "explanation": {
-            "description": "Why it matters and what it rests on, in sentences.",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingFacts/properties/explanation"
           },
           "id": {
-            "description": "The problem's id, the same at every read while it is open; its workflow's outcome names it.",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingFacts/properties/id"
           },
           "investigations": {
             "description": "Where on the map to look around its subject: its neighborhood and what it affects.",
@@ -16651,15 +16759,7 @@
             "type": "array"
           },
           "no_help_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Why HQ can neither run a fix nor name an exact command for it; null when it can do either."
+            "$ref": "#/components/schemas/FindingFacts/properties/no_help_reason"
           },
           "offers": {
             "description": "Reads of its subject this reader may run before acting.",
@@ -16669,11 +16769,7 @@
             "type": "array"
           },
           "operator_steps": {
-            "description": "What you do by hand to resolve it, in order. HQ never runs these.",
-            "items": {
-              "$ref": "#/components/schemas/OperatorStep"
-            },
-            "type": "array"
+            "$ref": "#/components/schemas/FindingFacts/properties/operator_steps"
           },
           "remedies": {
             "description": "The commands that would fix it which this reader may run, none of them destructive.",
@@ -16683,49 +16779,22 @@
             "type": "array"
           },
           "rule": {
-            "description": "The rule that found it, as the `rule` filter takes it.",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingFacts/properties/rule"
           },
           "scope": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The record type, reading type or check it is about as a whole; null when it has none."
+            "$ref": "#/components/schemas/FindingFacts/properties/scope"
           },
           "severity": {
-            "description": "How serious it is: `serious`, `attention`, `neutral` or `good`, most severe first.",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingFacts/properties/severity"
           },
           "since": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "When it was first seen open, an ISO 8601 instant; null where no read has recorded it."
+            "$ref": "#/components/schemas/FindingFacts/properties/since"
           },
           "subject": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The id of the map node it is about. Null when it is about a whole type or check."
+            "$ref": "#/components/schemas/FindingFacts/properties/subject"
           },
           "title": {
-            "description": "The problem, in a line.",
-            "type": "string"
+            "$ref": "#/components/schemas/FindingFacts/properties/title"
           },
           "workflow": {
             "anyOf": [
@@ -17021,6 +17090,22 @@
         ],
         "type": "object"
       },
+      "StepLabel": {
+        "description": "The step's heading; empty for an instruction its summary says alone.",
+        "type": "string"
+      },
+      "StepPhase": {
+        "description": "What the step is: `act` runs a remedy, `verify` checks it worked, `run` is an exact command the operator runs, `do` an instruction in words, `cannot` why it cannot be done from HQ.",
+        "type": "string"
+      },
+      "StepState": {
+        "description": "Where it stands: `recommended` to do now, `after_action` once the step before is done, `available` at any time, `operator` for you to do by hand, `blocked` where it cannot be done.",
+        "type": "string"
+      },
+      "StepSummary": {
+        "description": "The step in full: the command of a `run` step, the instruction of a `do` step, the reason of a `cannot` step. Empty when its label says it.",
+        "type": "string"
+      },
       "Success": {
         "additionalProperties": false,
         "properties": {
@@ -17051,8 +17136,7 @@
             "type": "string"
           },
           "effect": {
-            "description": "What running it does, in its command's own terms: `read`, `remote_write` or `infrastructure_change`. A `destructive` one is never suggested.",
-            "type": "string"
+            "$ref": "#/components/schemas/RemedyEffect"
           },
           "label": {
             "description": "What running it does here, in the remedy's own words or its command's.",
@@ -18540,12 +18624,10 @@
         "description": "A contextual route from evidence to action to observed resolution.",
         "properties": {
           "id": {
-            "description": "The plan's id, the same at every read of the problem it resolves.",
-            "type": "string"
+            "$ref": "#/components/schemas/PlanId"
           },
           "label": {
-            "description": "The plan's heading, such as `Next steps`.",
-            "type": "string"
+            "$ref": "#/components/schemas/PlanLabel"
           },
           "outcome": {
             "$ref": "#/components/schemas/WorkflowOutcome"
@@ -18573,20 +18655,16 @@
             "type": "array"
           },
           "label": {
-            "description": "The step's heading; empty for an instruction its summary says alone.",
-            "type": "string"
+            "$ref": "#/components/schemas/StepLabel"
           },
           "phase": {
-            "description": "What the step is: `act` runs a remedy, `verify` checks it worked, `run` is an exact command the operator runs, `do` an instruction in words, `cannot` why it cannot be done from HQ.",
-            "type": "string"
+            "$ref": "#/components/schemas/StepPhase"
           },
           "state": {
-            "description": "Where it stands: `recommended` to do now, `after_action` once the step before is done, `available` at any time, `operator` for you to do by hand, `blocked` where it cannot be done.",
-            "type": "string"
+            "$ref": "#/components/schemas/StepState"
           },
           "summary": {
-            "description": "The step in full: the command of a `run` step, the instruction of a `do` step, the reason of a `cannot` step. Empty when its label says it.",
-            "type": "string"
+            "$ref": "#/components/schemas/StepSummary"
           }
         },
         "type": "object"
