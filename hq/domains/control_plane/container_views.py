@@ -19,12 +19,14 @@ def container_detail(resource: Any, request: Any) -> dict[str, Any]:
     doing and which services reach it (``container_context``), then whether
     what it runs is current and safe, how it is run, and what upgrading it
     would take: the same objects the containers page and the containers and
-    upgrades resources serve, so none can disagree."""
+    upgrades resources serve, so none can disagree. One shape whether or not
+    it runs, each part None or empty when nothing does, so no reader indexes a
+    key only a running container has."""
 
     found = container_context(resource.spec.get("host", ""), resource.spec.get("name", ""))
     running, machine = found.get("running"), found.get("machine")
     if running is None:
-        return found
+        return {**found, "standing": None, "item": None, "plan": None, "readiness": None, "edit_url": ""}
     host = machine.name if machine is not None else resource.spec.get("host", "")
     item = next(
         (each for each in containers() if each.machine.name == host and each.running.name == running.name),

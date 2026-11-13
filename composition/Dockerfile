@@ -14,8 +14,8 @@ ARG HQ_IMAGE=scratch
 # mise.lock, which refuses a download whose checksum differs from it (as the
 # host image's tools stage does, with the same mise). mise.toml reads Go's
 # release from go.mod, so mise cannot load it without that file.
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.11.2@sha256:39cd8aad519a3dbc860eceb64dfd8cb5efe4cdbb8ad741a6867b544b2787b79c /usr/local/bin/mise /usr/local/bin/mise
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS tools
+COPY --from=ghcr.io/jdx/mise:2026.11.5@sha256:3beda11ba592da44277cac15061103b844c69420a55cb5c41694dc4f2734d0cb /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
@@ -25,7 +25,7 @@ RUN mise install uv ast-grep \
     && install -D "$(mise which ast-grep)" /opt/bin/ast-grep
 
 # The installer uses the same Python ABI as HQ.
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS installer-base
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS installer-base
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The extension check's scan of a package's source (tools/pipeline/check-plugin.sh),
 # which Compose runs in this base. The installer stage after it ships only

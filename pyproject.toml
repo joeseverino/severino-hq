@@ -162,10 +162,10 @@ tools = [
     "django-stubs==6.1.2",
     # Writes the served font from its source (tools/fonts), and the font tests read it.
     "fonttools==4.68.0",
-    "hypothesis==6.170.14",
+    "hypothesis==6.170.15",
     # Holds the layering contracts in [tool.importlinter] (lint:imports); its
     # graph, grimp, counts the imports between the layers (audit:layers).
-    "import-linter==2.15",
+    "import-linter==2.16",
     "mypy==2.4.1",
     "ruff==0.17.4",
     # Holds the clock still while the API examples are recorded (fix:api-examples).
@@ -240,6 +240,8 @@ check-typed-exception = true
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
 
 [tool.ruff.lint.per-file-ignores]
+# OperationRequest distinguishes unknown legacy attribution (NULL) from a machine's known empty person key.
+"hq/domains/control_plane/models.py" = ["DJ001"]
 # A synthetic extension standing in for a separate package, outside the host's product code.
 "tests/fixtures/example_hq_plugin/registry.py" = ["TID251"]
 # vulture's whitelist is attribute reads that do nothing, which vulture counts as uses.

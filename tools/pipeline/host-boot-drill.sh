@@ -31,7 +31,7 @@ lib=/usr/local/lib/severino-hq
 secrets=/run/severino-hq-secrets/web
 env_file="$secrets/severino_hq_env"
 registry=severino-hq-drill-registry
-registry_image=registry:3@sha256:ddf754342cfc8acc51a56d5d0ab6af06826461864460636d8bd5c546dab2a7b8
+registry_image=registry:3@sha256:38907510915c3f1604c7e83d6ab602ab3020d092f73bdaed8696773693ff768c
 dropin=/etc/systemd/system/severino-hq-web.service.d
 sandbox=/etc/systemd/system/severino-hq-.service.d
 

@@ -90,6 +90,21 @@ In Pocket ID, **Administration → APIs**:
    at the deploy of any release that adds a capability: Pocket ID refuses a
    sign-in that asks for a permission it does not list.
 
+For a machine client that needs only selected permissions already registered on
+this API, use `--machine-grant` with `--permissions` instead of `--grant`:
+
+```sh
+POCKET_ID_API_KEY='op://Example Vault/pocket-id/credential' \
+  op run -- mise run wire-pocket-id --pocket-id https://id.example.com \
+  --resource https://hq.example.com/api --machine-grant example-client --permissions read
+```
+
+This replaces only that client's machine grant with the exact comma-separated
+permission names. It leaves the API catalog and the client's delegated grant
+unchanged, refuses unknown or duplicate names and `own_device`, and refuses
+reusing a client registered as a person's own device. Without the admin key it
+changes nothing.
+
 The permission keys are HQ's capability names on purpose. A mapping table
 between the two systems would be a third home for the authorization model and
 the first thing to go stale when a plugin adds a capability, which is why the
@@ -743,7 +758,9 @@ Every tool but `execute_capability` and `export_year_summary` is
 `readOnlyHint` and closed-world (`openWorldHint: false`), which a client may
 use to call reads without asking or side by side, and a test calls each one
 and holds it to writing no row. `export_year_summary` records the export in
-the audit log, so it is closed-world, `idempotentHint` and not
+the audit log and includes only public and internal documentation, including
+the document IDs linked from content. Browser downloads retain the complete
+documentation index. The export is closed-world, `idempotentHint` and not
 `destructiveHint`, and never `readOnlyHint`. `execute_capability` runs any capability, so it states the
 spec's worst case for a write (`destructiveHint` and `openWorldHint`), and
 `idempotentHint`, because every call that changes anything carries a retry key:

@@ -32,7 +32,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.11.2"
+min_version = "2026.11.5"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -90,7 +90,7 @@ vale = "3.26.0"
 # Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
 # counts Ruff has no rule for (audit:ast).
 ast-grep = "0.51.1"
-yq = "4.54.1"
+yq = "4.54.3"
 jq = "1.8.2"
 uv = "0.13.7"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
@@ -117,7 +117,7 @@ cosign = { version = "3.1.4", lazy = true }
 # Known advisories in the npm tools' lock and the controller's modules, the
 # Go ones judged by whether the controller calls the vulnerable code
 # (lint:audit). Lazy, as age is.
-osv-scanner = { version = "2.7.0", lazy = true }
+osv-scanner = { version = "2.7.1", lazy = true }
 # Reads the names templates, strings and other languages' files hand to Python,
 # which vulture cannot see (audit:dead). Lazy, as age is.
 ripgrep = { version = "15.2.0", lazy = true }

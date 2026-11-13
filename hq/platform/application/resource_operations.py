@@ -361,6 +361,7 @@ def _queue_operation(
         requested_actor=principal.actor,
         requested_interface=principal.interface,
         requested_device=principal.device,
+        requested_person_key=principal.person_key,
         reason=command.reason,
         # Who asked stays who asked. Where a person had to agree before this
         # could be queued, that is recorded beside the request rather than in

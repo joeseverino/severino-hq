@@ -9,8 +9,8 @@
 # mise.toml reads Go's release from go.mod, so mise loads neither without it.
 # mise is the release min_version names, from its image by digest
 # (lint:toolchain holds the tag to min_version).
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.11.2@sha256:39cd8aad519a3dbc860eceb64dfd8cb5efe4cdbb8ad741a6867b544b2787b79c /usr/local/bin/mise /usr/local/bin/mise
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS tools
+COPY --from=ghcr.io/jdx/mise:2026.11.5@sha256:3beda11ba592da44277cac15061103b844c69420a55cb5c41694dc4f2734d0cb /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
@@ -20,7 +20,7 @@ RUN mise install go uv \
     && install -D "$(mise which uv)" /opt/bin/uv
 
 
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS build
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS build
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
@@ -100,7 +100,7 @@ FROM scratch AS programs
 COPY --from=controller /out/ /
 
 
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS runtime
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base

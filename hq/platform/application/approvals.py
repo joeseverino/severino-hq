@@ -374,7 +374,10 @@ def asked_by(approval_id: str, *, principal: Principal) -> ApprovalRequest | Non
 
     try:
         return ApprovalRequest.objects.filter(
-            pk=approval_id, requested_actor=principal.actor, requested_interface=principal.interface
+            pk=approval_id,
+            requested_actor=principal.actor,
+            requested_interface=principal.interface,
+            requested_person_key=principal.person_key,
         ).first()
     except ValueError, DjangoValidationError:
         return None
@@ -479,7 +482,11 @@ def pending(*, principal: Principal, limit: int | None = 50) -> tuple[ApprovalRe
     principal.require(Capability.READ)
     waiting = ApprovalRequest.objects.filter(state=ApprovalRequest.State.PENDING, expires_at__gt=derivations.clock())
     if not reads_every_hold(principal):
-        waiting = waiting.filter(requested_actor=principal.actor, requested_interface=principal.interface)
+        waiting = waiting.filter(
+            requested_actor=principal.actor,
+            requested_interface=principal.interface,
+            requested_person_key=principal.person_key,
+        )
     waiting = tuple(waiting.order_by("created_at")[:limit])
     # The answer changes as the first of them expires.
     for held in waiting:

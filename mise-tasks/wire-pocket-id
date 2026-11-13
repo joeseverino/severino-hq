@@ -5,6 +5,8 @@
 #USAGE flag "--pocket-id <url>" help="The Pocket ID to write to, https://<host>"
 #USAGE flag "--resource <uri>" env="SEVERINO_API_RESOURCE" help="HQ's API in Pocket ID, by its resource (SEVERINO_API_RESOURCE)"
 #USAGE flag "--grant <client>" help="Also give this client every permission but own_device, delegated by a signed-in person"
+#USAGE flag "--machine-grant <client>" help="Set only this client's machine permissions on the existing API; do not replace the API catalog"
+#USAGE flag "--permissions <keys>" help="Exact comma-separated permissions for --machine-grant; own_device is refused"
 set -eu
 
 # The list is the catalog of the extension set mise.local.toml names, as

@@ -125,24 +125,32 @@ class Run:
         return answer
 
 
-def wire(run: Run, permissions: Sequence[Permission]) -> None:
-    for permission in permissions:
-        print(f"{permission.key}\t{permission.name}\t{permission.description}", file=run.out)
-    client = run.usage.text("grant")
+def check_grant_flags(client: str, machine: str, scopes: str) -> None:
+    """Refuse a grant request that mixes the two modes or names an invalid client id."""
+
+    if machine and client:
+        raise UsageError("Choose --grant or --machine-grant, never both.")
+    if bool(machine) != bool(scopes):
+        raise UsageError("--machine-grant and --permissions are required together.")
+    if machine and not _CLIENT.fullmatch(machine):
+        raise UsageError("A Pocket ID client id is letters, digits, dots, hyphens and underscores.")
     if client and not _CLIENT.match(client):
         raise UsageError("A Pocket ID client id is letters, digits, dots, hyphens and underscores.")
-    if not run.environ.get(KEY_VARIABLE):
-        run.say(f"Nothing changed. Set {KEY_VARIABLE} to a Pocket ID admin's API key (op run) to write this list.")
-        return
-    resource = run.usage.text("resource")
-    if not run.usage.text("pocket_id") or not resource:
-        raise UsageError("--pocket-id and --resource name the Pocket ID and the API to write to.")
+
+
+def find_api(run: Run, resource: str) -> dict[str, Any]:
+    """The one Pocket ID API whose resource is the one named."""
 
     found = run.call("GET", "/apis?" + urlencode({"search": resource, "pagination[limit]": 100}), "the API listing")
     apis = [api for api in found.get("data") or () if isinstance(api, dict) and api.get("resource") == resource]
     if len(apis) != 1:
         raise Refused(f"Pocket ID has no API whose resource is {resource}: create it first (docs/API.md).")
-    api = apis[0]
+    return apis[0]
+
+
+def write_catalog(run: Run, api: Mapping[str, Any], resource: str, permissions: Sequence[Permission]) -> dict[Any, Any]:
+    """Replace the API's permission list and return the ids Pocket ID holds for it."""
+
     before = {p.get("key") for p in api.get("permissions") or ()}
     body = {"permissions": [permission.body() for permission in permissions]}
     written = run.call("PUT", f"/apis/{api['id']}/permissions", "the permission list", body)
@@ -152,8 +160,57 @@ def wire(run: Run, permissions: Sequence[Permission]) -> None:
     run.say(f"Wrote {len(ids)} permissions to {api.get('name')} ({resource}).")
     if removed := sorted(str(key) for key in before - set(ids)):
         run.say(f"Removed: {', '.join(removed)}")
+    return ids
+
+
+def wire(run: Run, permissions: Sequence[Permission]) -> None:
+    for permission in permissions:
+        print(f"{permission.key}\t{permission.name}\t{permission.description}", file=run.out)
+    client = run.usage.text("grant")
+    machine = run.usage.text("machine_grant")
+    scopes = run.usage.text("permissions")
+    check_grant_flags(client, machine, scopes)
+    if not run.environ.get(KEY_VARIABLE):
+        run.say(f"Nothing changed. Set {KEY_VARIABLE} to a Pocket ID admin's API key (op run) to write this list.")
+        return
+    resource = run.usage.text("resource")
+    if not run.usage.text("pocket_id") or not resource:
+        raise UsageError("--pocket-id and --resource name the Pocket ID and the API to write to.")
+
+    api = find_api(run, resource)
+    if machine:
+        machine_grant(run, machine, api, scopes)
+        return
+    ids = write_catalog(run, api, resource, permissions)
     if client:
         grant(run, client, api["id"], ids, permissions)
+
+
+def machine_grant(run: Run, client: str, api: Mapping[str, Any], requested: str) -> None:
+    """Replace one machine's grant using existing permission ids, without changing the API catalog."""
+
+    scopes = requested.split(",")
+    ids = {p["key"]: p["id"] for p in api.get("permissions") or ()}
+    if not all(scopes) or len(scopes) != len(set(scopes)) or set(scopes) - set(ids):
+        raise UsageError("--permissions must name distinct permissions already registered on this API.")
+    if DEVICE_SCOPE in scopes:
+        raise UsageError("A machine must never hold own_device.")
+    held = run.call("GET", f"/api-access/{client}/apis", f"{client}'s grants")
+    current = next((g for g in held if (g.get("api") or {}).get("id") == api["id"]), {})
+    delegated = list(current.get("userDelegatedPermissionIds") or ())
+    if ids.get(DEVICE_SCOPE) in delegated:
+        raise Refused("This client is registered as a person's own device; use a dedicated agent client.")
+    selected = [ids[scope] for scope in scopes]
+    body = {
+        "clientAccess": True,
+        "clientPermissionIds": selected,
+        "userDelegatedAccess": bool(current.get("userDelegatedAccess")),
+        "userDelegatedPermissionIds": delegated,
+    }
+    applied = run.call("PUT", f"/apis/{api['id']}/clients/{client}", f"{client}'s machine grant", body)
+    if not applied.get("clientAccess") or set(applied.get("clientPermissionIds") or ()) != set(selected):
+        raise Refused("Pocket ID did not apply the exact machine grant; read it under Administration, APIs.")
+    run.say(f"{client}'s machine grant is exactly: {', '.join(scopes)}. The API catalog was not changed.")
 
 
 def grant(run: Run, client: str, api: str, ids: Mapping[str, str], permissions: Sequence[Permission]) -> None:
