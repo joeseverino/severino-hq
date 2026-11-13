@@ -7,6 +7,7 @@ same part in a toast's placement (``.messages``), never a second part.
 
 from django import template
 
+from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.templatetags.value_tags import slotted
 
 register = template.Library()
@@ -28,7 +29,7 @@ TONES = {
 def notice_frame(name: str, given: dict) -> dict:
     """What the partial draws from what a page gave: the classes of its tone,
     the live region it is (an error interrupts, anything else waits its turn)
-    and its ``data-`` attributes, True drawn bare."""
+    and its ``data-`` attributes."""
 
     tone = given.get("tone") or ""
     if tone not in TONES:
@@ -37,11 +38,9 @@ def notice_frame(name: str, given: dict) -> dict:
         "classes": " ".join((TONES[tone], given.get("css") or "")).strip(),
         "role": "alert" if tone == "error" else "status",
         "title": given.get("title") or "",
-        "data": [
-            (option.replace("_", "-"), value)
-            for option, value in given.items()
-            if option.startswith("data_") and value is not None and value is not False and value != ""
-        ],
+        "data": html_attributes(
+            {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
+        ),
     }
 
 

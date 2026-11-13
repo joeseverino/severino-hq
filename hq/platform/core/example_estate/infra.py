@@ -142,7 +142,14 @@ def connections():
                 answering(ADGUARD, "adguard", f"http://{LAN}:3080", f"{len(SERVICES)} rewrites."),
                 answering(TAILSCALE, "tailscale", "https://api.tailscale.com", "3 devices."),
                 answering(SSH, "ssh", f"{MACHINE}:22", "Host key matches.", [MACHINE]),
-                answering(GITHUB, "github_app", "https://api.github.com", f"{len(work.REPOSITORIES)} repositories."),
+                # The accounts the app is installed on, as the controller's probe reports them.
+                answering(
+                    GITHUB,
+                    "github_app",
+                    "https://api.github.com",
+                    f"{len(work.REPOSITORIES)} repositories.",
+                    ["example"],
+                ),
                 answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
             ],
             principal=cli_principal(),

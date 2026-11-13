@@ -356,10 +356,23 @@ def _serves(hostname: str, names, claim: Claim, served_with: frozenset[str]) -> 
     return certificate_covers(hostname, names) and (not served_with or claim.resource_key in served_with)
 
 
+def served_here(origin: Origin | None) -> bool:
+    """Whether a certificate HQ holds can be what the name is served with.
+
+    A name served somewhere HQ does not reach (a CNAME to a hosted page) is
+    served with that host's certificate, whatever names HQ's own cover.
+    """
+
+    return origin is None or not origin.external
+
+
 def certificates_serving(hostname: str) -> tuple[str, ...]:
     """The declared certificates a name is served with, by key. Read once per projection."""
 
     wanted = normalized_hostname(hostname)
+    service = find_service(wanted)
+    if service is not None and not served_here(service.origin):
+        return ()
     found = declarations()
     covering, served_with = found.covering, found.served_with
     named = served_with.get(wanted, frozenset())
@@ -535,6 +548,7 @@ def _assemble(
         else None
     )
     context = name_context(hostname)
+    certified_here = served_here(origin)
     # A container declaration names a machine and a container, not a hostname,
     # so nothing else ties it to the name it serves. The origin resolves both
     # halves, which is the tie.
@@ -548,7 +562,7 @@ def _assemble(
             + tuple(
                 claim
                 for covered_facet, names, claim in covering
-                if covered_facet == facet_id and _serves(hostname, names, claim, served_with)
+                if covered_facet == facet_id and certified_here and _serves(hostname, names, claim, served_with)
             ),
             observed=_observed(facet_id, origin, estate.running),
             machine=(machine_for(origin, machines) if facet_id == RUNTIME_FACET else None),

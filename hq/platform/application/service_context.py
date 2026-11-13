@@ -34,6 +34,9 @@ lazy from .pages import PageBadge
 lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
 lazy from .paths import hq_path
+lazy from .reach import network_of
+lazy from .service_facets import CERTIFICATE_FACET
+lazy from .services import served_here
 
 
 @display
@@ -473,7 +476,7 @@ def _read_from(hops, index: int):
     link from the machine's tailnet device, a forward from its proxy."""
 
     step = hops[index].step
-    if step == "network":
+    if step == "network" and _on_the_tailnet(hops[index]):
         after = _next_step(hops, index, "machine")
         return after.source if after is not None else None
     if step == "upstream":
@@ -508,10 +511,19 @@ def _machine_health(hops, index: int) -> tuple[str, str] | None:
     return (found.state[0].capitalize(), found.state[1]) if found else None
 
 
+def _on_the_tailnet(hop) -> bool:
+    """Whether a network hop is the tailnet, the one link HQ reads: the
+    machine's tailnet device says nothing of its home-network link."""
+
+    return network_of(hop.detail) == "tailnet"
+
+
 def _link_health(hops, index: int) -> tuple[str, str] | None:
-    """A network hop's link, read from the tailnet presence of the machine the
+    """A tailnet hop's link, read from the tailnet presence of the machine the
     address belongs to: the next machine hop."""
 
+    if not _on_the_tailnet(hops[index]):
+        return None
     after = _next_step(hops, index, "machine")
     found = machines.machine(after.name) if after else None
     if found is None or found.presence is None:
@@ -595,13 +607,15 @@ def missing_facets(service: Any) -> list[Any]:
     running and not declared, with what taking it on would mean. What is
     declared is a row of the parts table."""
 
-    origin = service.origin
+    # A name served somewhere HQ does not reach is routed and certified there,
+    # so nothing HQ could add for those parts would be the one it is served by.
+    elsewhere = not served_here(service.origin)
     return [
         facet
         for facet in service.facets
         if not facet.present
         and (facet.observed or not facet.readings)
-        and not (origin is not None and origin.external and facet.routes)
+        and not (elsewhere and (facet.routes or facet.id == CERTIFICATE_FACET))
     ]
 
 

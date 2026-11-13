@@ -99,9 +99,7 @@ def contact_list(request):
             "observed_at": current.observed_at,
             "waiting_note": _waiting_note(current),
             "gap": change_gap(current),
-            **page_context(
-                "Messages", "What people sent through the contact form on the site.", reads=contact_list.page_reads
-            ),
+            **page_context("Messages", "From the site's contact form.", reads=contact_list.page_reads),
         },
     )
 

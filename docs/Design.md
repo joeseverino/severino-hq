@@ -201,7 +201,9 @@ a row's record ends the row as `{% row_actions actions %}`, each a
 `PageAction` drawn as a compact control with its middle on the first line's,
 under a heading of kind `control`; a page never draws a button in a cell
 (*Gate:* the survey's `actions on the first line`, and `a row's actions` in
-`HAND_DRAWN`).
+`HAND_DRAWN`). A row's controls stand side by side on one line, which their
+column asks for, and wrap only in a tight table, where every kept line does
+(*Gate:* the survey's `row actions stacked with room`).
 *Gates:* `a_table_fits_its_box_at_every_width`,
 `test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`,
 `only_a_table_scrolls_sideways`, and the page crawl, which fails any

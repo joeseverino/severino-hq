@@ -26,7 +26,7 @@ class ToolsView(PageMixin, TemplateView):
 
     template_name = "control_plane/tools.html"
     page_title = "Tools"
-    page_lede = "These look a name up on the public internet, not in AdGuard."
+    page_lede = "Answers from the public internet, not AdGuard."
 
     @override
     def get_context_data(self, **kwargs):

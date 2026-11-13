@@ -511,7 +511,8 @@ def _from_answer(name: str, answer: str, *, fronted: bool, depth: int, edge: str
         return _alias(name, host, depth=depth)
     if is_documentation(host):
         return [_placeholder(name, host, fronted=fronted, edge=edge)]
-    hops = [Hop("network", NETWORKS.get(network, network), "", detail=host)]
+    # Named by the address it is reached at there, the one value the step has.
+    hops = [Hop("network", NETWORKS.get(network, network), host, detail=host)]
     machine = _machine(host)
     if machine is None:
         hops.append(

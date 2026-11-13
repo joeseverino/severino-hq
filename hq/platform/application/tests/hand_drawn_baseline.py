@@ -26,7 +26,7 @@ BASELINE: dict[tuple[str, str], int] = {
     ("content/content_detail.html", "an empty line"): 1,
     ("content/content_detail.html", "label and value facts"): 2,
     ("control_plane/_connection_setup.html", "a fold"): 1,
-    ("control_plane/_container_detail.html", "label and value facts"): 5,
+    ("control_plane/_container_detail.html", "label and value facts"): 4,
     ("control_plane/_removal_summary.html", "a fold"): 1,
     ("control_plane/_removal_summary.html", "a notice"): 1,
     ("control_plane/_removal_summary.html", "label and value facts"): 2,

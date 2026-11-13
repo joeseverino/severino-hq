@@ -1,11 +1,10 @@
 {% extends "page.html" %}
 {% block page %}
-{% card css="agent-state" data_paused=agents_paused %}
+{% card css="agent-state" %}
   <div class="agent-state-main">
-    <span class="agent-state-dot" aria-hidden="true"></span>
     <div class="agent-state-copy">
-      <h2>{% if agents_paused %}Agents blocked{% else %}Agents allowed{% endif %}</h2>
-      <p>{% if agents_paused %}No agent can do anything through HQ until you allow them again.{% else %}They can do what the rules below allow, unless you block one of them.{% endif %}</p>
+      <h2>{% if agents_paused %}{% status "Agents blocked" tone="attention" pill=False css="agent-state-mark" %}{% else %}{% status "Agents allowed" tone="good" pill=False css="agent-state-mark" %}{% endif %}</h2>
+      {% if agents_paused %}<p>Every agent call is refused.</p>{% endif %}
     </div>
     {% url 'agent_access' as agent_access_url %}
     {% if agents_paused %}
@@ -28,7 +27,7 @@ or a machine agent's, which anyone who governs agents approves. Pressed here
 or on the device's row below, the same form.
 {% endcomment %}
 {% if prompts %}
-  {% section "Needs approval" count=prompts|length id="device-prompts" lede="Devices an agent called from for the first time." %}
+  {% section "Needs approval" count=prompts|length id="device-prompts" %}
     {% table_region "Needs approval" %}
       <table class="data-table">
         <thead>
@@ -57,7 +56,7 @@ holds open now (none says nothing, and a full set is warned of in its row),
 and its own block beside the pause above. Removing it is offered only while
 it is not blocked, since removal never lifts a block.
 {% endcomment %}
-{% with days=recent_days|counted:"day" %}{% with lede="What each did and was refused over the last "|add:days %}
+{% with days=recent_days|counted:"day" %}{% with lede="Activity over the last "|add:days %}
 {% section "Agents" count=standings|length id="agents" lede=lede %}
 {% if standings %}
   {% url 'agent_block' as block_url %}
@@ -84,12 +83,12 @@ it is not blocked, since removal never lifts a block.
                 {% if standing.devices %}<li><a href="#devices-{{ identity.pk }}">From {{ standing.devices|length|counted:"device" }}</a></li>{% endif %}
               </ul>
               <div class="row-below">
-                {% if identity.blocked_at %}<p>Every call it makes is refused until you allow it again. Blocked {{ identity.blocked_at|when:"ago" }}{% if identity.blocked_by %} by {{ identity.blocked_by.get_username|breakable }}{% endif %}</p>{% endif %}
-                {% if identity.person %}{% if standing.acts_for_nobody %}<p data-role="none">Signed in by {{ identity.person.get_username|breakable:"," }} who holds no role in HQ, so every call it makes is refused.</p>{% else %}<p data-role="{{ standing.role }}">Acts for {{ identity.person.get_username|breakable:"," }} and does only what their role allows: {{ standing.role_label|lower|breakable:"," }} confirmed {{ standing.role_confirmed|when:"ago" }}.</p>{% endif %}{% endif %}
-                {% with streams=standing.streams %}{% if streams.open and not streams.full %}<p data-streams="open">Holding {{ streams.open|counted:"connection" }} open for live updates ({{ streams.cap|breakable }} allowed).</p>{% endif %}{% endwith %}
+                {% if identity.blocked_at %}<p>Blocked {{ identity.blocked_at|when:"ago" }}{% if identity.blocked_by %} by {{ identity.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
+                {% if identity.person %}{% if standing.acts_for_nobody %}<p data-role="none">{{ identity.person.get_username|breakable }} holds no role, so its calls are refused.</p>{% else %}<p data-role="{{ standing.role }}">Role confirmed {{ standing.role_confirmed|when:"ago" }}.</p>{% endif %}{% endif %}
+                {% with streams=standing.streams %}{% if streams.open and not streams.full %}<p data-streams="open">{{ streams.open|breakable }} of {{ streams.cap|breakable }} live update streams open.</p>{% endif %}{% endwith %}
                 {% if standing.in_force %}<p>Permissions: {% for name in standing.in_force %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
-                {% if standing.missing %}<p data-missing>Not granted by its last sign-in, though HQ offers {% if standing.missing|length == 1 %}it{% else %}them{% endif %}: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again: a sign-in that asks for every permission HQ offers is refused until then. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
+                {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
                 {% if activity.latest %}
                   <ul class="agent-events prose" data-label="Latest">
                     {% for event in activity.latest %}
@@ -104,7 +103,7 @@ it is not blocked, since removal never lifts a block.
             <td data-sort="{{ activity.changes }}">
               {{ activity.changes|counted:"change" }}
               {% if activity.refused %}<br><span class="figure tone-attention">{{ activity.refused|breakable }} refused</span>{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
-              {% with streams=standing.streams %}{% if streams.full %}<br><span class="figure tone-attention" data-streams="full">Listening on {{ streams.open|breakable }} of {{ streams.cap|breakable }} streams</span> <span class="muted">so HQ refuses another</span>{% endif %}{% endwith %}
+              {% with streams=standing.streams %}{% if streams.full %}<br><span class="figure tone-attention" data-streams="full">{{ streams.open|breakable }} of {{ streams.cap|breakable }} streams open</span> <span class="muted">so another is refused</span>{% endif %}{% endwith %}
             </td>
             <td class="row-actions">
               {% if identity.blocked_at %}
@@ -127,9 +126,7 @@ Where a call is placed: on the device tailscaled says sent it, where its socket
 is there, so a call no device sent is refused; or, with no socket, nowhere,
 and the client is the finest unit (agent_devices.placement_posture).
 {% endcomment %}
-{% if placement %}
-  <p class="muted" data-placement="tailscaled">Calls are tied to the tailnet device that sent them, read from <code>{{ placement|breakable:"." }}</code></p>
-{% else %}
+{% if not placement %}
   <p class="muted" data-placement="none">Calls aren't tied to a device: HQ has no tailscaled socket.</p>
 {% endif %}
 {% endsection %}
@@ -141,12 +138,12 @@ this links to it only for how a provider's permission list is written.
 {% endcomment %}
 {% section "Setup" fold=True id="setup" open=setup_open %}
   <ol class="step-list">
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="card" %}</span><span><strong>Public client</strong> <span class="muted">Register one client per agent in your sign-in service, signing in with the authorization code and PKCE, and no client secret. Its client id is the agent's name here and in the audit log.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span><span><strong>Who signs in</strong> <span class="muted">Set its allowed user groups: the sign-in service refuses anyone else before HQ sees a token. An agent acts for the person who signed it in, within their role.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="lock" %}</span><span><strong>Permissions</strong> <span class="muted">Give the client all {{ offered|counted:"permission" }} HQ offers an agent, delegated by a signed-in person. A sign-in asks for every one, and a sign-in service that has not granted one refuses it. Narrow what each agent does with the rules below, which take effect at once. {% entity client_setup|outside label="Client setup" %}</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="clock" %}</span><span><strong>Token life</strong> <span class="muted">Set its access token life to about an hour: a permission taken away there ends at the agent's next refresh.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="laptop" %}</span><span><strong>First sign-in</strong> <span class="muted">Sign it in once in a browser. It appears under Agents above, and its first call from each tailnet device waits for that device's approval here.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="server" %}</span><span><strong>Unattended agents</strong> <span class="muted">An agent that runs unattended signs in as itself with its sign-in service's federated client assertion, a token its platform signs, so it keeps no stored secret. Grant it, as its own, only the permissions its work needs.</span></span></li>
+    <li><span class="band-icon">{% include "partials/_icon.html" with name="card" %}</span><span><strong>Public client</strong> <span class="muted">Register one public client per agent, with PKCE.</span></span></li>
+    <li><span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span><span><strong>Who signs in</strong> <span class="muted">Set the user groups allowed to sign it in.</span></span></li>
+    <li><span class="band-icon">{% include "partials/_icon.html" with name="lock" %}</span><span><strong>Permissions</strong> <span class="muted">Grant all {{ offered|counted:"permission" }} HQ offers, then narrow each agent with the rules below. {% entity client_setup|outside label="Client setup" %}</span></span></li>
+    <li><span class="band-icon">{% include "partials/_icon.html" with name="clock" %}</span><span><strong>Token life</strong> <span class="muted">Set its access token life to about an hour.</span></span></li>
+    <li><span class="band-icon">{% include "partials/_icon.html" with name="laptop" %}</span><span><strong>First sign-in</strong> <span class="muted">Sign it in once in a browser, then approve each device it calls from.</span></span></li>
+    <li><span class="band-icon">{% include "partials/_icon.html" with name="server" %}</span><span><strong>Unattended agents</strong> <span class="muted">Sign it in with a federated client assertion, granted only what its work needs.</span></span></li>
   </ol>
 {% endsection %}
 
@@ -157,7 +154,7 @@ could not place the call there. A call from a device runs once it is
 approved, and a block stops that device alone.
 {% endcomment %}
 {% if device_groups %}
-  {% with days=recent_days|counted:"day" %}{% with lede="The tailnet machines agents call from, and their calls over the last "|add:days %}
+  {% with days=recent_days|counted:"day" %}{% with lede="Calls over the last "|add:days %}
   {% section "Devices" id="agent-devices" lede=lede %}
   {% table_region "Devices" %}
     <table class="data-table">
@@ -180,17 +177,16 @@ approved, and a block stops that device alone.
                 {{ device.name|breakable }}
                 <ul class="dot-list muted">
                   {% if device.os %}<li>{{ device.os|breakable }}</li>{% endif %}
-                  {% if device.owner %}<li data-owner>Owned by {{ device.owner|breakable }}</li>{% elif device.record %}<li>Tagged</li>{% else %}<li data-unplaced>No tailnet device sent its call, so the call was refused</li>{% endif %}
+                  {% if device.owner %}<li data-owner>Owned by {{ device.owner|breakable }}</li>{% elif device.record %}<li>Tagged</li>{% else %}<li data-unplaced>Not on the tailnet, so its calls are refused</li>{% endif %}
                 </ul>
+                {% with record=device.record %}{% if record %}
                 <div class="row-below">
-                  {% with record=device.record %}
-                    {% if not record %}<p>tailscaled knows no device at this address, so there is nothing to approve: the call came from HQ's own host or another network, not from a tailnet device. An agent calls HQ over the tailnet from the device it runs on, and its first call from there asks for approval here.</p>
-                    {% elif record.person %}<p>Calls for {{ record.person.get_username|breakable:"," }} who approves it.</p>
-                    {% else %}<p>Calls as itself, for nobody, so anyone who governs agents approves it.</p>{% endif %}
+                    {% if record.person %}<p>Calls for {{ record.person.get_username|breakable:"," }} who approves it.</p>
+                    {% else %}<p>Calls as itself, so anyone who governs agents approves it.</p>{% endif %}
                     {% if record.approved_at %}<p>Approved {{ record.approved_at|when:"ago" }}{% if record.approved_by %} by {{ record.approved_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
-                    {% if record.blocked_at %}<p>Every call from it is refused until it is allowed again. Blocked {{ record.blocked_at|when:"ago" }}{% if record.blocked_by %} by {{ record.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
-                  {% endwith %}
+                    {% if record.blocked_at %}<p>Blocked {{ record.blocked_at|when:"ago" }}{% if record.blocked_by %} by {{ record.blocked_by.get_username|breakable:"." }}{% else %}.{% endif %}</p>{% endif %}
                 </div>
+                {% endif %}{% endwith %}
               </th>
               <td>{% status device.label tone=device.tone %}{% if device.waits_for %}<br><span class="muted">For {{ device.waits_for|breakable }}</span>{% endif %}</td>
               <td>{{ device.first_seen|when:"ago" }}</td>
@@ -212,7 +208,7 @@ The signed-in person's own devices: a client registered here whose token also
 carries the device permission stands as them. Only theirs, never anybody else's.
 {% endcomment %}
 {% url 'own_device' as device_url %}
-{% section "Your apps" count=devices|length id="own-devices" lede="Apps that sign in as you, such as a phone app or a Shortcut." %}
+{% section "Your apps" count=devices|length id="own-devices" lede="Apps that sign in as you." %}
   {% if devices %}
     {% table_region "Your apps" %}
       <table class="data-table">
@@ -235,15 +231,14 @@ carries the device permission stands as them. Only theirs, never anybody else's.
       </table>
     {% endtable_region %}
   {% else %}
-    <p class="muted">None registered. An app stands as you once you register its client id here.</p>
+    <p class="muted">None registered.</p>
   {% endif %}
   <form method="post" action="{{ device_url }}" class="form">
     {% write_token %}
     <input type="hidden" name="next" value="{{ request.get_full_path }}">
     <div class="field">
       <label for="device-client">Client id</label>
-      <input type="text" id="device-client" name="client_id" required autocomplete="off" spellcheck="false" aria-describedby="device-client-help">
-      <p class="help" id="device-client-help">The client id your app signs in with.</p>
+      <input type="text" id="device-client" name="client_id" required autocomplete="off" spellcheck="false">
     </div>
     <div class="form-actions"><button type="submit" name="registered" value="1" class="btn">{% words "agent.device.set" "on" %}</button></div>
   </form>
@@ -316,7 +311,7 @@ posts only the changed rules, and a rule not posted is left as it holds.
 <form method="post" class="policy" data-submit-busy data-submit-label="Working…">
   {% write_token %}
   {% if changed_groups %}
-    {% section "Rules" lede="Where an agent's rule differs from the default." %}
+    {% section "Rules" %}
       {% include "core/_policy_table.html" with groups=changed_groups label="Rules" %}
     {% endsection %}
   {% endif %}

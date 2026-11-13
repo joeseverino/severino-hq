@@ -81,8 +81,11 @@ class PlanTests(TestCase):
         self.assertEqual(plan.verified_by, ("its health check",))
         # Nothing was snapshotted, so only the override comes back.
         self.assertEqual(plan.steps[-1].detail, "The override as it was is restored if verification fails.")
-        # Nothing can apply it until a machine has the helper, and it says so.
-        self.assertEqual([blocker.id for blocker in plan.blockers], ["no-apply-path"])
+        # Nothing sends it to the machine, and the reason says that step, not
+        # that the upgrade cannot happen.
+        (blocker,) = plan.blockers
+        self.assertEqual(blocker.id, "no-apply-path")
+        self.assertEqual(blocker.reason, f"HQ does not send upgrades to {plan.container.machine.name}.")
 
     def test_a_plan_s_facts_say_their_tones(self):
         estate(advisories=[{**HIGH, "vulnerabilities": [["< 1.2.1", "1.2.1"]]}])
@@ -324,18 +327,10 @@ class ReadinessTests(TestCase):
 
 
 class HelperInstallTests(TestCase):
-    def test_while_the_helper_is_what_stands_in_the_way_the_plan_says_how_to_install_it(self):
-        from ..upgrades import HELPER, SUDOERS
+    def test_on_another_machine_the_helper_is_fetched_installed_and_allowed(self):
+        from ..upgrades import HELPER, SUDOERS, install_steps
 
-        estate()
-        published()
-        declare("app")
-
-        plan = next(plan for plan in plans() if plan.container.running.name == "app")
-
-        # HQ does not run on this machine, so its deploys never bring the helper.
-        self.assertFalse(plan.install_brought)
-        (fetch, install, allow, check) = plan.install
+        (fetch, install, allow, check) = install_steps("example-box")
         self.assertEqual((fetch.id, install.id), ("fetch", "install"))
         self.assertIn(f"-o root -g root -m 0755 hq-host {HELPER}", install.detail)
         # A rule for the one program and only an upgrade's arguments, never a broader one.
@@ -345,6 +340,27 @@ class HelperInstallTests(TestCase):
         self.assertIn("HQ does not know which account", allow.label)
         self.assertIn('id -u "$account"', allow.detail)
         self.assertTrue(check.detail.startswith(f"sudo -n -l {HELPER} upgrade --operation "))
+
+    def test_the_container_page_offers_no_install_that_would_not_unblock_it(self):
+        """HQ sends no upgrade with or without the helper there, so its
+        install steps would leave the plan exactly as blocked."""
+
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        from .markup import with_class
+
+        estate()
+        published()
+        inventory("portainer.runtime", [runtime("app", healthcheck=True)])
+        declare("app")
+        self.assertTrue(any(plan.container.running.name == "app" for plan in plans()))
+        self.client.force_login(get_user_model().objects.create_superuser("operator", password="x" * 20))
+
+        response = self.client.get(reverse("control_plane:detail", args=["example-box-app"]))
+
+        self.assertContains(response, "Not yet, because")
+        self.assertEqual(with_class(response, "upgrade-install"), [])
 
     def test_on_the_machine_hq_deploys_to_only_the_rule_is_needed(self):
         from ..upgrades import install_steps

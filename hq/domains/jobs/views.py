@@ -35,7 +35,6 @@ class JobListView(PageMixin, TableListMixin, ListView):
     page_title = "Background jobs"
     table_search_fields = ("label", "note")
     table_search_placeholder = "Search jobs and results…"
-    page_lede = "Work HQ does on a schedule or that you started, and how each run went."
     table_columns = (
         TableColumn("Job"),
         TableColumn("State", css="key-col", kind="status"),

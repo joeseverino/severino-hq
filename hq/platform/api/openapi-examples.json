@@ -1207,11 +1207,9 @@
               {
                 "id": "certificate",
                 "label": "Certificate",
-                "present": true,
-                "resources": [
-                  "wildcard-example-com"
-                ],
-                "state": "good"
+                "present": false,
+                "resources": [],
+                "state": ""
               }
             ],
             "faults": [],
@@ -1239,7 +1237,7 @@
           "blockers": [
             {
               "id": "no-apply-path",
-              "reason": "HQ cannot apply an upgrade on docker-host-01 yet."
+              "reason": "HQ does not send upgrades to docker-host-01."
             }
           ],
           "change": "minor",
@@ -2828,7 +2826,7 @@
               "blockers": [
                 {
                   "id": "no-apply-path",
-                  "reason": "HQ cannot apply an upgrade on docker-host-01 yet."
+                  "reason": "HQ does not send upgrades to docker-host-01."
                 }
               ],
               "change": "minor",
@@ -3240,7 +3238,7 @@
           ],
           "schema_version": 2,
           "summary": {
-            "edges": 305,
+            "edges": 306,
             "kinds": {
               "ability": 58,
               "connection": 10,
@@ -3249,10 +3247,10 @@
               "registry": 1,
               "resource": 42,
               "service": 8,
-              "target": 1,
+              "target": 2,
               "zone": 1
             },
-            "nodes": 125
+            "nodes": 126
           },
           "trace": null
         },

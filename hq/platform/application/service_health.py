@@ -184,14 +184,19 @@ def _dns_state(gap: str) -> str:
 
 
 def _with_own_findings(found: Health) -> Health:
-    """HQ's health, worsened to attention by each finding about HQ itself."""
+    """HQ's health, worsened to attention by each finding about HQ itself.
+
+    A word that is not already a problem gives way to the count: "Health
+    check passing" drawn in the attention tone would contradict itself.
+    """
 
     own = hq_findings()
     if not own:
         return found
-    state = found.state if found.state == SERIOUS else ATTENTION
-    about = counted(len(own), "open problem is about HQ", "open problems are about HQ")
-    return Health(state, found.label, " ".join(part for part in (found.detail, ended(about)) if part))
+    if found.state in (ATTENTION, SERIOUS):
+        about = counted(len(own), "open problem is about HQ", "open problems are about HQ")
+        return Health(found.state, found.label, " ".join(part for part in (found.detail, ended(about)) if part))
+    return Health(ATTENTION, counted(len(own), "open problem", "open problems"), found.detail)
 
 
 def hq_findings() -> tuple[Any, ...]:

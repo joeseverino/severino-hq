@@ -78,9 +78,14 @@ part's heading shows only when there is more than one.
                   </ul>
                 {% endif %}
                 {% endwith %}
+              {% elif row.changes_only %}
+                <span class="muted">Changes only:</span>
+                <ul class="connection-ability-list connection-ability-all">
+                  {% for state in row.changes %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
+                </ul>
               {% else %}{% empty_value %}{% endif %}
               {% endwith %}
-              {% if row.changes %}
+              {% if row.changes and not row.changes_only %}
                 <ul class="connection-ability-list connection-ability-all row-below" data-label="Changes">
                   {% for state in row.changes %}{% include "control_plane/_connection_ability.html" %}{% endfor %}
                 </ul>
@@ -122,6 +127,7 @@ part's heading shows only when there is more than one.
                 <span class="connection-state connection-state-{{ row.lifecycle }}">{{ row.state_label|breakable }}</span>
                 {% if row.read_requested_at %}<span class="muted narrow-more">Read asked {{ row.read_requested_at|ago }}</span>
                 {% elif row.state_line %}<span class="connection-authority connection-authority-{{ connection.authority }} {% if row.state_line_quiet %}row-more{% else %}narrow-more{% endif %}">{{ row.state_line|breakable }}</span>
+                {% elif row.changes_only and connection.instance.observed_at %}<span class="muted narrow-more">Checked {{ connection.instance.observed_at|ago }}</span>
                 {% elif not row.sight.sights and connection.instance.observed_at %}<span class="muted narrow-more">{% include "partials/_reading_age.html" with at=connection.instance.observed_at only %}</span>{% endif %}
                 {% if row.problems %}<a class="connection-problems" href="{{ row.problems_url }}">{{ row.problems|counted:"problem" }}</a>{% endif %}
               </span>

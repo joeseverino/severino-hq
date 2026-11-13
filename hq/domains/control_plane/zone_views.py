@@ -298,11 +298,11 @@ class ZoneDetailView(View):
                     found.zone,
                     (
                         format_html(
-                            "The DNS records of this domain, from {}.",
+                            "Records from {}.",
                             entity({"request": request}, entity_link("connection", found.connection_ref)),
                         )
                         if found.connection_ref
-                        else "The DNS records of this domain."
+                        else ""
                     ),
                     actions=(_pin_action(found), *_declaration_actions(found)),
                 ),

@@ -68,22 +68,6 @@ class Plan:
         return not self.blockers
 
     @property
-    def install(self) -> tuple[Step, ...]:
-        """How to give its machine the helper, while that is what stands in the way."""
-
-        if not any(blocker.id == "no-apply-path" for blocker in self.blockers):
-            return ()
-        machine = self.container.machine
-        return install_steps(machine.name, deployed_here=machine.runs_hq)
-
-    @property
-    def install_brought(self) -> bool:
-        """Whether HQ's own deploys bring the helper to its machine: only to the
-        one HQ runs on, which is the one its deploy targets."""
-
-        return bool(self.container.machine.runs_hq)
-
-    @property
     def stateful(self) -> bool:
         return bool(self.data)
 
@@ -279,9 +263,10 @@ def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]
         )
     if introduces:
         found.append(Blocker("target-affected", f"{standing.latest} brings a known vulnerability of its own."))
-    # The queue does not yet send an upgrade to the one machine it concerns,
-    # with or without the helper there (``install_steps``).
-    found.append(Blocker("no-apply-path", f"HQ cannot apply an upgrade on {item.machine.name} yet."))
+    # The queue sends no upgrade to the one machine it concerns, with or
+    # without the helper there (``install_steps``). Said as that missing step,
+    # since the page draws the reason under "Not yet, because".
+    found.append(Blocker("no-apply-path", ended(f"HQ does not send upgrades to {item.machine.name}")))
     return tuple(found)
 
 

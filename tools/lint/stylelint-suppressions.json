@@ -6,7 +6,7 @@
   },
   "static/css/app/cards.css": {
     "hq/restyled-primitive": {
-      "count": 35
+      "count": 34
     }
   },
   "static/css/app/connection.css": {
@@ -46,7 +46,7 @@
   },
   "static/css/app/routes.css": {
     "hq/restyled-primitive": {
-      "count": 12
+      "count": 10
     }
   },
   "static/css/app/tables.css": {

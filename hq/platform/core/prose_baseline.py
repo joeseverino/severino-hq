@@ -28,5 +28,4 @@ BASELINE: dict[tuple[str, str], int] = {
     ("hq/platform/application/topology_model.py", "Plain.Long"): 1,
     ("hq/platform/application/upgrades.py", "Plain.Long"): 1,
     ("templates/control_plane/service_list.html", "Plain.Long"): 1,
-    ("templates/core/agent_policy.html", "Plain.Long"): 3,
 }

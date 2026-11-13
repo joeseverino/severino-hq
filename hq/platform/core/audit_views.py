@@ -73,7 +73,6 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     )
     table_default_sort = "-created_at"
     table_search_placeholder = "Search what changed, ids and messages…"
-    page_lede = "Everything that changed, and who or what changed it."
 
     @override
     def get_page_actions(self):
@@ -101,7 +100,7 @@ class AuditLogListView(PageMixin, TableListMixin, ListView):
     @override
     def get_page_lede(self) -> str:
         about = self._about()
-        return f"Everything that happened to {about}, and who or what did it." if about else self.page_lede
+        return f"What happened to {about}." if about else self.page_lede
 
     @override
     def get_queryset(self):

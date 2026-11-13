@@ -78,15 +78,6 @@
           <dt>Last reached HQ</dt>
           <dd>{{ machine.presence.reached_hq.phrase|capfirst|breakable }}</dd>
         {% endif %}
-        {% comment %}
-        Every tailnet reading here is observer-relative, and on this machine
-        the observer is the subject. Said once, instead of a peering panel
-        about itself.
-        {% endcomment %}
-        {% if machine.presence.observer %}
-          <dt>Last reached HQ</dt>
-          <dd>This is HQ's own machine.</dd>
-        {% endif %}
         <dt>Node key</dt>
           <dd>{% if machine.presence.key_expires %}Expires in {{ machine.presence.key_expiry_days|counted:"day" }}{% else %}Does not expire{% endif %}</dd>
         <dt>Runs</dt>

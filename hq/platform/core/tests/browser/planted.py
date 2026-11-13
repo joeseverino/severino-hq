@@ -52,6 +52,13 @@ PLANTS = {
         '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
         '<button type="button" class="btn compact" style="translate: none">Example</button></td></tr></tbody></table>'
     ),
+    # A row's two buttons one above the other in a cell of a table with room
+    # for them side by side.
+    "row actions stacked with room": Plant(
+        '<table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
+        '<button type="button" class="btn compact" style="display: block">Example one</button>'
+        '<button type="button" class="btn compact" style="display: block">Example two</button></td></tr></tbody></table>'
+    ),
     "broken words": Plant(
         _TABLE.format('<span style="display: block; inline-size: 3ch; word-break: break-all">Example</span>')
     ),
@@ -320,6 +327,13 @@ PASSES = {
     ),
     "titles at the head's start": Plant(
         '{% section "Example" %}<p>Example</p>{% aside %}<a href="#">Example</a>{% endsection %}'
+    ),
+    # A row's controls one above the other where its table has no room for
+    # them side by side.
+    "row actions stacked with room": Plant(
+        '<div style="inline-size: 12rem"><table class="data-table"><tbody><tr><td>Example</td><td class="row-actions">'
+        '<button type="button" class="btn compact" style="display: block">Example one</button>'
+        '<button type="button" class="btn compact" style="display: block">Example two</button></td></tr></tbody></table></div>'
     ),
     "control words on one line": Plant(
         '<select aria-label="Example"><option>Example group name</option></select>'

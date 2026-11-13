@@ -328,7 +328,7 @@ class WatchingView(PageMixin, TemplateView):
 
     @override
     def get_page_lede(self) -> str:
-        return "What you star on GitHub, with each project's latest release and security advisories."
+        return "Your GitHub stars, with each project's latest release and advisories."
 
     @override
     def get_page_actions(self):
@@ -425,7 +425,7 @@ class PostureView(PageMixin, TemplateView):
 
     @override
     def get_page_lede(self) -> str:
-        return "Each repository checked against your repository rules. Public ones have extra checks."
+        return "Each repository, checked against your rules."
 
     @override
     def get_context_data(self, **kwargs):

@@ -230,6 +230,12 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table td.row-actions { --row-line: 1lh; text-align: right; white-space: nowrap; }
 .data-table td.row-actions > * { translate: 0 calc(var(--row-line) / 2 - 50%); }
 .data-table td.row-actions > * + * { margin-inline-start: var(--space-4); }
+/* A control column is as wide as what it holds will go (`width: 1px` above), so a row's controls keep one line between them and the column asks for that line: controls that may wrap would stand one to a line in a row with room to spare. Each has its middle on the middle of the row's first line, as a row's actions do; a note the cell holds beside them wraps as words do. */
+.data-table td > span.row-actions { flex-wrap: nowrap; }
+.data-table > tbody > tr > [data-kind="control"] { --row-line: 1lh; white-space: nowrap; }
+.data-table > tbody > tr > [data-kind="control"] > :is(.muted, p) { white-space: normal; }
+.data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form) { vertical-align: top; translate: 0 calc(var(--row-line) / 2 - 50%); }
+.data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form) + :is(a, button, .btn, form) { margin-inline-start: var(--space-4); }
 
 /* A pill fits the cell's line, so a row holding one is no taller than one without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
@@ -427,9 +433,9 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table[data-break] :is(td, th) :is(code, .token, .whole, [data-entity]) { overflow-wrap: anywhere; }
 /* A pill that wraps (tight, or in an opened row) flows as text: as a flex box its words and an identifier among them are items side by side, each squeezed until it breaks inside a word. Its corners round by half of one line, so it is a capsule on one line and a rounded box on several. */
 .data-table[data-tight] td .pill, .data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
-/* A row's controls side by side are wider than any other cell, so tight they stand one above the other, each its own width; a label stays whole on its line (the button rule) and the other columns give way to it. */
-.data-table[data-tight] td.row-actions > * { display: block; width: fit-content; margin-inline: auto 0; }
-.data-table[data-tight] td.row-actions > * + * { margin-top: var(--space-2); }
+/* A row's controls side by side are a kept line too, so tight they wrap where the cell is too narrow for them all, each line ending the cell. */
+.data-table[data-tight] > tbody > tr > :is(td.row-actions, [data-kind="control"]) { white-space: normal; }
+.data-table[data-tight] td > span.row-actions { flex-wrap: wrap; justify-content: end; }
 .data-table > * > tr > [data-dropped] { display: none; }
 .data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }
 .data-table:has(> tbody > tr > td[data-dropped]:not([data-blank])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }

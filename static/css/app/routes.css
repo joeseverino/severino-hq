@@ -185,14 +185,6 @@
   border-radius: 50%;
   background: currentColor;
 }
-/* Each destination is its own target, so two commands on one row cannot read
-   as one link. */
-/* Spacing only. Setting `display` here would be (0,1,1) and would silently
-   beat any single-class variant, un-centring the icon. */
-.connection-next > a,
-.connection-next > .btn { margin: 0 var(--space-2) var(--space-2) 0; }
-.connection-next > a:last-child,
-.connection-next > .btn:last-child { margin-bottom: 0; }
 /* A row's own commands are drawn by the shared action renderer as buttons and
    read here as quiet words, so the column stays as narrow as its longest
    phrase. The element qualifier outranks the button's tone variants
@@ -212,9 +204,9 @@ td.connection-next > .btn.connection-direct-action:hover {
 }
 td.connection-next > .btn.connection-direct-action.danger { color: var(--danger); }
 
-/* Each thing to do next is a control, so it keeps its line (page.css): the
-   column is as wide as its longest, and the table gives the room from columns
-   that can wrap. */
+/* Each thing to do next is a control, so it keeps its line (page.css), side
+   by side with the others (tables.css): the column is as wide as all of them,
+   and the table gives the room from columns that can wrap. */
 .connection-next { min-width: 0; }
 .connection-next > .muted { display: block; max-width: 240px; margin-top: var(--space-2); font-size: var(--text-2xs); line-height: 1.35; }
 kbd {

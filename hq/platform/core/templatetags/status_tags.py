@@ -12,10 +12,11 @@ template the host or an extension ships.
 """
 
 from django import template
-from django.utils.html import format_html, format_html_join
+from django.utils.html import format_html
 from django.utils.safestring import SafeString, mark_safe
 
 from hq.platform.application.labels import sentence
+from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.templatetags.value_tags import breakable
 lazy from hq.platform.application.infrastructure import RESOURCE_TONES
 lazy from hq.platform.application.ui import STATUS_VALUES
@@ -53,7 +54,7 @@ def status_pill(
     ``href`` makes it a link, ``title`` names it on hover, ``tip`` gives it
     HQ's tooltip (and the focus a tooltip needs), ``css`` adds classes (a
     queue row's ``is-mark``), and each ``data_*`` keyword is a ``data-``
-    attribute.
+    attribute, drawn as ``html_attributes`` draws one.
     """
 
     if chip and (tone or not pill):
@@ -82,9 +83,8 @@ def status_pill(
     if tip:
         attributes += [("tabindex", "0"), ("data-tip", tip)]
     attributes += [(f"data-{name.removeprefix('data_').replace('_', '-')}", value) for name, value in data.items()]
-    drawn = format_html_join("", ' {}="{}"', attributes)
     element = "a" if href else "span"
-    return format_html("<{}{}>{}</{}>", element, drawn, label, element)
+    return format_html("<{}{}>{}</{}>", element, html_attributes(dict(attributes)), label, element)
 
 
 # An advisory's severity as the tone its pill takes, wherever one is listed.

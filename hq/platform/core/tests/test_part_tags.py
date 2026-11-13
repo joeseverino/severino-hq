@@ -8,6 +8,7 @@ from pathlib import Path
 
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase, tag
+from django.utils.functional import SimpleLazyObject
 
 from hq.platform.application.page_parts import SectionPart
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class
@@ -138,6 +139,28 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual(frame.attrs["id"], "hosts")
         self.assertEqual(frame.attrs["data-fragment"], "hosts")
         self.assertNotEqual(elements(html, "h2")[0].attrs["id"], "hosts")
+
+    def test_a_lazy_flag_is_a_flag_on_every_part_that_takes_data_options(self):
+        # A context processor hands its values over lazily (agents_paused):
+        # off is no attribute, never ="False", on every part drawing data-.
+        parts = {
+            "card": "{% card data_example=flag %}A{% endcard %}",
+            "notice": "{% notice data_example=flag %}A{% endnotice %}",
+            "section": '{% section "Hosts" data_example=flag %}<p>A</p>{% endsection %}',
+            "status": '{% status "Online" data_example=flag %}',
+        }
+        for name, source in parts.items():
+            for value in (False, None):
+                with self.subTest(part=name, value=value):
+                    self.assertEqual(
+                        select(_render(source, flag=SimpleLazyObject(lambda value=value: value)), "data-example"), []
+                    )
+            with self.subTest(part=name, value=True):
+                (drawn,) = select(_render(source, flag=SimpleLazyObject(lambda: True)), "data-example")
+                self.assertEqual(drawn.attrs["data-example"], "")
+            with self.subTest(part=name, value=0):
+                (drawn,) = select(_render(source, flag=0), "data-example")
+                self.assertEqual(drawn.attrs["data-example"], "0")
 
     def test_a_folded_section_s_heading_is_its_toggle(self):
         html = _render(

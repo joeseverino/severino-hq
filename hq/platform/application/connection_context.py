@@ -133,6 +133,14 @@ class ConnectionRow:
         return tuple(state for state in self.connection.abilities if state.ability.effect != "read")
 
     @property
+    def changes_only(self) -> bool:
+        """Whether its credential reads nothing and only lets HQ change things:
+        the Reads cell then says so and names what it changes, since an empty
+        one beside "Working" reads as a reading gone missing."""
+
+        return not self.reads and bool(self.changes)
+
+    @property
     def more_scope(self) -> tuple[str, ...]:
         return self.sight.more_scope if self.sight is not None else ()
 

@@ -189,3 +189,67 @@ ACTIONS_OFF_THE_LINE = (
   return [...new Set(found)];
 }"""
 )
+
+# A row's controls stand side by side while its table has room for them: a
+# cell of controls (``cells``) whose controls lay out on more than one line,
+# when the table laid out at its least width, this cell's column widened to
+# hold them on one line, still fits its region with a pixel to spare. The
+# controls are the outermost pressable boxes in the cell, and their line is
+# their widths and the least gap between two of them on a shared line (none
+# when no two share one), so a row a table truly cannot widen is left alone.
+ACTIONS_STACKED_WITH_ROOM = (
+    "(cells) => {"
+    + DESCRIBE
+    + """
+  const pressed = 'a[href], button, .btn, [role="button"], input:is([type=submit], [type=button])';
+  const held = (el, css, read) => {
+    const before = el.style.cssText;
+    el.style.cssText += css;
+    const value = read();
+    el.style.cssText = before;
+    return value;
+  };
+  const least = new Map();
+  const leastOf = (table) => {
+    if (!least.has(table)) {
+      least.set(table, held(table, ';inline-size: min-content !important; min-inline-size: 0 !important; max-inline-size: none !important',
+        () => new Map([[table, box(table).width],
+          ...[...table.querySelectorAll(cells)].map((cell) => [cell, box(cell).width])])));
+    }
+    return least.get(table);
+  };
+  const found = [];
+  for (const cell of document.querySelectorAll(cells)) {
+    if (!cell.checkVisibility()) continue;
+    const controls = [...cell.querySelectorAll(pressed)]
+      .filter((el) => el.checkVisibility() && !el.parentElement.closest(pressed))
+      .map((el) => [el, box(el)])
+      .filter(([, r]) => r.width >= 2 && r.height >= 2);
+    if (controls.length < 2) continue;
+    const overlaps = (a, b) => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > Math.min(a.height, b.height) / 2;
+    const [, first] = controls[0];
+    if (controls.every(([, r]) => overlaps(r, first))) continue;
+    let gap = Infinity;
+    for (const [, a] of controls) {
+      for (const [, b] of controls) {
+        if (a !== b && overlaps(a, b) && b.left >= a.right) gap = Math.min(gap, b.left - a.right);
+      }
+    }
+    if (gap === Infinity) gap = 0;
+    const line = controls.reduce((sum, [, r]) => sum + r.width, 0) + gap * (controls.length - 1);
+    const table = cell.closest('table');
+    const region = table.parentElement;
+    const widths = leastOf(table);
+    const style = getComputedStyle(cell);
+    const frame = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+      + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+    const column = widths.get(cell) ?? box(cell).width;
+    const wanted = widths.get(table) - column + Math.max(column, line + frame);
+    if (wanted + 1 <= region.clientWidth) {
+      const words = controls.map(([el]) => el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 24)).join(' / ');
+      found.push(`${describe(cell)} stands "${words}" on several lines: one line takes ${line.toFixed(1)}px and its table would be ${wanted.toFixed(1)}px of ${region.clientWidth}px`);
+    }
+  }
+  return found;
+}"""
+)

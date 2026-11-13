@@ -331,14 +331,13 @@ class AgentDeviceTests(TestCase):
             "nothing can be approved",
         )
 
-    def test_the_page_says_where_calls_are_placed(self):
+    def test_the_page_says_only_when_calls_are_tied_to_no_device(self):
         (none,) = select(self.page(), "data-placement")
         with override_settings(SEVERINO_TAILSCALED_SOCKET="/run/tailscale/tailscaled.sock"):
-            (placed,) = select(self.page(), "data-placement")
+            placed = select(self.page(), "data-placement")
 
         self.assertEqual(none.attrs["data-placement"], "none")
-        self.assertEqual(placed.attrs["data-placement"], "tailscaled")
-        self.assertIn("/run/tailscale/tailscaled.sock", placed.words)
+        self.assertEqual(placed, [], "a tailnet device placing each call is the normal case, said by the Devices table")
 
     def test_a_devices_calls_are_counted_on_its_row(self):
         device = self.device(approved_at=timezone.now(), approved_by=self.person)

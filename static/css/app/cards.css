@@ -220,18 +220,14 @@ a.kpi:hover { background: var(--surface-2); }
 }
 .queue-table .queue-what { min-width: 10rem; }
 .queue-table .queue-act { width: 1%; text-align: right; white-space: nowrap; padding-block-start: calc(var(--row-pad) - var(--space-1)); padding-inline-end: var(--space-4); }
-/* What a row offers, then the reader's own dismiss, on one line whatever the cell's white-space says; the dismiss is one word and never gives way. */
+/* What a row offers, then the reader's own dismiss, side by side on one line whatever the cell's white-space says, so the column asks for that line and the other columns give way; the dismiss is one word and never gives way. */
 .queue-table .queue-buttons { display: inline-flex; gap: var(--space-3); vertical-align: top; text-align: start; }
 .queue-table .queue-buttons > [data-triage] { flex: none; }
-.queue-table .queue-buttons > * { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-3); margin: 0; }
+.queue-table .queue-buttons > * { display: flex; flex-wrap: nowrap; align-items: flex-start; gap: var(--space-3); margin: 0; }
 .queue-table .queue-act form { margin: 0; }
 /* A row with nothing to press, or whose buttons wait in the line beneath in a
    narrow table, gives the title the room its padding would keep. */
 .queue-table .queue-act:not(:has(> *)) { padding: 0; }
-/* A row's buttons stand one to a line, each as wide as its label, so the column asks for the longest label; the cap is a grid track the clamp-lifting rule leaves alone, so opening a row moves no column. */
-.queue-table .queue-buttons > .attention-actions { display: grid; width: max-content; grid-template-columns: fit-content(var(--hold)); justify-items: end; }
-/* A label keeps its line (the button rule) and holds out for all of it, so the track grows past the cap and the other columns give way. */
-.queue-table .attention-actions .btn { display: block; max-width: 100%; }
 @media (scripting: enabled) {
   /* Past the first two, a row's buttons wait in the line beneath at any
      width, with the rest of what it holds. */

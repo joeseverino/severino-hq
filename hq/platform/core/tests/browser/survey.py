@@ -22,7 +22,12 @@ from hq.platform.core.tests.browser.probes.boxes import (
     SMALL_TARGETS,
     TITLES_OFF_THEIR_START,
 )
-from hq.platform.core.tests.browser.probes.controls import ACTIONS_OFF_THE_LINE, CONTROL_HEIGHTS, WRAPPED_CONTROLS
+from hq.platform.core.tests.browser.probes.controls import (
+    ACTIONS_OFF_THE_LINE,
+    ACTIONS_STACKED_WITH_ROOM,
+    CONTROL_HEIGHTS,
+    WRAPPED_CONTROLS,
+)
 from hq.platform.core.tests.browser.probes.headings import HEADINGS_IN_CAPITALS, QUIET_LINKS_IN_THE_LINE
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES, FIELD_CONTRAST, FIELD_EDGES
 from hq.platform.core.tests.browser.probes.parts import (
@@ -191,6 +196,10 @@ _GEOMETRY = {
     "sideways": _SIDEWAYS_READ,
     "cells": CELLS,
     "actions on the first line": ACTIONS_OFF_THE_LINE,
+    "row actions stacked with room": (
+        ACTIONS_STACKED_WITH_ROOM,
+        f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}",
+    ),
     "broken words": (BROKEN_WORDS, SELECTORS["identifier"]),
     "words broken in text": (BROKEN_WORDS_IN_TEXT, _IDENTIFIER),
     "broken identifiers": (BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]),

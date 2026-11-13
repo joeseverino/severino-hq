@@ -311,8 +311,8 @@
 .agent-state { display: grid; gap: var(--space-6); }
 .agent-state-main { display: flex; align-items: center; gap: var(--space-6); }
 .agent-state-main > .btn { margin: 0 0 0 auto; }
-.agent-state-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 16%, transparent); }
-.agent-state[data-paused] .agent-state-dot { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 16%, transparent); }
+/* The state is a status drawn in its tone, its dot in the same color. */
+.agent-state-mark::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-inline-end: var(--space-4); border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 16%, transparent); vertical-align: 0.05em; }
 .agent-state-copy h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); font-weight: 650; letter-spacing: 0; }
 .agent-state-copy p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
 /* An agent's latest events, under its row: one line each, newest first. */

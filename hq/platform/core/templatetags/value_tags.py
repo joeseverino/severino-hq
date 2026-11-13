@@ -11,7 +11,7 @@ from django.template.base import token_kwargs
 from django.template.context import RequestContext
 from django.template.loader import render_to_string
 from django.utils import dateformat, timezone
-from django.utils.html import conditional_escape, format_html, format_html_join
+from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import mark_safe
 lazy from django.conf import settings
 
@@ -33,6 +33,7 @@ from hq.platform.application.moments import (
     when_exact as _when_exact,
 )
 from hq.platform.application.money import money as _money
+from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
 from hq.platform.application.timestamps import moment
 from hq.platform.application.ui import MISSING, counted as _counted
@@ -654,15 +655,10 @@ def slotted(
 CARD_ELEMENTS = frozenset(("section", "article", "figure", "details", "div"))
 
 
-def _drawn(value) -> bool:
-    # By identity, so a count of 0 is still drawn.
-    return value is not None and value is not False and value != ""
-
-
 def card_frame(name: str, given: dict) -> dict:
     """A card's opening and closing tags. Built here rather than in its
     partial, since the element is a choice and every attribute but the class
-    is drawn only when it has a value: True draws a bare attribute."""
+    is drawn only when it has a value, as ``html_attributes`` draws one."""
 
     element = given.get("element", "section")
     if element not in CARD_ELEMENTS:
@@ -676,13 +672,10 @@ def card_frame(name: str, given: dict) -> dict:
         "open": True if given.get("open") else None,
     }
     named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
-    drawn = [(key, value) for key, value in named.items() if _drawn(value)]
-    valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
-    bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
-    # The element is one of CARD_ELEMENTS, a tag name and never text, and the
-    # attributes are escaped above.
+    # The element is one of CARD_ELEMENTS, a tag name and never text, and
+    # html_attributes escapes the attributes.
     return {
-        "opening": mark_safe(f"<{element}{valued}{bare}>"),  # noqa: S308 - see above
+        "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
         "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
     }
 

@@ -24,6 +24,21 @@ from .labels import DOT_MARKUP
 # The arrow that ends a link onward, as {% arrow %} draws it.
 ARROW = mark_safe('&nbsp;<span aria-hidden="true">&rarr;</span>')
 
+
+def html_attributes(named: Mapping[str, object]) -> SafeString:
+    """A part's attributes as its opening tag writes them, each escaped: True
+    drawn bare, and None, False or "" not at all, so a count of 0 is still
+    drawn. A flag is read by its type, which ``isinstance`` sees through a
+    lazy object for, so a context processor's lazy False draws nothing and
+    never ``="False"``. Every part with ``data_*`` options draws them here."""
+
+    flags = {key: True if value else None for key, value in named.items() if isinstance(value, bool | None)}
+    drawn = [(key, value) for key, value in (named | flags).items() if value is not None and value != ""]
+    valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
+    bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
+    return valued + bare
+
+
 SECTION_PARTIAL = "partials/_part_section.html"
 # Where a section's head may be told to stand; "" leaves it to surfaces.css.
 HEADS = frozenset({"", "above", "inside"})
@@ -135,8 +150,7 @@ class SectionPart:
     def _landmark(self, heading_id: str) -> dict[str, SafeString]:
         """The section's opening and closing tags: the landmark its heading
         names, holding the head on the page and the frame of its body. A
-        ``data`` value of True draws a bare attribute, and None, False or ""
-        none, so a count of 0 is still drawn."""
+        ``data`` value is drawn as ``html_attributes`` draws one."""
 
         element = "details" if self.fold else "figure" if self.figure else "section"
         named = {
@@ -156,13 +170,11 @@ class SectionPart:
             "data-head": self.head or None,
         }
         named |= {f"data-{name.replace('_', '-')}": value for name, value in self.data.items()}
-        drawn = [
-            (key, value) for key, value in named.items() if value is not None and value is not False and value != ""
-        ]
-        valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
-        bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
-        # The element is one of three tag names, never text; the attributes are escaped above.
-        return {"opening": format_html("<{}{}{}>", element, valued, bare), "closing": format_html("</{}>", element)}
+        # The element is one of three tag names, never text; the attributes are escaped there.
+        return {
+            "opening": format_html("<{}{}>", element, html_attributes(named)),
+            "closing": format_html("</{}>", element),
+        }
 
     def __html__(self) -> SafeString:
         # Rendered by a template, so escaped already.

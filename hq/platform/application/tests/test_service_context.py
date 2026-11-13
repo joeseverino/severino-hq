@@ -390,7 +390,10 @@ class ObservedHealthTests(SimpleTestCase):
         from ..path_model import Hop, Route
         from ..service_context import part_rows
 
-        hops = tuple(Hop(kind, kind.capitalize(), name) for kind, name in steps)
+        # A network hop carries its address as its detail too, as paths builds it.
+        hops = tuple(
+            Hop(kind, kind.capitalize(), name, detail=name if kind == "network" else "") for kind, name in steps
+        )
         with mock.patch("hq.platform.application.machines.machine", return_value=machine):
             rows = part_rows(SimpleNamespace(claims=()), Route("internal DNS", hops))
         return next(row.observed_health for row in rows if row.hop.step == step)

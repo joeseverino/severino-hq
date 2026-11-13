@@ -42,34 +42,6 @@ standard, with what it uses beside its limits. Each said once; the band above ha
       {% endif %}
     </div>
   </div>
-  {% comment %}
-  Commands get the width of the page and a copy button, like the compose
-  change below: squeezed into the side column they wrap mid-path.
-  {% endcomment %}
-  {% if not plan.viable and plan.install %}
-  <div class="upgrade-install boxed-facts">
-    {% if plan.install_brought %}
-      <p class="muted">Every deploy of HQ puts the upgrade helper on this machine, owned by root. To let the controller run it:</p>
-    {% else %}
-      <p class="muted">HQ's deploys put the upgrade helper only on the machine HQ runs on. To give this machine its own copy, owned by root, and let the controller run it:</p>
-    {% endif %}
-    <ol class="upgrade-install-steps">
-      {% for step in plan.install %}
-        <li>
-          {% if step.detail %}
-          <div class="hardening-head">
-            <strong>{{ step.label|breakable }}</strong>
-            <button class="btn compact ghost" type="button" data-copy-target="install-{{ forloop.counter }}">Copy</button>
-          </div>
-          <pre tabindex="0" id="install-{{ forloop.counter }}"><code>{{ step.detail|breakable }}</code></pre>
-          {% else %}
-          <strong>{{ step.label|breakable }}</strong>
-          {% endif %}
-        </li>
-      {% endfor %}
-    </ol>
-  </div>
-  {% endif %}
 {% aside %}<span class="muted">{{ plan.change_label|breakable }}{% dot %}upgrade risk {% with mark=plan.risk_reason|then:"," %}{{ plan.risk|breakable:mark }}{% endwith %}{% if plan.risk_reason %} because {{ plan.risk_reason|breakable }}{% endif %}</span>
 {% endsection %}
 {% endif %}
