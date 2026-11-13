@@ -18,6 +18,24 @@
 }
 .form > :not(.field), .form > .field:has(textarea), .form > .field:has(> div > * + *), .form .field.is-wide { grid-column: 1 / -1; }
 .form > .field { margin-bottom: 0; }
+/* A form that asks one question (`is-question`, partials/_form.html) draws its
+   button on the field's line wherever the field keeps 18rem beside it, as a
+   search or lookup form does. The field adds no box of its own, so the
+   control and the button meet on one flex line, with the label above them
+   and the help and errors below, each taking the row. A form too narrow for
+   both stacks in reading order instead, the help under its control and the
+   button last, as any form's closing row is. */
+.form.is-question { container: question / inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-4); }
+.form.is-question > .field { display: contents; }
+.form.is-question > :not(.field, .form-actions), .form.is-question > .field > * { flex: 1 0 100%; margin: 0; }
+.form.is-question > .field > :is(input, select) { flex: 1 1 18rem; min-width: 0; }
+.form.is-question > .field > :not(label, input, select) { order: 1; }
+.form.is-question > .form-actions { margin: 0; }
+@container question (width < 30rem) {
+  .form.is-question > .field > :is(input, select) { flex-basis: 100%; }
+  .form.is-question > .field > :not(label, input, select) { order: 0; }
+  .form.is-question > .form-actions { margin-top: var(--space-4); }
+}
 /* A range's start and end (`field-range`) begin a row together, in the form's
    own columns, so a third column never takes one and leaves the other; on a
    phone they stack in order. */

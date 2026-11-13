@@ -1,11 +1,14 @@
 """A past expiry reads as past on every surface that says when something runs out."""
 
+import json
 import re
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
-from django.test import SimpleTestCase, TestCase, override_settings
+from django.conf import settings
+from django.test import SimpleTestCase, TestCase, override_settings, tag
 
 from hq.domains.control_plane.models import ManagedResource
 
@@ -46,24 +49,28 @@ def estate(*nodes) -> SimpleNamespace:
     return SimpleNamespace(now=NOW, nodes=lambda: nodes)
 
 
+# The wording HQ and its controller both write, one case per line: the days
+# left as ``days_until`` counts them, and the words for them. The controller's
+# TestTLSConditionsWordAnExpiryAsHQDoes reads the same table.
+CASES = Path(settings.BASE_DIR) / "controller/providers/testdata/expiry-words.json"
+
+
+@tag("source")
 class ExpiryWordsTests(SimpleTestCase):
-    def test_each_tense_is_its_own_phrase(self):
+    def test_each_count_of_days_reads_as_the_shared_table_says(self):
         from ..moments import expiry_words
 
-        cases = {
-            **SAID,
-            timedelta(hours=20): "expires in 1 day",
-            -timedelta(days=1, hours=2): "expired 1 day ago",
-        }
-        for offset, said in cases.items():
-            with self.subTest(offset=offset):
-                self.assertEqual(expiry_words(NOW + offset, NOW), said)
+        for case in json.loads(CASES.read_text(encoding="utf-8")):
+            with self.subTest(days=case["days"]):
+                self.assertEqual(expiry_words(case["days"]), case["words"])
 
+
+class ExpiryMomentTests(SimpleTestCase):
     def test_a_count_of_days_reads_as_its_moment_does(self):
         from ..expiry import days_until
         from ..moments import expiry_words
 
-        for offset in SAID:
+        for offset in (*SAID, timedelta(hours=20), -timedelta(days=1, hours=2)):
             when = NOW + offset
             with self.subTest(offset=offset):
                 self.assertEqual(expiry_words(days_until(when, NOW)), expiry_words(when, NOW))

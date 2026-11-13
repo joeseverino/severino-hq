@@ -6,17 +6,16 @@
 
     {% with reading=results|dictkey:"lookup.name.read" %}
       {% if reading %}
-    <div class="tool-result">
         {% if reading.ok %}
           {% table_region "Public records" %}
-            <table>
-              <thead><tr>{% table_heading "Type" "identifier" %}{% table_heading "Name" "identifier" %}{% table_heading "Answer" "identifier" %}</tr></thead>
+            <table class="data-table">
+              <thead><tr>{% table_heading "Type" "identifier" gutter=True %}{% table_heading "Name" "identifier" drop=1 %}{% table_heading "Answer" "identifier" %}</tr></thead>
               <tbody>
                 {% for answer in reading.answers %}
                   <tr>
                     <td><code>{{ answer.type|breakable }}</code></td>
                     <td>{{ answer.name|breakable }}</td>
-                    <td><code>{{ answer.value|breakable }}</code></td>
+                    <td><code class="cell-whole">{{ answer.value|breakable }}</code></td>
                   </tr>
                 {% empty %}
                   <tr><td colspan="3" class="muted">No public records.</td></tr>
@@ -30,7 +29,6 @@
         {% else %}
           <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>
         {% endif %}
-    </div>
       {% endif %}
     {% endwith %}
   {% endsection %}
@@ -41,7 +39,6 @@
 
     {% with reading=results|dictkey:"lookup.address.read" %}
       {% if reading %}
-    <div class="tool-result">
         {% if reading.ok %}
           <dl class="kv">
             <dt>Address</dt>
@@ -74,7 +71,6 @@
         {% else %}
           <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>
         {% endif %}
-    </div>
       {% endif %}
     {% endwith %}
   {% endsection %}

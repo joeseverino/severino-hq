@@ -109,6 +109,46 @@ class AskedTests(TestCase):
         self.assertIn(f"estate/domains lands on {report.estate_name(page)}", said.getvalue())
 
 
+class EarlyRefusalTests(SimpleTestCase):
+    """The task checks the set and the pages asked before it waits for the heavy turn, with no
+    database: a test case that refuses every query proves it."""
+
+    def refused(self, **asked) -> str:
+        """What the early check prints for ``asked``, or "" where it lets the run go on."""
+
+        environment = {"usage_seed": "showcase", **{f"usage_{key}": value for key, value in asked.items()}}
+        with (
+            mock.patch.dict("os.environ", environment),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as err,
+            redirect_stdout(io.StringIO()) as out,
+        ):
+            try:
+                report.refuse_early()
+            except SystemExit as exited:
+                self.assertEqual(exited.code, 2)
+                return err.getvalue()
+        self.assertEqual(out.getvalue(), "", "a page left out is the run's to name")
+        return ""
+
+    def test_a_page_that_is_none_is_refused_naming_the_nearest_route(self):
+        said = self.refused(pages="control_plane:containrs")
+
+        self.assertIn("No page control_plane:containrs", said)
+        self.assertIn("\n  estate/infrastructure/containers (the estate's control_plane:containers)", said)
+
+    def test_a_set_no_server_can_be_seeded_with_is_refused(self):
+        self.assertIn("example-no-such-set", self.refused(pages="estate/all", seed="example-no-such-set"))
+
+    def test_pages_perf_serves_or_is_asked_to_skip_go_on_to_the_run(self):
+        for asked in (
+            {"pages": "/infrastructure/containers/ control_plane:containers estate/all"},
+            {"pages": "connections /infrastructure/containers/", "skip_unservable": "true"},
+            {"pages": "connections", "skip_unservable": "true"},
+        ):
+            with self.subTest(**asked):
+                self.assertEqual(self.refused(**asked), "")
+
+
 class ComposedTests(Measured):
     """--image measures what production runs: the host image composed with the checkout's set."""
 

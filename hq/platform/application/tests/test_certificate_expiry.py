@@ -8,6 +8,7 @@ from hq.platform.application.certificate_expiry import CERTIFICATE_EXPIRES, expi
 from hq.platform.application.findings import findings
 from hq.platform.application.inventory_testing import store
 from hq.platform.application.projection import projection_scope
+from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.names import CLOUDFLARE, ZONE
@@ -116,5 +117,15 @@ class ExampleEstateTests(TestCase):
             found = findings(principal=web_principal(self.user))["findings"]
         titles = [finding["title"] for finding in found]
 
-        self.assertEqual(sum(finding["rule"] == "certificate-expiring" for finding in found), 2, titles)
+        # The estate holds certificates of its own that lapsed; these are the zone's.
+        edge = [
+            finding
+            for finding in found
+            if finding["rule"] == "certificate-expiring"
+            and any(fact["label"] == "Certificate" and fact["value"] == ZONE for fact in finding["evidence"])
+        ]
+        self.assertEqual(len(edge), 2, titles)
         self.assertEqual(len(set(titles)), len(titles), titles)
+        # Each draws on the findings page, whose queue keys hold no stamp.
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.get(reverse("control_plane:findings")).status_code, 200)

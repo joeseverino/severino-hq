@@ -146,6 +146,7 @@ STRAYS_OPENING_A_LINE = (
   // A middle dot, a bullet, a bar, a slash, an en or an em dash.
   const SEPARATOR = /^[·•|\/\u2013\u2014]/;
   const MARKS_ONLY = /^[^\p{L}\p{N}]*$/u;
+  const TYPED = 'textarea, input:not([type=checkbox], [type=radio], [type=image], [type=range], [type=color], [type=file])';
   const range = document.createRange();
   const inlineDisplay = (el) => ['inline', 'contents'].includes(getComputedStyle(el).display);
   const blockOf = (el) => { while (el.parentElement && inlineDisplay(el)) el = el.parentElement; return el; };
@@ -191,9 +192,12 @@ STRAYS_OPENING_A_LINE = (
         if (separator) add(blockOf(child), {ch: separator, rect: [...child.getClientRects()].find((r) => r.width), el: child});
         if (!atomic(child)) { walk(child); continue; }
         // Set in its parent's line whole: one piece, its words as its text,
-        // and a box with none (an icon, an image) as a mark.
+        // a field for words as what it shows (what is typed, else its
+        // placeholder), and a box with none (an icon, an image, a box to
+        // tick) as a mark.
         const rect = child.getBoundingClientRect();
-        if (drawnRect(child, rect)) add(blockOf(child.parentElement), {ch: child.textContent.trim() || '▪', rect, el: child});
+        const words = child.matches(TYPED) ? child.value || child.placeholder || 'field' : child.textContent;
+        if (drawnRect(child, rect)) add(blockOf(child.parentElement), {ch: words.trim() || '▪', rect, el: child});
         if (!child.matches('svg, img')) walk(child);
       }
     }

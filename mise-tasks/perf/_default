@@ -3,9 +3,7 @@
 #MISE extends="django"
 #MISE depends=[{task="setup:browser", args=["chromium"]}]
 #MISE depends_post=["image:docker stop"]
-#MISE env={SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
-#MISE lock=["gate", "heavy"]
-#MISE timeout="2h"
+#MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1", SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION="0", SEVERINO_HQ_PLUGINS="{{ env.HQ_LOCAL_PLUGINS | default(value='') }}", PYTHONPATH="{{ env.HQ_LOCAL_PYTHONPATH | default(value='') }}"}
 #USAGE arg "<pages>" var=#true help="Pages as dev:look names them: estate/<path>, a path (/infrastructure/containers/), a route name (control_plane:containers), or estate/all or all for every page the navigation lists"
 #USAGE flag "--skip-unservable" help="Name each page asked that perf cannot serve (a gate page, a record found by template or by the estate's links) and measure the rest, where such a page would refuse the run; dev:look's --perf and --base ask it so"
 #USAGE flag "--image" help="Measure the image production runs instead of dev:scratch: the one IMAGE names, else the host image image:build makes, composed with the extension set by image:compose (a base from its own composition/Dockerfile); with --host-alone the host image alone"
@@ -17,6 +15,10 @@
 
 # The harness is tools/perf/report.py; each run is kept as var/perf/<run>.json.
 set -eu
+# The data set and the pages asked are checked before the heavy turn, which
+# may wait behind other runs; where a page lands is asked of the seed in it.
+uv run --group browser python -c 'from tools.perf.report import refuse_early; refuse_early()'
+turn_bound=2h
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
 

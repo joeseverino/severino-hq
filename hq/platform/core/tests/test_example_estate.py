@@ -21,13 +21,13 @@ from hq.platform.application.capability_policy import RULE_LABELS
 from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
-from hq.platform.application.tests.markup import with_class, within
+from hq.platform.application.tests.markup import select, with_class, within
 from hq.platform.core import seeds
 from hq.platform.core.audit import ANONYMOUS
 from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED
 from hq.platform.core.example_estate.testing import sign_in, throwaway_media
 from hq.platform.core.models import AgentIdentity, AuditLog, OwnDevice
-from hq.platform.core.tests.browser.estate import ask_as_production, owner_client
+from hq.platform.core.tests.browser.estate import ask_as_production, estate_pages, owner_client
 
 
 class ExampleEstateTests(TestCase):
@@ -113,7 +113,8 @@ class ExampleEstateTests(TestCase):
         self.assertLess(min(edited), timezone.localdate() - timedelta(days=1))
 
     def test_an_assets_expense_is_dated_and_filed_as_its_purchase(self):
-        for asset in Asset.objects.all():
+        # An asset with no cost recorded was not bought, so no expense files it.
+        for asset in Asset.objects.exclude(total_cost=0):
             with self.subTest(asset=asset.slug):
                 (expense,) = Expense.objects.filter(related_asset=asset)
                 self.assertEqual(expense.date, asset.purchase_date)
@@ -205,6 +206,71 @@ class ExampleEstateTests(TestCase):
         (container,) = containers("container-image-unpinned")
 
         self.assertNotIn(container, containers("container-image-behind"))
+
+
+class WalkedStatesTests(TestCase):
+    """Each state the estate keeps for the browser gate to read shows on a page its walk visits."""
+
+    @classmethod
+    def setUpTestData(cls):
+        with throwaway_media(), seeds.built("showcase") as owner:
+            cls.user = owner
+
+    def setUp(self):
+        sign_in(self.client, self.user)
+
+    def walked(self, address):
+        self.assertIn(address, estate_pages())
+        page = self.client.get(address)
+        self.assertEqual(page.status_code, 200)
+        return page
+
+    def test_a_name_no_declaration_claims_is_listed_with_its_adoption(self):
+        from hq.platform.core.example_estate.network import HAND_MADE
+
+        hostname = HAND_MADE["domain"]
+        page = self.walked(reverse("control_plane:services"))
+
+        self.assertIn(hostname, [service.hostname for service, _actions in page.context["unmanaged_rows"]])
+        self.assertTrue(select(page, "formaction", reverse("control_plane:adopt", args=[hostname])))
+
+    def test_the_unfiled_receipt_s_match_page_offers_its_expense_as_a_row(self):
+        from hq.platform.core.example_estate.records import UNFILED, UNFILED_RECEIPT
+
+        vendor, item = UNFILED[1:3]
+        expense = Expense.objects.get(vendor=vendor, item=item)
+        page = self.walked(reverse("receipts:match", args=[UNFILED_RECEIPT]))
+
+        self.assertEqual([match for match, _actions in page.context["matches"]], [expense])
+        self.assertIn(str(expense.pk), [field.attrs.get("value") for field in select(page, "name", "expense_id")])
+
+    def test_an_asset_with_nothing_beside_it_is_its_facts_alone(self):
+        from hq.platform.core.example_estate.records import SWITCH_ASSET
+
+        page = self.walked(reverse("assets:detail", kwargs={"slug": SWITCH_ASSET}))
+
+        self.assertEqual(page.context["related"], ())
+        self.assertFalse(page.context["asset"].notes)
+
+    def test_the_reports_exports_follow_three_readings(self):
+        # Three readings fill a wide row, so the exports wrap onto one of their own.
+        page = self.walked(reverse("reports:dashboard"))
+
+        for reading in ("status_groups", "assets_by_category", "docs_needing_review"):
+            with self.subTest(reading=reading):
+                self.assertTrue(page.context[reading])
+
+    def test_two_lapsed_certificates_under_one_name_read_apart(self):
+        from hq.platform.core.example_estate.infra import LEFT_OVER, LEFT_OVER_LAPSED
+
+        self.walked(reverse("control_plane:findings"))
+        found = findings(principal=web_principal(self.user), rule="certificate-expiring")["findings"]
+        titles = [finding["title"] for finding in found if LEFT_OVER in finding["title"]]
+
+        self.assertEqual(len(titles), 2, titles)
+        self.assertEqual(len(set(titles)), 2, titles)
+        for title in titles:
+            self.assertIn(f"expired {LEFT_OVER_LAPSED.days} days ago", title)
 
 
 class PinnedWordsTests(TestCase):

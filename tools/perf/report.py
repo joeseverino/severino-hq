@@ -142,10 +142,12 @@ def landed(seed: str, every: list[str], chosen: list[str]) -> tuple[list[str], l
     return [*dict.fromkeys(lands[page] for page in every)], [*dict.fromkeys(lands[page] for page in chosen)]
 
 
-def served(names: tuple[str, ...], every: list[str], *, leave_out: bool) -> list[str]:
+def served(
+    names: tuple[str, ...], every: list[str], *, leave_out: bool, say: Callable[[str], None] = print
+) -> list[str]:
     """The addresses of the pages ``names`` asks that perf serves. A name it cannot serve refuses
-    the run, or with ``leave_out`` is named and left out, so a caller asking pages of every kind
-    (dev:look's) measures those it can."""
+    the run, or with ``leave_out`` is named through ``say`` and left out, so a caller asking pages
+    of every kind (dev:look's) measures those it can."""
 
     # A bare word dev:look takes as a gate page by name (connections) ends an
     # estate page's path too, and perf knows no gate page, so it takes no word.
@@ -159,14 +161,15 @@ def served(names: tuple[str, ...], every: list[str], *, leave_out: bool) -> list
         try:
             chosen += task.pages([name], every, by_word=False)
         except PageRefused:
-            print(f"perf leaves out {name}: it serves the {ESTATE}'s pages by path or route name alone", flush=True)
+            say(f"perf leaves out {name}: it serves the {ESTATE}'s pages by path or route name alone")
     if not chosen:
         raise NothingServed("perf: no page asked is one it serves, so nothing is measured")
     return list(dict.fromkeys(chosen))
 
 
-def plan() -> Plan:
-    """The pages asked, the phone's and the wide desktop's viewports, and the task's flags."""
+def set_up() -> str:
+    """Django set up with the pages the servers measured will compose, and why the host is
+    measured alone, as ``alone_because``."""
 
     alone = alone_because()
     if alone:
@@ -174,6 +177,36 @@ def plan() -> Plan:
         os.environ["SEVERINO_HQ_PLUGINS"] = ""
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "hq.config.settings")
     django.setup()
+    return alone
+
+
+def _unsaid(_said: str) -> None:
+    """What the early check leaves to the run to say."""
+
+
+def refuse_early() -> None:
+    """Check the data set and the pages asked before the task waits for the heavy turn, exiting 2
+    with the refusal ``plan`` would make once it holds it. Neither needs a database: a page is
+    found among the navigation's addresses, and only where it lands is asked of the seed."""
+
+    set_up()
+    asked = usage()
+    try:
+        seed = seed_of(asked.text("seed"))
+        with override_settings(**seeds.get(seed).settings):
+            served(asked.repeated("pages"), navigation(), leave_out=asked.switch("skip_unservable"), say=_unsaid)
+    except Unservable as error:
+        print(f"perf: {error}", file=sys.stderr)
+        sys.exit(2)
+    except NothingServed:
+        # The run says so: --skip-unservable is dev:look's, which runs perf inside its own turn.
+        return
+
+
+def plan() -> Plan:
+    """The pages asked, the phone's and the wide desktop's viewports, and the task's flags."""
+
+    alone = set_up()
     asked = usage()
     seed = seed_of(asked.text("seed"))
     # The pages the set's navigation reaches, and those asked, under the settings it is shown with.

@@ -19,16 +19,18 @@ import tempfile
 import time
 from collections.abc import Callable
 from contextlib import ExitStack, suppress
+from dataclasses import dataclass
 from pathlib import Path
-from typing import override
+from typing import Any, override
 from unittest import mock
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.management import call_command
 from django.db import connections
+from django.template.autoreload import get_template_directories
 from django.test import Client
-from django.urls import Resolver404, resolve
+from django.urls import Resolver404, get_resolver, resolve
 lazy from playwright.sync_api import Error as BrowserError
 
 from hq.platform.application import fragments
@@ -69,7 +71,7 @@ from hq.platform.core.tests.look_report import (
     unmatched,
 )
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
-from hq.platform.core.tests.task import PREFIX, Usage, estate_name, estate_path, is_estate, usage
+from hq.platform.core.tests.task import PREFIX, TEMPLATE, Usage, estate_name, estate_path, is_estate, usage
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
@@ -554,12 +556,19 @@ def _address(url: str) -> str:
     return parts.path + (f"?{parts.query}" if parts.query else "")
 
 
-def _guessable(path: str) -> bool:
-    """Whether a browser could request ``path`` speculatively: the rules
-    prefetch only a route behind the session (`speculation.sessionless`)."""
+def _marked_a_guess(request: Any) -> bool:
+    """Whether the look sends a request of the browser's marked as a guess, so
+    a part a page fetches that would act or reach out is refused
+    (`speculation.answer`). A document the look opens is a person's, so a page
+    that reads outside HQ (a DNS lookup) draws its answer; so is a route that
+    answers without a session (the reference's document), which the rules
+    never prefetch and where a guess is refused whole. A guess the browser
+    makes itself carries its own Sec-Purpose, forwarded as it came."""
 
+    if request.is_navigation_request():
+        return False
     try:
-        view = resolve(path).func
+        view = resolve(urlsplit(request.url).path).func
     except Resolver404:
         return True
     return getattr(view, "login_required", True)
@@ -689,25 +698,109 @@ def catalog_pages(asked) -> dict[str, str]:
     return {name: page for name, page in catalog.CatalogLayoutTests.render().items() if name in entries}
 
 
-def _pages(asked: tuple[str, ...]) -> list[str]:
+def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
     """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out, an
     estate page by its name; one dev:look cannot draw is refused. The catalog
     is read only for ``all`` or a name no other page is, so its refusal
-    offers its entries too."""
+    offers its entries too. Without ``records``, a name only the estate drawn
+    resolves is left out, and a record's address is taken unchecked."""
 
     named, posts = _named(), post_names()
+    if records is None:
+        asked = tuple(name for name in asked if name not in task.naming_records(asked))
+        if not asked:
+            return []
     try:
-        with EstatePages(_asked().text("seed")) as records:
-            found = None
-            if asked and "all" not in asked:
-                with suppress(task.PageRefused):
-                    found = task.pages(asked, estate_pages(), [*named, *posts], records)
-            if found is None:
-                named += catalog.CATALOG
-                found = task.pages(_families(asked), estate_pages(), [*named, *posts], records)
+        found = None
+        if asked and "all" not in asked:
+            with suppress(task.PageRefused):
+                found = task.pages(asked, estate_pages(), [*named, *posts], records)
+        if found is None:
+            named += catalog.CATALOG
+            found = task.pages(_families(asked), estate_pages(), [*named, *posts], records)
     except task.PageRefused as refused:
         raise AssertionError(str(refused)) from None
     return [page if page in named or page in posts else estate_name(page) for page in found]
+
+
+@dataclass(frozen=True, slots=True)
+class Asked:
+    """What the run was asked, each name in it checked: the pages, and the probe with its argument."""
+
+    pages: list[str]
+    probe: str
+    probe_source: str
+    probe_arg: object
+
+
+def _checked(records: task.Records | None) -> Asked:
+    """What the run was asked, or AssertionError naming what it refuses and
+    what to type instead: the seed first, as a record's page is found in its
+    estate, then the pages, the rule, the probe and its argument, and the
+    operation. ``records`` is ``_pages``'."""
+
+    given = _asked()
+    try:
+        seeds.get(given.text("seed"))
+    except LookupError as unknown:
+        raise AssertionError(f"--seed: {unknown}") from None
+    pages = _pages(given.repeated("pages"), records)
+    if (rule := Look.rule_asked()) and rule not in _rules():
+        raise AssertionError(no_rule(rule))
+    probe, probe_source = _probe(given.text("probe"))
+    if given.text("arg") and not probe:
+        raise AssertionError("--arg is what --probe's function takes: name the probe")
+    if given.text("operation") and not set(pages) & set(REFERENCE_PAGES):
+        raise AssertionError(
+            f"--operation opens an operation of the API reference: name {' or '.join(REFERENCE_PAGES)}"
+        )
+    return Asked(pages, probe, probe_source, _argument(given.text("arg")))
+
+
+def _not_the_hosts(asked: tuple[str, ...]) -> list[str]:
+    """The names of ``asked`` no page of the host alone can be, so an
+    extension's, which a look draws only composed: ``template:<name>`` that no
+    host template directory holds, and a route under a namespace the host has
+    none of."""
+
+    held = {
+        path.relative_to(folder).as_posix() for folder in get_template_directories() for path in folder.rglob("*.html")
+    }
+    namespaces = set(get_resolver().namespace_dict)
+    return [
+        name
+        for name in asked
+        if (
+            name.removeprefix(TEMPLATE) not in held
+            and not any(known.endswith(f"/{name.removeprefix(TEMPLATE)}") for known in held)
+            if name.startswith(TEMPLATE)
+            else ":" in name.partition("?")[0] and "/" not in name and name.split(":", 1)[0] not in namespaces
+        )
+    ]
+
+
+def refuse_early() -> None:
+    """Check what the task was asked before it waits for the heavy turn and
+    draws the estate, exiting 64 with the refusal: every name but those only
+    the estate drawn resolves, which the run checks (``_pages``). Not
+    composed, a name only an extension's page can be is refused too, with
+    the flag that loads them."""
+
+    said = []
+    try:
+        _checked(None)
+        _css(_asked().text("css"))
+        _script(_asked().text("eval"))
+    except AssertionError as refused:
+        said.append(str(refused))
+    if not _asked().switch("composed") and (theirs := _not_the_hosts(_asked().repeated("pages"))):
+        said.append(
+            f"No page of the host alone is {', '.join(theirs)}: an extension's page is drawn with --composed,"
+            " which loads the extension set mise.local.toml names"
+        )
+    if said:
+        print("mise run dev:look: " + "\n".join(said), file=sys.stderr)
+        sys.exit(64)
 
 
 class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
@@ -745,23 +838,16 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         # The tree the run draws from, held to the end (`changed_since`).
         cls.tree = tree_of(Path(settings.BASE_DIR))
         cls.clock_at = float(_asked().text(_CLOCK) or round(time.time()))
-        # What was asked is checked before the base is looked at, which takes a
-        # while: the seed first, as a record's page is found in its estate.
-        try:
-            seeds.get(_asked().text("seed"))
-        except LookupError as unknown:
-            raise AssertionError(f"--seed: {unknown}") from None
-        cls.asked = _pages(_asked().repeated("pages"))
-        if (rule := cls.rule_asked()) and rule not in _rules():
-            raise AssertionError(no_rule(rule))
-        cls.probe, cls.probe_source = _probe(_asked().text("probe"))
-        cls.probe_arg = _argument(_asked().text("arg"))
-        if _asked().text("arg") and not cls.probe:
-            raise AssertionError("--arg is what --probe's function takes: name the probe")
-        if _asked().text("operation") and not set(cls.asked) & set(REFERENCE_PAGES):
-            raise AssertionError(
-                f"--operation opens an operation of the API reference: name {' or '.join(REFERENCE_PAGES)}"
-            )
+        # What was asked is checked before the base is looked at, which takes a while.
+        with EstatePages(_asked().text("seed")) as records:
+            asked = _checked(records)
+        cls.asked, cls.probe, cls.probe_source, cls.probe_arg = (
+            asked.pages,
+            asked.probe,
+            asked.probe_source,
+            asked.probe_arg,
+        )
+        rule = cls.rule_asked()
         # The base next, while nothing of this run's holds memory but Django.
         ref = _asked().text("base")
         cls.base, cls.base_measured, cls.base_errors = _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {})
@@ -867,11 +953,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.sending = None
             response = sending.send(self.estate_client, **headers)
         else:
-            # Marked as a guess, so a page that would act or reach out is refused,
-            # except where no browser guesses: a route that answers without a
-            # session is never prefetched, and a guess there is refused whole, so
-            # the page's own fetch of one (the reference's document) is sent as made.
-            if _guessable(parts.path):
+            if _marked_a_guess(request):
                 headers["HTTP_SEC_PURPOSE"] = "prefetch"
             response = self.estate_client.get(address, secure=True, follow=True, **{**headers, **REQUEST})
         self.answered[address] = (response.status_code, response.get("X-Speculation-Refused", ""))

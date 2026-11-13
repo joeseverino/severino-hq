@@ -4,7 +4,11 @@ The showcase and standard data sets (``hq.platform.core.seeds``) and the
 rendered-page and export tests use it; HQ itself never reads it. Unlike the
 stress estate (``test_browser_fixtures.build_estate``), it is an HQ run for
 months, reached over the tailnet through the proxy with single sign-on, where
-what is left to point out is an image with a release out since it was pulled.
+what is left to point out is what such an HQ gathers: an image with a release
+out since it was pulled, a rewrite made in AdGuard's own screen, certificates
+left in the proxy that lapsed, a runbook due for review and a receipt not yet
+filed. Each is a named constant beside the records it seeds, so the browser
+gate reads the page it changes.
 """
 
 from django.contrib.auth import get_user_model

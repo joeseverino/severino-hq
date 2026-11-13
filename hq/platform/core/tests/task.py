@@ -227,6 +227,20 @@ def _takes_a_record(address: str) -> bool:
     return bool(match.args or match.kwargs)
 
 
+def _names_a_record(name: str, record_routes: set[str]) -> bool:
+    """Whether ``name`` is found only in the estate drawn: a route that takes a record, or ``template:<name>``."""
+
+    return name.startswith(TEMPLATE) or name in record_routes
+
+
+def naming_records(asked: Sequence[str]) -> list[str]:
+    """The names of ``asked`` that only the estate drawn can resolve, so a tool
+    checking names before it draws one leaves these to the run that does."""
+
+    record_routes = _record_routes()
+    return [name for name in asked if _names_a_record(name, record_routes)]
+
+
 def _record(name: str, records: Records | None) -> str:
     """The address of the estate page a record's name reaches: a route that
     takes a record, its first one the estate links to, or ``template:<name>``,
@@ -294,7 +308,7 @@ def _one_page(
     """The address of the one page ``name`` asks for, a record's or the
     estate's, or PageRefused saying why it is none, with the names it would take."""
 
-    if name.startswith(TEMPLATE) or name in record_routes:
+    if _names_a_record(name, record_routes):
         return _record(name, records)
     if (address := _address(name, every)) is None:
         offers = nearest(urlsplit(estate_path(name)).path if is_estate(name) else name, named)

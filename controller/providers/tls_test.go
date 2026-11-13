@@ -458,25 +458,30 @@ func TestAnUploadedCertificateInstallsTheKeyOpenedFromItsSlot(t *testing.T) {
 	}
 }
 
-// The expiry condition words a moment as HQ's moments.expiry_words does, a
-// past one as past.
+// The expiry condition words a count of days as HQ's moments.expiry_words
+// does, a past one as past: both read the one table in
+// testdata/expiry-words.json.
 func TestTLSConditionsWordAnExpiryAsHQDoes(t *testing.T) {
-	said := map[time.Duration]string{
-		3 * 24 * time.Hour:      "expires in 3 days",
-		24 * time.Hour:          "expires in 1 day",
-		0:                       "expires today",
-		-2 * time.Hour:          "expired today",
-		-(24 + 1) * time.Hour:   "expired 1 day ago",
-		-(4*24 + 1) * time.Hour: "expired 4 days ago",
+	data, err := os.ReadFile("testdata/expiry-words.json")
+	if err != nil {
+		t.Fatal(err)
 	}
-	spec := TLSCertificateSpec{RenewalWindowDays: 30}
-	for offset, want := range said {
-		conditions := tlsConditions(spec, nil, nil, nil, daysUntil(tlsNow.Add(offset), tlsNow))
+	var cases []struct {
+		Days  int    `json:"days"`
+		Words string `json:"words"`
+	}
+	if err := json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range cases {
+		// A window as long as the count, so every case raises the condition.
+		spec := TLSCertificateSpec{RenewalWindowDays: max(tc.Days, 0)}
+		conditions := tlsConditions(spec, nil, nil, nil, tc.Days)
 		if len(conditions) != 1 || conditions[0].Reason != "ExpiringSoon" {
-			t.Fatalf("%v: conditions %+v", offset, conditions)
+			t.Fatalf("%d days: conditions %+v", tc.Days, conditions)
 		}
-		if got := conditions[0].Message; got != "A certificate a site serves "+want+"." {
-			t.Errorf("%v: %q, want it to say %q", offset, got, want)
+		if got := conditions[0].Message; got != "A certificate a site serves "+tc.Words+"." {
+			t.Errorf("%d days: %q, want it to say %q", tc.Days, got, tc.Words)
 		}
 	}
 }

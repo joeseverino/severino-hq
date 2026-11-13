@@ -231,6 +231,8 @@ def expiry_words(when: datetime | int, now: datetime | None = None) -> str:
 
     ``when`` is the moment it runs out, or the days left as ``days_until``
     counts them. A past expiry is a past tense, never a count below nothing.
+    The controller's ``expiryWords`` says the same, and
+    ``controller/providers/testdata/expiry-words.json`` holds both to one table.
     """
 
     days = when if isinstance(when, int) else days_until(when, now)

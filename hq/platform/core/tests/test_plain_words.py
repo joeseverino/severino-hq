@@ -308,6 +308,26 @@ class BaselineTests(SimpleTestCase):
         # Part of the tree read, as a test of one template reads it, says nothing of the rest.
         self.assertEqual(self.held([], whole=False, allowed=2), [])
 
+    @tag("tree")
+    def test_a_listing_names_every_finding_an_entry_counts_at_its_line(self):
+        # Vale reads the text, plain_words the attribute; the file's entry counts both.
+        words = " ".join(["word"] * 24)
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp, "page.html")
+            page.write_text(f'<p>Fine.</p>\n<p>A {words}.</p>\n<a title="A {words}">x</a>\n')
+            counted = {(str(page), "Plain.Long"): 2}
+
+            def run(*flags):
+                printed = io.StringIO()
+                with mock.patch.dict(plain_words.BASELINE, counted, clear=True), contextlib.redirect_stdout(printed):
+                    status = plain_words.main([*flags, str(page)])
+                return status, [line.split(": ")[0:2] for line in printed.getvalue().splitlines()]
+
+            held, listed = run(), run("--list")
+
+        self.assertEqual(held[0], 0)
+        self.assertEqual(listed, (0, [[f"{page}:2:4", "Plain.Long"], [f"{page}:3", "Plain.Long"]]))
+
     def test_every_entry_names_a_file_and_a_rule_it_may_hold(self):
         from hq.platform.core.prose_baseline import BASELINE, BASELINED_RULES
 

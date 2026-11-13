@@ -412,12 +412,14 @@ def findings(alerts: dict, origins: list) -> list[str]:
     return found
 
 
-def _vale(text: str) -> tuple[int, dict]:
-    """Vale's exit status on ``text`` and its alerts, which an error leaves empty."""
+def _vale(text: str = "", files: Iterable[Path] = ()) -> tuple[int, dict]:
+    """Vale's exit status and its alerts, which an error leaves empty: on
+    ``files`` as lint:prose reads the tree, or else on ``text``."""
 
+    files = [str(path) for path in files]
     vale = subprocess.run(
-        ["vale", f"--config={VALE_CONFIG}", f"--ext={_EXTENSION}", "--output=JSON"],
-        input=text,
+        ["vale", f"--config={VALE_CONFIG}", "--output=JSON", *(files or [f"--ext={_EXTENSION}"])],
+        input=None if files else text,
         capture_output=True,
         text=True,
         check=False,
@@ -494,10 +496,14 @@ def census(found: list[str]) -> str:
 def main(arguments: list[str]) -> int:
     """With ``--tree <report>``, Vale's JSON report on the whole tree joins
     what is read here and the baseline is held whole; ``--census`` prints the
-    baseline's entries instead of failing."""
+    baseline's entries instead of failing. ``--list`` prints every finding in
+    ``paths``, with its line and rule, before the baseline holds any: Vale's on
+    their text, read here unless ``--tree`` gives it, then those on the
+    attributes, tag literals and labels."""
 
-    tree, show_census = None, "--census" in arguments
-    arguments = [argument for argument in arguments if argument != "--census"]
+    flags = {"--census", "--list"} & set(arguments)
+    arguments = [argument for argument in arguments if argument not in flags]
+    tree = None
     if arguments[:1] == ["--tree"]:
         tree, arguments = Path(arguments[1]), arguments[2:]
     paths = [Path(argument) for argument in arguments]
@@ -509,7 +515,15 @@ def main(arguments: list[str]) -> int:
     found = findings(alerts, origins)
     if tree is not None:
         found = tree_findings(json.loads(tree.read_text(encoding="utf-8") or "{}")) + found
-    if show_census:
+    if "--list" in flags:
+        if tree is None:
+            status, alerts = _vale(files=paths)
+            if status:
+                return status
+            found = tree_findings(alerts) + found
+        print("\n".join(found + label_findings(read)) or "no finding")
+        return 0
+    if "--census" in flags:
         print(census(found))
         return 0
     found = held(found, whole=tree is not None) + label_findings(read)

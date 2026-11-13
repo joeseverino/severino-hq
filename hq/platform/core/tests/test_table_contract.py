@@ -70,6 +70,25 @@ class TableContractTests(SimpleTestCase):
         in_region = '{% table_region "Things" %}' + bare + "{% endtable_region %}"
         self.assertEqual(table_problems(in_region), ["a heading not drawn by {% table_heading %}"])
 
+    def test_a_heading_outside_the_shared_table_is_refused(self):
+        """The heading's sort control and the region's fit are drawn by the
+        shared table's stylesheet, so a plain table there draws them as
+        page buttons."""
+
+        plain = (
+            '{% table_region "Things" %}<table><thead><tr>{% table_heading "Name" %}</tr></thead>'
+            "</table>{% endtable_region %}"
+        )
+        self.assertEqual(
+            table_problems(plain),
+            [
+                'a table in {% table_region %} without class="data-table"',
+                'a {% table_heading %} outside a table with class="data-table"',
+            ],
+        )
+        loose = '{% table_heading "Name" %}'
+        self.assertEqual(table_problems(loose), ['a {% table_heading %} outside a table with class="data-table"'])
+
     def test_a_declared_table_keeps_the_contract(self):
         source = (
             '{% table_region "Things" %}<table class="compact data-table"><thead><tr>'

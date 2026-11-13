@@ -5,7 +5,8 @@ Each entry is a file to rewrite. ``plain_words.held`` fails a file with more
 findings of a rule than its entry, and, when lint:prose reads the whole tree,
 one with fewer, whose entry must come down with the fix. So this only falls.
 ``mise run lint:prose`` names both; ``plain_words --census`` prints the
-entries the tree holds now.
+entries the tree holds now, and ``plain_words --list <paths>`` each finding
+an entry counts, at its line (``uv run python -m hq.platform.core.plain_words``).
 """
 
 # The rules a file may still break by its count here. Every other rule fails

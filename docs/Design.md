@@ -471,6 +471,13 @@ nothing of its own (`form_fields`, `form_note` from the view).
 template, and `test_form_page.py`, which holds every routed create and edit
 view to the frame and the card to it alone.
 
+A form that asks one question, one visible field of a line (words, a number,
+a date, one choice) closed by its verb alone, draws its button on the field's
+line where the field keeps 18rem beside it and under it where it cannot, as a
+search or lookup form does. The partial derives it (`asks_one_question`, then
+`.form.is-question`), so no page flags it.
+*Catalog:* `form/lookup`, and `form/lookup-help` with its help and an error.
+
 A form whose fields stand one to a row of a table (a group chosen for each
 record, a verdict for each request) is the same partial with `table_body`
 naming the template that draws the table, in its `table_region`. The form lays

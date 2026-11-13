@@ -94,6 +94,9 @@ SHELL_SUITES = "tests/shell"
 SHELL_SUITE = "test-*.sh"
 SHELL_TASK = "lint:shell:suites"
 MISE = ["mise"]
+# A folder of fixtures a test reads by path, from any tree: Go's convention, which go build skips
+# (`go help packages`), and a Python test may read another tree's (a case table the controller shares).
+TESTDATA = "testdata"
 # Ends a run with the line on what its process tree spent; a run inside a measured one adds none.
 MEASURER = str(ROOT / "tools" / "lib" / "measured")
 # Set by the run that found itself narrow, for the run it execs under the measurer, which pops it.
@@ -104,6 +107,18 @@ class KeepRefused(Exception):
     """A --keep names no test file this tree changed from the ref and the ref has a copy of."""
 
 
+def is_testdata(path: str) -> bool:
+    """A file under a ``testdata/`` folder: support of every suite, never a test module."""
+
+    return TESTDATA in Path(path).parts[:-1]
+
+
+def is_python_test_file(path: str) -> bool:
+    """A file the Python suite runs or reads: one under a ``tests/`` folder, or any tree's testdata."""
+
+    return is_test_file(path) or is_testdata(path)
+
+
 def is_go_test_file(path: str) -> bool:
     """A file the controller's tests are built from: a ``_test.go`` file, one under ``testdata/``, or one of a
     package of test support, which Go names for what it fakes (``connecttest``) or as test (``testrules``)."""
@@ -111,7 +126,7 @@ def is_go_test_file(path: str) -> bool:
     parts = Path(path).parts
     if parts[:1] != (GO,):
         return False
-    if path.endswith("_test.go") or "testdata" in parts[:-1]:
+    if path.endswith("_test.go") or is_testdata(path):
         return True
     return path.endswith(".go") and any(part.startswith("test") or part.endswith("test") for part in parts[1:-1])
 
@@ -119,7 +134,7 @@ def is_go_test_file(path: str) -> bool:
 def is_go_test_module(path: str, _labels: list[str]) -> bool:
     """A file go test compiles into its package's tests; any other Go test file is support."""
 
-    return path.endswith("_test.go")
+    return path.endswith("_test.go") and not is_testdata(path)
 
 
 def is_shell_test_file(path: str) -> bool:
@@ -145,6 +160,8 @@ def shell_command(suites: list[str], tree: Path) -> list[str]:
 def is_test_module(path: str, labels: list[str]) -> bool:
     """Whether ``path`` holds tests: Django finds it on its own, or a label names it or something in it."""
 
+    if is_testdata(path):
+        return False
     module = path.removesuffix(".py").replace("/", ".")
     named = (label.removesuffix(".py").replace("/", ".") for label in labels)
     return fnmatch.fnmatch(Path(path).name, TEST_MODULE) or any(
@@ -260,7 +277,7 @@ def python_suite() -> Suite:
     return Suite(
         imports=import_command,
         command=lambda args, _tree: [*UV_RUN, *TEST, *args],
-        is_test=is_test_file,
+        is_test=is_python_test_file,
         is_module=is_test_module,
         module=("test module", "test modules"),
         flags=(),

@@ -333,11 +333,15 @@ PLANTS = {
 # that finds nothing.
 PASSES = {
     # The dot held inside the name's box, a count's noun held to its figure,
-    # and a run of parts whose dot before a part that opens a row is clipped.
+    # a run of parts whose dot before a part that opens a row is clipped, and
+    # a filter bar whose search fills its row, a field for words and no mark.
     "lines opening on a stray": Plant(
+        "{% load filter_tags %}"
         '<p style="inline-size: 12ch"><span style="display: inline-block; inline-size: 100%">example-name&nbsp;·</span>'
         ' Example</p><p style="inline-size: 6ch">Example 12&nbsp;days</p>'
         '<ul class="dot-list" style="inline-size: 12ch"><li>Example one</li><li>Example two</li></ul>'
+        '<div style="inline-size: 16rem">{% filter_bar %}<input type="search" name="q" aria-label="Example"'
+        ' placeholder="Example names, vendors and notes">{% endfilter_bar %}</div>'
     ),
     # Three short facts of a band, together at its start however wide it is.
     "facts together": Plant(

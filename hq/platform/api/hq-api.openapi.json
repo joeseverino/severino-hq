@@ -373,10 +373,10 @@
             "rule": null,
             "schema_version": 2,
             "summary": {
-              "findings": 2,
-              "returned": 2,
+              "findings": 3,
+              "returned": 3,
               "severities": {
-                "attention": 1,
+                "attention": 2,
                 "neutral": 1
               },
               "truncated": false
@@ -389,34 +389,26 @@
       "getAssetsV2OK": {
         "dataValue": {
           "data": {
-            "business_use_percentage": 80,
-            "category": "server_hardware",
-            "estimated_deductible_amount": "311.20",
-            "infrastructure": "machine:docker-host-01",
-            "item_name": "Small form factor server",
+            "business_use_percentage": 100,
+            "category": "networking",
+            "estimated_deductible_amount": "0.00",
+            "infrastructure": "",
+            "item_name": "8-port gigabit switch",
             "notes": "",
-            "payment_method": "credit",
-            "purchase_date": "2024-11-11",
+            "payment_method": "",
+            "purchase_date": "2025-03-21",
             "relationships": {
               "content": [],
               "documentation": [],
-              "expense_ids": [
-                1
-              ],
-              "projects": [
-                "hq",
-                "media-server",
-                "photo-library",
-                "self-hosted-git",
-                "tailnet-hardening"
-              ]
+              "expense_ids": [],
+              "projects": []
             },
             "serial_number": "",
-            "slug": "sff-server",
+            "slug": "hallway-switch",
             "status": "active",
-            "total_cost": "389.00",
-            "updated_at": "2024-11-11T19:45:00+00:00",
-            "vendor": "eBay",
+            "total_cost": "0.00",
+            "updated_at": "2025-03-21T21:29:00+00:00",
+            "vendor": "",
             "warranty_date": null
           },
           "ok": true
@@ -467,7 +459,7 @@
                 "url": "/infrastructure/hq-dns/"
               }
             ],
-            "detail": "5 rewrites.",
+            "detail": "6 rewrites.",
             "endpoint": "http://10.100.200.214:3080",
             "facts": [],
             "family": "infrastructure.controllers",
@@ -1337,38 +1329,20 @@
       "listActionItemsV2OK": {
         "dataValue": {
           "data": {
-            "count": 3,
+            "count": 8,
             "items": [
               {
-                "action": "Open containers",
-                "detail": "registry.example.net/example-builds/home-automation-server:2024.11.3-ubu2404-ls45 to 2024.12.1-ubu2404-ls48.",
-                "label": "1 running image has an update",
+                "action": "Review docs",
+                "detail": "",
+                "label": "1 doc is past its review date",
                 "since": "",
-                "source": "Containers",
+                "source": "Docs",
                 "status": "attention",
-                "url": "/infrastructure/containers/"
-              },
-              {
-                "action": "Open certificate",
-                "detail": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal has not run; renew it.",
-                "label": "wildcard-example-com expires in 24 days",
-                "since": "",
-                "source": "Estate",
-                "status": "attention",
-                "url": "/infrastructure/wildcard-example-com/"
-              },
-              {
-                "action": "",
-                "detail": "A tag can later name a different build. Pin it by digest.",
-                "label": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
-                "since": "",
-                "source": "Infrastructure",
-                "status": "attention",
-                "url": "/infrastructure/findings/?rule=container-image-unpinned"
+                "url": "/docs/?needs_review=1"
               }
             ],
             "next": null,
-            "total": 3,
+            "total": 8,
             "truncated": false
           },
           "ok": true
@@ -1465,8 +1439,25 @@
       "listAssetsV2OK": {
         "dataValue": {
           "data": {
-            "count": 1,
+            "count": 2,
             "items": [
+              {
+                "business_use_percentage": 100,
+                "category": "networking",
+                "estimated_deductible_amount": "0.00",
+                "infrastructure": "",
+                "item_name": "8-port gigabit switch",
+                "notes": "",
+                "payment_method": "",
+                "purchase_date": "2025-03-21",
+                "serial_number": "",
+                "slug": "hallway-switch",
+                "status": "active",
+                "total_cost": "0.00",
+                "updated_at": "2025-03-21T21:29:00+00:00",
+                "vendor": "",
+                "warranty_date": null
+              },
               {
                 "business_use_percentage": 80,
                 "category": "server_hardware",
@@ -1486,7 +1477,7 @@
               }
             ],
             "next": null,
-            "total": 1,
+            "total": 2,
             "truncated": false
           },
           "ok": true
@@ -1533,7 +1524,7 @@
                 "kind": "npm",
                 "label": "npm",
                 "observed_at": "2026-01-15T09:30:00+00:00",
-                "open_problems": 0,
+                "open_problems": 1,
                 "status": "good",
                 "status_label": "Working"
               }
@@ -1797,7 +1788,7 @@
                 "environment": "homelab",
                 "external_url": "",
                 "github_path": "",
-                "last_reviewed": "2025-12-16",
+                "last_reviewed": "2025-06-29",
                 "notes": "",
                 "obsidian_path": "",
                 "published_at": null,
@@ -1805,7 +1796,7 @@
                 "status": "active",
                 "system": "",
                 "title": "Publish the public site and answer its contact form",
-                "updated_at": "2025-12-17T02:40:00+00:00"
+                "updated_at": "2025-06-30T01:56:00+00:00"
               },
               {
                 "doc_id": "rb-restore-backup",
@@ -2019,17 +2010,17 @@
       "listExpensesV2OK": {
         "dataValue": {
           "data": {
-            "count": 9,
+            "count": 10,
             "items": [
               {
                 "about": "",
                 "business_purpose": "",
-                "business_use_percentage": 100,
-                "category": "domains",
-                "date": "2025-08-03",
-                "estimated_deductible_amount": "10.44",
-                "id": 3,
-                "item": "example.com renewal",
+                "business_use_percentage": 80,
+                "category": "hardware",
+                "date": "2026-01-12",
+                "estimated_deductible_amount": "43.99",
+                "id": 10,
+                "item": "Replacement UPS battery",
                 "notes": "",
                 "paid_from": "",
                 "payment_method": "credit",
@@ -2037,13 +2028,13 @@
                 "related_content": null,
                 "related_documentation": null,
                 "related_project": null,
-                "total_cost": "10.44",
-                "updated_at": "2025-08-03T23:51:00+00:00",
-                "vendor": "Cloudflare"
+                "total_cost": "54.99",
+                "updated_at": "2026-01-12T20:24:00+00:00",
+                "vendor": "APC"
               }
             ],
             "next": null,
-            "total": 9,
+            "total": 10,
             "truncated": false
           },
           "ok": true
@@ -2393,7 +2384,7 @@
       "listReceiptsV2OK": {
         "dataValue": {
           "data": {
-            "count": 9,
+            "count": 10,
             "items": [
               {
                 "amount": "389.00",
@@ -2411,7 +2402,7 @@
               }
             ],
             "next": null,
-            "total": 9,
+            "total": 10,
             "truncated": false
           },
           "ok": true

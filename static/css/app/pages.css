@@ -211,29 +211,6 @@
 /* Two tools side by side where there is room, stacked where there is not.
    Neither is primary, so neither takes the wider column. */
 .lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-.tool-result > :last-child { margin-bottom: 0; }
-
-/* Side-by-side tools have to agree on where their rows are, and left to
-   themselves they do not: each card is its own grid, so a three-line
-   explanation on one side pushes its input below the input on the other and
-   the two forms sit at different heights.
-
-   Subgrid is what makes the bands shared rather than coincidental: intro,
-   form and result line up across every card in the row no matter how the
-   prose wraps, at any width, without anyone measuring text.
-
-   Stacked in one column it holds as well: each card takes the next three
-   rows, which then belong to it alone, so no width has to be asked. */
-@supports (grid-template-rows: subgrid) {
-  .lookup-grid { grid-template-rows: auto auto auto; }
-  /* No result yet in either card: two rows, not a third holding nothing. */
-  .lookup-grid:not(:has(.tool-result)) { grid-template-rows: auto auto; }
-  .lookup-grid:not(:has(.tool-result)) > .card { grid-row: span 2; }
-  .lookup-grid > .card {
-    display: grid; grid-row: span 3; grid-template-rows: subgrid;
-    align-content: start;
-  }
-}
 
 /* ---- Analytics ---------------------------------------------------------- */
 

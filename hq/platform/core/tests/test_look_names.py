@@ -7,7 +7,9 @@ typed; a rule it
 refuses that is a check of the survey is answered with the gate test that
 holds it."""
 
+import io
 import os
+from contextlib import redirect_stderr
 from unittest import mock
 
 from django.test import SimpleTestCase, TestCase
@@ -15,14 +17,15 @@ from django.urls import resolve, reverse
 
 from hq.platform.core.tests import look
 from hq.platform.core.tests.browser.estate import ask_as_production, estate_once, landings, owner_client
+from hq.platform.core.tests.look_records import EstatePages
 from hq.platform.core.tests.task import estate_name, estate_path, is_estate
 
 ASKED = {"usage_pages": "", "usage_seed": "showcase"}
 
 
 def _named(*asked):
-    with mock.patch.dict(os.environ, ASKED, clear=True):
-        return look._pages(asked)
+    with mock.patch.dict(os.environ, ASKED, clear=True), EstatePages(ASKED["usage_seed"]) as records:
+        return look._pages(asked, records)
 
 
 def _offers(refused: AssertionError) -> list[str]:
@@ -95,6 +98,52 @@ class CatalogNamesTests(SimpleTestCase):
         self.assertIn("part/notice-error", _offers(refused.exception))
 
 
+class EarlyRefusalTests(SimpleTestCase):
+    """What the task was asked is checked before it waits for the heavy turn,
+    with no database: a test case that refuses every query proves it."""
+
+    def refused(self, **asked) -> str:
+        """What the early check prints for ``asked``, or "" where it lets the run go on."""
+
+        printed = io.StringIO()
+        with (
+            mock.patch.dict(
+                os.environ, {**ASKED, **{f"usage_{key}": value for key, value in asked.items()}}, clear=True
+            ),
+            redirect_stderr(printed),
+        ):
+            try:
+                look.refuse_early()
+            except SystemExit as exited:
+                self.assertEqual(exited.code, 64)
+                return printed.getvalue()
+        return ""
+
+    def test_a_name_that_is_no_page_is_refused_with_the_nearest_entry(self):
+        said = self.refused(pages="part/form/filter-bar")
+
+        self.assertIn("part/form/filter-bar", said)
+        self.assertIn("form/filter-bar", [line.split()[0] for line in said.splitlines() if line.startswith("  ")])
+
+    def test_a_rule_that_is_none_is_refused(self):
+        self.assertIn("example-no-such-rule", self.refused(pages="connections", rule="example-no-such-rule"))
+
+    def test_a_name_only_the_drawn_estate_resolves_waits_for_the_run(self):
+        # A record's page by route or template is found in the seed's estate, which only the run draws.
+        for pages in ("template:_container_detail.html", "control_plane:detail", "connections part/notice"):
+            with self.subTest(pages=pages):
+                self.assertEqual(self.refused(pages=pages), "")
+
+    def test_a_name_only_an_extension_can_be_is_refused_with_the_flag_that_loads_them(self):
+        for pages in ("template:example_extension/_example.html", "example_extension:overview"):
+            with self.subTest(pages=pages):
+                said = self.refused(pages=pages)
+                self.assertIn(pages, said)
+                self.assertIn("--composed", said)
+        # Composed, the extensions' templates are theirs to hold, which the run reads.
+        self.assertEqual(self.refused(pages="template:example_extension/_example.html", composed="true"), "")
+
+
 class PostNamesTests(TestCase):
     def test_every_named_post_is_refused_on_the_seed_as_it_says(self):
         from hq.platform.core.tests.look_posts import post_names, posted
@@ -148,11 +197,27 @@ class EveryPageTests(TestCase):
         self.assertEqual(sorted(read), sorted(walked))
 
 
+class _Request:
+    """A request as Playwright's route hands it over: its URL, and whether it opens a document."""
+
+    def __init__(self, path: str, *, navigation: bool):
+        self.url = f"https://testserver{path}"
+        self.navigation = navigation
+
+    def is_navigation_request(self) -> bool:
+        return self.navigation
+
+
 class GuessTests(SimpleTestCase):
-    def test_a_page_behind_the_session_is_asked_as_a_guess_and_a_sessionless_route_as_made(self):
+    def test_a_part_a_page_fetches_behind_the_session_is_asked_as_a_guess_and_a_sessionless_route_as_made(self):
         # The reference's document answers without a session, where a guess is refused whole.
-        self.assertTrue(look._guessable(reverse("dashboard")))
-        self.assertFalse(look._guessable(reverse("hq_api:openapi")))
+        self.assertTrue(look._marked_a_guess(_Request(reverse("dashboard"), navigation=False)))
+        self.assertFalse(look._marked_a_guess(_Request(reverse("hq_api:openapi"), navigation=False)))
+
+    def test_a_page_the_look_opens_is_a_person_s_so_one_that_reads_outside_hq_draws_its_answer(self):
+        lookup = f"{reverse('control_plane:tools')}?tab=dns&name=example.com"
+
+        self.assertFalse(look._marked_a_guess(_Request(lookup, navigation=True)))
 
 
 class RecordPagesTests(TestCase):

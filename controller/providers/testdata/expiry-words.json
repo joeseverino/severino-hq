@@ -1,0 +1,15 @@
+[
+  {"days": 400, "words": "expires in 1\u00a0year, 1\u00a0month"},
+  {"days": 120, "words": "expires in 3\u00a0months, 4\u00a0weeks"},
+  {"days": 91, "words": "expires in 3\u00a0months"},
+  {"days": 90, "words": "expires in 90 days"},
+  {"days": 3, "words": "expires in 3 days"},
+  {"days": 1, "words": "expires in 1 day"},
+  {"days": 0, "words": "expires today"},
+  {"days": -1, "words": "expired today"},
+  {"days": -2, "words": "expired 1 day ago"},
+  {"days": -5, "words": "expired 4 days ago"},
+  {"days": -91, "words": "expired 90 days ago"},
+  {"days": -92, "words": "expired 3\u00a0months ago"},
+  {"days": -401, "words": "expired 1\u00a0year, 1\u00a0month ago"}
+]

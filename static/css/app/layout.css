@@ -154,6 +154,9 @@
    sections do. Kept at the class's weight, so a container that spaces its
    parts by a gap still clears it. */
 .section-head:where(:not(:first-child)) { margin-block-start: var(--stack-gap); }
+/* What a form in a section's frame answers stands as far off it, for the
+   same reason; the section's own foot stays the foot's distance. */
+.section-body > .form + :not(.section-foot) { margin-block-start: var(--stack-gap); }
 /* A heading takes the row's width its words need, before what sits beside
    it does, and no more. */
 .section-head :is(h2, h3, h4, h5, h6) { margin: 0; flex: 0 1 auto; }

@@ -47,6 +47,12 @@ from .names import (
 CERTIFICATE = "wildcard-example-com"
 # Inside its renewal window, so renewing it is one of the things to do.
 CERTIFICATE_EXPIRES = timedelta(days=24)
+# Left in the proxy from before the wildcard, when the media server answered
+# at this name: one certificate twice, as the proxy issued it and as it was
+# uploaded by hand, lapsed on one day and serving nothing, so deleting them
+# is one of the things to do.
+LEFT_OVER = "media.example.com"
+LEFT_OVER_LAPSED = timedelta(days=12)
 
 
 def declare():
@@ -139,7 +145,7 @@ def connections():
                 answering(DNS, "cloudflare_dns", "https://api.cloudflare.com/client/v4", "1 zone.", [ZONE]),
                 answering(CLOUDFLARE, "cloudflare_api", "https://api.cloudflare.com/client/v4", "1 account.", [ZONE]),
                 answering(PROXY_REF, "npm", f"http://{LAN}:81", f"{len(SERVICES)} proxy hosts."),
-                answering(ADGUARD, "adguard", f"http://{LAN}:3080", f"{len(SERVICES)} rewrites."),
+                answering(ADGUARD, "adguard", f"http://{LAN}:3080", f"{len(SERVICES) + 1} rewrites."),
                 answering(TAILSCALE, "tailscale", "https://api.tailscale.com", "3 devices."),
                 answering(SSH, "ssh", f"{MACHINE}:22", "Host key matches.", [MACHINE]),
                 # The accounts the app is installed on, as the controller's probe reports them.
@@ -179,6 +185,18 @@ def proxy():
             "expires_on": (now() + CERTIFICATE_EXPIRES).isoformat(),
             "serves": hosts,
         },
+        *(
+            {
+                "connection_ref": PROXY_REF,
+                "id": number,
+                "name": LEFT_OVER,
+                "provider": provider,
+                "domains": [LEFT_OVER],
+                "expires_on": (now() - LEFT_OVER_LAPSED).isoformat(),
+                "serves": [],
+            }
+            for number, provider in ((2, "letsencrypt"), (3, "other"))
+        ),
     )
     store(
         "npm.access_list",

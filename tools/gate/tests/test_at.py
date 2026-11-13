@@ -144,6 +144,33 @@ class TestAtRefTests(GateTestCase):
         self.assertNotIn("tests/helpers.py", replaced.partition(";")[0])
         self.assert_nothing_left()
 
+    def test_another_trees_testdata_is_support_laid_over_and_named_and_a_replaced_copy_runs_again_at_the_ref(self):
+        """A Python test reading a fixture under another tree's testdata/ reads this tree's at the ref."""
+        self.write("controller/providers/testdata/words.json", "old words\n")
+        self.old = self.commit("words")
+        self.write("controller/providers/testdata/words.json", "new words\n")
+        self.write("controller/providers/testdata/golden/test_records.py", "new golden\n")
+        probe = (
+            "import json, pathlib, sys\n"
+            "data = pathlib.Path.cwd() / 'controller' / 'providers' / 'testdata'\n"
+            "seen = pathlib.Path(sys.argv[1])\n"
+            "runs = json.loads(seen.read_text()) if seen.exists() else []\n"
+            "seen.write_text(json.dumps([*runs, [(data / 'words.json').read_text(),"
+            " (data / 'golden' / 'test_records.py').read_text()]]))\n"
+        )
+        with patch.object(at, "UV_RUN", [sys.executable, "-c", probe]):
+            code, out = self.run_main(str(self.seen), at_ref=self.old)
+
+        self.assertEqual(code, 0)
+        runs = json.loads(self.seen.read_text())
+        self.assertEqual(runs, [["new words\n", "new golden\n"], ["old words\n", "new golden\n"]])
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("new in this tree: controller/providers/testdata/golden/test_records.py", verdict)
+        self.assertIn("kept at the ref: controller/providers/testdata/words.json", verdict)
+        self.assertIn("this tree's controller/providers/testdata/words.json laid over instead", verdict)
+        self.assertFalse(at.is_go_test_module("controller/providers/testdata/case_test.go", []))
+        self.assert_nothing_left()
+
     def test_support_whose_name_git_quotes_is_found_at_the_ref(self):
         name = "tests/fakes/unit\\x2dname.txt"
         self.write(name, "old fake\n")

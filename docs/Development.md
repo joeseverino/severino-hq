@@ -339,7 +339,10 @@ test carries the `tree` tag (`test_tree_tag.py`).
 The wording rules are Vale's, in `tools/lint/vale`: `.vale.ini` there says
 which files each style reads, `styles` holds the rules, and `lint:prose` runs
 them. `hq/platform/core/plain_words.py` hands Vale the template attributes and
-tag literals it cannot read.
+tag literals it cannot read. `uv run python -m hq.platform.core.plain_words
+--list <paths>` prints every finding in those paths at its line, Vale's on the
+text and its own on the rest, before the baseline in `prose_baseline.py` holds
+any; `vale --output=line` alone sees only the text.
 
 A finding names its rule and what to say instead. A word that must stand in
 one file is turned off for that file in that `.vale.ini`, with the reason
@@ -718,7 +721,11 @@ showcase and standard seeds hold each extension's demo too, and `all` reads
 the record pages it names ([Plugins](Plugins.md#demo-data)). A bare word is the
 one page of the estate whose path it ends (`contacts`), and the run's lines name that
 page as `estate/<path>`; a word that ends several paths or none is refused with
-the nearest. An unknown page or rule is refused before anything runs, and a
+the nearest. An unknown page, rule, probe or seed is refused in seconds, before the look
+waits for the heavy turn; a record's page, named by its route or a template,
+is checked once the run has built the estate. Without `--composed`, a
+template no host directory holds, or a route under a namespace the host lacks,
+is refused as an extension's page, with the flag that loads them. A
 page that answers anything but 200 fails the run. A query rides on the page's name as it does on an address
 (`'search/?q=docker'`, `'control_plane:containers?q=hq'`), on any page the
 server answers, so a page drawn from its query (Command Center's results, a

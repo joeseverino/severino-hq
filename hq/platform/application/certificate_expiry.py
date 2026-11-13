@@ -181,13 +181,15 @@ def _finding(node, value: str, days: int, apart: str = "") -> dict[str, Any]:
 
     kind, title, stamp, names, issuer = _parts(value)
     label, _title, said = _reads_as(value, days)
+    day = when.date().isoformat() if (when := moment(stamp)) else stamp
     return {
         "rule": "certificate-expiring",
         "subject": node.id,
         "title": " ".join(filter(None, (label, title, apart, said))),
         # One connection can hold several certificates for one name, each its
-        # own matter in the queue.
-        "part": "|".join((kind, title, stamp, issuer)),
+        # own matter in the queue. The day stands for the expiry, since a key
+        # holds no time stamp (display_words).
+        "part": "|".join((kind, title, day, issuer, names)),
         # One that serves no name breaks nothing when it lapses: it is left
         # over, and the advice is to remove it, not renew it.
         "severity": "serious" if names and days <= SERIOUS_DAYS else "attention",

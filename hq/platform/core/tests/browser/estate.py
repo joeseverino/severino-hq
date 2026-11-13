@@ -42,7 +42,7 @@ lazy from hq.platform.core import seeds
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 lazy from hq.platform.core.example_estate.network import ZONE_KEY
-lazy from hq.platform.core.example_estate.records import RUNBOOKS, SERVER_ASSET, WRITEUPS
+lazy from hq.platform.core.example_estate.records import RUNBOOKS, SERVER_ASSET, SWITCH_ASSET, UNFILED_RECEIPT, WRITEUPS
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
 # The gate's widths, a wide desktop and the laptop windows where a wide table
@@ -158,8 +158,9 @@ def records():
     service with the longest name, its container (which has an upgrade to
     make), the zone, a message with the page that deletes it, HQ's project
     (the one every other kind is about), the server as an asset and its
-    expense and receipt, a runbook and a writeup; then each one an installed
-    extension's demo names (``seeds.demo_pages``)."""
+    expense and receipt, the switch nothing else is about, the receipt not
+    yet filed and the expense its match page offers, a runbook and a writeup;
+    then each one an installed extension's demo names (``seeds.demo_pages``)."""
 
     hostname, container, *_ = max(SERVICES, key=lambda service: len(service[0]))
     return [
@@ -173,6 +174,8 @@ def records():
         reverse("assets:detail", kwargs={"slug": SERVER_ASSET}),
         reverse("expenses:detail", args=[1]),
         reverse("receipts:detail", args=[1]),
+        reverse("assets:detail", kwargs={"slug": SWITCH_ASSET}),
+        reverse("receipts:match", args=[UNFILED_RECEIPT]),
         reverse("docs_index:detail", kwargs={"doc_id": RUNBOOKS[0][0]}),
         reverse("content:detail", kwargs={"slug": WRITEUPS[0][0]}),
         *seeds.demo_pages(),

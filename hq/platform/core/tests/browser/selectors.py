@@ -29,6 +29,11 @@ SELECTORS = {
     # A form's closing row (a long form's save bar is one), the section frame
     # it ends, and a control a row of the form chooses with.
     "save_bar": ".form-actions",
+    # A form that asks one question (partials/_form.html), its one control
+    # and its button.
+    "one_question": ".form.is-question",
+    "question_control": ".field > :is(input, select)",
+    "question_button": ".form-actions > button",
     "section_frame": ".section",
     "choice": "select",
     "quiet_link": ".subtle-link",

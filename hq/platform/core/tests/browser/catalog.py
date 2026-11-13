@@ -61,6 +61,25 @@ _ONE_LINE = """(values) => [...document.querySelectorAll(values)]
   .map((value) => value.textContent.trim())"""
 
 
+# Each form not drawn as one question, or drawn otherwise than its width
+# calls for: its button on the control's line in a form of 30rem or more
+# inside its padding, under the control in one narrower (forms.css).
+_ONE_QUESTION = """({forms, question, control: controls, button: buttons}) => [...document.querySelectorAll(forms)].filter((form) => {
+  if (!form.matches(question)) return true;
+  const control = form.querySelector(controls).getBoundingClientRect();
+  const button = form.querySelector(buttons).getBoundingClientRect();
+  const style = getComputedStyle(form);
+  const width = form.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+  const roomy = width >= 30 * parseFloat(getComputedStyle(document.documentElement).fontSize);
+  return roomy ? !(button.top < control.bottom && button.bottom > control.top) : button.top < control.bottom;
+}).map((form) => form.outerHTML.slice(0, 120))"""
+_QUESTION_PARTS = {
+    "forms": "main form",
+    "question": SELECTORS["one_question"],
+    "control": SELECTORS["question_control"],
+    "button": SELECTORS["question_button"],
+}
+
 # Each drawing with no box of its own while the box that holds it has one.
 _UNDRAWN = """(drawings) => [...document.querySelectorAll(drawings)].filter((drawing) => {
   const held = drawing.parentElement.getBoundingClientRect();
@@ -109,6 +128,12 @@ class _NoFields(forms.Form):
 
 class _ExampleLookup(forms.Form):
     name = forms.CharField(label="Example hostname", required=False)
+
+
+class _ExampleNaming(forms.Form):
+    name = forms.CharField(
+        label="Example group", help_text="An example of what a group is named for, long enough to wrap on a phone."
+    )
 
 
 def _readings(title, lede, *names, unit="min"):
@@ -675,8 +700,9 @@ CATALOG = {
     ),
     # The form page's card (form_page.html) with fields and what saving does,
     # one with no fields, which is its closing row alone, and a form that asks
-    # (partials/_form.html method="get"); a new option of either comes with an
-    # entry here (test_form_page).
+    # (partials/_form.html method="get"), one question on its button's line,
+    # once more with its help and an error under them; a new option of either
+    # comes with an entry here (test_form_page).
     "form/page": Entry(
         '{% include "form_page.html#form_card" %}',
         {
@@ -693,6 +719,13 @@ CATALOG = {
         '{% section "Example lookup" %}{% include "partials/_form.html" with method="get" form=form verb="Look up" '
         'cancel_url="" note="" choices="" choice_field="" bar="" %}{% endsection %}',
         {"form": _ExampleLookup()},
+        premise=(_ONE_QUESTION, _QUESTION_PARTS),
+    ),
+    "form/lookup-help": Entry(
+        '{% section "Example group" %}{% include "partials/_form.html" with form=form verb="Add example group" '
+        'cancel_url="" note="" choices="" choice_field="" bar="" %}{% endsection %}',
+        {"form": _ExampleNaming(data={})},
+        premise=(_ONE_QUESTION, _QUESTION_PARTS),
     ),
     # The filter bar ({% filter_bar %}) narrowed, with its way back and its
     # count; with one choice and nothing narrowed; and with labeled choices
