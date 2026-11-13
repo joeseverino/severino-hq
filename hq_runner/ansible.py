@@ -1,30 +1,8 @@
 """The worker's two uses of ansible-runner: a bound run's playbook, and a role's
-argument spec as ``ansible-doc`` reads it.
-
-Every argument is fixed here or comes from the bound run (``claim.bind``): the
-playbook and project from the resolved procedure, the inventory from the
-connection each of the run's hosts is reached through, the extra-vars from its
-parameters, the timeout from its procedure's record. Nothing is read from the
-private data directory's ``env/`` (a fresh, empty one per run), so no file
-there can add a command-line option, a variable or a callback, and none is
-written there (``suppress_env_files``). The artifacts live in a private
-directory under ``scratch`` (tmpfs in the worker's image), hold no event the
-handler did not keep and no stdout, and are removed with it when the run ends,
-as are Ansible's own working files and ssh's control sockets, which a
-read-only root has nowhere else to put.
-
-Ansible reads the worker's configuration and no project's (``environment``):
-its configuration file is an empty one of the run's own, so a project's
-``ansible.cfg`` is never read, and every path it looks for plugins and modules
-on is pinned. What Ansible loads from beside a playbook or inside a role
-(``callback_plugins/``, ``library/`` and the rest), no setting turns off; the
-scan reports each such directory a project holds (``catalog.unpinned``).
-
-Every host is reached over ssh as its connection says, with its identity
-alone (no agent, no password, no other key), against its host key as the
-renderer pinned it, and nothing else: ansible-runner turns host key checking
-off unless told otherwise, so the inventory turns it on. A run through the
-read login never escalates (``extravars``).
+argument spec as ``ansible-doc`` reads it. Every argument is fixed here or
+comes from the bound run (``claim.bind``), so no claim or project adds an
+option, a configuration file or a login. How a run is confined:
+docs/Architecture.md, "The automation worker".
 """
 
 import json

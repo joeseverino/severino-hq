@@ -1478,11 +1478,15 @@ escalate to nothing.
 
 Its inventory entry is that
 connection's address, port and user, its identity file alone (no agent, no
-password), its pinned `known_hosts` with host key checking on, and its
-`shell_type` when it carries one. The hosts and extra-vars come from the
-claim's `input`, and every ansible-runner argument is fixed in
-`hq_runner/ansible.py`, with its artifacts, Ansible's own working files and
-ssh's control sockets in a private directory removed when the run ends.
+password), its pinned `known_hosts` with host key checking on, since
+ansible-runner turns it off unless told otherwise, and its `shell_type` when
+it carries one. The hosts and extra-vars come from the claim's `input`, and
+every ansible-runner argument is fixed in `hq_runner/ansible.py`. Each run's
+private data directory is new and empty, and nothing is read from or written
+to its `env/` (`suppress_env_files`), so no file there adds an option, a
+variable or a callback. Its artifacts keep no stdout and no event the handler
+did not keep, and they, Ansible's own working files and ssh's control sockets
+sit in a private directory of the scratch space, removed when the run ends.
 Ansible reads the worker's own empty configuration through `ANSIBLE_CONFIG`,
 never a project's `ansible.cfg`, and every plugin and module path is pinned
 to a directory that does not exist; roles come from the project's `roles/`.
@@ -1522,7 +1526,10 @@ contract) also lists every file with its git object id, and each configuration,
 plugin, collection or variables directory Ansible would read past a playbook
 and its roles. It lists the commit's signature as GitHub verifies it, and each
 machine and privilege profile the worker has a login for ([The automation
-worker](#the-automation-worker)).
+worker](#the-automation-worker)). The worker reads and HQ judges: a sidecar is
+reported as parsed, and what the worker cannot read (a file that is not YAML,
+a role `ansible-doc` cannot find) is a problem of that playbook, while the rest
+of the report still arrives.
 
 HQ holds each sidecar to `ProcedureDeclaration`
 (`hq/platform/application/automation_sources.py`), adds every way it falls

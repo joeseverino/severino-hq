@@ -222,7 +222,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 /* A tile strip (partials/_tile_strip.html): every tile in view, as many to
    a row as the box holds, the rest on the rows under them. A note is said
    only when it stands out, so it is marked. */
-/* stylelint-disable-next-line hq/flow-grid -- small figures read across, tiles of one strip */
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- small figures read across, tiles of one strip */
 .tile-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: var(--space-4) 0; margin: 0; padding: 0; list-style: none; }
 /* Tiles start level, so a figure stands on the same line whether a note is under it or not. */
 .tile-strip li { display: grid; align-content: start; justify-items: center; gap: 1px; font-size: var(--text-3xs); color: var(--muted); }

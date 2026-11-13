@@ -95,7 +95,7 @@ class ScanResult(TypedDict):
     refused: Annotated[list[str], Describe("Each reason HQ will not adopt it; empty when it can.")]
     widens: Annotated[list[str], Describe("Each way adopting it lets a run do more than it may now.")]
     pending: Annotated[
-        bool, Describe("Whether it waits for a person to adopt or reject it in HQ. Only a person decides it.")
+        bool, Describe("Whether it waits for an operator to adopt or reject it in HQ. An agent can't decide it.")
     ]
 
 
@@ -203,7 +203,7 @@ def resources() -> tuple[ResourceSpec, ...]:
             SCANS,
             "Playbook scans",
             "The newest scan of your playbooks' repository, or one by its id. It says what adopting it widens; "
-            "a person adopts or rejects it in HQ.",
+            "an operator adopts or rejects it in HQ.",
             Capability.READ,
             list_scans,
             EmptyQuery,

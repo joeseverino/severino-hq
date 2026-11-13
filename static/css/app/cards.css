@@ -107,7 +107,7 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
   display: grid;
   /* A narrower track ceiling lets four insights share one row at desktop
      widths instead of stranding the fourth alone beside two empty columns. */
-  /* stylelint-disable-next-line hq/flow-grid -- a band's cells in one frame, counted into whole rows */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a band's cells in one frame, counted into whole rows */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, clamp(240px, 22%, 290px)), 1fr));
   margin: 0 0 var(--stack-gap);
 }

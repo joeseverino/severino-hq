@@ -1,14 +1,10 @@
-"""Adopting a proposal: what one scanned commit of the automation source
-changes becomes the catalog HQ runs procedures from, playbook by playbook or
-all at once, once a person agrees.
+"""Adopting a proposal: one scanned commit of the automation source becomes
+the catalog HQ runs procedures from, playbook by playbook or all at once, once
+an operator agrees.
 
-A Refresh proposes (``automation_sources``); this adopts. The newest
-``AdoptedCatalog`` row is the one declaration every procedure's command, its
-input type and the spec a held run is measured against are built from
-(``automation_runs``), and its digest is the generation each process checks
-its commands against, so an adoption reaches every process at its next
-request without a restart. How a commit is judged, and what holds an
-adoption for a person: docs/Architecture.md, "Adopting the playbooks".
+A Refresh proposes (``automation_sources``); this adopts. How a commit is
+judged and how an adoption reaches every process: docs/Architecture.md,
+"Adopting the playbooks".
 
 Security properties:
 
@@ -920,7 +916,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             ADOPT,
             "Adopt what a scanned commit changes in the playbooks HQ runs: one playbook's change, or every "
             "change that waits. A commit GitHub did not verify, or one carrying an ansible.cfg or a plugins "
-            "directory, is refused. Only a person adopts.",
+            "directory, is refused. Only an operator adopts, and never through an agent.",
             "infrastructure_change",
             # Held only at the operator's own interfaces (security.HELD_ONLY_AT).
             Capability.ADOPT_PLAYBOOKS,
@@ -940,7 +936,8 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         CapabilitySpec(
             REJECT,
             "Reject what a scanned commit changes: one playbook's change, which stays as adopted, or the whole "
-            "commit, so nothing waits to be adopted until a Refresh reads another. Only a person rejects.",
+            "commit, so nothing waits to be adopted until a Refresh reads another. Only an operator rejects, "
+            "and never through an agent.",
             "remote_write",
             Capability.ADOPT_PLAYBOOKS,
             RejectProposal,

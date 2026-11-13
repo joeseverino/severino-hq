@@ -556,7 +556,7 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
             REFRESH,
-            "Scan your repository for playbooks and keep the scan result. Nothing in it runs until a person adopts it.",
+            "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
             "remote_write",
             Capability.MANAGE_INFRASTRUCTURE,
             RefreshCommand,

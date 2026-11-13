@@ -15,15 +15,16 @@ family (`folded`, the family row's id) it is folded under that row. A
 dismissed row is its title and the way back. In a dense queue
 (`_work_queue.html`) the row is its title, its marks and its buttons on one
 line, its meaning first in the line beneath. Drawn away from the queue
-(`glance`), it holds nothing beneath: its title opens the page that shows it
-whole.
+(`glance`), it holds nothing beneath and names its urgency to a screen reader
+only, since the box it is drawn in is in its tone: its title opens the page
+that shows it whole.
 {% endcomment %}
 {% for entry in items %}{% with item=entry|decision %}
 <tr class="queue-row"{% if triage %} id="{{ item.anchor }}"{% endif %} data-attention-item{% if folded %} data-folded="{{ folded }}"{% endif %}>
   <td class="queue-what row-gutter">
     <div class="attention-head">
       {% if glance %}<a class="attention-title cell-prose" href="{{ item.page }}">{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="attention-title cell-prose" href="{{ item.href }}">{{ item.label|breakable }}</a>{% else %}<span class="attention-title cell-prose">{{ item.label|breakable }}</span>{% endif %}
-      {% if not item.aside %}{% include "partials/_urgency_pill.html" with item=item mark=True only %}{% endif %}
+      {% if not item.aside %}{% include "partials/_urgency_pill.html" with item=item mark=True quiet=glance only %}{% endif %}
       {% if not item.aside %}{% if item.since or item.observed_at or not grouped %}
       <span class="attention-meta">
         {% if not grouped %}<span>{{ item.source|breakable }}</span>{% endif %}

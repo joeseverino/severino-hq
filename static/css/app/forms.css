@@ -12,7 +12,7 @@
    actions) takes the row. */
 .form {
   display: grid;
-  /* stylelint-disable-next-line hq/flow-grid -- a form's fields, the one form layout */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a form's fields, the one form layout */
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
   gap: var(--space-7) var(--space-10);
   align-items: start;
@@ -111,7 +111,7 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
    while each keeps a readable width. The label reaches over its card, so
    pressing anywhere on it chooses; the radio names the consequence as its
    description, never its name. */
-/* stylelint-disable-next-line hq/flow-grid -- a form's choices, each a radio */
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- a form's choices, each a radio */
 .choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-4); }
 .choice-card { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-5); align-items: start; align-content: start; padding: var(--space-5) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
 .choice-card:hover { border-color: var(--line-strong); background: var(--surface-2); }

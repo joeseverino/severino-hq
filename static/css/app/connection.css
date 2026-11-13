@@ -326,7 +326,7 @@ details[open] > summary .ladder-more::after { transform: rotate(90deg); }
    block. Auto-fit lets a single row of readings take the whole width. */
 .sweep-grid {
   display: grid;
-  /* stylelint-disable-next-line hq/flow-grid -- a band's readings in one frame */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a band's readings in one frame */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 228px), 1fr));
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the frame's corners clip its items' rings, not their text */
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;

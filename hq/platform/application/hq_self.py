@@ -23,6 +23,7 @@ lazy from . import connections, machines, request_path
 lazy from .containers import containers
 lazy from .entity_links import entity_link
 lazy from .projection import read_once
+lazy from .reach import TAILNET
 
 
 def site_label() -> str:
@@ -152,12 +153,16 @@ def host_addresses() -> frozenset[str]:
     """The addresses the kernel routes from on this host, cached for the process.
 
     A connected UDP socket sends no packet and puts no DNS in the request path.
+    HQ answers on its tailnet, so the host's tailnet address is asked for too:
+    an address in the tailnet's range routes through the tailnet interface,
+    where the default route leaves through the local network.
     """
 
     found = {"127.0.0.1", "::1"}
     for family, destination in (
         (socket.AF_INET, "192.0.2.1"),
         (socket.AF_INET6, "2001:db8::1"),
+        *((socket.AF_INET if net.version == 4 else socket.AF_INET6, str(next(net.hosts()))) for net in TAILNET),
     ):
         try:
             with socket.socket(family, socket.SOCK_DGRAM) as probe:

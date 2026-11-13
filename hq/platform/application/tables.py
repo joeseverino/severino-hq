@@ -14,6 +14,7 @@ lazy from hq.platform.application.search import apply_search
 
 from .page_reads import Remedy
 from .projection import guarded
+from .ui import ended
 lazy from . import security
 
 
@@ -240,10 +241,10 @@ class TableListMixin:
     table_totals: tuple[TableTotal, ...] = ()
     table_default_sort = ""
     table_search_placeholder = "Search…"
-    # What an empty list means, in one line ("No assets yet."). What would
-    # fill it is derived: the page's lead action, or the connection that reads
-    # what it lists (``Page.remedy``).
-    table_empty = "Nothing here yet."
+    # What an empty list means, in one line ("No assets yet."); left blank, it
+    # is "No" and the model's plural. What would fill it is derived: the page's
+    # lead action, or the connection that reads what it lists (``Page.remedy``).
+    table_empty = ""
     # A sentence that qualifies it, in the same line ("Add one in the vault.").
     table_empty_why = ""
     # False where the lead action is a view of this same list, not a way to fill it.
@@ -254,7 +255,10 @@ class TableListMixin:
     _resolved_table_filters: tuple[TableFilter, ...] | None = None
 
     def get_table_empty(self) -> str:
-        return self.table_empty
+        if self.table_empty:
+            return self.table_empty
+        model = getattr(self, "model", None)
+        return ended(f"No {model._meta.verbose_name_plural}") if model is not None else "No rows."
 
     def get_table_empty_remedy(self) -> Remedy | None:
         """What fills this list when it is empty, where the page's derived remedy

@@ -17,7 +17,7 @@
   }
 
   /* A band lays out as whole even rows by how many cells it has (seven or more as rows of six, four, three, two or one), read off the band itself, so no page says how many it holds and none is left with three over one; cells are counted, not children (`--band-cell`). */
-  /* stylelint-disable hq/flow-grid -- a band's cells in one frame, counted into whole rows */
+  /* stylelint-disable declaration-property-value-disallowed-list -- a band's cells in one frame, counted into whole rows */
   &:has(> :nth-child(1 of :not(dialog)):nth-last-child(1 of :not(dialog))) { --band-cell: 100%; grid-template-columns: repeat(auto-fit, minmax(100%, 1fr)); }
   &:has(> :nth-child(2 of :not(dialog)):nth-last-child(1 of :not(dialog))) { --band-cell: var(--tracks-2-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-2-1), 1fr)); }
   &:has(> :nth-child(3 of :not(dialog)):nth-last-child(1 of :not(dialog))) { --band-cell: var(--tracks-3-1); grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr)); }
@@ -27,7 +27,7 @@
   &:has(> :nth-child(7 of :not(dialog))) {
     --band-cell: var(--tracks-6-4-3-2-1);
     grid-template-columns: repeat(auto-fill, var(--tracks-6-4-3-2-1));
-    /* stylelint-enable hq/flow-grid */
+    /* stylelint-enable declaration-property-value-disallowed-list */
     & > :not(dialog) { flex-grow: 0; }
   }
 }
@@ -278,7 +278,7 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* Standing alone the band is a surface and keeps an inset of its own; in a frame (a card, a section) the frame's padding is its inset (`--surface-inset`). */
 .facts-band {
   display: grid;
-  /* stylelint-disable-next-line hq/flow-grid -- a band's facts, cells of one frame */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a band's facts, cells of one frame */
   grid-template-columns: repeat(auto-fit, minmax(var(--fact-min), 1fr));
   gap: var(--space-8) var(--space-20);
   margin: 0 0 var(--stack-gap);
@@ -341,7 +341,9 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* Its words read on from the value ("3 rules"), so a label in a line is written in lower case where it is given. */
 .facts-inline .fact-label { order: 2; min-width: 0; }
 .facts-inline .fact-detail { order: 3; margin: 0; }
-.facts-inline .fact:has(a:hover) :is(.fact-value, .fact-label) { color: var(--ink); text-decoration: underline; }
+/* A linked fact is one target, a tile that tints under the pointer and the focus as a linked figure's does (cards.css `a.kpi`), with no underline. The tint reaches past its words as a shadow, so nothing moves. */
+.facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) { border-radius: var(--radius-sm); background: var(--surface-2); box-shadow: 0 0 0 var(--space-3) var(--surface-2); }
+.facts-inline .fact:has(.fact-value a:is(:hover, :focus-visible)) :is(.fact-value, .fact-label) { color: var(--ink); }
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; max-width: 100%; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }

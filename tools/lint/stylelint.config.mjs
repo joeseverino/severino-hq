@@ -55,13 +55,21 @@ const readingMeasure = {
   "/^--([\\w-]*-)?measure(-[\\w-]*)?$/": ["/./"],
   "/^max-(width|inline-size)$/": ["/(?<![-\\w.])[\\d.]+ch\\b/"],
 };
-// One list holds every disallowed value, so its message tells a cut and a
-// measure from the rest by its property.
+// A run of sibling sections or cards is drawn by the flow (`.section-flow`,
+// docs/Design.md "Sibling sections flow"), so no declaration lays out an
+// auto-fit or auto-fill grid. A part that lays out something else inside
+// itself (a form's fields, a band's cells) says so in a disable comment.
+const autoGrid = /\brepeat\(\s*auto-(fit|fill)\b/i;
+const flowGrid = { "/./": [`/${autoGrid.source}/i`] };
+// One list holds every disallowed value, so its message tells an auto grid, a
+// cut and a measure from the rest.
 const disallowedValues = (keys) => [
-  keys,
+  { ...keys, ...flowGrid },
   {
     message: (property, value) =>
-      matches(cutText, property)
+      autoGrid.test(value)
+        ? `"${property}: ${value}" lays out its own auto-fit grid: a run of sibling sections or cards is the flow (\`.section-flow\`, docs/Design.md); a part that lays out something else inside itself says so in a disable comment`
+        : matches(cutText, property)
         ? `"${property}: ${value}" cuts text outside cuts.css: move the whole rule to static/css/app/cuts.css, since a selector is styled in one sheet (test_a_selector_is_styled_in_one_place); a box that clips something other than text says why in a disable comment`
         : matches(readingMeasure, property)
           ? `"${property}: ${value}" stops text at a reading measure: prose fills the card or section it sits in (docs/Design.md); a cap that sizes something other than prose says why in a disable comment`
@@ -158,7 +166,6 @@ const restyledBySheet = [...new Set(primitives.flatMap((each) => each.sheets))].
 
 export default {
   plugins: [
-    "./stylelint-flow-grid.mjs",
     "./stylelint-ground-cover.mjs",
     "./stylelint-restyled-primitive.mjs",
   ],
@@ -170,7 +177,6 @@ export default {
   reportDescriptionlessDisables: true,
   reportNeedlessDisables: true,
   rules: {
-    "hq/flow-grid": true,
     "hq/ground-cover": true,
     // Any other sheet draws none.
     "hq/restyled-primitive": { primitives },

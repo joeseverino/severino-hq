@@ -172,7 +172,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
      half the row; where half is, the whole row. The share alone, never what a
      reading says: one that lands saying more wraps in its place, and its
      neighbors stay where they were drawn. */
-  /* stylelint-disable-next-line hq/flow-grid -- a row of readings beside a page's title */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a row of readings beside a page's title */
   grid-template-columns: repeat(auto-fit, max(
     calc(100% / var(--readings) - var(--space-5)),
     clamp(0px, (var(--readings) * var(--reading) - 100%) * 999, var(--half)),

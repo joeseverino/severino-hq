@@ -10,7 +10,7 @@
    tracks it is one column with no breakpoint. A card is as tall as what it
    holds: stretched to a taller neighbor, a short card is mostly empty frame,
    which reads worse than a card that is honestly short. */
-/* stylelint-disable-next-line hq/flow-grid -- a pair, like beside like, at most two to a row; an hq_sdk class extensions write */
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- a pair, like beside like, at most two to a row; an hq_sdk class extensions write */
 .two-col { container: pair / inline-size; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(320px, (100% - var(--layout-gap)) / 2)), 1fr)); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
 
 /* A main panel with a companion. Unlike two equal siblings, the companion is
@@ -213,8 +213,11 @@
 .month-day.is-past .month-mark, .month-day.is-past .month-item::before { opacity: .62; }
 .month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
 /* The date and the day's marks share one row, so marks take no height of
-   their own and the bars under them stay level across the week. */
-.month-day-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin-bottom: var(--space-1); }
+   their own and the bars under them stay level across the week. Marks a
+   narrow day has no room for run under its edge, which the day clips; the
+   day panel lists them all. */
+.month-day-head { display: flex; align-items: center; gap: var(--space-1); margin-bottom: var(--space-1); }
+.month-day-head > .month-mark { flex: none; }
 .month-date {
   display: inline-grid;
   place-items: center;
@@ -306,6 +309,7 @@
   .month-day { height: 3.25rem; }
   :is(.month-item, .month-more) { display: none; }
   .month-item-dot { display: inline-block; }
+  .month-mark { width: 6px; height: 6px; }
   .month-span { height: 4px; padding: 0; background: var(--source); font-size: 0; }
   .month-date { min-width: var(--target-min); height: var(--target-min); }
   .month-of { display: none; }
@@ -543,7 +547,7 @@
   --facts-across: 42rem;
   --fact-label-least: clamp(0px, (100% - var(--facts-across)) * 999, 6rem);
   --fact-value-least: clamp(min(12rem, 60% - var(--space-6)), (var(--facts-across) - 100%) * 999, 60% - var(--space-6));
-  /* stylelint-disable-next-line hq/flow-grid -- a list's pairs, each a label's track and a value's */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a list's pairs, each a label's track and a value's */
   grid-template-columns: repeat(auto-fit, minmax(var(--fact-label-least), max-content) minmax(var(--fact-value-least), 1fr));
   column-gap: clamp(var(--space-6), (100% - var(--facts-across)) * 999, var(--space-16));
   & > .fact { grid-column: span 2; }

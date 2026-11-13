@@ -13,6 +13,7 @@ from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import action_items as queue_state, fragments, getting_started
+from hq.platform.application.attention import APPROVAL_KEY
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
@@ -139,10 +140,14 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         queue = queue_state.with_aside_state(snapshot["priority"], self.request.user)
         doing, told = queue_state.split_waiting(queue)
         action_queue_count = len(doing)
-        # Only what is serious is shown in place, and only while it is short
-        # enough to read there. Everything else is the count above it and in
-        # the header.
-        serious = [item for item in doing if item["status"] == "serious"]
+        # Only what is serious, and what an agent waits on this person to
+        # decide, is shown in place, and only while it is short enough to read
+        # there. Everything else is the count above it and in the header.
+        serious = [
+            item
+            for item in doing
+            if item["status"] == "serious" or item["key"].partition(":")[2].startswith(APPROVAL_KEY)
+        ]
         hour = timezone.localtime().hour
         greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
         if name := self.request.user.first_name:

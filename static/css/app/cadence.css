@@ -15,7 +15,7 @@
   margin: var(--space-2) 0 0;
   padding: 0;
   display: grid;
-  /* stylelint-disable-next-line hq/flow-grid -- a timeline's entries, in reading order down and across */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a timeline's entries, in reading order down and across */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
   /* Each item draws the rule above it and the list clips the first row's, so
      the dividers are right in one column or two without counting items. */

@@ -112,6 +112,16 @@ class DashboardQueueTests(TestCase):
         ]
         self.assertEqual(headings, [])
 
+    def test_the_urgent_card_names_a_rows_urgency_to_a_screen_reader_alone(self):
+        # The card is in the urgent tone, so a row's word for it is no second mark; the queue page shows it.
+        for path, shown in (("/", False), ("/action-items/", True)):
+            with self.subTest(path=path):
+                marks = [
+                    mark for mark in with_class(self.client.get(path), "is-mark") if "pill-serious" in mark.classes
+                ]
+                self.assertTrue(marks)
+                self.assertEqual(any("visually-hidden" not in mark.classes for mark in marks), shown)
+
     def test_a_queue_with_nothing_urgent_is_only_the_count(self):
         calm = [item for item in work_queue() if item["status"] != "serious"]
         with patch("hq.platform.application.dashboard.work_queue", return_value=calm):

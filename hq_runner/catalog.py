@@ -1,37 +1,7 @@
 """What the worker's repository offers at the tip of its default branch: each
-procedure it declares, read without running anything of it.
-
-A procedure is a playbook with a sidecar beside it, ``<name>.hq.yml`` next to
-``<name>.yml``, anywhere in the project. The sidecar says what Ansible has no
-word for (its id, what it acts on, its effect); everything else is Ansible's
-own and read from where Ansible keeps it: the title from the first play's
-name, the preconditions and verification from the names of the
-``ansible.builtin.assert`` tasks in its plays' ``pre_tasks`` and
-``post_tasks``, and its inputs from the argument spec of each role its plays
-list, as ``ansible-doc`` reads it (``ansible.role_spec``).
-
-The worker reads; HQ judges. A sidecar is reported as parsed, and HQ holds it
-to the declaration's model, so the model has one home and a proposal says
-every way a sidecar falls short. What the worker cannot read (a file that is
-not YAML, a role ansible-doc cannot find) it reports as a problem of that
-procedure, and the rest of the catalog still arrives.
-
-Alongside, every file of the project with its git object id, which names its
-content, and each path Ansible would read beyond a playbook and its roles
-(``unpinned``): a configuration file the worker never reads, and directories
-Ansible loads code or variables from wherever they sit. Whether a commit
-carrying one may be adopted is HQ's decision; the worker only says it is
-there. And the commit's verification as GitHub reports it, so HQ can require
-a signed commit of a repository whose plan offers no rule that does, and each
-machine and privilege profile the worker has a login for (``reaches``), so HQ
-can refuse a run no login reaches when it is asked.
-
-A procedure whose sidecar declares it a read is a problem when any file its
-plays pull in (the playbook, a file it imports or includes by name, every
-file of each role it lists, includes or depends on) names escalation: a read
-runs through the read login with escalation turned off
-(``ansible.extravars``), so a read that escalates is a declaration that does
-not say what it does.
+procedure it declares, read without running any of it. The worker reads; HQ
+judges. What the scan reads and reports: docs/Architecture.md, "Refreshing
+the playbooks".
 """
 
 import http

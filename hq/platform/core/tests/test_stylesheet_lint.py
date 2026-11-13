@@ -30,7 +30,7 @@ RESTYLED = "hq/restyled-primitive"
 # A cap that stops text at a reading measure.
 MEASURE = CUT
 # A run of sections laid out by an auto-fit grid of its own, not the flow.
-FLOW = "hq/flow-grid"
+FLOW = CUT
 # Each exception is written on the line before the one it exempts.
 KICKER = f"/* stylelint-disable-next-line {CASE}"
 LAYS_OUT = f"/* stylelint-disable-next-line {FLOW}"

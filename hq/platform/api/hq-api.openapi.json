@@ -16503,7 +16503,7 @@
             "type": "integer"
           },
           "pending": {
-            "description": "Whether it waits for a person to adopt or reject it in HQ. Only a person decides it.",
+            "description": "Whether it waits for an operator to adopt or reject it in HQ. An agent can't decide it.",
             "type": "boolean"
           },
           "read_at": {
@@ -19520,7 +19520,7 @@
     },
     "/api/v2/capabilities/automation.source.refresh/": {
       "post": {
-        "description": "Scan your repository for playbooks and keep the scan result. Nothing in it runs until a person adopts it.",
+        "description": "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
         "operationId": "automationSourceRefreshV2",
         "parameters": [
           {
@@ -26850,7 +26850,7 @@
     },
     "/api/v2/resources/playbook_scans/": {
       "get": {
-        "description": "The newest scan of your playbooks' repository, or one by its id. It says what adopting it widens; a person adopts or rejects it in HQ.",
+        "description": "The newest scan of your playbooks' repository, or one by its id. It says what adopting it widens; an operator adopts or rejects it in HQ.",
         "operationId": "listPlaybookScansV2",
         "parameters": [
           {

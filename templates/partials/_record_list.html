@@ -27,6 +27,6 @@ entry needs interpreting rather than just identifying.
       {% if row.snippet %}<p class="row-snippet">{% for text, matched in row.snippet %}{% if matched %}<mark>{{ text|breakable }}</mark>{% else %}{{ text|breakable }}{% endif %}{% endfor %}</p>{% endif %}
     </li>
   {% empty %}
-    <li class="row-empty"><span class="muted">{{ empty|default:"Nothing here yet."|breakable }}</span></li>
+    <li class="row-empty"><span class="muted">{{ empty|default:"None."|breakable }}</span></li>
   {% endfor %}
 </ul>

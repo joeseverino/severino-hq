@@ -51,6 +51,22 @@ class OneEmptyStateTests(SimpleTestCase):
         self.assertEqual(page_text(html), "Nothing yet. Ask the owner")
         self.assertEqual(elements(html, "a"), [])
 
+    def test_a_list_that_says_nothing_of_empty_names_what_it_lists(self):
+        from django.views.generic import ListView
+
+        from hq.platform.core.models import AuditLog
+
+        from ..tables import TableListMixin
+
+        class Plain(TableListMixin, ListView):
+            model = AuditLog
+
+        class Projected(TableListMixin, ListView):
+            pass
+
+        self.assertEqual(Plain().get_table_empty(), f"No {AuditLog._meta.verbose_name_plural}.")
+        self.assertEqual(Projected().get_table_empty(), "No rows.")
+
     def test_a_list_without_reads_offers_its_own_lead_action(self):
         page = page_context(
             "Assets", actions=(PageAction("Export", "/export/"), PageAction("New asset", "/new/", primary=True))

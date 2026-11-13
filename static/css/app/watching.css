@@ -25,7 +25,7 @@
      repository with a segment per check. A row is short: as many to a line
      as the frame holds, each cell drawing its own hairlines as a band's do,
      so a wide frame is not a column of rows ending halfway across it. */
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list, hq/flow-grid -- the grid clips its cells' outer hairlines, not their text; a repository's posture segments, cells of one frame */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the grid clips its cells' outer hairlines, not their text; a repository's posture segments, cells of one frame */
   .posture-repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 32rem), 1fr)); list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: clip; }
   .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2); }
   .posture-repo-name { flex: 0 1 14rem; min-width: 0; display: flex; flex-direction: column; }
