@@ -267,78 +267,98 @@ func (c *Controller) pruneRuns() {
 	}
 }
 
-// copySecrets copies the connections document and the identities into the
-// run under the renderer's lock, held shared, so the run holds one
-// generation if a render replaces them meanwhile. A glance's document holds
-// only the connections it reads.
+// copySecrets lends the run its connections and their identities, the
+// controller's: every connection but the automation worker's, whose key the
+// controller never holds. A glance's are only the connections it reads.
 func (c *Controller) copySecrets(ctx context.Context, run string, glance bool) error {
-	if err := os.Mkdir(filepath.Join(run, "ssh"), 0o700); err != nil {
-		return err
+	keep := func(connection connections.Connection) bool {
+		return !runnerTransport(connection) && (!glance || glanceReads(connection))
 	}
-	unlock, err := c.Lock(ctx)
-	if err != nil {
-		return err
-	}
-	document := filepath.Join(c.SecretDir, "controller-connections.json")
-	err = c.Connections()
-	if err == nil && glance {
-		err = copyGlanceConnections(document, filepath.Join(run, "connections.json"))
-	} else if err == nil {
-		err = copyFile(document, filepath.Join(run, "connections.json"), 0o400)
-	}
-	if err == nil {
-		err = copyTree(filepath.Join(c.SecretDir, "ssh"), filepath.Join(run, "ssh"))
-	}
-	unlock()
-	if err != nil {
+	if _, err := lendConnections(ctx, c.Lock, c.Connections, c.SecretDir, run, keep); err != nil {
 		return err
 	}
 	return c.ownTree(run)
 }
 
-// copyGlanceConnections writes to the connections in from that a glance reads.
-func copyGlanceConnections(from, to string) error {
-	data, err := os.ReadFile(from)
+// runnerTransport is whether a connection is the automation worker's way to
+// a machine.
+func runnerTransport(connection connections.Connection) bool {
+	return connection.SSHTransport != nil && connection.SSHTransport.Role == connections.RunnerRole
+}
+
+// knownHosts is the renderer's file of pinned host keys in its ssh directory
+// (project.KnownHosts, held to it by a test).
+const knownHosts = "known_hosts"
+
+// lendConnections writes into run the rendered document's connections that
+// keep admits, as connections.json, and into run/ssh the identity files of
+// those alone, with the pinned host keys: a run never holds the key of a
+// connection it is not given. It copies under the renderer's lock, held
+// shared, so the run holds one generation if a render replaces them
+// meanwhile, and answers the connections it lent.
+func lendConnections(ctx context.Context, lock func(context.Context) (func(), error), check func() error, secretDir, run string,
+	keep func(connections.Connection) bool) ([]connections.Connection, error) {
+	if err := os.Mkdir(filepath.Join(run, "ssh"), 0o700); err != nil {
+		return nil, err
+	}
+	unlock, err := lock(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	defer unlock()
+	if err := check(); err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(secretDir, "controller-connections.json"))
+	if err != nil {
+		return nil, err
 	}
 	document, err := connections.Decode(data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	document.Connections = slices.DeleteFunc(document.Connections, func(connection connections.Connection) bool {
-		return !glanceReads(connection)
+		return !keep(connection)
 	})
 	if data, err = document.Encode(); err != nil {
-		return err
+		return nil, err
 	}
-	return os.WriteFile(to, data, 0o400) //nolint:gosec // G703: to is a fixed name in the run directory, which MkdirTemp made under the root-only SecretDir
-}
-
-// copyTree copies the regular files and directories under from into to, if
-// from exists. A link is not followed.
-func copyTree(from, to string) error {
-	err := filepath.WalkDir(from, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	if err := os.WriteFile(filepath.Join(run, "connections.json"), data, 0o400); err != nil { //nolint:gosec // G703: a fixed name in the run directory, which MkdirTemp made under the root-only SecretDir
+		return nil, err
+	}
+	lent := map[string]bool{}
+	for _, connection := range document.Connections {
+		lent[connection.Ref] = true
+	}
+	entries, err := os.ReadDir(filepath.Join(secretDir, "ssh"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return document.Connections, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.Type().IsRegular() || name != knownHosts && !lent[identityOf(name)] {
+			continue
 		}
-		target := filepath.Join(to, strings.TrimPrefix(path, from))
 		info, err := entry.Info()
 		if err != nil {
-			return err
+			return nil, err
 		}
-		switch {
-		case entry.IsDir():
-			return os.MkdirAll(target, info.Mode().Perm())
-		case entry.Type().IsRegular():
-			return copyFile(path, target, info.Mode().Perm())
+		if err := copyFile(filepath.Join(secretDir, "ssh", name), filepath.Join(run, "ssh", name), info.Mode().Perm()); err != nil {
+			return nil, err
 		}
-		return nil
-	})
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
 	}
-	return err
+	return document.Connections, nil
+}
+
+// identityOf is the connection a file of the renderer's ssh directory belongs
+// to: an SSH identity is the ref and ref.pub, a signing key ref.key and
+// ref.key.pub, and no ref ends in either suffix.
+func identityOf(name string) string {
+	name = strings.TrimSuffix(name, ".pub")
+	return strings.TrimSuffix(name, ".key")
 }
 
 var repository = regexp.MustCompile(`^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$`)

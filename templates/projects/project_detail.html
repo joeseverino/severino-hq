@@ -1,7 +1,7 @@
 {% extends "page.html" %}
 {% block page %}
 
-{% if project.tech_list %}<p class="project-tags">{% for t in project.tech_list %}{% status t chip=True %}{% endfor %}</p>{% endif %}
+{% if project.tech_list %}<p>{% for t in project.tech_list %}{% status t chip=True %}{% endfor %}</p>{% endif %}
 
 {% if github %}{% include "projects/_github_panel.html" with repo=github %}{% endif %}
 

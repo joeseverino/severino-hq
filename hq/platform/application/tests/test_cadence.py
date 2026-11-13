@@ -605,7 +605,8 @@ class ControllerTimerTests(SimpleTestCase):
 
     def test_each_doorbell_is_the_one_its_path_unit_waits_on(self):
         """HQ is told only where the controller's doorbell is, and rings the
-        glance's beside it: each must be the file its unit on the host watches."""
+        glance's and the automation worker's beside it: each must be the file
+        its unit on the host watches."""
 
         units = Path(settings.BASE_DIR) / "deploy/systemd"
 
@@ -621,6 +622,7 @@ class ControllerTimerTests(SimpleTestCase):
         for ring, unit, key in (
             (cadence.ring_doorbell, "severino-hq-controller.path", "PathChanged"),
             (cadence.ring_glance_doorbell, "severino-hq-glance.path", "PathExists"),
+            (cadence.ring_automation_doorbell, "severino-hq-automation.path", "PathExists"),
         ):
             with self.subTest(unit=unit), tempfile.TemporaryDirectory() as directory:
                 with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / controller.name)):

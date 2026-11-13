@@ -46,6 +46,8 @@ UV_RUN = ["uv", "run", "--group", "browser", "python"]
 FAILED_IMPORT = "unittest.loader._FailedTest."
 IMPORT_ERROR = "ImportError: Failed to import test module:"
 UNIMPORTED = 3
+# CPython's ImportError for a name a module lacks, which ends with the file it read.
+CANNOT_IMPORT = re.compile(r"cannot import name '[^']*' from '[^']*' \((?P<path>[^)]+)\)")
 # Imports the module each label names, as written, in the ref's environment
 # before its suite starts. The suite imports lazily (hq/config/imports.py), so a
 # name a label's module imports that the ref lacks raises only once a test, or
@@ -379,13 +381,24 @@ def run_at(ref: str, keep: list[str], args: list[str], suite: Suite | None = Non
         step = run_suite(gate.name, suite, args, labels, tree)
         unrun = suite.unrun(step, commit, labels, events)
         held = laid.replaced() if suite.held_again and step.ok and unrun is None else []
+        fixtures: list[str] = []
         if held:
             # The pass ran this tree's support, so the ref's own copies go back for a run that tests the ref.
             git("--literal-pathspecs", "checkout", commit, "--", *held, root=tree)
+
+            def again() -> tuple[Step, str | None]:
+                done = run_suite(gate.name, suite, args, labels, tree)
+                return done, suite.unrun(done, commit, labels, events)
+
+            kept, held, fixtures = run_kept(again, tree, held, present)
+            if kept is not None:
+                step, unrun = kept
             laid = layout(present, deleted, [*keep, *held], labels, suite.is_module, suite.module, laid.new)
-            step = run_suite(gate.name, suite, args, labels, tree)
-            unrun = suite.unrun(step, commit, labels, events)
     said = laid.summary()
+    if fixtures:
+        said += (
+            f"; laid over again, since the tests import from each a name the ref's copy lacks: {', '.join(fixtures)}"
+        )
     keeps = (word for path in laid.kept for word in ("--keep", path))
     at_ref = ["mise", "run", "test", "--at", ref, *keeps, *suite.flags]
     again = shlex.join(at_ref)
@@ -415,6 +428,42 @@ def run_suite(name: str, suite: Suite, args: list[str], labels: list[str], tree:
     if (imports := suite.imports(labels, tree)) and (step := run(name, imports, cwd=tree)).unimported:
         return step
     return run(name, suite.command(args, tree), cwd=tree)
+
+
+def run_kept(
+    run: Callable[[], tuple[Step, str | None]], tree: Path, held: list[str], present: list[str]
+) -> tuple[tuple[Step, str | None] | None, list[str], list[str]]:
+    """``run`` with ``held`` kept at the ref in ``tree``, again for as long as a failed import names one of them:
+    (its step and what ``unrun`` said, or None once every one was laid over again), the files still kept, and
+    the ones laid over again.
+
+    A kept file the tests import a name from that its copy at the ref lacks, as a module loads or as a test
+    runs, is a fixture the new test needs, never the fix, so it is laid over again and the rest stay at the
+    ref. Once none is left, the pass with them all laid over was the ref's own."""
+
+    fixtures: list[str] = []
+    while True:
+        step, unrun = run()
+        needed = [] if step.ok else imported_from(step, tree, [path for path in held if path in present])
+        if not needed:
+            return (step, unrun), held, fixtures
+        overlay(tree, needed, (), ROOT)
+        fixtures += needed
+        held = [path for path in held if path not in needed]
+        if not held:
+            return None, held, fixtures
+
+
+def imported_from(step: Step, tree: Path, paths: list[str]) -> list[str]:
+    """Each of ``paths`` a failed import in ``step`` named as the file that lacks the name asked of it."""
+
+    root = tree.resolve()
+    named = set()
+    for failed in step.tests:
+        for found in CANNOT_IMPORT.finditer(f"{failed.exception}\n{failed.traceback}"):
+            if Path(found["path"]).resolve().is_relative_to(root):
+                named.add(Path(found["path"]).resolve().relative_to(root).as_posix())
+    return [path for path in paths if path in named]
 
 
 def unproven(run: str) -> str:

@@ -378,7 +378,7 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    box, and neither does a region (`data-fragment`), which only says where its
    parts come from: what either holds reaches the sides as the body's own part
    would. A flow of sections in the body reaches them too. */
-:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .github-list, .posture-repos,
+:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
   .insight-grid, .sweep-grid,
   .month-grid, .list-rows, .section-flow, .timeline-list) {
   --frame-inset: var(--section-side);
@@ -395,7 +395,7 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    when it starts or ends the frame, its corners the frame's. A list of rows
    or a month, whose outer rows draw no edge there, keeps the frame's padding
    above and below it. */
-:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .github-list, .posture-repos,
+:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
   .insight-grid, .sweep-grid) {
   --section-corner: calc(var(--radius) - 1px);
   /* In a form that starts the body, its hidden fields draw nothing, so they

@@ -3,34 +3,14 @@
 
 @layer components {
   /* ----- Watching: your GitHub profile ----------------------------------- */
-  /* The card that says whose this is: the avatar, the name, the account,
-     and the counts beside them. */
-  .gh-profile { display: flex; flex-wrap: wrap; align-items: center; align-content: start; gap: var(--space-6) var(--space-9); }
-  .gh-avatar { width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 0 0 3px var(--accent-tint); }
-  .gh-identity { flex: 1 1 260px; min-width: 0; }
-  .gh-identity p { margin: 0; }
-  .gh-name { font-size: var(--text-xl); font-weight: 650; }
+  /* An account's identity (partials/_identity.html): its picture beside its
+     name, handle and words. */
+  .identity { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-6) var(--space-9); margin-bottom: var(--stack-gap); }
+  .identity-picture { width: 64px; height: 64px; border-radius: 50%; box-shadow: 0 0 0 3px var(--accent-tint); }
+  .identity-words { flex: 1 1 260px; min-width: 0; }
+  .identity-words p { margin: 0; }
+  .identity-name { font-size: var(--text-xl); font-weight: 650; }
   .github-gap { color: var(--tone-caution-ink, var(--muted)); }
-  /* A repository's lists: one surface, a row per item read left to right. */
-  .github-list { list-style: none; margin: 0 0 var(--space-6); padding: var(--surface-inset, 0); }
-  .github-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-5); padding: var(--space-4) var(--space-7); font-size: var(--text-sm); }
-  .github-list li + li { border-top: 1px solid var(--line-2); }
-  /* Workflows as chips that wrap like tags: the mark in its color, the name. */
-  .workflow-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0 0 var(--space-6); }
-  .workflow-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-6); border: 1px solid var(--line); border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); font-size: var(--text-sm); }
-  .workflow-chip .icon { color: var(--muted-2); }
-  .workflow-chip.tone-good .icon { color: var(--ok); }
-  .workflow-chip.tone-serious { border-color: var(--danger); }
-  .workflow-chip.tone-serious .icon { color: var(--danger); }
-  .workflow-chip.tone-attention .icon { color: var(--tone-caution-ink); }
-  .workflow-chip:hover { border-color: var(--line-strong); }
-  .github-mark { display: inline-flex; font-size: 1.15em; color: var(--muted-2); }
-  .github-mark.tone-good { color: var(--ok); }
-  .github-mark.tone-serious { color: var(--danger); }
-  .github-mark.tone-attention { color: var(--tone-caution-ink); }
-  /* What the deploy proved before it ran: its own verification steps. */
-  .github-verified { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--danger); cursor: default; }
-  .github-verified.is-verified { color: var(--ok); }
   /* Containers: what needs you, one row per image and version, then the table. */
   .container-advisories { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); font-size: var(--text-sm); }
   /* Words rather than a pill: a narrow column wraps them instead of widening. */
@@ -88,15 +68,8 @@
   .posture-score.is-met { color: var(--ok); }
   .posture-score.is-unmet { color: var(--danger); }
 
-  /* Where a project lives and runs, under its name: one line, dots between.
-     Each wrapped line is a target tall, so a link is never pressed for the
-     one above it. */
-  .project-meta { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--dot-gap); line-height: var(--target-min); }
-  .project-tags { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: 0 0 var(--stack-gap); }
   /* An age or a count that reads wrong split across two lines. */
   .nowrap { white-space: nowrap; }
-  /* The same mark as a verified certificate: a check in a circle, one color. */
-  .gh-verified { display: inline-flex; margin-left: var(--space-3); color: var(--accent-2); font-size: .9em; vertical-align: -.1em; cursor: default; }
 
   /* Who can reach a name, in one word. Internet-facing is stated plainly,
      since a public site is meant to be; only what HQ could not read is a

@@ -63,10 +63,14 @@ class CurrentStateBrowserTests(BrowserGate):
 
             cls.map = reverse("control_plane:topology")
             whole = ask(cls.map)
-            cls.focused, neighbors = next((node, linked.split()) for node, linked in _NODE.findall(whole) if linked)
-            cls.neighbor = neighbors[0]
-            answers[cls.map] = ask(topology_url(cls.focused))
             bodies = {node: unescape(url) for node, url in _BODY.findall(whole)}
+            # A card's neighbors include nodes the whole map leaves out
+            # (kept_on_the_map), which have no card to select: the pair is
+            # one the map draws both ends of.
+            cls.focused, cls.neighbor = next(
+                (node, other) for node, linked in _NODE.findall(whole) for other in linked.split() if other in bodies
+            )
+            answers[cls.map] = ask(topology_url(cls.focused))
             answers[urlsplit(bodies[cls.neighbor]).path] = ask(bodies[cls.neighbor], **_XHR)
             answers[reverse("search")] = ask(reverse("search"), HTTP_X_FRAGMENT="palette", **_XHR)
             transaction.set_rollback(True)

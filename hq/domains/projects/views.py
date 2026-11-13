@@ -355,6 +355,14 @@ class WatchingView(PageMixin, TemplateView):
             )
         context["profile"] = profile(self.login)
         context["app_repositories"] = self.app_repositories
+        # Why the account is yours, on hover beside its name: the sign-in
+        # names it, and the App installed on it says so from GitHub's side.
+        context["account_tip"] = "\n".join(
+            (
+                "This is your GitHub account, according to your sign-in.",
+                *(("HQ's GitHub App is installed on it.",) if self.app_repositories else ()),
+            )
+        )
         return context
 
     @property

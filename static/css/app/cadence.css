@@ -41,19 +41,20 @@
 .timeline-copy a:hover { color: var(--accent); }
 
 
-/* ── Notice pages (404 / 500) ───────────────────────────────────────
+/* ── Error pages (partials/_error_page.html) ────────────────────────
    Deliberately plain: the operator is here by accident, so the page
    orients and offers one way out rather than decorating the mistake. */
 
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the whole page is one centered box, sized as a dialog is, with its search field in it */
-.notice-page { max-width: 44ch; margin: 12vh auto 0; text-align: center; }
-.notice-code {
+.error-page { max-width: 44ch; margin: 12vh auto 0; text-align: center; }
+.error-page-code {
   margin: 0 0 var(--space-3); font-size: var(--text-xs); font-weight: 650; letter-spacing: .1em;
   color: var(--muted-2); font-feature-settings: "tnum";
 }
-.notice-page h1 { margin: 0 0 var(--space-5); font-size: var(--text-4xl); letter-spacing: -.02em; }
-.notice-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
-.notice-page .page-actions { justify-content: center; display: flex; }
+.error-page h1 { margin: 0 0 var(--space-5); font-size: var(--text-4xl); letter-spacing: -.02em; }
+.error-page-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
+.error-page .filter-bar { justify-content: center; margin: 0 0 var(--space-8); }
+.error-page .page-actions { justify-content: center; display: flex; }
 
 /* In a narrow box (tables.js) the cadence matrix drops its oldest
    periods rather than scrolling. A

@@ -16,6 +16,17 @@
       "repositories": ["example/notes"],
       "permissions": {"contents": "read", "metadata": "read"},
       "path": "/run/example-pull/github_token"
+    },
+    {
+      "name": "automation-projects",
+      "repositories": ["example/playbooks"],
+      "permissions": {"contents": "read", "metadata": "read"},
+      "path": "/run/severino-hq-automation/github_token"
     }
-  ]
+  ],
+  "automation": {
+    "repository": "example/playbooks",
+    "directory": "ansible",
+    "grant": "automation-projects"
+  }
 }

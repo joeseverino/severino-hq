@@ -28,8 +28,8 @@
   .facts-band,
   .filter-bar, .kpi-grid, .insight-grid,
   .form,
-  .auth-card, .mail-stage,
-  .topology-workspace, .github-list,
+  .mail-stage,
+  .topology-workspace,
   .posture-repos, .route) {
     border: var(--surface-border, 1px solid var(--line));
     border-radius: var(--surface-radius, var(--radius));

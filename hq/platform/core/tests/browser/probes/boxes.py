@@ -690,7 +690,7 @@ FRAMES_SHORT_OF_THEIR_COLUMN = (
   for (const el of document.querySelectorAll('main ' + frames)) {
     const main = el.closest('main');
     const style = getComputedStyle(el);
-    if (!el.checkVisibility() || style.display === 'contents' || style.display.startsWith('inline')
+    if (!el.checkVisibility() || el.matches(floating) || style.display === 'contents' || style.display.startsWith('inline')
       || ['absolute', 'fixed'].includes(style.position) || style.float !== 'none' || !inPageFlow(el, main)) continue;
     let column = el.parentElement;
     while (column !== main && getComputedStyle(column).display === 'contents') column = column.parentElement;
@@ -819,7 +819,8 @@ CHECKS = {
     "section asides": (ASIDES_WRAPPED_WITH_ROOM, SELECTORS["section_head"]),
     "inset in the frame": (INSET_IN_THE_FRAME, SELECTORS["section_body"]),
     "frames in a row": (FRAMES_OUT_OF_ROW, [SELECTORS["section_head"], SELECTORS["section_body"]]),
-    "frames span their column": (FRAMES_SHORT_OF_THEIR_COLUMN, [PAGE_FRAMES, SELECTORS["floating"]]),
+    # A card drawn alone is a page of its own, sized as a dialog is.
+    "frames span their column": (FRAMES_SHORT_OF_THEIR_COLUMN, [PAGE_FRAMES, f"{SELECTORS['floating']}, [data-alone]"]),
     "titles at the head's start": (TITLES_OFF_THEIR_START, SELECTORS["section_head"]),
     "lists across an empty frame": (
         LISTS_ACROSS_AN_EMPTY_FRAME,

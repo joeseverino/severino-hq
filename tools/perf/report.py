@@ -28,7 +28,7 @@ from hq.platform.core.attribution import from_the_shell
 from hq.platform.core.tests import task
 from hq.platform.core.tests.browser.in_flight import SETTLED
 from hq.platform.core.tests.task import ESTATE, PageRefused, RefError, estate_name, trusted_mise, usage, worktree
-from tools.perf import measure, parse, runs, table
+from tools.perf import measure, runs, table
 from tools.perf.targets import (
     COLD_STARTS,
     IMAGE_MEMORY,
@@ -39,6 +39,7 @@ from tools.perf.targets import (
     Scratch,
     clean_env,
     run,
+    set_refused,
 )
 lazy from hq.platform.core import seeds
 lazy from hq.platform.core.tests.browser.estate import Redirected, ask_as_production, landing, navigation, owner_client
@@ -103,7 +104,7 @@ class NothingServed(Exception):
 
 
 class SetRefused(Exception):
-    """A tree's server refused the extension set for the plugin API it supports."""
+    """A tree whose HQ serves the host alone cannot load the extension set."""
 
 
 def alone_because() -> str:
@@ -280,11 +281,8 @@ def image_of(tree: Path, commit: str, *, here: bool, composed: bool) -> str:
     command = ["mise", "-C", str(ROOT), "run", "image:compose", "--host", host, "--tag", tag, "--context", str(tree)]
     done = subprocess.run(command, capture_output=True, text=True, env=clean_env(), check=False)
     if done.returncode:
-        said = f"{done.stdout}\n{done.stderr}"
-        # The build collects static under the set, so a plugin API's refusal surfaces here, above
-        # the build's own closing lines, and serve() reads it to measure the host alone.
-        tail = "\n".join(said.strip().splitlines()[-20:])
-        raise NotMeasured(f"image:compose exited {done.returncode}: {parse.api_refusal(said) or tail}")
+        tail = "\n".join(f"{done.stdout}\n{done.stderr}".strip().splitlines()[-20:])
+        raise NotMeasured(f"image:compose exited {done.returncode}: {tail}")
     return tag
 
 
@@ -449,12 +447,12 @@ def serve(
             target.__enter__()
     except Exception as error:
         recorder.fail("start", error)
-        said = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
-        # A composed image's build can refuse the set before any server runs.
-        said += f"\n{error}"
-        refused = None if asked.alone else parse.api_refusal(said)
+        # Whatever stopped the start, a scratch boot or a composed image's build, a tree whose HQ
+        # serves the host alone but cannot load the set is measured alone on both sides, so the
+        # extensions' cost is never counted as the change's.
+        refused = None if asked.alone else set_refused(tree, trusted=not here)
         if refused:
-            raise SetRefused(f"{commit} refused the extension set: {refused}") from error
+            raise SetRefused(f"{commit} cannot load the extension set: {refused}") from error
         return None
     server = Live(recorder, target)
     stack.callback(server.stop)

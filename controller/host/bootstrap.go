@@ -26,6 +26,9 @@ type Config struct {
 	// Grants are the GitHub App tokens the controller keeps on this host
 	// beside HQ's own (Grant).
 	Grants []Grant `json:"grants,omitempty"`
+	// Automation is where the automation worker's procedures come from;
+	// a host without it runs no worker.
+	Automation *AutomationConfig `json:"automation,omitempty"`
 }
 
 // ConnectConfig is the local 1Password Connect server the renderer reads.
@@ -80,6 +83,9 @@ func ReadConfig(data []byte) (Config, error) {
 		return Config{}, errors.New("connect.url must be http://127.0.0.1:PORT")
 	}
 	if err := checkGrants(config.Grants); err != nil {
+		return Config{}, err
+	}
+	if err := checkAutomation(config.Automation, config.Grants); err != nil {
 		return Config{}, err
 	}
 	return config, nil

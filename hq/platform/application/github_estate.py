@@ -22,10 +22,9 @@ from hq.domains.control_plane.observations.github import (
 )
 from hq.platform.application.labels import dotted
 
-from .card_items import Insight
+from .card_items import Insight, ListRow
 from .containers import SERIOUS
 from .derivations import reached, whole
-from .display_words import display
 from .entity_links import web_url
 from .expiry import days_until
 from .freshness import Freshness, freshness
@@ -33,7 +32,7 @@ from .item_help import cannot_help, commands
 from .moments import ago
 from .projection import read_once
 from .timestamps import moment
-from .ui import counted
+from .ui import counted, severity_tone
 from .workflow_contracts import ActionLink
 lazy from .facts import snapshots_of
 lazy from .images import GHCR, ImageRef
@@ -70,24 +69,10 @@ _DEPLOY_TONES = {"success": "good", "failure": "serious", "error": "serious"}
 UPDATE_BRANCH = "renovate/"
 
 
-@display
-class WorkflowRun:
-    """A workflow's newest run, as its chip on a repository's panel shows it."""
-
-    name: str
-    url: str
-    # What it came to, or where it is while it has not finished: "Success".
-    state: str
-    # The run's color: good, serious, attention, or none while it says nothing.
-    tone: str
-    # Shown on hover: what it came to, then its branch, commit and age.
-    tip: str
-    # Read out after its name: what it came to, its branch, and its age.
-    said: str
-
-
-def workflow_run(run: Mapping[str, Any]) -> WorkflowRun:
-    """One run of the reading's ``runs``, as its chip says it."""
+def workflow_run(run: Mapping[str, Any]) -> ListRow:
+    """One run of the reading's ``runs``, as a row of a repository's panel:
+    the workflow, what it came to (or where it is while it has not finished)
+    in its tone, then its branch, commit and age."""
 
     conclusion, status = str(run.get("conclusion") or ""), str(run.get("status") or "")
     if conclusion == "success":
@@ -97,21 +82,45 @@ def workflow_run(run: Mapping[str, Any]) -> WorkflowRun:
     elif status != "completed":
         tone = "attention"
     else:
-        tone = ""
-    word = (conclusion or status).replace("_", " ")
-    state = word.capitalize()
-    branch = str(run.get("branch") or "")
-    created = moment(str(run.get("created_at") or ""))
-    age = ago(created) if created else ""
-    where = dotted(branch, str(run.get("sha") or "")[:7], age)
-    return WorkflowRun(
-        name=str(run.get("name") or "Workflow"),
+        tone = "neutral"
+    state = (conclusion or status).replace("_", " ").capitalize()
+    return ListRow(
+        str(run.get("name") or "Workflow"),
         url=web_url(run.get("url")),
-        state=state,
-        tone=tone,
-        tip=f"{state}\n{where}" if where else state,
-        said=", ".join(part for part in (word, branch, age) if part),
+        external=True,
+        badge=state,
+        status=tone if state else "",
+        meta=dotted(str(run.get("branch") or ""), str(run.get("sha") or "")[:7], _age(run.get("created_at"))),
     )
+
+
+def _age(stamp: object) -> str:
+    """How long ago a provider's stamp was, or nothing where it has none."""
+
+    found = moment(str(stamp or ""))
+    return ago(found) if found else ""
+
+
+def _pull_row(pull: Mapping[str, Any], *details: str, meta: str = "", badge: str = "", status: str = "") -> ListRow:
+    """A pull request as a row: its title leading to it on GitHub, its number first in the detail."""
+
+    return ListRow(
+        str(pull.get("title") or ""),
+        url=web_url(pull.get("url")),
+        external=True,
+        detail=dotted(f"#{pull.get('number')}", *details),
+        meta=meta,
+        badge=badge,
+        status=status,
+    )
+
+
+# A pull request's checks as its update row says them, by the combined state.
+_PULL_CHECKS = {
+    "failure": ("Checks failing", "serious"),
+    "pending": ("Checks running", "attention"),
+    "success": ("Checks passing", "good"),
+}
 
 
 def _severity_rank(level: str) -> int:
@@ -171,7 +180,7 @@ class Repository:
         return tuple(found)
 
     @property
-    def workflow_runs(self) -> tuple[WorkflowRun, ...]:
+    def workflow_runs(self) -> tuple[ListRow, ...]:
         """Each workflow's newest run, as the repository's panel shows it."""
 
         return tuple(workflow_run(run) for run in self.record.get("runs") or ())
@@ -229,6 +238,53 @@ class Repository:
             for pull in self.record.get("pull_requests") or ()
             if not str(pull.get("branch") or "").startswith(UPDATE_BRANCH)
         ]
+
+    @property
+    def pull_rows(self) -> tuple[ListRow, ...]:
+        """``other_pulls`` as rows: each one's number, author and age, and
+        whether it is a draft."""
+
+        return tuple(
+            _pull_row(
+                pull,
+                str(pull.get("author") or ""),
+                meta=_age(pull.get("updated_at")),
+                badge="Draft" if pull.get("draft") else "",
+            )
+            for pull in self.other_pulls
+        )
+
+    @property
+    def update_rows(self) -> tuple[ListRow, ...]:
+        """The update pull requests, then the Dependabot alerts none of them
+        answers, as one list: a pull request with how its checks stand (the
+        failing ones named), an alert with its severity and what would fix it."""
+
+        rows = []
+        for pull in self.update_pulls:
+            checks = pull.get("checks") or {}
+            badge, tone = _PULL_CHECKS.get(checks.get("state"), ("No checks", "neutral"))
+            failing = ", ".join(checks.get("failing") or ()) if checks.get("state") == "failure" else ""
+            opened = f"opened {ago(pull['opened'])}" if pull["opened"] else ""
+            rows.append(_pull_row(pull, failing, meta=opened, badge=badge, status=tone))
+        for alert in self.unmatched_alerts:
+            fixed = alert.get("first_patched_version")
+            severity = str(alert.get("severity") or "")
+            rows.append(
+                ListRow(
+                    str(alert.get("package") or ""),
+                    url=web_url(alert.get("url")),
+                    external=True,
+                    detail=dotted(
+                        "No update open",
+                        f"fixed in {fixed}" if fixed else "no fixed version yet",
+                        str(alert.get("manifest_path") or ""),
+                    ),
+                    badge=severity,
+                    status=severity_tone(severity) if severity else "",
+                )
+            )
+        return tuple(rows)
 
     @property
     def oldest_update_days(self) -> int | None:
@@ -297,6 +353,14 @@ class Repository:
         if not steps:
             return None
         return all(step.get("conclusion") == "success" for step in steps)
+
+    @property
+    def verification_tip(self) -> str:
+        """Each check production's last deploy ran before deploying, a line
+        apiece with what it came to, as its verdict says on hover."""
+
+        steps = (self.production or {}).get("verified") or []
+        return "\n".join(f"{step.get('name')}: {step.get('conclusion') or 'not run'}" for step in steps)
 
     @property
     def production(self) -> Mapping[str, Any] | None:

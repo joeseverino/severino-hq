@@ -580,8 +580,11 @@ empty, or a row with a gulf in it, is a layout to redesign, not padding to trim.
 frames what it encloses (`partials/_card.html`). It draws a section unless
 `element=` names an article, figure, details or div. `heading` is its
 heading's id, or `label` its name when it has no heading; `busy` marks it while
-its content is still coming; each `data_*` option is a `data-` attribute (True
-draws it bare). A state of the
+its content is still coming; `alone` makes it the whole of a page that stands
+outside the page frame (the sign-in): centered at a dialog's width, a picture
+leading it over its own title, and an action alone on its line the card's
+width (*Catalog:* `part/card-alone`); each `data_*` option is a `data-`
+attribute (True draws it bare). A state of the
 card is a `data_*` option the stylesheet reads, never a class written inside an
 `{% if %}`. No template writes `class="card"` itself
 (`test_only_the_tag_draws_a_card`). A card is never wider than the column or
@@ -657,8 +660,15 @@ messages (`<ul class="messages">`, base.html) the same part is a toast, set
 closer; it is never a second part. Drawn with no body it is the frame a script
 clones and fills: base.html holds one per tone in a `<template data-notice>`,
 so a line a script adds (`fragment.js`, `demo.js`) is the part the server
-draws, and no script writes a notice's class. An error page's notice
-(`.notice-page`) is a page of its own, never this part.
+draws, and no script writes a notice's class. An error page is a page of its
+own, never this part.
+
+**An error page is drawn by `partials/_error_page.html`.** `{% include "partials/_error_page.html" with code="404" title="Page not found" body="..." search=user.is_authenticated only %}`
+is the whole of what 403, 404 and 500 show, standing outside the page frame
+and so titling itself: the status over the title, what happened and what to
+do, and the one way back to the dashboard. `request_id` names the id the log
+line for the failure carries, and `search` offers the search field.
+*Catalog:* `part/error-page`, `part/error-page-request`.
 
 **A state is a pill drawn by `{% status %}`.** `{% status row.get_status_display tone=row.status %}`
 (`status_tags.py`; `hq_sdk.ui.status_pill` from Python) says the state in
@@ -712,6 +722,12 @@ screen
 viewport). The browser dismisses it on an outside press or Escape, and the
 fragment primitive shows it again after a swap that replaces it, found by its
 id, so a ticked box leaves its menu open. No script places or closes it.
+
+**An account is named by `partials/_identity.html`.** Its picture (a `data:`
+URI or an HQ path, never another host's address), its name with a state
+beside it drawn by `{% status %}`, its handle leading to it and a line in its
+own words, as the Starred page names your GitHub profile above its counts.
+*Catalog:* `part/identity`.
 
 **The user menu says whose session it is first.** The person's picture (kept
 by HQ from sign-on, never loaded from the provider by a page), their name,
@@ -1336,9 +1352,14 @@ is not polled, and a region that fails is asked less often.
 
 Script that needs a part calls `hqFragment.swap(region, {url})`; script that
 needs to ask again calls `hqEvery(work, {ms})`. After a swap the new content
-hears `hq:fragment`, which is where a behavior binds to it.
+hears `hq:fragment`. Any part of a page can be swapped (the page's `main` is a
+region), so a behavior either listens on the document and asks where an event
+landed, or sets up its elements through `hqFragment.each(selector, setup)`,
+which runs once for each element on the page as drawn and in every part placed
+since.
 *Gates:* `lint:js` (no other script fetches, reads a response as text,
-parses markup or keeps an interval, and fragment.js does each once);
+parses markup or keeps an interval, and fragment.js does each once; no script
+asks the page for an element at load outside `hqFragment.each`);
 `FragmentPrimitiveTests` (every named part is defined);
 `FragmentBrowserTests` (browser).
 

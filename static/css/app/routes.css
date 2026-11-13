@@ -221,13 +221,14 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .pagination { display: flex; gap: var(--space-6); align-items: center; margin: var(--space-8) 0; font-size: var(--text-sm); }
 
 
-.auth-card { max-width: 380px; margin: clamp(var(--space-20), 10vh, var(--space-40)) auto; padding: var(--surface-inset, var(--space-14)); text-align: center; }
-.auth-logo { display: block; width: 64px; height: 64px; margin: 0 auto var(--space-7); }
-.auth-card h1 { font-size: var(--text-2xl); margin-bottom: var(--space-9); }
-.auth-sso { display: block; text-align: center; margin-top: var(--space-2); }
-
-.auth-note { margin: var(--space-8) 0 0; font-size: var(--text-xs); text-align: center; }
-.notice-search { justify-content: center; margin: 0 0 var(--space-8); }
+/* A card that is the whole of a page outside the page frame ({% card alone=True %},
+   the sign-in): centered at a dialog's width, its mark over its title, and
+   its one action the card's width. */
+.card[data-alone] { max-width: 380px; margin: clamp(var(--space-20), 10vh, var(--space-40)) auto; padding: var(--surface-inset, var(--space-14)); text-align: center; }
+.card[data-alone] > img { display: block; margin: 0 auto var(--space-7); }
+.card[data-alone] > h1 { font-size: var(--text-2xl); margin-bottom: var(--space-9); }
+.card[data-alone] > p > .btn:only-child { display: block; margin-top: var(--space-2); }
+.card[data-alone] > p:last-child { margin-top: var(--space-8); }
 
 /* ── Dashboard: external links ─────────────────────────────────── */
 

@@ -11,7 +11,7 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.platform.core.tests.browser.estate import Redirected, ask_as_production, landing, owner_client
 from tools.perf import report
-from tools.perf.tests.test_runs import PLAN, REFUSED_LOG, FakeTarget, Measured
+from tools.perf.tests.test_runs import PLAN, SET, SET_REFUSALS, Checks, FakeTarget, Measured
 
 
 class AnsweredTests(Measured):
@@ -229,13 +229,22 @@ class ComposedTests(Measured):
         composed.assert_not_called()
         self.assertEqual(image, "severino-hq:perf-ba9876543210")
 
-    def test_a_composition_refused_for_its_plugin_api_starts_the_run_again_alone(self):
-        # The refusal is the collect step's, with the build's own report of the failure after it.
+    def test_a_composition_its_tree_cannot_load_starts_the_run_again_alone(self):
+        # The build's own report of the failure buries the refusal; the tree's check names it.
         build_tail = "".join(f" {line} | RUN collectstatic\n" for line in range(40))
-        self.compose(1, said=REFUSED_LOG + build_tail + "ERROR: failed to solve: exit code: 1\n")
-        asked = report.Plan(**{**PLAN.__dict__, "image": True, "extensions": ["example.ledger.plugin:plugin"]})
+        failed = subprocess.CompletedProcess([], 1, stdout="", stderr=build_tail + "ERROR: failed to solve\n")
+        checks = Checks(composed=SET_REFUSALS[0])
 
-        with mock.patch.object(report, "run"), self.assertRaisesRegex(report.SetRefused, r"requires API 5"):
+        def ran(command, **kwargs):
+            return failed if "image:compose" in command else checks(command, **kwargs)
+
+        asked = report.Plan(**{**PLAN.__dict__, "image": True, "extensions": [SET]})
+        with (
+            mock.patch.dict("os.environ", {"HQ_LOCAL_PLUGINS": SET}),
+            mock.patch.object(report.subprocess, "run", ran),
+            mock.patch.object(report, "run"),
+            self.assertRaisesRegex(report.SetRefused, r"requires API 5"),
+        ):
             self.measure(FakeTarget(), asked)
 
     def test_a_composed_image_is_kept_apart_from_the_host_image_s(self):

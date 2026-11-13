@@ -13,13 +13,8 @@ would be a page about anybody.
   {% include "partials/_empty_state.html" with message="Not read from GitHub yet." only %}
 {% else %}
   <div class="section-flow">
-  {% card css="gh-profile" label="Your GitHub profile" %}
-    {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}
-    <div class="gh-identity">
-      <p class="gh-name">{{ profile.name|default:profile.login|breakable }}<span class="gh-verified" tabindex="0" data-tip="This is your GitHub account, according to your sign-in.{% if app_repositories %}&#10;HQ's GitHub App is installed on it.{% endif %}">{% include "partials/_icon.html" with name="check-circle" %}<span class="visually-hidden">This is your GitHub account, according to your sign-in.</span></span></p>
-      <div>{% entity profile.url|outside label="@"|add:profile.login %}</div>
-      {% if profile.bio %}<p>{{ profile.bio|breakable }}</p>{% endif %}
-    </div>
+  {% card label="Your GitHub profile" %}
+    {% include "partials/_identity.html" with picture=profile.avatar name=profile.name|default:profile.login handle="@"|add:profile.login url=profile.url badge="Your account" tone="good" tip=account_tip about=profile.bio only %}
     {% facts layout="band" label="On GitHub" %}
       {% fact "Followers" %}{% entity profile.url|add:"?tab=followers"|outside label=profile.followers %}{% endfact %}
       {% fact "Following" %}{% entity profile.url|add:"?tab=following"|outside label=profile.following %}{% endfact %}

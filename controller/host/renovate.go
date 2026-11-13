@@ -100,7 +100,7 @@ func (r *Renovator) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := r.confine(ctx); err != nil {
+	if err := renovateEgress.confine(ctx, r.Machine); err != nil {
 		return err
 	}
 	log, err := r.openLog()
@@ -212,7 +212,7 @@ func RenovateArgs(name, image, envFile, config, owner string) []string {
 		"--read-only",
 		"--network", RenovateNetwork,
 	}
-	for _, resolver := range RenovateResolvers {
+	for _, resolver := range PublicResolvers {
 		args = append(args, "--dns", resolver)
 	}
 	args = append(args, "--pids-limit", "4096")

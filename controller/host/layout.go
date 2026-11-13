@@ -98,6 +98,24 @@ const (
 	// the next controller pass is given read-only.
 	DependencyRunFile   = StateDir + "/renovate/dependency-run.json"
 	dependencyRunTarget = hostcore.RunDir + "/dependency-run.json"
+
+	// AutomationUnit runs the automation worker until no run is queued. Its
+	// path unit starts it when HQ rings AutomationDoorbell, beside the
+	// controller's.
+	AutomationUnit     = "severino-hq-automation.service"
+	AutomationDoorbell = hostcore.RunDir + "/automation-doorbell"
+	// AutomationState is the worker's journal directory, the one place it
+	// writes that outlives a crash: the worker's account's alone, made by
+	// the tmpfiles rule.
+	AutomationState = StateDir + "/automation"
+	// AutomationImage is the worker's image in the tree, one digest-pinned
+	// reference; a release without one runs no worker.
+	AutomationImage = "deploy/automation/image"
+	// AutomationBound is the longest the worker runs before it is removed:
+	// the longest run a procedure may ask for (an hour), its checkout and its
+	// report, with room for one queued behind it. The unit's start
+	// timeout outlasts it (tested).
+	AutomationBound = 90 * time.Minute
 )
 
 // Renderers names each secret renderer on the host and its status document

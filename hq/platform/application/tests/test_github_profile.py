@@ -18,6 +18,13 @@ from ..security import Capability, Principal
 from .markup import hrefs, select, text
 from .sentinel import SENTINEL
 
+
+def tips(response):
+    """The lines every tooltip on the page says on hover."""
+
+    return [line for element in select(response, "data-tip") for line in element.attrs["data-tip"].splitlines()]
+
+
 PROFILE = {
     "login": "example-user",
     "name": "Example User",
@@ -317,7 +324,7 @@ class PageTests(TestCase):
         response = self.client.get(reverse("watching"))
 
         self.assertIn("@example-user", text(response))
-        self.assertContains(response, "This is your GitHub account, according to your sign-in.")
+        self.assertIn("This is your GitHub account, according to your sign-in.", tips(response))
         self.assertIn("https://github.com/example-user?tab=followers", hrefs(response))
         self.assertContains(response, "v1.2.0")
         self.assertContains(response, "CVE-2026-0001")
@@ -396,7 +403,7 @@ class AppProofTests(TestCase):
 
         response = self.client.get(reverse("watching"))
 
-        self.assertContains(response, "HQ's GitHub App is installed on it.")
+        self.assertIn("HQ's GitHub App is installed on it.", tips(response))
         self.assertContains(response, "reading 1 of your repositories")
         self.assertContains(response, "(private)")
         self.assertNotContains(response, "someone-else/thing")

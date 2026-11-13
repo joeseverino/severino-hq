@@ -9,7 +9,7 @@
 #USAGE flag "--image" help="Measure the image production runs instead of dev:scratch: the one IMAGE names, else the host image image:build makes, composed with the extension set by image:compose (a base from its own composition/Dockerfile); with --host-alone the host image alone"
 #USAGE flag "--seed <name>" default="showcase" help="The data set every server measured is seeded with, as dev:scratch --seed names it (hq/platform/core/seeds.py)"
 #USAGE flag "--base <ref>" help="Also measure <ref>, in a temporary worktree removed however the run ends: each number beside how far it moved, and each page's server time asked of both servers in turn, marked where it moved past its spread"
-#USAGE flag "--host-alone" help="Measure the host with no extension composed, on both sides; a base that refuses the extension set for its plugin API is measured so on its own"
+#USAGE flag "--host-alone" help="Measure the host with no extension composed, on both sides; a tree whose HQ cannot load the extension set but serves the host alone (a base older than the set) has the run measured so on its own, its closing line saying why"
 #USAGE flag "--fresh" help="Measure the base's browser, memory and cold start even when an earlier run kept a complete report of its commit holding these pages, under the same plan and a load close to the load now"
 #USAGE flag "--requests <n>" default="30" help="Rounds of asking every page, of both servers in turn with a base, for each server's p50 and p95 and the difference's spread"
 

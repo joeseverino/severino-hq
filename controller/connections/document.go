@@ -28,6 +28,12 @@ const SchemaVersion = 2
 // MaxBytes bounds a document on read.
 const MaxBytes = 1 << 20
 
+// RunnerRole is the role of an SSH transport the automation worker reaches a
+// machine through (hq_runner/connections.py reads the same word). Its account
+// takes a shell, where the controller's readers speak to the hq-controller
+// forced command, so it is never the controller's to dial or to hold.
+const RunnerRole = "runner"
+
 var (
 	refPattern  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 	namePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)

@@ -25,6 +25,16 @@ from .labels import dotted, plural
 # rendered with its own text so state is never carried by color alone.
 STATUS_VALUES = frozenset({"good", "attention", "serious", "neutral"})
 
+# An advisory's severity as the tone it is drawn in, wherever one is listed:
+# critical and high serious, medium attention, the rest neutral.
+SEVERITY_TONES = {"critical": "serious", "high": "serious", "medium": "attention", "moderate": "attention"}
+
+
+def severity_tone(severity: object) -> str:
+    """The tone an advisory's severity is drawn in."""
+
+    return SEVERITY_TONES.get(str(severity or "").lower(), "neutral")
+
 
 def _one_of(name: str, value: str, allowed: frozenset[str], *, or_empty: bool = False) -> None:
     """Refuse a state outside its vocabulary, naming the vocabulary."""

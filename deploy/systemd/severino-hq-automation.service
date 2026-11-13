@@ -1,0 +1,21 @@
+[Unit]
+Description=Severino HQ automation worker
+After=network-online.target docker.service severino-hq-secrets.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+# Root executes only root-owned code, as the controller unit does.
+WorkingDirectory=/usr/local/lib/severino-hq
+# Removed before the worker claims, so a run queued while it works rings
+# again, and its path unit starts the next worker when this one ends.
+ExecStartPre=/bin/rm -f /run/severino-hq/automation-doorbell
+ExecStart=/usr/local/lib/severino-hq/deploy/bin/hq-host automation
+# The worker is removed at AutomationBound (controller/host/layout.go), and
+# this outlasts it so that removal runs (tested).
+TimeoutStartSec=95min
+
+# The run directory on the renderer's tmpfs, and the doorbell.
+ReadWritePaths=/run/severino-hq-secrets /run/severino-hq

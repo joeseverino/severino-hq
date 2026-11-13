@@ -9,7 +9,8 @@ agents alike. Setup, tasks and layout: [Development](docs/Development.md).
    with your brief's base, or `origin/main` without one, before designing:
    work lands from more than one place, and the mechanism you need may already
    exist there.
-2. Ready is the [definition of done](#definition-of-done).
+2. Done, for a piece and for the branch it lands on, is the
+   [definition of done](#definition-of-done).
 
 mise prints the tasks live, so this file does not list them:
 
@@ -200,16 +201,25 @@ adding UI; grow a primitive rather than styling a page.
 
 ## Definition of done
 
-"Ready" means `mise run check --release` exits 0, or `mise run check --release
---remote` for a pushed commit: every CI gate, the composed suite with the extension set
-required, and read-only checks of the deploy host (`hq-host check`,
-[Deployment](docs/Deployment.md)). `--skip-host` exits 2, never 0, and so does
-a host whose release nothing verified; the check says how to verify it.
+A piece of work in a worktree is done when `mise run fast` passes on its tip,
+with the tests its change touches (`mise run test <labels>`) and, for a change
+to what a page shows, `mise run dev:look` on each page its templates draw. The
+whole-tree runs are the integration branch's: the survey of `all` in both
+engines on the tip a change to what pages draw lands on, since a shared sheet
+or part reaches pages the change never named, and the browser suite and the
+release check once before the branch ships.
+
+The integration branch is "ready" when `mise run check --release` exits 0, or
+`mise run check --release --remote` for a pushed commit: every CI gate, the
+composed suite with the extension set required, and read-only checks of the
+deploy host (`hq-host check`, [Deployment](docs/Deployment.md)). `--skip-host`
+exits 2, never 0, and so does a host whose release nothing verified; the check
+says how to verify it.
 
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
-- A change to templates or CSS passes `mise run browser` and is walked in a
-  real browser through the workflow it serves.
+- A change to templates or CSS is walked in a real browser through the
+  workflow it serves, and the integration branch passes `mise run browser`.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits
   enter the diff.

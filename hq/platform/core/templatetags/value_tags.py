@@ -691,6 +691,7 @@ def card_frame(name: str, given: dict) -> dict:
         "aria-label": given.get("label"),
         "aria-busy": "true" if given.get("busy") else None,
         "open": True if given.get("open") else None,
+        "data-alone": True if given.get("alone") else None,
     }
     named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
     # The element is one of CARD_ELEMENTS, a tag name and never text, and
@@ -714,6 +715,6 @@ slotted(
     "card",
     "partials/_card.html",
     ("content",),
-    frozenset(("element", "id", "css", "heading", "label", "busy", "open")),
+    frozenset(("element", "id", "css", "heading", "label", "busy", "open", "alone")),
     shape=card_frame,
 )

@@ -698,11 +698,7 @@ class TemplateClassStyleTests(SimpleTestCase):
 # Each host template's classes that no shared part declares yet, by template.
 # An entry leaves as its page moves onto a part, and none is ever added.
 HAND_ROLLED: dict[str, str] = {
-    "403.html": "notice-body notice-code notice-page",
-    "404.html": "notice-body notice-code notice-page notice-search",
-    "500.html": "notice-body notice-code notice-page",
     "analytics/overview.html": "bar-label bar-list bar-row bar-track bar-value chip reading-note window-switch",
-    "auth/login.html": "auth-card auth-logo auth-note auth-sso",
     "base.html": "content",
     "calendars/_entry_fields.html": "field-range",
     "calendars/calendar.html": (
@@ -795,13 +791,8 @@ HAND_ROLLED: dict[str, str] = {
     "partials/_posture.html": "posture-checks step-list",
     "partials/_queue_groups.html": "queue-table",
     "partials/approval_card.html": "approval-actions approval-card approval-reason",
-    "projects/_github_panel.html": "github-gap github-list github-mark workflow-chip workflow-chips",
-    "projects/_project_meta.html": "project-meta",
-    "projects/_updates.html": "github-list github-mark",
     "projects/posture.html": (
         "is-unmet posture-access posture-meter posture-meter-break posture-repo-name posture-repos posture-score"
     ),
-    "projects/project_detail.html": "project-tags",
-    "projects/watching.html": "gh-avatar gh-identity gh-name gh-profile gh-verified",
     "receipts/receipt_detail.html": "document-picture",
 }

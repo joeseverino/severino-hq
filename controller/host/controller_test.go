@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/secrets/project"
 )
 
 // Values that may reach the container only inside the mounted document.
@@ -41,8 +43,10 @@ type launch struct {
 	controller *Controller
 	args       []string
 	mounted    map[string][]byte
-	locked     bool
-	order      []string
+	// lentFiles is every file in the ssh directory the container is lent.
+	lentFiles []string
+	locked    bool
+	order     []string
 	// container is what the pass does, given its out directory on the host.
 	container func(out string)
 }
@@ -58,9 +62,13 @@ func newLaunch(t *testing.T) *launch {
 	if err := os.WriteFile(filepath.Join(secrets, "ssh", reference), []byte("an identity\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	document, _ := json.Marshal(map[string]any{"schema_version": 2, "connections": []any{
-		map[string]any{"ref": reference, "api_token": map[string]string{"api_token": sentinel}},
-	}})
+	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
+		{Ref: reference, Provider: "cloudflare_dns", Store: connections.Store{Vault: "Example", Item: "example"},
+			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+	}}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(secrets, "controller-connections.json"), document, 0o400); err != nil {
 		t.Fatal(err)
 	}
@@ -85,6 +93,11 @@ func newLaunch(t *testing.T) *launch {
 				if source, target, ok := bind(args[i+1]); ok {
 					if data, err := os.ReadFile(source); err == nil {
 						l.mounted[target] = data
+					}
+					if entries, err := os.ReadDir(source); err == nil && target == controllerSSH {
+						for _, entry := range entries {
+							l.lentFiles = append(l.lentFiles, entry.Name())
+						}
 					}
 					if target == controllerOut && l.container != nil {
 						l.container(source)
@@ -605,6 +618,85 @@ func TestAGlanceIsGivenOnlyTheConnectionsItReads(t *testing.T) {
 	}
 	if !slices.Contains(l.args, "severino-hq.role=glance") {
 		t.Errorf("the glance's container is not labeled as one: %v", l.args)
+	}
+}
+
+// The automation worker's connection, and its identity, never reach a
+// controller or glance pass, and a pass holds only the identities of the
+// connections it is given.
+func TestNoPassHoldsTheAutomationWorkersKey(t *testing.T) {
+	for _, pass := range []Pass{Plan, Apply, Glance} {
+		t.Run(fmt.Sprint(pass), func(t *testing.T) {
+			l := newLaunch(t)
+			glanceDocument(t, l)
+			withRunnerConnection(t, l.controller.SecretDir)
+
+			l.run(t, pass)
+
+			document, err := connections.Decode(l.mounted[controllerConnections])
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, connection := range document.Connections {
+				if connection.Ref == "example-machine" {
+					t.Errorf("the pass is given %s", connection)
+				}
+			}
+			slices.Sort(l.lentFiles)
+			want := []string{"example-ssh", "example-ssh.pub", "known_hosts"}
+			if pass != Glance {
+				want = []string{"example-dns.key", "example-ssh", "example-ssh.pub", "known_hosts"}
+			}
+			if !slices.Equal(l.lentFiles, want) {
+				t.Errorf("the pass holds %v, want %v", l.lentFiles, want)
+			}
+		})
+	}
+}
+
+func TestThePinnedHostKeysAreTheRenderersFile(t *testing.T) {
+	if knownHosts != project.KnownHosts {
+		t.Errorf("a run is lent %s, the renderer writes %s", knownHosts, project.KnownHosts)
+	}
+}
+
+// withRunnerConnection adds the automation worker's connection to the
+// rendered document, and the files the renderer writes for the document's
+// connections: each SSH identity, a signing key, the pinned host keys.
+func withRunnerConnection(t *testing.T, secrets string) {
+	t.Helper()
+	rendered := filepath.Join(secrets, "controller-connections.json")
+	data, err := os.ReadFile(rendered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := connections.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document.Connections = append(document.Connections, connections.Connection{
+		Ref: "example-machine", Provider: "ssh", Store: connections.Store{Vault: "Example", Item: "example-machine"},
+		SSHTransport: &connections.SSHTransport{Host: "192.0.2.20", User: "example-read", HostKey: "key", Identity: "example-machine", Port: "22", Role: "runner"},
+	})
+	if data, err = document.Encode(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(rendered); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rendered, data, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(secrets, "ssh")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(secrets, "ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"example-machine", "example-machine.pub", "example-ssh", "example-ssh.pub", "example-dns.key", "known_hosts"} {
+		if err := os.WriteFile(filepath.Join(secrets, "ssh", name), []byte(name+"\n"), 0o400); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

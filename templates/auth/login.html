@@ -2,8 +2,8 @@
 {% load static %}
 {% block title %}Sign in{% endblock %}
 {% block content %}
-<div class="auth-card">
-  <img class="auth-logo" src="{% static 'img/logo.png' %}" alt="{{ SITE_NAME }}" width="64" height="64">
+{% card element="div" alone=True label="Sign in" %}
+  <img src="{% static 'img/logo.png' %}" alt="{{ SITE_NAME }}" width="64" height="64">
   {% comment %}
   <!-- ast-grep-ignore: hand-drawn-heading --> the sign-in page stands outside the page frame, so it titles itself
   {% endcomment %}<h1>Sign in</h1>
@@ -16,10 +16,10 @@
   {% if OIDC_ENABLED %}
     {% if request.GET.signed_out %}<p class="muted">You are signed out.</p>{% endif %}
     {% if sso_failure %}{% notice tone="error" %}{{ sso_failure|breakable }}{% endnotice %}{% endif %}
-    <p><a class="btn primary auth-sso" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Use single sign-on</a></p>
+    <p><a class="btn primary" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Use single sign-on</a></p>
   {% else %}
     {% include "partials/_form.html" with verb="Sign in" next=next %}
   {% endif %}
-  <p class="muted auth-note">Unauthorized access is prohibited.</p>
-</div>
+  <p><small class="muted">Unauthorized access is prohibited.</small></p>
+{% endcard %}
 {% endblock %}

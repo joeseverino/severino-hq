@@ -189,12 +189,12 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* The dot stands in the gap before its part, so where the run wraps, the dot
    that would open a line lies outside the run and is clipped: a line never
    starts with a separator. */
-:is(.dot-list, .glance-caption, .project-meta) {
+:is(.dot-list, .glance-caption) {
   --dot-gap: calc(2 * var(--space-3) + .4em);
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- clips the dot before a part that opens a line, never a part */
   overflow-x: clip;
 }
-:is(.dot-list > li, .glance-caption > span, .project-meta > *) + *::before {
+:is(.dot-list > li, .glance-caption > span) + *::before {
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
 }

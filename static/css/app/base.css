@@ -50,13 +50,13 @@ a:is(:hover, :focus-visible) { color: var(--accent); text-decoration: underline;
    which beside muted text no link color can be while it holds its contrast
    with the page: a quiet underline, full on hover. Words are a paragraph, a
    line of small print, a muted line, or a value or item that reads as a
-   sentence (`.prose`). A muted dot list, or a head's meta line, is items,
-   not a line, so its item is words only where it is `.prose`. Anywhere else a link is the whole of its line, row,
+   sentence (`.prose`). A muted dot list is items, not a line, so its item
+   is words only where it is `.prose`. Anywhere else a link is the whole of its line, row,
    item or chip, and a link with a class of its own is a control, so both
    read by their color and underline on hover and focus. An external link
    keeps its class and its place among words; a bold link already stands out
    from them. */
-:where(p, small, .muted:not(.dot-list), .prose) a:where(:not([class]), .external-link):not(strong a, :has(> strong:only-child), .project-meta > :not(.prose) a) {
+:where(p, small, .muted:not(.dot-list), .prose) a:where(:not([class]), .external-link):not(strong a, :has(> strong:only-child)) {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
   text-decoration-thickness: 1px;

@@ -10,6 +10,7 @@ block ends: a server runs in a process group of its own, which goes whole.
 import contextlib
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -150,6 +151,43 @@ def scratch_env(tree: Path, *, trusted: bool, alone: bool) -> dict[str, str]:
         env = {name: value for name, value in env.items() if name not in _LOCAL_SET}
         env["MISE_IGNORED_CONFIG_PATHS"] = str(tree / LOCAL)
     return env
+
+
+# What a Python traceback ends on: the exception's dotted name and its message, with the indented
+# lines a message of several lines goes on in.
+_RAISED = re.compile(r"^[A-Za-z_][\w.]*: .+(?:\n[ \t]+\S.*)*", re.MULTILINE)
+
+
+def unloaded(tree: Path, env: dict[str, str]) -> str | None:
+    """The error ``tree``'s HQ stops at as Django loads under ``env``, its system checks
+    included, or None when it loads."""
+
+    done = subprocess.run(
+        ["mise", "-C", str(tree), "run", "--raw", "manage:scratch", "--", "check"],
+        capture_output=True,
+        text=True,
+        env=env,
+        check=False,
+    )
+    if not done.returncode:
+        return None
+    said = f"{done.stdout}\n{done.stderr}"
+    # The exception Python ended on, never mise's own line after it saying the task failed.
+    if raised := _RAISED.findall(said):
+        return " ".join(raised[-1].split())
+    return f"manage.py check exited {done.returncode}: {said.strip()[-400:]}"
+
+
+def set_refused(tree: Path, *, trusted: bool) -> str | None:
+    """Why ``tree``'s HQ cannot load the extension set where it loads the host alone, as the error
+    loading the set stopped at; None where the set loads, or the host alone fails too, a failure
+    of the tree's own. Every way a tree's HQ can refuse the set (a plugin API it predates, an
+    extension importing what it lacks) is answered here, by what Django does with it."""
+
+    refused = unloaded(tree, scratch_env(tree, trusted=trusted, alone=False))
+    if refused and unloaded(tree, scratch_env(tree, trusted=trusted, alone=True)) is None:
+        return refused
+    return None
 
 
 class Scratch:

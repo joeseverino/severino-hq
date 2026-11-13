@@ -6,21 +6,9 @@ Every refusal of a signed-in page: an account that may not do this, or a form
 whose page went stale (`stale`, from `error_views.csrf_failure`). It never
 repeats the refusal's own text, which names permissions by their identifiers.
 {% endcomment %}
-<div class="notice-page">
-  <p class="notice-code">403</p>
-  {% if stale %}
-    {% comment %}
-    <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
-    {% endcomment %}<h1>Form expired</h1>
-    <p class="notice-body">The page it came from was open too long, or you signed in again since. Go back, reload the page and try once more. Nothing was saved.</p>
-  {% else %}
-    {% comment %}
-    <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
-    {% endcomment %}<h1>Access denied</h1>
-    <p class="notice-body">Your account is not allowed to see or do this. If it should be, change what your sign-in allows, then sign in again.</p>
-  {% endif %}
-  <p class="page-actions">
-    <a class="btn primary" href="{% url 'dashboard' %}">Back to dashboard</a>
-  </p>
-</div>
+{% if stale %}
+  {% include "partials/_error_page.html" with code="403" title="Form expired" body="The page it came from was open too long, or you signed in again since. Go back, reload the page and try once more. Nothing was saved." only %}
+{% else %}
+  {% include "partials/_error_page.html" with code="403" title="Access denied" body="Your account is not allowed to see or do this. If it should be, change what your sign-in allows, then sign in again." only %}
+{% endif %}
 {% endblock %}

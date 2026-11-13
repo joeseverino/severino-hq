@@ -56,9 +56,12 @@ own copy. A run that replaced the code its test holds has tested this tree's
 code, so a Python or Go pass with such a file runs once more with each one
 kept at the ref. That second run's outcome is the verdict.
 
-When that second run does not import or build, the kept files hold a fixture
-the new test needs, which proves nothing: `--keep` only what holds the fix. A
-shell suite's support is the fakes it reads, so its pass runs once.
+A kept file the tests import a name from that its copy at the ref lacks is a
+fixture the new test needs, never the fix, so it is laid over again for a
+further run, and the line names it. When a run still does not import or
+build, the kept files hold a fixture nothing names, which proves nothing:
+`--keep` only what holds the fix. A shell suite's support is the fakes it
+reads, so its pass runs once.
 
 A test that drives `at.main` patches its `ROOT`, as `TestAtRefTests` does,
 since `changed_tests` lists files with git.
@@ -974,9 +977,11 @@ have been measured under a one-minute load average within 2 of the load the
 tip is measured under; a report that kept no load stands in for nothing. The
 closing line names both loads beside the run the base is kept from.
 
-A ref that refuses the extension set for its plugin API makes the run measure
-the host alone on both sides, as `--host-alone` asks, and its closing line
-says so.
+A tree whose start fails where its HQ cannot load the extension set but loads
+the host alone (`manage.py check` run both ways), such as a base older than an
+extension's plugin API or an import it needs, makes the run measure the host
+alone on both sides, as `--host-alone` asks, so the extensions' cost is never
+counted as the change's. Its closing line names the error the set stopped at.
 
 With `--base`, one page takes about 40 s (under 30 with the base kept) and
 every page about two and a half minutes (two with the base kept).

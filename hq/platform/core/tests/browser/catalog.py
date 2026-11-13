@@ -627,10 +627,13 @@ CATALOG = {
     ),
     # A list whose rows carry their own padding fills the frame as a table does.
     "part/section-rows": Entry(
-        '{% section "Example repositories" count=2 %}<ul class="github-list">'
-        '<li><a href="/example/one/">example-one</a> <span class="muted">Example access, read only</span></li>'
-        '<li><a href="/example/two/">example-two</a> <span class="muted">Example access, read only</span></li>'
-        "</ul>{% endsection %}"
+        '{% section "Example repositories" count=2 %}{% include "partials/_record_list.html" %}{% endsection %}',
+        {
+            "rows": [
+                ListRow("example-one", url="/example/one/", detail="Example access, read only"),
+                ListRow("example-two", url="/example/two/", detail="Example access, read only"),
+            ]
+        },
     ),
     # A band of facts, which draws its own cells, fills the frame as a table
     # does, the prose after it in the frame's padding; as a project's GitHub
@@ -706,12 +709,15 @@ CATALOG = {
     # by the stack gap, after prose and after a list of rows alike.
     "part/section-nested-rows": Entry(
         '{% section "Example repository" %}<p>An example line about the repository.</p>'
-        '{% section "Example pull requests" count=2 %}<ul class="github-list">'
-        '<li><a href="/example/41/">Example change</a> <span class="muted">#41</span></li>'
-        '<li><a href="/example/42/">Another example change</a> <span class="muted">#42</span></li>'
-        "</ul>{% endsection %}"
+        '{% section "Example pull requests" count=2 %}{% include "partials/_record_list.html" %}{% endsection %}'
         '{% section "Example workflows" %}<p>Example build, example test</p>{% endsection %}'
-        "{% endsection %}"
+        "{% endsection %}",
+        {
+            "rows": [
+                ListRow("Example change", url="/example/41/", detail="#41"),
+                ListRow("Another example change", url="/example/42/", detail="#42", badge="Draft"),
+            ]
+        },
     ),
     # A section in a section: the inner head in the outer frame, the inner
     # table reaching the outer frame's sides and foot.
@@ -1268,6 +1274,47 @@ CATALOG = {
                 Message(level, f"An example {name} message.")
                 for level, name in ((SUCCESS, "success"), (INFO, "info"), (WARNING, "warning"), (ERROR, "error"))
             ]
+        },
+    ),
+    # An error page, which titles itself outside the page frame: one with the
+    # search field, as a missing page offers it, and one naming the request
+    # id its log line carries, long enough to break at its dots.
+    "part/error-page": Entry(
+        '{% include "partials/_error_page.html" with code="404" title="Page not found" '
+        'body="The example link may be old, or what it pointed to was deleted." search=True %}',
+        heads_the_page=True,
+    ),
+    "part/error-page-request": Entry(
+        '{% include "partials/_error_page.html" with code="500" title="Something broke" '
+        'body="The example error is in the log. Trying again is safe." request_id=request_id %}',
+        {"request_id": "example-0123abcd.4567ef89.0123abcd4567"},
+        heads_the_page=True,
+    ),
+    # A card that is the whole of a page outside the frame, as the sign-in
+    # draws one: its mark, its own title, its one action and its closing line.
+    "part/card-alone": Entry(
+        '{% load static %}{% card element="div" alone=True label="Example sign-in" %}'
+        '<img src="{% static "img/logo.png" %}" alt="Example" width="64" height="64">'
+        "<h1>Example sign-in</h1>"
+        '<p class="muted">An example line before the action.</p>'
+        '<p><a class="btn primary" href="/example/">Use example sign-on</a></p>'
+        '<p><small class="muted">An example closing line.</small></p>{% endcard %}',
+        heads_the_page=True,
+    ),
+    # An account named as whose it is, in a card above its band of counts, as
+    # the Starred page draws your GitHub profile: its picture, its name with
+    # a state beside it, its handle and a line in its own words.
+    "part/identity": Entry(
+        '{% card label="Example profile" %}{% include "partials/_identity.html" with picture=picture '
+        'name="Example Person" handle="@example" url="https://example.com/example" badge="Your account" '
+        'tone="good" tip="An example reason it is yours." about="Runs an example homelab." only %}'
+        '{% facts layout="band" %}{% fact "Example followers" value=12 %}{% fact "Example repos" value=4 %}'
+        "{% endfacts %}{% endcard %}",
+        {
+            "picture": (
+                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E"
+                "%3Crect width='8' height='8' fill='%23888'/%3E%3C/svg%3E"
+            )
         },
     ),
     # A saved copy's footer, which says from the page's corner what it is.

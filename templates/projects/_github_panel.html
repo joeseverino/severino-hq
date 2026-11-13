@@ -27,7 +27,7 @@ reading; nothing here calls GitHub.
     {% detail %}
       {% if repo.production %}
         <small><code>{{ repo.production.sha|slice:":7"|breakable }}</code>{% dot %}{{ repo.production.created_at|ago_short }}{% if repo.production.sha != repo.head.sha %}{% dot %}{{ repo.default_branch|breakable }} has newer commits{% endif %}</small>
-        {% if repo.production.verified %}<small class="github-verified{% if repo.production_verified %} is-verified{% endif %}" tabindex="0" data-tip="{% for step in repo.production.verified %}{{ step.name }}: {{ step.conclusion|default:'not run' }}{% if not forloop.last %}&#10;{% endif %}{% endfor %}">{% include "partials/_icon.html" with name="check-circle" %}{% if repo.production_verified %}Verified before deploying{% else %}Verification failed{% endif %}</small>{% endif %}
+        {% if repo.production.verified %}<small>{% if repo.production_verified %}{% status "Verified before deploying" tone=repo.verified_tone pill=False tip=repo.verification_tip %}{% else %}{% status "Verification failed" tone=repo.verified_tone pill=False tip=repo.verification_tip %}{% endif %}</small>{% endif %}
       {% else %}
         <small>No deployments on GitHub.</small>
       {% endif %}
@@ -48,13 +48,13 @@ reading; nothing here calls GitHub.
       {% include "projects/_updates_run.html" with run=updates_run asked=run_asked %}
     </span>{% endfact %}
     {% if posture.measured %}
-      {% fact "Repository settings" %}<span class="prose"><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules){% if posture.unmet %}<br><span class="github-gap">{% for result in posture.unmet %}{{ result.check.unmet|breakable:"." }}{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endif %}</span>{% endfact %}
+      {% fact "Repository settings" %}<span class="prose"><a href="{% url 'posture' %}">{{ posture.met|breakable }} of {{ posture.measured|counted:"check passes,checks pass" }}</a> ({% if repo.private %}private{% else %}public{% endif %} repo rules){% if posture.unmet %}<br>{% for result in posture.unmet %}{% status result.check.unmet tone="attention" pill=False %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% endfact %}
     {% endif %}
     {% if rules %}
       {% fact "Changes to "|add:repo.default_branch %}
         {% if rules.pull_request %}Need a pull request{% if rules.reviews %} with {{ rules.reviews|counted:"approval" }}{% endif %}{% else %}Need no pull request{% endif %}
         and {{ rules.required_checks|length|counted:"passing check,passing checks" }}{% if rules.required_checks %} ({{ rules.required_checks|join:", "|breakable:")." }}{% else %}.{% endif %}{% if rules.blocks_force_push %} Force-push is blocked.{% endif %}
-        {% if repo.unrequired_checks %}<br><span class="github-gap">Run on pull requests but not required: {{ repo.unrequired_checks|join:", "|breakable }}</span>{% endif %}
+        {% if repo.unrequired_checks %}<br>{% status "Run on pull requests but not required:" repo.unrequired_checks|join:", " tone="attention" pill=False %}{% endif %}
       {% endfact %}
     {% elif "branch_rules" in repo.refused %}
       {% fact "Changes to "|add:repo.default_branch %}<span class="muted">GitHub does not offer branch rules for this repository's plan.</span>{% endfact %}
@@ -76,30 +76,14 @@ reading; nothing here calls GitHub.
   {% endcomment %}
   {% include "projects/_updates.html" %}
 
-  {% with pulls=repo.other_pulls %}
-  {% if pulls %}
-    {% section "Open pull requests" count=pulls|length %}
-    <ul class="github-list">
-      {% for pull in pulls %}
-        <li>
-          <span class="github-mark">{% include "partials/_icon.html" with name="pull" %}</span>
-          {% entity pull.url|outside label=pull.title %}
-          <span class="muted">#{{ pull.number|breakable }}{% dot %}{{ pull.author|breakable }}{% dot %}{{ pull.updated_at|ago_short }}</span>
-          {% if pull.draft %}{% status "Draft" %}{% endif %}
-        </li>
-      {% endfor %}
-    </ul>
+  {% if repo.pull_rows %}
+    {% section "Open pull requests" count=repo.pull_rows|length %}
+      {% include "partials/_record_list.html" with rows=repo.pull_rows label="Open pull requests" only %}
     {% endsection %}
   {% endif %}
-  {% endwith %}
 
   {% if repo.workflow_runs %}
     {% section "Workflows" %}
-    {% comment %}Chips that wrap, not cells: a grid strands a last row. Detail on hover.{% endcomment %}
-    <p class="workflow-chips">
-      {% for run in repo.workflow_runs %}
-        {% outside_link url=run.url css="workflow-chip" tone=run.tone tip=run.tip %}{% include "partials/_icon.html" with name="check-circle" %}{{ run.name|breakable }}<span class="visually-hidden">: {{ run.said|breakable }}</span>{% endoutside_link %}
-      {% endfor %}
-    </p>
+      {% include "partials/_record_list.html" with rows=repo.workflow_runs label="Workflows" only %}
     {% endsection %}
   {% endif %}

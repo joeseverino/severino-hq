@@ -140,10 +140,9 @@ class UpdatesSurfaceTests(TestCase):
 
         response = self.client.get(reverse("projects:detail", args=["alpha"]))
 
-        updates = [element.attrs["href"] for element in within(response, "data-updates") if element.tag == "a"]
-        alerts = [element.attrs["href"] for element in within(response, "data-unmatched-alerts") if element.tag == "a"]
-        self.assertEqual(updates, [UPDATE["url"]])
-        self.assertEqual(alerts, [estate.UNANSWERED["url"]])
+        # The updates and the alert none answers, and never the answered one.
+        listed = [element.attrs["href"] for element in within(response, "id", "updates") if element.tag == "a"]
+        self.assertEqual(listed, [UPDATE["url"], estate.UNANSWERED["url"]])
         self.assertIn(LONG_TITLE, text(response))
         self.assertIn("Checks failing", text(response))
         self.assertIn("no fixed version yet", text(response))

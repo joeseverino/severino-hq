@@ -228,7 +228,50 @@ def _updates(name):
                 "branch": "renovate/example-thumbnailer-3.x",
                 "labels": ["dependencies"],
                 "checks": {"state": "success", "total": 4, "failing": [], "running": 0, "names": ["lint", "test"]},
-            }
+            },
+            {
+                "number": 43,
+                "title": "Read the thumbnail size from the library's settings",
+                "url": f"{url}/pull/43",
+                "author": "example",
+                "draft": True,
+                "created_at": iso(timedelta(days=2)),
+                "updated_at": iso(timedelta(hours=6)),
+                "head": hexed("draft", name, length=40),
+                "branch": "thumbnail-size",
+                "labels": [],
+            },
+        ],
+        # Each workflow's newest run: the default branch's build passing, a
+        # release still going, and a nightly check that failed on an older commit.
+        "runs": [
+            {
+                "name": "CI",
+                "url": f"{url}/actions/runs/101",
+                "status": "completed",
+                "conclusion": "success",
+                "branch": "main",
+                "sha": hexed("head", name, length=40),
+                "created_at": iso(timedelta(days=4)),
+            },
+            {
+                "name": "Release",
+                "url": f"{url}/actions/runs/102",
+                "status": "in_progress",
+                "conclusion": "",
+                "branch": "main",
+                "sha": hexed("head", name, length=40),
+                "created_at": iso(timedelta(minutes=20)),
+            },
+            {
+                "name": "Nightly checks",
+                "url": f"{url}/actions/runs/99",
+                "status": "completed",
+                "conclusion": "failure",
+                "branch": "main",
+                "sha": hexed("older", name, length=40),
+                "created_at": iso(timedelta(days=5)),
+            },
         ],
         "alerts": {"dependabot": {"medium": 1}},
         "dependabot_alerts": [

@@ -272,11 +272,13 @@ func Only[S any](c Connections, pick func(connections.Connection) *S) (S, error)
 	return Need(found)
 }
 
-// SSHRefs is every connection that is an SSH transport, in ref order.
+// SSHRefs is every connection that is an SSH transport the controller dials,
+// in ref order: every one but the automation worker's
+// (connections.RunnerRole).
 func (c Connections) SSHRefs() []string {
 	refs := []string{}
 	for _, connection := range c.All() {
-		if transport := connection.SSHTransport; transport != nil && transport.Host != "" && transport.User != "" {
+		if transport := connection.SSHTransport; transport != nil && transport.Host != "" && transport.User != "" && transport.Role != connections.RunnerRole {
 			refs = append(refs, connection.Ref)
 		}
 	}

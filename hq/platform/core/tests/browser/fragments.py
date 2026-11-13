@@ -141,25 +141,27 @@ def _asking_dialog_probe():
     )
 
 
-# A page about one thing: the content draws its ask and the note beside it,
-# first as last read and then as it is now.
+# A page about one thing: the content draws its ask, and the page's own head
+# its note, first as last read and then as it is now.
 _ASKING_HEAD = """<main class="content" id="content">
-<header class="page-head"><h1>Probe</h1></header>
+{head}
 <p data-probe="said">{said}</p>
 {control}
 </main>"""
 
 
 def _asking_head_probe():
+    visit = PageVisit("page", "example")
+    head = render_to_string("partials/_page_head.html", {"page": {"title": "Probe"}, "page_visit": visit})
     control = Template('{% include "partials/_visit_refresh.html" with visit=visit %}').render(
-        Context({"visit": PageVisit("page", "example")})
+        Context({"visit": visit})
     )
     scripts = f"""<!doctype html><html><head><title>Probe</title>
 {_FRAGMENT_JS}
 <script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
 </head><body>"""
     return [
-        scripts + _ASKING_HEAD.format(said=said, control=control) + "</body></html>"
+        scripts + _ASKING_HEAD.format(head=head, said=said, control=control) + "</body></html>"
         for said in ("as last read", "as it is now")
     ]
 
@@ -593,7 +595,7 @@ class FragmentBrowserTests(BrowserGate):
     def test_a_pages_note_says_what_its_ask_waits_for_and_the_ask_outlives_the_swap(self):
         self.visit = _VISIT_LIVE
         self.page.goto(f"{ORIGIN}/probe-asking-head/", wait_until="load")
-        note = "#content > [data-ask-note]"
+        note = SELECTORS["page_note"]
         self.page.evaluate(
             "(note) => { document.querySelector('[data-ask]').kept = true; document.querySelector(note).was = true; }",
             note,
@@ -665,3 +667,8 @@ class FragmentBrowserTests(BrowserGate):
                     self.assertRegex(after, r"^web:[0-9a-f]{48}$")
                 else:
                     self.assertEqual(after, before)
+                if answer == "lost":
+                    # Chromium logs the post the route aborted as a failed
+                    # load: the test's own doing, as a failed status is
+                    # (gate's _FAILED_ANSWER).
+                    self.refusals = [heard for heard in self.refusals if "Failed to load resource: net::" not in heard]

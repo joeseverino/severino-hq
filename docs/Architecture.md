@@ -1387,3 +1387,72 @@ so a claim retried after a crash is answered the same run, which is reported
 as unknown and never run again. `mise run smoke:runner` runs a real playbook
 on the local machine through its entry point, fetched from a repository on
 the same machine.
+
+### The automation worker on the host
+
+On a host the worker runs as the glance does, a oneshot unit a path starts:
+HQ's doorbell, `severino-hq-automation.path`, starts
+`severino-hq-automation.service`, a 15-minute timer is its floor, and root's
+`hq-host automation` (`controller/host/automation.go`) launches it as a
+controller pass is launched, in a short-lived container of its own image
+(`AutomationImage`, pinned in the tree). Where the procedures come from is
+the host's `automation` entry, never a claim
+([Tokens on the host](Deployment.md#tokens-on-the-host)).
+
+It runs on a network of its own, `severino-hq-automation`, confined by an
+nftables table as the Renovate run is, rather than on the host's network as
+the controller is: that is the least it can reach. Docker masquerades a
+container's packet as it leaves the host, changing its source "to an address
+on the host interface the packet is sent on" (Docker,
+[Port publishing and mapping](https://docs.docker.com/engine/network/port-publishing/),
+"Masquerade or SNAT for outgoing packets"). So a machine the worker reaches
+over the tailnet sees the host's tailnet address, which its `hq-read` login
+allows. A packet to the host itself is delivered locally, through the
+prerouting and input hooks alone (nftables,
+[Netfilter hooks](https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks)),
+so no masquerade applies and it would arrive from the network's own subnet
+(`AutomationSubnet`, its one declaration), which the host's `hq-read` login
+refuses: sshd's `from=` and `AllowUsers` and the PAM check of the source's
+tailnet node all know the host by its own address. So the table's nat chain
+on the input hook, at srcnat, after every filter has seen the subnet, gives
+each such connection the address it was sent to as its source, one of the
+host's own (nft(8), "NAT STATEMENTS": snat is valid in the input chain). The
+login then sees the host, which is what the connection is, and nothing new is
+granted, since any process on the host can already connect from that address;
+the subnet stays HQ's alone, and the login's gates are not widened for it.
+Only a packet delivered locally reaches the input hook, so the chain rewrites
+no connection the host forwards.
+
+What it is given, and what that means:
+
+- **Account.** The unit runs as root under the shared sandbox, widened by
+  netlink in the host's network namespace to load the table
+  (`CAP_NET_ADMIN`) and the web account's files (`CAP_CHOWN`,
+  `CAP_DAC_OVERRIDE`). The container runs as the web account, which the
+  bridge's peer check requires, with no capability, no way to gain one, a
+  read-only root, a `noexec` scratch tmpfs, and caps on its memory and
+  processes.
+- **Custody.** It holds the runner-role connections and their identities
+  alone, the pinned host keys and the grant's token, copied under the
+  renderer's lock into a directory of its own on the renderer's tmpfs and
+  lent read-only; its journal directory is the one host path it writes. No
+  controller or glance pass holds a runner connection or its key
+  (`lendConnections`), and the controller never dials one (`SSHRefs`). It is
+  given no other credential, no web volume, no seal key, certificate state,
+  unit socket or docker socket.
+- **Reach.** The table lets its network reach each lent connection's address
+  and port, and public IPv4 addresses (GitHub, the public resolvers), and
+  drops everything else: the LAN, the tailnet, the host's other services,
+  other containers, IPv6 and a forged source. A runner connection whose host
+  is not an IPv4 address cannot be named by the table, so it is not lent.
+- **A compromised worker** reaches `hq-read` on the machines lent to it (no
+  sudo, no docker), an hour's read of the procedures' repository, and the
+  whole bridge as the web account, as the controller does: the socket
+  authorizes by account.
+- **A reviewed playbook's local tasks** run as the worker's account, and can
+  read the token file and the identity files, as any Ansible controller's
+  can.
+- **Bounds.** A run ends at its manifest's `timeout_seconds` and its lease;
+  root removes the container at `AutomationBound`, and the unit's
+  start timeout outlasts that. A run in flight then is reported unknown and
+  never run again; one queued behind it waits for the next start.

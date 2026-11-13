@@ -33,7 +33,7 @@ class ServerErrorTests(SimpleTestCase):
 
         body = server_error(request).content.decode()
 
-        self.assertIn("under request id 0123abcd", text(body))
+        self.assertIn("request id is 0123abcd", text(body))
         self.assertIn("0123abcd", texts(body, "code"))
 
 

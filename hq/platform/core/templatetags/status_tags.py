@@ -24,7 +24,7 @@ from hq.platform.application.labels import sentence
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.core.templatetags.value_tags import breakable
 lazy from hq.platform.application.infrastructure import RESOURCE_TONES
-lazy from hq.platform.application.ui import STATUS_VALUES
+lazy from hq.platform.application.ui import STATUS_VALUES, severity_tone as _severity_tone
 
 register = template.Library()
 
@@ -114,16 +114,12 @@ def status_pill(
     return format_html("<{}{}>{}</{}>", element, html_attributes(dict(attributes)), label, element)
 
 
-# An advisory's severity as the tone its pill takes, wherever one is listed.
-SEVERITY_TONES = {"critical": "serious", "high": "serious", "medium": "attention", "moderate": "attention"}
-
-
 @register.filter
 def severity_tone(severity):
     """``{{ advisory.severity|severity_tone }}``: the tone of an advisory's
-    severity, critical and high serious, medium attention, the rest neutral."""
+    severity (``application.ui.severity_tone``)."""
 
-    return SEVERITY_TONES.get(str(severity or "").lower(), "neutral")
+    return _severity_tone(severity)
 
 
 def _field(thing, name: str) -> str:

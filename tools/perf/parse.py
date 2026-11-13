@@ -12,9 +12,6 @@ _METRIC = re.compile(r"(?:^|,)\s*([!#$%&'*+.^_`|~\w-]+)((?:\s*;[^,]*)*)")
 _DURATION = re.compile(r";\s*dur\s*=\s*([0-9.]+)")
 # `footprint -f bytes` prints each process's resident footprint as this line.
 _FOOTPRINT = re.compile(r"^\s*phys_footprint:\s*(\d+)\s*B\s*$", re.MULTILINE)
-# How HQ refuses an extension built for another plugin API
-# (hq/platform/application/plugins.py), as a server's log holds it.
-_API_REFUSAL = re.compile(r"Plugin \S+ requires API \d+; HQ supports \d+\.?")
 
 
 def server_time(header: str, metric: str = "app") -> float | None:
@@ -50,13 +47,6 @@ def container_anon_bytes(memory_stat: str) -> int:
     if anon is None:
         raise ValueError(f"memory.stat names no anonymous memory: {memory_stat.strip()[:80]!r}")
     return anon
-
-
-def api_refusal(log: str) -> str | None:
-    """HQ's refusal of an extension built for another plugin API, from a server's log; None without one."""
-
-    found = _API_REFUSAL.search(log)
-    return found.group(0) if found else None
 
 
 # Elements that never hold others, so never close.

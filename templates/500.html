@@ -1,16 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Something broke{% endblock %}
 {% block content %}
-<div class="notice-page">
-  <p class="notice-code">500</p>
-  {% comment %}
-  <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
-  {% endcomment %}<h1>Something broke</h1>
-  <p class="notice-body">
-    The error is in the log{% if request_id %}, under request id <code>{{ request_id|breakable:"." }}</code>{% else %}.{% endif %} Trying again is safe.
-  </p>
-  <p class="page-actions">
-    <a class="btn primary" href="{% url 'dashboard' %}">Back to dashboard</a>
-  </p>
-</div>
+{% include "partials/_error_page.html" with code="500" title="Something broke" body="The error is in the log. Trying again is safe." request_id=request_id only %}
 {% endblock %}
