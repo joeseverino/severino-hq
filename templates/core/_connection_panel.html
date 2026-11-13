@@ -157,7 +157,6 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   </div>
 
   {% section "Addresses" fold=True open=True lede="Yours and HQ's" %}
-    <div class="section-flow">
       {% section "Your addresses" %}
         {% table_region "Your addresses" %}
           <table class="data-table" data-addresses="yours">
@@ -193,7 +192,6 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
           {% endtable_region %}
         {% endsection %}
       {% endif %}
-    </div>
   {% aside %}<span class="count">Yours {{ request_path.addresses|length }}{% if request_path.hq_addresses %}{% dot %}HQ {{ request_path.hq_addresses|length }}{% endif %}</span>
   {% endsection %}
 

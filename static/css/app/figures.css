@@ -98,8 +98,9 @@
 }
 /* A name in the muted line under the row's name is context the row shares with its neighbors: one line, cut at the cell's edge, holding out for none of it (`--cut-floor`). */
 .data-table td .muted { --cut-lines: 1; --cut-floor: 0px; }
-/* A value quoted in a cell can hold a run with no seam (a link, a digest), so it breaks wherever it must and never widens its column; marked on the cell when the whole cell is such text. */
-.data-table :is(td[data-cell~=data], td [data-cell~=data], :is(td[data-cell~=data], td [data-cell~=data]) .token) { overflow-wrap: anywhere; }
+/* A value quoted in a cell can hold a run with no seam (a link, a digest), which `breakable` makes a token, so the token breaks wherever it must and never widens its column; marked on the cell when the whole cell is such text. Its words stay whole, so the column is never narrower than its longest. */
+.data-table :is(td[data-cell~=data], td [data-cell~=data]) { overflow-wrap: break-word; }
+.data-table :is(td[data-cell~=data], td [data-cell~=data]) .token { overflow-wrap: anywhere; }
 /* A list row's actions (`_record_list.html`) read as several: the span gets the flex box. A table row's are its cell's (tables.css). */
 span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); white-space: nowrap; }
 .chart-grid { stroke: var(--line-2); stroke-width: 1; }

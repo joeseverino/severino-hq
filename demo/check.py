@@ -323,14 +323,20 @@ class DemoSiteTests(unittest.TestCase):
         playbooks = (OUT / "infrastructure" / "playbooks" / "index.html").read_text(encoding="utf-8")
         runs = sorted(set(re.findall(r'href="(/commands/[^"/]+\.run/)"', playbooks)))
         self.assertTrue(runs, "Playbooks links each playbook's runs")
+        # Each run's own page says who asked and who approved it, and how it ended.
         approved = []
         for path in runs:
             page = (OUT / path.strip("/") / "index.html").read_text(encoding="utf-8")
-            for row in re.split(r"<tr\b", page):
-                tones = {mark for classes, _ in _MARK.findall(row) for mark in classes.split()}
-                labels = set(re.findall(r'data-label="([^"]+)"', row))
-                if {"Approved by", "Tasks"} <= labels and "pill-good" in tones and "pill-serious" not in tones:
-                    approved.append(path)
+            for run in sorted(set(re.findall(r'href="(/jobs/runs/[^"/]+/)"', page))):
+                shown = (OUT / run.strip("/") / "index.html").read_text(encoding="utf-8")
+                tones = {mark for classes, _ in _MARK.findall(shown) for mark in classes.split()}
+                if (
+                    "approved by" in shown
+                    and "Finished" in shown
+                    and "pill-good" in tones
+                    and "pill-serious" not in tones
+                ):
+                    approved.append(run)
         self.assertTrue(approved, "a playbook's runs hold one approved and finished")
 
     def test_a_list_s_toolbar_filters_and_says_what_it_cannot_search(self):

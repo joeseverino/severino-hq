@@ -213,9 +213,8 @@
 .month-day.is-past .month-mark, .month-day.is-past .month-item::before { opacity: .62; }
 .month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
 /* The date and the day's marks share one row, so marks take no height of
-   their own and the bars under them stay level across the week. Marks a
-   narrow day has no room for run under its edge, which the day clips; the
-   day panel lists them all. */
+   their own and the bars under them stay level across the week; the day
+   panel lists every mark. */
 .month-day-head { display: flex; align-items: center; gap: var(--space-1); margin-bottom: var(--space-1); }
 .month-day-head > .month-mark { flex: none; }
 .month-date {
@@ -303,6 +302,8 @@
    what is hit, and a dot that names it stands in on it. */
 .month-grid.is-compact .month-date { min-width: var(--target-min); height: var(--target-min); font-size: var(--text-2xs); }
 .month-grid.is-compact .month-mark { width: 6px; height: 6px; }
+/* A narrow day's marks narrow to slivers before they would leave its head. */
+.month-grid.is-compact .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
 /* A phone shows where things are, not what: dots and slivers, and the day
    panel under the month says the rest. */
 @container month (max-width: 34rem) {
@@ -310,6 +311,7 @@
   :is(.month-item, .month-more) { display: none; }
   .month-item-dot { display: inline-block; }
   .month-mark { width: 6px; height: 6px; }
+  .month-day-head > .month-mark { flex: 0 1 auto; min-width: 0; }
   .month-span { height: 4px; padding: 0; background: var(--source); font-size: 0; }
   .month-date { min-width: var(--target-min); height: var(--target-min); }
   .month-of { display: none; }

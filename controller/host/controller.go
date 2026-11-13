@@ -58,7 +58,7 @@ type Controller struct {
 	Statfs     func(path string) (free, total uint64, err error)
 	// RebootRequired is the flag an update leaves when it waits on a restart
 	// (hostcore.RebootRequired), and Born when a file was created
-	// (hostcore.Born).
+	// (born.At).
 	RebootRequired string
 	Born           func(path string) (time.Time, error)
 	// Connections checks the connections document before it is read.

@@ -121,9 +121,14 @@
 /* The table is as wide as its region, so the shares are of the region: a table of auto width grows until its field's own width is the fifth that is left. */
 .table-scroll.is-compare > .data-table { inline-size: 100%; }
 .table-scroll.is-compare > .data-table > tbody > tr > td[data-side] { inline-size: 40%; }
-/* Each side wraps at its words and nowhere inside one, so its words are its narrowest: a region too narrow for the table then lets its Status go to the row's line beneath (tables.js) rather than squeezing the two values to a letter wide. */
-.table-scroll.is-compare > .data-table > tbody > tr > td[data-side],
-.table-scroll.is-compare > .data-table > tbody > tr > td[data-side] .token { overflow-wrap: break-word; }
+/* A change's side (`data-side`, partials/_change_table.html) keeps its words whole, so it is never narrower than its longest word and an identifier in it breaks into pieces no narrower than that, never a letter wide; a table too wide then lets its Status go to the row's line beneath (tables.js). */
+.table-scroll > .data-table > tbody > tr > td[data-side] { overflow-wrap: break-word; }
+/* With no script a phone's box has no line beneath a row for Status to go to, and the change's columns of whole words are wider than the box, so Status, its last column, leaves outright: each side already shows the change, with a dash where a value is absent. */
+@media (scripting: none) {
+  @container table-region (width < 640px) {
+    .table-scroll > .data-table:has(> tbody > tr > td[data-side]) > * > tr:not(.row-detail) > :last-child { display: none; }
+  }
+}
 /* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
 .data-table > tbody > tr[data-emphasized] > * { background: var(--accent-tint); }
 .data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
@@ -211,10 +216,11 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A row's actions (`{% row_actions %}`) end its line side by side, each with its middle on the middle of the row's first line, as the words beside it are set, however much taller than a line a button stands. `--row-line` carries the cell's line down to each control, whose own is its label's. */
 .data-table td.row-actions { --row-line: 1lh; text-align: right; white-space: nowrap; }
 .data-table td.row-actions > *, .data-table td.row-actions > [data-ask] > [data-ask-button] { translate: 0 calc(var(--row-line) / 2 - 50%); }
-/* A row's control (a compact button, as `{% row_actions %}` draws each, or an icon link) stands taller than the row's line by twice `--control-rise`, which its cell takes out of its padding above and below, so a row holding one is as tall as a row of words and the control's middle is still the line's. A row's controls that wrap stand a control apart, as they would anywhere. */
-.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(a, button, form, [role="button"])) { --control-rise: max(0px, (var(--control-compact) - var(--row-line)) / 2); padding-block-start: calc(var(--row-pad) - var(--control-rise)); }
-.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(a, button, form, [role="button"])):not(:has(> [data-ask])) { padding-block-end: calc(var(--row-pad) - var(--control-rise)); }
-.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(a, button, form, [role="button"])) > :is(a, button, form, [role="button"]) { vertical-align: top; translate: none; }
+/* A row's control (a compact button, as `{% row_actions %}` or an ask draws each, or an icon link) stands taller than the row's line by twice `--control-rise`, which its cell takes out of its padding above and below, so a row holding one is as tall as a row of words and the control's middle is still the line's. A row's controls that wrap stand a control apart, as they would anywhere. */
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(.btn, .icon-link, form, [data-ask])) { --control-rise: max(0px, (var(--control-compact) - var(--row-line)) / 2); padding-block-start: calc(var(--row-pad) - var(--control-rise)); }
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(.btn, .icon-link, form, [data-ask])):not(:has(> [data-ask])) { padding-block-end: calc(var(--row-pad) - var(--control-rise)); }
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(.btn, .icon-link, form, [data-ask])) > :is(.btn, .icon-link, form, [data-ask]),
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]) > [data-ask] > .btn { vertical-align: top; translate: none; }
 .data-table td.row-actions > * + * { margin-inline-start: var(--space-4); }
 /* An ask's controls flow as words do in a cell (partials/_ask.html), so its own line there would break theirs and stand the next control under it. The cell keeps the line under all its controls instead, and what the ask says stands in it out of the flow, as wide as the cell and asking it for no width, so a press moves nothing. */
 .data-table td:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
@@ -262,9 +268,11 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
   max-width: 50cqi;
 }
 .data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::after { overflow-wrap: anywhere; }
-/* A narrow box has no width to hold out with (`--cut-floor`). */
-@container style(--box: narrow) {
-  .data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *) > .token[data-sole] > .strut::before { display: none; }
+/* A narrow box has no width to hold out with (`--cut-floor`), where a row can open to show what is cut, so only with script. The selector is the strut's own above, so it is as specific and, coming later, wins. */
+@media (scripting: enabled) {
+  @container style(--box: narrow) {
+    .data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::before { display: none; }
+  }
 }
 /* Outside it a closed row's chip holds out for its whole name, up to half the region, so it is cut only once its table has no column left to give way. One in a context line (`.muted`) holds out only for its longest piece, as a name there does (figures.css): the row's name sizes the column. */
 @container style(--box: whole) {

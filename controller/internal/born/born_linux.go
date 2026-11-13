@@ -1,4 +1,4 @@
-package hostcore
+package born
 
 import (
 	"time"
@@ -6,9 +6,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Born is when the file at path was created, as statx(2) states it, or when
+// At is when the file at path was created, as statx(2) states it, or when
 // it was last written where the filesystem keeps no birth time.
-func Born(path string) (time.Time, error) {
+func At(path string) (time.Time, error) {
 	var stat unix.Statx_t
 	if err := unix.Statx(unix.AT_FDCWD, path, unix.AT_SYMLINK_NOFOLLOW, unix.STATX_BTIME|unix.STATX_MTIME, &stat); err != nil {
 		return time.Time{}, err

@@ -35,11 +35,14 @@ UNKNOWN = (
 class Bridge(Protocol):
     def claim(
         self, controller_id: str, *, capabilities: Sequence[str], lease_seconds: int, attempt: str
-    ) -> dict[str, Any]: ...
+    ) -> dict[str, Any]:
+        """Claim the next queued run this worker can do, under a lease."""
 
-    def renew(self, controller_id: str, operation: str, *, lease_seconds: int) -> dict[str, Any]: ...
+    def renew(self, controller_id: str, operation: str, *, lease_seconds: int) -> dict[str, Any]:
+        """Extend the lease on a claimed run."""
 
-    def report(self, controller_id: str, operation: str, report: Mapping[str, Any]) -> dict[str, Any]: ...
+    def report(self, controller_id: str, operation: str, report: Mapping[str, Any]) -> dict[str, Any]:
+        """Send what a claimed run did so far, or how it ended."""
 
 
 class Runner(Protocol):
@@ -50,7 +53,8 @@ class Runner(Protocol):
 
     def __call__(
         self, run: Run, *, on_event: Callable[[Mapping[str, Any]], None], should_stop: Callable[[], bool]
-    ) -> str: ...
+    ) -> str:
+        """Run ``run`` and answer its final status."""
 
 
 # Reads the source at the tip of its default branch and answers its catalog
@@ -294,7 +298,7 @@ def _pass(
         else:
             entry = journal.started(entry, claim.operation)
             report = run_claimed(bridge, controller_id, run, runner, clock, secrets)
-            entry = journal.finished(entry, report)
+            journal.finished(entry, report)
     bridge.report(controller_id, claim.operation, report)
     journal.clear()
     return Outcome(claim.operation, report)

@@ -94,7 +94,9 @@ export SEVERINO_HQ_PLUGINS="$plugin_reference"
 # django-stubs keys mypy's cache on INSTALLED_APPS alone, so a cache kept
 # beside the package still names a host model module that has since moved;
 # a cache of this run's own costs what a warm one does.
-MYPYPATH="$hq_root" "$python" -m mypy --cache-dir "$work/mypy"
+# django-stubs loads the settings while mypy starts, and mypy reports an
+# error there only as its own crash; the traceback names the real cause.
+MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
 "$python" "$hq_root/manage.py" check
 "$python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # The template checks read every template Django loads, so they hold the

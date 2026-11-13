@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/internal/atomicfile"
@@ -512,9 +511,6 @@ func copyFile(from, to string, mode os.FileMode) error {
 
 // Free is the free bytes on the filesystem holding path.
 func Free(path string) (uint64, error) {
-	var stat syscall.Statfs_t
-	if err := syscall.Statfs(path, &stat); err != nil {
-		return 0, err
-	}
-	return stat.Bavail * uint64(stat.Bsize), nil
+	free, _, err := hostcore.Statfs(path)
+	return free, err
 }

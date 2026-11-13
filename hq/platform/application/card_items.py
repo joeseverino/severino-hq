@@ -149,13 +149,20 @@ class RowLink(Protocol):
     """
 
     @property
-    def label(self) -> str: ...
+    def label(self) -> str:
+        """The words the link is drawn with."""
+
     @property
-    def url(self) -> str: ...
+    def url(self) -> str:
+        """Where it leads."""
+
     @property
-    def external(self) -> bool: ...
+    def external(self) -> bool:
+        """Whether it leads out of HQ."""
+
     @property
-    def kind_label(self) -> str: ...
+    def kind_label(self) -> str:
+        """What kind of thing it leads to, in words."""
 
 
 class RowAction(Protocol):
@@ -166,13 +173,20 @@ class RowAction(Protocol):
     """
 
     @property
-    def label(self) -> str: ...
+    def label(self) -> str:
+        """The words its button is drawn with."""
+
     @property
-    def url(self) -> str: ...
+    def url(self) -> str:
+        """Where it sends."""
+
     @property
-    def method(self) -> str: ...
+    def method(self) -> str:
+        """The HTTP method it sends with."""
+
     @property
-    def disabled(self) -> bool: ...
+    def disabled(self) -> bool:
+        """Whether it is drawn but cannot be pressed."""
 
 
 @display

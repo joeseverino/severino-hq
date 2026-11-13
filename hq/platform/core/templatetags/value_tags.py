@@ -602,6 +602,8 @@ class Takes:
 
     # The option that, given, makes the tag stand alone, enclosing nothing.
     bare_with = ""
+    # What the tag takes in order after its content, each required.
+    ordered: tuple[str, ...] = ()
 
     def __init__(
         self, name: str, partial: str, parts: tuple[str, ...], options: frozenset[str], shape: Shape | None
@@ -611,10 +613,11 @@ class Takes:
         self.parts = parts
         self.options = options
         self.shape = shape
-        keyword = inspect.Parameter.KEYWORD_ONLY
+        keyword, ordered = inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD
         self.__signature__ = inspect.Signature(
             [
-                inspect.Parameter("content", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+                inspect.Parameter("content", ordered),
+                *(inspect.Parameter(name, ordered) for name in self.ordered),
                 *(inspect.Parameter(option, keyword, default="") for option in sorted(options)),
                 *([inspect.Parameter("data", inspect.Parameter.VAR_KEYWORD)] if shape else []),
             ]

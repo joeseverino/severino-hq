@@ -76,8 +76,12 @@ class AddressEvidenceTests(TestCase):
 
         self.assertEqual([row.value for row in rows], ["100.64.0.9"])
 
-    def test_yours_and_hq_s_addresses_are_two_tables_side_by_side_in_one_flow(self):
-        """Each list is a table in a section of its own, and the two sections share one flow."""
+    def test_yours_and_hq_s_addresses_are_two_tables_one_under_the_other(self):
+        """Each list is a table in a section of its own, both in Addresses and in no flow.
+
+        HQ usually has one address, so its section is far shorter than yours,
+        and a flow would leave it beside yours with a gap under it.
+        """
 
         from .markup import select
 
@@ -95,13 +99,14 @@ class AddressEvidenceTests(TestCase):
             self.assertEqual(table.tag, "table")
             self.assertIn(A_TAILNET_ADDRESS if table is tables["yours"] else "100.64.0.9", table.words)
 
-        def flowed_section(table):
-            index = max(i for i, up in enumerate(table.ancestors) if "section-flow" in up.classes)
-            return table.ancestors[index], table.ancestors[index + 1]
+        def section_of(table):
+            return next(up for up in reversed(table.ancestors) if "section" in up.classes)
 
-        (flow_yours, section_yours), (flow_hq, section_hq) = map(flowed_section, tables.values())
-        self.assertIs(flow_yours, flow_hq)
-        self.assertIsNot(section_yours, section_hq)
+        yours, hq = section_of(tables["yours"]), section_of(tables["hq"])
+        self.assertIsNot(yours, hq)
+        self.assertIs(section_of(yours), section_of(hq))
+        for table in tables.values():
+            self.assertFalse([up for up in table.ancestors if "section-flow" in up.classes])
 
 
 @override_settings(

@@ -30,6 +30,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/born"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"io/fs"
@@ -100,7 +101,7 @@ type Receiver struct {
 	Docker, Systemctl, Busctl string
 	// RebootRequired is the flag an update leaves when it waits on a restart
 	// (hostcore.RebootRequired), and Born when a file was created
-	// (hostcore.Born).
+	// (born.At).
 	RebootRequired string
 	Born           func(path string) (time.Time, error)
 	// Env is every program's whole environment.
@@ -129,7 +130,7 @@ func Defaults(getenv func(string) string) Receiver {
 		Systemctl:      "systemctl",
 		Busctl:         hostcore.ScheduledShutdown[0],
 		RebootRequired: hostcore.RebootRequired,
-		Born:           hostcore.Born,
+		Born:           born.At,
 		Env:            hostcore.RootEnvironment(),
 		Now:            time.Now,
 		Addresses:      net.InterfaceAddrs,

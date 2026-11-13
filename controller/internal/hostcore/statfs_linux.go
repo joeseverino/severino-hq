@@ -10,9 +10,9 @@ func Statfs(path string) (free, total uint64, err error) {
 	if err := syscall.Statfs(path, &stat); err != nil {
 		return 0, 0, err
 	}
-	size := uint64(stat.Frsize)
+	size := uint64(stat.Frsize) //nolint:gosec // G115: the kernel's fragment size is never negative
 	if size == 0 {
-		size = uint64(stat.Bsize)
+		size = uint64(stat.Bsize) //nolint:gosec // G115: the kernel's block size is never negative
 	}
 	return stat.Bavail * size, stat.Blocks * size, nil
 }

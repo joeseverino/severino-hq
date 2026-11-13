@@ -10,8 +10,8 @@ file transport, as the worker fetches from GitHub over https.
 import subprocess
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 from .remote import REPOSITORY, Remote
 
@@ -82,7 +82,7 @@ class FetchTests(ResolverTestCase):
     def test_the_token_reaches_git_through_its_environment_and_never_its_command_line(self):
         revision = self.remote.commit({"playbooks/check.yml": PLAY})
         token = "ghs_example0123456789token"
-        with mock.patch("hq_runner.procedures.subprocess.run", wraps=subprocess.run) as ran:
+        with unittest.mock.patch("hq_runner.procedures.subprocess.run", wraps=subprocess.run) as ran:
             self.resolve(revision, token=token)
 
         headers = []
@@ -115,7 +115,7 @@ class PlaybookPathTests(ResolverTestCase):
     def test_a_playbook_path_that_is_not_plain_relative_yml_is_refused_before_any_fetch(self):
         revision = self.remote.commit({"playbooks/check.yml": PLAY})
         for playbook in ("../check.yml", "/etc/check.yml", "playbooks/../check.yml", "check.yaml", "-check.yml", ""):
-            with self.subTest(playbook=playbook), mock.patch("hq_runner.procedures.subprocess.run") as ran:
+            with self.subTest(playbook=playbook), unittest.mock.patch("hq_runner.procedures.subprocess.run") as ran:
                 self.assertEqual(self.refused(revision, playbook), "Unrunnable")
                 ran.assert_not_called()
 

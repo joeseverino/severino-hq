@@ -161,7 +161,7 @@ class ExampleEstateTests(TestCase):
 
         with projection_scope():
             found = findings(principal=web_principal(self.user), rule="certificate-expiring")["findings"]
-        titles = sorted(finding["title"] for finding in found if "lapsed.example.com" in finding["title"])
+        titles = sorted(finding["title"] for finding in found if "lapsed.example.com" in finding["title"].split())
 
         self.assertEqual(len(titles), 2, titles)
         self.assertIn("NPM certificate lapsed.example.com from Let's Encrypt", titles[0])

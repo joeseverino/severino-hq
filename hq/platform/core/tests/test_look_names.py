@@ -94,14 +94,19 @@ class CatalogNamesTests(SimpleTestCase):
     def test_a_look_that_names_no_entry_never_reads_the_catalog(self):
         # A base whose constructors this tree's catalog does not fit fails as the catalog is imported.
         class Unimportable:
+            read: list[str] = []
+
             def __getattr__(self, name):
-                raise AssertionError(f"the catalog was read for {name}")
+                self.read.append(name)
+                raise AttributeError(name)
 
         names = ["estate/projects", "connections", "post:project-create-blank", "search/?q=docker"]
-        with mock.patch.object(look, "catalog", Unimportable()):
+        catalog = Unimportable()
+        with mock.patch.object(look, "catalog", catalog):
             pages = _named(*names)
             self.assertEqual(len(pages), len(names))
             self.assertEqual(look.catalog_pages(pages), {})
+        self.assertEqual(catalog.read, [])
 
     def test_no_other_page_takes_an_entry_s_name(self):
         # The catalog is read only for a name no other page is, so a page by that name would shadow the entry.

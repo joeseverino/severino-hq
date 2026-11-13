@@ -8,8 +8,8 @@ import subprocess
 import sys
 import threading
 import unittest
+import unittest.mock
 from pathlib import Path
-from unittest import mock
 
 from . import fakes
 from .test_worker import PassTestCase
@@ -67,7 +67,7 @@ class TracedTests(PassTestCase):
         self.sent = InMemorySpanExporter()
         provider = TracerProvider()
         provider.add_span_processor(SimpleSpanProcessor(self.sent))
-        self.enterContext(mock.patch.object(tracing, "tracer", return_value=provider.get_tracer("test")))
+        self.enterContext(unittest.mock.patch.object(tracing, "tracer", return_value=provider.get_tracer("test")))
 
     def test_a_pass_is_one_trace_with_each_task_outcome_and_none_of_its_asker_or_parameters(self):
         secret = "example-not-a-real-secret-value"

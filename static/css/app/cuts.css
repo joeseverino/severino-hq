@@ -144,6 +144,8 @@
   .data-table td.row-gutter > br + .muted:not(.table-clamp, :has(code)) { display: block; contain: inline-size; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
 .data-table td.row-gutter > br + .muted [data-entity] { display: inline; }
+/* What the line holds wraps as the line does: a time a tight table lets wrap would otherwise open a break inside the one cut line and split a word at its edge. */
+.data-table td.row-gutter > br + .muted:not(.table-clamp) :is(time, .pill, .cell-part) { white-space: inherit; }
 /* A match's context is a line of the row's own, two lines at most. WebKit lays a value's parts out past its clamp, so the box holds two lines too. */
 .list-rows .row-snippet { flex-basis: 100%; margin: 0; color: var(--muted); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; max-block-size: 2lh; overflow: hidden; }
 /* A snippet is a run of prose cut from a record, so a value in it flows as its words do: a box of its own would set a word the match splits in two apart from its matched half. */

@@ -178,7 +178,7 @@
 
 /* A group has no operations of its own: its section is its heading, over the
    domains it holds, with no empty list beside it. */
-[data-vendored] .scalar-app .section-column:has(> .endpoints-card:not(:has(a))) { display: none; }
+[data-vendored] .scalar-app .section-column:has(> .endpoints-card):not(:has(> .endpoints-card a)) { display: none; }
 
 /* A tag's list of operations sits beside its description only where each path
    in it fits on one line; elsewhere it takes the row under the description.

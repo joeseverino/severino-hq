@@ -242,7 +242,21 @@ def handed() -> Reads | None:
 
 
 def _active() -> Watch | None:
-    return _watches[-1] if _watches and not getattr(_state, "depth", 0) else None
+    if not _watches or getattr(_state, "depth", 0) or _importing():
+        return None
+    return _watches[-1]
+
+
+def _importing() -> bool:
+    """Whether a module's body is running. Imports are lazy, so a body runs in whichever test first touches
+    one of its names, and what it reads belongs to the process; fast selects a test by its imports."""
+
+    frame = sys._getframe(2)
+    while frame is not None:
+        if frame.f_code.co_name == "exec_module" and frame.f_code.co_filename.startswith("<frozen importlib"):
+            return True
+        frame = frame.f_back
+    return False
 
 
 @contextmanager

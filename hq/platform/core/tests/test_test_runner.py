@@ -39,6 +39,7 @@ from hq.platform.core.test_runner import (
     drives_a_browser,
     excluded_tags,
     report_class_times,
+    tests_in,
 )
 
 
@@ -825,6 +826,22 @@ class BrowserTestTests(SimpleTestCase):
             pass
 
         self.assertTrue(drives_a_browser(Drawn("test_it")))
+
+    def test_the_whole_suite_leaves_out_every_browser_gate_it_discovers(self):
+        gate = type("Gate", (SimpleTestCase,), {"__module__": f"{BROWSER_TESTS}.catalog", "test_it": lambda self: None})
+
+        class Plain(SimpleTestCase):
+            def test_it(self):
+                pass
+
+        found = unittest.TestSuite([gate("test_it"), Plain("test_it")])
+        with (
+            unittest.mock.patch.object(DiscoverRunner, "build_suite", return_value=found),
+            unittest.mock.patch("hq.platform.core.test_runner.plugin_test_modules", return_value=[]),
+        ):
+            suite = SeverinoTestRunner(verbosity=0).build_suite([])
+
+        self.assertEqual([type(test) for test in tests_in(suite)], [Plain])
 
 
 class BrowserFailureShotTests(SimpleTestCase):

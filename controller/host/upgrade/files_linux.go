@@ -12,7 +12,7 @@ import (
 // checked fails the open. A kernel without openat2 refuses the open, since
 // O_NOFOLLOW alone guards only the last component.
 func openUnmoved(path string, flag int, perm os.FileMode) (*os.File, error) {
-	how := unix.OpenHow{Flags: uint64(flag | unix.O_CLOEXEC | unix.O_NOFOLLOW), Resolve: unix.RESOLVE_NO_SYMLINKS}
+	how := unix.OpenHow{Flags: uint64(flag | unix.O_CLOEXEC | unix.O_NOFOLLOW), Resolve: unix.RESOLVE_NO_SYMLINKS} //nolint:gosec // G115: open flags are never negative
 	if flag&os.O_CREATE != 0 {
 		how.Mode = uint64(perm.Perm())
 	}

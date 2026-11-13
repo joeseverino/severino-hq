@@ -37,13 +37,15 @@ def peer_uid(connection: socket.socket) -> int:
 
     if sys.platform == "linux":
         raw = connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, struct.calcsize("3i"))
-        return int(struct.unpack("3i", raw)[1])
-    if sys.platform == "darwin":
+        uid = struct.unpack("3i", raw)[1]
+    elif sys.platform == "darwin":
         # LOCAL_PEERCRED at SOL_LOCAL (0) answers a struct xucred: its version,
         # then the uid.
         raw = connection.getsockopt(0, 1, struct.calcsize("Ii") + 4 * 18)
-        return int(struct.unpack_from("Ii", raw)[1])
-    raise BridgeError("peer credentials are not available on this platform")
+        uid = struct.unpack_from("Ii", raw)[1]
+    else:
+        raise BridgeError("peer credentials are not available on this platform")
+    return int(uid)
 
 
 def trusted(path: str, uid: int) -> None:

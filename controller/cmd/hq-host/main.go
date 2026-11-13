@@ -23,6 +23,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/born"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"io/fs"
@@ -270,7 +271,7 @@ func controller(stdout, stderr io.Writer) *host.Controller {
 		MountTable:     hostcore.MountTable,
 		Statfs:         hostcore.Statfs,
 		RebootRequired: hostcore.RebootRequired,
-		Born:           hostcore.Born,
+		Born:           born.At,
 		Connections:    requireConnections,
 		Lock:           host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
 		LookPath:       exec.LookPath,

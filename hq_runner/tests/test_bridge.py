@@ -51,7 +51,7 @@ class BridgeTestCase(unittest.TestCase):
 
             @override
             def log_message(self, format, *args):
-                del format, args
+                """Print nothing: the server's request lines would fill the test's output."""
 
         server = _Server(str(self.socket), Handler)
         self.socket.chmod(0o600)

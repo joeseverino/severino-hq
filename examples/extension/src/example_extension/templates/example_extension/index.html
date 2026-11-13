@@ -8,7 +8,7 @@
         {% for note in notes %}
         <tr>
           <td><a href="{% url 'example_extension:note' note.slug %}">{{ note.title|breakable }}</a></td>
-          <td><span class="row-less">{{ note.written_on|day }}</span><span class="row-more">Written {{ note.written_on|day }}, filed as {{ note.slug }}</span></td>
+          <td><span class="row-less">{{ note.written_on|day }}</span><span class="row-more">Written {{ note.written_on|day }}, filed as {{ note.slug|breakable }}</span></td>
         </tr>
         {% endfor %}
       </tbody>

@@ -25,6 +25,14 @@
   {% endfacts %}
 {% endsection %}
 
+{% if extra %}
+{% section "Metadata" %}
+  {% facts label="Metadata" %}
+    {% for key, value in extra.items %}{% fact key %}{{ value|or_empty }}{% endfact %}{% endfor %}
+  {% endfacts %}
+{% endsection %}
+{% endif %}
+
 {% change_table changes %}
 {% if scan %}
   {% if scan.unplaced %}
@@ -43,14 +51,6 @@
     {% endsection %}
   {% endif %}
   {% if scan.preview %}{% change_table scan.preview %}{% endif %}
-{% endif %}
-
-{% if extra %}
-{% section "Metadata" %}
-  {% facts label="Metadata" %}
-    {% for key, value in extra.items %}{% fact key %}{{ value|or_empty }}{% endfact %}{% endfor %}
-  {% endfacts %}
-{% endsection %}
 {% endif %}
 </div>
 {% endif %}

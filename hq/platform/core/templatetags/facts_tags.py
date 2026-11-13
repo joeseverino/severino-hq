@@ -12,8 +12,6 @@ A fact whose value is markup is written as a block, its detail after
 Given ``value=``, a fact is one tag with no end.
 """
 
-import inspect
-
 from django import template
 from django.template.base import token_kwargs
 
@@ -43,17 +41,11 @@ class FactTakes(Takes):
     ``value``, the option ``bare_with`` names, it encloses nothing."""
 
     bare_with = "value"
+    ordered = ("label",)
 
     def __init__(self) -> None:
-        options = frozenset(("value", "url", "detail", "tone", "icon"))
-        super().__init__("fact", FACT_PARTIAL, ("value", "detail"), options, None)
-        ordered, keyword = inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.KEYWORD_ONLY
-        self.__signature__ = inspect.Signature(
-            [
-                inspect.Parameter("content", ordered),
-                inspect.Parameter("label", ordered),
-                *(inspect.Parameter(option, keyword, default="") for option in sorted(options)),
-            ]
+        super().__init__(
+            "fact", FACT_PARTIAL, ("value", "detail"), frozenset(("value", "url", "detail", "tone", "icon")), None
         )
 
     def values(self, given: dict) -> dict:

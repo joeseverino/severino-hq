@@ -864,6 +864,9 @@ class SeverinoTestRunner(DiscoverRunner):
             if self.installed_plugins and not modules:
                 raise RuntimeError("--installed-plugins: no plugin is installed.")
             suite = super().build_suite([*modules] if self.installed_plugins else [".", *modules], **kwargs)
+            # Discovery loads a package's __init__ as well as its test files, so a
+            # browser gate declared there is found; the browser gates run by name.
+            suite = self.test_suite(test for test in tests_in(suite) if not drives_a_browser(test))
             require_tests_from(suite, modules)
         if any(drives_a_browser(test) for test in tests_in(suite)):
             # Here, in the process that starts the run and before any worker

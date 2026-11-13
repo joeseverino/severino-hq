@@ -267,8 +267,7 @@ class RegistryTests(SimpleTestCase):
     def test_an_unknown_id(self) -> None:
         registry = OperationRegistry((manifest(),))
 
-        with self.assertRaises(UnknownOperation):
-            registry["example.missing"]
+        self.assertRaises(UnknownOperation, registry.__getitem__, "example.missing")
         self.assertIsNone(registry.get("example.missing"))
 
     def test_it_is_supplied_manifests_and_nothing_else(self) -> None:

@@ -635,13 +635,16 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_rows_ask_that_succeeds_drops_the_failure_it_last_said(self):
         """A row whose last refresh failed carries the failure as its button's
-        title; pressed again and done, the title says what the button is for."""
+        title; pressed again and done, the title says what the button is for.
+        Its result shows in a region beside it, so the control the press drew
+        is still the one on the page."""
 
         failed = Ask(
             "Refresh",
             "/example/ask/",
             Standing(asks.FAILED, "The example could not be read."),
             title="Read the example again.",
+            refresh="[data-example-region]",
         )
         self.pages = {
             **self.pages,
@@ -650,6 +653,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
                 "<tr><td>A</td>"
                 '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
+                "<div data-example-region><p>An example line.</p></div>"
                 '<form id="hq-post" method="post" hidden></form>'
                 '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
                 '{% include "partials/_notice_frames.html" %}'
