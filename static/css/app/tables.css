@@ -241,9 +241,9 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A status said by one pill alone (`data-pill-only`, table_cells) fills its column, which is as wide as its widest pill, so the pills down a column share both edges. */
 .data-table > tbody > tr > td[data-pill-only] > .kept-line { display: flex; width: auto; max-width: none; }
 .data-table > tbody > tr > td[data-pill-only] .pill { display: flex; flex: auto; justify-content: center; text-align: center; }
-/* A pill is a label, whole until its table is tight (figures.css), so a name it says (a header's, as an evidence row's type) is never cut inside it: its column holds the pill, and the prose beside it wraps. */
+/* A pill is a label, whole until its table is tight (figures.css), so a name it says (a header's, as an evidence row's type) is never cut inside it: it holds out for its whole length (`--cut-floor`), so its column holds the pill, and the prose beside it wraps. */
 @container not style(--tight: given) {
-  .data-table td .pill > .token[data-sole] { min-width: max-content; }
+  .data-table tr:not(.is-expanded) td .pill { --cut-floor: max-content; }
 }
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }

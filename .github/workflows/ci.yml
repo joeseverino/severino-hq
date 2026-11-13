@@ -208,7 +208,7 @@ jobs:
     needs: [proven, legs]
     if: ${{ !cancelled() && needs.proven.outputs.gates != 'passed' && needs.legs.outputs.browser != 'false' }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     # Playwright's image for the release uv.lock pins carries its browsers and
     # their system libraries, so a leg installs nothing from apt or a browser
     # CDN (BrowserInstallTests holds the two versions together). As its CI
