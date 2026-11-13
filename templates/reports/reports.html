@@ -9,12 +9,7 @@
   <button class="btn" type="submit">Filter</button>
 </form></search>
 
-<div class="kpi-grid">
-  <div class="kpi"><span class="label">Expenses {{ year|breakable }}</span><span class="value">{{ expenses_total|money }}</span><span class="muted">{% if expenses_count %}<a class="subtle-link" href="{{ expenses_url }}">{{ expenses_count|counted:"expense" }}</a>{% else %}{{ expenses_count|counted:"expense" }}{% endif %}</span></div>
-  <div class="kpi"><span class="label">Deductible (est.) {{ year|breakable }}</span><span class="value">{{ expenses_deductible|money }}</span><span class="muted">Estimate, not tax advice</span></div>
-  <div class="kpi"><span class="label">Assets purchased {{ year|breakable }}</span><span class="value">{{ assets_count|breakable }}</span><span class="muted">{{ assets_total|money }} total</span></div>
-  <div class="kpi"><span class="label">Docs due for review</span><span class="value">{% if docs_needing_review_count %}<a href="{{ docs_needing_review_url }}">{{ docs_needing_review_count|breakable }}</a>{% else %}0{% endif %}</span></div>
-</div>
+{% include "partials/_kpi_grid.html" with items=figures only %}
 
 {% comment %}
 A year with no expenses is said by the count above; its breakdowns do not draw.

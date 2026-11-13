@@ -35,3 +35,26 @@ class EmptyListTests(TestCase):
         self.assertContains(response, "Nothing matches.")
         self.assertTrue(offers(response, "Clear filters", "?"))
         self.assertNotContains(response, "No assets yet.")
+
+    def test_an_empty_table_page_says_what_is_missing_in_place_of_its_table(self):
+        """A page whose table region holds no row draws the region's empty
+        state in its own words and no headings over nothing."""
+
+        for name, says in (
+            ("control_plane:list", "No records yet."),
+            ("control_plane:machines", "No machines yet."),
+            ("control_plane:services", "No services."),
+        ):
+            with self.subTest(name):
+                response = self.client.get(reverse(name))
+                self.assertContains(response, says)
+                self.assertNotContains(response, "<th")
+                self.assertNotContains(response, "Nothing matches.")
+
+    def test_a_table_emptied_by_its_filter_offers_the_way_back(self):
+        response = self.client.get(reverse("control_plane:list"), {"q": "no such record"})
+
+        self.assertContains(response, "Nothing matches.")
+        self.assertNotContains(response, "No records yet.")
+        self.assertNotContains(response, "<th")
+        self.assertTrue(offers(response, "Clear filters", reverse("control_plane:list")))

@@ -59,14 +59,14 @@ class ListRowTests(SimpleTestCase):
     """State on a shared row is never carried by color alone."""
 
     def test_status_requires_its_own_text(self):
-        from ..ui import ListRow
+        from ..card_items import ListRow
 
         ListRow(title="Import", status="attention", badge="Needs review")
         with self.assertRaises(ValueError):
             ListRow(title="Import", status="attention")
 
     def test_status_must_come_from_the_one_vocabulary(self):
-        from ..ui import ListRow
+        from ..card_items import ListRow
 
         with self.assertRaises(ValueError):
             ListRow(title="Import", status="warning", badge="Warning")
@@ -75,8 +75,8 @@ class ListRowTests(SimpleTestCase):
         from django.template.loader import render_to_string
         from django.utils import timezone
 
+        from ..card_items import ListRow
         from ..moments import when_day
-        from ..ui import ListRow
         from .markup import text
 
         today = timezone.localdate()
@@ -86,6 +86,36 @@ class ListRowTests(SimpleTestCase):
         row = ListRow(title="Message", meta="Draft", at=today)
         shown = text(render_to_string("partials/_record_list.html", {"rows": [row]}))
         self.assertIn(" ".join(f"Draft · {when_day(today)}".split()), shown)
+
+    def test_a_rows_actions_end_its_line_a_post_one_submitting_its_value(self):
+        """A record moved or removed from its row posts through the page's one
+        form, a glyph named aloud by its title, and one that cannot be pressed
+        says why where it stands."""
+
+        from django.template.loader import render_to_string
+
+        from ..card_items import ListRow
+        from ..pages import PageAction
+        from .markup import elements, select
+
+        row = ListRow(
+            title="Example group",
+            actions=(
+                PageAction("↑", "/example/group/", method="post", value="up", title="Move up", disabled=True),
+                PageAction("↓", "/example/group/", method="post", value="down", title="Move down"),
+                PageAction("Open", "/example/group/open/"),
+            ),
+        )
+        drawn = render_to_string("partials/_record_list.html", {"rows": [row]})
+
+        (down,) = elements(drawn, "button")
+        self.assertEqual(
+            (down.attrs["formaction"], down.attrs["value"], down.attrs["aria-label"]),
+            ("/example/group/", "down", "Move down"),
+        )
+        (held,) = select(drawn, "aria-disabled", "true")
+        self.assertEqual(held.attrs["title"], "Move up")
+        self.assertIn(("/example/group/open/", "Open"), [(a.attrs.get("href"), a.words) for a in elements(drawn, "a")])
 
 
 class TableTotalsTests(TestCase):

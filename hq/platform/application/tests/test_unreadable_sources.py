@@ -7,9 +7,10 @@ from unittest import mock
 from django.test import SimpleTestCase, TestCase
 
 from .. import plugins
+from ..card_items import Insight, Kpi
 from ..plugin_testing import installed, providers_derived_again, sibling
 from ..plugins import PLUGIN_API_VERSION, PluginIntegration, PluginManifest
-from ..ui import DomainOverview, Insight, Kpi
+from ..ui import DomainOverview
 
 LOGGER = "severino.composition"
 EVENT = "composition.source.unreadable"

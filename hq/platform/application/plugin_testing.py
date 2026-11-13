@@ -29,6 +29,7 @@ lazy from django.utils import timezone
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.templatetags import table_tags
 
+from .card_items import Insight
 from .plugins import (
     DERIVED_PROVIDERS,
     PLUGIN_API_VERSION,
@@ -36,7 +37,7 @@ from .plugins import (
     PluginManifest,
     clear_plugin_composition_cache,
 )
-from .ui import DomainOverview, Insight
+from .ui import DomainOverview
 lazy from . import pages, plugins
 lazy from .connection_contracts import ConnectionSpec
 lazy from .derivation_testing import frozen

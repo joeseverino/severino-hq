@@ -8,13 +8,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from hq.platform.application import roles
+from hq.platform.application.card_items import Insight, Kpi
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot, work_queue
 from hq.platform.application.domains import Domain, host_domains
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import MCP_INTERFACE, agent_principal, cli_principal
-from hq.platform.application.ui import DomainOverview, Insight, Kpi
+from hq.platform.application.ui import DomainOverview
 
 LOGGER = "severino.composition"
 EVENT = "composition.source.unreadable"

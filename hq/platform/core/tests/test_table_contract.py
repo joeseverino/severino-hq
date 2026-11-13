@@ -15,7 +15,7 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.plugin_testing import hand_drawn_tables, table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
+from hq.platform.application.tests.markup import all_elements, elements, links, select, with_class, within
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 
 from .signed_in_case import _AuthedTestCase
@@ -199,6 +199,41 @@ class TableTagTests(SimpleTestCase):
         html = _render(source, {"rows": ["a"]})
         self.assertEqual(len(elements(html, "table")), 1)
         self.assertEqual(select(html, "data-empty-state"), [])
+
+    def test_an_empty_region_says_what_is_missing_or_that_its_filter_emptied_it(self):
+        """A region told what its empty tables mean says so with what would
+        fill them; one its own filter emptied says nothing matches, with the
+        way back, in place of the table and only there."""
+
+        table = (
+            '<table class="data-table"><thead><tr>{% table_heading "Name" "identifier" %}</tr></thead>'
+            "<tbody>{% for row in rows %}<tr><td>{{ row }}</td></tr>{% endfor %}</tbody></table>"
+        )
+        fill = {"label": "Add a run", "url": "/runs/new/"}
+        for options, says, offers in (
+            ('empty="No runs yet." remedy=fill', "No runs yet.", ("Add a run", "/runs/new/")),
+            (
+                'empty="No runs yet." action_url="/runs/new/" action_label="Add a run"',
+                "No runs yet.",
+                ("Add a run", "/runs/new/"),
+            ),
+            (
+                'empty="No runs yet." remedy=fill filtered=True clear="/runs/"',
+                "Nothing matches.",
+                ("Clear filters", "/runs/"),
+            ),
+        ):
+            source = "{% table_region " + f'"Runs" {options}' + " %}" + table + "{% endtable_region %}"
+            with self.subTest(options):
+                html = _render(source, {"rows": [], "fill": fill})
+                self.assertEqual(elements(html, "table"), [])
+                (empty,) = select(html, "data-empty-state")
+                self.assertTrue(empty.words.startswith(says), empty.words)
+                ((words, href),) = links(html)
+                self.assertEqual((words.startswith(offers[0]), href), (True, offers[1]))
+                html = _render(source, {"rows": ["a"], "fill": fill})
+                self.assertEqual(len(elements(html, "table")), 1)
+                self.assertEqual(select(html, "data-empty-state"), [])
 
     def test_a_region_names_the_room_its_identifiers_get_and_still_does_not_scroll(self):
         for room in ("shared", "snug"):
@@ -549,6 +584,7 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(heading.attrs["aria-sort"], "ascending")
         (link,) = elements(html, "a")
         self.assertEqual(parse_qs(urlsplit(link.attrs["href"]).query), {"q": ["x"], "sort": ["-name"]})
+        self.assertEqual(select(html, "data-sort-local"), [])
 
     def test_pagination_links_keep_the_filters_and_set_the_page(self):
         request = RequestFactory().get("/things/", {"q": "x", "sort": "name", "page": "2"})
@@ -609,6 +645,54 @@ class TableTagTests(SimpleTestCase):
         source = '{% table_region "Things" %}' + table.replace("rows", "one") + table.replace("rows", "two")
         html = _render(source + "{% endtable_region %}", {"one": ["a"], "two": ["a", "b"]})
         self.assertEqual([each.attrs.get("aria-sort") for each in elements(html, "th")], [None, "none"])
+
+    def test_a_heading_sorts_on_the_page_unless_it_holds_controls(self):
+        """A heading that says nothing of its order sorts the rows on the page
+        where there are two to put in order; a column of controls, one named
+        for assistive technology alone and the tick-box column never do, nor
+        a heading told to keep the table's own order."""
+
+        headings = {
+            "name": '{% table_heading "Name" "identifier" %}',
+            "cost": '{% table_heading "Cost" "numeric" %}',
+            "kept": '{% table_heading "Step" local_sort=False %}',
+            "control": '{% table_heading "Link" "control" %}',
+            "actions": '{% table_heading "Actions" css="actions-col" %}',
+            "hidden": '{% table_heading "Note" hidden=True %}',
+            "select": '{% table_heading "Select all rows" select_all=True %}',
+        }
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+            + "".join(headings.values())
+            + "</tr></thead><tbody>{% for row in rows %}<tr>"
+            + "<td>{{ row }}</td>" * len(headings)
+            + "</tr>{% endfor %}</tbody></table>{% endtable_region %}"
+        )
+        for rows, sorting in ((["a", "b"], {"name", "cost"}), (["a"], set())):
+            with self.subTest(rows=len(rows)):
+                ready = {
+                    name
+                    for name, each in zip(headings, elements(_render(source, {"rows": rows}), "th"), strict=True)
+                    if "data-sort-ready" in each.attrs
+                }
+                self.assertEqual(ready, sorting)
+                self.assertEqual(len(select(_render(source, {"rows": rows}), "data-sort-local")), len(sorting))
+
+    def test_a_charts_table_keeps_the_charts_order(self):
+        """A chart's table is the chart read whole, in its order, so its
+        headings sort nothing, asked or not."""
+
+        for heading in ('{% table_heading "Week" "status" %}', '{% table_heading "Week" "status" local_sort=True %}'):
+            source = (
+                '{% table_region "Example sessions" chart=True %}<table class="data-table"><thead><tr>'
+                + heading
+                + "</tr></thead><tbody><tr><td>Week 1</td></tr><tr><td>Week 2</td></tr></tbody></table>"
+                "{% endtable_region %}"
+            )
+            with self.subTest(heading):
+                html = _render(source)
+                self.assertEqual(select(html, "data-sort-local"), [])
+                self.assertNotIn("data-sort-ready", elements(html, "th")[0].attrs)
 
     def test_a_figures_cells_align_as_its_heading_says(self):
         """A numeric column's cells are marked with its kind, body and totals
@@ -818,6 +902,14 @@ class ListTableTests(_AuthedTestCase):
         # The frame's row block still fills the table from inside the region.
         rows = [each for each in within(page, "class", "table-scroll") if each.tag == "tr"]
         self.assertGreater(len(rows), 1)
+
+    def test_a_lists_rows_keep_the_order_its_server_gives(self):
+        """A list page holds one page of a list its server orders, so no
+        heading sorts the rows on the page, where a sort would order a page."""
+
+        page = self.client.get(reverse("expenses:list"))
+        self.assertTrue(select(page, "aria-sort"))
+        self.assertEqual(select(page, "data-sort-local"), [])
 
     def test_a_sort_mark_is_drawn_by_the_stylesheet_never_by_a_face(self):
         """A glyph is drawn by whichever face has it, at that face's size, so

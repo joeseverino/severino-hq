@@ -8,7 +8,7 @@ anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
 {% if machines %}<p class="muted">{{ machines|length|counted:"machine" }}: {% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}</p>{% endif %}
-{% table_region "Machines" room="shared" %}
+{% table_region "Machines" room="shared" empty="No machines yet." remedy=page.remedy %}
   <table class="data-table">
     <thead>
       <tr>
@@ -50,8 +50,6 @@ anyway, and would go on meaning nothing after it stopped being.
             {% status machine.state.0 tone=machine.state.1 %}{% if machine.state_since %}<br><span class="muted">since {{ machine.state_since|breakable }}</span>{% endif %}
           </td>
         </tr>
-      {% empty %}
-        <tr><td colspan="5">{% include "partials/_empty_state.html" with message="No machines yet." remedy=page.remedy %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

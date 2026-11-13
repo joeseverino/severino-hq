@@ -26,6 +26,9 @@ ignores:
   # The provider form's name list is a form widget, which Django renders from
   # Python; its remove control is a button like every other.
   - "hq/platform/application/provider_forms.py"
+  # The hand-drawn shapes table names the markup a template may not write, as
+  # the patterns that refuse it; it draws nothing.
+  - "hq_sdk/template_contract.py"
 rule:
   kind: string
   any:

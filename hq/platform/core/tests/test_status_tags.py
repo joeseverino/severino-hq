@@ -75,6 +75,22 @@ class StatusPillTests(SimpleTestCase):
                 self.assertNotIn("pill", drawn.classes)
                 self.assertIn(f"toned-{shown}", drawn.classes)
 
+    def test_a_chip_is_a_name_said_as_written_in_no_tone(self):
+        """A technology, a domain or a role a record carries is a name, so it
+        keeps its own case ("django", "example.com") and takes no state's color."""
+
+        for name in ("django", "example.com", "Reverse proxy"):
+            with self.subTest(name):
+                chip = elements(_drawn('{% status name chip=True title="Example" %}', name=name), "span")[0]
+                self.assertEqual(chip.words, name)
+                self.assertEqual(chip.attrs["title"], "Example")
+                self.assertFalse({"pill", "toned"} & {word.split("-")[0] for word in chip.classes})
+
+    def test_a_chip_refuses_a_tone(self):
+        for options in ({"tone": "good"}, {"pill": False}):
+            with self.subTest(options), self.assertRaises(ValueError):
+                status_pill("django", chip=True, **options)
+
 
 # A class a status draws, which a template writing it by hand would spell itself,
 # and a state's tone spelled as a `control-` class: a state, a tone, or one filled in.

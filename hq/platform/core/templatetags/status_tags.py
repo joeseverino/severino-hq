@@ -4,7 +4,9 @@ The one way a page draws a state (`{% status %}` in a template, `status_pill`
 in Python), so every state reads alike wherever it stands: "Online" and
 "Exited" beside "Running", never one page's "online" beside another's "Done".
 It is a pill, or with ``pill=False`` its words in its tone alone, as a figure
-that says which way it went is drawn among others. A source test in
+that says which way it went is drawn among others, or with ``chip=True`` a
+neutral chip: one of a record's names (a technology, a domain, a role), said
+as written. A source test in
 `test_status_tags.py` refuses a pill or tone class written by hand in any
 template the host or an extension ships.
 """
@@ -38,12 +40,15 @@ def status_pill(
     title: str = "",
     tip: str = "",
     pill: bool = True,
+    chip: bool = False,
     **data: object,
 ) -> SafeString:
     """The pill for a state: ``parts`` its words, the first said in sentence
     case and each held as ``breakable`` holds a value; ``tone`` its color.
     ``pill=False`` draws the words in that color with no pill around them,
-    on fixed digit widths.
+    on fixed digit widths. ``chip=True`` draws a name a record carries,
+    in no tone and in its own case: "django" and "example.com" stay as
+    written.
 
     ``href`` makes it a link, ``title`` names it on hover, ``tip`` gives it
     HQ's tooltip (and the focus a tooltip needs), ``css`` adds classes (a
@@ -51,12 +56,16 @@ def status_pill(
     attribute.
     """
 
+    if chip and (tone or not pill):
+        raise ValueError("A chip is a neutral name, never a state: it takes no tone and no pill=False.")
     words = [str(part) for part in parts if part not in (None, "")]
-    if words:
+    if words and not chip:
         words[0] = sentence(words[0])
     label = mark_safe(" ".join(str(breakable(word)) for word in words))  # noqa: S308 - each word is escaped by breakable
     tone_class = _tone(tone)
-    if not pill:
+    if chip:
+        classes = "tag"
+    elif not pill:
         # The status vocabulary's tones are the only ones words alone take.
         # Written whole, so the stylesheet's usage check reads the `toned-` family.
         classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'}"
@@ -127,9 +136,10 @@ def drift_tip(reading):
 
 
 @register.simple_tag(name="status")
-def status(*parts, tone="", css="", href="", title="", tip="", pill=True, **data):
+def status(*parts, tone="", css="", href="", title="", tip="", pill=True, chip=False, **data):
     """``{% status row.get_status_display tone=row.status %}``: a state as a pill,
-    or with ``pill=False`` as its words in its tone (``{% status change tone="good" pill=False %}``).
+    or with ``pill=False`` as its words in its tone (``{% status change tone="good" pill=False %}``),
+    or with ``chip=True`` as a neutral chip for a name (``{% status domain chip=True %}``).
 
     Several parts are one label ("HQ expects" and the value it expects), only
     the first sentence-cased.
@@ -143,5 +153,6 @@ def status(*parts, tone="", css="", href="", title="", tip="", pill=True, **data
         title=str(title or ""),
         tip=str(tip or ""),
         pill=bool(pill),
+        chip=bool(chip),
         **data,
     )

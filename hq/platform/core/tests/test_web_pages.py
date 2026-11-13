@@ -543,7 +543,8 @@ class DashboardWorkflowTests(_AuthedTestCase):
         response = self.client.get("/reports/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["docs_needing_review_count"], 1)
+        figures = {figure.label: figure for figure in response.context["figures"]}
+        self.assertEqual(figures["Docs due for review"].value, 1)
         self.assertEqual(
             [link.title for link, _reviewed in response.context["docs_needing_review"]],
             [stale.doc_id],

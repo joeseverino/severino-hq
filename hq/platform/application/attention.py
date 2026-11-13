@@ -22,6 +22,7 @@ from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 from . import sections
+from .card_items import Insight
 from .conditions import held_since
 from .delivery_progress import STALLED_AFTER, WAITING, delivery_progress
 from .entity_links import EntityLink, entity_link, kind_label
@@ -37,7 +38,7 @@ from .references import dangling
 from .security import cli_principal, internal_principal
 from .services import service_catalog
 from .timestamps import moment
-from .ui import Insight, counted, ended
+from .ui import counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan
 lazy from .approvals import asked, pending, preview, reads_every_hold
 lazy from .connections import machines_once

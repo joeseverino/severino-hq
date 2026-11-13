@@ -23,6 +23,7 @@ from hq.domains.control_plane.providers import PROVIDERS, read_spec
 from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 
+from .card_items import ListRow
 from .entity_links import entity_link
 from .expiry import days_until
 from .facts import Subject, inventory_about, inventory_records, readings as stored_readings, refusals_about
@@ -30,7 +31,7 @@ from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
 from .mail_policy import is_null_mx
 from .timestamps import moment
-from .ui import ListRow, counted, ended
+from .ui import counted, ended
 from .zones import ZONE_KIND, ZoneInsight
 lazy from . import zones
 lazy from .service_list import services_by_zone

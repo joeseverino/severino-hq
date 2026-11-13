@@ -22,6 +22,7 @@ from hq.domains.control_plane.observations.github import (
 )
 from hq.platform.application.labels import dotted
 
+from .card_items import Insight
 from .containers import SERIOUS
 from .derivations import reached, whole
 from .display_words import display
@@ -32,7 +33,7 @@ from .item_help import cannot_help, commands
 from .moments import ago
 from .projection import read_once
 from .timestamps import moment
-from .ui import Insight, counted
+from .ui import counted
 from .workflow_contracts import ActionLink
 lazy from .facts import snapshots_of
 lazy from .images import GHCR, ImageRef

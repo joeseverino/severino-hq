@@ -4,7 +4,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase
 
 from ..action_links import ActionLink
-from ..ui import Insight
+from ..card_items import Insight
 from ..workflows import claim_identity, claim_resolution_plan, serialize_workflow
 from .markup import actions, hrefs
 

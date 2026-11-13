@@ -3,8 +3,9 @@
 import math
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
+from .card_items import Kpi, TimelineItem
 from .chart_numbers import (
     _format_chart_value,
     _format_fitted_value,
@@ -14,10 +15,8 @@ from .chart_numbers import (
     _table_heading,
     fitted_range,
 )
-from .display_words import display, in_words
-from .drawings import Dots, Trend
+from .display_words import display
 from .labels import dotted, plural
-from .workflow_contracts import ActionLink, WorkflowPlan
 
 # The one status vocabulary. Every surface that shows state (dashboard cards,
 # insight panels, extension-provided projections) draws from this set, so a
@@ -128,168 +127,6 @@ class PageNavigation:
         ids = tuple(item.id for item in self.items)
         if len(set(ids)) != len(ids):
             raise ValueError("PageNavigation section ids must be unique.")
-
-
-@display
-class Kpi:
-    label: str
-    value: str | int
-    detail: str = ""
-    url: str = ""
-    is_zero: bool = False
-    # A mark before the label, by its name in ``partials/_icon.html``: what
-    # kind of thing the figure counts, for an eye scanning a card of several.
-    # A name the set does not draw shows nothing.
-    icon: str = ""
-    # What the figure looks like beside its value: ``Dots`` for a part of a
-    # whole, ``Trend`` for a direction. One or neither. It repeats what the
-    # value and the note already say, so the words stay.
-    drawing: Dots | Trend | None = None
-
-
-@display
-class Insight:
-    """A reading, what it means, and the next action.
-
-    The shape extensions emit for ``partials/_insight_grid.html``. Provided by
-    the host so a surface needing decision support does not restate the card
-    markup or re-map its own status names onto styling.
-    """
-
-    status: str
-    eyebrow: str
-    title: str
-    value: str
-    body: str
-    action: str = ""
-    url: str = ""
-    # How many things this insight stands for, when it stands for a countable
-    # backlog. ``value`` is a display string and may be a balance or a distance,
-    # so a surface that totals a queue cannot infer a quantity from it. Left
-    # unset, the insight counts as the single thing it describes, which is
-    # what an alert is.
-    magnitude: int | None = None
-    # Optional closure loop emitted by any host or plugin domain. The queue and
-    # insight partials render it generically; the domain still owns every action.
-    workflow: WorkflowPlan | None = None
-    # Quick actions offered on the item itself, each going through its owner's
-    # route exactly as the owner's own page would.
-    actions: tuple[ActionLink, ...] = ()
-    # What this item is about, stable for as long as it is the same matter:
-    # "finding:<rule>:<subject>", "approval:<id>". Read state follows it, so it
-    # must not carry anything that changes while the matter stays the same: a
-    # count, a days-left figure, a message. Unique within its source. Left empty,
-    # the eyebrow and title stand in for it.
-    key: str = ""
-    # The thing this item is about, as a link to its own page.
-    subject: ActionLink | None = None
-    # The one thing on its subject it is about, where the subject holds many:
-    # a container's name on its machine. A page about one of them alone tells
-    # its own problems from its neighbors' by it.
-    part: str = ""
-    # A notice reports something that happened or was measured; there is
-    # nothing to resolve and no reading to refresh until it clears. The queue
-    # keeps notices apart from what needs doing and out of that count, and a
-    # reader who dismisses one is done with it: it returns only when what it
-    # reports (its ``body``) changes. So a notice's body says the occurrence
-    # (the run, the day, the figures), and a counter that moves on its own
-    # (days since) belongs in ``value``.
-    notice: bool = False
-    # What kind of matter this is, as its owner would head a list of them:
-    # "Image advisories", "Tailscale updates". Several open items of one family
-    # from one source are folded under that heading in the queue, so a dozen of
-    # the same thing read as one line until opened. Left empty, the item
-    # stands alone.
-    family: str = ""
-    # When this began, where its owner knows: the moment a condition was first
-    # seen, a request was made, a key ran out. A card says "Since Oct 3".
-    # Left unset when the owner knows only that it holds now: a card that
-    # guesses a start is worse than one that gives none.
-    since: datetime | None = None
-    # When the reading this item is drawn from was taken, where it is drawn
-    # from one: a card says how old what it claims is.
-    observed_at: datetime | None = None
-    # What was read that shows it, as (label, value) pairs: "Device address",
-    # "192.0.2.10". A card draws each label once with its values beside it.
-    facts: tuple[tuple[str, str], ...] = ()
-    # Pages that help look into it (where it sits, what depends on it), drawn
-    # as one line of links under its buttons. Never something that acts.
-    links: tuple[ActionLink, ...] = ()
-    # The capabilities a reader must hold to be shown it, for an item drawn
-    # from what only they may read. Empty, every reader of the queue sees it.
-    read_capabilities: tuple[str, ...] = ()
-
-    def __post_init__(self) -> None:
-        _one_of("Insight status", self.status, STATUS_VALUES)
-        for label, _value in self.facts:
-            in_words(label, label=True)
-
-
-@display
-class ListRow:
-    """One line of a compact record list: what it is, and when.
-
-    The shape ``partials/_record_list.html`` renders, so history panels, queues
-    and "latest N" lists read the same everywhere and a change to the row lands
-    everywhere at once. A row is for records that speak for themselves; one
-    that needs interpreting belongs in ``_insight_grid.html``.
-    """
-
-    title: str
-    # Inline after the title, muted: the one fact that distinguishes this row.
-    detail: str = ""
-    # Trailing, right-aligned, in words: a duration, a measure, "Due Oct 3".
-    # Kept short: it is scanned.
-    meta: str = ""
-    url: str = ""
-    # Leaves HQ. Rendered so the operator knows before they click, and so a
-    # linked page cannot reach back through window.opener.
-    external: bool = False
-    # Optional state. `badge` carries the text, so state is never color alone.
-    status: str = ""
-    badge: str = ""
-    # When the record happened, after ``meta``: a value, so the row says it
-    # in HQ's time words as the day it fell on, the moment itself on hover.
-    at: date | None = None
-
-    def __post_init__(self) -> None:
-        _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)
-        if self.status and not self.badge:
-            raise ValueError("ListRow status needs a badge: state is never carried by color alone.")
-
-
-@display
-class TimelineItem:
-    """One dated event in the host-owned planning horizon.
-
-    Plugins emit meaning; HQ owns chronology, accessibility, responsive layout,
-    and state styling. The date remains a real ``date`` until the template so
-    callers cannot accidentally sort display strings such as "Nov 1".
-    """
-
-    when: date
-    title: str
-    detail: str = ""
-    url: str = ""
-    status: str = "neutral"
-    badge: str = ""
-
-    def __post_init__(self) -> None:
-        _one_of("TimelineItem status", self.status, STATUS_VALUES)
-
-
-@display
-class Timeline:
-    """A chronological, dependency-free planning surface."""
-
-    title: str
-    description: str
-    items: tuple[TimelineItem, ...]
-
-    def __post_init__(self) -> None:
-        ordered = tuple(sorted(self.items, key=lambda item: (item.when, item.title)))
-        if ordered != self.items:
-            raise ValueError("Timeline items must be sorted chronologically.")
 
 
 # The plot rectangle every chart in HQ draws inside. Stated once so a line and

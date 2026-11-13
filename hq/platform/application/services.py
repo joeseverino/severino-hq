@@ -17,6 +17,7 @@ from hq.domains.control_plane.names import certificate_covers, in_zone, normaliz
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS, registry_label, resource_home, service_facets
 
+from .card_items import ListRow
 from .containers import Running, container_watchers
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
@@ -31,7 +32,6 @@ from .published_sites import published_projects
 from .reach import UNKNOWN, Reach, is_documentation, reach_of
 from .service_declarations import Claim, declarations, runtime_claim
 from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, ServiceFacet
-from .ui import ListRow
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
 lazy from .exposure import exposure_of_name
 lazy from .paths import path_to

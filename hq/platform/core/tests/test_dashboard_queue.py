@@ -6,11 +6,12 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from hq.platform.application.card_items import Insight
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.plugins import gather_attention
 from hq.platform.application.tests.markup import hrefs, select, with_class, within
-from hq.platform.application.ui import DomainOverview, Insight
+from hq.platform.application.ui import DomainOverview
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.application.workflows import claim_resolution_plan
 

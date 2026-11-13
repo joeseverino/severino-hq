@@ -17,12 +17,13 @@ lazy from django.conf import settings
 
 from hq.platform.application.routes import reverse
 
+from .card_items import Insight
 from .derivations import passed
 from .github_estate import Repository, attention as repository_attention, repositories
 from .item_help import cannot_help, do_step, run_step, steps
 from .standards import UNMET, Check as _Check, Measurement, measure
 from .timestamps import moment
-from .ui import Insight, counted, ended
+from .ui import counted, ended
 lazy from .projects import repository_key
 
 BOTH = "both"

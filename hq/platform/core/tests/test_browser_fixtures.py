@@ -17,19 +17,12 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.projects.models import Project
+from hq.platform.application.card_items import Insight, Kpi
 from hq.platform.application.drawings import Dot, Dots
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
 from hq.platform.application.services import CONTAINER_KIND
-from hq.platform.application.ui import (
-    ActivityCalendar,
-    CalendarDay,
-    ChartSeries,
-    DomainOverview,
-    Insight,
-    Kpi,
-    stacked_bar_chart,
-)
+from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, DomainOverview, stacked_bar_chart
 from hq.platform.core import seeds
 from hq.platform.core.network import SOCKET_PEER
 from hq.platform.core.tests.browser.gate import answered

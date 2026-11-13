@@ -203,7 +203,8 @@ def web_url(value: Any) -> str:
     if any(ord(character) < 0x20 or ord(character) == 0x7F for character in text):
         return ""
     try:
-        parts = urlsplit(text)
+        # A browser reads a backslash in an http(s) address as a slash.
+        parts = urlsplit(text.replace("\\", "/"))
     except ValueError:  # a bracketed host that is no IPv6 address
         return ""
     return text if parts.scheme in ("http", "https") and parts.hostname else ""

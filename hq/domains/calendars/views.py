@@ -22,12 +22,12 @@ from hq.platform.application.calendar_entries import (
     when_label,
 )
 from hq.platform.application.capabilities import capability_title, capability_words
+from hq.platform.application.card_items import ListRow
 from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
-from hq.platform.application.ui import ListRow
 from hq.platform.application.web_writes import execute_posted, refusal_response
 from hq.platform.application.writes import CommandFormPage, ServiceCreateMixin, ServiceDeleteMixin, ServiceUpdateMixin
 

@@ -17,6 +17,7 @@ from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
+from ..card_items import Timeline, TimelineItem
 from ..dashboard import operating_snapshot
 from ..money import money
 from ..projection import projection_scope, read_once
@@ -33,8 +34,6 @@ from ..ui import (
     PageNavigation,
     PageSection,
     PlannedDay,
-    Timeline,
-    TimelineItem,
     WeekPlan,
     line_chart,
     stacked_bar_chart,

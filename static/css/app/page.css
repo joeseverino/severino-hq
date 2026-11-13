@@ -85,7 +85,7 @@
    A div with no class of its own is a region (a list's results a script
    swaps, a record a refresh redraws), never a layout, so what it holds
    stacks as the page does. */
-.content > * + *:not(dialog), .content > :is(div:not([class]), .table-results) > * + *:not(dialog) { margin-top: var(--stack-gap); }
+.content > * + *:not(dialog), .content > div:not([class]) > * + *:not(dialog) { margin-top: var(--stack-gap); }
 
 h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.012em; font-weight: 650; }
 /* A section heading reads as a heading: ink, sentence case, a step above body,

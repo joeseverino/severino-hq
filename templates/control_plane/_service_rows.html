@@ -10,7 +10,7 @@ the last one back.
 favorites, where the order is something the operator chose; among the rest,
 alphabetical is the order and there is nothing to move.
 {% endcomment %}
-{% table_region "Services" room="snug" %}
+{% table_region "Services" room="snug" empty=empty_message action_url=start_url action_label="Publish a service" %}
   <table class="data-table">
     <thead>
       <tr>
@@ -105,10 +105,6 @@ alphabetical is the order and there is nothing to move.
           <td>{% status service.status_label tone=service.status title=service.health.detail %}</td>
         </tr>
       {% endfor %}
-    </tbody>
-    {% empty %}
-    <tbody>
-      <tr><td colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}">{% include "partials/_empty_state.html" with message=empty_message action_url=start_url action_label="Publish a service" %}</td></tr>
     </tbody>
     {% endfor %}
   </table>

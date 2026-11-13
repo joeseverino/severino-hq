@@ -18,7 +18,8 @@ offers every type.
     <strong>{% if records.filtered %}{{ records.shown|breakable }} of {% endif %}{{ records.total|counted:"record" }}</strong>{% if records.unsettled %}, {{ records.unsettled|counted:"needs a look,need a look" }}{% endif %}
   </p>
 </form></search>
-{% table_region "Records" %}
+{% url 'control_plane:list' as every_record %}
+{% table_region "Records" empty="No records yet." filtered=records.filtered clear=every_record %}
   <table class="data-table">
     <thead>
       <tr>{% table_heading "Name" "identifier" gutter=True local_sort=True %}{% table_heading "State" "status" css="key-col" local_sort=True %}{% table_heading "Last read" "status" drop=1 local_sort=True %}</tr>
@@ -46,8 +47,6 @@ offers every type.
         </tr>
       {% endfor %}
     </tbody>
-    {% empty %}
-    <tbody><tr class="row-empty"><td colspan="3">{% if records.filtered %}{% include "partials/_empty_state.html" with message="Nothing matches." only %}{% else %}{% include "partials/_empty_state.html" with message="No records yet." only %}{% endif %}</td></tr></tbody>
     {% endfor %}
   </table>
 {% endtable_region %}

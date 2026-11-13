@@ -1874,7 +1874,14 @@
           "drawn": {
             "kind": "property"
           },
+          "kind": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "legend": {
+            "kind": "property"
+          },
+          "links": {
             "kind": "property"
           },
           "spoken": {
@@ -2082,11 +2089,18 @@
           "url=",
           "is_zero=",
           "icon=",
-          "drawing="
+          "drawing=",
+          "tone=",
+          "detail_tone=",
+          "detail_url="
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "holds_links": {
+            "kind": "property"
+          }
+        }
       },
       "LinePoint": {
         "bases": [],
@@ -2111,7 +2125,8 @@
           "external=",
           "status=",
           "badge=",
-          "at="
+          "at=",
+          "actions="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2308,6 +2323,10 @@
             "kind": "attribute",
             "type": "str"
           },
+          "links": {
+            "kind": "attribute",
+            "type": "bool"
+          },
           "marks": {
             "kind": "property"
           },
@@ -2397,6 +2416,7 @@
           "title=",
           "tip=",
           "pill=",
+          "chip=",
           "**data"
         ]
       },
@@ -3412,6 +3432,7 @@
           "title=",
           "tip=",
           "pill=",
+          "chip=",
           "**data"
         ],
         "parts": []
@@ -3446,7 +3467,13 @@
           "css=",
           "chart=",
           "pane=",
-          "room="
+          "room=",
+          "empty=",
+          "remedy=",
+          "action_url=",
+          "action_label=",
+          "filtered=",
+          "clear="
         ],
         "parts": []
       },

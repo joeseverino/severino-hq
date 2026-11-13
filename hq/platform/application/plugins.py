@@ -21,9 +21,10 @@ from django.core.exceptions import ImproperlyConfigured
 
 from hq.platform.application.routes import reverse
 
+from .card_items import Insight
 from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
-from .ui import STATUS_VALUES, DomainOverview, Insight
+from .ui import STATUS_VALUES, DomainOverview
 lazy from .domains import NAVIGATION_GROUPS
 lazy from .integrations import clear_integration_graph_cache
 lazy from .item_help import instructions

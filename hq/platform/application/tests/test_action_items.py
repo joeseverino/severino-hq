@@ -27,8 +27,8 @@ from ..action_items import (
     with_aside_state,
 )
 from ..capabilities import execute_capability
+from ..card_items import Insight
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal
-from ..ui import Insight
 from .markup import select
 
 ITEM = {

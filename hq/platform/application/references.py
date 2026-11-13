@@ -24,12 +24,12 @@ from django.db.models.functions import Cast
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 lazy from . import entity_links, security
+lazy from .card_items import Insight
 lazy from .demo import showing_demo
 lazy from .entity_links import NODE_KINDS, entity_link, kind_label, node_name
 lazy from .projection import read_once
 lazy from .security import Principal, cli_principal
 lazy from .topology import derive_topology
-lazy from .ui import Insight
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.

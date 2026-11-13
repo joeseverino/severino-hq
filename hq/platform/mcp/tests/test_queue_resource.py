@@ -4,10 +4,10 @@ page of the queue is its own, larger than the one the MCP tools answer."""
 
 from django.test import TestCase
 
+from hq.platform.application.card_items import Insight
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.resources import BoundedQuery, list_resource, resource_registry
 from hq.platform.application.security import Capability, Principal
-from hq.platform.application.ui import Insight
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 

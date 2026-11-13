@@ -15,6 +15,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase as DatabaseTestCase, tag
 from django.utils import timezone
 
+from ..card_items import Insight, Kpi
 from ..domains import domain_navigation
 from ..pages import page_context
 from ..plugin_testing import importable
@@ -32,7 +33,7 @@ from ..plugins import (
     plugin_capabilities,
     plugin_health,
 )
-from ..ui import Insight, Kpi, PageNavigation, PageSection
+from ..ui import PageNavigation, PageSection
 from .markup import hrefs, text, with_class
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
@@ -636,7 +637,7 @@ class AttentionContractTests(TestCase):
             return plugins.plugin_attention_items()
 
     def test_serious_items_sort_ahead_of_attention_across_extensions(self):
-        from hq.platform.application.ui import Insight
+        from hq.platform.application.card_items import Insight
 
         a = self._manifest(id="example.a", name="Aaa")
         b = self._manifest(id="example.b", name="Bbb")
@@ -651,7 +652,7 @@ class AttentionContractTests(TestCase):
         self.assertEqual([e["item"].title for e in gathered], ["B urgent", "A watch"])
 
     def test_healthy_and_neutral_items_are_not_attention(self):
-        from hq.platform.application.ui import Insight
+        from hq.platform.application.card_items import Insight
 
         manifest = self._manifest()
         gathered = self._gather(
@@ -667,7 +668,7 @@ class AttentionContractTests(TestCase):
         self.assertEqual([e["item"].title for e in gathered], ["Broken"])
 
     def test_items_carry_their_source_for_attribution(self):
-        from hq.platform.application.ui import Insight
+        from hq.platform.application.card_items import Insight
 
         gathered = self._gather(
             (self._manifest(),),
@@ -718,9 +719,10 @@ class ComposedPluginTestKitTests(TestCase):
         self.assertEqual(sections["example.alpha"]["url"], "/alpha/")
 
     def test_a_sibling_contributes_a_typed_domain_overview(self):
+        from ..card_items import Kpi
         from ..plugin_testing import sibling
         from ..plugins import plugin_overviews
-        from ..ui import DomainOverview, Kpi
+        from ..ui import DomainOverview
 
         overview = DomainOverview("Current state.", "/alpha/", (Kpi("Open", 3),))
         self.case(siblings=(sibling(overview=overview),))
@@ -755,9 +757,10 @@ class ComposedPluginTestKitTests(TestCase):
         Overviews are a display surface and truncate, so a `serious` item must
         still reach the queue through the domain's attention items.
         """
+        from ..card_items import Kpi
         from ..plugin_testing import sibling
         from ..plugins import plugin_attention_items
-        from ..ui import DomainOverview, Kpi
+        from ..ui import DomainOverview
 
         item = Insight(
             status="serious",

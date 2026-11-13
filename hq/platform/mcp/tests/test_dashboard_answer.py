@@ -7,11 +7,11 @@ from asgiref.sync import async_to_sync
 from django.test import TestCase
 from mcp import Client
 
+from hq.platform.application.card_items import Insight
 from hq.platform.application.dashboard import operating_snapshot
 from hq.platform.application.integration_specs import typed_keys
 from hq.platform.application.plugin_testing import installed, sibling
 from hq.platform.application.security import Capability, Principal, operator_capabilities
-from hq.platform.application.ui import Insight
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 

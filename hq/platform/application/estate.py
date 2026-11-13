@@ -19,6 +19,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.names import in_zone
 
+from .card_items import Insight, Kpi
 from .connection_lifecycle import Lifecycle, probed, standing
 from .derivations import reached
 from .drawings import Dot, Dots
@@ -31,7 +32,7 @@ from .projection import read_once
 from .security import Principal
 from .service_health import UNKNOWN
 from .timestamps import moment
-from .ui import DomainOverview, Insight, Kpi, counted, ended
+from .ui import DomainOverview, counted, ended
 from .workflow_contracts import ActionLink
 lazy from . import connections, services, zones
 lazy from .connection_catalog import connection_total

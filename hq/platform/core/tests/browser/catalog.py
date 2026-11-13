@@ -363,13 +363,26 @@ CATALOG = {
     ),
     "table/sorts": Entry(
         '{% section "Example hosts" %}{% table_region "Example hosts" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" local_sort=True %}{% table_heading "State" "status" local_sort=True %}</tr></thead>'
-        '<tbody><tr><td>example-01</td><td>{% status "Online" tone="good" %}</td></tr>'
-        '<tr><td>example-02</td><td>{% status "Offline" tone="attention" %}</td></tr></tbody></table>'
-        "{% endtable_region %}{% endsection %}"
+        '{% table_heading "Name" %}{% table_heading "State" "status" %}'
+        '{% table_heading "Actions" "control" hidden=True %}</tr></thead>'
+        '<tbody><tr><td>example-01</td><td>{% status "Online" tone="good" %}</td><td><a href="#">Open</a></td></tr>'
+        '<tr><td>example-02</td><td>{% status "Offline" tone="attention" %}</td><td><a href="#">Open</a></td></tr>'
+        "</tbody></table>{% endtable_region %}{% endsection %}"
         '{% section "Example host" %}{% table_region "Example host" %}<table class="data-table"><thead><tr>'
-        '{% table_heading "Name" local_sort=True %}{% table_heading "State" "status" local_sort=True %}</tr></thead>'
+        '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead>'
         '<tbody><tr><td>example-01</td><td>{% status "Online" tone="good" %}</td></tr></tbody></table>'
+        "{% endtable_region %}{% endsection %}"
+    ),
+    # A region whose tables hold no row: what is missing and what fills it,
+    # then a list its own filter emptied, with the way back.
+    "table/empty": Entry(
+        '{% section "Example hosts" %}{% table_region "Example hosts" empty="No example hosts yet." '
+        'action_url="#" action_label="Add an example host" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead><tbody></tbody></table>'
+        "{% endtable_region %}{% endsection %}"
+        '{% section "Example records" %}{% table_region "Example records" empty="No example records yet." '
+        'filtered=True clear="#" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Name" %}{% table_heading "State" "status" %}</tr></thead><tbody></tbody></table>'
         "{% endtable_region %}{% endsection %}"
     ),
     "table/gutter": Entry(

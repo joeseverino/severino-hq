@@ -120,6 +120,10 @@ def sentences(registrar: str) -> None:
     # The same state as its words in its tone, with no pill around them.
     assert_type(ui.status_pill("+3 bpm", tone="good", pill=False), SafeString)
     ui.status_pill("+3 bpm", pill="no")  # type: ignore[arg-type]
+    assert_type(ui.status_pill("django", chip=True), SafeString)
+    ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
+    assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)
+    ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
     assert_type(validation.sentence_closes("src"), list[str])
 
 

@@ -241,10 +241,12 @@ editor closed.
 *Gate:* `hq/platform/core/tests/test_row_editor.py`.
 
 **Every table sorts.** A list its server sorts has links in its headings
-(`table_heading sort=`). Any other table whose rows are worth sorting has the
-same control, looking the same, drawn as a button (`local_sort=True`), which
-the region keeps only where the table holds two rows to put in order, counted
-across its groups. `tables.js` sorts the rows on the
+(`table_heading sort=`). Every other heading has the same control, looking
+the same, drawn as a button, which the region keeps only where the table
+holds two rows to put in order, counted across its groups. A column of
+controls and a heading named for assistive technology alone have nothing to
+order, and `local_sort=False` keeps a table's own order, as a list page does
+with the one page of its server's order it holds. `tables.js` sorts the rows on the
 page: ascending, descending, then as they came. Amounts, dates and lengths
 of time sort as what they are; a cell may say its own value with `data-sort`.
 Sections keep their own rows. No table is drawn by hand, an extension's
@@ -430,7 +432,9 @@ back. A page with nothing yet says what is missing and, where it can, what
 would fill it and where (`partials/_empty_state.html`: `message`, `why`, an
 action); controls that only make sense over data wait for the data. A
 `{% table_region %}` whose tables hold no row draws that card in their place,
-so no page draws headings over nothing.
+so no page draws headings over nothing: its `empty=` says what is missing in
+the page's words, with `remedy=` (or `action_url=` and `action_label=`), and
+`filtered=` with `clear=` says its filter emptied it, with the way back.
 
 **One head.** `partials/_page_head.html`: trail, title, controls, lede, laid
 out the same at every width. The title and its controls share a row (the title

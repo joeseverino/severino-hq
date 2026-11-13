@@ -3,7 +3,8 @@
 A list: the toolbar, the table and its empty state, drawn from the view's
 TableListMixin. The header comes from `table.columns`; a page writes only the
 cells of one row in `{% block row %}`, which renders once per row with `row`
-set; its first cell stands in the gutter and holds the row's toggle, both drawn by the region from its heading, and `{% block row_attributes %}` gives its `tr` attributes (a fold's `id` and `data-folds`, a folded row's `data-folded`). `{% block summary %}` sits between the toolbar and the table.
+set. Its rows are one page of a list the server orders, so a heading sorts
+there (`sort=`) or not at all, never on the page. Its first cell stands in the gutter and holds the row's toggle, both drawn by the region from its heading, and `{% block row_attributes %}` gives its `tr` attributes (a fold's `id` and `data-folds`, a folded row's `data-folded`). `{% block summary %}` sits between the toolbar and the table.
 The view's `table_empty` says what an empty list means ("No assets yet."), with
 `table_empty_why` beside it and `get_table_empty_remedy()` where the derived remedy
 is not the one,
@@ -18,7 +19,7 @@ the pages.
 {% endcomment %}
 {% block page %}
 {% include "partials/_table_toolbar.html" %}
-<div class="table-results" data-table-results>
+<div data-table-results>
 {% block summary %}{% endblock %}
 {% if not object_list %}
 {% if table.active_count %}{% include "partials/_empty_state.html" with message="Nothing matches." remedy=table.clear %}{% elif table.empty_link %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=table.empty_link %}{% elif table.empty_remedy %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why remedy=page.remedy %}{% else %}{% include "partials/_empty_state.html" with message=table.empty why=table.empty_why %}{% endif %}
@@ -29,7 +30,7 @@ the pages.
       <tr>
         {% if table.selectable %}{% table_heading "Select all rows" select_all=True %}{% endif %}
         {% for column in table.columns %}
-          {% table_heading column.label|default:"Actions" column.kind css=column.css drop=column.drop sort=column.sort gutter=forloop.first hidden=column.label|yesno:",True" %}
+          {% table_heading column.label|default:"Actions" column.kind css=column.css drop=column.drop sort=column.sort local_sort=False gutter=forloop.first hidden=column.label|yesno:",True" %}
         {% endfor %}
       </tr>
     </thead>

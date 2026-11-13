@@ -363,6 +363,13 @@ td.row-actions > * + * { margin-left: var(--space-6); }
 .ext-choice-label { overflow-wrap: anywhere; }
 .ext-choice-sub { font-size: var(--text-xs); text-align: end; }
 .icon { width: 1em; height: 1em; flex: none; }
+/* The bar's marks, drawn from the set at the size each control sets them
+   (the menu's, the badge's and the search dialog's set by their own rules). */
+.nav-group-label > .icon { width: 9px; height: 6px; stroke: var(--muted); }
+.nav-group > button:has(+ :popover-open) .nav-group-label > .icon { transform: rotate(180deg); }
+.global-search > .icon { width: 15px; height: 15px; stroke-width: 2; }
+.user-menu > button > .icon { width: 15px; stroke: var(--muted); stroke-width: 1.8; transition: stroke .12s ease; }
+.user-menu > button:is(:hover, :has(+ :popover-open)) > .icon { stroke: var(--ink); }
 /* Each control is its own POST, so its own form, laid inline so the actions row does not stack them as blocks. */
 .page-actions form { margin: 0; display: inline-flex; }
 

@@ -27,13 +27,13 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, read_record, reco
 lazy from hq.platform.application.resource_capabilities import offered_changes
 
 from .adoption import AdoptCommand, unmanaged
+from .card_items import ListRow
 from .command_fields import Describe
 from .entity_links import entity_link
 from .infrastructure import enabled_resources, resource_health
 from .record_errors import PolicyError, RecordNotFound
 from .resource_records import ManagedResourceItem
 from .security import Principal
-from .ui import ListRow
 lazy from . import adoption, plugins
 lazy from .facts import snapshots_of
 lazy from .projection import read_once

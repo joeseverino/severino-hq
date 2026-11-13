@@ -11,13 +11,13 @@ from hq.domains.expenses.models import DEFAULT_CATEGORY, EXPENSE_CATEGORY_CHOICE
 
 from .answer_fields import BusinessUseShare
 from .assets import PaymentMethod
+from .card_items import Kpi
 from .command_fields import Describe, Names, Refers
 from .money import money
 from .projection import iso
 from .record_fields import Notes, TotalCost, one_of
 from .record_saves import Held, Link, linked_saver
 from .sensitivity import SAFE_SENSITIVITIES
-from .ui import Kpi
 
 # An expense's fields as its command writes them and its row reads them back, each said once.
 _CATEGORY = one_of(EXPENSE_CATEGORY_CHOICES)
