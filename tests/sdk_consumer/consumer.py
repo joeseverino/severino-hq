@@ -246,6 +246,15 @@ def catalogs(principal: capabilities.Principal) -> None:
     connections.describe_connections(principal="example")  # type: ignore[arg-type]
 
 
+def a_connection() -> None:
+    # A connection says what kind of credential it holds, a keyless one included.
+    keyless = connections.ConnectionInstance("example", "Example", "example", "good", "Read", credential_model="none")
+    assert_type(keyless.credential_model, str)
+    assert_type(keyless.keyless, bool)
+
+    connections.ConnectionInstance("example", "Example", "example", "good", "Read")  # type: ignore[call-arg]
+
+
 def looking_up(progress: jobs.Progress, *, subject: str, principal: capabilities.Principal) -> dict[str, Any]:
     return {}
 

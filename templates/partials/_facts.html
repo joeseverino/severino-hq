@@ -1,6 +1,7 @@
 {% comment %}
 Facts, drawn by {% facts %}: {% facts layout="band" label="Controller status" %}{% fact ... %}{% endfacts %}.
 A band is a row of cells; a list, the default, is each label beside its
-value (facts_tags.py). label names the whole for a reader when nothing on the
-page heads it.
-{% endcomment %}<dl class="{% if layout == 'band' %}facts-band{% else %}facts-list{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ content|safe }}</dl>
+value; a line (inline) is a card's summary, each fact its value then its words
+(facts_tags.py). label names the whole for a reader when nothing on the page
+heads it.
+{% endcomment %}<dl class="{% if layout == 'band' %}facts-band{% elif layout == 'inline' %}facts-inline{% else %}facts-list{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ content|safe }}</dl>

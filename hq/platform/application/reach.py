@@ -4,13 +4,19 @@ A DNS record answers with an address, an address belongs to a network, and a
 network is the tailnet, the house or the internet, so who can open a socket to
 a service follows from declarations HQ already reconciles. Otherwise it is
 invisible: a rewrite to a LAN address and one to a tailnet address look
-identical and differ only in who can reach what is behind them.
+identical and differ only in who can reach what is behind them. A proxy's
+access list can narrow that audience and never widen it, so the narrower of
+the two is the reach.
 """
 
 import socket
 from dataclasses import dataclass
 from ipaddress import IPv6Network, ip_address, ip_network
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from hq.domains.control_plane.provider_adapters.contracts import IngressPolicy
 
 # Tailscale hands out addresses from the carrier-grade NAT range and one IPv6
 # ULA prefix. Nothing else on a normal network uses either, so an address in
@@ -110,6 +116,12 @@ class Reach:
     def tailnet_only(self) -> bool:
         return self.id == "tailnet"
 
+    @property
+    def rank(self) -> int:
+        """Its place in ``WIDEST_FIRST``, by audience, whatever said so."""
+
+        return next(index for index, candidate in enumerate(WIDEST_FIRST) if candidate.id == self.id)
+
 
 TAILNET_ONLY = Reach(
     "tailnet",
@@ -129,6 +141,20 @@ PUBLIC = Reach(
 UNKNOWN = Reach("unknown", "", "")
 # Widest audience first: the order a ranking compares.
 WIDEST_FIRST = (PUBLIC, LOCAL_NETWORK, TAILNET_ONLY, UNKNOWN)
+# The same audiences when a proxy's access list is what narrowed them, by the
+# network the list admits.
+LISTED = {
+    "tailnet": Reach(
+        "tailnet",
+        TAILNET_ONLY.label,
+        "Its proxy's access list admits only tailnet addresses, so only tailnet devices can connect.",
+    ),
+    "network": Reach(
+        "network",
+        LOCAL_NETWORK.label,
+        "Its proxy's access list admits only home network and tailnet addresses.",
+    ),
+}
 
 
 def reach_of(answers: tuple[str, ...]) -> Reach:
@@ -141,6 +167,60 @@ def reach_of(answers: tuple[str, ...]) -> Reach:
 
     found = {_classify(answer) for answer in answers}
     return next(candidate for candidate in WIDEST_FIRST if candidate in found or candidate is UNKNOWN)
+
+
+def admitted_network(policy: IngressPolicy) -> str:
+    """The widest network a proxy's access list admits requests from, when the
+    list alone decides who gets in.
+
+    "" when it narrows nothing HQ can name: no list, rules HQ has not read, a
+    rule admitting the internet, a password that admits anyone from anywhere,
+    or no refusal of everyone else.
+    """
+
+    if not policy.restricted or policy.rules is None:
+        return ""
+    if policy.satisfy_any and policy.authorizations != 0:
+        return ""
+    allowed = []
+    for directive, address in policy.rules:
+        # The first rule a source matches decides, so nothing after "deny all"
+        # admits anyone.
+        if (directive, address) == ("deny", "all"):
+            break
+        if directive == "allow":
+            allowed.append(address)
+    else:
+        if not policy.implicit_deny:
+            return ""
+    networks = {_range_network(address) for address in allowed}
+    # A list that admits nobody has no audience to name, so it claims none.
+    if not networks or "public" in networks:
+        return ""
+    return "network" if "network" in networks else "tailnet"
+
+
+def narrowed(reach: Reach, admitted: str) -> Reach:
+    """``reach``, or the narrower audience a proxy's access list admits."""
+
+    listed = LISTED.get(admitted)
+    if listed is None or (reach.id != UNKNOWN.id and listed.rank <= reach.rank):
+        return reach
+    return listed
+
+
+def _range_network(address: str) -> str:
+    """Which network every address in a rule's range belongs to; "public" for
+    one that spans more or will not parse, since that admits wider."""
+
+    try:
+        found = ip_network(address, strict=False)
+    except ValueError:
+        return "public"
+    for name, networks in (("tailnet", TAILNET), ("network", PRIVATE)):
+        if any(found.version == network.version and found.subnet_of(network) for network in networks):
+            return name
+    return "public"
 
 
 # Where the kernel lists this host's IPv6 addresses, one per line:

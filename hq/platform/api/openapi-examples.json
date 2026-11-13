@@ -2416,22 +2416,22 @@
             {
               "kind": "loopback",
               "label": "Loopback",
-              "source": "this request came from it",
+              "source": "This request",
               "value": "127.0.0.1"
             }
           ],
           "connection": {
             "address": "127.0.0.1",
-            "carried_over": "Not known yet",
+            "carried_over": "",
             "channel": "loopback",
             "channel_label": "Loopback",
-            "device": "No tailnet device at this address",
+            "device": "",
             "device_standing": "unplaced",
             "forwarded": false,
             "handshake": "\u2013",
             "identity_agrees": false,
             "measured_by": "Another tailnet machine (docker-host-01)",
-            "path": "Unknown",
+            "path": "",
             "summary": "6 failed\u00a0\u00b7 4 not confirmed",
             "tailnet_observed_at": "2026-01-15T09:30:00+00:00",
             "transport": "Encryption not confirmed",
@@ -2452,38 +2452,38 @@
             {
               "certificate": null,
               "check": {
-                "detail": "This request reached HQ at testserver.",
-                "label": "Confirmed by this request",
-                "state": "proven",
+                "detail": "No reading names the device at 127.0.0.1.",
+                "label": "Not confirmed",
+                "state": "unproven",
                 "step": ""
               },
-              "detail": "",
+              "detail": "127.0.0.1",
               "evidence": [
                 {
-                  "detail": "Whether this request arrived encrypted.",
-                  "label": "Scheme",
-                  "role": "",
-                  "value": "http"
+                  "detail": "Your address, as HQ sees it.",
+                  "label": "Address",
+                  "role": "judged",
+                  "value": "127.0.0.1"
                 }
               ],
-              "label": "HQ",
+              "label": "Device",
               "layers": [
                 {
-                  "boundary": "Network",
-                  "detail": "This request never left the machine HQ runs on.",
-                  "evidence": "127.0.0.1",
-                  "id": "channel",
-                  "label": "The address is on the tailnet",
-                  "mechanism": "The tailnet address range",
+                  "boundary": "Device identity",
+                  "detail": "No device on the tailnet has this address.",
+                  "evidence": "",
+                  "id": "device",
+                  "label": "The tailnet knows this device",
+                  "mechanism": "The tailnet device list",
                   "rules": [],
                   "state": "does-not"
                 }
               ],
               "link": null,
-              "name": "Severino HQ",
+              "name": "",
               "overlays": [],
               "source": null,
-              "step": "hq",
+              "step": "device",
               "unread": ""
             }
           ],

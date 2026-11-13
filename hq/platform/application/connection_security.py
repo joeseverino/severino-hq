@@ -127,7 +127,7 @@ def _unattested_firewall() -> SecurityControl:
         FIREWALL_LABEL,
         "neutral",
         "Not read",
-        "HQ has no firewall reading for this machine, so it cannot say which interface this request had to arrive on.",
+        "HQ has no firewall reading for this machine.",
     )
 
 
@@ -438,27 +438,26 @@ def _headline(admission: _Admission | None) -> str:
 
 
 def _custody_control(groups: tuple[ConnectionGroup, ...]) -> SecurityControl:
-    """Whether every connection either names where its secret is kept or needs none."""
+    """Where each connection's secret is kept, or that it needs none.
 
-    stores = Counter(
-        group.spec.secret_store for group in groups for _connection in group.connections if group.spec.secret_store
-    )
-    unkept = tuple(connection for group in groups if not group.spec.secret_store for connection in group.connections)
-    keyless = sum(connection.instance.credential_model == "none" for connection in unkept)
-    total = sum(stores.values()) + len(unkept)
-    unknown = len(unkept) - keyless
+    Each connection says its credential model and one that holds a key names
+    its store (``connection_catalog``), so every connection is one or the other.
+    """
+
+    connections = tuple((group, connection) for group in groups for connection in group.connections)
+    keyless = sum(connection.instance.keyless for _group, connection in connections)
+    stores = Counter(group.spec.secret_store for group, connection in connections if not connection.instance.keyless)
     return SecurityControl(
         "credentials",
         "Keys are kept in a vault",
-        "good" if total and not unknown else "neutral",
+        "good" if connections else "neutral",
         dotted(
             *(f"{count} in {store}" for store, count in sorted(stores.items())),
             f"{keyless} need no key" if keyless else "",
-            f"{unknown} do not say" if unknown else "",
         )
         or "No connections yet",
         "HQ keeps no secret itself. Each connection names the place that keeps its secret."
-        if total
+        if connections
         else "No connection has been read yet.",
     )
 
@@ -527,7 +526,7 @@ def _freshness_control(connections: tuple) -> SecurityControl:
     read, only the lookups made through it, which carry their own times.
     """
 
-    connections = tuple(connection for connection in connections if connection.instance.credential_model != "none")
+    connections = tuple(connection for connection in connections if not connection.instance.keyless)
     read = tuple(connection for connection in connections if connection.instance.observed_at)
     oldest = min(read, key=lambda connection: connection.instance.observed_at, default=None)
     unread = len(connections) - len(read)

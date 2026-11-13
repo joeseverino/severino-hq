@@ -1,0 +1,19 @@
+# A sentence a person reads on a page says one thing in a few words. Past
+# twenty, it is carrying a hedge, a mechanism or a second thought: cut what
+# the reader does not need in order to act.
+#
+# Words are counted while one space, a comma and a space, or a line break part
+# them, so a run of clauses joined by commas counts as the one sentence it
+# reads as. Anything else ends the count: a stop, a colon, a bracket, a quote,
+# and a template's tag, which Vale masks as a run of spaces, since the words on
+# either side of an {% if %} are often two branches. A line break joins words
+# where a template wraps a paragraph (the next line is indented) or a Python
+# string goes on in its next piece (the line ends in a space); otherwise it
+# parts two strings.
+extends: existence
+message: "'%s…' runs past 20 words; cut it to what the reader needs"
+level: error
+nonword: true
+scope: [shown, ~comment & ~code]
+raw:
+  - '(?:[\w’''-]+,?(?: | \n|\n[ \t]+)){20}[\w’''-]+'

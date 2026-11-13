@@ -185,7 +185,7 @@ def _traffic(service) -> SummaryItem | None:
     return SummaryItem(
         dotted("Traffic", f"{HOST_TRAFFIC_DAYS} days"),
         counted(measured["pageviews"], "pageview"),
-        detail=dotted(counted(measured["visits"], "visit"), basis),
+        detail=lines(counted(measured["visits"], "visit"), basis),
         icon="eye",
     )
 
@@ -195,12 +195,13 @@ def _traffic(service) -> SummaryItem | None:
 
 @dataclass(frozen=True, slots=True)
 class SummaryItem:
-    """One line of a service's summary: a label, a value, and what backs it."""
+    """One line of a service's summary: a label, a value, and what backs it,
+    each part of that a line of its own under the value."""
 
     label: str
     value: str
     link: EntityLink | None = None
-    detail: str = ""
+    detail: tuple[str, ...] = ()
     tone: str = ""
     # What kind of fact it is, drawn as its tile: a name in partials/_icon.html.
     icon: str = ""
@@ -238,16 +239,23 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
     )
 
 
-def _health_detail(service) -> str:
+def lines(*parts: str) -> tuple[str, ...]:
+    """The parts of a fact's detail that say something, each a line."""
+
+    return tuple(part for part in parts if part)
+
+
+def _health_detail(service) -> tuple[str, ...]:
     """What the health rests on, and what the container itself says: its
     uptime and its own health check."""
 
     # The uptime is the container's card on the path; the health check is the
     # evidence the verdict rests on.
     running = service.container
-    # Not twice: a health check that passes is already the verdict's word.
-    check = running.check if running and running.check.lower() != service.health.label.lower() else ""
-    return dotted(check, service.health.detail)
+    # Not twice: a health check the verdict or its sentence already says.
+    said = f"{service.health.label} {service.health.detail}".lower()
+    check = running.check if running and running.check.lower() not in said else ""
+    return lines(check, service.health.detail)
 
 
 def _what(service) -> str:
@@ -277,9 +285,9 @@ def _where(path) -> SummaryItem:
         )
     if end is not None and end.step == "hq" and path.machine:
         # HQ's own name ends at HQ; where it runs is the machine HQ is on.
-        return SummaryItem("Where it runs", path.machine, entity_link("machine", path.machine), end.detail)
+        return SummaryItem("Where it runs", path.machine, entity_link("machine", path.machine), lines(end.detail))
     if end is not None and end.step in ("served", "external", "origin", "hq"):
-        return SummaryItem("Where it runs", f"{end.label} {end.name}".strip(), end.link, end.detail)
+        return SummaryItem("Where it runs", f"{end.label} {end.name}".strip(), end.link, lines(end.detail))
     if path.machine:
         container = next(
             (hop.name for route in path.routes for hop in route.hops if hop.step == "container"),
@@ -291,17 +299,17 @@ def _where(path) -> SummaryItem:
             entity_link("machine", path.machine),
             _container_detail(path.machine, container),
         )
-    return SummaryItem("Where it runs", MISSING, detail=path.gaps[0] if path.gaps else "")
+    return SummaryItem("Where it runs", MISSING, detail=lines(path.gaps[0] if path.gaps else ""))
 
 
-def _container_detail(machine: str, container: str) -> str:
+def _container_detail(machine: str, container: str) -> tuple[str, ...]:
     """The container, and whether what it runs is current and safe."""
 
     if not container:
-        return ""
+        return ()
 
     standing = standings_on(machine).get(container)
-    return dotted(f"Container {container}", standing.summary if standing else "")
+    return lines(f"Container {container}", standing.summary if standing else "")
 
 
 def _certificate(path) -> SummaryItem | None:
@@ -322,7 +330,7 @@ def _certificate(path) -> SummaryItem | None:
         "Certificate",
         certificate.name,
         certificate.link,
-        dotted(certificate.issuer, certificate.left),
+        lines(certificate.issuer, certificate.left),
         icon="lock",
     )
 
@@ -337,17 +345,19 @@ def _project(service) -> SummaryItem | None:
 
     project = Project.objects.filter(slug=service.project["slug"]).only("repository_url", "last_push_at").first()
     repo = repository_for(project.repository_url) if project and project.repository_url else None
-    parts = [
-        _repository_detail(repo)
-        or (_repository_label(project.repository_url) if project and project.repository_url else ""),
+    parts = (
+        *(
+            _repository_detail(repo)
+            or (_repository_label(project.repository_url) if project and project.repository_url else "",)
+        ),
         f"pushed {ago(project.last_push_at)}" if project and project.last_push_at else "",
-    ]
-    return SummaryItem("Project", service.project["name"], link, dotted(*parts), icon="commit")
+    )
+    return SummaryItem("Project", service.project["name"], link, lines(*parts), icon="commit")
 
 
-def _repository_detail(repo) -> str:
+def _repository_detail(repo) -> tuple[str, ...]:
     if repo is None:
-        return ""
+        return ()
 
     head, deployed = (repo.head or {}).get("sha", ""), (repo.production or {}).get("sha", "")
     parts = [repo.short]
@@ -355,7 +365,7 @@ def _repository_detail(repo) -> str:
         parts.append(counted(len(repo.pull_requests), "open pull request", "open pull requests"))
     if head and deployed and head != deployed:
         parts.append(f"{repo.default_branch} is ahead of production")
-    return dotted(*parts)
+    return lines(*parts)
 
 
 @dataclass(frozen=True, slots=True)

@@ -506,6 +506,130 @@ VALUES_OFF_THEIR_ROW = (
 )
 
 
+# What a fact draws: its words and its icon's mark, as the rects a reader sees.
+_FACT_DRAWN = r"""
+const factRects = (cell) => [
+  ...drawn(cell).flatMap(rects),
+  ...[...cell.querySelectorAll('svg')].filter((mark) => mark.checkVisibility()).map((mark) => mark.getBoundingClientRect()),
+].filter((r) => r.width && r.height);
+const extent = (found) => found.length && {
+  top: Math.min(...found.map((r) => r.top)), bottom: Math.max(...found.map((r) => r.bottom)),
+  left: Math.min(...found.map((r) => r.left)), right: Math.max(...found.map((r) => r.right)),
+};
+"""
+
+
+# The facts of a band sit together, as a stat group does in Primer's Stack or
+# Atlassian's Inline: no fact stands further from its neighbor on its row than
+# the widest fact of the band is wide. Read from what each fact draws, so a
+# cell stretched past its words is found however the band lays it out.
+FACTS_SPREAD_APART = (
+    "([band, fact, unseen]) => {"
+    + DESCRIBE
+    + BASELINES
+    + _FACT_DRAWN
+    + r"""
+  const found = [];
+  for (const each of document.querySelectorAll(band)) {
+    if (!each.checkVisibility()) continue;
+    const drawnFacts = [...each.querySelectorAll(`:scope > ${fact}`)]
+      .map((cell) => [cell, extent(factRects(cell))]).filter(([, at]) => at);
+    if (drawnFacts.length < 2) continue;
+    const widest = Math.max(...drawnFacts.map(([, at]) => at.right - at.left));
+    const rows = new Map();
+    for (const [cell, at] of drawnFacts) {
+      const top = Math.round(cell.getBoundingClientRect().top);
+      if (!rows.has(top)) rows.set(top, []);
+      rows.get(top).push(at);
+    }
+    for (const row of rows.values()) {
+      row.sort((a, b) => a.left - b.left);
+      for (let i = 1; i < row.length; i++) {
+        const gap = row[i].left - row[i - 1].right;
+        if (gap > widest + 0.5) found.push(`${describe(each)} sets two facts ${Math.round(gap)}px apart, wider than its widest fact (${Math.round(widest)}px)`);
+      }
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A fact's detail is running words: its lines are the ones its markup
+# declares (a `<small>` each), so no word of it is laid out as a row of its
+# own by a flex or grid box, which makes each run of text between two
+# elements an item, a dot or a link on a line alone.
+DETAIL_WORDS_IN_ROWS = (
+    "([detail, unseen]) => {"
+    + DESCRIBE
+    + BASELINES
+    + r"""
+  const found = [];
+  for (const each of document.querySelectorAll(detail)) {
+    if (!each.checkVisibility()) continue;
+    for (const box of [each, ...each.querySelectorAll('*')]) {
+      if (!/flex|grid/.test(getComputedStyle(box).display)) continue;
+      const loose = [...box.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && node.data.trim()
+        && !box.closest(unseen) && rects(node).length);
+      if (loose) found.push(`${describe(box)} lays out "${loose.data.trim().slice(0, 30)}" as a row of its own`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A fact keeps its frame's inset: what it draws stands at least `least`
+# pixels inside the sides of the frame that holds it (the nearest box that
+# draws an edge all round) and below any rule drawn above it there, a
+# section head's or its own line's among them.
+FACTS_AGAINST_THEIR_FRAME = (
+    "([fact, unseen, least]) => {"
+    + DESCRIBE
+    + BASELINES
+    + _FACT_DRAWN
+    + r"""
+  const seen = (color) => color && !/^(transparent|rgba\(.*,\s*0\))$/.test(color);
+  const edge = (style, side) => parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none'
+    && seen(style[`border${side}Color`]);
+  const framed = (style) => ['Top', 'Right', 'Bottom', 'Left'].every((side) => edge(style, side));
+  const found = [];
+  for (const cell of document.querySelectorAll(`main ${fact}`)) {
+    if (!cell.checkVisibility()) continue;
+    const at = extent(factRects(cell));
+    if (!at) continue;
+    let frame = cell.parentElement;
+    while (frame && frame !== document.body && !framed(getComputedStyle(frame))) frame = frame.parentElement;
+    if (!frame || frame === document.body) continue;
+    const style = getComputedStyle(frame);
+    const f = frame.getBoundingClientRect();
+    const sides = {
+      left: at.left - (f.left + parseFloat(style.borderLeftWidth)),
+      right: f.right - parseFloat(style.borderRightWidth) - at.right,
+      top: at.top - (f.top + parseFloat(style.borderTopWidth)),
+    };
+    // A rule above the fact inside its frame: a bottom edge some box draws
+    // across the fact's columns, ending above what the fact draws.
+    for (const ruled of frame.querySelectorAll('*')) {
+      if (ruled.contains(cell) || !edge(getComputedStyle(ruled), 'Bottom')) continue;
+      const r = ruled.getBoundingClientRect();
+      if (r.bottom > at.top + 0.5 || r.right <= at.left || r.left >= at.right) continue;
+      sides.top = Math.min(sides.top, at.top - r.bottom);
+    }
+    for (let up = cell.parentElement; up !== frame; up = up.parentElement) {
+      const its = getComputedStyle(up);
+      if (edge(its, 'Top')) sides.top = Math.min(sides.top, at.top - up.getBoundingClientRect().top - parseFloat(its.borderTopWidth));
+    }
+    const near = Object.entries(sides).filter(([, gap]) => gap < least - 0.5);
+    if (near.length) {
+      found.push(`${describe(cell)} "${cell.textContent.trim().slice(0, 30)}" stands ${near.map(([side, gap]) => `${Math.round(gap)}px from its frame's ${side}`).join(', ')}`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
 # A block box set in a line that clips what it holds takes its bottom margin
 # edge as its baseline (CSS 2.1 §10.8.1), so on the line's baseline its text
 # rides a descent above the words beside it. That is an inline block (and

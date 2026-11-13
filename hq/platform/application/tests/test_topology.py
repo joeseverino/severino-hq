@@ -81,6 +81,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
                     "good",
                     "Healthy",
                     controller_id="example-controller",
+                    credential_model="none",
                 ),
             ),
             web_route="control_plane:list",
@@ -131,6 +132,7 @@ class DerivedTopologyTests(SentinelMixin, TestCase):
                     "good",
                     "Healthy",
                     dependencies=(ConnectionLink("example-zone", "https://example.test/elsewhere"),),
+                    credential_model="none",
                 ),
             ),
         )
@@ -270,6 +272,7 @@ class MeasuredNodeTests(TestCase):
                     "good",
                     "Healthy",
                     targets=tuple(ConnectionLink(host) for host in hosts),
+                    credential_model="none",
                 ),
             ),
         )
@@ -358,6 +361,7 @@ class OneNodePerMachineTests(TestCase):
                     "Healthy",
                     controller_id="a-docker-host",
                     targets=tuple(ConnectionLink(target) for target in targets),
+                    credential_model="none",
                 ),
             ),
         )

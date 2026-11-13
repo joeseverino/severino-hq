@@ -305,14 +305,6 @@
 .tag:last-child { margin-inline-end: 0; }
 
 .search-page-form input[type=search] { flex-basis: 420px; }
-.command-center-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
-  align-items: start;
-  gap: var(--layout-gap);
-  margin: var(--layout-gap) 0;
-}
-.command-center-grid > * { margin: 0; min-width: 0; }
 .discovery-list { list-style: none; margin: 0; padding: 0; }
 .discovery-list li { border-top: 1px solid var(--line); }
 .discovery-list li:first-child { border-top: 0; }

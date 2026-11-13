@@ -27,7 +27,7 @@ from .labels import dotted, lower_first
 from .locate import host_of, split_endpoint
 from .path_model import Certificate, Hop, HopSource, Route, ServicePath, dns_label, pointing_at
 from .projection import read_once
-from .reach import NETWORKS, is_documentation, network_of
+from .reach import NETWORKS, admitted_network, is_documentation, network_of
 lazy from . import connections, request_path, services
 lazy from .containers import container_watchers, standing_of, started_at, up_for
 lazy from .expiry import days_until
@@ -642,6 +642,7 @@ def _ingress(name: str, *, behind_edge: bool, on: str = "") -> list[Hop]:
                 detail=_answer(row),
                 source=row.source,
                 certificate=_served_certificate(name, row, "Origin" if behind_edge else "Served"),
+                admits=_admits(row),
             )
             return [hop, *_upstream(_answer(row), on=on)]
     answered = _redirect(name, at_ingress=True) or _not_found(name)
@@ -651,6 +652,13 @@ def _ingress(name: str, *, behind_edge: bool, on: str = "") -> list[Hop]:
     if gap:
         return [Hop("ingress", "Ingress", unread=gap)]
     return []
+
+
+def _admits(row: _Row) -> str:
+    """The network the proxy record's access list admits requests from."""
+
+    read = PROVIDERS[row.kind].ingress_policy
+    return admitted_network(read(row.record)) if read is not None and row.record else ""
 
 
 def _served_certificate(name: str, row: _Row, role: str) -> Certificate:

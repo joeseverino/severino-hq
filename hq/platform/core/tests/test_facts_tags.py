@@ -92,8 +92,24 @@ class FactsTagTests(SimpleTestCase):
         self.assertEqual(elements(html, "b"), [])
         self.assertEqual(elements(html, "i"), [])
 
+    def test_a_detail_given_as_lines_is_a_line_each_with_no_dot(self):
+        html = _render(
+            '{% facts layout="band" %}{% fact "Certificate" value="example" detail=lines %}{% endfacts %}',
+            lines=("Example issuer", "", "24 days left"),
+        )
+
+        (detail,) = with_class(html, "fact-detail")
+        self.assertEqual(texts(html, "small"), ["Example issuer", "24 days left"])
+        self.assertTrue(all(detail in small.ancestors for small in elements(html, "small")))
+        self.assertNotIn("·", detail.words)
+
+    def test_an_inline_line_is_its_own_look(self):
+        (line,) = elements(_render('{% facts layout="inline" %}{% fact "Rules" value=0 %}{% endfacts %}'), "dl")
+
+        self.assertIn("facts-inline", line.classes)
+
     def test_an_unknown_layout_option_or_part_is_refused(self):
-        with self.assertRaisesMessage(TemplateSyntaxError, "layout= is one of band, list"):
+        with self.assertRaisesMessage(TemplateSyntaxError, "layout= is one of band, inline, list"):
             _render('{% facts layout="grid" %}{% endfacts %}')
         with self.assertRaises(TemplateSyntaxError):
             Template('{% facts %}{% fact "A" heading="B" value=1 %}{% endfacts %}')
@@ -125,3 +141,18 @@ class FactsCatalogTests(SimpleTestCase):
                 self.assertEqual([o for o in options if f"{o}=" not in opened], [], "add a part/facts-* entry")
         self.assertEqual([layout for layout in LAYOUTS if f'layout="{layout}"' not in entries], [])
         self.assertIn("{% detail %}", entries)
+
+
+class FactsBandWidthTests(SimpleTestCase):
+    def test_a_band_turns_into_a_list_at_the_width_its_tracks_do(self):
+        """A band's facts switch to one track (`--fact-min`) and its facts to
+        the list's rows (the `band` container query) at one width, below it
+        and not at it: a band exactly that wide, as a dialog's is, otherwise
+        lays out list rows in narrow tracks, a letter a line."""
+
+        from hq.platform.core.stylesheets import stylesheet
+
+        css = stylesheet()
+        (track,) = re.findall(r"--fact-min:\s*clamp\([^,]+,\s*\(([\d.]+rem)\s*-\s*100%\)", css)
+        queries = re.findall(r"@container band\s*\(([^)]*)\)", css)
+        self.assertEqual(queries, [f"width < {track}"])

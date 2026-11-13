@@ -167,6 +167,27 @@ PLANTS = {
         '{% fact "Example refused" %}<a href="#" style="display: inline-block; vertical-align: baseline; line-height: 3rem">13</a>'
         "{% endfact %}{% endfacts %}"
     ),
+    # Two short facts given half the band each, as the Agents card's were.
+    "facts together": Plant(
+        '{% facts layout="band" %}{% fact "Example rules" value=0 %}{% fact "Example refused" value=13 %}{% endfacts %}',
+        css=".facts-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }",
+    ),
+    # A detail laid out as a grid, which sets each run of its words apart.
+    "fact details in words": Plant(
+        '{% facts layout="band" %}{% fact "Example host" %}Up{% detail %}on <a href="#">example-host</a> today'
+        "{% endfact %}{% endfacts %}",
+        css=".fact-detail { display: grid; }",
+    ),
+    # A detail's link set a target tall by its top, off the words' baseline.
+    "links in a fact's detail": Plant(
+        '{% facts layout="band" %}{% fact "Example host" %}Up{% detail %}<small>on <a href="#">example-host</a> today</small>'
+        "{% endfact %}{% endfacts %}",
+        css=".fact-detail a { display: inline-block; vertical-align: top; line-height: var(--target-min); }",
+    ),
+    # Facts in a frame that keeps no inset, as the container's Upgrade card's were.
+    "facts inside their frame": Plant(
+        '<div style="border: 1px solid; padding: 0">{% facts %}{% fact "Example" value="One" %}{% endfacts %}</div>'
+    ),
     # A name cut where it overruns, set in a line on the bottom edge it clips at.
     "raised text": Plant(
         '<p>Example words <span style="display: inline-block; overflow: hidden">example-name</span> and more</p>'
@@ -287,6 +308,11 @@ PLANTS = {
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # Three short facts of a band, together at its start however wide it is.
+    "facts together": Plant(
+        '{% facts layout="band" %}{% fact "Example rules" value=0 %}{% fact "Example held" value=2 %}'
+        '{% fact "Example refused" value=13 %}{% endfacts %}'
+    ),
     # A frame across its column, and frames that share a row.
     "frames span their column": Plant(
         '<div class="card">Example</div><div style="display: flex; gap: 1rem">'

@@ -42,7 +42,7 @@ UNPROVEN = "unproven"
 _CHECK_LABELS = {
     PROVEN: "Confirmed by this request",
     CONTRADICTED: "This request disagrees",
-    UNPROVEN: "This request cannot show it",
+    UNPROVEN: "Not confirmed",
 }
 # The layer class each check state is drawn with.
 _CHECK_STATES = {PROVEN: "holds", CONTRADICTED: "does-not", UNPROVEN: "unknown"}
@@ -73,9 +73,9 @@ LAYER_STEPS = {
 
 # How each role in the forwarded chain was decided.
 _CHAIN_DETAIL = {
-    "proxy": ("A proxy HQ trusts. HQ takes your address only from this proxy."),
+    "proxy": "A trusted proxy. HQ takes your address from it.",
     "judged": "Your address, as HQ sees it.",
-    "ignored": ("Listed before the address HQ uses, where a caller could have typed it. HQ ignores it."),
+    "ignored": "Ignored: anyone can write this part of the header.",
 }
 
 
@@ -127,7 +127,7 @@ def address_chain(request) -> tuple[Evidence, ...]:
             _address(
                 peer,
                 "judged",
-                "This address is not on HQ's list of trusted proxies, so HQ ignores the address it forwarded."
+                "Not a trusted proxy, so HQ ignores the address it forwarded."
                 if forwarded
                 else "Your address, as HQ sees it.",
             ),
@@ -140,8 +140,7 @@ def address_chain(request) -> tuple[Evidence, ...]:
         found[0] = _address(
             client_ip(request),
             "judged",
-            "Every address this request passed through is a trusted proxy, so "
-            "HQ has no address for the caller and uses the first proxy's.",
+            "Every hop is a trusted proxy, so HQ uses the first one's address.",
         )
     return tuple(found)
 
@@ -232,15 +231,10 @@ def _whose(found: Connection) -> str:
 def _device_gap(found: Connection) -> str:
     label = HopSource(TAILNET_KIND).label
     if found.untrusted_forwarding:
-        return (
-            f"not read: {label}, because a proxy HQ does not trust forwarded "
-            "this request, so HQ ignores the address it gave"
-        )
+        return f"not read: {label}, because an untrusted proxy forwarded this request"
     if found.channel.id != "tailnet":
         return ""
-    return why_unread(TAILNET_KIND) or (
-        f"not read: {label}, because no device in the tailnet reading holds {found.address}"
-    )
+    return why_unread(TAILNET_KIND) or (f"not read: {label}, because no device there holds {found.address}")
 
 
 # ----- Joining the request to the walked path ----------------------------------
@@ -356,15 +350,13 @@ def _device_check(found: Connection) -> HopCheck:
     if found.untrusted_forwarding:
         return HopCheck(
             CONTRADICTED,
-            f"{found.address} forwarded this request but is not on HQ's list "
-            "of trusted proxies, so HQ ignores the address it gave.",
-            "If that address is your proxy, add it to the trusted proxies in "
-            "HQ's settings; otherwise find what is forwarding to HQ.",
+            f"{found.address} forwarded this request and is not a trusted proxy.",
+            "If it is your proxy, add it to HQ's trusted proxies.",
         )
     if channel == "opaque":
         return HopCheck(
             CONTRADICTED,
-            "Every address this request passed through is a trusted proxy, so HQ has no address for the caller.",
+            "Every hop is a trusted proxy, so HQ has no address for you.",
             "Have the proxy pass the client's address in X-Forwarded-For.",
         )
     if channel == "tailnet":
@@ -377,7 +369,7 @@ def _device_check(found: Connection) -> HopCheck:
             )
         return HopCheck(
             UNPROVEN,
-            f"{found.address} is on the {NETWORKS['network'].lower()}, and HQ has no reading that names the device at it.",
+            f"No reading names the device at {ended(found.address)}",
         )
     return HopCheck(
         CONTRADICTED,
@@ -401,26 +393,23 @@ def _tailnet_device_check(found: Connection) -> HopCheck:
     if not found.tailnet_current:
         return HopCheck(
             UNPROVEN,
-            f"The last reading of the tailnet has no device at {ended(found.address)} "
-            "A device that joined or changed address since is in the next read.",
+            f"The last tailnet read has no device at {ended(found.address)}",
         )
     return HopCheck(
         CONTRADICTED,
-        f"This request came from {found.address}, a tailnet address no device in the tailnet reading has.",
-        "A refresh of the tailnet connection finds a device that joined since. If the address stays "
-        "unknown, it belongs to a device the connection cannot see, such as "
-        "one shared in from another tailnet.",
+        f"No tailnet device holds {ended(found.address)}",
+        "Refresh the tailnet. A device shared in from another tailnet never appears.",
     )
 
 
 def _dns(hop: Hop, context: _Context):
     evidence = (Evidence("Host", context.host, "The name this request asked for."),)
     if not is_hostname(context.host):
-        return evidence, HopCheck(UNPROVEN, "This request used an address, so DNS was not involved.")
+        return evidence, HopCheck(UNPROVEN, "This request used an address.")
     return evidence, HopCheck(
         PROVEN,
-        f"This request asked for {normalized_hostname(context.host)}, the name "
-        f"this {hop.label.lower()} answers with {ended(hop.name or 'an address')}",
+        f"This request asked for {normalized_hostname(context.host)}, which resolves to "
+        f"{ended(hop.name or 'an address')}",
     )
 
 
@@ -432,14 +421,11 @@ def _network(hop: Hop, context: _Context):
     here = NETWORKS.get(expected, expected).lower()
     evidence = (Evidence("Arrived from", found.address, found.channel.label),)
     if arrived not in NETWORKS:
-        return evidence, HopCheck(
-            UNPROVEN, "HQ has no address for the caller, so it cannot tell which network the request used."
-        )
+        return evidence, HopCheck(UNPROVEN, "HQ has no address for you.")
     if arrived == expected:
         return evidence, HopCheck(
             PROVEN,
-            f"The name points to an address on the {here}, and this request "
-            f"came from {found.address}, also on the {ended(here)}",
+            f"The name points to the {here}, and this request came from {ended(found.address)}",
         )
     came = NETWORKS[arrived].lower()
     return evidence, HopCheck(
@@ -475,7 +461,7 @@ def _machine(hop: Hop, context: _Context):
         return evidence, HopCheck(UNPROVEN, "A request does not show which machines it passed before reaching HQ's.")
     return evidence, HopCheck(
         UNPROVEN,
-        "HQ answered on an address that no machine it knows has.",
+        "No known machine holds the address HQ answered on.",
     )
 
 
@@ -511,8 +497,7 @@ def _forwarder_check(hop: Hop, context: _Context, peer: str, proxy: str) -> HopC
     if agrees is None or not agrees.conclusive:
         return HopCheck(
             UNPROVEN,
-            f"A trusted proxy at {peer} forwarded this request without {proxy}'s "
-            f"own {' and '.join(headers)} headers, so it cannot show it was {ended(proxy)}",
+            f"A trusted proxy at {peer} forwarded this request without {proxy}'s {' and '.join(headers)} headers.",
         )
     if not agrees.holds:
         return HopCheck(
@@ -554,9 +539,7 @@ def _forwarding_headers(hop: Hop, context: _Context) -> tuple[Evidence, ...]:
 def _edge(_hop: Hop, context: _Context):
     headers = _access_headers(context.host)
     if not headers:
-        return (), HopCheck(
-            UNPROVEN, "The edge adds no header HQ reads, so HQ cannot tell whether this request passed it."
-        )
+        return (), HopCheck(UNPROVEN, "The edge adds no header HQ reads.")
     present = [name for name in headers if context.header(name)]
     evidence = tuple(
         Evidence(name, f"present, {len(context.header(name))} characters", "Never shown.") for name in present
@@ -564,8 +547,7 @@ def _edge(_hop: Hop, context: _Context):
     if not present:
         return evidence, HopCheck(
             CONTRADICTED,
-            f"Access protects {context.host}, but this request has no Access "
-            "header, so it did not pass through Access.",
+            f"Access protects {context.host}, and this request has no Access header.",
             "Check that the name is proxied through the edge and that HQ cannot be reached around it.",
         )
     return evidence, HopCheck(
@@ -613,23 +595,22 @@ def _container(hop: Hop, _context: _Context):
         if running.name == hop.name and running.id
     }
     if not known:
-        return (), HopCheck(UNPROVEN, "HQ has no container ID from the readings to compare with.")
+        return (), HopCheck(UNPROVEN, "No container ID to compare with.")
     here = own_container_id()
     if not here:
         return (), HopCheck(UNPROVEN, "HQ is not running in a container it can name.")
-    evidence = (Evidence("Answered by", here, "The container Docker started HQ in, read from its own mounts."),)
+    evidence = (Evidence("Answered by", here, "Read from HQ's own mounts."),)
     if here in known:
         return evidence, HopCheck(PROVEN, ended(f"HQ answered this request from inside {hop.name}"))
     return evidence, HopCheck(
         UNPROVEN,
-        f"The last reading of containers lists another container as {ended(hop.name)} "
-        "A container started since that read, as one is by every deploy, is listed in the next read.",
+        f"The last container read lists another container as {ended(hop.name)}",
     )
 
 
 def _hq(_hop: Hop, context: _Context):
     evidence = (
-        Evidence("Host", context.host, "The name this request asked for. HQ answers only for names on its list."),
+        Evidence("Host", context.host, "Checked against HQ's allowed names."),
         Evidence(
             "Scheme",
             "https" if context.request.is_secure() else "http",
@@ -739,7 +720,7 @@ def serialize_request_path(found: RequestPath) -> dict[str, Any]:
             "untrusted_forwarding": connection.untrusted_forwarding,
             "device": connection.peer_label,
             "path": connection.path_label,
-            "carried_over": connection.peering.label,
+            "carried_over": connection.peering.label if connection.peering else "",
             "handshake": connection.handshake,
             "measured_by": connection.measurement_label,
             "tailnet_observed_at": iso(connection.tailnet_observed_at),

@@ -121,7 +121,6 @@ CLASSES = (
     "allocation",
     "allocation-legend",
     "btn",
-    "card-columns",
     "cell-data",
     "chart-axis",
     "chart-card",
@@ -192,6 +191,7 @@ CLASSES = (
     "row-meta",
     "row-more",
     "save-bar",
+    "section-flow",
     "section-foot",
     "section-period",
     "split",
@@ -264,11 +264,11 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
     },
     "a notice": {
         "pattern": _class_word("msg", "notice"),
-        "write": "{% notice %}, the part to come (hq-1766)",
+        "write": "{% notice %}",
     },
     "a filter bar": {
         "pattern": _class_word("filter-bar"),
-        "write": "partials/_filter_bar.html, the part to come (hq-1768)",
+        "write": "partials/_filter_bar.html, the part to come",
     },
     "an icon": {
         "pattern": r'<svg\b[^>]*\baria-hidden="true"',

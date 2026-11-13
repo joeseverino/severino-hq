@@ -90,7 +90,6 @@ def unused_style_classes(css: str, sources: Iterable[tuple[str, str]], public: C
 # by the example extension; this only falls.
 UNDRAWN = frozenset(
     {
-        "card-columns",
         "chart-card",
         "danger-link",
         "domain-charts",

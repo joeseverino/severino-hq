@@ -86,8 +86,9 @@
 .field-effect { color: var(--warn); font-weight: 500; }
 .form-will-act .form-actions button[type="submit"] { background: var(--accent-2); border-color: var(--accent-2); }
 
-/* Email policy: four stages, then the one decision worth making. */
-.mail-stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
+/* Email policy: four stages, then the one decision worth making. The stages
+   are short cards, so their flow pairs them sooner than sections. */
+.mail-stages { --flow-basis: 16rem; }
 .mail-stage { padding: var(--surface-inset, var(--space-6) var(--space-7)); }
 .mail-stage-concern { border-color: var(--warn); }
 .mail-stage-head { display: grid; gap: var(--space-2); }

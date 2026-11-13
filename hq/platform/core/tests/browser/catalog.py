@@ -543,6 +543,35 @@ CATALOG = {
         '{% fact "Example checks" icon="check-circle" tone="good" value="Passing" %}'
         "{% endfacts %}"
     ),
+    # A detail given as lines, one of them holding a link among its words.
+    "part/facts-band-lines": Entry(
+        '{% facts layout="band" %}'
+        '{% fact "Example certificate" value="example-com" url="/example/" detail=lines icon="lock" %}'
+        '{% fact "Example health" icon="activity" tone="good" %}Passing{% detail %}'
+        '<small>Forwards to example-app on <a href="/example/host/">example-host-01</a>.</small>'
+        "<small>Read an example minute ago</small>{% endfact %}"
+        "{% endfacts %}",
+        {"lines": ("Example issuer", "24 example days left")},
+    ),
+    # A card's summary line under its head: a zero, a linked count, a toned
+    # count. Its labels read on from the value, so they are lower case.
+    "part/facts-inline": Entry(
+        '{% card %}<p>An example head of the card.</p>{% facts layout="inline" %}'
+        '{% fact "example rules" value=0 %}'
+        '{% fact "example held for approval" value=2 url="/example/?held=1" tone="attention" %}'
+        '{% fact "example refused in the last day" value=13 url="/example/?refused=1" %}'
+        "{% endfacts %}{% endcard %}"
+    ),
+    # Enough facts to wrap at the phone's width.
+    "part/facts-inline-many": Entry(
+        '{% card %}<p>An example head of the card.</p>{% facts layout="inline" %}'
+        '{% fact "example rules" value=0 %}'
+        '{% fact "example devices waiting" value=1 url="/example/?waiting=1" tone="serious" %}'
+        '{% fact "example calls in the last hour" value=1204 url="/example/?calls=1" %}'
+        '{% fact "example refused in the last day" value=13 url="/example/?refused=1" %}'
+        '{% fact "example agents blocked" value=0 %}'
+        "{% endfacts %}{% endcard %}"
+    ),
     # A few short pairs, one of them a long address, which keep to their
     # content's width however wide the page is.
     "part/facts-list": Entry(

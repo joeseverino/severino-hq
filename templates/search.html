@@ -10,7 +10,7 @@
 <div data-search-results>
 {% if q %}
   {% if discovery_total %}
-  <div class="command-center-grid">
+  <div class="section-flow">
     {% include "partials/_discovery_catalog.html" with title="Machines, services and domains" items=discovered_estate %}
     {% include "partials/_discovery_catalog.html" with title="Pages" items=discovered_resources plain=True %}
     {% include "partials/_discovery_catalog.html" with title="Commands" items=discovered_commands %}

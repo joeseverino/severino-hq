@@ -484,7 +484,6 @@ class ContainerHopTests(TestCase):
         _, check = self.check(here="ffffffffffff", listed="0123456789ab")
 
         self.assertEqual(check.state, UNPROVEN)
-        self.assertIn("next read", check.detail)
 
     def test_its_own_container_is_read_from_its_mounts_on_any_network(self):
         from .. import request_path as module
@@ -499,4 +498,5 @@ class ContainerHopTests(TestCase):
     def test_a_sweep_that_read_no_id_says_it_cannot_show(self):
         _, check = self.check(here="0123456789ab", listed="")
 
-        self.assertIn("no container ID", check.detail)
+        self.assertEqual(check.state, UNPROVEN)
+        self.assertIn("container ID", check.detail)

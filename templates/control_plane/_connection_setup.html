@@ -13,7 +13,7 @@ list, with what it says and where it is set up, so everything not yet
 connected is in one place.
 {% endcomment %}
 {% load value_tags %}
-{% section again|yesno:"Add another account,Add a connection" count=count id="connection-setup" lede="Each connection is a 1Password item the controller is given. Open one to see what to make." %}
+{% section again|yesno:"Add another account,Add a connection" count=count id="connection-setup" %}
   <ul class="setup-list">
     {% for setup in setups %}
       <li id="setup-{{ setup.provider }}">

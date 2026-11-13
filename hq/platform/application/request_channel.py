@@ -27,7 +27,7 @@ class Channel:
 TAILNET_CHANNEL = Channel(
     "tailnet",
     NETWORKS["tailnet"],
-    "This request came from an address only Tailscale issues, so it came over the tailnet.",
+    "This request came from a tailnet address.",
 )
 NETWORK_CHANNEL = Channel(
     "network",
@@ -38,8 +38,7 @@ LOOPBACK_CHANNEL = Channel("loopback", NETWORKS["loopback"], "This request never
 OPAQUE_CHANNEL = Channel(
     "opaque",
     "Address not passed through",
-    "Every address this request passed through is a proxy HQ trusts, so HQ "
-    "has the proxy's address and cannot tell where the caller is.",
+    "Every hop is a trusted proxy, so HQ has only the proxy's address.",
 )
 ELSEWHERE_CHANNEL = Channel(
     "elsewhere",

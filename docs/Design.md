@@ -66,6 +66,15 @@ per thing:
 A capability and the button that runs it say the same words.
 *Gate:* `lint:prose`, over the paths `tools/lint/vale/.vale.ini` gives Plain.
 
+**A sentence says what is true, in a few plain words.** A value HQ does not
+have is left out, and its row with it: never "Not known yet", never an
+explanation of why. A detail is one short sentence the reader needs in order
+to act, or nothing, and deleting a line is the first fix. No sentence argues
+with itself, hedges, explains HQ's machinery, or narrates the page ("Open one
+to see", "Each connection is a..."). `Plain.Long` refuses a sentence past
+twenty words and `Plain.Narrate` the narrating lede; a file that still breaks
+either is counted in `hq/platform/core/prose_baseline.py`, which only falls.
+
 **No page writes a style.** A page's look comes only from HQ's own sheets.
 The policy's `style-src-elem 'self'` refuses a `<style>` element, and HQ
 writes no `style` attribute either: one would be refused once
@@ -366,8 +375,8 @@ which opens on the line beneath the row at the table's width. The face that
 stands in for it while closed is `.row-less`. Never a `<details>` inside a
 cell.
 
-**One band.** A row of facts, readings or choices is a band: one surface,
-cells divided by hairlines each cell draws itself. So a wrapped row keeps its
+**One band.** A row of readings or choices is a band: one surface, cells
+divided by hairlines each cell draws itself. So a wrapped row keeps its
 dividers at any width and a short last row ends in plain surface.
 
 A band of a fixed count lays out as whole even rows (never 3+1). A band counts
@@ -379,6 +388,14 @@ A band is listed once, in the band rule in `css/app/figures.css`; its cells
 keep their own padding. Too narrow for two cells, a band reads as a list:
 label left, value right.
 
+A band of facts draws no rule between them and counts nothing. Each fact is
+as wide as what it says, up to `--fact-max`. The facts sit together at the
+start, a fixed gap apart, as Primer's Stack and Atlassian's Inline do. As many
+share a row as fit at `--fact-min`, so a few facts never spread across a wide
+page. Standing alone the band is a surface with its own inset. In a card or a
+section, the frame's padding is its inset. Under 27.5rem it reads as a list,
+each fact laying out its own rows.
+
 Every label and its value is a fact: `{% fact "Label" value=n url=... detail=... %}`
 inside `{% facts %}`, or the block form `{% fact "Label" %}markup{% detail %}lines{% endfact %}`
 for a value that is markup. A band (`{% facts layout="band" %}`) is the few
@@ -388,6 +405,12 @@ value stands on one baseline, a zero beside a linked count alike. A list, the
 default, is the facts about one thing, each label beside its value, its label
 column as wide as its longest label, so a few short pairs never spread across
 a wide page. A label with several values holds them as a list inside one fact.
+A line (`{% facts layout="inline" %}`) is a card's summary: each fact its bold
+value, then its words ("3 rules"). Its facts stand a fixed gap apart, under a
+rule when they follow the card's head. Its labels read on from the value, so
+they are written in lower case. A fact with an address is a link whole.
+A fact's detail is running words. Its lines are the ones its markup declares:
+a `<small>` each, or a `detail=` given as a list.
 A fact drawn by hand (`.kv`, a page's own band) is a shape `test_hand_drawn`
 counts, and so is a figure set bold apart from the words that count it.
 
@@ -910,10 +933,21 @@ starts a section of its own. `.section-head` clears what is above it by the
 stack gap, so it is never closer to what came before than to what it heads.
 *Gate:* `section heads` in the layout survey.
 
-The sections that close a thing's page are `.section-flow`: each a card
-holding its own heading, two to a row at one height. A wide one (four columns
-or more, or folded) goes across the row, and the short ones are collected to
-pair.
+**Sibling sections flow.** A run of sibling sections or cards (the sections
+that close a thing's page, the connection panel's identity, link and route,
+a page's run of cards) is one `.section-flow`: as many to a row as keep each
+at least `--flow-basis` wide (22rem), one to a row where that is the whole
+width, a row's last ones sharing what it leaves and each on a row as tall as
+the tallest. It is measured against the box it sits in, so the same sections
+pair in a dialog and on a page. A part that needs more room before it shares
+a row sets a wider basis on itself (the connection panel's route), and a run
+of narrower cards a narrower one on the flow. A wide one (a table of four
+columns or more, a fold, anything that is not a section or card) goes across
+the row, and the short ones are collected after it to share rows. No page
+writes an auto-fit grid of its own for this: `lint:css` refuses
+`repeat(auto-fit` and `repeat(auto-fill` outside the parts that lay out
+something else inside themselves (`flowGrids` in
+`tools/lint/stylelint.config.mjs`, each with its reason).
 
 **Only what is urgent is framed.** A thing's page draws the problems about it
 from `partials/_problems.html`. An urgent one is the queue's row in a box above
@@ -1242,8 +1276,9 @@ Alignment:
 - Paired sections end each row together, and so do cards drawn side by side,
   the dashboard's included. Sections that share a row start their frames
   together too, whatever their heads hold (the survey's `frames in a row`).
-- A band lays out as whole even rows, and each of its cells keeps its padding;
-  so does any filled box.
+- A band of readings or choices lays out as whole even rows, and each of its
+  cells keeps its padding; so does any filled box. A band of facts packs at
+  its facts' widths.
 - A form fills its rows, controls in a row share one height, a wrapped bar of
   controls fills its rows, and a section of queue cards ends its buttons at
   one edge.

@@ -202,9 +202,11 @@ def web_url(value: Any) -> str:
     # would disagree about what the link names.
     if any(ord(character) < 0x20 or ord(character) == 0x7F for character in text):
         return ""
+    # A browser reads a backslash in an http(s) address as a slash, so the
+    # href is written as the browser reads it, never as a second spelling.
+    text = text.replace("\\", "/")
     try:
-        # A browser reads a backslash in an http(s) address as a slash.
-        parts = urlsplit(text.replace("\\", "/"))
+        parts = urlsplit(text)
     except ValueError:  # a bracketed host that is no IPv6 address
         return ""
     return text if parts.scheme in ("http", "https") and parts.hostname else ""

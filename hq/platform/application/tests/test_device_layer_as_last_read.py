@@ -33,14 +33,12 @@ def device_layer():
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
 class DeviceLayerAsLastReadTests(TestCase):
-    def test_an_old_reading_without_the_address_waits_for_the_next_read(self):
+    def test_an_old_reading_without_the_address_is_inconclusive(self):
         read_only_hq(age=AWAY)
 
         layer = device_layer()
 
         self.assertFalse(layer.conclusive)
-        self.assertIn("last reading", layer.detail)
-        self.assertIn("next read", layer.detail)
 
     def test_a_current_reading_without_the_address_fails(self):
         read_only_hq()

@@ -705,9 +705,13 @@ Say how authority is proven, not only what it permits. Each ability declares a
 | `coarse` | the credential is the whole account and nothing narrower exists |
 | `none` | the call is keyless |
 
-Each instance reports its `credential_model` from the same words, or `rejected`
-for a credential the provider refused. HQ derives one evidence state per
-ability and instance:
+Each instance says its `credential_model`, a required keyword: one of the same
+words, `rejected` for a credential the provider refused, or `unknown` for one
+whose kind cannot be told. An instance that leaves it out, or says anything
+else, is refused as it is made. One that holds a credential (any model but
+`none`) belongs to a spec that names its `secret_store`, and the Connections
+page says "Secrets in" that store or "No key needed" (`PLUGIN_API_VERSION` 11).
+HQ derives one evidence state per ability and instance:
 
 | Evidence | The ability |
 | --- | --- |
@@ -911,7 +915,7 @@ A test that posts a form without opening its page first sends
 
 Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `card-columns`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-foot`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`.
+Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `cell-data`, `chart-axis`, `chart-card`, `chart-data`, `chart-legend`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `kv`, `list-rows`, `msg`, `msg-error`, `msg-warning`, `muted`, `narrow-more`, `notice`, `notice-attention`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `section-period`, `split`, `stacked`, `status-tabs`, `subtle-link`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`.
 
 Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`.
 
@@ -920,12 +924,12 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | a `<section>` element | `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout |
 | a count split from its words | {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}` |
 | a figure | `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi |
-| a filter bar | `partials/_filter_bar.html`, the part to come (hq-1768) |
+| a filter bar | `partials/_filter_bar.html`, the part to come |
 | a fold | `{% section "Heading" fold=True %}`body`{% endsection %}` |
 | a form that writes | `{% include "partials/_form.html" %}`, or `{% post_button %}` for a single verb |
 | a heading | the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page |
 | a list of rows | `{% include "partials/_record_list.html" %}` from hq_sdk.ui.ListRow |
-| a notice | `{% notice %}`, the part to come (hq-1766) |
+| a notice | `{% notice %}` |
 | a row's actions | `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell |
 | a table outside its region | `{% table_region "Label" %}` around its `<table class="data-table">` |
 | a toned value | `{% status value tone=tone pill=False %}` |

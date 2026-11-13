@@ -559,7 +559,7 @@ class ObservedNameTests(TestCase):
         path = self.walk("admin.example.com")
 
         self.assertEqual(summary["Health"].tone, "unknown")
-        self.assertIn(path.observed_line, summary["Health"].detail)
+        self.assertIn(path.observed_line, " ".join(summary["Health"].detail))
         self.assertIn("Admin", summary["What it is"].value)
         section = page[page.index('id="path"') : page.index('id="parts"')]
         missing, unread = path.gaps
@@ -618,7 +618,7 @@ class HqHealthTests(TestCase):
             health = self.summary()["Health"]
 
         self.assertEqual(health.tone, "attention")
-        self.assertIn("1 open problem", health.detail)
+        self.assertIn("1 open problem", " ".join(health.detail))
 
     def test_only_findings_about_hq_count(self):
         from ..finding_model import Finding

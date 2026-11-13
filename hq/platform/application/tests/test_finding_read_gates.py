@@ -53,6 +53,7 @@ def gated_family(credential_model: str):
         "Requires infrastructure management.",
         Capability.MANAGE_INFRASTRUCTURE,
         mock.Mock(return_value=(instance,)),
+        secret_store="Example Vault",
     )
 
 
@@ -183,6 +184,7 @@ def naming(name: str, capability: Capability, *names: str, controller: str = "ex
         "Good",
         controller_id=controller,
         targets=tuple(ConnectionLink(label) for label in names),
+        credential_model="none",
     )
     return ConnectionSpec(f"example.{name}", name.title(), "Example.", capability, mock.Mock(return_value=(instance,)))
 

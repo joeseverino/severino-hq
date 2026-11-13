@@ -53,28 +53,15 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
     """
 
     current = found.peer_address
-    current_source = (
-        "given by a proxy HQ does not trust, so HQ does not use it"
-        if found.untrusted_forwarding
-        else "this request came from it"
-    )
+    current_source = "From an untrusted proxy, unused" if found.untrusted_forwarding else "This request"
     rows: list[Address | None] = [_address_row(current, current_source, current=True)]
     device = found.caller_device
     if device is not None:
-        rows.extend(
-            _address_row(address, "issued to this device by Tailscale")
-            for address in device.addresses
-            if address != current
-        )
+        rows.extend(_address_row(address, "Issued by Tailscale") for address in device.addresses if address != current)
     presence = found.presence
     if presence is not None:
-        rows.append(
-            _address_row(
-                presence.direct_endpoint,
-                "seen as this device's endpoint",
-            )
-        )
-        rows.extend(_address_row(endpoint, "seen as one of this device's endpoints") for endpoint in presence.endpoints)
+        rows.append(_address_row(presence.direct_endpoint, "WireGuard endpoint"))
+        rows.extend(_address_row(endpoint, "Endpoint") for endpoint in presence.endpoints)
     return tuple(_deduplicated(rows))
 
 
@@ -84,7 +71,7 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
     serves = found.serves
     if serves is None:
         return ()
-    rows: list[Address | None] = [_address_row(address, "HQ answers here") for address in serves.addresses]
+    rows: list[Address | None] = [_address_row(address, "") for address in serves.addresses]
     return tuple(_deduplicated(rows))
 
 

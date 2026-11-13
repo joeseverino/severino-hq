@@ -61,12 +61,6 @@
     align-content: start;
     background: none;
   }
-  /* Facts in a card are the card's content, as its stats are: set apart by
-     gaps, with no cell padding doubling the card's own. The space between
-     columns is each fact's end padding, since a band's tracks are shares of
-     its width (`--band-cell`) that a column gap would push onto a new row. */
-  .card > .facts-band { gap: var(--space-6) 0; }
-  .card > .facts-band > .fact { padding: 0 var(--space-7) 0 0; }
   /* A row of stats shares its lines. Each stat takes the row's three tracks
      (label, value, note), so the labels start level and the values stand
      level, however many lines one label wraps to. */
@@ -247,14 +241,18 @@
   /* A band too narrow for two cells is a list, like every other summary:
      each fact one row, its label and its value at the right edge, the detail
      under both. Asked of the band's own width, so a band in a narrow card
-     reads the same as one on a phone. 27.5rem is two 220px cells. */
+     reads the same as one on a phone. 27.5rem is two 220px cells; under it,
+     never at it, as the facts' own tracks switch (`--fact-min`), so a band
+     exactly that wide is laid out one way by both. */
   :is(.facts-band, .control-summary) { container: band / inline-size; }
-  @container band (max-width: 27.5rem) {
+  @container band (width < 27.5rem) {
     /* The label keeps its words up to three fifths of the row and wraps past
        that, so a long label never squeezes its value to a letter a line. */
-    .facts-band > .fact { grid-template-columns: auto fit-content(60%) minmax(0, 1fr); align-items: baseline; column-gap: var(--space-4); padding: var(--space-5) var(--space-6); }
+    /* One fact to a row has no neighbor to share its lines with, so it lays out its own rows: rows the band sized would be asked of the fact before its columns have widths, a letter a line. */
+    .facts-band > .fact { grid-row: auto; grid-template-rows: none; grid-template-columns: auto fit-content(60%) minmax(0, 1fr); align-items: baseline; column-gap: var(--space-4); max-inline-size: none; }
     .facts-band > .fact:not(:has(.band-icon)) { grid-template-columns: fit-content(60%) minmax(0, 1fr); }
-    .facts-band .band-icon { align-self: center; width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
+    /* The icon stands on the label's row, beside the words it marks; across the fact's rows it would center below them. */
+    .facts-band .band-icon { grid-row: 1; align-self: center; width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
     .facts-band .fact-label { grid-row: 1; grid-column: -3; font-size: var(--text-sm); }
     .facts-band .fact-value { grid-row: 1; grid-column: -2; text-align: right; font-size: var(--text-md); }
     .facts-band .fact-detail { grid-row: 2; grid-column: -3 / -1; }

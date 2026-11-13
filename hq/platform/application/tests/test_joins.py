@@ -607,6 +607,7 @@ class ConnectionSpecFixture:
                     "good",
                     "Healthy",
                     targets=(ConnectionLink("Example checking"),),
+                    credential_model="none",
                 ),
             ),
         )

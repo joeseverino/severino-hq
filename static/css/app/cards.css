@@ -385,7 +385,7 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    (`--frame-inset`), so their words stand where the frame's prose does. */
 /* A form in the body that lays out no fields of its own (not .form) adds no box: what it holds reaches the sides as the body's own part would. */
 :is(.section > .section-body, .section > .section-body > form:not(.form)) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
-  .facts-band, .control-summary, .insight-grid, .connection-control-grid, .sweep-grid,
+  .control-summary, .insight-grid, .connection-control-grid, .sweep-grid,
   .month-grid, .list-rows, .setup-list, .day-panel-entry, .search-hits, .conn-rows) {
   --frame-inset: var(--section-side);
   margin-inline: calc(-1 * var(--section-side));
@@ -398,7 +398,7 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    or a month, whose outer rows draw no edge there, keeps the frame's padding
    above and below it. */
 :is(.section > .section-body, .section > .section-body > form:not(.form)) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
-  .facts-band, .control-summary, .insight-grid, .connection-control-grid, .sweep-grid) {
+  .control-summary, .insight-grid, .connection-control-grid, .sweep-grid) {
   --section-corner: calc(var(--radius) - 1px);
   /* In a form that starts the body, its hidden fields draw nothing, so they
      do not count. */

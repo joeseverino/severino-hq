@@ -17,6 +17,7 @@ lazy from hq.domains.control_plane.observations import OBSERVATIONS
 lazy from hq.domains.control_plane.observations.host import FIREWALL_KIND, TAILNET_LOCK_KIND
 lazy from hq.domains.control_plane.providers import PROVIDERS, registry_label
 
+from .connection_contracts import UNKNOWN_CREDENTIAL
 from .ui import counted
 lazy from . import cadence, tailnet
 lazy from .connection_security import host_firewall_control, ingress_kinds, observed_connection_controls
@@ -293,10 +294,10 @@ def _scope(inputs) -> CheckOutcome:
             evidence=f"Full account access: {', '.join(sorted(connection.instance.label for _, connection in broad))}",
             read_capabilities=_gates_of(group for group, _ in broad),
         )
-    if not any(connection.instance.credential_model not in ("none", "") for connection in connections):
+    if not any(connection.instance.credential_model != "none" for connection in connections):
         return CheckOutcome(met=None, evidence="No connections yet", remedy="add a connection", remedy_url=_setup_url())
-    if any(connection.instance.credential_model in ("", "unknown") for connection in connections):
-        return CheckOutcome(met=None, evidence="A connection's credential has not been probed yet")
+    if any(connection.instance.credential_model == UNKNOWN_CREDENTIAL for connection in connections):
+        return CheckOutcome(met=None, evidence="A connection's credential is of a type HQ does not model")
     return _scoped_where_offered(connections, scoped)
 
 

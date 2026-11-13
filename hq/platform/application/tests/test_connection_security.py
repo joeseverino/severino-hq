@@ -48,6 +48,7 @@ def _groups(*, ability_available=True, status="good", required_scopes=("example:
         granted_scopes=("example:read",) if ability_available else (),
         ability_names=(ability.name,),
         dependencies=(ConnectionLink("example.resource"),),
+        credential_model="scoped",
     )
     spec = ConnectionSpec(
         "example.connections",
@@ -311,6 +312,22 @@ class ConnectionSecurityPostureTests(TestCase):
         self.assertIn("1 need no key", controls["credentials"].evidence)
         self.assertIn("1 need no key", controls["scope"].evidence)
 
+    def test_a_keyless_connection_needs_no_key_whatever_its_family_keeps(self):
+        from dataclasses import replace
+
+        (group,) = _groups()
+        view = group.connections[0]
+        keyless = replace(
+            view, instance=replace(view.instance, granted_scopes=(), scopes_known=False, credential_model="none")
+        )
+
+        posture = connection_security_posture((replace(group, connections=(view, keyless)),), request=self.request())
+
+        custody = next(control for control in posture.controls if control.id == "credentials")
+        self.assertIn("1 in Example Vault", custody.evidence)
+        self.assertIn("1 need no key", custody.evidence)
+        self.assertEqual(custody.state, "good")
+
     def test_deriving_the_posture_costs_no_queries(self):
         with self.assertNumQueries(0):
             connection_security_posture(_groups(), request=self.request())
@@ -461,7 +478,6 @@ class ArrivalInterfaceTests(TestCase):
     def test_a_reading_nothing_took_is_not_a_verdict(self):
         control = observed_firewall_control()
         self.assertEqual(control.state, "neutral")
-        self.assertIn("cannot say", control.detail)
 
     def test_an_unreachable_reading_is_not_a_verdict_either(self):
         ProviderInventory.objects.create(

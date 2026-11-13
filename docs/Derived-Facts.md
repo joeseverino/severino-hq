@@ -347,10 +347,14 @@ says who it admits, worst first:
   meets the edge, or its answer is a public address.
 - **gated**: reachable from the internet, but a reading that `restricts` names
   it. HQ reads that the gate exists, not what its policy admits.
-- **private**: the answer is on the tailnet or the home network. A private
-  route says who it admits as its reach (`reach.Reach`): tailnet only, or the
-  home network and tailnet when any answer is a local address. That wording is
-  the one the service page's header, its path and the services list all show.
+- **private**: the answer is on the tailnet or the home network, or a proxy on
+  the route admits only those. A private route says who it admits as its reach
+  (`reach.Reach`): tailnet only, or the home network and tailnet when any
+  answer is a local address. A proxy's access list whose rules HQ read narrows
+  that and never widens it (`reach.admitted_network`): a local or public answer
+  behind a list admitting only tailnet ranges reads tailnet only, and the
+  detail names the list. That wording is the one the service page's header,
+  its path and the services list all show.
 - **unrouted**: nothing HQ reads routes a name to it.
 - **unknown**: nothing HQ saw routes to it, but HQ has not read every kind that
   could (`paths.reads_every_route`), or the container publishes ports and no

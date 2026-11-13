@@ -22,7 +22,7 @@ from .action_links import (
 # record without importing this reader. Re-exported here as the one name
 # callers already use.
 from .connection_contracts import (
-    CREDENTIAL_MODELS,
+    UNKNOWN_CREDENTIAL,
     ConnectionAbility,
     ConnectionInstance,
     ConnectionLink,
@@ -317,6 +317,13 @@ def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> Co
     _check_reading(instance)
     _check_grants(instance)
     _check_relations(spec, instance)
+    # The page says where a connection's secret is kept or that it needs none,
+    # so one that holds a credential names its family's store.
+    if not instance.keyless and not spec.secret_store.strip():
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} holds a {instance.credential_model} credential, "
+            f"so {spec.name!r} must name its secret_store."
+        )
     return instance
 
 
@@ -339,10 +346,6 @@ def _check_grants(instance: ConnectionInstance) -> None:
     scopes = instance.granted_scopes
     if len(scopes) != len(set(scopes)) or any(not SCOPE_NAME.fullmatch(scope) for scope in scopes):
         raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid granted scopes.")
-    if instance.credential_model not in ("", *CREDENTIAL_MODELS):
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has invalid credential model {instance.credential_model!r}."
-        )
     if instance.credential_model == "none" and (scopes or instance.scopes_known):
         raise ImproperlyConfigured(f"Connection {instance.id!r} is keyless but reports grants.")
 
@@ -496,7 +499,7 @@ def serialize_connection(connection: ConnectionView) -> dict:
         "observed_at": (instance.observed_at.isoformat() if instance.observed_at else None),
         "scopes_known": instance.scopes_known,
         "granted_scopes": list(instance.granted_scopes),
-        "credential_model": instance.credential_model or None,
+        "credential_model": None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
         "lifecycle": connection.lifecycle,
         "authority": connection.authority,
         "abilities": [serialize_ability(state) for state in connection.abilities],

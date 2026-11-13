@@ -5,6 +5,8 @@ Vale (``mise run lint:prose``) reads a template's text but not its attributes or
 tags. ``shown`` finds the rest of what a person sees as words, and ``main``
 hands each to Vale as a paragraph of its own, reported at the template line it
 came from. Like ``interface_text``, a gate reads this and a running HQ never does.
+lint:prose hands ``main`` Vale's report on the whole tree too, and ``held``
+holds both to the count ``prose_baseline`` keeps of each file's findings.
 
 A label (a heading, a tab, a fold's title, a column, a row group, a dialog's
 title, a button, a link to another page) is the plain name a mature product's
@@ -21,6 +23,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Iterable, Iterator
 from html.parser import HTMLParser
 from pathlib import Path
@@ -29,6 +32,9 @@ from typing import override
 from django.utils.text import smart_split
 
 from .interface_text import TEMPLATE_COMMENT
+from .prose_baseline import BASELINE, BASELINED_RULES
+
+BASELINE_FILE = "hq/platform/core/prose_baseline.py"
 
 _TEMPLATE_TAG = re.compile(r"\{%.*?%\}|\{\{.*?\}\}", re.DOTALL)
 _TAG_LITERAL = re.compile(r"""(["'])((?:(?!\1).)*)\1""", re.DOTALL)
@@ -443,14 +449,70 @@ def template_labels(paths: Iterable[Path]) -> list[tuple[str, str]]:
     ]
 
 
+def tree_findings(alerts: dict) -> list[str]:
+    """Vale's JSON report on the tree, one ``path:line:column: Check: Message`` each."""
+
+    return [
+        f"{path}:{alert['Line']}:{alert['Span'][0]}: {alert['Check']}: {alert['Message']}"
+        for path, found in sorted(alerts.items())
+        for alert in found
+    ]
+
+
+def _counted(finding: str) -> tuple[str, str]:
+    """The ``(path, check)`` a finding is counted under in the baseline."""
+
+    where, check = finding.split(": ", 2)[:2]
+    return where.split(":", 1)[0], check
+
+
+def held(found: list[str], *, whole: bool) -> list[str]:
+    """``found`` less what ``prose_baseline.BASELINE`` allows each file, with a
+    line for each file over its entry and, when ``whole`` (the whole tree was
+    read), each under it, whose entry must come down."""
+
+    counts = Counter(_counted(finding) for finding in found)
+    kept = [finding for finding in found if counts[_counted(finding)] > BASELINE.get(_counted(finding), 0)]
+    for (path, check), allowed in sorted(BASELINE.items()):
+        have = counts[path, check]
+        if have > allowed:
+            kept.append(f"{path}: {check}: {have} where the baseline allows {allowed}; fix the new one")
+        elif have < allowed and whole:
+            kept.append(
+                f"{path}: {check}: {have} where the baseline allows {allowed}; lower its entry in {BASELINE_FILE}"
+            )
+    return kept
+
+
+def census(found: list[str]) -> str:
+    """The baseline's entries for ``found``, as ``prose_baseline.BASELINE`` writes them."""
+
+    counts = Counter(key for finding in found if (key := _counted(finding))[1] in BASELINED_RULES)
+    return "\n".join(f"    ({path!r}, {check!r}): {count}," for (path, check), count in sorted(counts.items()))
+
+
 def main(arguments: list[str]) -> int:
+    """With ``--tree <report>``, Vale's JSON report on the whole tree joins
+    what is read here and the baseline is held whole; ``--census`` prints the
+    baseline's entries instead of failing."""
+
+    tree, show_census = None, "--census" in arguments
+    arguments = [argument for argument in arguments if argument != "--census"]
+    if arguments[:1] == ["--tree"]:
+        tree, arguments = Path(arguments[1]), arguments[2:]
     paths = [Path(argument) for argument in arguments]
     text, origins = document(paths)
     status, alerts = _vale(text)
     if status:
         return status
     read = template_labels(paths)
-    found = findings(alerts, origins) + label_findings(read)
+    found = findings(alerts, origins)
+    if tree is not None:
+        found = tree_findings(json.loads(tree.read_text(encoding="utf-8") or "{}")) + found
+    if show_census:
+        print(census(found))
+        return 0
+    found = held(found, whole=tree is not None) + label_findings(read)
     print(
         "\n".join(found)
         if found

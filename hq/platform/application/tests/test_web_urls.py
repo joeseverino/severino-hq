@@ -74,6 +74,7 @@ class WebUrlProperties(SimpleTestCase):
         @example("http://[")
         @example("HTTP://\x08")
         @example("HTTP://\\")
+        @example("HTTP:\\\\0")
         def test_whatever_it_returns_a_browser_reads_as_a_web_address(self, value):
             """Never raises; an href is http(s) and names a host, as a browser reads it."""
 

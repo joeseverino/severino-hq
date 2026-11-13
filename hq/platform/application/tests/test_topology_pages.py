@@ -349,7 +349,7 @@ class ConnectionActionTests(TestCase):
             "Declared routes",
             "A synthetic connection family that declares where it can be reached.",
             Capability.READ,
-            lambda: (ConnectionInstance("one", "One", "example", "good", "Healthy"),),
+            lambda: (ConnectionInstance("one", "One", "example", "good", "Healthy", credential_model="none"),),
             **overrides,
         )
 

@@ -72,6 +72,7 @@ def _finance_spec() -> ConnectionSpec:
         ability_names=("accounts.read", "transactions.sync"),
         targets=(ConnectionLink("4 accounts", "/example/accounts/"),),
         facts=(ConnectionFact("Last refresh", "12 hours ago"),),
+        credential_model="scoped",
     )
     return ConnectionSpec(
         "example.finance",
@@ -182,6 +183,7 @@ class ConnectionExecutionTests(SentinelMixin, TestCase):
             spec.instance_provider()[0],
             scopes_known=False,
             ability_names=(ability.name,),
+            credential_model="unknown",
         )
         spec = replace(
             spec,
@@ -427,6 +429,7 @@ class ConnectionRegistrationTests(TestCase):
                     "good",
                     "healthy",
                     ability_names=("example.missing",),
+                    credential_model="none",
                 ),
             ),
         )
@@ -450,6 +453,7 @@ class ConnectionRegistrationTests(TestCase):
                     "good",
                     "healthy",
                     targets=(ConnectionLink("Bad", "javascript:alert(1)"),),
+                    credential_model="none",
                 ),
             ),
         )
@@ -555,11 +559,22 @@ class ConnectionWorkspaceTests(TestCase):
         self.assertContains(response, "No key needed")
         self.assertNotContains(response, "Does not say where its secret is kept")
 
-    def test_a_connection_with_a_key_and_no_store_does_not_claim_none(self):
-        response = self.page_for("scoped")
+    def test_a_connection_with_a_key_must_say_where_it_is_kept(self):
+        for model in ("scoped", "coarse", "rejected", "unknown"):
+            with self.subTest(model), self.assertRaisesRegex(ImproperlyConfigured, "secret_store"):
+                self.page_for(model)
 
-        self.assertContains(response, "Does not say where its secret is kept")
-        self.assertNotContains(response, "No key needed")
+    def test_a_connection_that_does_not_say_its_credential_model_is_refused(self):
+        made = {"id": "one", "label": "One", "kind": "example", "status": "good", "status_label": "ok"}
+
+        with self.assertRaisesRegex(TypeError, "credential_model"):
+            ConnectionInstance(**made)
+        for unsaid in ("", "password"):
+            with self.subTest(unsaid), self.assertRaises(ValueError) as refused:
+                ConnectionInstance(**made, credential_model=unsaid)
+            # The refusal names the field and every value it takes.
+            for word in ("credential_model", "scoped", "coarse", "none", "rejected", "unknown"):
+                self.assertIn(word, str(refused.exception))
 
 
 class GrantEvidenceTests(TestCase):
@@ -570,7 +585,14 @@ class GrantEvidenceTests(TestCase):
         return ConnectionAbility(**{**base, **overrides})
 
     def instance(self, **overrides):
-        base = {"id": "one", "label": "One", "kind": "example", "status": "good", "status_label": "ok"}
+        base = {
+            "id": "one",
+            "label": "One",
+            "kind": "example",
+            "status": "good",
+            "status_label": "ok",
+            "credential_model": "unknown",
+        }
         return ConnectionInstance(**{**base, **overrides})
 
     def evidence(self, ability, instance):
@@ -675,22 +697,6 @@ class GrantEvidenceTests(TestCase):
         with self.assertRaisesRegex(ImproperlyConfigured, "staleness window"):
             validate_connection_spec(replace(spec(self.ability(grant="none")), stale_after_hours=0))
         validate_connection_spec(spec(self.ability(grant="scoped", required_scopes=("a:read",))))
-
-    def test_a_credential_model_is_validated_when_the_instance_is_read(self):
-        def catalog(instance):
-            spec = ConnectionSpec(
-                "example.credentials",
-                "Credentials",
-                "Credential contract.",
-                Capability.READ,
-                lambda: (instance,),
-                (self.ability(),),
-            )
-            with offering(spec):
-                return connection_catalog(principal=READ)
-
-        with self.assertRaisesRegex(ImproperlyConfigured, "invalid credential model"):
-            catalog(self.instance(credential_model="password", ability_names=("example.read",)))
 
     def test_a_keyless_instance_cannot_also_report_grants(self):
         spec = ConnectionSpec(

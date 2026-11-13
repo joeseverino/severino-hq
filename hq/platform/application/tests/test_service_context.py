@@ -80,10 +80,42 @@ class ProjectTileTests(TestCase):
         self.assertTrue(tile.link.url)
         self.assertIn("example/a-project", tile.detail)
 
+    def test_each_part_of_its_repository_is_a_line_of_its_own(self):
+        a_project(repository_url="https://github.com/example/a-project")
+        repo = mock.Mock(short="example/a-project", pull_requests=[1, 2], head={}, production={})
+
+        with mock.patch("hq.platform.application.service_context.repository_for", return_value=repo):
+            tile = project_tile(a_service())
+
+        self.assertEqual(tile.detail[:2], ("example/a-project", "2 open pull requests"))
+
     def test_a_project_without_a_repository_names_none(self):
         a_project(repository_url="")
 
-        self.assertEqual(project_tile(a_service()).detail, "")
+        self.assertEqual(project_tile(a_service()).detail, ())
+
+
+class HealthDetailTests(SimpleTestCase):
+    def health(self, check: str, label: str, detail: str):
+        from types import SimpleNamespace
+
+        from ..service_context import _health_detail
+
+        return _health_detail(
+            SimpleNamespace(container=SimpleNamespace(check=check), health=SimpleNamespace(label=label, detail=detail))
+        )
+
+    def test_each_part_is_a_line_of_its_own(self):
+        self.assertEqual(
+            self.health("Restarting", "Down", "Nothing answers at the proxy."),
+            ("Restarting", "Nothing answers at the proxy."),
+        )
+
+    def test_a_check_its_sentence_already_says_is_said_once(self):
+        detail = "Health check passing when last read."
+
+        self.assertEqual(self.health("health check passing", "Healthy", detail), (detail,))
+        self.assertEqual(self.health("Healthy", "Healthy", detail), (detail,))
 
 
 class ActivityTests(TestCase):
@@ -188,7 +220,7 @@ class TrafficSectionTests(TestCase):
     def test_a_measured_host_gets_its_traffic_without_a_foreign_key(self):
         self._measure("probe.example.com")
         found = self.traffic()
-        self.assertEqual((found.value, found.detail), ("120 pageviews", "90 visits\xa0· counted"))
+        self.assertEqual((found.value, found.detail), ("120 pageviews", ("90 visits", "counted")))
 
     def test_a_host_nothing_measures_says_nothing(self):
         # Not "0 pageviews": that would read as a dead site rather than an
@@ -197,7 +229,7 @@ class TrafficSectionTests(TestCase):
 
     def test_sampling_is_carried_rather_than_presented_as_a_count(self):
         self._measure("probe.example.com", sample_interval=10)
-        self.assertEqual(self.traffic().detail, "90 visits\xa0· sampled 1 in 10")
+        self.assertEqual(self.traffic().detail, ("90 visits", "sampled 1 in 10"))
 
     def test_another_hosts_traffic_is_not_borrowed(self):
         self._measure("someone-else.example.com", pageviews=9999)

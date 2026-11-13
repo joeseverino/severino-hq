@@ -578,7 +578,7 @@ class CommandTitleTests(TestCase):
 
         state = _ability_state(
             ability,
-            ConnectionInstance("one", "One", "example", "good", "Healthy"),
+            ConnectionInstance("one", "One", "example", "good", "Healthy", credential_model="none"),
             operator,
         )
 

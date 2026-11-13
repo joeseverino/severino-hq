@@ -59,6 +59,9 @@ from hq.platform.core.tests.browser.probes.text import (
     CHIPS_OFF_THEIR_LINE,
     CHIPS_PAST_THEIR_PAINT,
     CUT_DECISIONS,
+    DETAIL_WORDS_IN_ROWS,
+    FACTS_AGAINST_THEIR_FRAME,
+    FACTS_SPREAD_APART,
     OVERLAPPING_TEXT,
     PAST_THE_CLAMP,
     RAISED_TEXT,
@@ -156,6 +159,25 @@ FACT_ROWS_READ = (
     [SELECTORS["fact_band"], SELECTORS["band_fact_cell"], SELECTORS["fact_value"], SELECTORS["unseen"]],
 )
 
+# A fact's detail: every part of a fact after its value.
+_FACT_DETAIL = f"{SELECTORS['band_fact_cell']} > dd:not({SELECTORS['fact_value']})"
+
+FACTS_APART_READ = (FACTS_SPREAD_APART, [SELECTORS["fact_band"], SELECTORS["band_fact_cell"], SELECTORS["unseen"]])
+
+DETAIL_ROWS_READ = (DETAIL_WORDS_IN_ROWS, [_FACT_DETAIL, SELECTORS["unseen"]])
+
+# A link in a fact's detail, or a word there that opens its tip, sits on the
+# line of the words beside it, as a chip does.
+DETAIL_LINKS_READ = (
+    CHIPS_OFF_THEIR_LINE,
+    [f"{_FACT_DETAIL} :is({SELECTORS['link']}, [tabindex])", SELECTORS["unseen"]],
+)
+
+# How far inside its frame a fact's words and mark stand at the least.
+FACT_INSET = 8
+
+FACTS_INSET_READ = (FACTS_AGAINST_THEIR_FRAME, [SELECTORS["band_fact_cell"], SELECTORS["unseen"], FACT_INSET])
+
 HEADS_READ = (
     HEAD_CONTROLS,
     [SELECTORS["head_actions"], SELECTORS["head_menu"], SELECTORS["head_menu_panel"], SELECTORS["ask"]],
@@ -195,6 +217,10 @@ _GEOMETRY = {
     "changes": CHANGES_READ,
     "chips": CHIPS_READ,
     "fact rows": FACT_ROWS_READ,
+    "facts together": FACTS_APART_READ,
+    "fact details in words": DETAIL_ROWS_READ,
+    "links in a fact's detail": DETAIL_LINKS_READ,
+    "facts inside their frame": FACTS_INSET_READ,
     "raised text": (RAISED_TEXT, SELECTORS["unseen"]),
     "heads": HEADS_READ,
     "section heads": (CRAMPED_HEADS, SELECTORS["section_head"]),

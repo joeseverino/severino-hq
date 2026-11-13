@@ -24,14 +24,14 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
   <div class="conn-peering conn-{{ connection.channel.id }} conn-verdict-{{ connection.verdict }}">
     <div class="conn-peer">
       <span class="conn-peer-role">You</span>
-      {% if connection.machine_url %}
+      {% if connection.peer_label and connection.machine_url %}
         <a class="conn-peer-name" href="{{ connection.machine_url }}">{{ connection.peer_label|breakable }}</a>
-      {% else %}
+      {% elif connection.peer_label %}
         <strong>{{ connection.peer_label|breakable }}</strong>
       {% endif %}
       <code>{{ connection.peer_address|breakable }}</code>
       {% if connection.reported_device %}
-        <span class="conn-row-note">reported by the proxy that forwarded it</span>
+        <span class="conn-row-note">From the proxy's header</span>
       {% elif connection.identity.tailnet_user %}
         <span class="conn-row-note">{{ connection.identity.tailnet_user|breakable }}</span>
       {% endif %}
@@ -39,7 +39,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     <div class="conn-link conn-link-{{ connection.path }}">
       <p class="conn-headline"><span class="conn-dot" aria-hidden="true"></span>{{ connection.channel.label|breakable }}</p>
       <span class="conn-link-line" aria-hidden="true"></span>
-      <p class="conn-sub">This request: {{ connection.tally|lower|breakable }}{% dot %}{{ connection.path_label|breakable }}{% dot %}{{ connection.transport|breakable }}</p>
+      <p class="conn-sub">This request: {{ connection.tally|lower|breakable }}{% if connection.path_label %}{% dot %}{{ connection.path_label|breakable }}{% endif %}{% dot %}{{ connection.transport|breakable }}</p>
       {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line|breakable }}</p>
       {% endif %}
     </div>
@@ -88,7 +88,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         <dd>
           <strong>{{ connection.caller_device.label|breakable }}</strong>
           {% if connection.caller_device.os %}<span class="conn-row-note">{{ connection.caller_device.os|breakable }}</span>{% endif %}
-          {% if connection.untrusted_forwarding and connection.reported_device %}<span class="conn-row-note">matched from what the proxy forwarded; not used to let you in</span>{% endif %}
+          {% if connection.untrusted_forwarding and connection.reported_device %}<span class="conn-row-note">From the proxy's header</span>{% endif %}
         </dd>
       {% endif %}
       {% if connection.caller_device.dns_name %}
@@ -98,11 +98,13 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         <dt>Tags</dt>
         <dd>{% for tag in connection.caller_device.tags %}<code>{{ tag|breakable }}</code> {% endfor %}</dd>
       {% endif %}
-      <dt>Signed in via</dt>
-      <dd>
-        {{ connection.identity.route|breakable }}
-        {% if connection.identity.provider %}<code>{{ connection.identity.provider|breakable }}</code>{% endif %}
-      </dd>
+      {% if connection.identity.route %}
+        <dt>Signed in via</dt>
+        <dd>
+          {{ connection.identity.route|breakable }}
+          {% if connection.identity.provider %}<code>{{ connection.identity.provider|breakable }}</code>{% endif %}
+        </dd>
+      {% endif %}
       {% if connection.identity.groups %}
         <dt>Groups</dt>
         <dd>{% for group in connection.identity.groups %}<code>{{ group|breakable }}</code> {% endfor %}</dd>
@@ -130,38 +132,38 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       </p>
     {% elif connection.identity.tailnet_user %}
       <p class="conn-agree conn-agree-no">
-        Your tailnet account and your sign-in are not linked, so HQ cannot tell they are the same person.
+        Your tailnet account and your sign-in are not linked.
       </p>
     {% else %}
       <p class="conn-agree conn-agree-no">
-        Only your sign-in says who you are. No tailnet account is known for this request.
+        Only your sign-in identifies you.
       </p>
     {% endif %}
   {% endsection %}
 
   {% section "The link" %}
-    {% comment %}A reading older than the panel asks again for is what HQ last saw: every row below is said as of then, never as now.{% endcomment %}
+    {% comment %}A reading older than the panel asks again for is what HQ last saw: the rows below are as of then.{% endcomment %}
     {% if connection.tailnet_observed_at and not connection.tailnet_current %}
-      <p class="conn-note" data-last-seen>As last seen when HQ read the tailnet {{ connection.tailnet_observed_at|when }}.</p>
+      <p class="conn-note" data-last-seen>Tailnet read {{ connection.tailnet_observed_at|when }}.</p>
     {% endif %}
     <dl class="kv">
-      <dt>Path</dt>
-      <dd>
-        <strong>{{ connection.path_label|breakable }}</strong>
-      </dd>
+      {% if connection.path_label %}
+        <dt>Path</dt>
+        <dd>
+          <strong>{{ connection.path_label|breakable }}</strong>
+        </dd>
+      {% endif %}
       {% if connection.observer %}
         <dt>Measured by</dt>
         <dd>
           <strong{% if connection.serving_basis %} title="{{ connection.serving_basis|capfirst }}"{% endif %}>{{ connection.measurement_label|breakable }}</strong>
         </dd>
       {% endif %}
-      <dt>Carried over</dt>
+      {% comment %}Named as Tailscale names a connection type, and left out where the reading names no path.{% endcomment %}
+      {% if connection.peering %}
+      <dt>Connection</dt>
       <dd class="conn-carriage conn-carriage-{{ connection.peering.id }}">
         <strong>{{ connection.peering.label|breakable }}</strong>
-        <details class="conn-more conn-why">
-          <summary aria-label="Reason for this answer">Reason</summary>
-          <p class="conn-row-note">{{ connection.peering.detail|breakable }}</p>
-        </details>
         {% if connection.peering.public %}
           <details class="conn-more" data-peering-detail>
             <summary>
@@ -170,14 +172,15 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
             <div class="conn-rows"
                  data-fragment="{% url 'tool_public_address' %}?address={{ connection.peering.address|urlencode }}"
                  data-fragment-load
-                 data-fragment-failure="The lookup could not be reached.">
+                 data-fragment-failure="Lookup failed.">
               <div class="conn-row">
-                <span class="conn-row-note">Looked up when you open this.</span>
+                <span class="conn-row-note">Loading…</span>
               </div>
             </div>
           </details>
         {% endif %}
       </dd>
+      {% endif %}
       {% if connection.presence.direct_endpoint %}
         <dt>WireGuard endpoint</dt>
         <dd>
@@ -199,12 +202,8 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       <dt>Encryption</dt><dd>{{ connection.transport_path|breakable }}</dd>
       {% if connection.peer_keys %}
         {% comment %}
-        The evidence the rest of this section is describing. An endpoint, a
-        handshake age and a byte count are all consequences of these two keys
-        having agreed: naming them is what turns "HQ says you are a peer"
-        into something checkable against `tailscale status` on either machine.
-        Folded away because it is proof rather than a reading: wanted when the
-        claim is doubted, noise on every other visit.
+        The two keys the rows above rest on, checkable against `tailscale
+        status` on either machine. Folded: wanted only when the claim is doubted.
         {% endcomment %}
         <dt>Peered as</dt>
         <dd>
@@ -216,11 +215,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
                 <dd><code>{{ key|breakable }}</code></dd>
               {% endfor %}
             </dl>
-            <p class="conn-row-note">
-              Your device's key and the key of the machine that measured this link.
-              {% if connection.link_observed_by_hq %}That machine is the one HQ runs on.{% else %}HQ cannot confirm that machine is the one it runs on.{% endif %}
-              Compare either with <code>tailscale status</code> on that machine.
-            </p>
+            <p class="conn-row-note">Compare with <code>tailscale status</code>.</p>
           </details>
         </dd>
       {% endif %}
@@ -324,7 +319,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
 
   {% comment %}Folded: the response is read back only once somebody opens it.{% endcomment %}
   {% section "Headers" fold=True lede="Sent by your browser and by HQ" data_connection_protocol=True %}
-      {% section "Request" lede="Every header this request carried, and what HQ reads it for." %}
+      {% section "Request" %}
         <div class="conn-rows">
           {% for header in request_path.headers %}{% if header.used %}
             <div class="conn-row conn-row-used">
@@ -350,9 +345,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% endif %}
       {% endsection %}
 
-      {% section "Response" lede="Read from the response this browser received." %}
+      {% section "Response" %}
         <div class="conn-rows" data-response-headers>
-          <div class="conn-row"><span class="conn-row-note">Open Headers to read the response.</span></div>
+          <div class="conn-row"><span class="conn-row-note">Loading…</span></div>
         </div>
       {% endsection %}
   {% aside %}<span class="count">Yours {{ request_path.headers|length }}</span>

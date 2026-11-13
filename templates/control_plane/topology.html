@@ -56,7 +56,7 @@
   the lanes that are context and the cards nothing links to
   (`topology_lenses.kept_on_the_map`). The script rewrites only the count.
   {% endcomment %}
-  <p class="topology-hint muted"><span aria-live="polite" data-topology-status>{{ topology_shown|breakable }} of {{ topology_total|breakable }} shown. Press a count of links to see only what it connects to.</span>
+  <p class="topology-hint muted"><span aria-live="polite" data-topology-status>{{ topology_shown|breakable }} of {{ topology_total|breakable }} shown.</span>
     {% if topology_left_out %}<a href="{% url 'control_plane:topology' %}?all=1#map">Show {{ topology_left_out|breakable }} more</a>{% elif topology_everything %}<a href="{% url 'control_plane:topology' %}#map">Show fewer</a>{% endif %}</p>
 
   <div class="topology-stage">

@@ -156,6 +156,9 @@ class Hop:
     layers: tuple[Any, ...] = ()
     # ``(text, url)`` lines under the name: what a container is running.
     facts: tuple[tuple[str, str], ...] = ()
+    # On a proxy's hop: the network its access list admits requests from
+    # (``reach.admitted_network``), "" when it narrows nothing HQ read.
+    admits: str = ""
 
     @property
     def icon(self) -> str:

@@ -457,16 +457,16 @@ class LinkTests(TestCase):
 
         self.assertEqual(connection(a_request()).handshake, MISSING)
 
-    def test_no_device_is_said_as_why(self):
-        unread = connection(a_request()).peer_label
+    def test_no_device_leaves_the_name_out(self):
+        """The address stands alone: no sentence fills the place of a name HQ
+        does not have, whether it read the tailnet or not."""
 
+        unread = connection(a_request())
         a_tailnet(a_device("hq-host", "100.64.0.9", observer=True))
-        absent = connection(a_request()).peer_label
+        absent = connection(a_request())
 
-        # Two reasons, told apart: nothing read, and nothing at this address.
-        self.assertTrue(unread)
-        self.assertTrue(absent)
-        self.assertNotEqual(unread, absent)
+        self.assertEqual((unread.peer_label, absent.peer_label), ("", ""))
+        self.assertEqual(absent.peer_address, A_TAILNET_ADDRESS)
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -489,7 +489,7 @@ class ConnectionPageTests(TestCase):
         for header in response.context["request_path"].headers:
             with self.subTest(header=header.name):
                 self.assertTrue(any(text.startswith(f"{header.name}:") for text in shown))
-        self.assertTrue(any(text.startswith("One address from the proxy.") for text in shown))
+        self.assertTrue(any(text.startswith("HQ reads X-Forwarded-For.") for text in shown))
 
     def test_the_panel_the_dialog_lifts_out_is_on_the_page(self):
         """The dialog finds the panel by this hook, so its absence is a break."""

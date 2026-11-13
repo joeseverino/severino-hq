@@ -258,17 +258,6 @@
 
 .reading-note { margin: calc(var(--space-3) * -1) 0 var(--stack-gap); font-size: var(--text-sm); }
 
-/* Six breakdowns, each a card. Two columns where there is room and one where
-   there is not: a bar list is unreadable below about 20rem. */
-.breakdown-grid {
-  display: grid; gap: var(--layout-gap); margin: 0 0 var(--stack-gap);
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-  /* Each card as tall as its own list. Stretched to the row, a breakdown with
-     three entries carries the height of one with twelve, and the page reads as
-     mostly empty boxes. */
-  align-items: start;
-}
-
 /* A row is label, bar and number in one line, with the bar behind the text
    rather than beside it: a separate bar column costs the label the width it
    needs, and a path is the longest thing on the page. */

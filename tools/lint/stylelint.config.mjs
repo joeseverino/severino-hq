@@ -180,6 +180,48 @@ const cellRoles = [
   `/(?:${cell})[\\s\\S]*\\.(?!(?:${cellParts.join("|")})(?![-\\w]))[a-zA-Z][\\w-]*/`,
 ];
 
+// A run of sibling sections or cards is the flow (`.section-flow`), so these
+// are the only rules that write an auto-fit or auto-fill grid: each a part
+// that lays out something else inside itself, never a run of sections. The
+// list does not grow to pass `hq/flow-grid`; a new run of sections is the flow.
+const flowGrids = [
+  // A pair: at most two to a row, like beside like, a lone one keeping half
+  // the row so a chart keeps its scale; an hq_sdk class extensions write.
+  ".two-col",
+  // The calendar's aside: one column beside the month, its day and its list
+  // of calendars side by side under it.
+  ".calendar-aside",
+  // A band's cells in one frame, counted into whole rows.
+  ":is(.control-summary, .insight-grid, .sweep-grid, .machine-telemetry-metrics, .kpi-grid:not(.card > *))",
+  ".control-summary",
+  ".insight-grid",
+  ".sweep-grid",
+  ".machine-telemetry-metrics",
+  ".facts-band",
+  ".connection-control-grid",
+  // HQ's standard: its checks as a list in two columns at most.
+  ".posture-checks",
+  // A form's choices, each a radio.
+  ".policy-choices",
+  // A timeline's entries, in reading order down and across.
+  ".timeline-list",
+  // A repository's row of posture segments, cells of one frame.
+  ".posture-repos",
+  // The hours of a day at a glance, tiles of one strip.
+  ".glance-hours",
+  // The dashboard head's readings beside the greeting.
+  ".dash-readings",
+  // Two tools whose intro, form and result share rows through subgrid,
+  // which a flex flow cannot hold.
+  ".lookup-grid",
+  // Vital figures in one card.
+  ".vitals-strip",
+  // A form's fields (`.form`, the one form layout).
+  ".form",
+  // A command result's facts.
+  ".command-result-facts",
+];
+
 // A primitive looks one way, drawn in the sheets that draw it, so a page
 // built from it looks like every other (`hq/restyled-primitive`). Each is
 // the classes that name it, a table its own elements too, and those sheets.
@@ -207,7 +249,12 @@ const restyledBySheet = [...new Set(primitives.flatMap((each) => each.sheets))].
 }));
 
 export default {
-  plugins: ["./stylelint-faded-text.mjs", "./stylelint-ground-cover.mjs", "./stylelint-restyled-primitive.mjs"],
+  plugins: [
+    "./stylelint-faded-text.mjs",
+    "./stylelint-flow-grid.mjs",
+    "./stylelint-ground-cover.mjs",
+    "./stylelint-restyled-primitive.mjs",
+  ],
   // The app sheets share one set of tokens, so a property one sheet reads may
   // be defined in another.
   referenceFiles: ["../../static/css/app/*.css"],
@@ -217,6 +264,7 @@ export default {
   reportNeedlessDisables: true,
   rules: {
     "hq/faded-text": fadedText,
+    "hq/flow-grid": { allowed: flowGrids },
     "hq/ground-cover": true,
     // Any other sheet draws none.
     "hq/restyled-primitive": { primitives },

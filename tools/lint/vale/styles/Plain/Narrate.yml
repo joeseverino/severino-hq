@@ -1,0 +1,13 @@
+# A lede or note that narrates the page ("Open one to see what to make",
+# "Click a row to see it") or defines what the reader is already looking at
+# ("Each connection is a 1Password item"). The page already shows both: say
+# what the reader does not see, or nothing.
+extends: existence
+message: "'%s' narrates the page; say what the reader does not already see, or nothing"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, ~comment & ~code]
+tokens:
+  - '\b(?:open|click|tap|press|select|pick)\w*\b[^.!?;:\n]{0,30}\bto (?:see|read|find|learn|view)\b'
+  - '(?:^|[.!?]\s+)Each [\w’''-]+(?: [\w’''-]+)? (?:is|are) (?:a|an|one)\b'

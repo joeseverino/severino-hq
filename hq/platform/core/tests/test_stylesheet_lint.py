@@ -32,6 +32,8 @@ ROLE = "selector-disallowed-list"
 RESTYLED = "hq/restyled-primitive"
 # A cap that stops text at a reading measure.
 MEASURE = CUT
+# A run of sections laid out by an auto-fit grid of its own, not the flow.
+FLOW = "hq/flow-grid"
 
 REFUSED = [
     (APP, ".a { color: #0a0a0a; }", "color-no-hex"),
@@ -104,6 +106,12 @@ REFUSED = [
     (APP, ".a { max-inline-size: min(100%, 65ch); }", MEASURE),
     (CUTS, ".a { max-width: 30ch; }", MEASURE),
     (REFERENCE, ".a { max-inline-size: 60ch; }", MEASURE),
+    (APP, ".a { grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }", FLOW),
+    (APP, ".a { grid-template-columns: repeat( AUTO-FILL , 12rem); }", FLOW),
+    (APP, ".a { grid: auto-flow / repeat(auto-fit, minmax(10rem, 1fr)); }", FLOW),
+    (APP, ".two-col .a { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }", FLOW),
+    (APP, ".a { &:has(> *) { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); } }", FLOW),
+    ("static/css/app/layout.css", ".a { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }", FLOW),
     (APP, f"{WHY} */\n.a {{ overflow: hidden; }}", "--report-descriptionless-disables"),
     (APP, f"{WHY} -- a frame's corners */\n.a {{ overflow: auto; }}", "--report-needless-disables"),
     (TABLES, ".data-table td .whole:not(td > strong:first-child *) { white-space: nowrap; }", ROLE),
@@ -177,6 +185,9 @@ PASSED = [
     (APP, ".a { overflow: auto; } .b { overflow-x: visible; overflow-y: scroll; }"),
     (APP, ".a { max-width: 100%; max-inline-size: 24rem; inline-size: 16ch; } .b { max-width: max-content; }"),
     (APP, f"{WHY} -- a frame's corners clip its fill */\n.a {{ overflow: hidden; }}"),
+    (APP, ".form { grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); }"),
+    (APP, ".a { grid-template-columns: repeat(3, minmax(0, 1fr)); }"),
+    (APP, ".timeline-list { &:has(> :nth-child(2)) { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); } }"),
 ]
 
 

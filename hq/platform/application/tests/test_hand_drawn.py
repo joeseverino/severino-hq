@@ -8,6 +8,7 @@ draws a shape is either a part itself (``PARTS``) or one of today's pages
 still to move onto its part (``hand_drawn_baseline``), whose counts only fall.
 """
 
+import re
 from collections import Counter
 from pathlib import Path
 
@@ -148,3 +149,18 @@ class SplitCountShapeTests(SimpleTestCase):
 
     def test_bold_names_in_prose_are_left_alone(self):
         self.assertEqual([line for line in BOLD_PROSE if self._drawn(line)], [])
+
+
+@tag("source")
+class PublishedTextTests(SimpleTestCase):
+    """HQ is public and a queue id is a private reference, so no text hq_sdk publishes names one."""
+
+    QUEUE_ID = re.compile(r"\bhq-\d+\b")
+
+    def test_no_hand_drawn_write_names_a_queue_id(self):
+        named = [shape for shape, row in HAND_DRAWN.items() if self.QUEUE_ID.search(row["write"])]
+        self.assertEqual(named, [])
+
+    def test_the_published_contract_names_no_queue_id(self):
+        text = (Path(settings.BASE_DIR) / "hq_sdk" / "contract.json").read_text(encoding="utf-8")
+        self.assertEqual(self.QUEUE_ID.findall(text), [])

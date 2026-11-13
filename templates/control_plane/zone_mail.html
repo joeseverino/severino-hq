@@ -7,9 +7,9 @@ say where the domain stands and nothing else: the records themselves live in
 the editor below, because a card that names its answer and then lists the same
 hostnames underneath says everything twice and is twice as tall for it.
 {% endcomment %}
-<div class="mail-stages">
+<div class="section-flow mail-stages">
   {% for section in mail.sections %}
-    <div class="mail-stage{% if section.concern %} mail-stage-concern{% endif %}">
+    <article class="mail-stage{% if section.concern %} mail-stage-concern{% endif %}">
       <div class="mail-stage-head">
         <span class="control-label">{{ section.label|breakable }}</span>
         <strong>{{ section.answer|breakable }}</strong>
@@ -19,7 +19,7 @@ hostnames underneath says everything twice and is twice as tall for it.
       {% if section.concern %}
         <p class="mail-stage-warning">{% status "Needs attention" tone="attention" %} {{ section.concern|breakable }}</p>
       {% endif %}
-    </div>
+    </article>
   {% endfor %}
 </div>
 

@@ -114,7 +114,7 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       const visible = nodes.filter((node) => !node.hidden).length;
       status.textContent = selected
         ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
-        : `${visible} of ${total} shown. Press a count of links to see only what it connects to.`;
+        : `${visible} of ${total} shown.`;
     }
   };
 

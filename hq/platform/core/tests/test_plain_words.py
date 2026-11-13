@@ -204,6 +204,42 @@ class ValeRuleTests(SimpleTestCase):
 
         self.assertEqual(sorted(rules(files)), ["Dash", "Dash", "Hedge", "Hedge"])
 
+    def test_a_sentence_past_twenty_words_is_found_however_it_is_written(self):
+        """Wrapped in a template, written in pieces in Python, or run on with
+        commas; a stop, a template's branch and the next string end it."""
+
+        long = " ".join(["word"] * 21)
+        page = (
+            f"<p>\n  {' '.join(['word'] * 10)}\n  {' '.join(['word'] * 11)}.\n</p>\n"
+            f"<p>{', '.join(['word'] * 21)}.</p>\n"
+            f"<p>{' '.join(['word'] * 20)}.</p>\n"
+            f"<p>{' '.join(['word'] * 12)}. {' '.join(['word'] * 12)}.</p>\n"
+            f"<p>{' '.join(['word'] * 12)}{{% if x %}} {' '.join(['word'] * 12)}{{% endif %}}.</p>\n"
+        )
+        source = (
+            f'DETAIL = ("{" ".join(["word"] * 11)} "\n          "{" ".join(["word"] * 10)}.")\n'
+            f'PAIR = ("{" ".join(["word"] * 12)}",\n        "{" ".join(["word"] * 12)}")\n'
+            # Capitalized: lower-case text alone is read as an identifier.
+            f'ONE = "Word {long}."\n'
+        )
+
+        self.assertEqual(
+            [(name, line) for name, line, rule in vale({"page.html": page, "views.py": source}) if rule == "Long"],
+            [("page.html", 2), ("page.html", 5), ("views.py", 1), ("views.py", 5)],
+        )
+
+    def test_a_note_that_narrates_the_page_is_found(self):
+        found = (
+            "Each connection is a 1Password item the controller is given.",
+            "Open one to see what to make.",
+            "Press a count of links to see only what it connects.",
+            "Click a row to read it.",
+        )
+        kept = ("Open deploy.", "Each one runs daily.", "Press Refresh after a change.", "⌘-click for more.")
+        page = "".join(f"<p>{text}</p>\n" for text in (*found, *kept))
+
+        self.assertEqual(rules({"page.html": page}), ["Narrate"] * len(found))
+
 
 @tag("source", "tree")
 class TemplatePieceTests(SimpleTestCase):
@@ -237,6 +273,42 @@ class TemplatePieceTests(SimpleTestCase):
     def test_a_path_that_is_gone_fails_rather_than_passing(self):
         with self.assertRaises(FileNotFoundError):
             plain_words.document([Path("templates/no-such-page.html")])
+
+
+@tag("source")
+class BaselineTests(SimpleTestCase):
+    """A file keeps the findings its entry counts, no more, and an entry the
+    whole tree no longer fills must come down."""
+
+    LONG = "a.py:3:1: Plain.Long: too long"
+    OTHER = "a.py:4:1: Plain.Sweep: a word"
+
+    def held(self, found, *, whole=True, allowed=1):
+        with mock.patch.dict(plain_words.BASELINE, {("a.py", "Plain.Long"): allowed}, clear=True):
+            return plain_words.held(found, whole=whole)
+
+    def test_the_findings_an_entry_counts_pass_and_any_other_rule_fails(self):
+        self.assertEqual(self.held([self.LONG, self.OTHER]), [self.OTHER])
+
+    def test_a_file_past_its_entry_fails_with_every_finding_named(self):
+        found = self.held([self.LONG, self.LONG.replace(":3:", ":9:")])
+
+        self.assertEqual(found[:2], [self.LONG, self.LONG.replace(":3:", ":9:")])
+        self.assertIn("allows 1", found[2])
+
+    def test_an_entry_the_tree_no_longer_fills_must_come_down(self):
+        self.assertIn("lower its entry", self.held([], allowed=2)[0])
+        # Part of the tree read, as a test of one template reads it, says nothing of the rest.
+        self.assertEqual(self.held([], whole=False, allowed=2), [])
+
+    def test_every_entry_names_a_file_and_a_rule_it_may_hold(self):
+        from hq.platform.core.prose_baseline import BASELINE, BASELINED_RULES
+
+        base = Path(settings.BASE_DIR)
+        for (path, rule), count in BASELINE.items():
+            self.assertTrue((base / path).is_file(), path)
+            self.assertIn(rule, BASELINED_RULES)
+            self.assertGreater(count, 0)
 
 
 @tag("source", "tree")

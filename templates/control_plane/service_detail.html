@@ -14,7 +14,7 @@ readings. The path is the next section, drawn once.
     {% endfact %}
   {% endfor %}
   {% if service.aliases %}
-    {% fact "Also at" icon="globe" %}{% for alias in service.aliases %}<code>{{ alias|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}
+    {% fact "Also at" value=service.aliases|length|counted:"other name,other names" detail=service.aliases icon="globe" %}
   {% endif %}
 {% endfacts %}
 {% comment %}
@@ -37,11 +37,13 @@ is open.
 {% endif %}
 {% for route, parts in route_parts %}
   {% if routes|length > 1 %}
-    {% section "Via "|add:route.via_phrase %}{% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}{% endsection %}
+    {% comment %}Two answers of one kind (an A and an AAAA record) are two routes via the same DNS, so each is named by its answer too.{% endcomment %}
+    {% firstof "Via "|add:route.via_phrase as heading %}{% if route.hops.0.name %}{% firstof heading|add:" to "|add:route.hops.0.name as heading %}{% endif %}
+    {% section heading %}{% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}{% endsection %}
   {% else %}
     {% include "control_plane/_path_hops.html" with route=route label="Path via "|add:route.via %}
   {% endif %}
-  {% section "Steps" %}{% include "control_plane/_service_parts.html" %}{% endsection %}
+  {% include "control_plane/_service_parts.html" %}
 {% empty %}
   {% if declared_parts %}{% with parts=declared_parts %}{% include "control_plane/_service_parts.html" %}{% endwith %}{% endif %}
   <p class="muted">{% for gap in service.path.gaps %}{{ gap|capfirst|breakable }}{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</p>

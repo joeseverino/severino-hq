@@ -20,7 +20,7 @@
       {{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %}{% dot %}estimated from 1 in {{ totals.sample_interval|breakable }} visits{% endif %}{% if observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=observed_at only %}{% endif %}{% if coverage.expected_days and not coverage.complete %}{% dot %}{{ coverage.covered_days|breakable }} of {{ coverage.expected_days|breakable }} days read so far, the rest still loading{% endif %}
     </p>
 
-    <div class="breakdown-grid">
+    <div class="section-flow">
       {% for panel in breakdowns %}
         {% section panel.label %}
           {% if panel.rows %}

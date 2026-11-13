@@ -3,8 +3,10 @@
 ``{% facts layout="band" %}{% fact "Running" value=n url=u detail=d tone=t icon="container" %}{% endfacts %}``
 draws ``partials/_facts.html`` around each ``partials/_fact.html``. A band is
 the few facts that sum up a page or a part, each a cell of its own; a list
-(the default) is the facts about one thing, each label beside its value. A
-fact whose value is markup is written as a block, its detail after
+(the default) is the facts about one thing, each label beside its value; a
+line (``inline``) is a card's summary, each fact read as one phrase, its value
+then its words. A ``detail=`` given as a list is its lines, one under another.
+A fact whose value is markup is written as a block, its detail after
 ``{% detail %}``:
 ``{% fact "Version" icon="layers" %}<code>{{ tag }}</code>{% detail %}<small>Tag only</small>{% endfact %}``.
 Given ``value=``, a fact is one tag with no end.
@@ -23,7 +25,7 @@ FACTS_PARTIAL = "partials/_facts.html"
 FACT_PARTIAL = "partials/_fact.html"
 
 # Each layout, drawn as its class (``facts-band``) by the partial.
-LAYOUTS = ("list", "band")
+LAYOUTS = ("list", "band", "inline")
 
 
 class FactsTakes(Takes):
@@ -53,6 +55,12 @@ class FactTakes(Takes):
                 *(inspect.Parameter(option, keyword, default="") for option in sorted(options)),
             ]
         )
+
+    def values(self, given: dict) -> dict:
+        detail = given.get("detail")
+        if isinstance(detail, list | tuple):
+            return {**given, "detail": "", "lines": tuple(line for line in detail if line)}
+        return given
 
 
 FACTS = FactsTakes("facts", FACTS_PARTIAL, ("content",), frozenset(("layout", "label")), None)

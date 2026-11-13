@@ -15,10 +15,10 @@
     {% endif %}
   </div>
   {% url 'core:audit_list' as audit_url %}
-  {% facts layout="band" %}
-    {% fact "Rules" value=rule_count %}
-    {% if awaiting_count %}{% fact "Held for approval" value=awaiting_count url=audit_url|add:"?awaiting=1" %}{% endif %}
-    {% fact "Refused in the last day" value=refused_count url=audit_url|add:"?action=denied" %}
+  {% facts layout="inline" %}
+    {% if rule_count == 1 %}{% fact "rule" value=rule_count %}{% else %}{% fact "rules" value=rule_count %}{% endif %}
+    {% if awaiting_count %}{% fact "held for approval" value=awaiting_count url=audit_url|add:"?awaiting=1" %}{% endif %}
+    {% fact "refused in the last day" value=refused_count url=audit_url|add:"?action=denied" %}
   {% endfacts %}
 {% endcard %}
 
@@ -128,9 +128,9 @@ is there, so a call no device sent is refused; or, with no socket, nowhere,
 and the client is the finest unit (agent_devices.placement_posture).
 {% endcomment %}
 {% if placement %}
-  <p class="muted" data-placement="tailscaled">Each call is placed on the tailnet device that sent it, asked of tailscaled at <code>{{ placement|breakable:";" }}</code> a call no device sent is refused, and one tailscaled does not answer for waits.</p>
+  <p class="muted" data-placement="tailscaled">Calls are tied to the tailnet device that sent them, read from <code>{{ placement|breakable:"." }}</code></p>
 {% else %}
-  <p class="muted" data-placement="none">HQ is given no tailscaled socket, so this deployment has no tailnet to place a call on: a call is placed on no device, and each client is the finest unit HQ answers for.</p>
+  <p class="muted" data-placement="none">Calls aren't tied to a device: HQ has no tailscaled socket.</p>
 {% endif %}
 {% endsection %}
 {% endwith %}{% endwith %}

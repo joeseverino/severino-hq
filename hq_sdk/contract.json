@@ -540,17 +540,22 @@
           "observed_at=",
           "granted_scopes=",
           "scopes_known=",
-          "credential_model=",
           "ability_names=",
           "targets=",
           "dependencies=",
           "facts=",
           "controller_id=",
-          "connection_ref="
+          "connection_ref=",
+          "*",
+          "credential_model"
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "keyless": {
+            "kind": "property"
+          }
+        }
       },
       "ConnectionLink": {
         "bases": [],
@@ -2747,7 +2752,6 @@
       "allocation",
       "allocation-legend",
       "btn",
-      "card-columns",
       "cell-data",
       "chart-axis",
       "chart-card",
@@ -2818,6 +2822,7 @@
       "row-meta",
       "row-more",
       "save-bar",
+      "section-flow",
       "section-foot",
       "section-period",
       "split",
@@ -3020,7 +3025,7 @@
       },
       "a filter bar": {
         "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:filter-bar)(?![\\w-])",
-        "write": "partials/_filter_bar.html, the part to come (hq-1768)"
+        "write": "partials/_filter_bar.html, the part to come"
       },
       "a fold": {
         "pattern": "<details\\b",
@@ -3040,7 +3045,7 @@
       },
       "a notice": {
         "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:msg|notice)(?![\\w-])",
-        "write": "{% notice %}, the part to come (hq-1766)"
+        "write": "{% notice %}"
       },
       "a row's actions": {
         "pattern": "(?s)<td\\b[^>]*>(?:(?!</td>).)*?(?:\\{%\\s*post_button\\b(?![^%]*\\bcss=)|\\b(?:class|css)=\"(?:[^\"]*\\s)?btn(?![\\w-]))",

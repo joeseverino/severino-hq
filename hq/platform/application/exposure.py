@@ -16,7 +16,7 @@ lazy from hq.domains.control_plane.observations.host import PERIMETER_KIND
 from .facts import Subject, readings
 from .path_model import Route
 from .projection import read_once
-from .reach import LOCAL_NETWORK, PUBLIC, UNKNOWN as UNKNOWN_REACH, WIDEST_FIRST, Reach, network_of, reach_of
+from .reach import LOCAL_NETWORK, PUBLIC, UNKNOWN as UNKNOWN_REACH, Reach, narrowed, network_of, reach_of
 lazy from . import paths
 lazy from .paths import path_to, routed_names
 
@@ -75,7 +75,7 @@ class RouteExposure:
     def rank(self) -> tuple[int, int, str]:
         """Worst first: the level, then within it the wider audience."""
 
-        return LEVELS.index(self.level), WIDEST_FIRST.index(self.reach), self.hostname
+        return LEVELS.index(self.level), self.reach.rank, self.hostname
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,8 +200,17 @@ def public_name(route: Route) -> bool:
 
 def route_reach(route: Route) -> Reach:
     """Who this route admits a request from: the internet, or the widest
-    private network its answers are on."""
+    private network its answers are on, narrowed by any proxy on the way
+    whose access list admits less. It never names a wider audience than the
+    proxy admits."""
 
+    found = _answer_reach(route)
+    for hop in route.hops:
+        found = narrowed(found, hop.admits)
+    return found
+
+
+def _answer_reach(route: Route) -> Reach:
     answers = tuple(hop.detail for hop in route.hops if hop.step == "network")
     networks = {network_of(answer) for answer in answers}
     through_edge = any(hop.step == "edge" for hop in route.hops)
