@@ -36,13 +36,13 @@ def patches_leave_no_copy() -> None:
     copy is given back the patched name's own value.
     """
 
-    global _left_by  # noqa: PLW0603 - the door is wrapped once a process
+    global _left_by
     if _left_by is None:
-        _left_by = mock._patch.__exit__  # noqa: SLF001 - the one door every patch leaves by
-        mock._patch.__exit__ = _taking_back_copies(_left_by)  # noqa: SLF001 - as above
+        _left_by = mock._patch.__exit__
+        mock._patch.__exit__ = _taking_back_copies(_left_by)
         # And the one every patch comes in by, so a module loaded before it
         # has its lazy aliases noted before the patch can bind them.
-        mock._patch.__enter__ = _noting_aliases(mock._patch.__enter__)  # noqa: SLF001 - as above
+        mock._patch.__enter__ = _noting_aliases(mock._patch.__enter__)
 
 
 def _noting_aliases(enter):
@@ -111,7 +111,7 @@ def _read_new_modules() -> None:
     it as ``<lazy_import 'x.f'>``. So a module that first loads while the name
     it aliases is patched, and binds the alias then, keeps the mock."""
 
-    global _last_read  # noqa: PLW0603 - where the last read left sys.modules
+    global _last_read
     # A module loads at the end of sys.modules, so an unchanged count and
     # last entry mean none loaded since.
     mark = (len(sys.modules), next(reversed(sys.modules), None))
@@ -140,7 +140,7 @@ def own_markers() -> Path:
     process, since a forked worker inherits its parent's.
     """
 
-    global _markers  # noqa: PLW0603 - one directory per process, made on first use
+    global _markers
     if _markers is None or _markers[0] != os.getpid():
         directory = Path(tempfile.mkdtemp(prefix="markers-"))
         for setting, name in MARKERS:
@@ -204,10 +204,10 @@ def _copied(limits: agent_limits.Limits) -> agent_limits.Limits:
     """A set holding what ``limits`` holds, each count its own and behind a lock of its own."""
 
     copied = agent_limits.Limits.__new__(agent_limits.Limits)
-    with limits._lock:  # noqa: SLF001 - the copy is the set's whole state, which it offers no way to read
+    with limits._lock:
         held = vars(limits)
         copied.__dict__.update(
             {name: dict(value) if isinstance(value, dict) else value for name, value in held.items()}
         )
-    copied._lock = threading.Lock()  # noqa: SLF001 - a lock of its own, not the original's
+    copied._lock = threading.Lock()
     return copied

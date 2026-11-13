@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import ast
 import functools
+import hashlib
 import json
 import os
 import re
@@ -54,7 +55,9 @@ GROUP_RUN = re.compile(r"\buv run\b[^\n]*--group\b[^\n]*\bmanage\.py test\b((?:\
 # most of the tree through the shared layers, and the module in between has
 # tests of its own at this distance.
 REACH = 2
-# Past this share of the suite the change is wide and the fast gate says so.
+# Past this share of the suite the change is wide, and the whole suite runs:
+# the rest costs little beside it, and only a whole run's pass starts the
+# chain of recorded trees later runs read from (record_pass).
 WIDE = 0.6
 # What extensions render through. A change here reaches their pages, which no
 # host test imports, so with an extension set named their suites run too.
@@ -89,7 +92,73 @@ def touches_shared_ui(paths: list[str]) -> bool:
 def quick_gates() -> tuple[str, ...]:
     """Every task tagged QUICK."""
 
-    return tuple(task["name"] for task in mise_json("tasks", "ls", "--tag", QUICK, "--hidden", "--local", "--json"))
+    return tuple(quick_tasks())
+
+
+@functools.cache
+def quick_tasks() -> dict[str, dict[str, Any]]:
+    """Every task tagged QUICK, by name, as mise lists it."""
+
+    listed = mise_json("tasks", "ls", "--tag", QUICK, "--hidden", "--local", "--json")
+    return {task["name"]: task for task in listed}
+
+
+# A quick gate whose tool fixes what it finds declares this flag, which writes
+# the fixes instead of checking (mise-tasks/lint.toml); fast runs it first.
+FIX = re.compile(r'^flag "--fix"', re.MULTILINE)
+# A file task declares its usage in its own header, which mise's listing leaves out.
+FILE_USAGE = re.compile(r"^#USAGE (.*)$", re.MULTILINE)
+
+
+def fixers(tasks: tuple[str, ...]) -> tuple[str, ...]:
+    """Those of ``tasks`` whose usage declares the fix flag."""
+
+    quick = quick_tasks()
+    return tuple(task for task in tasks if task in quick and FIX.search(usage_of(quick[task])))
+
+
+def usage_of(task: dict[str, Any]) -> str:
+    """A task's usage spec, from its listing or a file task's header."""
+
+    if task.get("file"):
+        return "\n".join(FILE_USAGE.findall(Path(task["file"]).read_text(encoding="utf-8")))
+    return task.get("usage") or ""
+
+
+def fixed_first(
+    gate: Gate, tasks: tuple[str, ...], base: str, paths: tuple[list[str], list[str]]
+) -> tuple[list[str], list[str]]:
+    """The changed and deleted paths once the fix modes of ``tasks`` have run,
+    and the gate set to judge the tree they left, saying what they rewrote."""
+
+    fixed = fix(tasks)
+    if not fixed:
+        return paths
+    print(f"[fast] the quick gates' fixes rewrote: {' '.join(fixed)}", flush=True)
+    gate.restart()
+    return changed_paths(base, ROOT)
+
+
+def fix(tasks: tuple[str, ...]) -> list[str]:
+    """Run the fix mode of each of ``tasks`` that has one, in one run of mise,
+    and return the paths it rewrote, so the gates then judge fixed files and
+    formatting never fails a run. What a fixer still finds, its gate reports."""
+
+    fixing = fixers(tasks)
+    if not fixing:
+        return []
+    before = dirty()
+    words = [word for task in fixing for word in (":::", task, "--fix")][1:]
+    subprocess.run(["mise", "run", "--continue-on-error", *words], cwd=ROOT, check=False, capture_output=True)
+    after = dirty()
+    return sorted(path for path, digest in after.items() if before.get(path) != digest)
+
+
+def dirty() -> dict[str, str]:
+    """Each path where the checkout differs from HEAD, untracked ones included, by a digest of its bytes."""
+
+    present, _ = changed_paths("HEAD", ROOT)
+    return {path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest() for path in present if (ROOT / path).is_file()}
 
 
 def selected_tasks(paths: list[str], base: str) -> tuple[str, ...]:
@@ -135,6 +204,42 @@ def list_shell(root: Path, paths: list[str]) -> list[str]:
         ["/bin/sh", str(SHELL_SOURCES), *paths], cwd=root, check=True, capture_output=True, text=True
     )
     return listed.stdout.splitlines()
+
+
+# How far back first-parent history is read for a commit whose tree passed.
+PASSED_REACH = 300
+
+
+def fast_base(asked: str | None) -> tuple[str, str]:
+    """(the commit the change is read from, why it is the one).
+
+    With none asked for, the nearest commit whose tree passed: what the change
+    from it leaves unselected had passed, which is what lets ``record_pass``
+    record this tree. Without one in reach, the merge base with the branch
+    HEAD lands on."""
+
+    if asked:
+        return merge_base(asked), f"the merge base with {asked}"
+    if found := passed_ancestor(ROOT):
+        commit, back = found
+        return commit, f"the nearest commit whose tree passed, {back} back on first-parent history"
+    reason = f"no commit within {PASSED_REACH} back has a passed tree, so the merge base with the branch HEAD lands on"
+    return merge_base(None), reason
+
+
+def passed_ancestor(root: Path) -> tuple[str, int] | None:
+    """(the nearest commit on HEAD's first-parent history whose tree passed,
+    how many commits back), or None within PASSED_REACH."""
+
+    folder = passes(root)
+    if not folder.is_dir():
+        return None
+    history = answered("log", "--first-parent", f"--max-count={PASSED_REACH}", "--format=%H %T", "HEAD", root=root)
+    for back, line in enumerate(history):
+        commit, _, tree = line.partition(" ")
+        if (folder / tree).is_file():
+            return commit, back
+    return None
 
 
 def merge_base(base: str | None) -> str:
@@ -224,7 +329,7 @@ def importers(files: list[Path]) -> dict[str, set[str]]:
 
 
 @functools.cache
-def _importers(root: Path, files: tuple[Path, ...]) -> dict[str, set[str]]:  # noqa: ARG001 - root is a key of the cache
+def _importers(root: Path, files: tuple[Path, ...]) -> dict[str, set[str]]:
     """Ruff's import graph, which reads a test's dotted strings (mock targets)
     as imports too. A string outside a test is a late-bound reference, such
     as a domain's declaration naming its urlconf: followed, the registry
@@ -448,6 +553,12 @@ def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tupl
     return sorted(picked), len(tests)
 
 
+def whole_suite(files: list[Path]) -> list[str]:
+    """Every test module, which a wide change runs."""
+
+    return sorted(module_name(p) for p in files if is_test(p))
+
+
 def chosen(modules: dict[str, Path], reached: set[str], touched: set[str]) -> set[str]:
     """Those of ``modules`` the change reaches, and those that name an app it touched."""
 
@@ -521,8 +632,8 @@ def walk_for_tree() -> Future[list[str]]:
 
 
 # The module every test that reads each of the browser gate's modules goes
-# through. Such a test is a source check that starts no browser (the selector
-# guard among them), so those selected run ahead of the rest, in fast:source,
+# through. Such a test is a source check that starts no browser (the probe
+# check among them), so those selected run ahead of the rest, in fast:source,
 # and a refusal there is printed before the suite starts.
 BROWSER_MODULES = "hq.platform.core.tests.browser_modules"
 # fast's test run, the task that runs it after fast:source
@@ -641,16 +752,21 @@ def main(asked: Usage) -> int:
     list_only = asked.switch("list")
     # A run opens on where its verdict is kept; a listing keeps none.
     gate = None if list_only else Gate("fast")
-    base = merge_base(asked.text("base") or None)
+    base, why = fast_base(asked.text("base") or None)
     changed, deleted = changed_paths(base, ROOT)
+    selected = selected_tasks([*changed, *deleted], base) if gate else ()
+    if gate:
+        changed, deleted = fixed_first(gate, selected, base, (changed, deleted))
     walking = walk_for_tree() if changed or deleted else None
     files = python_files()
     reached, touched = affected(changed, deleted, files)
     labels, total = test_labels(files, reached, touched)
+    counts = f"{len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules"
+    print(f"[fast] base {base[:9]}, {why}: {counts}")
     every_test = len(labels) == total > 0
-    print(f"[fast] base {base[:9]}: {len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules")
-    if total and len(labels) / total > WIDE:
-        print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
+    if gate and not every_test and len(labels) > WIDE * total:
+        print("[fast] wide change: the whole suite and every quick gate run, so a pass records this tree")
+        labels, every_test = whole_suite(files), True
 
     if changed or deleted:
         print("[fast] every test tagged tree runs too: each walks the checkout, which the change is part of")
@@ -659,14 +775,15 @@ def main(asked: Usage) -> int:
         print("\n".join(labels))
         return 0
 
-    tasks = (*selected_tasks([*changed, *deleted], base), *group_tasks(files, reached, touched))
+    whole = (*quick_gates(), *group_tests().values())
+    tasks = whole if every_test else (*selected, *group_tasks(files, reached, touched))
     steps = gates_and_tests(tasks, labels, files, parallel)
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))
     steps.append(step("patch integrity", ["git", "diff", "--check", base]))
     passed = all(s.ok for s in steps)
     if passed:
-        record_pass(gate.judged(), base, whole=every_test and set(tasks) == {*quick_gates(), *group_tests().values()})
+        record_pass(gate.judged(), base, whole=every_test and set(tasks) == set(whole))
     gate.close(steps, " (full gate before push: `mise run check`)")
     return 0 if passed else 1
 

@@ -427,7 +427,7 @@ def reference(context, row, field):
 
 
 @register.inclusion_tag("partials/_related.html", takes_context=True)
-def referenced_by(context, thing, identity="", cards=True):  # noqa: ARG001 - hq_sdk's contract, which extensions call with cards
+def referenced_by(context, thing, identity="", cards=True):
     """Everything that names a thing, for that thing's page: a card per kind
     of reference, as every related list is drawn (``partials/_related.html``).
 

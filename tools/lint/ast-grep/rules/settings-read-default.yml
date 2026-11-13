@@ -1,7 +1,7 @@
 # A setting is declared once, in hq/config/settings.py, and read as
 # settings.NAME. getattr(settings, NAME, default) turns a misspelled name into
 # a feature quietly switched off and writes the default a second time. A name
-# held in a variable is refused too, which getattr-literal-default leaves be.
+# held in a variable is refused too.
 id: settings-read-default
 language: python
 severity: error

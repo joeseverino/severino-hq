@@ -14,7 +14,9 @@ from hq.platform.core.table_cells import ROLE_CLASSES
 from hq_sdk.template_contract import CLASSES
 lazy from hq.platform.core.tests.browser.catalog import CATALOG
 
-from .test_style_usage import TEMPLATE_PREFIX
+# A class built at render time ends in a prefix ahead of an interpolation,
+# ``pill-{{ tone }}`` in a class attribute.
+TEMPLATE_PREFIX = re.compile(r"(?<![\w-])([a-z][a-z0-9]*(?:-[a-z0-9]+)*-)(?=\{\{)")
 
 # The host's own templates, which no extension's check reads.
 TEMPLATES = STATIC.parent / "templates"

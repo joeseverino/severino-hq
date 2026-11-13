@@ -12,7 +12,8 @@
 
   A cell with a tone is a state, drawn as its status. What a row shows
   beneath itself (`below`, a run's evidence) is in its open line, drawn by
-  {% run_evidence %}. A section whose rows
+  {% run_evidence %}, and what may be done to it (`actions`) ends it, drawn by
+  {% row_actions %}. A section whose rows
   are the latest of more links to the rest from its heading (`more_url`).
 
   Expects: `sections`: an iterable of ServiceSection; `spans_row`, True for
@@ -29,9 +30,9 @@ separate "Show all" under the heading reads as a control belonging to nothing.
 {% section section.label id=section.id count=section.records|length fold=section.folded more_label=section.more_label more_url=section.more_url %}
   {% table_region section.label %}
     <table class="data-table{% if section.compact %} compact-table{% endif %}">
-      <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=True gutter=True %}{% elif forloop.length > 2 %}{% table_heading column local_sort=True drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=True %}{% endif %}{% endfor %}</tr></thead>
+      <thead><tr>{% for column in section.columns %}{% if forloop.first %}{% table_heading column local_sort=True gutter=True %}{% elif forloop.length > 2 %}{% table_heading column local_sort=True drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=True %}{% endif %}{% endfor %}{% if section.actions %}{% table_heading "Actions" css="actions-col" hidden=True %}{% endif %}</tr></thead>
       <tbody>
-        {% for record, below in section.rows %}
+        {% for record, below, actions in section.rows %}
           <tr>
             {% for cell in record %}
               <td>
@@ -49,6 +50,7 @@ separate "Show all" under the heading reads as a control belonging to nothing.
                 {% if forloop.last %}{% run_evidence below %}{% endif %}
               </td>
             {% endfor %}
+            {% if section.actions %}{% row_actions actions %}{% endif %}
           </tr>
         {% endfor %}
       </tbody>

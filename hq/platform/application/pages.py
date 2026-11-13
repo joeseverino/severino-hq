@@ -250,7 +250,7 @@ class PageMixin(FragmentMixin):
     def get_page_navigation(self) -> PageNavigation | None:
         return None
 
-    def trail_label(self, record: Any) -> str | None:  # noqa: ARG002 - the default; an override is given the record
+    def trail_label(self, record: Any) -> str | None:
         """The record's crumb after ``page_trail``'s; None, the default, leaves it off.
 
         ``record`` is ``self.object``, the record as stored: an edit page's

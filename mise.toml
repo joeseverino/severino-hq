@@ -348,7 +348,7 @@ env = { SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 # The lint tools the quick gates and the stylesheet tests run.
 depends = ["setup:lint-tools"]
 usage = '''
-arg "[base]" env="CHECK_BASE" help="The ref to diff against; default origin/main, then main"
+arg "[base]" env="CHECK_BASE" help="The ref to diff against; default the nearest commit whose tree passed, then the branch HEAD lands on"
 flag "--list" help="Print the selected test modules and run nothing"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
@@ -391,7 +391,6 @@ sources = [
   "Dockerfile.dockerignore",
   "LICENSE",
   "README.md",
-  "complexipy.toml",
   "entrypoint.sh",
   "manage.py",
   "mise.fast.toml",

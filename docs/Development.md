@@ -294,12 +294,26 @@ On an 8 GB Apple silicon machine:
 | `mise run lint` | about a minute |
 | `mise run fast` | one to two minutes |
 
-`mise run fast [BASE]` maps the changed files against the merge base (`BASE`,
-`$CHECK_BASE`, then the branch HEAD lands on, then `origin/main`, `main`).
-The branch HEAD lands on is its own branch's upstream, or else the local
-branch tracking a remote one whose history HEAD left most recently: a
-worktree's branch tracks nothing and is made from the branch it lands on.
-`--list` prints the selection.
+`mise run fast [BASE]` maps the changed files against a base. One asked for
+(`BASE`, `$CHECK_BASE`) is read as its merge base with HEAD. With none, the
+base is the nearest commit on HEAD's first-parent history (as far back as
+`PASSED_REACH` in `tools/gate/fast.py`) whose tree passed fast (the record
+below), so the change is only what came after a proven tree. Without one,
+it is the merge base with the branch HEAD lands on, then `origin/main`,
+`main`. The branch HEAD lands on is its own branch's
+upstream, or else the local branch tracking a remote one whose history HEAD
+left most recently: a worktree's branch tracks nothing and is made from the
+branch it lands on. The line that counts the selection names the base and
+why it is the one. `--list` prints the selection.
+
+Before anything judges the tree, each selected quick gate whose tool fixes
+what it finds runs its fix mode (`--fix` in its usage: `lint:ruff` with
+Ruff's fixes and format, `lint:css` with Stylelint's, `lint:js` with
+ESLint's, `lint:mise-format` with `mise fmt`), and the run names the files
+they rewrote. The gates then check the fixed files, so formatting never
+fails a run, and the tree the run judges is the one the fixes left. What a
+tool cannot fix, its gate still reports.
+
 The tests it selects are:
 
 - the test modules that import a changed file, directly or through one module
@@ -330,8 +344,13 @@ The tests it selects are:
   change reaches what extensions render through (`templates/`, `static/`,
   `hq_sdk/`, the shared table, page, UI and moment modules, template tags).
 
+A selection past `WIDE` of the test modules (`tools/gate/fast.py`) is a
+wide change, and the whole suite runs with every quick gate instead: the
+rest costs little beside it, and only a whole run's pass records a tree that
+has no passed base.
+
 Beside the tests it runs each quick gate the change affects, as mise's
-`--affected` reads it from the merge base: a quick gate is a task tagged
+`--affected` reads it from the base: a quick gate is a task tagged
 `fast`, and it is affected when a changed or deleted file matches its
 `sources` (`!` patterns take paths out) or its own definition changed. Every
 quick gate's sources also name the tool pins and task definitions, and each
@@ -369,7 +388,7 @@ holds has ended, so one run names every gate and test that failed, and the
 verdict's last line names the rerun of each. A quick gate that takes the
 heavy lock itself (the shell gate, for its suites) runs in it too, once it
 has the turn. The selected tests that read every browser gate module (each
-imports `browser_modules`: the selector guard among them) start no browser,
+imports `browser_modules`: the probe check among them) start no browser,
 and run first as `fast:source`, ahead of the tests, which run after them
 whether or not they passed.
 
@@ -389,10 +408,10 @@ verdict file opens on, as an empty file named by that hash under
 `$(git rev-parse --git-common-dir)/severino/fast-passes/`, which every
 worktree shares and which a re-signed commit keeps. It records one only when
 the run proves the tree: its base's tree has a record, so what the change left
-unselected had passed, or the run selected every test and quick gate. A base
-far enough back selects them all (`mise run fast $(git rev-list
---max-parents=0 HEAD)`), the way to record a first tree. The agent hooks hold
-a brief's base to a recorded pass.
+unselected had passed, or the run selected every test and quick gate. A wide
+change runs them all, so a branch whose history has no recorded tree records
+one on its first wide run, and each run after reads from it. The agent hooks
+hold a brief's base to a recorded pass.
 
 ### What `check` runs
 

@@ -109,7 +109,7 @@ class RuleTests(TestCase):
             "operation_claimed_names_its_claim": changed(queued, state="claimed"),
             "operation_queued_has_no_claim": changed(queued, claimed_by="example-controller"),
             "operation_finished_says_when": changed(queued, state="succeeded"),
-            "approval_state_is_declared": changed(pending, state="maybe"),
+            "approval_state_is_declared": changed(pending, state="maybe", decided_at=now),
             "approval_settled_says_when": changed(pending, state="expired"),
             "approval_decision_names_who_decided": changed(pending, state="approved", decided_at=now),
             "job_percent_at_most_100": changed(job, percent=101),

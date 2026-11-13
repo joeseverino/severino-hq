@@ -1390,7 +1390,13 @@ playbook is safe to repeat. The refusal's `details.holding`
 is the run in the way, `details.machines` the machines it is on and
 `details.shared` the asked machines it holds, empty when it is the playbook's
 own run; a page words it with the run's playbook, state and age and a link to
-it on Jobs (`automation_runs.held_words`). A
+it on Jobs (`automation_runs.held_words`), with the button that cancels it
+where the reader may. A run nothing has claimed is cancelled through
+`automation.run.cancel`, by its `operation.id`: a person cancels any run
+they have the authority to ask for, from its row on Jobs, on its machine's
+or playbook's page, or from that refusal, and an agent only a run it asked
+for, another's reading as no run at all. A claimed run is left to its
+worker, and to its lease. A
 held run is measured against the manifest as supplied, its parameters as
 validated and its hosts as they resolve then (`approvals.measured_by`). So a
 new revision, a parameter that validates to another value, or a host that now

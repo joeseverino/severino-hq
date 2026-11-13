@@ -18,6 +18,7 @@ from jsonschema import Draft202012Validator
 
 from hq.domains.calendars.models import Entry
 from hq.domains.control_plane.models import ApprovalRequest
+from hq.platform.application.automation_adoption import catch_up
 from hq.platform.application.field_masks import WHOLE_RECORD
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.integration_validation import validate_resource_spec
@@ -83,6 +84,8 @@ class RecordTypeTests(TestCase):
                     self.assertIsNotNone(spec.record_type)
 
     def test_each_answer_is_of_its_resources_type(self):
+        # Read past the doors, which each read the playbooks adopted now as they serve a call.
+        catch_up()
         registry = _host_resources()
         identifiers: dict[str, list[Any]] = {}
         for name, spec in registry.items():

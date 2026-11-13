@@ -645,7 +645,7 @@ def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
 
 def _clean_metric(metric: Any) -> dict[str, str]:
     if not isinstance(metric, dict):
-        raise ValueError("Dashboard metrics must be objects.")  # noqa: TRY004 - a payload is refused with ValueError, whatever is wrong with it
+        raise ValueError("Dashboard metrics must be objects.")
     label = str(metric.get("label", "")).strip()[:40]
     value = str(metric.get("value", "")).strip()[:80]
     detail = str(metric.get("detail", "")).strip()[:120]

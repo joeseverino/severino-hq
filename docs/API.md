@@ -146,7 +146,7 @@ An operator can allow, hold, or deny each capability per client. Handle all thre
 | Outcome | Response | Client should |
 |---|---|---|
 | Allowed | `200`, the capability's result | carry on |
-| Held | `202 Accepted`, since nothing has happened yet: the `AwaitingApproval` the document lists under `202` on every capability that changes something, `status: "awaiting_approval"`, with `approval.review_url`; over MCP, a task to a client of the tasks extension ([below](#held-changes-as-mcp-tasks)) | report it and stop, or wait on the task; retrying returns the same request, at `202` |
+| Held | `202 Accepted`, since nothing has happened yet: the `AwaitingApproval` the document lists under `202` on every capability that changes something, `status: "awaiting_approval"`, with `approval.review_url`; over MCP, a task to a client of the tasks extension ([below](#held-changes-as-mcp-tasks)) | report it, then read `approvals` by its id or wait on the task; retrying returns the same request, at `202` |
 | Refused | `403`, error code `denied_by_policy` | stop |
 
 With no rules set, changes to gated infrastructure are held, and so is
@@ -158,7 +158,15 @@ whatever the rules say, since no rule may allow it. The rules themselves are in
 A person's own device is no agent: it stands as its person. So the `/agents/`
 rules do not reach it, and nothing it asks for is held.
 
-### Reading a hold and a playbook's run
+### Finding a playbook, reading a hold and a playbook's run
+
+Every adopted playbook lists at `GET /v2/resources/playbooks/`: its id, the
+command that runs it (`automation.<id>.run`), its effect, and in `reachable`
+the machines a run of it may name now, the ones HQ's runner has a login to as
+the playbook needs. A read of one adds what its Run page states of it. The
+newest scan of the repository reads at `/v2/resources/playbook_scans/`: the
+`id` that `automation.source.adopt` takes as `proposal`, what HQ refuses in it,
+and what adopting it widens.
 
 A held call's `approval.id` reads where it stands at
 `GET /v2/resources/approvals/<id>/` (MCP: `get_resource` of `approvals`, or
@@ -1016,6 +1024,7 @@ capabilities. A client that declares nothing keeps the held answer.
 | Approved, and its operation failed or was cancelled | `completed`, `result` a tool error coded `operation_failed`, whose `details` is the call's answer with its operation as it ended |
 | Declined | `completed`, `result` a tool error coded `declined`, with the person's note |
 | Lapsed unanswered, or overtaken by a change to what it acts on | `completed`, `result` a tool error coded `expired` or `stale` |
+| Withdrawn by its asker, through `tasks/cancel` or `approval.withdraw` | `cancelled`, with no `result` |
 
 Every answer carries a `statusMessage`, since a client shows the last one it
 was sent. It is the sentence the approval card and the audit log say the hold
@@ -1040,11 +1049,14 @@ Security properties:
 
 - The task is the hold, read afresh at each `tasks/get`; no task state is
   kept apart from it. Its id is the hold's random UUID.
-- Nothing in the extension decides a hold. A hold asks for no input, so
-  `tasks/update` acknowledges and changes nothing. `tasks/cancel` is
-  acknowledged with the empty result the specification requires and changes
-  nothing either, since cancellation is the server's to honor: the change stays
-  a person's to approve or decline in HQ, under the rules every approval keeps.
+- Nothing in the extension approves or declines a hold. A hold asks for no
+  input, so `tasks/update` acknowledges and changes nothing. `tasks/cancel` is
+  the asker withdrawing its own hold while it waits: it runs `approval.withdraw`,
+  under that command's rules and audit, and the task then reads `cancelled`,
+  with no result. A hold already decided goes on as it was, since cancellation
+  is cooperative (tasks.extensions.modelcontextprotocol.io, specification,
+  Cancellation); either way the answer is the empty result the specification
+  requires.
 - The review address carries the hold's id and nothing else; reading it
   takes a person signed in to HQ.
 - A task answers only the actor and interface that asked. Every task method

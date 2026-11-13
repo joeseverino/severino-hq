@@ -34,7 +34,7 @@ def booted_code() -> str:
     A process keeps running the modules it imported when the files under it
     change, so a key it stores under stays the one it started with."""
 
-    global recorded  # noqa: PLW0603 - the one value a process records about itself, taken on first use.
+    global recorded
     if recorded is None:
         recorded = running_code()
     return recorded

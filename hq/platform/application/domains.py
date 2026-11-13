@@ -687,6 +687,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         description="The playbooks HQ can run, and the scans of your repository you adopt them from.",
         # Beside the jobs that run them: the work a playbook is, before it runs.
         navigation=(NavigationItem("Playbooks", "control_plane:procedures", "control_plane", 132, "Infrastructure"),),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.playbook_reads:resources")),
     ),
     DomainDescriptor(
         id="hq.audit",

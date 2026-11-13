@@ -463,7 +463,9 @@ def capabilities(request: APIRequest) -> HttpResponse:
     """Every capability, each flagged by whether your token may run it.
 
     The list includes the ones your token is not granted, so you can see which
-    scope to add.
+    scope to add. Each adopted playbook runs as `automation.<id>.run`, which
+    `?name=automation` lists; the `playbooks` resource names each one's
+    command and the machines it can run on now.
     """
 
     # `?name=` narrows to a capability or a dotted prefix of whole segments,

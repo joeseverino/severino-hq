@@ -1,6 +1,7 @@
 """What the browser gate hands the page, held without a browser."""
 
 import ast
+import importlib
 import pkgutil
 import re
 from collections import Counter
@@ -10,55 +11,8 @@ from unittest import mock
 from django.test import SimpleTestCase, tag
 
 from hq.platform.core.stylesheets import SHEETS
-from hq.platform.core.tests.browser import (
-    accessibility,
-    agent_devices,
-    catalog,
-    command_forms,
-    components,
-    current_state,
-    estate,
-    folds,
-    fragments,
-    gate,
-    head_strip,
-    in_flight,
-    layout,
-    page_errors,
-    page_navigation,
-    planted,
-    probes as probe_package,
-    reading,
-    reference,
-    refresh,
-    reports,
-    selectors,
-    serving,
-    shots,
-    stress,
-    survey,
-    sweeps,
-    table_fit,
-    uncaught,
-    widths,
-)
-from hq.platform.core.tests.browser.catalog import common, families as catalog_families
-from hq.platform.core.tests.browser.catalog.families import chart, form, graph, part, status, table
-from hq.platform.core.tests.browser.probes import (
-    audit,
-    axe,
-    boxes,
-    controls,
-    describe,
-    flows,
-    headings,
-    palette,
-    parts,
-    settle,
-    shifts,
-    tables,
-    text,
-)
+from hq.platform.core.tests.browser import planted, probes as probe_package, survey
+from hq.platform.core.tests.browser.probes import axe, settle
 from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, losses, lost_fills
 from hq.platform.core.tests.browser.serving import static_file
@@ -66,61 +20,9 @@ from hq.platform.core.tests.browser.survey import palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import WIDE
 from hq.platform.core.tests.browser_modules import browser_modules
 
-# Imported by name rather than found, so a change to any of them selects these
-# tests in the fast gate; test_every_browser_module_is_read holds the list whole.
-MODULES = (
-    accessibility,
-    agent_devices,
-    catalog,
-    common,
-    catalog_families,
-    chart,
-    form,
-    graph,
-    part,
-    status,
-    table,
-    command_forms,
-    components,
-    current_state,
-    estate,
-    folds,
-    fragments,
-    gate,
-    head_strip,
-    in_flight,
-    layout,
-    page_errors,
-    page_navigation,
-    planted,
-    probe_package,
-    reading,
-    reference,
-    refresh,
-    reports,
-    selectors,
-    serving,
-    shots,
-    stress,
-    survey,
-    sweeps,
-    table_fit,
-    uncaught,
-    widths,
-    audit,
-    axe,
-    boxes,
-    controls,
-    describe,
-    flows,
-    headings,
-    palette,
-    parts,
-    settle,
-    shifts,
-    tables,
-    text,
-)
+# Every module of the browser package, found rather than listed, so a new
+# probe is read without an edit here.
+MODULES = tuple(importlib.import_module(name) for name in browser_modules())
 
 _WALK = re.compile(r"\bcreate(?:TreeWalker|NodeIterator)\(")
 
@@ -169,13 +71,6 @@ def probes() -> dict[str, str]:
 
 
 class ProbeTests(SimpleTestCase):
-    def test_every_browser_module_is_read(self):
-        self.assertEqual(
-            sorted(module.__name__ for module in MODULES),
-            sorted(browser_modules()),
-            "a browser module is imported and listed in MODULES above",
-        )
-
     def test_no_probe_walks_the_page_with_a_callback(self):
         """An engine with script off refuses to call a page function back, so
         a walk with a filter throws there instead of reading the page."""

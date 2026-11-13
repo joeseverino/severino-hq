@@ -30,6 +30,7 @@ from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
 lazy from . import machines
 lazy from .action_links import command_url
+lazy from .automation_runs import listed_with_actions
 lazy from .containers import standings_on
 lazy from .github_estate import repository_for
 lazy from .infrastructure import RESOURCE_TONES
@@ -45,6 +46,7 @@ lazy from .services import served_here
 lazy from .work_runs import WorkRun
 
 if TYPE_CHECKING:
+    from .pages import PageAction
     from .work_runs import RunEvidence
 
 
@@ -104,6 +106,10 @@ class ServiceSection:
     # What each row's open line shows beneath it, one for each record in its
     # order (None for a row with nothing), drawn through the run evidence part.
     below: tuple[RunEvidence | None, ...] = ()
+    # What may be done to each row's record, one tuple for each record in its
+    # order, drawn as the row's last cell (``{% row_actions %}``); left empty,
+    # or with nothing in any, the table has no column for them.
+    actions: tuple[tuple[PageAction, ...], ...] = ()
 
     def __post_init__(self) -> None:
         if not PAGE_SECTION_ID.fullmatch(self.id):
@@ -112,6 +118,10 @@ class ServiceSection:
             raise ValueError("ServiceSection label must not be empty.")
         if self.below and len(self.below) != len(self.records):
             raise ValueError("ServiceSection below holds one entry for each record.")
+        if self.actions and len(self.actions) != len(self.records):
+            raise ValueError("ServiceSection actions holds one entry for each record.")
+        if not any(self.actions):
+            object.__setattr__(self, "actions", ())
         # A column no row has anything in is a heading over nothing. Dropped
         # here, so no section has to check its own; an unknown value (the dash placeholder) is
         # something to say and keeps its column.
@@ -129,11 +139,13 @@ class ServiceSection:
         return self.folded or len(self.columns) >= ROW_COLUMNS
 
     @property
-    def rows(self) -> tuple[tuple[tuple[Cell, ...], RunEvidence | None], ...]:
-        """Each record with what its open line shows beneath it, if anything."""
+    def rows(self) -> tuple[tuple[tuple[Cell, ...], RunEvidence | None, tuple[PageAction, ...]], ...]:
+        """Each record with what its open line shows beneath it, if anything,
+        and what may be done to it."""
 
         below = self.below or (None,) * len(self.records)
-        return tuple(zip(self.records, below, strict=True))
+        actions = self.actions or ((),) * len(self.records)
+        return tuple(zip(self.records, below, actions, strict=True))
 
 
 def filled_columns(width: int, records: tuple[tuple[Cell, ...], ...]) -> tuple[int, ...]:
@@ -220,6 +232,8 @@ def recent_work(
     """
 
     shows = principal is not None and principal_opens(principal, urls.resolve(reverse("jobs:list")).func)
+    if principal is not None:
+        runs = listed_with_actions(runs, principal)
     records = tuple(
         (
             _playbook(run) if by_machine else machines_cell(run.evidence.hosts),
@@ -241,6 +255,7 @@ def recent_work(
         more_label="All runs",
         more_url=more_url,
         below=tuple(run.evidence or None for run in runs) if shows else (),
+        actions=tuple(run.actions for run in runs),
     )
 
 

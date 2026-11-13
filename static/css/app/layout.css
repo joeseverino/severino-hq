@@ -210,7 +210,6 @@
    on every source's fill as words still followed must, its dots fainter. */
 .month-day.is-past :is(.month-span, .month-item) { color: var(--ink-3); }
 .month-day.is-past .month-span.is-start { border-left-color: color-mix(in srgb, var(--source) 62%, var(--surface)); }
-/* stylelint-disable-next-line hq/faded-text -- a past day's dots, marks */
 .month-day.is-past .month-mark, .month-day.is-past .month-item::before { opacity: .62; }
 .month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
 /* The date and the day's marks share one row, so marks take no height of
@@ -241,7 +240,6 @@
 .month-mark.is-missed {
   background: linear-gradient(135deg, transparent 44%, var(--source) 44% 56%, transparent 56%);
   box-shadow: inset 0 0 0 1.5px var(--source);
-  /* stylelint-disable-next-line hq/faded-text -- a missed day's dot, a mark */
   opacity: .6;
 }
 .month-span.is-start { margin-left: 0; border-left: 3px solid var(--source); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }

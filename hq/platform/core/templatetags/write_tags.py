@@ -85,7 +85,7 @@ def row_editor(context, form, key, *, label, action, verb, **initial):
         drawn.auto_id = f"row-{slug}-%s"
         # A copy shares the bound fields its form already drew, with their ids
         # and values; Django offers no public way to draw them afresh.
-        drawn._bound_fields_cache = {}  # noqa: SLF001 (starts the copy's fields over)
+        drawn._bound_fields_cache = {}
         drawn.initial = {**form.initial, **initial}
     return {
         "label": label,

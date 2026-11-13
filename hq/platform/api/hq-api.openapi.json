@@ -1045,6 +1045,84 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "getPlaybookScansV2OK": {
+        "dataValue": {
+          "data": {
+            "adopted": false,
+            "branch": "main",
+            "committer": "example-maintainer",
+            "held": "",
+            "id": 3,
+            "read_at": "2026-01-15T06:30:00+00:00",
+            "refused": [
+              "playbooks/package_upgrade.hq.yml: Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."
+            ],
+            "revision": "000cb167aee92601ea8a6c0811081a69038d2d91",
+            "widens": []
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getPlaybooksV2OK": {
+        "dataValue": {
+          "data": {
+            "capability": "automation.example.cache_flush.run",
+            "effect": "infrastructure_change",
+            "facts": [
+              {
+                "label": "Runs on",
+                "value": "Any machine"
+              },
+              {
+                "label": "Effect",
+                "value": "Changes a live system"
+              },
+              {
+                "label": "Access",
+                "value": "No sudo"
+              },
+              {
+                "label": "Timeout",
+                "value": "5\u00a0min"
+              },
+              {
+                "label": "Preconditions",
+                "value": "The cache's service is running on the machine."
+              },
+              {
+                "label": "Verification",
+                "value": "The cache reports no entries."
+              },
+              {
+                "label": "Recovery",
+                "value": "The cache refills on its own as it is read."
+              },
+              {
+                "label": "Retry",
+                "value": "Only once the machines are looked at"
+              },
+              {
+                "label": "Adopted commit",
+                "value": "0123456789ab"
+              },
+              {
+                "label": "Playbook file",
+                "value": "playbooks/cache_flush.yml"
+              }
+            ],
+            "playbook": "example.cache_flush",
+            "reachable": [
+              "docker-host-01",
+              "iphone-16-pro",
+              "macbook-pro-16"
+            ],
+            "title": "Empty a cache"
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "getProjectsV2BadRequest": {
         "dataValue": {
           "error": {
@@ -2400,6 +2478,80 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "listPlaybookScansV2OK": {
+        "dataValue": {
+          "data": {
+            "count": 1,
+            "items": [
+              {
+                "adopted": false,
+                "branch": "main",
+                "committer": "example-maintainer",
+                "held": "",
+                "id": 3,
+                "read_at": "2026-01-15T06:30:00+00:00",
+                "refused": [
+                  "playbooks/package_upgrade.hq.yml: Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."
+                ],
+                "revision": "000cb167aee92601ea8a6c0811081a69038d2d91",
+                "widens": []
+              }
+            ],
+            "next": null,
+            "total": 1,
+            "truncated": false
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "listPlaybooksV2OK": {
+        "dataValue": {
+          "data": {
+            "count": 3,
+            "items": [
+              {
+                "capability": "automation.example.cache_flush.run",
+                "effect": "infrastructure_change",
+                "playbook": "example.cache_flush",
+                "reachable": [
+                  "docker-host-01",
+                  "iphone-16-pro",
+                  "macbook-pro-16"
+                ],
+                "title": "Empty a cache"
+              },
+              {
+                "capability": "automation.example.disk_report.run",
+                "effect": "read",
+                "playbook": "example.disk_report",
+                "reachable": [
+                  "docker-host-01",
+                  "iphone-16-pro",
+                  "macbook-pro-16"
+                ],
+                "title": "Report a mount's use"
+              },
+              {
+                "capability": "automation.example.package_upgrade.run",
+                "effect": "infrastructure_change",
+                "playbook": "example.package_upgrade",
+                "reachable": [
+                  "docker-host-01",
+                  "iphone-16-pro",
+                  "macbook-pro-16"
+                ],
+                "title": "Upgrade packages"
+              }
+            ],
+            "next": null,
+            "total": 3,
+            "truncated": false
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "listProjectsV2BadRequest": {
         "dataValue": {
           "error": {
@@ -3069,7 +3221,7 @@
               "state": "pending",
               "target": ""
             },
-            "message": "This change waits for approval in HQ. Nothing is written or queued until an operator approves it. Report the request id and stop, since a token cannot approve it.",
+            "message": "This change waits for approval in HQ. Nothing is written or queued until an operator approves it, which a token cannot. Report the request id to your user, and read `approvals` by that id for how it stands.",
             "queued": false,
             "repeated": false,
             "status": "awaiting_approval"
@@ -3704,6 +3856,15 @@
         },
         "style": "form"
       },
+      "PlaybookIdentifier": {
+        "description": "The record's `playbook`, as each item of the list carries it.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "ProviderIdentifier": {
         "description": "The record's `provider`, as each item of the list carries it.",
         "in": "path",
@@ -3884,6 +4045,30 @@
           }
         },
         "description": "Not Found."
+      },
+      "ApprovalWithdrawnSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/ApprovalWithdrawn"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
       },
       "AssetSavedSuccess": {
         "content": {
@@ -5920,6 +6105,50 @@
         "description": "The operation queued to apply the change at once; null where none was.",
         "title": "Applying"
       },
+      "ApprovalWithdrawRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The held request to take back, which you asked for.",
+            "properties": {
+              "approval_id": {
+                "description": "The held request to withdraw. The `approval.id` its held answer carried.",
+                "type": "string"
+              },
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              }
+            },
+            "required": [
+              "approval_id"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "ApprovalWithdrawn": {
+        "additionalProperties": false,
+        "description": "A held change its asker took back, so nothing it asked was done.",
+        "properties": {
+          "withdrawn": {
+            "description": "The id of the request withdrawn.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "withdrawn"
+        ],
+        "type": "object"
+      },
       "AsRead": {
         "description": "An object in its source's own shape, passed on as HQ read it: its keys are the source's.",
         "type": "object"
@@ -6444,6 +6673,36 @@
       "AttemptCount": {
         "description": "How many times a controller has tried it.",
         "type": "integer"
+      },
+      "AutomationRunCancelRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The run to cancel, by its operation id.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "operation_id": {
+                "description": "The run to cancel. Its `operation.id`, from the answer that queued it, or its held request's `operation` once approved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation_id"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
       },
       "AutomationSourceAdoptRequest": {
         "additionalProperties": false,
@@ -7253,6 +7512,7 @@
                   "refused_hold",
                   "rejected",
                   "stale",
+                  "withdrawn",
                   "work_failed"
                 ]
               },
@@ -10865,7 +11125,7 @@
             "type": "string"
           },
           "id": {
-            "description": "The request's id, which the asking agent reports back to its user.",
+            "description": "The request's id, which the asking agent reports back to its user and `approvals` reads it by.",
             "type": "string"
           },
           "reason": {
@@ -10897,7 +11157,7 @@
             "type": "string"
           },
           "state": {
-            "description": "Where the request stands: `pending`, `approved`, `rejected`, `expired` or `stale`; only a `pending` one can still be decided.",
+            "description": "Where the request stands: `pending`, `approved`, `rejected`, `expired`, `stale` or `withdrawn`; only a `pending` one can still be decided.",
             "type": "string"
           },
           "target": {
@@ -10927,7 +11187,7 @@
         "description": "A held request you asked for: what it asks, where it stands, and once done what the call answered.",
         "properties": {
           "answer": {
-            "description": "What the call answered once done: its command's own answer, carrying its work as it ended, or a refusal coded `declined`, `expired`, `stale` or `operation_failed`; empty until then.",
+            "description": "What the call answered once done: its command's own answer, carrying its work as it ended, or a refusal coded `declined`, `expired`, `stale`, `withdrawn` or `operation_failed`; empty until then.",
             "type": "object"
           },
           "asks": {
@@ -10941,7 +11201,7 @@
             "$ref": "#/components/schemas/HeldRequest/properties/content_fingerprint"
           },
           "done": {
-            "description": "Whether it is settled: declined, lapsed or overtaken, or approved and its work ended.",
+            "description": "Whether it is settled: declined, lapsed, overtaken or withdrawn, or approved and its work ended.",
             "type": "boolean"
           },
           "expires_at": {
@@ -13740,6 +14000,78 @@
         ],
         "type": "object"
       },
+      "PlaybookFact": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "What the fact is about, as its Run page labels it.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The fact in the words its Run page says it in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PlaybookRecord": {
+        "additionalProperties": false,
+        "description": "One playbook whole: its row, and what its Run page states of it.",
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/capability"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/effect"
+          },
+          "facts": {
+            "description": "What its Run page states of it, each fact by its label, such as where it runs and its timeout.",
+            "items": {
+              "$ref": "#/components/schemas/PlaybookFact"
+            },
+            "type": "array"
+          },
+          "playbook": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/playbook"
+          },
+          "reachable": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/reachable"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/title"
+          }
+        },
+        "type": "object"
+      },
+      "PlaybookRow": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "description": "The command that runs it, by name. Its schema says what it takes, and its notes what it does.",
+            "type": "string"
+          },
+          "effect": {
+            "description": "What it does to a machine: `read`, `infrastructure_change` or `destructive`. Anything but a read waits for an operator's approval when an agent asks.",
+            "type": "string"
+          },
+          "playbook": {
+            "description": "The playbook's id, which a read of one and the `runs` filter `playbook` take.",
+            "type": "string"
+          },
+          "reachable": {
+            "description": "The machines a run of it may name now, each by its name in HQ. HQ's runner has a login to each as it needs. A Refresh reads them anew.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "Its name in HQ, as its Run page is headed.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "PolicyCounts": {
         "additionalProperties": false,
         "description": "How many grants, groups, tags and tests the policy holds.",
@@ -16162,6 +16494,61 @@
           "task": {
             "description": "The task, by its name in the playbook.",
             "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScanResult": {
+        "additionalProperties": false,
+        "properties": {
+          "adopted": {
+            "description": "Whether it is the commit HQ runs playbooks from now, so adopting it does nothing.",
+            "type": "boolean"
+          },
+          "branch": {
+            "description": "The branch that commit is on.",
+            "type": "string"
+          },
+          "committer": {
+            "description": "Who committed it, as GitHub names them; empty when it said no one.",
+            "type": "string"
+          },
+          "held": {
+            "description": "The id of an adoption of it that waits for approval, which `approvals` reads; empty for none.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The scan result's id, which `automation.source.adopt` takes as the scan result to adopt.",
+            "type": "integer"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When HQ read it, an ISO 8601 date-time."
+          },
+          "refused": {
+            "description": "Each reason HQ will not adopt it; empty when it can.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "The commit it read, by its full id.",
+            "type": "string"
+          },
+          "widens": {
+            "description": "Each way adopting it lets a run do more than it may now. An agent's adoption that widens waits for an operator's approval, whatever its rules say.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "type": "object"
@@ -18689,6 +19076,77 @@
         ]
       }
     },
+    "/api/v2/capabilities/approval.withdraw/": {
+      "post": {
+        "description": "Take back a change you asked for that still waits for approval, so no operator is asked to decide it. Send the `approval.id` its held answer carried.",
+        "operationId": "approvalWithdrawV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalWithdrawRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ApprovalWithdrawnSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Withdraw a held change",
+        "tags": [
+          "hq.approvals"
+        ],
+        "x-hq-capability": "approval.withdraw",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "read"
+        ]
+      }
+    },
     "/api/v2/capabilities/asset.create/": {
       "post": {
         "description": "Add a new asset.",
@@ -19001,6 +19459,77 @@
         "x-hq-effect": "remote_write",
         "x-hq-required-capabilities": [
           "write_assets"
+        ]
+      }
+    },
+    "/api/v2/capabilities/automation.run.cancel/": {
+      "post": {
+        "description": "Cancel a playbook's run that has not started, so it holds its playbook and machines no more. Send the run's `operation.id`. An agent may cancel only a run it asked for.",
+        "operationId": "automationRunCancelV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationRunCancelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationQueuedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Cancel run",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-capability": "automation.run.cancel",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "read"
         ]
       }
     },
@@ -23296,10 +23825,12 @@
                 "action_item.restore",
                 "action_item.set_aside",
                 "appearance.theme.set",
+                "approval.withdraw",
                 "asset.create",
                 "asset.delete",
                 "asset.update",
                 "asset.upsert",
+                "automation.run.cancel",
                 "automation.source.adopt",
                 "automation.source.refresh",
                 "calendar.entry.create",
@@ -26404,6 +26935,322 @@
         "x-hq-resource": "machines"
       }
     },
+    "/api/v2/resources/playbook_scans/": {
+      "get": {
+        "description": "The newest scan of your playbooks' repository, or one by its id. It says what adopting it widens, and `automation.source.adopt` adopts it.",
+        "operationId": "listPlaybookScansV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/listPlaybookScansV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ResourceCollection"
+                        }
+                      ],
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/ScanResult"
+                          },
+                          "type": "array"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbook scans: the list",
+        "tags": [
+          "hq.procedures"
+        ],
+        "x-hq-resource": "playbook_scans"
+      }
+    },
+    "/api/v2/resources/playbook_scans/{identifier}/": {
+      "get": {
+        "description": "One of the records Playbook scans lists, found by its `id`.",
+        "operationId": "getPlaybookScansV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getPlaybookScansV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ScanResult"
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbook scans: one by id",
+        "tags": [
+          "hq.procedures"
+        ],
+        "x-hq-identifier": "id",
+        "x-hq-resource": "playbook_scans"
+      }
+    },
+    "/api/v2/resources/playbooks/": {
+      "get": {
+        "description": "Every adopted playbook: the command that runs it, what it does, and the machines it can run on now.",
+        "operationId": "listPlaybooksV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/listPlaybooksV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ResourceCollection"
+                        }
+                      ],
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/PlaybookRow"
+                          },
+                          "type": "array"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbooks: the list",
+        "tags": [
+          "hq.procedures"
+        ],
+        "x-hq-resource": "playbooks"
+      }
+    },
+    "/api/v2/resources/playbooks/{identifier}/": {
+      "get": {
+        "description": "One of the records Playbooks lists, found by its `playbook`.",
+        "operationId": "getPlaybooksV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PlaybookIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getPlaybooksV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PlaybookRecord"
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbooks: one by playbook",
+        "tags": [
+          "hq.procedures"
+        ],
+        "x-hq-identifier": "playbook",
+        "x-hq-resource": "playbooks"
+      }
+    },
     "/api/v2/resources/projects/": {
       "get": {
         "description": "Projects and their safe cross-domain relationships.",
@@ -27966,6 +28813,8 @@
                 "hq",
                 "infrastructure",
                 "machines",
+                "playbook_scans",
+                "playbooks",
                 "projects",
                 "readings",
                 "receipts",
@@ -28069,6 +28918,8 @@
                 "domains",
                 "infrastructure",
                 "machines",
+                "playbook_scans",
+                "playbooks",
                 "projects",
                 "readings",
                 "relationships",
@@ -28443,6 +29294,13 @@
       "name": "hq.machines",
       "parent": "hq.infrastructure",
       "summary": "Machines"
+    },
+    {
+      "description": "The playbooks HQ can run, and the scans of your repository you adopt them from.",
+      "kind": "nav",
+      "name": "hq.procedures",
+      "parent": "hq.infrastructure",
+      "summary": "Playbooks"
     },
     {
       "description": "The credentials HQ reads each system through, and what each can see.",

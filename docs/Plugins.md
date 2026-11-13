@@ -212,11 +212,8 @@ package of its own, in its own CI (`test:plugin-check`).
 
 The check:
 
-- refuses a dot typed between two parts of a line in its `src` (less tests
-  and migrations), by the host's `dot-typed-in-text` rule
-  (`tools/lint/ast-grep/rules`); a line's parts join with `hq_sdk.ui.dotted`;
 - refuses a test that reads a table cell by its closing tag, by the host's
-  `cell-read-by-its-text` rule;
+  `cell-read-by-its-text` rule (`tools/lint/ast-grep/rules`);
 - refuses a test that asserts a short word absent from a page's markup, where
   a random token can hold it, by the host's `absent-text-read-from-the-text`
   rule;

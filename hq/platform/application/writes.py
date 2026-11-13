@@ -388,7 +388,7 @@ class CommandFormMixin(PostedOnce):
     def get_success_url(self) -> str:
         return reverse(self.success_url_name)
 
-    def get_success_message(self, result: Any) -> str:  # noqa: ARG002 - the default; an override is given the result
+    def get_success_message(self, result: Any) -> str:
         return self.success_message
 
     def run(self, command: Any) -> Any:

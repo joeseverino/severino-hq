@@ -3,8 +3,9 @@
 The client waits on the task while a person decides in HQ and HQ applies it:
 it reads working, saying what it holds and where it is decided, then the
 call's answer once the change is applied, or a refusal once a person declines
-or applying it fails. Nothing in the extension decides it, and a task answers
-only the caller that asked.
+or applying it fails. Nothing in the extension approves or declines it; a
+cancel is its asker withdrawing it, and a task answers only the caller that
+asked.
 """
 
 import json
@@ -294,21 +295,60 @@ class HeldTaskTests(TestCase):
         self.assertEqual(read["status"], "working")
         self.assertEqual(ApprovalRequest.objects.get(pk=answered.task_id).requested_actor, other.actor)
 
-    def test_nothing_in_the_extension_decides_the_hold(self):
+    def test_an_update_decides_nothing(self):
         created, _ = self._held_task()
 
         async def steps(client):
-            updated = await _task(client, "tasks/update", created.task_id, input_responses={"approve": {"ok": True}})
-            cancelled = await _task(client, "tasks/cancel", created.task_id)
-            return updated, cancelled, await _task(client, "tasks/get", created.task_id)
+            await _task(client, "tasks/update", created.task_id, input_responses={"approve": {"ok": True}})
+            return await _task(client, "tasks/get", created.task_id)
 
-        _updated, cancelled, read = self._session(steps)
+        read = self._session(steps)
 
-        # Acknowledged, as the extension requires, and the hold goes on waiting for a person.
-        self.assertEqual(cancelled.keys() - {"resultType", "_meta"}, set())
         self.assertEqual(read["status"], "working")
         self.assertEqual(ApprovalRequest.objects.get().state, ApprovalRequest.State.PENDING)
         self.assertFalse(OperationRequest.objects.exists())
+
+    def test_a_cancel_withdraws_the_hold_and_the_task_reads_cancelled(self):
+        created, _ = self._held_task()
+
+        async def steps(client):
+            cancelled = await _task(client, "tasks/cancel", created.task_id)
+            return cancelled, await _task(client, "tasks/get", created.task_id)
+
+        cancelled, read = self._session(steps)
+
+        # Acknowledged with the empty result the extension requires.
+        self.assertEqual(cancelled.keys() - {"resultType", "_meta"}, set())
+        self.assertEqual(read["status"], "cancelled")
+        self.assertNotIn("result", read)
+        self.assertEqual(ApprovalRequest.objects.get().state, "withdrawn")
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_a_cancel_of_a_decided_hold_changes_nothing(self):
+        created, _ = self._held_task()
+        approve(ApproveCommand(created.task_id), principal=self.person)
+
+        async def steps(client):
+            cancelled = await _task(client, "tasks/cancel", created.task_id)
+            return cancelled, await _task(client, "tasks/get", created.task_id)
+
+        cancelled, read = self._session(steps)
+
+        self.assertEqual(cancelled.keys() - {"resultType", "_meta"}, set())
+        self.assertEqual(read["status"], "working")
+        self.assertEqual(ApprovalRequest.objects.get().state, ApprovalRequest.State.APPROVED)
+
+    def test_another_agent_cannot_cancel_the_task(self):
+        created, _ = self._held_task()
+        other = Principal("example-other-agent", "mcp", self.agent.capabilities)
+
+        async def steps(client):
+            with self.assertRaises(MCPError) as raised:
+                await _task(client, "tasks/cancel", created.task_id)
+            return raised.exception.error.code
+
+        self.assertEqual(self._session(steps, principal=other), types.INVALID_PARAMS)
+        self.assertEqual(ApprovalRequest.objects.get().state, ApprovalRequest.State.PENDING)
 
     def test_a_client_without_the_extension_keeps_the_held_answer(self):
         async def steps(client):

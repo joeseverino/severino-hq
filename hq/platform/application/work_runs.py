@@ -124,6 +124,11 @@ class WorkRun:
     duration: float | None
     # What a run shows for itself; empty for a job.
     evidence: RunEvidence = RunEvidence()
+    # A run's effect as its playbook's record pins it, which asking for one,
+    # and cancelling one, takes the authority of; empty for a job.
+    effect: str = ""
+    # What its reader may do to it where it is listed (``automation_runs.listed_with_actions``).
+    actions: tuple[Any, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -462,6 +467,7 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
                 for event in (operation.result or {}).get("events") or ()
             ),
         ),
+        effect=str((operation.resource.spec or {}).get("effect", "")),
     )
 
 

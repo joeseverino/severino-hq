@@ -19,30 +19,28 @@ from tools.gate.tests.base import GateTestCase
 from tools.gate.verdict import ESCAPE
 
 ROOT = Path(__file__).resolve().parents[3]
-SELECTORS = "hq.platform.core.tests.test_browser_selectors"
+PROBES = "hq.platform.core.tests.test_browser_probes"
 
 
 @tag("source", "tree")
 class SourceFirstTests(GateTestCase):
     """A selected test that reads each browser module runs in fast:source, which the tests wait on."""
 
-    def test_the_selector_guard_runs_first_and_the_rest_with_the_tests(self):
+    def test_the_probe_check_runs_first_and_the_rest_with_the_tests(self):
         other = "hq.platform.core.tests.test_part_tags"
-        first, rest = fast_gate.source_first(
-            [SELECTORS, f"{SELECTORS}.BrowserGateSelectorTests", other], fast_gate.python_files()
-        )
-        self.assertEqual(first, [SELECTORS, f"{SELECTORS}.BrowserGateSelectorTests"])
+        first, rest = fast_gate.source_first([PROBES, f"{PROBES}.ProbeTests", other], fast_gate.python_files())
+        self.assertEqual(first, [PROBES, f"{PROBES}.ProbeTests"])
         self.assertEqual(rest, [other])
 
     def test_each_test_run_first_starts_no_browser(self):
         readers = sorted(fast_gate.importers(fast_gate.python_files())[fast_gate.BROWSER_MODULES])
-        self.assertIn(SELECTORS, readers)
+        self.assertIn(PROBES, readers)
         suite = DiscoverRunner(verbosity=0).build_suite(readers)
         self.assertFalse([test.id() for test in tests_in(suite) if drives_a_browser(test)])
 
     def test_the_tests_start_once_the_source_checks_they_name_have_passed(self):
         # The run as fast makes it, less its gates and its config environment.
-        command = fast_gate.run_command((), [SELECTORS], ["example.tests.test_x"], "auto")
+        command = fast_gate.run_command((), [PROBES], ["example.tests.test_x"], "auto")
         run = command.index("run")
         planned = subprocess.run(
             [*command[: command.index("--env")], "run", "--dry-run", *command[run + 1 :]],
@@ -55,15 +53,15 @@ class SourceFirstTests(GateTestCase):
         plain = ESCAPE.sub("", planned.stdout + planned.stderr)
         order = [line for line in plain.splitlines() if " $ " in line]
         self.assertEqual(len(order), 2, order)
-        self.assertTrue(order[0].startswith("[fast:source] ") and order[0].endswith(f" {SELECTORS}"), order)
+        self.assertTrue(order[0].startswith("[fast:source] ") and order[0].endswith(f" {PROBES}"), order)
         self.assertTrue(order[1].startswith(f"[{fast_gate.TESTS}] "), order)
 
     def test_the_run_is_one_mise_run_in_fast_s_environment_with_no_output_flag(self):
         # An --output or MISE_TASK_OUTPUT would outrank the tests' own output setting.
-        command = fast_gate.run_command(("lint:ruff", "lint:mypy"), [SELECTORS], ["example.tests.test_x"], "auto")
+        command = fast_gate.run_command(("lint:ruff", "lint:mypy"), [PROBES], ["example.tests.test_x"], "auto")
         mise = command.index("mise")
         self.assertEqual(command[mise : mise + 4], ["mise", "--env", fast_gate.ENVIRONMENT, "run"])
-        self.assertIn(f"{fast_gate.SOURCE}={SELECTORS}", command[:mise])
+        self.assertIn(f"{fast_gate.SOURCE}={PROBES}", command[:mise])
         self.assertNotIn("--output", command)
         tests = command.index(fast_gate.TESTS)
         self.assertEqual(command[tests - 1], ":::")

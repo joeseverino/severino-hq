@@ -38,7 +38,19 @@ from .agent_devices import (
     set_device_blocked,
 )
 from .appearance import SET_THEME, ThemeCommand, set_theme
-from .approvals import APPROVE, DESTRUCTIVE_EFFECT, REJECT, ApproveCommand, RejectCommand, answered, approve, reject
+from .approvals import (
+    APPROVE,
+    DESTRUCTIVE_EFFECT,
+    REJECT,
+    WITHDRAW,
+    ApproveCommand,
+    RejectCommand,
+    WithdrawCommand,
+    answered,
+    approve,
+    reject,
+    withdraw,
+)
 from .cadence import ControllerSweepCommand, request_controller_sweep
 from .capability_policy import SET_POLICY, PolicyCommand, apply_changes
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
@@ -572,6 +584,25 @@ CORE_CAPABILITY_SPECS = (
         execution_notes=("Record the refusal, who made it and the note, and apply nothing.",),
         label="Reject a held change",
         reached_from="action_items",
+    ),
+    # The asker's own way out of a request it no longer wants. Its own
+    # request only, so any caller that asked may: a person decides nothing here.
+    CapabilitySpec(
+        WITHDRAW,
+        "Take back a change you asked for that still waits for approval, so no operator is asked to decide it. "
+        "Send the `approval.id` its held answer carried.",
+        "remote_write",
+        Capability.READ,
+        WithdrawCommand,
+        answered(withdraw),
+        execution_notes=(
+            "Find the request among the ones you asked for, and refuse any other.",
+            "Refuse a request already decided or expired.",
+            "Mark it withdrawn, apply nothing, and stop counting it against how many you may hold.",
+        ),
+        label="Withdraw a held change",
+        verb="Withdraw",
+        subject_resource="approvals",
     ),
     # Who may act as an agent, decided by a person (security.HELD_ONLY_AT), so
     # no credential widens or frees itself.

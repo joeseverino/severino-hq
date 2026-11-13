@@ -24,6 +24,7 @@ from django.http import HttpRequest, HttpResponse
 lazy from django.forms import BaseForm
 lazy from django.utils.html import format_html
 
+lazy from hq.platform.core.templatetags.action_tags import post_button
 lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .capabilities import Ran, run_capability
@@ -36,7 +37,7 @@ from .idempotency import (
     validate_key,
 )
 from .refusal_status import Refusal, refusal_of, refuse
-from .security import web_principal
+from .security import Principal, web_principal
 lazy from .automation_runs import held_words
 
 # The hidden field the key travels in: a name no command declares, like the
@@ -95,7 +96,9 @@ def refused(request: HttpRequest, answer: dict[str, Any], *, form: BaseForm | No
     if answer.get("ok"):
         return None
     refusal = refusal_of(answer)
-    said = _said(refusal)
+    # Only a signed-in reader is offered a cancel of the run in the way.
+    user = request.user
+    said = _said(refusal, web_principal(user) if user.is_authenticated else None)
     if form is None:
         messages.error(request, said)
     elif not _placed(form, refusal.details):
@@ -103,15 +106,23 @@ def refused(request: HttpRequest, answer: dict[str, Any], *, form: BaseForm | No
     return refusal
 
 
-def _said(refusal: Refusal) -> str:
+def _said(refusal: Refusal, principal: Principal | None) -> str:
     """The refusal's sentence as a page says it: a run refused for another in
-    its way names that run and links to it, where the machine API's sentence
-    points at ``details.holding``."""
+    its way names that run, links to it and offers to cancel it where the
+    reader may, where the machine API's sentence points at ``details.holding``."""
 
-    held = held_words(refusal.details)
+    held = held_words(refusal.details, principal)
     if held is None:
         return refusal.message
-    return format_html('{} <a href="{}">{}</a>', breakable(held.sentence), held.href, breakable(held.link))
+    said = format_html('{} <a href="{}">{}</a>', breakable(held.sentence), held.href, breakable(held.link))
+    if held.cancel is None:
+        return said
+    cancel = held.cancel
+    return format_html(
+        "{} {}",
+        said,
+        post_button(cancel.label, cancel.url, name=cancel.field, value=cancel.value, css=f"{cancel.css} compact"),
+    )
 
 
 def refusal_response(answer: dict[str, Any]) -> HttpResponse:

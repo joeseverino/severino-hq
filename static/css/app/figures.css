@@ -195,13 +195,11 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .chart-line-4 { stroke: var(--series-4); }
 .chart-line-5 { stroke: var(--series-5); }
 /* Dashed and thinner than its series, so a fitted line reads as an estimate. */
-/* stylelint-disable-next-line hq/faded-text -- a chart's trend line, a mark */
 .chart-trend { fill: none; stroke-width: 1.5; stroke-dasharray: 5 4; opacity: .65; }
 .chart-dot { stroke: var(--surface); stroke-width: 1.5; pointer-events: none; }
 /* A 3px dot cannot be hit with a mouse, so the tooltip is carried by an invisible circle four times its size. */
 .chart-hit { fill: transparent; stroke: none; cursor: default; }
 .chart-hit:hover { fill: color-mix(in srgb, var(--ink) 7%, transparent); }
-/* stylelint-disable-next-line hq/faded-text -- a chart's marks */
 .chart-mark { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; opacity: .55; }
 .chart-mark-label { font-size: var(--text-3xs); font-weight: 600; }
 .control-label { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }

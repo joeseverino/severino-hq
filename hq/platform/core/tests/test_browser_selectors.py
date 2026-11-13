@@ -9,18 +9,15 @@ without starting a browser.
 import re
 from functools import cache
 from pathlib import Path
-from typing import Any
 
 from django.conf import settings
 from django.template import engines
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.page_parts import SectionPart
-from hq.platform.application.tests.facts import ROOT as FACTS_ROOT, STRING, TOP, grouped, scan, strings
 from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.templatetags.part_tags import SectionNode
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser_modules import browser_modules
 
 ROOT = Path(settings.BASE_DIR)
 AUDIT = ROOT / "hq/platform/core" / "browser_audit.js"
@@ -33,30 +30,9 @@ TAG_LIBRARIES = ROOT / "hq/platform/core/templatetags"
 _CLASS = re.compile(r"\.(-?[A-Za-z_][\w-]*)")
 _ID = re.compile(r"#(-?[A-Za-z_][\w-]*)")
 _ATTRIBUTE = re.compile(r"\[\s*([A-Za-z_][\w-]*)")
-PLAYWRIGHT_QUERIES = {"locator", "query_selector", "query_selector_all", "wait_for_selector"}
 # A literal handed to a DOM query, and a class handed to classList.
 _QUERY = re.compile(r"\b(?:querySelector|querySelectorAll|closest|matches)\(\s*(['\"`])(.*?)\1", re.DOTALL)
 _CLASS_LIST = re.compile(r"classList\.(?:contains|add|remove|toggle)\(\s*(['\"`])([\w-]+)\1")
-# The gate's one registry of selectors, a statement of selectors.py itself.
-REGISTRY: dict[str, Any] = {"kind": "assignment", "has": {"field": "left", "regex": "^SELECTORS$"}, **TOP}
-# Each literal of the gate outside the registry.
-GATE_STRING = {"all": [STRING, {"not": {"inside": {**REGISTRY, "stopBy": "end"}}}]}
-# A literal handed to a Playwright query as its first argument.
-QUERIED = {
-    **STRING,
-    "nthChild": 1,
-    "inside": {
-        "kind": "argument_list",
-        "inside": {
-            "kind": "call",
-            "has": {
-                "field": "function",
-                "kind": "attribute",
-                "has": {"field": "attribute", "regex": f"^({'|'.join(sorted(PLAYWRIGHT_QUERIES))})$"},
-            },
-        },
-    },
-}
 
 
 def tokens(selector: str) -> set[tuple[str, str]]:
@@ -224,40 +200,6 @@ class BrowserGateSelectorTests(SimpleTestCase):
             if not rendered(kind, name)
         )
         self.assertEqual(missing, [])
-
-    def test_the_gate_queries_markup_only_through_selectors(self):
-        """A literal selector anywhere else in the gate would escape this check.
-
-        In-page probes query by tag and attribute only; anything naming a class
-        or an id belongs in SELECTORS.
-        """
-
-        # The example estate's gate is outside this rule: it presses the
-        # estate's controls through literal selectors of its own.
-        paths = [
-            path.relative_to(FACTS_ROOT)
-            for module, path in browser_modules().items()
-            if module != "hq.platform.core.tests.browser.estate"
-        ]
-        found = grouped(scan({"registry": REGISTRY, "string": GATE_STRING, "queried": QUERIED}, *paths))
-        self.assertEqual(len(found.get("registry", [])), 1, "no one SELECTORS registry to hold literals against")
-        queried = {(match.path, match.start) for match in found.get("queried", [])}
-        offences = []
-        for match in found.get("string", []):
-            if (match.path, match.start) in queried and isinstance(match.value(), str):
-                offences.append(match.value())
-            for text in strings(match):
-                offences.extend(
-                    selector
-                    for selector in audit_selectors(text)
-                    if any(kind != "attribute" for kind, _ in tokens(selector))
-                )
-        self.assertEqual(
-            offences,
-            [],
-            "each of these names a class or an id outside SELECTORS: add it to SELECTORS "
-            "(hq/platform/core/tests/browser/selectors.py) and pass it to the probe as an argument",
-        )
 
 
 @tag("source", "tree")

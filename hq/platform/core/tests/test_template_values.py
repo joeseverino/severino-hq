@@ -766,9 +766,17 @@ class TemplateValueTests(SimpleTestCase):
 
 # What a `format_html` builder may print as text: a call that holds its names
 # or composes markup whose own values are read where it was built (the entity
-# tag holds its name with breakable), an amount, and a tag's attributes
-# (page_parts.html_attributes), which are never text.
-HOLDING_CALLS = HOLDING | {"entity", "format_html", "format_html_join", "html_attributes", "mark_safe", "money"}
+# tag holds its name with breakable, and post_button its label), an amount,
+# and a tag's attributes (page_parts.html_attributes), which are never text.
+HOLDING_CALLS = HOLDING | {
+    "entity",
+    "format_html",
+    "format_html_join",
+    "html_attributes",
+    "mark_safe",
+    "money",
+    "post_button",
+}
 _PLACEHOLDER = re.compile(r"\{(\w*)\}")
 # A format string that is attributes to add to a tag (' title="{}"') starts
 # inside that tag.

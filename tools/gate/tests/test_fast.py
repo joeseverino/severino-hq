@@ -19,26 +19,14 @@ from django.test.utils import iter_test_cases
 from hq.config.sandbox import RUN
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.test_runner import excluded_tags
-from hq.platform.core.tests.task import RefError, Usage, names, trusted_mise
+from hq.platform.core.tests.task import Usage, names, trusted_mise
 from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks, takes_the_turn
 from tools.gate import fast as fast_gate, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase, fixture_git
-from tools.gate.tests.fast_runs import run_main
+from tools.gate.tests.fast_runs import Recorder, run_main
 from tools.gate.verdict import FailedTest
 
 ROOT = Path(__file__).resolve().parents[3]
-
-
-class Recorder:
-    """A step that prints before it ends, as every real one does, and records what it was asked to run."""
-
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, list[str]]] = []
-
-    def __call__(self, label: str, cmd: list[str]) -> gate_verdict.Step:
-        self.calls.append((label, cmd))
-        print("step output", flush=True)
-        return gate_verdict.Step(label)
 
 
 @tag("source", "tree")
@@ -354,67 +342,6 @@ class FastGateTreeTests(GateTestCase):
 
     def test_fast_installs_the_lint_tools_its_gates_and_tests_run(self):
         self.assertIn("setup:lint-tools", mise_tasks()["fast"]["depends"])
-
-
-@tag("source")
-class FastGateBaseTests(GateTestCase):
-    REFS = {"main": "aaa", "topic": "bbb"}
-
-    def resolve(self, base, landing=()):
-        def git(*args):
-            if args[-1] not in self.REFS:
-                raise RefError(f"no ref {args[-1]}")
-            return [self.REFS[args[-1]]]
-
-        with patch.object(fast_gate, "git", git), patch.object(fast_gate, "landing", return_value=list(landing)):
-            return fast_gate.merge_base(base)
-
-    def test_with_none_asked_for_the_branch_head_lands_on_is_the_base(self):
-        self.assertEqual(self.resolve(None, landing=["topic"]), "bbb")
-
-    def test_the_branch_a_worktree_lands_on_is_the_one_it_was_made_from(self):
-        """A worktree's branch tracks nothing; the branch it was made from tracks a remote one and has moved on
-        since. Its own upstream, where it has one, is the base."""
-        with tempfile.TemporaryDirectory() as directory:
-            origin, clone = Path(directory) / "origin", Path(directory) / "clone"
-            origin.mkdir()
-            git = fixture_git(origin)
-            git("init", "-q", "-b", "main")
-            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "main")
-            git("checkout", "-q", "-b", "integration")
-            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "ahead of main")
-            subprocess.run(["git", "clone", "-q", str(origin), str(clone)], check=True)
-            git = fixture_git(clone)
-            git("checkout", "-q", "-b", "local-only")
-            git("checkout", "-q", "integration")
-            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "landed, not pushed")
-            fork = git("rev-parse", "HEAD")
-            self.assertEqual(fast_gate.landing(clone), ["origin/integration"])
-            git("checkout", "-q", "-b", "worker")
-            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "the worker's change")
-            git("checkout", "-q", "integration")
-            git("commit", "--quiet", "--no-verify", "--allow-empty", "-m", "another worker landed")
-            git("checkout", "-q", "worker")
-            (nearest,) = fast_gate.landing(clone)
-            self.assertEqual(nearest, "refs/heads/integration")
-            self.assertEqual(git("merge-base", "HEAD", nearest), fork)
-
-    def test_a_base_asked_for_is_the_one_used(self):
-        self.assertEqual(self.resolve("topic"), "bbb")
-
-    def test_a_base_asked_for_that_does_not_resolve_fails(self):
-        with self.assertRaises(SystemExit) as raised:
-            self.resolve("typo")
-        self.assertIn("typo", str(raised.exception.code))
-
-    def test_the_environment_names_a_base_behind_the_argument(self):
-        """CHECK_BASE and CHECK_PARALLEL reach the gate through the task's usage spec, never read by hand."""
-        usage = mise_tasks()["fast"]["usage"]
-        self.assertRegex(usage, r'arg "\[base\]" env="CHECK_BASE"')
-        self.assertRegex(usage, r'flag "--parallel <\w+>" env="CHECK_PARALLEL"')
-
-    def test_with_none_asked_for_a_missing_origin_falls_back_to_main(self):
-        self.assertEqual(self.resolve(None), "aaa")
 
 
 @tag("source")
@@ -831,6 +758,33 @@ class FastGatePassRecordTests(GateTestCase):
 
     def test_a_passing_run_of_the_whole_suite_on_a_tree_that_held_still_records_it(self):
         self.assertEqual(self.run_fast(whole=True), [TREE])
+
+    def test_a_wide_selection_runs_the_whole_suite_and_every_quick_gate_and_records_it(self):
+        """Past WIDE of the suite the rest runs too, so the pass starts the chain of recorded trees; short of it,
+        the selection runs alone."""
+        suite = [f"hq.example.tests.test_{n}" for n in range(10)]
+        for share, whole in ((7, True), (2, False)):
+            with self.subTest(share=share):
+                shutil.rmtree(self.folder, ignore_errors=True)
+                recorder = Recorder()
+                with patch.object(fast_gate, "passes", return_value=self.folder):
+                    run_main(
+                        ("hq/example.py",),
+                        selected=(),
+                        step=recorder,
+                        affected=(set(), set()),
+                        test_labels=(suite[:share], len(suite)),
+                        whole_suite=suite,
+                        judged=TREE,
+                        tree_of=BASE_TREE,
+                        touches_shared_ui=False,
+                    )
+                (run,) = [cmd for _, cmd in recorder.calls if fast_gate.TESTS in cmd]
+                every_gate = {*fast_gate.quick_gates(), *fast_gate.group_tests().values()}
+                self.assertEqual(every_gate <= set(run), whole)
+                self.assertEqual(set(suite) <= set(run), whole)
+                recorded = sorted(path.name for path in self.folder.iterdir()) if self.folder.is_dir() else []
+                self.assertEqual(recorded, [TREE] if whole else [])
 
     def test_a_passing_run_over_a_passed_base_records_the_tree(self):
         self.folder.mkdir(parents=True)

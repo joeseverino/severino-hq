@@ -162,7 +162,7 @@ def record_analytics(
     payload: dict[str, Any],
     *,
     principal: Principal,
-    controller_id: str = "",  # noqa: ARG001 - the bridge passes every report its controller_id
+    controller_id: str = "",
 ) -> dict[str, Any]:
     """Store one controller's reading of every site it can see.
 

@@ -133,7 +133,7 @@ def flush_through_the_audit_guard() -> None:
     """
 
     # Django offers no hook before a test's flush, so the flush itself is wrapped.
-    flush = TransactionTestCase._fixture_teardown  # noqa: SLF001 - the one place a test flushes
+    flush = TransactionTestCase._fixture_teardown
     if getattr(flush, "through_the_audit_guard", False):
         return
 
@@ -144,7 +144,7 @@ def flush_through_the_audit_guard() -> None:
             flush(self)
 
     _fixture_teardown.through_the_audit_guard = True
-    TransactionTestCase._fixture_teardown = _fixture_teardown  # noqa: SLF001 - as above
+    TransactionTestCase._fixture_teardown = _fixture_teardown
 
 
 def commands_from_the_shell() -> None:
@@ -191,9 +191,9 @@ def hypothesis_profiles() -> None:
     """
 
     try:
-        from hypothesis import settings as hypothesis  # noqa: PLC0415 - a tools-group dependency the image lacks
-        from hypothesis.configuration import set_hypothesis_home_dir  # noqa: PLC0415 - as above
-        from hypothesis.database import DirectoryBasedExampleDatabase  # noqa: PLC0415 - as above
+        from hypothesis import settings as hypothesis
+        from hypothesis.configuration import set_hypothesis_home_dir
+        from hypothesis.database import DirectoryBasedExampleDatabase
     except ImportError:
         return
     set_hypothesis_home_dir(HYPOTHESIS_HOME)

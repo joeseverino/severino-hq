@@ -13,15 +13,13 @@ from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
 from . import approval_review, approvals
 from .describe import Describe
-from .held_answer import HeldRequest, applying
+from .held_answer import HELD, HeldRequest, applying
 from .integration_specs import ResourceSpec
 from .record_errors import RecordNotFound
 from .refusal_status import refusal_of, refuse
 from .resource_operations import serialize_operation
 from .security import Capability, Principal
 from .ui import ended
-
-HELD = "approvals"
 
 # An operation still to finish, so the call it answers is not yet done.
 UNFINISHED = frozenset({OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED})
@@ -33,7 +31,8 @@ class HeldRequestRecord(HeldRequest):
     asks: Annotated[str, Describe("What it asks, in the sentence its card in HQ says.")]
     said: Annotated[str, Describe("Where it stands, in a sentence.")]
     done: Annotated[
-        bool, Describe("Whether it is settled: declined, lapsed or overtaken, or approved and its work ended.")
+        bool,
+        Describe("Whether it is settled: declined, lapsed, overtaken or withdrawn, or approved and its work ended."),
     ]
     operation: Annotated[
         str,
@@ -46,7 +45,7 @@ class HeldRequestRecord(HeldRequest):
         dict[str, Any],
         Describe(
             "What the call answered once done: its command's own answer, carrying its work as it ended, or a "
-            "refusal coded `declined`, `expired`, `stale` or `operation_failed`; empty until then."
+            "refusal coded `declined`, `expired`, `stale`, `withdrawn` or `operation_failed`; empty until then."
         ),
     ]
 

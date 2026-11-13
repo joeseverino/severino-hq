@@ -630,7 +630,10 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   reads only the held requests it asked for, on every surface that lists them;
   a person reads every one. Approval requires a person, in the browser or on
   their own device, and never the caller that asked. So no agent's token
-  approves anything.
+  approves anything. The caller that asked may withdraw its own request
+  while it waits (`approval.withdraw`, or MCP's `tasks/cancel`), which
+  applies nothing and frees its place among the ten; another caller's reads
+  as no request at all.
 - The change runs as the agent that asked, so its audit events name that
   agent. The person who approved or declined it is the request's
   `decided_actor`, which a decided request cannot be saved without.

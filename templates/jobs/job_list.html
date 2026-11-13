@@ -4,7 +4,9 @@ HQ's jobs and its automation runs as one list (`work_runs.WorkRun`), each
 state said in the same words and tones. What failed on its last run is said
 once above the rows that lead the list. A run's evidence (its machines, who
 approved it, its correlation id, its lease while a worker holds it, and each
-task's outcome) is in its row's open line, drawn by {% run_evidence %}.
+task's outcome) is in its row's open line, drawn by {% run_evidence %}. A
+run nothing has started ends with its Cancel button, for a reader who may
+cancel it.
 {% endcomment %}
 {% block summary %}
 {% if ended_badly %}
@@ -23,4 +25,5 @@ task's outcome) is in its row's open line, drawn by {% run_evidence %}.
     {% run_evidence row.evidence %}
   </td>
   <td>{{ row.by|or_empty }}</td>
+  {% row_actions row.actions %}
 {% endblock %}

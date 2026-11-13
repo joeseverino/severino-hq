@@ -1,6 +1,7 @@
 """A web view turns a refused answer into what a person sees one way: ``web_writes.refused``."""
 
 from django import forms
+from django.contrib.auth.models import AnonymousUser
 from django.contrib.messages import get_messages
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sessions.backends.signed_cookies import SessionStore
@@ -19,6 +20,7 @@ class ExampleForm(forms.Form):
 def a_request():
     request = RequestFactory().post("/example/")
     request.session = SessionStore()
+    request.user = AnonymousUser()
     request._messages = FallbackStorage(request)
     return request
 

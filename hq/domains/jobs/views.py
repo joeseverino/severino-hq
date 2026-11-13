@@ -9,10 +9,12 @@ from django.urls import reverse
 from django.views.generic import DetailView, ListView, View
 
 from hq.platform.application.pages import PageAction, PageMixin
+from hq.platform.application.security import web_principal
 from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
 from hq.platform.application.web_writes import execute_posted
 lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
+lazy from hq.platform.application.automation_runs import listed_with_actions
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT
 lazy from hq.platform.application.ui import counted
@@ -39,6 +41,7 @@ class JobListView(PageMixin, TableListMixin, ListView):
         TableColumn("Duration", kind="numeric"),
         TableColumn("Result", kind="prose"),
         TableColumn("Requested by", kind="prose"),
+        TableColumn("", css="actions-col"),
     )
     # Each sort's value is the projection's order, which reads it.
     table_sorts = (
@@ -82,7 +85,8 @@ class JobListView(PageMixin, TableListMixin, ListView):
             search=query.search,
             order=query.sort,
         )
-        return Projected(rows, work_runs.hydrated)
+        principal = web_principal(self.request.user)
+        return Projected(rows, lambda page: listed_with_actions(work_runs.hydrated(page), principal))
 
     @override
     def get_context_data(self, **kwargs):

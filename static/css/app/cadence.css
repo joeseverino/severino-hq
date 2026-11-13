@@ -193,7 +193,6 @@
 .route-band-5.route-swatch { background: var(--route-band-5); }
 .route-marker { stroke: var(--surface); stroke-width: 2.5; }
 .route-scale { stroke: var(--ink-2); stroke-width: 2; }
-/* stylelint-disable-next-line hq/faded-text -- a route's lines are marks, faded beside the one hovered */
 .route-map:hover .route-line:not(:hover) { opacity: .55; }
 
 /* ── Background jobs ────────────────────────────────────────────── */

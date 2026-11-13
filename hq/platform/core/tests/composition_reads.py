@@ -111,7 +111,7 @@ def _watch() -> None:
 
 
 def reads(modules: list[str]) -> list[str]:
-    global _ours  # noqa: PLW0603 - set once, before the first import it judges
+    global _ours
     _ours = tuple(sorted({"hq", *(name.partition(".")[0] for name in modules)}))
     _watch()
 

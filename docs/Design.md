@@ -544,7 +544,11 @@ it, and each task's outcome, each a labeled `row-below` block of the row's open
 line. Jobs draws it in a run's row, and a section's rows draw it through
 `ServiceSection.below`, so a machine's page and a procedure's page show a run
 as Jobs does. A section shows it only to a reader who may open Jobs
-(`service_context.recent_work`). *Catalog:* `part/run-evidence`.
+(`service_context.recent_work`). A section's rows end with what may be done
+to each record through `ServiceSection.actions`, drawn by `{% row_actions %}`
+as Jobs draws a run's Cancel button (`automation_runs.cancel_action`); a
+section none of whose rows has one draws no column for them. *Catalog:*
+`part/run-evidence`.
 
 A row of readings beside a page's title is `{% readings %}`, each
 `{% reading icon=... %}`: its mark, its figure, its quiet lines
@@ -1068,8 +1072,7 @@ an `aria-hidden` element. Text built in Python joins its parts with
 `breakable` draws that dot as `{% dot %}` does; markup built in Python joins
 with `dotted_html(...)`. *Gate:* `test_template_separators`, which follows
 every branch and include before each held mark, over the host's templates
-and an extension's, and the `dot-typed-in-text` ast-grep rule over the
-host's Python and an extension's `src`.
+and an extension's.
 
 A moment, a date and an age are each written one way, by
 `hq/platform/application/moments.py`: `when`, `when_day`, `ago`, `when_exact`
@@ -1131,8 +1134,7 @@ theme is a set of token values and dark mode is not a second stylesheet.
 (disabled, `aria-disabled`, `aria-busy`) or a mark that is not text. Text a
 reader still uses takes an ink token that clears 4.5:1: `--ink-3` on a tinted
 fill, `--muted` on a surface, `--code-muted` beside code.
-*Gate:* lint:css runs the faded-text rule
-(`tools/lint/stylelint-faded-text.mjs`), and the survey checks contrast.
+*Gate:* the survey checks contrast, measuring faded text as it is drawn.
 
 **Buttons.** Primary for the one thing a page is for; default for the rest;
 `ghost` for link-like actions that sit inline; `danger` in red text on the same

@@ -158,7 +158,6 @@ const restyledBySheet = [...new Set(primitives.flatMap((each) => each.sheets))].
 
 export default {
   plugins: [
-    "./stylelint-faded-text.mjs",
     "./stylelint-flow-grid.mjs",
     "./stylelint-ground-cover.mjs",
     "./stylelint-restyled-primitive.mjs",
@@ -171,7 +170,6 @@ export default {
   reportDescriptionlessDisables: true,
   reportNeedlessDisables: true,
   rules: {
-    "hq/faded-text": true,
     "hq/flow-grid": true,
     "hq/ground-cover": true,
     // Any other sheet draws none.

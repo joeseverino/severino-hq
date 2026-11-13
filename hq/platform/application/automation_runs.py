@@ -9,13 +9,13 @@ docs/Architecture.md, "Running a playbook".
 import hashlib
 import json
 import secrets
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
 from functools import lru_cache, partial
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from urllib.parse import urlencode
 
-from django.core.exceptions import ImproperlyConfigured
+from django.core.exceptions import ImproperlyConfigured, ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
 from django.utils.text import get_text_list
@@ -40,11 +40,13 @@ from .command_fields import Among, Describe, Names
 from .integration_specs import IDEMPOTENCY_FIELD, CapabilitySpec, CommandAbout, CommandFact
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
-lazy from . import approvals, automation_adoption
+lazy from . import approvals, automation_adoption, pages
+lazy from .action_links import command_url
 lazy from .approval_review import ChangePreview
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_sources import PLAYBOOKS, SHORT_REVISION
 lazy from .cadence import ring_automation_doorbell
+lazy from .capabilities import capability_words
 lazy from .controller import release_lapsed
 lazy from .entity_links import entity_link, kind_label
 lazy from .idempotency import IdempotencyConflict
@@ -56,10 +58,14 @@ lazy from .moments import ago, when
 lazy from .payload_words import ChangeRow, field_words, value_words
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
 lazy from .routes import reverse
+lazy from .run_reads import RUNS
 lazy from .service_context import Cell, ServiceSection, machines_cell, recent_work
 lazy from .timestamps import moment
 lazy from .ui import ended
-lazy from .work_runs import recent_runs
+lazy from .work_runs import RUN, WorkRun, operation_of, recent_runs
+
+if TYPE_CHECKING:
+    from .pages import PageAction
 
 
 # One catalog at a time: a process builds its commands from the catalog
@@ -368,13 +374,16 @@ class HeldWords:
     sentence: str
     href: str
     link: str = "See that run on Jobs"
+    # The button that cancels that run, for a reader who may cancel it now.
+    cancel: PageAction | None = None
 
 
-def held_words(details: object) -> HeldWords | None:
+def held_words(details: object, principal: Principal | None = None) -> HeldWords | None:
     """What a page says of the run a refusal names in ``details`` (``_held_by``):
     which playbook it runs, on which machines, in what state and since when,
-    and whether this playbook or a machine is what it holds. None for a
-    refusal that names no run in the way."""
+    and whether this playbook or a machine is what it holds, with the button
+    that cancels it where ``principal`` may. None for a refusal that names no
+    run in the way."""
 
     if not isinstance(details, dict) or not isinstance(details.get("holding"), dict):
         return None
@@ -394,7 +403,18 @@ def held_words(details: object) -> HeldWords | None:
         sentence = f"{ended(held)} A playbook runs once at a time, so ask again once that run ends."
     asked = {"kind": capability_name(playbook), "state": state.as_job.value}
     href = f"{reverse('jobs:list')}?{urlencode({**asked, **({'host': (shared or machines)[0]} if machines else {})})}"
-    return HeldWords(sentence, href)
+    return HeldWords(sentence, href, cancel=_holder_cancel(holding, principal))
+
+
+def _holder_cancel(holding: dict[str, Any], principal: Principal | None) -> PageAction | None:
+    """The button that cancels the run in the way, read as it stands now, for a ``principal`` who may."""
+
+    if principal is None:
+        return None
+    holder = OperationRequest.objects.select_related("resource").filter(pk=holding.get("id")).first()
+    if holder is None or not _offers_cancel(holder.state, str(holder.resource.spec.get("effect", "")), principal):
+        return None
+    return _cancel_button(str(holder.pk))
 
 
 @transaction.atomic
@@ -450,6 +470,128 @@ def request_run(
     # and only once it is stored for the claim to find.
     transaction.on_commit(ring_automation_doorbell)
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
+
+
+CANCEL = "automation.run.cancel"
+# The reason a run cancelled before it started carries in its result.
+CANCELLED_REASON = "Cancelled"
+
+
+def run_authority(effect: str) -> Capability:
+    """What asking for a run of a procedure of ``effect`` takes, and so what cancelling one does."""
+
+    return Capability.READ if effect == "read" else Capability.MANAGE_INFRASTRUCTURE
+
+
+@dataclass(frozen=True, slots=True)
+class CancelRunCommand:
+    """The run to cancel, by its operation id."""
+
+    operation_id: Annotated[
+        str,
+        Describe(
+            "The run to cancel.",
+            api="Its `operation.id`, from the answer that queued it, or its held request's `operation` once approved.",
+        ),
+    ]
+
+
+def _cancellable(operation_id: str, principal: Principal) -> OperationRequest:
+    """The run ``principal`` may cancel, locked, else a refusal.
+
+    A person cancels any run they have the authority to ask for. An agent
+    cancels only a run it asked for, and another's reads as no run at all.
+    """
+
+    try:
+        found = (
+            OperationRequest.objects.select_for_update()
+            .select_related("resource")
+            .filter(pk=operation_id, action=OperationRequest.Action.RUN)
+            .first()
+        )
+    except ValueError, DjangoValidationError:
+        found = None
+    if found is not None and not approvals.reads_every_hold(principal) and not _asked_it(found, principal):
+        found = None
+    if found is None:
+        raise RecordNotFound("No run you may cancel has that id.")
+    principal.require(run_authority(str(found.resource.spec.get("effect", ""))))
+    return found
+
+
+def _asked_it(operation: OperationRequest, principal: Principal) -> bool:
+    return (operation.requested_actor, operation.requested_interface, operation.requested_person_key) == (
+        principal.actor,
+        principal.interface,
+        principal.person_key,
+    )
+
+
+@transaction.atomic
+def cancel_run(command: CancelRunCommand, *, principal: Principal) -> OperationQueued:
+    """Cancel a run nothing has claimed, so it holds its playbook and machines no more.
+
+    A claimed run is left to its runner, which ends it or lets its lease run
+    out, and a lapsed lease holds nothing (``release_lapsed``).
+    """
+
+    # A claim whose lease ran out is put back or ended first, by the rule a claim applies.
+    release_lapsed(timezone.now())
+    operation = _cancellable(command.operation_id, principal)
+    if operation.state == OperationRequest.State.CLAIMED:
+        raise PolicyError(
+            "HQ's runner started this run, so it runs until it ends or the runner stops reporting.",
+            details={"operation": serialize_operation(operation)},
+        )
+    if operation.state != OperationRequest.State.QUEUED:
+        raise PolicyError(
+            f"This run already ended: {operation.get_state_display().lower()}.",
+            details={"operation": serialize_operation(operation)},
+        )
+    operation.state = OperationRequest.State.CANCELLED
+    operation.completed_at = timezone.now()
+    operation.result = {
+        "ok": False,
+        "message": f"{principal.actor} cancelled it before it started.",
+        "reason": CANCELLED_REASON,
+    }
+    operation.save(update_fields=("state", "completed_at", "result", "updated_at"))
+    return {"ok": True, "queued": False, "operation": serialize_operation(operation)}
+
+
+def _offers_cancel(state: str, effect: str, principal: Principal) -> bool:
+    """Whether a page offers ``principal`` the button that cancels a run in
+    ``state`` of a playbook of ``effect``: one nothing has claimed, for a
+    person who may ask for it themselves."""
+
+    return (
+        state == OperationRequest.State.QUEUED
+        and approvals.reads_every_hold(principal)
+        and principal.permits(Capability.READ, run_authority(effect))
+    )
+
+
+def _cancel_button(operation_id: str) -> PageAction:
+    """The press that posts the run's id to its cancel command's own form."""
+
+    return pages.PageAction(
+        capability_words(CANCEL), command_url(CANCEL), method="post", field="operation_id", value=operation_id
+    )
+
+
+def cancel_action(run: WorkRun, principal: Principal) -> PageAction | None:
+    """The button that cancels ``run`` where it is listed, posting its id, or None."""
+
+    if run.source != RUN or not operation_of(run.kind) or not _offers_cancel(run.state, run.effect, principal):
+        return None
+    return _cancel_button(run.id)
+
+
+def listed_with_actions(runs: Iterable[WorkRun], principal: Principal) -> list[WorkRun]:
+    """``runs`` each with what ``principal`` may do to it where it is listed."""
+
+    return [replace(run, actions=(action,)) if (action := cancel_action(run, principal)) else run for run in runs]
 
 
 def _run(manifest: OperationManifest, command: RunCommand, *, principal: Principal) -> OperationQueued:
@@ -566,16 +708,22 @@ def run_preview(manifest: OperationManifest, held: ApprovalRequest) -> ChangePre
 
 
 def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
-    """What the adopted catalog says a run checks before it works, how it
-    shows it worked, and how a failed one is recovered, for an agent to read
-    before it asks, as a person reads them on the command's page."""
+    """What the adopted catalog says of a run: what it may do on a machine,
+    how long it has, what it checks before it works, how it shows it worked,
+    how a failed one is recovered and whether it is run again, for an agent
+    to read before it asks, as a person reads them on the command's page."""
 
     said = (
         ("Before it works, the playbook checks:", manifest.preconditions),
         ("It shows it worked when:", manifest.verification),
         ("If it fails:", manifest.recovery),
     )
-    return tuple(f"{lead} {_statements(statements)}" for lead, statements in said if statements)
+    return (
+        ended(f"Access: {access_words(manifest.privilege, manifest.effect)}"),
+        ended(f"Timeout: {seconds(manifest.timeout_seconds)}"),
+        *(f"{lead} {_statements(statements)}" for lead, statements in said if statements),
+        ended(f"Retry: {RETRY_WORDS[manifest.retry]}"),
+    )
 
 
 def _approval_words(manifest: OperationManifest) -> str:
@@ -598,6 +746,11 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
     # The playbook by its title in quotes, or by its id where it has none.
     named = f"“{titles[manifest.id]}”" if titles.get(manifest.id) else manifest.id
     run = measured_by(partial(run_subject, manifest), shown=partial(run_preview, manifest))(partial(_run, manifest))
+    # A read is keyed afresh at each ask (``_run``), so asking again finds the first run in the way.
+    asked_again = (
+        "A read takes no `idempotency_key`. Asked again after `call_timed_out`, it is refused while the first "
+        "run waits or works, and `details.holding` is that run."
+    )
     if manifest.effect != "read":
         # A procedure that changes a machine is a person's to approve each time
         # an agent asks; a person's own click is their consent.
@@ -606,13 +759,15 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
         name,
         f"Run the adopted playbook {named} on the machines you name. {_approval_words(manifest)}",
         manifest.effect,
-        Capability.READ if manifest.effect == "read" else Capability.MANAGE_INFRASTRUCTURE,
+        run_authority(manifest.effect),
         command_type(manifest),
         run,
         execution_notes=(
             "Find each machine named, and refuse one the playbook is not written for.",
             "Refuse while another run waits or works on this playbook or on one of those machines.",
             "Queue it once, and HQ runs it with Ansible outside this request.",
+            *((asked_again,) if manifest.effect == "read" else ()),
+            f"Read how it went from `{RUNS}`, by the `operation.id` this answers.",
             *_reviewed_notes(manifest),
         ),
         label=run_title(manifest.id, titles),
@@ -625,9 +780,32 @@ def _capability(manifest: OperationManifest, titles: Mapping[str, str]) -> Capab
     )
 
 
+def _cancel_spec() -> CapabilitySpec:
+    return CapabilitySpec(
+        CANCEL,
+        "Cancel a playbook's run that has not started, so it holds its playbook and machines no more. "
+        "Send the run's `operation.id`. An agent may cancel only a run it asked for.",
+        "remote_write",
+        # Held to the run's own authority by the handler, which reads the run.
+        Capability.READ,
+        CancelRunCommand,
+        cancel_run,
+        execution_notes=(
+            "Find the run, and refuse one you may not ask for, or another agent's.",
+            "Refuse a run HQ's runner has started: it runs until it ends or the runner stops reporting.",
+            "Mark it cancelled, so nothing runs, and the next run of its playbook or machines can be asked.",
+        ),
+        label="Cancel run",
+        # Read on a held cancel's card, after "example-agent wants to".
+        wants="call off playbook work before HQ's runner starts it",
+        reached_from="jobs:list",
+        home=PLAYBOOKS,
+    )
+
+
 def capability_specs(generation: str | None = None) -> tuple[CapabilitySpec, ...]:
-    """The command each procedure of the adopted catalog is run through."""
+    """Cancelling a run, and the command each procedure of the adopted catalog is run through."""
 
     digest = automation_adoption.generation() if generation is None else generation
     titles = automation_adoption.playbook_titles(digest)
-    return tuple(_capability(manifest, titles) for manifest in operation_registry(digest).values())
+    return (_cancel_spec(), *(_capability(manifest, titles) for manifest in operation_registry(digest).values()))

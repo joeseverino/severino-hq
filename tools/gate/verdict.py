@@ -498,7 +498,7 @@ class Gate:
         self.stem = re.sub(r"[^\w.-]+", "-", name).strip("-")
         self.path = VERDICTS / f"{self.stem}.txt"
         self.log_path = VERDICTS / f"{self.stem}.log"
-        global OPENED  # noqa: PLW0603 - a process runs one gate, whose commands' output goes to its log
+        global OPENED
         if OPENED is not None:
             OPENED.shut()
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -512,6 +512,12 @@ class Gate:
         OPENED = self
         print(f"[{name}] all the run printed: {self.log_path}; verdict: the last line, kept whole in {self.path}")
         sys.stdout.flush()
+
+    def restart(self) -> None:
+        """Judge the checkout as it stands now: a gate that rewrites it first
+        (fast's fixes) judges what it left."""
+
+        self.tree = tree_now(self.root)
 
     def judged(self) -> str | None:
         """The tree the gate judged: the checkout's when it opened, if the
@@ -575,7 +581,7 @@ class Gate:
     def shut(self) -> None:
         """Give the process its own output back and close the log."""
 
-        global OPENED  # noqa: PLW0603 - see Gate.__init__
+        global OPENED
         if isinstance(sys.stdout, Kept) and sys.stdout.log is self.log:
             sys.stdout.flush()
             sys.stdout = self.screen

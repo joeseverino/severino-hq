@@ -1027,6 +1027,86 @@
       }
     }
   },
+  "getPlaybookScansV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "adopted": false,
+          "branch": "main",
+          "committer": "example-maintainer",
+          "held": "",
+          "id": 3,
+          "read_at": "2026-01-15T06:30:00+00:00",
+          "refused": [
+            "playbooks/package_upgrade.hq.yml: Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."
+          ],
+          "revision": "000cb167aee92601ea8a6c0811081a69038d2d91",
+          "widens": []
+        },
+        "ok": true
+      }
+    }
+  },
+  "getPlaybooksV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "capability": "automation.example.cache_flush.run",
+          "effect": "infrastructure_change",
+          "facts": [
+            {
+              "label": "Runs on",
+              "value": "Any machine"
+            },
+            {
+              "label": "Effect",
+              "value": "Changes a live system"
+            },
+            {
+              "label": "Access",
+              "value": "No sudo"
+            },
+            {
+              "label": "Timeout",
+              "value": "5\u00a0min"
+            },
+            {
+              "label": "Preconditions",
+              "value": "The cache's service is running on the machine."
+            },
+            {
+              "label": "Verification",
+              "value": "The cache reports no entries."
+            },
+            {
+              "label": "Recovery",
+              "value": "The cache refills on its own as it is read."
+            },
+            {
+              "label": "Retry",
+              "value": "Only once the machines are looked at"
+            },
+            {
+              "label": "Adopted commit",
+              "value": "0123456789ab"
+            },
+            {
+              "label": "Playbook file",
+              "value": "playbooks/cache_flush.yml"
+            }
+          ],
+          "playbook": "example.cache_flush",
+          "reachable": [
+            "docker-host-01",
+            "iphone-16-pro",
+            "macbook-pro-16"
+          ],
+          "title": "Empty a cache"
+        },
+        "ok": true
+      }
+    }
+  },
   "getProjectsV2": {
     "responses": {
       "200": {
@@ -2387,6 +2467,82 @@
       }
     }
   },
+  "listPlaybookScansV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 1,
+          "items": [
+            {
+              "adopted": false,
+              "branch": "main",
+              "committer": "example-maintainer",
+              "held": "",
+              "id": 3,
+              "read_at": "2026-01-15T06:30:00+00:00",
+              "refused": [
+                "playbooks/package_upgrade.hq.yml: Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."
+              ],
+              "revision": "000cb167aee92601ea8a6c0811081a69038d2d91",
+              "widens": []
+            }
+          ],
+          "next": null,
+          "total": 1,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listPlaybooksV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 3,
+          "items": [
+            {
+              "capability": "automation.example.cache_flush.run",
+              "effect": "infrastructure_change",
+              "playbook": "example.cache_flush",
+              "reachable": [
+                "docker-host-01",
+                "iphone-16-pro",
+                "macbook-pro-16"
+              ],
+              "title": "Empty a cache"
+            },
+            {
+              "capability": "automation.example.disk_report.run",
+              "effect": "read",
+              "playbook": "example.disk_report",
+              "reachable": [
+                "docker-host-01",
+                "iphone-16-pro",
+                "macbook-pro-16"
+              ],
+              "title": "Report a mount's use"
+            },
+            {
+              "capability": "automation.example.package_upgrade.run",
+              "effect": "infrastructure_change",
+              "playbook": "example.package_upgrade",
+              "reachable": [
+                "docker-host-01",
+                "iphone-16-pro",
+                "macbook-pro-16"
+              ],
+              "title": "Upgrade packages"
+            }
+          ],
+          "next": null,
+          "total": 3,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
   "listProjectsV2": {
     "responses": {
       "200": {
@@ -3085,7 +3241,7 @@
             "state": "pending",
             "target": ""
           },
-          "message": "This change waits for approval in HQ. Nothing is written or queued until an operator approves it. Report the request id and stop, since a token cannot approve it.",
+          "message": "This change waits for approval in HQ. Nothing is written or queued until an operator approves it, which a token cannot. Report the request id to your user, and read `approvals` by that id for how it stands.",
           "queued": false,
           "repeated": false,
           "status": "awaiting_approval"

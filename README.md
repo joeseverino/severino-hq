@@ -108,7 +108,7 @@ names them.
   `hq/platform/application/tests/test_plugins.py` fails when a host file
   names an installed extension.
 - Architecture rules (no view writes a model, MCP reads no model, one table
-  engine, function complexity) are tests in
+  engine) are tests in
   `hq/platform/application/tests/test_architecture.py`, listed in
   [New Domain](docs/New-Domain.md).
 - An image's signature checks against the Compose workflow on `main`, the

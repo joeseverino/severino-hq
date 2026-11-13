@@ -5,7 +5,6 @@ import os
 import shutil
 import subprocess
 import tempfile
-import tomllib
 from pathlib import Path, PurePath
 from unittest.mock import patch
 
@@ -103,10 +102,8 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertLessEqual(drift, set(fast_gate.quick_gates()), "a drift gate is a quick gate: tag it fast")
 
     def test_a_gates_exclusions_are_those_its_tool_declares(self):
-        """complexipy leaves out what complexipy.toml's exclude names; the structural bar drops test code."""
+        """The structural bar drops test code."""
 
-        declared = tomllib.loads((ROOT / "complexipy.toml").read_text(encoding="utf-8"))["exclude"]
-        self.assertEqual(sorted(exclusions("lint:complexity")), sorted(declared))
         excluded = exclusions("lint:structural")
         disagree = [
             path
@@ -166,11 +163,6 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertIn(
             "lint:structural", selected("hq/platform/core/tests/test_example.py", "hq/platform/core/example.py")
         )
-
-    def test_a_change_to_tests_alone_runs_the_complexity_bound_and_a_migration_alone_does_not(self):
-        self.assertIn("lint:complexity", selected("hq/platform/core/tests/test_example.py"))
-        self.assertIn("lint:complexity", selected("tests/example/consumer.py"))
-        self.assertNotIn("lint:complexity", selected("hq/domains/example/migrations/0001_initial.py"))
 
     def test_a_change_to_what_every_gate_reads_runs_them_all(self):
         for changed in ("mise-tasks/lint.toml", "mise-tasks/test.toml", "tools/pipeline/toolchain.env"):

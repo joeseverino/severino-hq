@@ -2,8 +2,8 @@
 fills it, which no host page does, drawn through its own partial or tag on a
 page of its own and held by the whole survey. A new state of a shared part is
 one entry in the module of its family under ``families/``, the prefix of its
-name (``part/``, ``table/``). A new family is a new module there, one import
-below and one line of ``MODULES`` in test_browser_probes."""
+name (``part/``, ``table/``). A new family is a new module there and one
+import below."""
 
 from typing import override
 

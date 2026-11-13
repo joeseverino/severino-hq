@@ -29,7 +29,7 @@ lazy from hq.platform.core.models import AuditLog
 from . import derivations
 from .command_fields import Describe
 from .derivations import holds_until
-from .held_answer import ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
+from .held_answer import HELD, ApprovalApplied, ApprovalRejected, HeldCall, serialize_approval
 from .record_errors import PolicyError, RecordNotFound
 from .refusal_status import refusal_of, refuse
 from .security import (
@@ -45,6 +45,7 @@ lazy from . import agent_access, capabilities, resources
 lazy from .approval_review import asked
 lazy from .capabilities import authorize_capability, execute_approved, validate_command
 lazy from .command_targets import item_name
+lazy from .held_answer import ApprovalWithdrawn
 lazy from .integration_specs import capability_fields
 lazy from .resource_refusals import UnsupportedResourceOperation
 lazy from .resources import InvalidResourceInput
@@ -429,8 +430,8 @@ def _awaiting(held: ApprovalRequest, *, repeated: bool) -> HeldCall:
         "applied": False,
         "message": (
             "This change waits for approval in HQ. Nothing is written or queued "
-            "until an operator approves it. Report the request id and stop, "
-            "since a token cannot approve it."
+            "until an operator approves it, which a token cannot. Report the "
+            f"request id to your user, and read `{HELD}` by that id for how it stands."
         ),
         "repeated": repeated,
         "approval": serialize_approval(held),
@@ -468,6 +469,7 @@ _UNAPPLIED = {
             "Ask again if you still need the change."
         ),
     ),
+    ApprovalRequest.State.WITHDRAWN: ("withdrawn", "You withdrew this request, so nothing was written."),
 }
 
 
@@ -634,6 +636,7 @@ def _require_asker_running(held: ApprovalRequest) -> None:
 REQUEST = "approval.request"
 APPROVE = "approval.approve"
 REJECT = "approval.reject"
+WITHDRAW = "approval.withdraw"
 LAPSE = "approval.lapse"
 _LAPSED_NOTE = "It expired without an answer."
 
@@ -742,6 +745,38 @@ def answered[**P, R](decide: Callable[P, R]) -> Callable[P, R | dict[str, Any]]:
             return refusal_of(settled).answer()
 
     return run
+
+
+@dataclass(frozen=True, slots=True)
+class WithdrawCommand:
+    """The held request to take back, which you asked for."""
+
+    approval_id: Annotated[
+        str, Describe("The held request to withdraw.", api="The `approval.id` its held answer carried.")
+    ]
+
+
+def withdraw(command: WithdrawCommand, *, principal: Principal) -> ApprovalWithdrawn:
+    """Take back a held request its asker no longer wants, before anybody decides it.
+
+    Only the caller that asked may: another caller's request reads as one
+    nothing holds (``asked_by``). Withdrawn, it applies nothing, no person is
+    asked to decide it, and it no longer counts against its asker's
+    ``MAX_PENDING_PER_ACTOR``.
+    """
+
+    held = asked_by(command.approval_id, principal=principal)
+    if held is None:
+        raise RecordNotFound("No held request of yours has that id.")
+    held = _decidable(str(held.pk), principal)
+    with _its_operation(held, WITHDRAW, principal), transaction.atomic():
+        locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
+        if locked.state != ApprovalRequest.State.PENDING:
+            raise ApprovalError(f"That request is already {locked.get_state_display().lower()}.")
+        locked.state = ApprovalRequest.State.WITHDRAWN
+        locked.decided_at = timezone.now()
+        locked.save(update_fields=("state", "decided_at", "updated_at"))
+    return {"ok": True, "withdrawn": str(locked.id)}
 
 
 def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:

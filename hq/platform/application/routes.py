@@ -22,7 +22,7 @@ from .projection import read_once
 @lru_cache(maxsize=4096)
 def _resolved(
     urlconf: Any,
-    prefix: str,  # noqa: ARG001 - a key of the cache: Django's reverse reads the script prefix itself
+    prefix: str,
     current_app: Any,
     viewname: Any,
     args: tuple,

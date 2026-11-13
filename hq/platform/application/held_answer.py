@@ -9,11 +9,17 @@ from .command_fields import Describe
 from .describe import listed
 from .hq_self import site_url
 
+# The resource a held request is read by, which a held answer names for a
+# caller whose client cannot wait on it as a task.
+HELD = "approvals"
+
 
 class HeldRequest(TypedDict):
     """A call held for approval: what it asks, who asked, and where it is decided."""
 
-    id: Annotated[str, Describe("The request's id, which the asking agent reports back to its user.")]
+    id: Annotated[
+        str, Describe(f"The request's id, which the asking agent reports back to its user and `{HELD}` reads it by.")
+    ]
     capability: Annotated[str, Describe("The command it would run, by name.")]
     target: Annotated[str, Describe("The record the command would act on, as the call named it; empty for none.")]
     resource_kind: Annotated[
@@ -71,6 +77,13 @@ class ApprovalRejected(TypedDict):
 
     ok: Literal[True]
     rejected: Annotated[str, Describe("The id of the request rejected.")]
+
+
+class ApprovalWithdrawn(TypedDict):
+    """A held change its asker took back, so nothing it asked was done."""
+
+    ok: Literal[True]
+    withdrawn: Annotated[str, Describe("The id of the request withdrawn.")]
 
 
 def serialize_approval(held: ApprovalRequest) -> HeldRequest:

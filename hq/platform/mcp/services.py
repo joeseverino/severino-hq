@@ -245,7 +245,7 @@ def audit_registry() -> RegistryAudit:
 
 
 @tool("Export a year summary", requires=holding(Capability.READ), budget=Budget(4_700, frozendict({"year": 2026})))
-def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary:  # noqa: A002 - the MCP tool's parameter, by name
+def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary:
     """One year's summary, as Markdown or JSON: its expenses, projects,
     writeups, docs and the assets bought.
 

@@ -265,7 +265,7 @@ class TableListMixin:
     def get_table_filters(self) -> tuple[TableFilter, ...]:
         return self.table_filters
 
-    def get_table_rows(self, query: TableQuery) -> Projected | None:  # noqa: ARG002 (the override reads it)
+    def get_table_rows(self, query: TableQuery) -> Projected | None:
         """The rows of a list a projection fills, for what its address asks;
         None, the default, lists the model's queryset.
 

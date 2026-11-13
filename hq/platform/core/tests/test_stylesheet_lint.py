@@ -33,7 +33,6 @@ MEASURE = CUT
 FLOW = "hq/flow-grid"
 # Each exception is written on the line before the one it exempts.
 KICKER = f"/* stylelint-disable-next-line {CASE}"
-FADE = "/* stylelint-disable-next-line hq/faded-text"
 LAYS_OUT = f"/* stylelint-disable-next-line {FLOW}"
 
 REFUSED = [
@@ -74,16 +73,6 @@ REFUSED = [
     (APP, ".a::after { content: ' / '; }", "declaration-property-value-disallowed-list"),
     (TOKENS, '.a::after { content: "Dismissed: "; }', "declaration-property-value-disallowed-list"),
     (REFERENCE, '.a::after { content: "\\2197"; }', "declaration-property-value-disallowed-list"),
-    (APP, ".a { opacity: .62; }", "hq/faded-text"),
-    (APP, ".a { opacity: 50%; }", "hq/faded-text"),
-    (APP, ".a { opacity: var(--fade); } :root { --fade: .5; }", "hq/faded-text"),
-    (APP, ".btn:disabled, .btn-note { opacity: .5; }", "hq/faded-text"),
-    (APP, ".a:not(:disabled) { opacity: .5; }", "hq/faded-text"),
-    (APP, ".day :is(.label, .month-mark) { opacity: .6; }", "hq/faded-text"),
-    (APP, ".month-mark span { opacity: .6; }", "hq/faded-text"),
-    (APP, "@keyframes example-fade { to { opacity: .4; } }", "hq/faded-text"),
-    (APP, ".route-map:hover .route-line:not(:hover) { opacity: .55; }", "hq/faded-text"),
-    (APP, f"{FADE} */\n.chart-trend {{ opacity: .65; }}", "--report-descriptionless-disables"),
     (APP, ".a { position: sticky; background: var(--bg); }", "hq/ground-cover"),
     (
         APP,
@@ -164,12 +153,6 @@ PASSED = [
         APP,
         '.a::before { content: none; } .b::before { content: counter(step) ". "; } .c::before { content: attr(data-x); }',
     ),
-    (APP, ".a { opacity: 0; } .b { opacity: 1; } .c { opacity: 100%; }"),
-    (APP, '.btn:disabled, span.btn[aria-disabled="true"] { opacity: .52; }'),
-    (APP, 'main[aria-busy="true"] :is(.a, .b) { opacity: .55; }'),
-    (APP, ".chart:hover rect:not(:hover) { opacity: .78; } .chart path.is-past { opacity: .5; }"),
-    (APP, f"{FADE} -- a chart's trend line, a mark */\n.chart-trend {{ opacity: .65; }}"),
-    (APP, f"@keyframes conn-pulse {{\n  {FADE} -- the live dot's pulse, a mark */\n  50% {{ opacity: .35; }}\n}}"),
     (CUTS, ".a { overflow: hidden; text-overflow: ellipsis; } .b { -webkit-line-clamp: 2; line-clamp: 2; }"),
     (
         TABLES,

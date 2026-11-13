@@ -251,7 +251,7 @@ class CommandView(View):
             "change_url": command_url(self.spec.name),
         }
 
-    def get(self, request, name: str):  # noqa: ARG002 - Django passes the URL's name; dispatch read it into spec
+    def get(self, request, name: str):
         initial = {"next": safe_next(request)}
         target = request.GET.get("target", "") if self.spec.target_kind else ""
         known_targets = {option.value for option in self.target_options or ()}
@@ -274,7 +274,7 @@ class CommandView(View):
             return {}
         return capability_target_initial(self.spec, target, principal=self.principal)
 
-    def post(self, request, name: str):  # noqa: ARG002 - Django passes the URL's name; dispatch read it into spec
+    def post(self, request, name: str):
         form = self.form_class(request.POST, request.FILES, initial=self._held(request.POST.get("__target", "")))
         if not form.is_valid():
             return TemplateResponse(request, self.template_name, self._context(form), status=400)

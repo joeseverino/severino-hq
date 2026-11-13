@@ -670,6 +670,8 @@ class ApprovalState(models.TextChoices):
     # Decided by nobody: the thing it described changed underneath it, so
     # the approval that was asked for no longer covers what would happen.
     STALE = "stale", "Superseded"
+    # Taken back by whoever asked, before anybody decided it.
+    WITHDRAWN = "withdrawn", "Withdrawn"
 
 
 class ApprovalRequest(TimestampedModel):

@@ -88,7 +88,7 @@ def _run_directory() -> Path:
         run = Path(tempfile.mkdtemp(prefix=RUN_PREFIX))
         owner = os.open(run / OWNER, os.O_RDWR | os.O_CREAT, 0o600)
         _Owner.held = owner
-        os.set_inheritable(owner, True)  # noqa: FBT003 - positional only; held across an exec of this process
+        os.set_inheritable(owner, True)
         fcntl.flock(owner, fcntl.LOCK_EX)
         os.write(owner, str(os.getpid()).encode())
         os.environ.update({RUN: str(run), "TMPDIR": str(run)})
