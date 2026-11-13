@@ -1,6 +1,7 @@
 """A dense page's map, as a reader moves through it: the link the keyboard is
 on, and the link of the section being read, are in the row's view, and
-bringing one there never moves the page."""
+bringing one there never moves the page, and a map an answer brings in is
+marked as the one it replaced was."""
 
 from typing import override
 
@@ -15,7 +16,11 @@ from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
 
 _MAP = "part/page-navigation"
-_SCRIPT = '<script defer src="{{ static }}js/app.js" nonce="{{ nonce }}"></script>'
+# app.js after fragment.js, as base.html loads them.
+_SCRIPT = (
+    '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
+    '<script defer src="{{ static }}js/app.js" nonce="{{ nonce }}"></script>'
+)
 
 # The catalog's map over sections a screen tall each, so the last ones are
 # reached only by scrolling the page, as on a dense page.
@@ -25,6 +30,16 @@ _DENSE = (
     "{% section item.label id=item.id %}{% for line in lines %}<p>An example line.</p>{% endfor %}"
     "{% endsection %}{% endfor %}"
 )
+
+# The same, inside a region answered from its own page, as a search's
+# results hold their groups' map.
+_REGION = "example-results"
+_SWAPPED = f'<div id="{_REGION}" data-fragment>{_DENSE}</div>'
+
+# The region answered again, and then the text of each link marked as the
+# section being read.
+_ANSWERED = f"() => hqFragment.swap(document.getElementById('{_REGION}'))"
+_MARKED = """(current) => [...document.querySelectorAll(current)].map((link) => link.textContent.trim())"""
 
 # A link (the focused one, without a selector), how far it stands outside the
 # row's visible box on either side (0 inside it), and where the page is.
@@ -44,8 +59,8 @@ _SEEN = """([list, link]) => {
 _SCROLL_TO = "(id) => { window.scrollTo({top: document.getElementById(id).offsetTop, behavior: 'instant'}); return window.scrollY; }"
 
 
-def _page():
-    drawn = Template(_DENSE).render(Context({**CATALOG[_MAP].context, "lines": range(40)}))
+def _page(markup=_DENSE):
+    drawn = Template(markup).render(Context({**CATALOG[_MAP].context, "lines": range(40)}))
     script = Template(_SCRIPT).render(Context({"static": settings.STATIC_URL, "nonce": NONCE}))
     return part_page(_MAP, drawn).replace("</head>", script + "</head>")
 
@@ -57,11 +72,11 @@ class PageNavigationBrowserTests(BrowserGate):
     @classmethod
     @override
     def render(cls):
-        return {"page-navigation": _page()}
+        return {"page-navigation": _page(), "page-navigation-answered": _page(_SWAPPED)}
 
-    def open_map(self, address=""):
+    def open_map(self, address="", page="page-navigation"):
         self.page.set_viewport_size({"width": PHONE_SCREEN[0], "height": PHONE_SCREEN[1]})
-        self.page.goto(f"{ORIGIN}/page-navigation/{address}", wait_until="load")
+        self.page.goto(f"{ORIGIN}/{page}/{address}", wait_until="load")
         self.page.evaluate(PAINTED)
 
     def seen(self, link=None):
@@ -115,3 +130,18 @@ class PageNavigationBrowserTests(BrowserGate):
                     self.assertEqual(current["link"], label, current)
                     self.assertEqual(current["outside"], [0, 0], current)
                     self.assertEqual(current["page"], put, current)
+
+    @with_script
+    def test_a_map_an_answer_brings_in_marks_the_section_being_read(self):
+        """Its region answered again in place, the map that replaced the one
+        drawn marks the section being read, and goes on marking it as the
+        page is scrolled."""
+
+        self.open_map("#example-5", page="page-navigation-answered")
+        self.assertEqual(self.page.evaluate(_MARKED, SELECTORS["page_nav_current"]), ["Example history"])
+        self.assertTrue(self.page.evaluate(_ANSWERED), "the region's answer was not placed")
+        self.page.evaluate(PAINTED)
+        self.assertEqual(self.page.evaluate(_MARKED, SELECTORS["page_nav_current"]), ["Example history"])
+        self.page.evaluate(_SCROLL_TO, "example-0")
+        self.page.evaluate(PAINTED)
+        self.assertEqual(self.page.evaluate(_MARKED, SELECTORS["page_nav_current"]), ["Overview"])

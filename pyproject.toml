@@ -94,19 +94,20 @@ DEP004 = [
 # Which module may import which, read by lint:imports from every import,
 # lazy or not, however it is spelled. A forbidden list names `hq.**` rather
 # than `hq`: import-linter skips a forbidden module that contains the source.
+# Every package of the code is a root, so a path through the SDK is in the graph.
 [tool.importlinter]
-root_packages = ["hq", "hq_runner"]
+root_packages = ["hq", "hq_sdk", "hq_runner"]
 
 [[tool.importlinter.contracts]]
-name = "The automation worker imports nothing of HQ: it ships in an image of its own"
+name = "The automation worker imports nothing of HQ or its SDK: it ships in an image of its own"
 type = "forbidden"
 source_modules = ["hq_runner"]
-forbidden_modules = ["hq"]
+forbidden_modules = ["hq", "hq_sdk"]
 
 [[tool.importlinter.contracts]]
-name = "HQ never imports the automation worker, which its image does not ship"
+name = "HQ and its SDK never import the automation worker, which their image does not ship"
 type = "forbidden"
-source_modules = ["hq"]
+source_modules = ["hq", "hq_sdk"]
 forbidden_modules = ["hq_runner"]
 
 [[tool.importlinter.contracts]]

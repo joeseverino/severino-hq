@@ -380,7 +380,7 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    would. A flow of sections in the body reaches them too. */
 :is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .github-list, .posture-repos,
   .insight-grid, .sweep-grid,
-  .month-grid, .list-rows, .search-hits, .section-flow, .timeline-list) {
+  .month-grid, .list-rows, .section-flow, .timeline-list) {
   --frame-inset: var(--section-side);
   margin-inline: calc(-1 * var(--section-side));
   max-inline-size: calc(100% + 2 * var(--section-side));

@@ -1,7 +1,7 @@
 """dev:look reads what it was asked only from its task, reads --css as a file
 from the checkout and --probe as a probe module's, reports page by page, shoots a dialog open as a reader
-opens it, and compares against a base in a worktree it always removes, keeping
-the base's shots."""
+opens it, and matches findings against a base's (test_look_base.py looks at
+the base)."""
 
 import io
 import os
@@ -822,78 +822,6 @@ class ProgressTests(SimpleTestCase):
             look._relay([sys.executable, "-c", "print('Looking at example at 402'); print('done')"], sink, "base")
         self.assertEqual(said.getvalue(), "base: Looking at example at 402\nbase: done\n")
         self.assertEqual(sink.getvalue(), "Looking at example at 402\ndone\n")
-
-
-@tag("source", "tree")
-class WorktreeTests(SimpleTestCase):
-    def test_a_report_names_the_commit_it_was_looked_at(self):
-        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
-            checkout = _repository(Path(folder))
-            head = _git("rev-parse", "--short", "HEAD", cwd=checkout).strip()
-            self.assertEqual(look._commit("HEAD"), head)
-            (checkout / "page.txt").write_text("changed\n", encoding="utf-8")
-            self.assertEqual(look._commit("HEAD"), f"{head} with uncommitted changes")
-            self.assertIn("unknown", look._commit("example-missing"))
-
-    def test_the_base_is_looked_at_under_this_trees_test_files(self):
-        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
-            checkout = _repository(Path(folder))
-            Path(checkout, "hq", "tests").mkdir(parents=True)
-            Path(checkout, "hq", "tests", "test_new.py").write_text("new\n", encoding="utf-8")
-            seen = {}
-
-            def relay(_command, _sink, _ref, cwd, env):
-                seen["test"] = Path(cwd, "hq", "tests", "test_new.py").read_text(encoding="utf-8")
-                seen["database"] = env.get("SEVERINO_TEST_DATABASE_PATH")
-                seen["css"] = env.get("usage_css")
-                Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
-
-            with (
-                mock.patch.dict(
-                    os.environ,
-                    {**ASKED, "usage_css": "main { color: red }", "SEVERINO_TEST_DATABASE_PATH": "var/example.sqlite3"},
-                    clear=True,
-                ),
-                mock.patch.object(look, "LENS", ()),
-                mock.patch.object(look, "this_run", lambda: checkout / "var" / "look" / "example-run"),
-                mock.patch.object(look, "_relay", relay),
-                mock.patch("sys.stdout", new_callable=io.StringIO),
-            ):
-                self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}, []))
-            self.assertEqual(seen["test"], "new\n")
-            self.assertIsNone(seen["database"], "the base migrates a database of its own")
-            self.assertEqual(seen["css"], "", "the base is drawn as its tree draws, without --css")
-
-    def test_the_base_shoots_into_this_runs_folder_so_its_shots_outlive_its_worktree(self):
-        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
-            checkout = _repository(Path(folder))
-            run = checkout / "var" / "look" / "example-run"
-            run.mkdir(parents=True)
-
-            def relay(_command, _sink, _ref, cwd, env):
-                self.assertFalse(Path(env["usage_shots_into"]).is_relative_to(cwd))
-                Path(env["usage_shots_into"]).mkdir()
-                Path(env["usage_shots_into"], "example-402.png").write_bytes(b"base")
-                Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
-
-            with (
-                mock.patch.dict(os.environ, ASKED, clear=True),
-                mock.patch.object(look, "LENS", ()),
-                mock.patch.object(look, "this_run", lambda: run),
-                mock.patch.object(look, "_relay", relay),
-                mock.patch("sys.stdout", new_callable=io.StringIO),
-            ):
-                look._look_at("HEAD", "survey", 0.0)
-            self.assertEqual((run / look.BASE_OUT / "example-402.png").read_bytes(), b"base")
-
-    def test_a_base_that_names_nothing_is_refused(self):
-        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
-            _repository(Path(folder))
-            with (
-                mock.patch.dict(os.environ, ASKED, clear=True),
-                self.assertRaisesMessage(AssertionError, "--base example-missing"),
-            ):
-                look._look_at("example-missing", "survey", 0.0)
 
 
 class _Unanswered:

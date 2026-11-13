@@ -68,6 +68,7 @@ from hq.platform.core.tests.look_report import (
     Measured,
     beside,
     closing,
+    drawn_only_here,
     failed_pages,
     looked,
     unmatched,
@@ -94,10 +95,12 @@ _RUN_NAME = re.compile(r"\d{8}-\d{6}(?:-\d+)?")
 # The base's shots, written by the run at the base into this run's folder, so
 # the two sides of a change are read together and outlive the base's worktree.
 BASE_OUT = "base"
-# What a look against a base runs at the base as this checkout has it beside
-# this tree's test files, so a finding is new for what the change drew rather
-# than for how it was judged: the probes the survey runs.
-LENS = (AUDIT.resolve(),)
+# What a look against a base lays over it from this checkout, so a finding is
+# new for what the change drew rather than for how it was judged: the probes
+# the survey runs. Every other file the base runs is its own (the look, the
+# catalog, the fixtures and the seeds they read), so a page, an entry or a
+# field only this tree has never reaches the base's code.
+LENS = (AUDIT.resolve(), Path(probes.__file__).resolve().parent)
 # A run with a rule writes its whole report here, in its own folder, and prints
 # only its verdict and, against a base, its new findings, so a long report is
 # never cut short where it is read.
@@ -511,8 +514,9 @@ def _relay(command: list[str], sink, ref: str, **options) -> None:
 
 
 # Run at a base, each module named on its stdin imported and every name it
-# imports read, so a lazy import of a name the base lacks fails here rather than
-# mid-look; each that fails is printed after `_UNIMPORTABLE`.
+# imports read, so a lazy import of a name the base lacks, or a key its tables
+# lack (a selector a probe reads as it loads), fails here rather than mid-look;
+# each that fails is printed after `_UNIMPORTABLE`.
 _UNIMPORTABLE = "unimportable: "
 _IMPORTS = f"""
 import importlib, sys
@@ -521,7 +525,7 @@ for name in sys.stdin.read().split():
         module = importlib.import_module(name)
         for each in list(vars(module)):
             getattr(module, each)
-    except ImportError:
+    except Exception:
         print({_UNIMPORTABLE!r} + name, flush=True)
 """
 
@@ -563,9 +567,8 @@ def kept_own(tree: Path, commit: str, laid: list[str], python: list[str], env: d
 
 def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found, list[str]]:
     """What this run finds, measures and hears go wrong, looked for at ``ref``: the same
-    task's run, in a worktree of it with this checkout's test files and lens
-    (`LENS`) laid over it as `test --at` lays them, so a base older than a test
-    file still looks and both are judged alike. Its environment is this run's, but for a
+    task's run, in a worktree of it with only this checkout's lens (`LENS`) laid
+    over it, so both are judged alike and the base draws with its own code. Its environment is this run's, but for a
     database of its own, this run's clock, and the CSS already read and the
     script's absolute path, since a relative path names this checkout, and
     without ``--css``'s sheet."""
@@ -573,12 +576,12 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
     checkout = Path(settings.BASE_DIR).resolve()
     try:
         commit = task.commit_of(ref, checkout)
-        present, deleted = task.changed_tests(commit, checkout)
     except task.RefError as error:
         raise AssertionError(f"--base {ref}: {error}") from None
+    lens = [path.relative_to(checkout).as_posix() for path in LENS]
+    present, deleted = task.changed_tests(commit, checkout, functools.partial(_in_lens, lens))
     with task.worktree(commit, checkout, lint_tools=True) as tree:
-        lens = [str(path.relative_to(checkout)) for path in LENS]
-        task.overlay(tree, [*present, *lens], deleted, checkout)
+        task.overlay(tree, present, deleted, checkout)
         found, log = tree.parent / "found.json", tree.parent / "look.log"
         # The kept test database is migrated for this checkout's code, so the base makes its own in its worktree.
         left = {f"{PREFIX}base", "VIRTUAL_ENV", "SEVERINO_TEST_DATABASE_PATH"}
@@ -606,6 +609,10 @@ def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Fou
             said = log.read_text(encoding="utf-8").splitlines()[-40:]
             raise AssertionError(f"The look at {ref} did not finish:\n" + "\n".join(said))
         return (*_read_found(found), kept)
+
+
+def _in_lens(lens: list[str], path: str) -> bool:
+    return any(path == part or path.startswith(f"{part}/") for part in lens)
 
 
 def _its_own(kept: list[str]) -> str:
@@ -788,6 +795,8 @@ def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
 
 # What a look at a base says of a page it does not have.
 NOT_AT_BASE = "not at this ref, so looked at only in the tree that asked"
+# What the look that asked says of those pages as it closes.
+DRAWN_ONLY_HERE = "not drawn at {}, so judged here alone"
 
 
 def _served(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
@@ -1151,6 +1160,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             kept = this_run() / REPORT
             kept.write_text(f"{head}\n{judged}\n{report}\n", encoding="utf-8")
             printed = [f"Page by page: {_shown(kept)}", *said, *printed]
+            if self.base is not None and (alone := drawn_only_here(self.base, found)):
+                printed.append(f"{', '.join(alone)}: {DRAWN_ONLY_HERE.format(ref)}")
             failed = [said[-1]] * rule_failed + failed
             if not self.judged_at:
                 failed.append(nothing := JUDGED_NOTHING.format(rule))

@@ -186,6 +186,24 @@ class WaitingTests(TestCase):
         self.assertIn("/run/reboot-required.pkgs", commands[0])
         self.assertIn("shutdown -r", commands[1])
 
+    def test_a_controller_on_its_own_edge_waits_once_as_its_newer_reading_says(self):
+        edge()
+        # The controller runs on the edge and reports as it; both readings of
+        # the one machine say it waits, each read at its own time.
+        for older, newer in ((KIND, EDGE_KIND), (EDGE_KIND, KIND)):
+            with self.subTest(newer=newer):
+                for kind, package, age in (
+                    (older, "linux-image-older", timedelta(hours=1)),
+                    (newer, "linux-image-newer", timedelta(0)),
+                ):
+                    said = {"connection_ref": "example-edge"} if kind == EDGE_KIND else {}
+                    sweep(reading(packages=[package], **said), kind=kind, age=age, controller_id="example-edge")
+
+                (finding,) = raised(RULE)
+
+                self.assertIn("example-edge", finding["title"])
+                self.assertIn("linux-image-newer", evidence(finding).get("Packages", ""))
+
     def test_nothing_waiting_raises_nothing(self):
         sweep(reading(pending=False))
 

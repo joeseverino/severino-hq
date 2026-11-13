@@ -804,8 +804,4 @@ HAND_ROLLED: dict[str, str] = {
     "projects/project_detail.html": "project-tags",
     "projects/watching.html": "gh-avatar gh-identity gh-name gh-profile gh-verified",
     "receipts/receipt_detail.html": "document-picture",
-    "search.html": (
-        "command-hint search-badge search-group search-hit search-hit-main search-hit-title search-hits "
-        "search-scopes search-snippet search-summary"
-    ),
 }

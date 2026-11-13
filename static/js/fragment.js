@@ -763,10 +763,29 @@ const hqFragment = (() => {
       .catch(() => {});
   };
 
+  // A script's setup for the elements a selector matches, run once for each:
+  // on the page as drawn, and in every part placed since, so an element an
+  // answer brings in is set up as the one it replaced was. A setup that
+  // listens beyond its element (the window, the document) does so once,
+  // outside it, since a replaced element's setup is never undone.
+  const each = (selector, setup) => {
+    const done = new WeakSet();
+    const run = (root) => within(root, selector).forEach((element) => {
+      if (done.has(element)) return;
+      done.add(element);
+      setup(element);
+    });
+    run(document.documentElement);
+    document.addEventListener("hq:fragment", (event) => run(event.target));
+  };
+
   reveal(document);
   watch(document.documentElement);
+  // Only the page as drawn: an answer to the form is drawn with it again
+  // while a reading is still due, and sending it then would ask forever.
+  // eslint-disable-next-line no-restricted-syntax -- sent once per page, never per part placed
   document.querySelectorAll("form[data-fragment-auto]").forEach(auto);
 
-  return { swap, fail };
+  return { swap, fail, each };
 })();
 window.hqFragment = hqFragment;

@@ -438,13 +438,14 @@ mise writes the file and keeps every other value in it, and
 `mise doctor project` then checks that the set imports.
 
 A worktree Claude Code makes gets a copy of the file through the gitignored
-`.worktreeinclude`, so it composes the extensions' main checkouts. A
-`HQ_LOCAL_PYTHONPATH` already in the environment wins, so an extension
-worktree is composed by naming its sources on the command line, one `src` per
-package, joined by `:`:
+`.worktreeinclude`, so it composes the extensions' main checkouts. A value of
+either already in the environment wins, so an extension worktree is composed
+by naming its sources on the command line, one `src` per package, joined by
+`:`, and another set by naming its manifests:
 
 ```sh
 HQ_LOCAL_PYTHONPATH=<worktree>/packages/<name>/src mise run test --composed
+HQ_LOCAL_PLUGINS=tests.fixtures.example_hq_plugin.plugin:plugin mise run dev:scratch
 ```
 
 Only the composed suite, the dev servers and `mise run dev:look --composed`
@@ -865,12 +866,12 @@ are judged as findings are: without a base any fails the run, against one only
 a new one does.
 
 `--base <ref>` looks at the same pages at `<ref>` first, in a temporary
-worktree with this checkout's test files laid over it as `test --at` does, and
-judges both by this checkout's rules. A test file laid over that does not
-import there, as an estate walk naming a seed record the base lacks does not,
-is put back as the base has it, and the closing line names it. A page the
-base cannot draw, such as a record its estate lacks, is said there and looked
-at only here. The base's
+worktree that runs the base's own look, catalog, fixtures and seeds, with only
+this checkout's probes laid over it, so both are judged by this checkout's
+rules. A probe laid over that does not import there is put back as the base
+has it, and the closing line names it. A page or catalog entry the base cannot
+draw, such as one added here or a record its estate lacks, is said there,
+judged here alone, every finding on it new, and named in the closing line. The base's
 screenshots are kept in
 `base/` inside the run's folder, under the same names as this checkout's
 beside them, so the two sides of a change can be compared once the worktree is

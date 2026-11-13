@@ -103,6 +103,24 @@ class ListRowTests(SimpleTestCase):
         shown = text(render_to_string("partials/_record_list.html", {"rows": [row]}))
         self.assertIn(" ".join(f"Draft · {when_day(today)}".split()), shown)
 
+    def test_a_snippet_quotes_the_records_text_with_its_match_marked(self):
+        """A search hit's snippet is what the record holds, which a person or a
+        provider wrote, so text HQ's own words refuse is drawn as written."""
+
+        from django.template.loader import render_to_string
+
+        from ..card_items import ListRow
+        from .markup import elements, text
+
+        quoted = "enabled: False at 2026-11-02 09:30, <b> "
+        row = ListRow(title="Example host", snippet=((quoted, False), ("backup", True)))
+        drawn = render_to_string("partials/_record_list.html", {"rows": [row]})
+
+        self.assertEqual([mark.words for mark in elements(drawn, "mark")], ["backup"])
+        self.assertIn("enabled: False at 2026-11-02 09:30, <b> backup", text(drawn))
+        with self.assertRaises(ValueError):
+            ListRow(title="Example host", detail=quoted)
+
     def test_a_rows_actions_end_its_line_a_post_one_submitting_its_value(self):
         """A record moved or removed from its row posts through the page's one
         form, a glyph named aloud by its title, and one that cannot be pressed

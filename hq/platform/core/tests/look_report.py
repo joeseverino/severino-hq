@@ -117,6 +117,14 @@ def compare(base: Found, branch: Found) -> tuple[Found, Found]:
     return {key: said for key, said in new.items() if said}, {key: said for key, said in fixed.items() if said}
 
 
+def drawn_only_here(base: Found, branch: Found) -> list[str]:
+    """The pages the branch looked at that the base drew at no width: new here,
+    or ones the base's own code cannot draw, so each finding on them is new."""
+
+    at_base = {name for name, _ in base}
+    return list(dict.fromkeys(name for name, _ in branch if name not in at_base))
+
+
 def against(ref: str, rule: str, base: Found, branch: Found) -> tuple[str, list[str], bool]:
     """A look against a base: the whole report, new and fixed findings page by
     page and then all this checkout found; what is printed, a line for each new finding and the verdict last;

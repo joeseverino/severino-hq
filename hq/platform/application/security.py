@@ -75,6 +75,9 @@ CLI_ACTOR = "local-operator"
 # The agent doors: the MCP server and the machine API.
 MCP_INTERFACE = "mcp"
 API_INTERFACE = "api"
+# The URL namespace the machine API's routes resolve under, which tells a
+# request through that door from one through the web.
+API_NAMESPACE = "hq_api"
 # What the MCP mount names each request, until a tool binds an operation of its own.
 MCP_OPERATION = "mcp"
 # Work HQ runs from its job queue, attributed to whoever started it.

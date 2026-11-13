@@ -202,25 +202,11 @@
 .table-selection strong { margin-right: auto; font-size: var(--text-sm); }
 main[aria-busy="true"] :is([data-table-results], [data-search-results]) { opacity: .55; transition: opacity 100ms ease; }
 
-/* Global search results */
-.search-summary { display: flex; align-items: baseline; gap: var(--space-7); flex-wrap: wrap; margin-bottom: var(--space-7); }
-.search-summary p { margin: 0; }
-.search-scopes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .scope-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); text-decoration: none; }
 a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
 /* The current choice in a group of chip links: a heavier border, drawn inside
    so the chip keeps its size. */
 .scope-chip[aria-current] { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.search-group { margin-bottom: var(--space-7); }
-.search-hits { list-style: none; margin: 0; padding: 0; }
-.search-hit { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-8); padding: var(--space-5) var(--frame-inset, 0); border-top: 1px solid var(--line); }
-.search-hit:first-child { border-top: 0; }
-.search-hit-main { min-width: 0; }
-.search-hit-title { margin: 0; display: flex; align-items: baseline; gap: var(--space-4); flex-wrap: wrap; }
-.search-badge { font-size: var(--text-2xs); color: var(--muted-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px var(--space-2); }
-/* A match is part of the word it is found in, so it adds no room inside it, and reads in the ink of what it names. */
-.search-snippet mark { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--ink); border-radius: 3px; font-weight: 600; }
-.search-hit .row-meta { flex-shrink: 0; }
 .actions-col { width: 1%; text-align: right; white-space: nowrap; }
 /* A row's actions (`{% row_actions %}`) end its line side by side, each with its middle on the middle of the row's first line, as the words beside it are set, however much taller than a line a button stands. `--row-line` carries the cell's line down to each control, whose own is its label's. */
 .data-table td.row-actions { --row-line: 1lh; text-align: right; white-space: nowrap; }

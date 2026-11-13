@@ -5,7 +5,6 @@ import json
 from datetime import timedelta
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.inventory_testing import store
 
 from .names import (
     ADGUARD,
@@ -34,6 +33,7 @@ from .names import (
     tailnet_v4,
     tailnet_v6,
 )
+from .sweep import store
 
 # The tailnet: the owner reaches the server on 443, and nothing else is granted.
 POLICY = {

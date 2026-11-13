@@ -15,10 +15,10 @@ from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.platform.application import scheduled_work
 from hq.platform.application.images import ImageRef
-from hq.platform.application.inventory_testing import store
 from hq.platform.core.audit import stamped
 
 from .names import CONTAINERS, GITHUB, HQ_DIGEST, HQ_REVISION, NEWER, OWNER_NAME, SOURCES, hexed, iso, stamp
+from .sweep import store
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")

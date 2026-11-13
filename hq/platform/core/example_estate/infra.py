@@ -12,7 +12,6 @@ from hq.domains.control_plane.models import (
     WeatherObservation,
 )
 from hq.platform.application import readings
-from hq.platform.application.inventory_testing import store
 from hq.platform.application.labels import dotted
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
@@ -22,6 +21,7 @@ from .names import (
     ADGUARD,
     CLOUDFLARE,
     CONTAINERS,
+    CONTROLLER,
     DNS,
     GITHUB,
     HQ,
@@ -43,6 +43,7 @@ from .names import (
     now,
     stamp,
 )
+from .sweep import store
 
 CERTIFICATE = "wildcard-example-com"
 # Inside its renewal window, so renewing it is one of the things to do.
@@ -159,7 +160,7 @@ def connections():
                 answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
             ],
             principal=cli_principal(),
-            controller_id="example-controller",
+            controller_id=CONTROLLER,
         )
 
 
@@ -218,22 +219,19 @@ def proxy():
 def host():
     """What the host reports of itself: its firewall, perimeter, disks, restart and load."""
 
-    # The controller's own machine waits on nothing. On the edge, a kernel and a
-    # library installed two days ago wait on a restart, which is scheduled for a
-    # quiet hour.
-    store("host.reboot", {"pending": False, "read_at": stamp()})
-    store(
-        "host.edge_reboot",
-        {
-            "connection_ref": SSH,
-            "pending": True,
-            "since": stamp(timedelta(days=2)),
-            "packages": ["linux-image-generic", "libc6"],
-            "scheduled_action": "reboot",
-            "scheduled_at": stamp(-timedelta(hours=7)),
-            "read_at": stamp(),
-        },
-    )
+    # A kernel and a library installed two days ago wait on a restart, which is
+    # scheduled for a quiet hour. The controller runs on the edge, so its own
+    # reading and the edge receiver's are of one machine, and say the same.
+    restart = {
+        "pending": True,
+        "since": stamp(timedelta(days=2)),
+        "packages": ["linux-image-generic", "libc6"],
+        "scheduled_action": "reboot",
+        "scheduled_at": stamp(-timedelta(hours=7)),
+        "read_at": stamp(),
+    }
+    store("host.reboot", restart)
+    store("host.edge_reboot", {"connection_ref": SSH, **restart})
 
     # A root a build has all but filled, beside a roomy boot partition.
     store(

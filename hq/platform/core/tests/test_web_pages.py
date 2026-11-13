@@ -134,7 +134,27 @@ class SearchPageTests(_AuthedTestCase):
             for each in select(response, "aria-labelledby")
             if each.attrs.get("id", "").startswith("scope-")
         }
-        self.assertEqual(shown, {f"scope-{group['scope']}" for group in response.context["groups"] if group["count"]})
+        self.assertEqual(shown, {section["id"] for section in response.context["result_sections"]})
+        self.assertEqual(
+            {section["id"] for section in response.context["result_sections"]},
+            {f"scope-{group['scope']}" for group in response.context["groups"] if group["count"]},
+        )
+
+    def test_a_hit_quotes_its_records_text_and_each_group_is_a_way_from_the_navigation(self):
+        """What a record holds is shown as written, however unlike HQ's own
+        words, and every group of results is one link over them."""
+
+        Project.objects.create(name="Quoted target", description="enabled: False at 2026-11-02 09:30, quoted")
+        ContentItem.objects.create(title="Quoted content", notes="A quoted piece of content.")
+        response = self.client.get("/search/", {"q": "quoted"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("2026-11-02 09:30", text(response))
+        ids = [section["id"] for section in response.context["result_sections"]]
+        self.assertGreater(len(ids), 1)
+        self.assertEqual(
+            [link.attrs["href"] for link in select(response, "data-page-nav-link")], [f"#{i}" for i in ids]
+        )
 
 
 class EmptyListTests(_AuthedTestCase):

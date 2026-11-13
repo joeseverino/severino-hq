@@ -268,6 +268,13 @@ class AMachineAGatedFamilyNamesTests(TestCase):
                 joined = {"controller": "runs_on", "target": "stands_for"}[node.kind]
                 self.assertIn((joined, node.id, machine.id), self.edges)
 
+    def test_a_machine_a_controller_folds_into_opens_only_its_own_page(self):
+        machine, _relations, _by_id = self.machine(
+            naming("open", Capability.READ, "example-host", controller="example-host")
+        )
+
+        self.assertEqual([action.url for action in machine.actions if action.name == "open"], [machine.url])
+
     def test_what_a_family_any_reader_may_read_names_is_still_folded_onto_the_machine(self):
         machine, _relations, by_id = self.machine(
             naming("open", Capability.READ, "example-host", controller="example-host")

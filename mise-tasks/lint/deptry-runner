@@ -1,0 +1,24 @@
+#!/bin/sh
+#MISE description="The automation worker imports only the standard library and what the runner group installs, its image's whole environment"
+#MISE hide=true
+#MISE tags=["fast"]
+#MISE sources=["hq_runner/**/*.py", "mise-tasks/lint/deptry-runner", "pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env"]
+#MISE outputs=[]
+
+# lint:deptry holds hq_runner to every runtime dependency, which the worker's
+# image does not install. This pass holds it to the runner group alone, as uv
+# locks it with what that group brings, so an import of anything else (django,
+# pydantic, a package of theirs) is a finding.
+set -eu
+
+scratch="$(mktemp -d)"
+trap 'rm -rf "${scratch}"' EXIT
+uv export --locked --quiet --only-group runner --no-hashes --no-header --no-annotate \
+    --format requirements.txt --output-file "${scratch}/runner.txt"
+
+# An empty config has no [project], so deptry reads the requirements file in
+# its place. An unused one is no finding here: lint:deptry judges what the
+# project declares. opentelemetry is loaded by hq_runner/tracing.py only while
+# OTEL_EXPORTER_OTLP_ENDPOINT is set, which development alone sets.
+uv run deptry hq_runner --config /dev/null --requirements-files "${scratch}/runner.txt" \
+    --extend-exclude 'hq_runner/tests/' --ignore DEP002 --per-rule-ignores DEP003=opentelemetry

@@ -24,12 +24,11 @@ from hq.platform.core import speculation, tracing
 from hq.platform.core.attribution import operation_context
 from hq.platform.core.outbound import serving
 from hq.platform.core.write_bounds import NOTHING, Bound, writes
-lazy from hq.platform.api.urls import app_name as API_APP
 lazy from hq.platform.application import hq_self
 lazy from hq.platform.application.pages import authorizes_itself, page_refusal
 lazy from hq.platform.application.projection import projection_scope
 lazy from hq.platform.application.request_identity import signed_in
-lazy from hq.platform.application.security import API_INTERFACE, WEB_INTERFACE
+lazy from hq.platform.application.security import API_INTERFACE, API_NAMESPACE, WEB_INTERFACE
 
 # Where the browser's own answer to "show me stand-ins" is kept. Named here
 # because the middleware that reads it and the view that writes it are the only
@@ -90,7 +89,7 @@ def request_operation(path: str, *, operation_id: str) -> AbstractContextManager
     except Resolver404:
         route = None
     return operation_context(
-        interface=API_INTERFACE if route is not None and API_APP in route.app_names else WEB_INTERFACE,
+        interface=API_INTERFACE if route is not None and API_NAMESPACE in route.app_names else WEB_INTERFACE,
         actor="",
         operation=(route.view_name or route.route) if route is not None else UNROUTED,
         operation_id=operation_id,

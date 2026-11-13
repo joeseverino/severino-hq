@@ -294,12 +294,7 @@ def _fold(nodes, edges, estate: _Estate) -> None:
         if host.kind == "machine":
             fact = (_FOLDS_INTO_MACHINE[node.kind], node.label)
             facts = facts + ((fact,) if fact not in facts else ())
-        nodes[into] = replace(
-            host,
-            facts=facts,
-            actions=host.actions
-            + tuple(action for action in node.actions if all(existing.url != action.url for existing in host.actions)),
-        )
+        nodes[into] = replace(host, facts=facts, actions=host.actions + _carried(node.actions, host.actions))
     if not folded:
         return
     moved: dict[str, TopologyEdge] = {}
@@ -319,6 +314,19 @@ def _fold(nodes, edges, estate: _Estate) -> None:
     edges.update(moved)
     for node_id in folded:
         del nodes[node_id]
+
+
+def _carried(actions, held) -> tuple:
+    """What a folded node's ``actions`` add to the ``held`` actions of the node
+    it folds into. A controller's or target's "open" stands in for a page it
+    lacks, so a host with a page of its own keeps only its own."""
+
+    opens = any(action.name == "open" for action in held)
+    return tuple(
+        action
+        for action in actions
+        if not (opens and action.name == "open") and all(existing.url != action.url for existing in held)
+    )
 
 
 def _named_estate_nodes(nodes, estate: _Estate) -> dict[str, str]:

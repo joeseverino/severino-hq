@@ -131,6 +131,9 @@ def sentences(registrar: str) -> None:
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
     assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)
     ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
+    # A search hit's snippet is runs of the record's text, each with whether it matched.
+    ui.ListRow("Backup host", snippet=(("nightly ", False), ("backup", True)))
+    ui.ListRow("Backup host", snippet="nightly backup")  # type: ignore[arg-type]
     assert_type(validation.sentence_closes("src"), list[str])
     assert_type(validation.sentence_labels("src"), list[str])
 

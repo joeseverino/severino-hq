@@ -35,6 +35,10 @@ TAILSCALE = "tailscale"
 # A shell connection is named for the machine it opens, which is what makes it
 # that machine rather than a fifth one.
 SSH = MACHINE
+# The machine the controller runs on, beside HQ, and so the id it reports as,
+# as production's falls back to its machine's hostname. It is the estate's
+# edge too, which a controller may run on.
+CONTROLLER = MACHINE
 GITHUB = "github"
 
 

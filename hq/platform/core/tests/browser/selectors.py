@@ -214,6 +214,8 @@ SELECTORS = {
     "figure_value": ".kpi .value",
     # A "do this now" control, whose words are its button's.
     "ask": ".ask",
+    # An ask's button.
+    "ask_button": "[data-ask] [data-ask-button]",
     # One standing in a table's row, rather than in the line a row opens.
     "row_ask": ".data-table > tbody > tr:not(.row-detail) > td [data-ask]",
     # What an ask says on the line its row opens to.

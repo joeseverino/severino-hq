@@ -591,32 +591,42 @@ class ComponentLayoutTests(LayoutBrowserTests):
 
     @with_script
     def test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to(self):
-        """A row's Refresh that fails says its word in the row, which keeps
-        its height, and its sentence on the row's open line, where a phone
-        with no title to hover reads it."""
+        """A row's Refresh that fails, pressed in its row or on its open line
+        once its column has left, keeps the row's height and says its
+        sentence on the row's open line, where a phone with no title to hover
+        reads it."""
 
-        # Where the column of actions stays: one that leaves takes its ask to
-        # the open line whole, where its note says the sentence itself.
+        # A column of actions that leaves takes its ask to the open line
+        # whole, where it is pressed and its note says the sentence itself.
         for width in (820, WIDE):
             with self.subTest(width=width):
                 self.open("connections", width)
-                pressed = [
-                    button
-                    for button in self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]").all()
-                    if button.is_visible()
-                ]
-                self.assertTrue(pressed, "no row's ask to press")
-                button = pressed[0]
-                row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
+                row = (
+                    self.page.locator(SELECTORS["row_ask"])
+                    .first.evaluate_handle("(ask) => ask.closest('tr')")
+                    .as_element()
+                )
+                button = row.query_selector(SELECTORS["ask_button"])
+                opened = not button.is_visible()
+                if opened:
+                    row.query_selector(SELECTORS["row_toggle"]).click()
+                    button = row.evaluate_handle(
+                        "(row, button) => row.nextElementSibling?.querySelector(button)", SELECTORS["ask_button"]
+                    ).as_element()
+                    self.assertTrue(
+                        button and button.is_visible(), "the row's ask is on neither its row nor its open line"
+                    )
+                control = button.evaluate_handle("(button, ask) => button.closest(ask)", SELECTORS["ask"])
                 tall = row.bounding_box()["height"]
                 button.click()
-                self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="failed"]')
+                self.page.wait_for_function("(control) => control.dataset.askState === 'failed'", arg=control)
                 self.assertLessEqual(row.bounding_box()["height"], tall + 1)
-                row.query_selector(SELECTORS["row_toggle"]).click()
+                if not opened:
+                    row.query_selector(SELECTORS["row_toggle"]).click()
                 said = row.evaluate(
                     "(row, why) => { const shown = row.nextElementSibling?.querySelector(why);"
                     " return shown?.checkVisibility() ? shown.textContent : null; }",
-                    SELECTORS["ask_why"],
+                    SELECTORS["ask_note"] if opened else SELECTORS["ask_why"],
                 )
                 self.assertIsNotNone(said, "the open line says nothing of the ask")
                 self.assertIn(button.get_attribute("title"), said)

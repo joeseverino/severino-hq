@@ -98,6 +98,20 @@ class KeptOwnTests(SimpleTestCase):
         self.assertEqual((self.root / "walk.py").read_text(encoding="utf-8"), "lazy from seeds import SERVER\n")
         self.assertIn("FINE", (self.root / "fine.py").read_text(encoding="utf-8"))
 
+    def test_a_probe_reading_a_selector_the_base_lacks_as_it_loads_is_the_bases_own(self):
+        self.write("parts.py", "SELECTORS = {'frame': '.frame'}\n")
+        self.write("probe.py", "from parts import SELECTORS\nREAD = SELECTORS['frame']\n")
+        subprocess.run(["git", "-C", str(self.root), "add", "--all"], check=True)
+        identity = ("user.name=Example", "user.email=example@example.com", "commit.gpgsign=false")
+        configured = [part for setting in identity for part in ("-c", setting)]
+        subprocess.run(
+            ["git", "-C", str(self.root), *configured, "commit", "--quiet", "--no-verify", "-m", "probe"], check=True
+        )
+        self.write("probe.py", "from parts import SELECTORS\nREAD = SELECTORS['facts_list']\n")
+
+        self.assertEqual(self.kept(["probe.py"]), ["probe.py"])
+        self.assertIn("'frame'", (self.root / "probe.py").read_text(encoding="utf-8"))
+
     def test_files_that_import_at_the_base_stay_as_this_tree_has_them(self):
         self.write("walk.py", "lazy from seeds import SERVER\nWALKED = 1\n")
 

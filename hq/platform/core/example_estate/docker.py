@@ -14,10 +14,10 @@ from hq.domains.control_plane.observations.public_registry import (
     VULNERABILITY_KIND,
 )
 from hq.platform.application.images import ImageRef
-from hq.platform.application.inventory_testing import store
 from hq.platform.application.services import CONTAINER_KIND
 
 from .names import CONTAINERS, LAN, MACHINE, NEWER, PORTAINER, SOURCES, container_id, digest, hexed, iso, stamp
+from .sweep import store
 
 UP_FOR = timedelta(days=12)
 # How a well-run container is run: a user, no-new-privileges, a limit, a check.

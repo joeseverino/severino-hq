@@ -316,8 +316,10 @@ OVERLAPPING_TEXT = (
 # them and less than a space's width between their glyphs, each as much of it
 # as is painted: a heading and the status beside it in a flex row, where the
 # space between them in the markup is dropped, read as one word. Runs in one
-# block's line with nothing between their glyphs are one word the markup wrote
-# across elements, as is a name `breakable` split at its seams (`identifier`);
+# block's line with nothing between their glyphs, or set a fraction of a
+# pixel into each other (a search match marked inside its word), are one word
+# the markup wrote across elements, as is a name `breakable` split at its
+# seams (`identifier`);
 # a run that ends opening, or starts closing, a phrase or a figure (a bracket,
 # a comma, a dash) is set against its neighbor on purpose. A line is held only
 # against lines in its own layer, as overlapping text holds it.
@@ -403,7 +405,7 @@ TOUCHING_TEXT = (
       if (shared <= Math.min(a.rect.height, b.rect.height) / 2) continue;
       const gap = b.rect.left - a.rect.right;
       if (gap <= -2 || gap >= Math.min(space(a.el), space(b.el)) - 0.5) continue;
-      if (a.block === b.block && Math.abs(gap) <= 0.5) continue;
+      if (a.block === b.block && gap <= 0.5) continue;
       if (spacedBetween(a, b)) continue;
       found.push(`"${a.node.data.trim().slice(-30)}" (${describe(a.el)}) touches "${b.node.data.trim().slice(0, 30)}" (${describe(b.el)}), ${gap.toFixed(1)}px apart`);
     }

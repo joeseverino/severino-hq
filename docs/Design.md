@@ -1023,6 +1023,12 @@ names a thing HQ links (a related record, a project) is given its `link`, an
 `EntityLink`, in place of a `title` and a `url`, and draws it as every
 mention of a thing is drawn. A project's row gives its `category`, drawn as
 that category's color (`--cat-*`) before the title, its name in `detail`.
+A search hit gives its `snippet`, where the record matched, as runs of the
+record's own text each with whether it is the match: a line of its own under
+the row, two lines at most, the match marked. It is quoted as the record holds
+it, so it is the one field not held to words. Search draws every group of
+results this way, the count in its filter bar, a way to each group in the
+page navigation over them, and the hint before a search as a notice.
 
 A pair whose value is a list of names (`.address-list`, or a `.code-list` of
 two or more) takes a row of its own. So it never wraps beside another pair and

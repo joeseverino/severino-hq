@@ -6,7 +6,9 @@
 # fast. Its sources are the files it reads, then the dependencies, tool pins
 # and task definitions every gate reads; `!` takes out a path its tool never
 # reads, as the tool's own config says. outputs = [] keeps mise from skipping
-# it as up to date. tools/gate/tests/test_fast_selection.py holds all of it.
+# it as up to date. tools/gate/tests/test_fast_selection.py holds all of it,
+# and tools/tests/test_drift_sources.py holds a drift gate's sources to every
+# file of the checkout its run opens.
 
 ["lint:ruff"]
 description = "Ruff lints the Python and holds it to its format"
@@ -143,6 +145,7 @@ hide = true
 tags = ["fast"]
 sources = [
   "hq/**/*.py",
+  "hq_sdk/**/*.py",
   "hq_runner/**/*.py",
   "pyproject.toml",
   "uv.lock",
@@ -386,6 +389,7 @@ sources = [
   "static/css/**",
   "static/js/**",
   "tools/lint/ast-grep/rules/hand-drawn-*.yml",
+  "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -405,6 +409,7 @@ sources = [
   "**/*.py",
   "hq/platform/api/hq-api.openapi.json",
   "hq/platform/api/openapi-examples.json",
+  "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -425,6 +430,12 @@ tags = ["fast"]
 sources = [
   "**/*.py",
   "hq/platform/api/openapi-examples.json",
+  "hq/domains/control_plane/bridge_base.json",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "templates/**",
+  "static/css/**",
+  "static/js/**",
+  "static/vendor/scalar/**",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -445,6 +456,7 @@ sources = [
   "hq/domains/control_plane/bridge_base.json",
   "controller/api/**",
   "hq/config/controller-connections.json",
+  "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -463,6 +475,7 @@ tags = ["fast"]
 sources = [
   "**/*.py",
   "docs/Connections.md",
+  "deploy/systemd/severino-hq-secrets.timer",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -482,6 +495,7 @@ sources = [
   "tools/fonts/**",
   "static/fonts/**",
   "static/css/**",
+  "tools/__init__.py",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",

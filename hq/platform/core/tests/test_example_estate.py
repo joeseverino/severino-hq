@@ -23,6 +23,7 @@ from hq.platform.application.findings import findings
 from hq.platform.application.linked_accounts import GITHUB, linked_login
 from hq.platform.application.security import WEB_INTERFACE, cli_principal, web_principal
 from hq.platform.application.tests.markup import all_elements, select, with_class, within
+from hq.platform.application.topology import derive_topology
 from hq.platform.core import seeds
 from hq.platform.core.audit import ANONYMOUS
 from hq.platform.core.example_estate.agents import AGENT, NOT_CARRIED
@@ -252,6 +253,29 @@ class WalkedStatesTests(TestCase):
 
         self.assertIn(f"{reverse('agent_policy')}?endpoint=1", folded)
         self.assertLessEqual(folded, set(walked))
+
+    def test_what_the_controller_reads_of_its_host_is_on_the_machine_it_runs_on(self):
+        # Production's controller reports as its machine's hostname, so what it
+        # reads of that machine is said on the machine's page. The estate's
+        # runs on its one machine, beside HQ.
+        from hq.platform.core.example_estate.names import MACHINE as CONTROLLER
+
+        principal = web_principal(self.user)
+        nodes = derive_topology(principal=principal).nodes
+        (machine,) = [node.id for node in nodes if node.kind == "machine" and node.label == CONTROLLER]
+        host = {
+            finding["rule"]: finding["subject"]
+            for finding in findings(principal=principal)["findings"]
+            if (finding["scope"] or "").startswith("host.")
+        }
+        page = self.walked(reverse("control_plane:machine", kwargs={"name": CONTROLLER}))
+
+        self.assertEqual([node.id for node in nodes if node.kind == "controller"], [])
+        self.assertLessEqual({"filesystem-nearly-full", "reboot-pending"}, set(host))
+        for rule, subject in host.items():
+            with self.subTest(rule=rule):
+                self.assertEqual(subject, machine)
+                self.assertContains(page, f"rule%3D{rule}")
 
     def test_the_unfiled_receipt_s_match_page_offers_its_expense_as_a_row(self):
         from hq.platform.core.example_estate.records import UNFILED, UNFILED_RECEIPT

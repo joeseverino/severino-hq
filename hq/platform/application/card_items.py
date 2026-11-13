@@ -5,10 +5,11 @@ Each is the shape one shared partial draws (``_kpi_grid.html``,
 ``hq_sdk.ui`` exports so an extension fills the same part the host does.
 """
 
+from dataclasses import field
 from datetime import date, datetime
 from typing import Protocol
 
-from .display_words import display, in_words
+from .display_words import QUOTED, display, in_words
 from .drawings import AllocationBar, Dots, Trend
 from .workflow_contracts import ActionLink, WorkflowPlan
 lazy from .ui import STATUS_VALUES, _one_of
@@ -211,6 +212,10 @@ class ListRow:
     # A project's category key ("homelab"), drawn as its color before the
     # title; ``detail`` says it in words, since color is never alone.
     category: str = ""
+    # Where a search found the record, under its line: the record's own text
+    # in runs, each with whether it is the match, which is marked. Quoted as
+    # the record holds it, so it is not held to words.
+    snippet: tuple[tuple[str, bool], ...] = field(default=(), metadata=QUOTED)
 
     def __post_init__(self) -> None:
         _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)

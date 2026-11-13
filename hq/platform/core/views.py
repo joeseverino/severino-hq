@@ -1,7 +1,8 @@
 """Dashboard + audit-log views."""
 
+import re
 from typing import ClassVar, override
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 lazy from datetime import timedelta
 
 from django.conf import settings
@@ -11,6 +12,7 @@ from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpRespo
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import capfirst
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
@@ -20,6 +22,7 @@ from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AG
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
 from hq.platform.application.capabilities import capability_words
+from hq.platform.application.card_items import ListRow
 from hq.platform.application.command_center import command_center
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
@@ -28,7 +31,8 @@ from hq.platform.application.projection import projection_scope
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
-from hq.platform.application.ui import counted
+from hq.platform.application.timestamps import moment
+from hq.platform.application.ui import PageNavigation, PageSection, counted
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
@@ -385,6 +389,8 @@ class AgentPolicyView(PageMixin, TemplateView):
 
 
 DISCOVERY_GROUPS = ("estate", "resources", "commands", "connections", "views", "checks")
+# What a search scope's name may hold besides what a fragment id does.
+SCOPE_ID = re.compile(r"[^a-z0-9-]+")
 
 
 class SearchView(PageMixin, TemplateView):
@@ -441,6 +447,53 @@ class SearchView(PageMixin, TemplateView):
                 break
         return visible
 
+    @staticmethod
+    def _result_sections(q: str, groups: list[dict], contacts: list) -> list[dict]:
+        """The page's results, a section of record rows per group that found
+        something, the messages last; each section's id is a fragment the
+        navigation over them links."""
+
+        # An audit entry has no page of its own: its row opens the log at the
+        # same search.
+        audit = f"{reverse('core:audit_list')}?{urlencode({'q': q})}"
+        sections = [
+            {
+                "id": f"scope-{SCOPE_ID.sub('-', group['scope'].lower()).strip('-')}",
+                "label": group["label"],
+                "rows": [
+                    ListRow(
+                        title=item["title"],
+                        url=item["url"] or audit,
+                        detail=item["badge"],
+                        at=item["timestamp"],
+                        snippet=tuple(item["snippet"]),
+                    )
+                    for item in group["items"]
+                ],
+            }
+            for group in groups
+            if group["count"]
+        ]
+        if contacts:
+            sections.append(
+                {
+                    "id": "scope-contacts",
+                    "label": "Messages",
+                    "rows": [
+                        ListRow(
+                            title=item["name"],
+                            url=reverse("contacts:detail", args=[item["id"]]),
+                            detail=capfirst(item.get("status") or ""),
+                            at=moment(item.get("created_at")),
+                        )
+                        for item in contacts
+                    ],
+                    "more_label": "Search messages",
+                    "more_url": f"{reverse('contacts:list')}?{urlencode({'q': q})}",
+                }
+            )
+        return sections
+
     @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -480,12 +533,22 @@ class SearchView(PageMixin, TemplateView):
         palette_search_groups = self._palette_search_groups(groups)
         palette_search_count = sum(len(group["items"]) for group in palette_search_groups)
         discovery_total = sum(len(discovery[key]) for key in discovery)
+        sections = [] if palette_request else self._result_sections(q, groups, contacts)
         ctx.update(
             q=q,
             search_query=q,
             groups=groups,
-            contacts=contacts,
             total=total,
+            result_sections=sections,
+            # A way to each group of results, over them, once there are two.
+            result_navigation=(
+                PageNavigation(
+                    tuple(PageSection(section["id"], section["label"]) for section in sections),
+                    label="Result groups",
+                )
+                if len(sections) > 1
+                else None
+            ),
             discovered_estate=discovery["estate"],
             discovered_resources=discovery["resources"],
             discovered_commands=discovery["commands"],

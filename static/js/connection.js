@@ -86,19 +86,7 @@ const hqWatchRoundTrip = (root) => {
   if (slot && endpoint) hqRoundTrip.start(slot, endpoint);
 };
 
-document.addEventListener("DOMContentLoaded", () => {
-  const panel = document.querySelector("[data-connection-panel]");
-  if (panel && !panel.closest("dialog")) hqWatchRoundTrip(panel);
-});
-
-// The panel a dialog fetched when it opened is measured the same way.
-document.addEventListener("hq:fragment", (event) => {
-  const panel = event.target.closest("[data-connection-panel]");
-  if (!panel || panel !== event.target) return;
-  hqWatchRoundTrip(panel);
-  hqShowResponseHeaders(panel);
-});
-
+// eslint-disable-next-line no-restricted-syntax -- the frame's dialog, which no fragment holds
 document.getElementById("modal-connection")?.addEventListener("close", () => {
   hqRoundTrip.stop();
 });
@@ -150,9 +138,11 @@ const hqShowResponseHeaders = (root) => {
     });
 };
 
-document.addEventListener("DOMContentLoaded", () => {
-  const panel = document.querySelector("[data-connection-panel]");
-  if (panel && !panel.closest("dialog")) hqShowResponseHeaders(panel);
+// The panel on its own page, the one a dialog fetched when it opened, and
+// any drawn again in place, each measured and read once it is there.
+hqFragment.each("[data-connection-panel]", (panel) => {
+  hqWatchRoundTrip(panel);
+  hqShowResponseHeaders(panel);
 });
 
 document.addEventListener("toggle", (event) => {

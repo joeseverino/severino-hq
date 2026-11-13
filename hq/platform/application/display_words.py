@@ -7,8 +7,9 @@ builder in the traceback, and never reaches a page.
 """
 
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, fields
+from types import MappingProxyType
 from typing import Any, dataclass_transform
 
 # What only a machine writes, by what it is.
@@ -19,6 +20,9 @@ MACHINE_TEXT = {
     "a bare flag": re.compile(r"(?<![\w-])(?:True|False)(?![\w-])"),
     "markup": re.compile(r"<[a-z][\w-]*[\s/>]|(?<![\w-])[a-z][\w-]*=\"[^\"]*\""),
 }
+# A field's metadata when it quotes a record's own text (a search match): a
+# person or a provider wrote it, and a page shows it as they did.
+QUOTED: Mapping[str, bool] = MappingProxyType({"quoted": True})
 # A field's name as code writes it, where its label belongs.
 _KEY = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
 
@@ -48,10 +52,13 @@ def said_in_words(view: Any) -> None:
 
     A field typed ``str`` holds a str, a flag is only a field typed ``bool``,
     and each str a field holds, in a tuple too, is words. A field named
-    ``label`` or ``…_label`` is a label.
+    ``label`` or ``…_label`` is a label. A field marked ``QUOTED`` holds a
+    record's own text, shown as it was written, so it is not held to words.
     """
 
     for field in fields(view):
+        if field.metadata.get("quoted"):
+            continue
         value = getattr(view, field.name)
         where = f"{type(view).__name__}.{field.name}"
         if (field.type is str and not isinstance(value, str)) or (isinstance(value, bool) and field.type is not bool):

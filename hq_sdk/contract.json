@@ -2293,7 +2293,8 @@
           "at=",
           "actions=",
           "link=",
-          "category="
+          "category=",
+          "snippet="
         ],
         "fields": [],
         "kind": "dataclass",

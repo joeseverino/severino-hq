@@ -114,6 +114,22 @@ const submitterRebuilt = {
   message: "A submit's body is `new FormData(form, submitter)`, which places the button as a native submit does.",
 };
 
+// A part of the page can be replaced by an answer (base.html's `main` is a
+// region), and an element found once as the page loads is gone with the part
+// it was in, its successor never set up. So the page is asked for elements at
+// load only through `hqFragment.each`, which sets up each one placed since
+// too, or by a listener on the document asking where an event landed. Load is
+// top-level code, a function called where it is written, and a
+// DOMContentLoaded listener; a query there for what no fragment holds (the
+// frame's header, its dialogs) says so in its disable comment.
+const loadTimeQuery = {
+  selector:
+    "CallExpression[callee.object.name='document'][callee.property.name=/^(querySelector(All)?|getElementById|getElementsBy\\w+)$/]"
+    + ":not(:function:not(.callee, CallExpression[callee.property.name='addEventListener'][arguments.0.value='DOMContentLoaded'] > .arguments) *)",
+  message:
+    "An element found once at load is lost when a fragment replaces its part: set it up through `hqFragment.each(selector, setup)`, or listen on the document.",
+};
+
 export default [
   {
     linterOptions: { reportUnusedDisableDirectives: "error" },
@@ -153,7 +169,7 @@ export default [
     rules: {
       "no-restricted-globals": ["error", ...primitiveGlobals],
       "no-restricted-properties": ["error", ...primitiveProperties],
-      "no-restricted-syntax": ["error", ...primitiveSyntax, ...drawnMarkup, layoutReads, submitterRebuilt],
+      "no-restricted-syntax": ["error", ...primitiveSyntax, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery],
     },
   },
   {
@@ -166,7 +182,7 @@ export default [
         { name: "setTimeout", message: "fragment.js keeps one timer, hqEvery's, as window.setTimeout." },
       ],
       "no-restricted-properties": ["error", ...oncePerPage],
-      "no-restricted-syntax": ["error", parserStaysInside, ...drawnMarkup, layoutReads, submitterRebuilt],
+      "no-restricted-syntax": ["error", parserStaysInside, ...drawnMarkup, layoutReads, submitterRebuilt, loadTimeQuery],
     },
   },
 ];

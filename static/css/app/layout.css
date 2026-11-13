@@ -492,6 +492,11 @@
 /* A title is ink however it links: its own address, or a thing it names. */
 .list-rows :is(a strong, strong > a) { color: var(--ink); font-weight: 600; }
 .list-rows :is(a:hover strong, strong > a:hover) { color: var(--accent); }
+/* A snippet belongs to the line it is under, so it sits closer to it than
+   the row's gap. */
+.list-rows li:has(> .row-snippet) { row-gap: var(--space-1); }
+/* A match is part of the word it is found in, so it adds no room inside it, and reads in the ink of what it names. */
+.list-rows .row-snippet mark { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--ink); border-radius: 3px; font-weight: 600; }
 
 /* Prose list: sentences, where .list-rows carries chips.
    `.row-main` is a flex container, which is right for a row assembled from a

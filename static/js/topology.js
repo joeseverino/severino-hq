@@ -5,7 +5,7 @@
 // enhancement filters, isolates a node's immediate neighborhood, and loads
 // the selected node's details into the one panel beside the lanes, creating
 // no client-side topology state of its own.
-document.querySelectorAll("[data-topology]").forEach((workspace) => {
+hqFragment.each("[data-topology]", (workspace) => {
   const nodes = [...workspace.querySelectorAll("[data-topology-node]")];
   const lanes = [...workspace.querySelectorAll("[data-topology-lane]")];
   const map = workspace.querySelector(".topology-map");

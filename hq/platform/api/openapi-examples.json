@@ -263,7 +263,7 @@
                 }
               ],
               "explanation": "The next write that needs more room than is left fails, and says only that the write did.",
-              "id": "claim:1d767918c4a28e08",
+              "id": "claim:e378f3b6e41c6c8c",
               "investigations": [
                 {
                   "capability": "",
@@ -275,7 +275,7 @@
                   "recommended": false,
                   "refusal": "",
                   "target": "",
-                  "url": "/infrastructure/topology/?focus=controller%3Ae61d92aae82ff989#trace"
+                  "url": "/infrastructure/topology/?focus=machine%3Adocker-host-01#trace"
                 }
               ],
               "no_help_reason": null,
@@ -283,19 +283,19 @@
                 {
                   "capability": "",
                   "effect": "read",
-                  "label": "Open Infrastructure",
+                  "label": "Open",
                   "method": "GET",
                   "name": "open",
                   "reason": "",
                   "recommended": false,
                   "refusal": "",
                   "target": "",
-                  "url": "/infrastructure/connections/"
+                  "url": "/infrastructure/machines/docker-host-01/"
                 }
               ],
               "operator_steps": [
                 {
-                  "command": "ssh example-controller \"sudo df -h /\"",
+                  "command": "ssh docker-host-01 \"sudo df -h /\"",
                   "label": "See the space on /",
                   "notes": []
                 }
@@ -305,13 +305,13 @@
               "scope": "host.filesystem",
               "severity": "serious",
               "since": null,
-              "subject": "controller:e61d92aae82ff989",
-              "title": "The filesystem at / on example-controller is nearly full",
+              "subject": "machine:docker-host-01",
+              "title": "The filesystem at / on docker-host-01 is nearly full",
               "workflow": {
-                "id": "resolve:claim:1d767918c4a28e08",
+                "id": "resolve:claim:e378f3b6e41c6c8c",
                 "label": "Next steps",
                 "outcome": {
-                  "claim_id": "claim:1d767918c4a28e08",
+                  "claim_id": "claim:e378f3b6e41c6c8c",
                   "kind": "claim_absent",
                   "label": ""
                 },
@@ -438,7 +438,7 @@
             }
           ],
           "connection_ref": "adguard",
-          "controller_id": "example-controller",
+          "controller_id": "docker-host-01",
           "credential_fix": null,
           "credential_model": "coarse",
           "dependencies": [
@@ -454,7 +454,7 @@
           "family": "infrastructure.controllers",
           "family_label": "Infrastructure",
           "granted_scopes": [],
-          "id": "example-controller:adguard",
+          "id": "docker-host-01:adguard",
           "kind": "adguard",
           "label": "adguard",
           "last_activity": {
@@ -793,7 +793,10 @@
               "name": "docker-host-01",
               "url": "/infrastructure/machines/docker-host-01/"
             },
-            "provider_machine": null,
+            "provider_machine": {
+              "name": "docker-host-01",
+              "url": "/infrastructure/machines/docker-host-01/"
+            },
             "readout": [
               {
                 "desired": "10.100.200.214",
@@ -1500,7 +1503,7 @@
               "connection_ref": "npm",
               "detail": "5 proxy hosts.",
               "family": "infrastructure.controllers",
-              "id": "example-controller:npm",
+              "id": "docker-host-01:npm",
               "kind": "npm",
               "label": "npm",
               "observed_at": "2026-01-15T09:30:00+00:00",
@@ -2638,7 +2641,7 @@
                     }
                   ],
                   "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
-                  "id": "claim:5bec129f1d278ff4",
+                  "id": "claim:d3cadf1809bee399",
                   "investigations": [
                     {
                       "capability": "",
@@ -2650,7 +2653,7 @@
                       "recommended": false,
                       "refusal": "",
                       "target": "",
-                      "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Aexample-controller%3Atailscale#trace"
+                      "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Adocker-host-01%3Atailscale#trace"
                     }
                   ],
                   "no_help_reason": null,
@@ -2682,13 +2685,13 @@
                   "scope": null,
                   "severity": "neutral",
                   "since": null,
-                  "subject": "connection:infrastructure.controllers:example-controller:tailscale",
+                  "subject": "connection:infrastructure.controllers:docker-host-01:tailscale",
                   "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
                   "workflow": {
-                    "id": "resolve:claim:5bec129f1d278ff4",
+                    "id": "resolve:claim:d3cadf1809bee399",
                     "label": "Next steps",
                     "outcome": {
-                      "claim_id": "claim:5bec129f1d278ff4",
+                      "claim_id": "claim:d3cadf1809bee399",
                       "kind": "claim_absent",
                       "label": ""
                     },
@@ -3234,7 +3237,6 @@
             "kinds": {
               "ability": 61,
               "connection": 10,
-              "controller": 1,
               "machine": 3,
               "registry": 1,
               "resource": 42,
@@ -3242,7 +3244,7 @@
               "target": 2,
               "zone": 1
             },
-            "nodes": 129
+            "nodes": 128
           },
           "trace": null
         },

@@ -2,8 +2,10 @@
 {% block page %}
 {% comment %}The palette's results: the part this page answers to the header's search.{% endcomment %}
 {% partialdef palette %}{% include "partials/_command_center.html#results" %}{% endpartialdef %}
+{% comment %}The count sits in the bar that asked for it.{% endcomment %}
 {% filter_bar verb="Search" data_table_toolbar=True %}
   <input type="search" name="q" value="{{ q }}" placeholder="Find anything" aria-label="Find anything" autofocus>
+{% summary %}{% if total %}{{ total|counted:"record" }} for <strong>{{ q|breakable }}</strong>{% endif %}
 {% endfilter_bar %}
 
 <div data-search-results>
@@ -19,66 +21,19 @@
   </div>
   {% endif %}
 
-  {% if total %}
-  <div class="search-summary">
-    <p class="muted">{{ total|counted:"record" }} for <strong>{{ q|breakable }}</strong></p>
-    <nav class="search-scopes" aria-label="Result groups">
-      {% for group in groups %}{% if group.count %}
-      <a class="scope-chip" href="#scope-{{ group.scope }}">{{ group.label|breakable }}</a>
-      {% endif %}{% endfor %}
-      {% if contacts %}<a class="scope-chip" href="#scope-contacts">Messages</a>{% endif %}
-    </nav>
-  </div>
-  {% endif %}
-
-  {% for group in groups %}{% if group.count %}
-  {% section group.label count=group.count id="scope-"|add:group.scope css="search-group" %}
-    <ul class="search-hits">
-      {% for item in group.items %}
-      <li class="search-hit">
-        <div class="search-hit-main">
-          <p class="search-hit-title">
-            {% if item.url %}
-            <a href="{{ item.url }}"><strong>{{ item.title|breakable }}</strong></a>
-            {% else %}
-            <a href="{% url 'core:audit_list' %}?q={{ q|urlencode }}"><strong>{{ item.title|breakable }}</strong></a>
-            {% endif %}
-            {% if item.badge %}<code class="search-badge">{{ item.badge|breakable }}</code>{% endif %}
-          </p>
-          {% if item.snippet %}
-          <p class="search-snippet">{% for text, hit in item.snippet %}{% if hit %}<mark>{{ text|breakable }}</mark>{% else %}{{ text|breakable }}{% endif %}{% endfor %}</p>
-          {% endif %}
-        </div>
-        {% if item.timestamp %}<span class="row-meta">{{ item.timestamp|when }}</span>{% endif %}
-      </li>
-      {% endfor %}
-    </ul>
+  {% comment %}Drawn in the results, so a new search brings its own groups.{% endcomment %}
+  {% if result_navigation %}{% include "partials/_page_navigation.html" with navigation=result_navigation %}{% endif %}
+  {% for section in result_sections %}
+  {% section section.label count=section.rows|length id=section.id more_label=section.more_label more_url=section.more_url %}
+    {% include "partials/_record_list.html" with rows=section.rows label=section.label only %}
   {% endsection %}
-  {% endif %}{% endfor %}
-
-  {% if contacts %}
-  {% section "Messages" count=contacts|length id="scope-contacts" css="search-group" %}
-    <ul class="search-hits">
-      {% for item in contacts %}
-      <li class="search-hit">
-        <div class="search-hit-main">
-          <p class="search-hit-title">
-            <a href="{% url 'contacts:detail' item.id %}"><strong>{{ item.name|breakable }}</strong></a>{% if item.status %}<span class="muted">{% dot %}{{ item.status|capfirst|breakable }}</span>{% endif %}
-          </p>
-        </div>
-        <span class="row-meta">{{ item.created_at|when }}</span>
-      </li>
-      {% endfor %}
-    </ul>
-    <p class="muted"><a class="subtle-link" href="{% url 'contacts:list' %}?q={{ q|urlencode }}">Search messages{% arrow %}</a></p>
-  {% endsection %}
-  {% endif %}
+  {% endfor %}
 
   {% if not total and not discovery_total %}
   {% include "partials/_empty_state.html" with message="Nothing matches. Try a shorter word, a domain name, or an id." only %}
   {% endif %}
 {% else %}
-  <p class="command-hint muted">Search finds machines, services, domains, records, pages and commands.<span class="keyboard-only"> <kbd>⌘ K</kbd> opens it from any page.</span></p>
+  {% notice %}<p>Search finds machines, services, domains, records, pages and commands.<span class="keyboard-only"> <kbd>⌘ K</kbd> opens it from any page.</span></p>{% endnotice %}
 {% endif %}
 </div>
 {% endblock %}

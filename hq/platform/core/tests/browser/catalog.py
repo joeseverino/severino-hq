@@ -877,6 +877,45 @@ CATALOG = {
             ]
         },
     ),
+    # Search hits, each with where the record matched under its line: a
+    # match inside a word, a snippet long enough to be cut at its second
+    # line, and record text that is not HQ's words.
+    "part/record-list-snippets": Entry(
+        '{% section "Example results" count=3 %}{% include "partials/_record_list.html" %}{% endsection %}',
+        {
+            "rows": [
+                ListRow(
+                    "Example backup host",
+                    url="/example/host/",
+                    detail="Machine",
+                    at=date(2026, 11, 2),
+                    snippet=(("Runs the nightly ", False), ("backup", True), ("s for example-host-one.", False)),
+                ),
+                ListRow(
+                    "An example note with a long title that wraps on a phone",
+                    url="/example/note/",
+                    detail="Note",
+                    snippet=(
+                        ("The example ", False),
+                        ("backup", True),
+                        (
+                            (
+                                " runs at 02:00 and copies every example volume to the example store, then checks"
+                                " each copy against its source and writes what it found to the example log, which"
+                                " the morning report reads before anyone is awake to read it."
+                            ),
+                            False,
+                        ),
+                    ),
+                ),
+                ListRow(
+                    "Example audit entry",
+                    url="/example/audit/",
+                    snippet=(("enabled: False to True at 2026-11-02 09:30, ", False), ("backup", True)),
+                ),
+            ]
+        },
+    ),
     # An absence said where a value would stand, beside a value that is
     # there, in a list of facts and in a table's cell.
     "part/empty-inline": Entry(

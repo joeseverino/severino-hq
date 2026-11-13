@@ -1,10 +1,15 @@
 """setup:extensions names the set Compose would build from the same checkouts."""
 
+import json
+import os
+import subprocess
 import tempfile
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase
 
+from hq.platform.core.tests.task import trusted_mise
 from tools.dev.extension_set import extension_set
 
 MANIFEST = (
@@ -37,7 +42,6 @@ class ExtensionSetTests(SimpleTestCase):
         )
         for root in (alpha, beta, single):
             self.assertIn(str(root.resolve() / "src"), named["HQ_LOCAL_PYTHONPATH"])
-        self.assertIn("get_env(name='HQ_LOCAL_PYTHONPATH'", named["HQ_LOCAL_PYTHONPATH"])
 
     def test_a_checkout_with_no_package_is_refused(self):
         with self.assertRaises(SystemExit):
@@ -48,3 +52,36 @@ class ExtensionSetTests(SimpleTestCase):
         (root / "pyproject.toml").write_text('[project]\nname = "example-other"\n')
         with self.assertRaises(SystemExit):
             extension_set([root])
+
+    def test_a_value_the_environment_holds_wins_over_the_file_and_the_file_names_the_rest(self):
+        from tools.dev.extension_set import write
+
+        project = self.checkout()
+        empty = project / "global.toml"
+        empty.write_text("")
+        written = {"HQ_LOCAL_PYTHONPATH": "/srv/example/src", "HQ_LOCAL_PLUGINS": "example_alpha.plugin:plugin"}
+        isolated = {
+            **os.environ,
+            **trusted_mise(project, project / "state"),
+            "MISE_CEILING_PATHS": str(project.parent),
+            "MISE_GLOBAL_CONFIG_FILE": str(empty),
+            "MISE_SYSTEM_CONFIG_FILE": str(empty),
+        }
+        isolated.pop("HQ_LOCAL_PYTHONPATH", None)
+        isolated.pop("HQ_LOCAL_PLUGINS", None)
+        with mock.patch.dict(os.environ, isolated, clear=True):
+            write(project / "mise.local.toml", written)
+
+        def resolved(**given: str) -> dict[str, str]:
+            done = subprocess.run(
+                ["mise", "-C", str(project), "env", "--json"],
+                env={**isolated, **given},
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return {name: json.loads(done.stdout)[name] for name in written}
+
+        self.assertEqual(resolved(), written)
+        chosen = "example_beta.plugin:plugin"
+        self.assertEqual(resolved(HQ_LOCAL_PLUGINS=chosen), {**written, "HQ_LOCAL_PLUGINS": chosen})

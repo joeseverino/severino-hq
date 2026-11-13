@@ -10,13 +10,14 @@ they are taken).
 
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import Any
 
 from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, REBOOT_KIND
 
-from .finding_model import FindingRule, OperatorStep, cannot_run_commands, machine_step
+from .finding_model import Finding, FindingEstate, FindingRule, OperatorStep, cannot_run_commands, machine_step
 from .moments import when
-from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller
+from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, taken_at
 from .timestamps import moment
 from .topology_model import TopologyNode
 
@@ -181,13 +182,36 @@ _waiting = OnEachMachine(
 _edge_waiting = replace(_waiting, row=EdgeRebootState)
 
 
+def _restarts(estate: FindingEstate) -> tuple[Finding, ...]:
+    """One finding per machine. A controller can run on an edge of its own,
+    so one machine can hold both readings: what it says comes from the newer,
+    under the controller's reading's scope, so its identity holds while the
+    two are read in turn."""
+
+    nodes = {node.id: node for node in estate.nodes()}
+
+    def read(finding: Finding) -> datetime | None:
+        return taken_at(nodes[finding.subject], finding.scope)
+
+    kept: dict[str, Finding] = {}
+    for finding in (*_waiting(estate), *_edge_waiting(estate)):
+        held = kept.get(finding.subject)
+        if held is None:
+            kept[finding.subject] = finding
+            continue
+        at, held_at = read(finding), read(held)
+        newer = finding if at is not None and (held_at is None or at > held_at) else held
+        kept[finding.subject] = replace(newer, scope=REBOOT_KIND)
+    return tuple(kept.values())
+
+
 # The rules this module raises, beside the detectors that decide them.
 RULES: tuple[FindingRule, ...] = (
     FindingRule(
         "reboot-pending",
         "Waiting on a restart",
         "attention",
-        lambda estate: (*_waiting(estate), *_edge_waiting(estate)),
+        _restarts,
         operator_action="On the machine, read what waits on the restart, then schedule it for a time that suits.",
         no_help_reason=cannot_run_commands(),
     ),
