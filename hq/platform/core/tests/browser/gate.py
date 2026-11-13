@@ -208,6 +208,12 @@ def sent(body, headers):
     return page
 
 
+class SentFile(bytes):
+    """A file HQ answered (a picture a page draws), carrying its headers."""
+
+    headers: dict[str, str]
+
+
 # A nonce as a policy names it, and a script tag as a browser serializes it
 # once parsed: emptied, so a page cannot read its nonce back out of the markup.
 _NONCE_SOURCE = re.compile(r"'nonce-([^']+)'")
@@ -228,9 +234,12 @@ def answered(response):
     """A test client's answer as the browser is to receive it: its body and
     every header but its length, which Playwright counts from the body."""
 
-    return sent(
-        response.content.decode(), {name: value for name, value in response.items() if name != "Content-Length"}
-    )
+    headers = {name: value for name, value in response.items() if name != "Content-Length"}
+    if response.get("Content-Type", "").startswith("image/"):
+        file = SentFile(response.getvalue())
+        file.headers = headers
+        return file
+    return sent(response.content.decode(), headers)
 
 
 # HQ's policy takes a style only from a sheet of its own origin, and a page a
@@ -523,6 +532,9 @@ class BrowserGate(SimpleTestCase):
         its own, for a page HQ answered, or HQ's policy, for one put together
         by a test."""
 
+        if isinstance(page, SentFile):
+            route.fulfill(headers=page.headers, body=bytes(page))
+            return
         if isinstance(page, Sent):
             route.fulfill(headers=page.headers, body=str(page))
             return

@@ -50,6 +50,20 @@ BOXES = """([readings, content, ask]) => [
 })"""
 BOXES_ARGS = [SELECTORS["readings"], SELECTORS["content"], SELECTORS["ask"]]
 
+# The page laid out again from nothing, its markup and its script's state as
+# they stand. The gates hold a page's face back until asked for
+# (`serving.in_the_face`), so a page is first laid out in the next face of the
+# stack, and an engine may keep a measure from that layout (a row a pixel
+# shorter in WebKit on Linux) that the same markup swapped in afresh does not
+# have. A reader's browser draws the face from the first paint or never, so a
+# landing is compared with the layout that browser has.
+LAID_OUT_AFRESH = """() => {
+  const root = document.documentElement;
+  root.style.setProperty('display', 'none');
+  root.getBoundingClientRect();
+  root.style.removeProperty('display');
+}"""
+
 
 def _current(context):
     """The strip as the refresh answers it: every reading current, and
@@ -198,6 +212,7 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
                 with self.subTest(page=path, width=width):
                     self.pressed, self.redrawn = "", []
                     self.visit(path, width)
+                    self.page.evaluate(LAID_OUT_AFRESH)
                     self.page.evaluate(SETTLE)
                     drawn = self.page.evaluate(BOXES, BOXES_ARGS)
                     self.press()

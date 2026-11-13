@@ -127,6 +127,8 @@
 @media (scripting: none) {
   @container table-region (width < 640px) {
     .table-scroll > .data-table:has(> tbody > tr > td[data-side]) > * > tr:not(.row-detail) > :last-child { display: none; }
+    /* Its three columns of whole words then fill the narrowest phone to the pixel, and an engine draws the same words a pixel or two wider than another, so its cells stand closer and the table keeps room to spare. */
+    .table-scroll > .data-table:has(> tbody > tr > td[data-side]) > * > tr > * { padding-inline: var(--space-2); }
   }
 }
 /* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
@@ -239,6 +241,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A status said by one pill alone (`data-pill-only`, table_cells) fills its column, which is as wide as its widest pill, so the pills down a column share both edges. */
 .data-table > tbody > tr > td[data-pill-only] > .kept-line { display: flex; width: auto; max-width: none; }
 .data-table > tbody > tr > td[data-pill-only] .pill { display: flex; flex: auto; justify-content: center; text-align: center; }
+/* A pill is a label, whole until its table is tight (figures.css), so a name it says (a header's, as an evidence row's type) is never cut inside it: its column holds the pill, and the prose beside it wraps. */
+@container not style(--tight: given) {
+  .data-table td .pill > .token[data-sole] { min-width: max-content; }
+}
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }
 /* Cut to one line, a token is plain text: the ellipsis lands in it and no part draws a box past the cut. */
@@ -309,6 +315,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 @container not style(--break: given) {
   .data-table td code.cell-whole .whole { white-space: nowrap; }
+}
+/* A name among names on a line (an item of a dot list) is no sentence, though it is a list item in a cell: its hyphenated part stays whole, so its column holds the longest name or leaves the table (tables.js), and never squeezes a name into breaking at a hyphen. */
+@container not style(--break: given) {
+  .data-table td .dot-list > li code .whole { white-space: nowrap; }
 }
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
@@ -468,10 +478,10 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
 /* A button's label wraps in an opened row and the line beneath it (surfaces.css), where its words and an identifier in it are flex items side by side, each squeezed until it breaks inside a word; wrapping, each keeps its own line before it shrinks. One with an icon keeps its label beside it. */
 .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) td .btn:not(:has(> svg)) { flex-wrap: wrap; }
-/* Broken, its identifiers break where they must, the last give before it scrolls: a name broken is read where a name past the card is not. A word is no identifier (line_breaks.breakable leaves it plain text), so a chip or a link holding only words keeps them whole, and its column is never narrower than its longest word. Code is always an identifier, one with no seam for `breakable` to mark (`describe_capabilities`) too. */
+/* Broken, its identifiers break where they must, the last give before it scrolls: a name broken is read where a name past the card is not. A word is no identifier (line_breaks.breakable leaves it plain text), so a chip or a link holding only words keeps them whole, and its column is never narrower than its longest word. Code a template writes is an identifier, one with no seam for `breakable` to mark (`describe_capabilities`) too; an entity's label is the name it was given, which may be a word (a connection called Portainer), so code inside one breaks only where it holds an identifier. */
 @container style(--break: given) {
   .data-table :is(td, th) .whole { white-space: normal; }
-  .data-table :is(td, th) :is(.token, .whole, code, [data-entity]:has(.token, .whole)) { overflow-wrap: anywhere; }
+  .data-table :is(td, th) :is(.token, .whole, code:not([data-entity] *), [data-entity]:has(.token, .whole)) { overflow-wrap: anywhere; }
 }
 .data-table > * > tr > [data-dropped] { display: none; }
 .data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }

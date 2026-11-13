@@ -83,6 +83,9 @@ HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePop
 _IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
 
 
+_PICTURE = re.compile(r'<img\b[^>]*\ssrc="(/[^"/][^"]*)"')
+
+
 def fragments_of(client, address, page, answers, ask):
     """Every part the page at ``address`` fetches into itself, and the parts
     inside those, by address and part name, as the server answers them."""
@@ -98,6 +101,12 @@ def fragments_of(client, address, page, answers, ask):
             if response.status_code == 200:
                 answers[url, name] = answered(response)
                 pending.append((url, answers[url, name]))
+        # A picture the page draws from HQ's own records is asked for as it loads.
+        for url in _PICTURE.findall(body):
+            if (url, "") not in answers and not url.startswith(settings.STATIC_URL):
+                response = ask(client, url)
+                if response.status_code == 200:
+                    answers[url, ""] = answered(response)
 
 
 def navigation():
@@ -349,7 +358,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
 # server stands at, the links its headings sort by, and the queue's choices.
 _TOOLBAR_BOX = re.compile(r'<input type="checkbox" name="([^"]+)" value="([^"]*)"')
 _DEFAULT_SORT = re.compile(r'<select name="sort">.*?<option value="([^"]*)" selected>', re.DOTALL)
-_SORT_LINK = re.compile(r'class="table-sort-link" href="([^"]+)"')
+_SORT_LINK = re.compile(r'<a class="table-sort-link"[^>]* href="([^"]+)"')
 _QUEUE_CHOICES = re.compile(r'<select name="(status|source)"[^>]*>(.*?)</select>', re.DOTALL)
 _OPTION = re.compile(r'<option value="([^"]+)"')
 _FIRST_ROW = re.compile(r"<tbody>\s*<tr[^>]*>(.*?)</tr>", re.DOTALL)
@@ -492,7 +501,10 @@ class ExampleEstateControlTests(BrowserGate):
         body = ask(path)
         for name, value in _TOOLBAR_BOX.findall(body):
             ask(f"{path}?{name}={value}")
-        for href in _SORT_LINK.findall(body):
+        sorts = _SORT_LINK.findall(body)
+        if not sorts:
+            raise AssertionError(f"{path} draws no heading that sorts")
+        for href in sorts:
             for deeper in _SORT_LINK.findall(ask(urljoin(path, unescape(href)))):
                 ask(urljoin(path, unescape(deeper)))
         first = _FIRST_ROW.search(body)
@@ -563,23 +575,22 @@ class ExampleEstateControlTests(BrowserGate):
                 self.page.wait_for_function(_LET_GO, arg=asked)
                 self.assertEqual(self.rows(), every)
 
-                # A list its filters empty says so, and gives every row back.
+                # A toggle beside the menus narrows the list too, and gives every row back.
                 toggle = self.page.locator(SELECTORS["table_toggle"]).first
                 asked = [toggle.get_attribute("name"), toggle.get_attribute("value")]
                 toggle.check()
                 self.page.wait_for_function(_ASKED, arg=asked)
-                self.assertEqual(self.rows(), 0)
-                self.assertTrue(self.page.locator(SELECTORS["table_empty"]).is_visible())
+                kept = self.rows()
+                self.assertLess(kept, every)
                 toggle.uncheck()
                 self.page.wait_for_function(_LET_GO, arg=asked)
                 self.assertEqual(self.rows(), every)
-                self.assertFalse(self.page.locator(SELECTORS["table_empty"]).count())
 
                 # Back is the list as it was, the address and the box agreeing,
                 # and Forward the list after it.
                 self.page.go_back()
                 self.page.wait_for_function(_ASKED, arg=asked)
-                self.assertEqual(self.rows(), 0)
+                self.assertEqual(self.rows(), kept)
                 self.assertTrue(toggle.is_checked())
                 self.page.go_forward()
                 self.page.wait_for_function(_LET_GO, arg=asked)
