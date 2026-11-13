@@ -22,7 +22,8 @@ class _Surveyed:
     close = look.Look.close
     shooting = False
 
-    def __init__(self, judged):
+    def __init__(self, judged, undrawn=()):
+        self.undrawn = undrawn
         self.base, self.base_errors, self.errors = None, {}, {key: [] for key in judged}
         self.unanswered_pages = {}
         self.judged_at = dict.fromkeys(judged)
@@ -40,7 +41,7 @@ class SurveyRecordTests(SimpleTestCase):
     what failed; it fails when it found anything or judged nothing, so its
     record says FAILED."""
 
-    def close(self, found, judged, **asked):
+    def close(self, found, judged, undrawn=(), **asked):
         """What the survey failed on, what it said it judged to the gate and
         what it said reruns it, each None for nothing."""
 
@@ -54,7 +55,7 @@ class SurveyRecordTests(SimpleTestCase):
                 mock.patch.dict(os.environ, {**ASKED, **asked, **gate}, clear=True),
                 mock.patch("sys.stdout", new_callable=io.StringIO),
             ):
-                failed = _Surveyed(judged).close("survey", found)
+                failed = _Surveyed(judged, undrawn).close("survey", found)
             said = [path.read_text(encoding="utf-8") if path.is_file() else None for path in (detail, again)]
             return failed, *said
 
@@ -94,3 +95,8 @@ class SurveyRecordTests(SimpleTestCase):
         _, said, again = self.close(found, found, usage_found_into="example-found.json")
         self.assertIsNone(said)
         self.assertIsNone(again)
+
+    def test_a_survey_of_undrawn_templates_alone_passes_and_names_them(self):
+        failed, said, _ = self.close({}, {}, ("template:example/_none.html",))
+        self.assertEqual(failed, [])
+        self.assertIn("undrawn: template:example/_none.html\njudged: none", said)

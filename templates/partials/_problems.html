@@ -20,7 +20,7 @@ Nothing is drawn when nothing is open.
 {% partialdef rest %}{% if rest %}{% include "partials/_work_queue.html" with items=rest grouped=True here=True fold=True dense=True only %}{% endif %}{% endpartialdef %}
 {% with urgent=problems|urgent rest=problems|not_urgent %}
 {% if urgent %}
-{% card css="problems problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
+{% card css="problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
   {% comment %}
   <!-- ast-grep-ignore: hand-drawn-heading --> the urgent problems' notice, whose heading is for a screen reader alone: nothing visible titles it
   {% endcomment %}<h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
@@ -28,6 +28,6 @@ Nothing is drawn when nothing is open.
 {% endcard %}
 {% endif %}
 {% if rest %}
-{% card css="problems" label=rest|length|counted:"open problem,open problems" %}{% partial rest %}{% endcard %}
+{% card label=rest|length|counted:"open problem,open problems" %}{% partial rest %}{% endcard %}
 {% endif %}
 {% endwith %}

@@ -56,25 +56,6 @@
 .error-page .filter-bar { justify-content: center; margin: 0 0 var(--space-8); }
 .error-page .page-actions { justify-content: center; display: flex; }
 
-/* In a narrow box (tables.js) the cadence matrix drops its oldest
-   periods rather than scrolling. A
-   sideways scrollbar under a five-column grid of dots is both ugly and
-   useless: the columns only mean anything lined up against each other, and
-   half of them parked off-screen are not lined up against anything. The
-   three most recent survive, which is the end of the row an eye goes to
-   first and the part a decision is made from; the full history is a tap away
-   on the page this panel links to.
-   Counted from the end, so it is "the last three" whatever the window
-   length happens to be, rather than a fixed set of column numbers. */
-@container style(--box: narrow) {
-  .cadence-matrix th:nth-child(n+2):nth-last-child(n+5),
-  .cadence-matrix td:nth-child(n+2):nth-last-child(n+5) { display: none; }
-  /* The "last trained" line is what pushes the label column past a narrow box.
-     The dots are the reading; the exact recency is on the split page. */
-  .cadence-matrix .cadence-detail { display: none; }
-  .cadence-matrix th, .cadence-matrix td { padding: var(--space-3) var(--space-1); }
-}
-
 /* ── Cadence strip ──────────────────────────────────────────────────
    Whether a thing happened, period by period. A filled mark is a period it
    happened in; the gaps are the point, so they stay the same size and shape as
@@ -121,23 +102,13 @@
    rows can be read against each other. Deliberately not stacked on a phone: a
    matrix that becomes a list of lists loses the alignment it exists for, and a
    row of five dots fits a narrow screen comfortably. */
-.cadence-matrix th[scope="col"] { text-align: center; }
-.cadence-matrix th[scope="col"]:first-child { text-align: left; }
-.cadence-matrix th[scope="row"] { text-align: left; font-weight: 650; }
-.cadence-matrix th[scope="row"] a { color: var(--ink); }
-.cadence-matrix th[scope="row"] a:hover { color: var(--accent); }
 .cadence-detail { display: block; font-weight: 400; font-size: var(--text-2xs); }
-.cadence-cell { text-align: center; }
 .cadence-cell .cadence-mark { margin: 0 auto; }
 .cadence-period { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; white-space: nowrap; }
-.cadence-total { text-align: center; font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }
+.cadence-total { font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }
 /* Compact: for a matrix sharing a row with a chart, where the default cell
-   padding would push eight columns past a half-width card. */
-.cadence-matrix.is-compact th,
-.cadence-matrix.is-compact td { padding: var(--space-3) var(--space-2); }
-.cadence-matrix.is-compact .cadence-period { font-size: var(--text-3xs); }
-.cadence-matrix.is-compact th[scope="row"] { font-size: var(--text-sm); }
-.cadence-matrix.is-compact .cadence-detail { font-size: var(--text-3xs); }
+   padding and type would push eight columns past a half-width card. */
+[data-marks="compact"] :is(.cadence-period, .cadence-detail) { font-size: var(--text-3xs); }
 
 /* Tabbed charts. Several drawings of one thing in the space of one, built from
    radios so the panel works with no JavaScript and the arrow keys move between
@@ -302,11 +273,10 @@
   .page-nav,
   .table-filter-menu, .table-selection,
   .btn, button, .job-progress, .page-actions, form,
-  /* `.pill` in a page head is a link ("Markdown", "Care →"). Status pills
-     inside a table are content and are kept. */
-  .page-head .pill, .section-head .pill,
-  /* The app's warning banner addresses whoever is at the screen. Printed
-     under a page of gait measurements it reads as an accusation. */
+  /* `.pill` in a page head is a link ("Markdown", "Care →"), as one in a
+     section's head is (surfaces.css). Status pills inside a table are content
+     and are kept. */
+  .page-head .pill { display: none !important; }
 
   /* Cards become ruled sections: backgrounds are dropped, so the separation
      has to be drawn in ink rather than in a tint. */

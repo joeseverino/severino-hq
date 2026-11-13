@@ -1,5 +1,5 @@
 /* Cards: pills, the KPI grid, the tooltip, the insight grid, the queue and
-   steps side by side. */
+   steps side by side. The section part is drawn in surfaces.css. */
 
 @layer components {
 
@@ -75,9 +75,6 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 .kpi .value { font-size: var(--text-4xl); font-weight: 650; letter-spacing: -.018em; line-height: 1.2; font-feature-settings: "tnum"; }
 .kpi.is-zero .value { color: var(--muted-2); font-weight: 500; }
 .kpi .muted { font-size: var(--text-2xs); }
-/* Nested in a card, the grid's own bottom margin becomes dead space inside the
-   card's padding rather than separation between sections. */
-.card > .kpi-grid:last-child, .card > .insight-grid:last-child { margin-bottom: 0; }
 
 /* The tooltip: chart marks, and anything else carrying data-tip. Fixed to the viewport and inert to the pointer, so it can
    never sit between the cursor and the mark it is describing. */
@@ -122,7 +119,9 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
   min-width: 0;
 }
 .insight-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); flex-wrap: wrap; }
-.insight-value { font-size: var(--text-xl); font-weight: 650; letter-spacing: -.015em; font-feature-settings: "tnum"; white-space: nowrap; }
+/* A reading wraps only where it is longer than its line, at the seams
+   `breakable` marks, as a list of mail servers is: a figure fits whole. */
+.insight-value { font-size: var(--text-xl); font-weight: 650; letter-spacing: -.015em; font-feature-settings: "tnum"; overflow-wrap: break-word; }
 .insight-title { margin: 0; font-size: var(--text-md); font-weight: 650; }
 .insight-title a { color: inherit; }
 .insight-body { margin: 0; font-size: var(--text-sm); line-height: 1.5; color: var(--ink-2); }
@@ -163,13 +162,7 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 :root:has(.origin-panel:popover-open) .chart-tip { display: none; }
 /* One of HQ's modals; what it lists sits flat inside it. */
 .origin-panel { --surface-border: 0 none; --surface-radius: 0; --surface-bg: transparent; --surface-shadow: none; --surface-inset: 0; }
-/* What was read that shows it: each label once, its values beside it. */
 /* The queue's table: the title leads since it is what a reader presses, the urgency is one quiet word after it only when urgent (the pill keeps its word for a screen reader and its tip), the meaning wraps under it to the buttons, and the buttons end the row. */
-.queue-table > tbody > tr > :is(.queue-mark, .queue-what) { font-size: var(--queue-size, var(--text-md)); line-height: 1.5; }
-/* The gutter is the queue's at every width, so the title and everything the
-   opened line holds start on one edge whatever the rows offer. */
-.queue-table > tbody > tr > .queue-mark { width: 1%; padding-inline: var(--row-gutter) 0; }
-.queue-table .queue-mark > [data-row-toggle] { inset-inline-start: var(--space-5); }
 .pill.is-mark { padding: 0 var(--space-3); font-size: var(--text-xs); line-height: 1.5; font-weight: 600; }
 .queue-table .attention-title { font-weight: 600; }
 .queue-table a.attention-title:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
@@ -177,8 +170,7 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
 /* The dense form (`_work_queue.html`'s `dense`), for problems inside a section
    of a page about something else: a line of the table's own size and weight,
    so the section's own rows stay what it is about. */
-.queue-table.is-dense { --queue-size: var(--text-sm); }
-.queue-table.is-dense .attention-title { font-weight: 500; }
+.queue-table.is-dense .attention-title { font-size: var(--text-sm); font-weight: 500; }
 /* A table with no headings is read as one column, so the queue counts its own two for the share; with no script in a narrow box the title and the buttons share one. */
 .data-table.queue-table { --columns: 2; }
 @media (scripting: none) {
@@ -200,11 +192,6 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
   /* Past the first two, a row's buttons wait in the line beneath at any
      width, with the rest of what it holds. */
   .queue-table > tbody > tr:not(.row-detail) .queue-later { display: none; }
-  /* A row with nothing held back offers nothing: its toggle shows once a value in it is cut short or the row holds more beneath. */
-  .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .narrow-more, .queue-more)) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
-  @container style(--box: whole) {
-    .queue-table > tbody > tr:not(.is-expanded, [data-cut]):not(:has(.queue-later, .queue-more)) > .queue-mark > [data-row-toggle]:not([data-fold-toggle]) { display: none; }
-  }
   @container style(--box: narrow) {
     .queue-table .queue-act:not(:has(> :not(.narrow-more, .queue-buttons), .queue-buttons > :not(.narrow-more))) { padding: 0; }
     /* On a phone the title has the row: Dismiss is a mark at its end, still
@@ -214,8 +201,6 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
   }
 }
 /* The opened line (table_tags._detail_row): what the row holds back, then one place for every button the row holds, each the line's width on a phone, in one track that asks the line for no width (`minmax(0, 1fr)`) so a long label never widens the table. A contained button (`contain: inline-size`) in a column would do the same, but WebKit measures its height at no width and draws it hundreds of pixels tall. */
-.queue-table .row-detail > td { padding-inline: calc(var(--row-gutter) + var(--space-6)) var(--space-6); }
-.queue-table .row-detail > td > * { margin-bottom: var(--space-8); }
 .queue-more > :first-child { margin-top: 0; }
 .queue-table .row-detail .row-columns { padding: 0; background: none; }
 /* One column: each part spans both of the line's tracks. */
@@ -234,27 +219,19 @@ a.kpi, a.kpi:hover { text-decoration: none; color: inherit; }
   .queue-table .row-detail .row-columns > dd { display: grid; grid-template-columns: minmax(0, 1fr); }
   .queue-table .row-detail .row-columns > dd .btn { justify-content: center; white-space: normal; text-align: center; }
 }
-/* A family: how bad, what kind and how many, opening to its rows, which are
-   set in under its name. Its name heads them, so it reads below a title. */
+/* A family: how bad, what kind and how many, opening to its rows (set in
+   under it as any folded row is, tables.css). Its name heads them, so it
+   reads below a title. */
 .queue-family { cursor: pointer; }
 .queue-family-name { font-size: var(--text-sm); font-weight: 600; color: var(--ink-2); }
 .queue-table .count { margin-inline-start: var(--space-1); color: var(--muted); font-weight: 400; font-variant-numeric: tabular-nums; white-space: nowrap; }
-.queue-table .row-group > th { font-weight: 600; color: var(--muted); }
-@container style(--box: whole) {
-  .queue-table tr[data-folded] > .queue-what { padding-inline-start: calc(var(--space-6) + var(--space-10)); }
-  .queue-table tr[data-folded] + .row-detail > td { padding-inline-start: calc(var(--row-gutter) + var(--space-6) + var(--space-10)); }
-}
 /* A row dismissed in place: its title, quiet, and the way back. */
-.queue-row[data-dismissed] > td > :not(.attention-head, .queue-buttons),
+.queue-row[data-dismissed] :is(.attention-detail, .queue-more, .queue-what > [data-row-toggle]),
 .queue-row[data-dismissed] .queue-buttons > :not([data-triage]),
 .queue-row[data-dismissed] :is(.attention-meta, .pill.is-mark) { display: none; }
 .queue-row[data-dismissed] .attention-title { color: var(--muted); font-weight: 400; }
 .queue-row[data-dismissed] .attention-title::before { content: "Dismissed: " / "Dismissed: "; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
-/* A card of the problems about the thing a page shows, and the dashboard's
-   short queue, hold only the queue's rows, which keep their own gutter, so
-   they reach its sides as a section's table does. */
-.card.problems { padding-inline: 0; }
 /* The urgent ones: their box above the page. */
 .problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }
 /* Steps or checks side by side ({% steps %}), each an icon, a title and a
@@ -309,105 +286,5 @@ ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
    so its title starts at the edge every other card's heading starts at. The
    mark is its own width plus its gap, both in its own ems. */
 details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)); }
-
-/* A section ({% section %}): its head inside its frame, over a rule, or,
-   when its body is one table region (or head="above" says so), its head on
-   the page and its body the frame (surfaces.css holds the same test). What
-   draws its own edges, cells or fill reaches the frame's sides, as a card's
-   flush list group does in Bootstrap: the frame names each such part, and the
-   survey's "inset in the frame" finds one it does not name. Anything else
-   sits in the frame's padding. A section inside a section is part of the
-   outer frame: its body adds no inset, and what fills it reaches the outer
-   frame's sides, and its foot when it ends the outer frame. */
-/* The landmark never pads itself: whatever a page's css= names on it, its
-   head starts at the column's edge and its frame spans the column. */
-:is(section, details, figure).section { padding: 0; }
-/* Inside any other frame (a section's body, a card, a form, a band) a section
-   is part of that frame. The frame rule (surfaces.css) sets --surface-inset
-   to 0 for all it holds and leaves it unset elsewhere, so the value the
-   landmark inherits is the test: in a frame, its head draws no rule and no
-   inset of its own and its body adds none. */
-.section {
-  --section-head-pad: var(--surface-inset) 0 var(--space-5);
-  --section-head-rule: var(--surface-inset);
-  --section-inset: var(--surface-inset);
-}
-/* An edged section (`edge=`) wears its tone down its frame's starting edge,
-   drawn by whichever box frames it (surfaces.css): the section framed whole,
-   or its body under a head that stands above. */
-.section-edge { --surface-edge: 3px solid var(--toned); }
-/* A figure's own margin is the browser's; the page's stacking gives it its room. */
-:where(figure.section) { margin: 0; }
-/* A heading is never left alone at the foot of a column or a printed page:
-   Chromium keeps the break after a flex head only when the head is whole. */
-.section > .section-head { margin-bottom: var(--space-5); break-inside: avoid; break-after: avoid; }
-/* A head inside the frame stands at the inset the body's words stand at. */
-.section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)) > .section-head {
-  margin: 0; padding: var(--section-head-pad, var(--space-4) var(--space-9));
-  border-block-end: var(--section-head-rule, 1px solid var(--line));
-}
-/* A section's heading line is one control tall, its words centered in it, so
-   a control beside it (a button, a month's arrows) adds no height, and heads
-   that share a row are one height and start their frames together. */
-.section > .section-head > :is(h2, h3, h4, h5, h6) { min-block-size: var(--control-size); align-content: center; }
-.section > .section-body {
-  --section-start: var(--section-inset, var(--space-8));
-  --section-end: var(--space-8);
-  --section-side: var(--space-9);
-  padding: var(--section-inset, var(--section-start) var(--section-side) var(--section-end));
-}
-/* A heading inside a frame heads part of the section above it, so it reads
-   quieter than that section's, never as its sibling. */
-.section .section > .section-head :is(h3, h4, h5, h6) { color: var(--muted); font-size: var(--text-sm); font-weight: 600; }
-.section-body > .section:not(:last-child) > .section-body { --section-end: 0; }
-/* Each part that reaches the sides. Its rows, where they draw no edge of
-   their own at the frame's side, keep the frame's inset as their padding
-   (`--frame-inset`), so their words stand where the frame's prose does. */
-/* A form in the body that lays out no fields of its own (not .form) adds no
-   box, and neither does a region (`data-fragment`), which only says where its
-   parts come from: what either holds reaches the sides as the body's own part
-   would. A flow of sections in the body reaches them too. */
-:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
-  .insight-grid, .sweep-grid,
-  .month-grid, .list-rows, .section-flow, .timeline-list) {
-  --frame-inset: var(--section-side);
-  margin-inline: calc(-1 * var(--section-side));
-  max-inline-size: calc(100% + 2 * var(--section-side));
-  /* A table is as wide as it is told, never as wide as its block's room. */
-  &:where(table) { inline-size: calc(100% + 2 * var(--section-side)); }
-}
-/* A section in that flow stands beside others: its words keep the frame's
-   inset, and what reaches the sides reaches its own, so two tables side by
-   side meet only across the flow's gap. */
-.section-body > .section-flow > .section > :is(.section-head, .section-body) { padding-inline: var(--section-side); }
-/* What also draws its first and last rows reaches the frame's top and foot
-   when it starts or ends the frame, its corners the frame's. A list of rows
-   or a month, whose outer rows draw no edge there, keeps the frame's padding
-   above and below it. */
-:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
-  .insight-grid, .sweep-grid) {
-  --section-corner: calc(var(--radius) - 1px);
-  /* In a form that starts the body, its hidden fields draw nothing, so they
-     do not count. */
-  &:where(.section-body > *):first-child,
-  &:where(.section-body > :is(form, [data-fragment]):first-child > *):nth-child(1 of :not(input[type="hidden"])) {
-    margin-block-start: calc(-1 * var(--section-start));
-    border-start-start-radius: min(var(--section-start), var(--section-corner));
-    border-start-end-radius: min(var(--section-start), var(--section-corner));
-  }
-  &:where(.section-body > *):last-child,
-  &:where(.section-body > :is(form, [data-fragment]):last-child > *):last-child {
-    margin-block-end: calc(-1 * var(--section-end));
-    border-end-start-radius: min(var(--section-end), var(--section-corner));
-    border-end-end-radius: min(var(--section-end), var(--section-corner));
-  }
-}
-.section-body > * + .section, .section-body > .section + * { margin-block-start: var(--stack-gap); }
-/* A reading a section holds (raw JSON, a provider's readout) has paths of any
-   length: wrapped, so only its height scrolls and never the page sideways. */
-.section-body > pre { max-block-size: 18rem; white-space: pre-wrap; overflow-wrap: anywhere; }
-/* A folded section's mark hangs before its heading, so the heading starts
-   where every other section's does. */
-details.section.section-fold > summary.section-head::before { margin-inline: calc(-1em - var(--space-1)) calc(var(--space-1) - var(--space-6)); }
 
 }

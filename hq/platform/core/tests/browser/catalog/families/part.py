@@ -1772,6 +1772,39 @@ ENTRIES = {
             ]
         },
     ),
+    # Insights standing under the page's own title, as a domain's mail stages
+    # do, their titles a level under it; one wraps a long reading at its
+    # seams, one carries its next step.
+    "part/insight-grid-under-title": Entry(
+        '{% include "partials/_insight_grid.html" with label="Example stages" level=2 %}',
+        {
+            "items": [
+                Insight(
+                    "neutral",
+                    "Example receiving",
+                    "Who accepts example mail?",
+                    "mx1.example.com, mx2.example.com, mx3.example.com",
+                    "Three example servers, tried in priority order.",
+                ),
+                Insight(
+                    "attention",
+                    "Example enforcing",
+                    "What happens to failing example mail?",
+                    "Delivered anyway",
+                    "Example failures are reported and delivered.",
+                    action="Published but not enforcing: failures are delivered.",
+                ),
+            ]
+        },
+    ),
+    # A picture of a document in a figure's section, square where its box is a
+    # page's shape, so it sits at the top of the room held for it.
+    "part/document-picture": Entry(
+        '{% load static %}{% static "img/logo.png" as picture %}'
+        '{% section "Example file" figure=True lede="example-receipt.png" %}'
+        '{% include "partials/_document_picture.html" with src=picture alt="An example receipt" only %}'
+        "{% endsection %}",
+    ),
     # A command to paste somewhere else, short and long enough to wrap at its
     # slashes and spaces.
     "part/command": Entry(

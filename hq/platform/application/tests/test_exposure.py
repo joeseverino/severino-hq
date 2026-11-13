@@ -141,7 +141,7 @@ class ServiceReachTests(TestCase):
     def test_a_private_name_offers_no_gate(self):
         body = self.service("app.example.com")
 
-        self.assertEqual([item.words for item in with_class(body, "exposure-private")], ["Tailnet only"])
+        self.assertEqual([item.words for item in select(body, "data-exposure", "private")], ["Tailnet only"])
         self.assertNotIn("Add an access list", body)
 
     def test_the_header_the_path_and_the_list_name_one_audience(self):
@@ -180,8 +180,8 @@ class ServiceReachTests(TestCase):
             with self.subTest(reach=reach.id):
                 body = self.service(hostname)
                 (header,) = (item for item in within(body, "class", "page-title-row") if item.attrs.get("title"))
-                (path,) = with_class(body, "exposure")
-                (row,) = (item for item in with_class(listed, "exposure") if hostname in item.attrs["title"])
+                (path,) = select(body, "data-exposure")
+                (row,) = (item for item in select(listed, "data-exposure") if hostname in item.attrs["title"])
 
                 steps = [item.words for item in with_class(body, "hop-label")]
 

@@ -210,9 +210,15 @@
   font-size: var(--text-3xs); color: var(--muted-2);
   font-family: var(--font-mono); overflow: hidden; text-overflow: ellipsis;
 }
+/* A share's label is its first line, the rest clamped rather than run past
+   the row on one line: wrapped, no part of it stands beyond the row's edge.
+   A part of it flows as its words do, so the clamp cuts at a word. WebKit
+   lays a value's parts out past its clamp, so the box holds one line too. */
 .bar-label {
-  position: relative; flex: 1 1 auto; min-inline-size: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  position: relative; flex: 1 1 auto; min-inline-size: 0; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; max-block-size: 1lh; overflow: hidden;
 }
+.bar-label :is(.token, .whole) { display: inline; }
 /* A line that is a label, not prose: cut with an ellipsis, whole on hover. */
 .one-line { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 

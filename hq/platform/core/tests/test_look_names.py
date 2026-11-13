@@ -299,3 +299,24 @@ class RecordPagesTests(TestCase):
         self.assertTrue(reached)
         for route, _ in self.drawn(*reached):
             self.assertEqual(route, "control_plane:detail")
+
+
+class UndrawnTemplateTests(SimpleTestCase):
+    """A template nothing draws is not refused: the look names it as undrawn
+    and surveys the drawn names asked beside it."""
+
+    def checked(self, pages):
+        with mock.patch.dict(os.environ, {**ASKED, "usage_pages": pages}, clear=True):
+            return look._checked(None)
+
+    def test_an_undrawn_template_is_named_and_asks_no_page(self):
+        template = next(iter(look.DRAWN_BY_NOTHING))
+        asked = self.checked(f"template:{template}")
+
+        self.assertEqual((asked.undrawn, asked.pages), ((f"template:{template}",), []))
+
+    def test_a_drawn_name_beside_it_is_still_looked_at(self):
+        template = next(iter(look.DRAWN_BY_NOTHING))
+        asked = self.checked(f"template:{template} dashboard")
+
+        self.assertEqual((asked.undrawn, asked.pages), ((f"template:{template}",), ["dashboard"]))

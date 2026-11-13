@@ -1,0 +1,19 @@
+{% comment %}
+A ranked list of shares, each row its label and figure over a bar of its size
+against the largest row's:
+
+  {% include "partials/_share_list.html" with rows=panel.rows only %}
+
+Each row has `label`, `figure` and `share` (0 to 100, of the largest row). The
+bar is a `<meter>`, so the browser draws it from its value and the template
+writes no width. A label longer than its line is cut, whole on hover.
+{% endcomment %}
+<ol class="bar-list">
+  {% for row in rows %}
+    <li class="bar-row">
+      <meter class="bar-track" min="0" max="100" value="{{ row.share }}" aria-hidden="true"></meter>
+      <span class="bar-label" title="{{ row.label }}">{{ row.label|breakable }}</span>
+      <span class="bar-value">{{ row.figure|breakable }}</span>
+    </li>
+  {% endfor %}
+</ol>

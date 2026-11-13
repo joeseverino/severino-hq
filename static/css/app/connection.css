@@ -80,20 +80,8 @@
 .field-effect { color: var(--warn); font-weight: 500; }
 .form-will-act .form-actions button[type="submit"] { background: var(--accent-2); border-color: var(--accent-2); }
 
-/* Email policy: four stages, then the one decision worth making. The stages
-   are short cards, so their flow pairs them sooner than sections. */
-.mail-stages { --flow-basis: 16rem; }
-.mail-stage { padding: var(--surface-inset, var(--space-6) var(--space-7)); }
-.mail-stage-concern { border-color: var(--warn); }
-.mail-stage-head { display: grid; gap: var(--space-2); }
-.mail-stage-head strong { font-size: var(--text-lg); overflow-wrap: anywhere; }
-.mail-stage-question { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-sm); font-weight: 500; }
-.mail-stage-warning { margin: var(--space-4) 0 0; font-size: var(--text-sm); color: var(--warn); }
-.mail-record-value { color: var(--muted); overflow-wrap: anywhere; }
-
 /* ── Reachability answer ───────────────────────────────────────── */
 
-.verdict { display: flex; align-items: baseline; gap: var(--space-4); margin: var(--space-7) 0 var(--space-2); }
 .modal .filter-bar { margin-bottom: var(--space-2); }
 .modal .filter-bar .control-label { margin: 0 var(--space-1) 0 0; }
 

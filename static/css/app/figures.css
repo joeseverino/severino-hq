@@ -3,10 +3,10 @@
 
 @layer components {
 
-/* A band: each cell draws its own left and top edge and the band clips the outer rim, so a wrapped row keeps its dividers at any width with no breakpoint. */
-/* `:is`, not `:where`: a cell that is also a surface has its shadow cleared by the frame rule, and this rule has to win that. */
+/* A band (`data-band`, drawn by the stat, insight and reading-age parts): each cell draws its own left and top edge and the band clips the outer rim, so a wrapped row keeps its dividers at any width with no breakpoint. */
+/* The rule weighs two classes, its `:not()`'s: a cell that is also a surface has its shadow cleared by the frame rule, and this rule has to win that. */
 /* Stats in a card stand apart by gaps and draw no edges (surfaces.css), so there is no rim to clip, and what a stat holds rings whole at its edge. */
-:is(.insight-grid, .sweep-grid, .kpi-grid:not(.card > *)) {
+:where([data-band]):not(.card > .kpi-grid) {
   gap: 0;
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the band clips its cells' outer rim, not their text */
   overflow: clip;
@@ -154,11 +154,11 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   border-radius: var(--radius-sm);
   background: var(--bg-tint);
 }
-.chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: var(--space-6) 0 var(--space-1); color: var(--muted); font-size: var(--text-xs); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: var(--space-6); margin: 0; color: var(--muted); font-size: var(--text-xs); }
+/* A legend after the drawing it keys stands apart from it; one that opens what holds it (a figure's head, the row over a calendar's days) takes its place from that. */
+.chart-legend:not(:first-child) { margin-block: var(--space-6) var(--space-1); }
 .chart-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
 .chart-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; }
-/* A legend in a figure's head, or in the row over a calendar's days, takes its place from what holds it. */
-:is(.section-aside, .calendar-legend) > .chart-legend { margin: 0; }
 /* `.chart-scroll` has no rule on purpose: a chart has no floor, so there is nothing to scroll, and an end label hangs into the card's padding. */
 /* Fills the card at a height this sheet decides: its parts are rectangles and rules, so `preserveAspectRatio="none"` stretches them truthfully, the labels are HTML so no type stretches, and a floor could only ever turn into a scrollbar. */
 .bar-chart {
@@ -347,9 +347,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); }
 .page-title-row > h1 { margin: 0; max-width: 100%; }
 .page-title-meta { margin: 0; color: var(--muted); font-size: var(--text-sm); }
-/* The origin reads under the facet row rather than as a fifth card: four is what a name needs, a fifth would wrap the row. */
-.control-origin { margin: calc(var(--space-3) * -1) 0 22px; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
-.control-origin strong { color: var(--ink); font-weight: 600; }
 
 .icon { width: 1em; height: 1em; flex: none; }
 /* An icon a cell's kept line opens with (tables.css), its own or a status's (`icon=`), hangs in the line's padding, a float of no width there, so the value's lines start clear of it and a name the line cuts fills what the line holds out for, beside the icon on its first line. An indent would not do: a cut name is as wide as the line's box, which leaves out the indent its first line gets back. The hang is past the line's hold, so the value holds out for what it would with no icon. In a narrow box the line is no block, and the icon sits in it as in any line. */
@@ -378,11 +375,5 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 /* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
 .row-below > pre { max-block-size: 18rem; }
-.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
-.btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
-/* A destructive action that should not be the loudest thing in its row. */
-/* A button like its neighbors, in red: the same surface and lift, so it does not read as an outline beside solid ones. */
-.btn.ghost.danger { background: var(--surface); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); box-shadow: var(--shadow-sm); }
-.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
 
 }

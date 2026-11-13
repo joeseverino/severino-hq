@@ -153,7 +153,14 @@ In a narrow box (`--box: narrow`, else `whole`, read by `@container style()`)
 a table gets roomier rows and holds back what is marked `narrow-more`. What is
 marked `narrow-only` shows there alone: a few words in the cell that names the
 row, standing in for the columns that left (the audit log's action under its
-name).
+name). What is marked `wide-only` leaves a narrow box outright, held for no
+toggle, since what it says is on a page of its own.
+
+A table of marks (`data-marks` on the table: one row a thing, one column a
+period, a mark in each cell, as the cadence matrix is) centers every heading
+but the names over its column, and its cells stand closer in a narrow box
+and where it shares a row with a chart (`data-marks="compact"`). Its older
+periods are `wide-only`, so a narrow box keeps the newest three.
 
 A table still wider in a narrow box is tight (`data-tight`). Its headings,
 times, statuses and a value's parts wrap at their spaces, and the name gives up
@@ -256,6 +263,10 @@ first, then each part under its column's name (`dl.row-columns`).
   every other row keeps its place. A table with a row open, however it was
   opened, is fitted as it would stand with its rows closed and held there, in
   a table without headings too.
+- A part that reads differently on the row's line and on the line beneath
+  asks where it stands (`@container style(--cell: line)`, or `open`), which
+  the table primitive sets on its cells, and never names the table: an ask's
+  note says its word alone on the row's line and its sentence beneath.
 
 Every row that can open has its toggle drawn by the server. The region draws
 it, last in the row's cell under the heading that keeps the gutter
@@ -430,8 +441,9 @@ its own cells (not a dialog a cell opens, not its note) and takes the tracks
 for that count, two to six (`--tracks-2-1` up to `--tracks-6-3-1`). A lone
 cell takes the band, so no page says how many it holds.
 
-A band is listed once, in the band rule in `css/app/figures.css`; its cells
-keep their own padding. Too narrow for two cells, a band reads as a list:
+A part that draws a band marks its box `data-band` (the stats, insights
+and reading ages), and the one band rule in `css/app/figures.css` draws
+every one; its cells keep their own padding. Too narrow for two cells, a band reads as a list:
 label left, value right.
 
 A band of facts draws no rule between them and counts nothing. Its facts share
@@ -690,7 +702,10 @@ bare). A state of the card is a `data_*` option the stylesheet reads, never a
 class written inside an `{% if %}`. No template writes `class="card"` itself
 (`test_only_the_tag_draws_a_card`). A card is never wider than the column or
 track it is placed in (`.card { min-inline-size: 0 }`), so on a phone what it
-holds wraps inside it.
+holds wraps inside it. A card holding only a table region (a thing's problems,
+the dashboard's short queue) has no inset at its sides, so the table's rows
+reach them as a section's do (`:has()` in surfaces.css decides; a page picks
+nothing).
 
 **A section is drawn by `{% section %}`.** `{% section "Agents" count=n
 lede="..." %}body{% aside %}a line, a link, a control{% empty %}No agent has
@@ -1383,6 +1398,12 @@ strip (`partials/_tile_strip.html`), each a `StripTile`
 (`application.drawings`): what it is of, the figure, and a `note` said only
 when something stands out, and then marked. As many tiles stand to a line as the box holds, the rest on
 the lines under them.
+
+A ranked list of shares, as the pages and sources of a site's traffic are, is
+a share list (`partials/_share_list.html`): each row its label and figure on
+one line over a bar of its size against the largest row's, so a long tail
+still reads apart. The bar is a `<meter>`, and a label past its line is cut,
+whole on hover.
 
 A figure that is itself a change takes `tone`, a status tone its value is drawn
 in, featured or not, so a rise and a fall never read alike. A figure that is a

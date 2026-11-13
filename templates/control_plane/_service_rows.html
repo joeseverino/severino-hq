@@ -31,7 +31,7 @@ alphabetical is the order and there is nothing to move.
             {% include "control_plane/_service_pin.html" with service=service reorderable=reorderable first=forloop.first last=forloop.last only %}
           </td>
           {% with exposure=service.exposure %}
-            <td><span class="exposure exposure-{{ exposure.level }}" title="{{ exposure.sentence }}">{{ exposure.short|breakable }}</span></td>
+            <td>{% status exposure.short tone=exposure.tone title=exposure.sentence pill=False data_exposure=exposure.level %}</td>
           {% endwith %}
           {% for facet in service.facets %}
             {% if facet.id != runtime_facet %}

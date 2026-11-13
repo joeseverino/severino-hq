@@ -14,23 +14,24 @@ Each item accepts:
   status   good | attention | serious | neutral (default neutral)
   url      optional; makes the card a link
 
+`level` is its titles' heading level, 3 by default, under a section's
+heading; 2 for a grid that stands under the page's own title.
+
 `status` drives a pill that always carries its own text, so state is never
 communicated by color alone. The pill is the eyebrow, and the one place a
 card says its state, so it is left out only where the card before showed the
 same eyebrow in the same state.
 {% endcomment %}
-<div class="insight-grid"{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
+<div class="insight-grid" data-band{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
   {% for item in items %}
     <article class="insight-card">
       <div class="insight-head">
         {% ifchanged item.eyebrow item.status %}{% if item.eyebrow %}{% status item.eyebrow tone=item.status|default:"neutral" %}{% endif %}{% endifchanged %}
         {% if item.value %}<strong class="insight-value">{{ item.value|breakable }}</strong>{% endif %}
       </div>
-      {% comment %}
-      <!-- ast-grep-ignore: hand-drawn-heading --> an insight's title, the part's own
-      {% endcomment %}<h3 class="insight-title">
+      <h{{ level|default:3 }} class="insight-title">
         {% if item.url %}<a href="{{ item.url }}">{{ item.title|breakable }}</a>{% else %}{{ item.title|breakable }}{% endif %}
-      </h3>
+      </h{{ level|default:3 }}>
       {% headed %}
       {% if item.body %}<p class="insight-body">{{ item.body|breakable }}</p>{% endif %}
       {% if item.action %}<p class="insight-action">{{ item.action|breakable }}</p>{% endif %}

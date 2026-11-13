@@ -96,16 +96,7 @@
   .topology-map { scroll-behavior: auto; }
 }
 
-/* ----- Tools ------------------------------------------------------------ */
-
-/* Two tools side by side where there is room, stacked where there is not.
-   Neither is primary, so neither takes the wider column. */
-/* stylelint-disable-next-line hq/flow-grid -- two tools whose intro, form and result share rows through subgrid, which a flex flow cannot hold */
-.lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-
-/* ---- Analytics ---------------------------------------------------------- */
-
-.reading-note { margin: calc(var(--space-3) * -1) 0 var(--stack-gap); font-size: var(--text-sm); }
+/* ---- Share list (partials/_share_list.html) ----------------------------- */
 
 /* A row is label, bar and number in one line, with the bar behind the text
    rather than beside it: a separate bar column costs the label the width it
@@ -134,9 +125,6 @@
 .approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); color: var(--ink-2); font-size: var(--text-sm); }
 .approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
 
-/* An agent's latest events, under its row: one line each, newest first. */
-.agent-events { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-.mcp-endpoint { display: grid; gap: var(--stack-gap); }
 .policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; color: var(--muted-2); }
 .policy-effect.effect-destructive { color: var(--danger); }
 .policy-effect.effect-infrastructure_change { color: var(--warn); }
@@ -237,13 +225,17 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
    as wide as its button, so the row stays one line tall. There the sentence
    is the button's title, and the clock is left to the open row. */
 .ask-word { display: none; }
-.data-table > tbody > tr:not(.row-detail) > td .ask-note > .ask-word { display: inline; }
-.data-table > tbody > tr:not(.row-detail) > td :is(.ask-note > .ask-sentence, .ask-elapsed) { display: none; }
+@container style(--cell: line) {
+  .ask-note > .ask-word { display: inline; }
+  :is(.ask-note > .ask-sentence, .ask-elapsed) { display: none; }
+}
 .ask-note:empty, .ask-elapsed:empty { display: none; }
 /* The word and the sentence again, for a row's open line alone, since
    everywhere else the note says both. */
 .ask-why { display: none; }
-.row-detail .ask-why { display: inline; overflow-wrap: anywhere; }
+@container style(--cell: open) {
+  .ask-why { display: inline; overflow-wrap: anywhere; }
+}
 .ask-elapsed { font-variant-numeric: tabular-nums; }
 .ask[data-ask-state="failed"] .ask-note { color: var(--danger); }
 /* Busy keeps the button focusable, so it is marked rather than disabled. */

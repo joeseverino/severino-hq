@@ -33,3 +33,14 @@ class InsightEyebrowTests(SimpleTestCase):
         (head,) = _eyebrows([Insight("attention", "Example pace", "Example pace this month", "", "An example body.")])
 
         self.assertIn("Example pace", head)
+
+
+class InsightLevelTests(SimpleTestCase):
+    def test_a_grid_under_the_page_title_heads_its_cards_a_level_under_it(self):
+        item = Insight("neutral", "Example stage", "Who accepts example mail?", "mx.example.com", "An example body.")
+
+        for level, tag in ((None, "h3"), (2, "h2")):
+            with self.subTest(level=level):
+                context = {"items": [item]} | ({"level": level} if level else {})
+                html = render_to_string("partials/_insight_grid.html", context)
+                self.assertEqual([title.tag for title in with_class(html, "insight-title")], [tag])

@@ -35,4 +35,5 @@ class AnalyticsOverviewView(PageMixin, TemplateView):
         vitals = context.get("vitals", {})
         context["vitals_measured"] = any(metric["percent"] is not None for metric in vitals.values())
         context["vitals_named"] = [(VITAL_NAMES.get(key, key.upper()), metric) for key, metric in vitals.items()]
+        context["page_aside"] = "analytics/_window.html"
         return context

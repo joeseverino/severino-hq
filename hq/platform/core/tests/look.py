@@ -769,6 +769,22 @@ def catalog_pages(asked) -> dict[str, str]:
     return {name: page for name, page in catalog.CatalogLayoutTests.render().items() if name in entries}
 
 
+# A template no page or entry draws, with why: once one is drawn, the test
+# says so, and its line goes. A look asked for one is not refused: its record
+# says it was undrawn, since the change owes no survey of a page that is not.
+DRAWN_BY_NOTHING = {
+    "403.html": "Django draws it for a refused request, and the look asks as the estate's owner",
+    "404.html": "Django draws it for an address no route answers, which no page of the estate is",
+    "500.html": "Django draws it for a request that raised, which no page of the estate does",
+    "auth/login.html": "drawn for a reader signed out, and the look signs in as the estate's owner",
+    "control_plane/zone_index.html": "drawn only where no zone is managed, and the estate manages one",
+    "control_plane/certificate_upload.html": "the estate holds no certificate to upload one for",
+    "calendars/entry_confirm_delete.html": "an entry's page is linked only from a day opened beside the month",
+    "partials/_attention_list.html": "no template or view draws it; only a test renders it",
+    "partials/_row_field.html": "only itself includes it, and no form names it as its table body",
+}
+
+
 def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
     """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out, an
     estate page by its name; one dev:look cannot draw is refused. The catalog
@@ -828,6 +844,8 @@ class Asked:
     probe: str
     probe_source: str
     probe_arg: object
+    # The asked templates on ``DRAWN_BY_NOTHING``, which no page shows.
+    undrawn: tuple[str, ...] = ()
 
 
 def _checked(records: task.Records | None) -> Asked:
@@ -841,7 +859,14 @@ def _checked(records: task.Records | None) -> Asked:
         seeds.get(given.text("seed"))
     except LookupError as unknown:
         raise AssertionError(f"--seed: {unknown}") from None
-    pages = _served(given.repeated("pages"), records)
+    names = given.repeated("pages")
+    undrawn = tuple(
+        name
+        for name in names
+        if name.removeprefix(task.TEMPLATE) in DRAWN_BY_NOTHING and name.startswith(task.TEMPLATE)
+    )
+    rest = tuple(name for name in names if name not in undrawn)
+    pages = _served(rest, records) if rest or not undrawn else []
     if (rule := Look.rule_asked()) and rule not in _rules():
         raise AssertionError(no_rule(rule))
     probe, probe_source = _probe(given.text("probe"))
@@ -851,7 +876,7 @@ def _checked(records: task.Records | None) -> Asked:
         raise AssertionError(
             f"--operation opens an operation of the API reference: name {' or '.join(REFERENCE_PAGES)}"
         )
-    return Asked(pages, probe, probe_source, _argument(given.text("arg")))
+    return Asked(pages, probe, probe_source, _argument(given.text("arg")), undrawn)
 
 
 def _not_the_hosts(asked: tuple[str, ...]) -> list[str]:
@@ -922,6 +947,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     tree: str
     clock_at: float
     asked: list[str]
+    undrawn: tuple[str, ...] = ()
     base: Found | None
     base_measured: Measured
     base_errors: Found
@@ -945,8 +971,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         # What was asked is checked before the base is looked at, which takes a while.
         with EstatePages(_asked().text("seed")) as records:
             asked = _checked(records)
-        cls.asked, cls.probe, cls.probe_source, cls.probe_arg = (
+        cls.asked, cls.undrawn, cls.probe, cls.probe_source, cls.probe_arg = (
             asked.pages,
+            asked.undrawn,
             asked.probe,
             asked.probe_source,
             asked.probe_arg,
@@ -1168,7 +1195,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             # verdict: what the look's failure says, which a gate shows.
             pages = said[:-1] or found_lines(found, lambda name, width: _shown(_shot(name, width).with_suffix(".txt")))
             failed = [*pages, said[-1]] * rule_failed + failed
-            if not self.judged_at:
+            if not self.judged_at and not self.undrawn:
                 failed.append(nothing := JUDGED_NOTHING.format(rule))
                 printed.append(nothing)
         # A page that did not answer was not looked at, here or at a base, so it fails either way.
@@ -1208,6 +1235,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         lines = [
             verdict,
             f"asked: {' '.join(asked.repeated(_ASKED))}",
+            *([f"undrawn: {' '.join(self.undrawn)}"] if self.undrawn else []),
             f"judged: {', '.join(dict.fromkeys(name for name, _ in self.judged_at)) or 'none'}",
             f"at: {', '.join(dict.fromkeys(str(width) for _, width in self.judged_at)) or 'none'}",
             f"with: {' '.join(drawn) or 'the defaults'}",

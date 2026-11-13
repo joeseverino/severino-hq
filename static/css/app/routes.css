@@ -129,14 +129,16 @@
 .connection-authority-proven { color: var(--muted); }
 .connection-authority-missing { color: var(--danger); }
 .connection-ability-list + .connection-ability-list { margin-top: var(--space-2); }
-/* In the row, what a connection reads is a run of names like the links beside
-   it, each kept whole, at the row's own size, as many as its line has room
-   for (`line_list`): the separator before the rest goes with its first part. */
-.connection-table td > .connection-ability-list { display: inline; }
-.connection-table td > .connection-ability-list > li { display: inline; font-size: inherit; line-height: inherit; }
-.connection-table td > .connection-ability-list > li::before { content: none; }
-.connection-table td > .connection-ability-list > li:not(:last-child)::after { content: "\a0·" / ""; color: var(--muted-2); }
-.connection-table td > .connection-ability-list > li > * + * { margin-left: var(--space-2); }
+/* In the row and the line beneath it, what a connection reads and changes is
+   a run of names like the links beside it, each kept whole, at the row's own
+   size, as many as its line has room for (`line_list`): the separator before
+   the rest goes with its first part. Listed under its column's name in the
+   opened line, it is the list the line draws (forms.css). */
+.connection-ability-list:not(.row-columns *) { display: inline; }
+.connection-ability-list:not(.row-columns *) > li { display: inline; font-size: inherit; line-height: inherit; }
+.connection-ability-list:not(.row-columns *) > li::before { content: none; }
+.connection-ability-list:not(.row-columns *) > li:not(:last-child)::after { content: "\a0·" / ""; color: var(--muted-2); }
+.connection-ability-list:not(.row-columns *) > li > * + * { margin-left: var(--space-2); }
 .connection-read-list.connection-ability-list:is(.line-list, .line-run) { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: .3em; }
 .connection-read-list.connection-ability-list.line-list > .line-rest { display: flex; }
 .connection-read-list.connection-ability-list.line-list > :has(+ .line-rest)::after { content: none; }
@@ -152,25 +154,6 @@
 /* Opened, the rest of them, flowing across the line beneath the row. */
 .connection-ability-all { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
 .connection-ability-all > li { flex: none; }
-/* A row's own commands are drawn by the shared action renderer as buttons and
-   read here as quiet words, so the column stays as narrow as its longest
-   phrase. The element qualifier outranks the button's tone variants
-   (`.btn.ghost.danger`), which keep only their color. */
-td.connection-next > .btn.connection-direct-action,
-td.connection-next > .btn.connection-direct-action:hover {
-  display: inline-block;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--accent-2);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  line-height: inherit;
-}
-td.connection-next > .btn.connection-direct-action.danger { color: var(--danger); }
-
 /* Each thing to do next is a control, so it keeps its line (page.css), side
    by side with the others (tables.css): the column is as wide as all of them,
    and the table gives the room from columns that can wrap. */

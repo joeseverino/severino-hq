@@ -567,7 +567,8 @@ OVERVIEW_DIMENSIONS = (
 
 
 def _with_share(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Each row's size relative to the largest, for drawing a bar.
+    """Each row as ``partials/_share_list.html`` draws it: its label, its
+    figure and its size relative to the largest.
 
     Relative to the biggest row rather than to the total, because the bar is
     there to compare rows with each other. Against a total, a breakdown with a
@@ -575,7 +576,14 @@ def _with_share(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
 
     largest = max((row["pageviews"] for row in rows), default=0)
-    return [row | {"share": round(row["pageviews"] * 100 / largest, 1) if largest else 0} for row in rows]
+    return [
+        {
+            "label": row["value"],
+            "figure": f"{row['pageviews']:,}",
+            "share": round(row["pageviews"] * 100 / largest, 1) if largest else 0,
+        }
+        for row in rows
+    ]
 
 
 def overview(*, days: int = DEFAULT_WINDOW_DAYS, limit: int = 12) -> dict[str, Any]:

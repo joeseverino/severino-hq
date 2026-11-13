@@ -1,6 +1,6 @@
 {% comment %}
 <!-- ast-grep-ignore: hand-drawn-figure --> the figure part itself
-{% endcomment %}<div class="kpi-grid{% if featured %} is-featured{% endif %}"{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
+{% endcomment %}<div class="kpi-grid{% if featured %} is-featured{% endif %}" data-band{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
   {% for item in items %}
     {% with drawing=item.drawing %}
     {% comment %}

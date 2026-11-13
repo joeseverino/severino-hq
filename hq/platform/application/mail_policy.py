@@ -10,6 +10,8 @@ is the DNS record's own use case, which knows how to reconcile a change.
 from dataclasses import dataclass, field
 from typing import Any
 
+from .card_items import Insight
+from .entity_links import entity_link
 from .ui import counted, ended
 
 DMARC_VERSION = "DMARC1"
@@ -346,10 +348,43 @@ class MailOverview:
     sections: tuple[MailSection, ...]
     dmarc_record: Any = None
     dmarc_tags: dict[str, str] = field(default_factory=dict)
+    # The domain's page, where a record no section here edits is added.
+    zone_url: str = ""
 
     @property
     def concerns(self) -> tuple[str, ...]:
         return tuple(section.concern for section in self.sections if section.concern)
+
+    def place(self, section: MailSection) -> str:
+        """Where a stage is changed: its section on the page, or the domain's
+        page for a record it has none of yet."""
+
+        drawn = {
+            "receiving": "#delivery" if section.records else "",
+            "sending": "#senders",
+            "signing": "#signing" if section.records else "",
+            "enforcing": "#failed-mail" if self.dmarc_record else "",
+        }
+        return drawn.get(section.id) or self.zone_url
+
+    @property
+    def insights(self) -> tuple[Insight, ...]:
+        """Each stage as an insight: its answer the reading, its question
+        what the reading is about and a link to where it is changed, a
+        concern its next step."""
+
+        return tuple(
+            Insight(
+                "attention" if section.concern else "neutral",
+                section.label,
+                section.question,
+                section.answer,
+                section.detail,
+                action=section.concern,
+                url=self.place(section),
+            )
+            for section in self.sections
+        )
 
 
 def _is_spf(record) -> bool:
@@ -511,4 +546,5 @@ def mail_overview(zone) -> MailOverview:
         sections=sections,
         dmarc_record=dmarc_records[0] if dmarc_records else None,
         dmarc_tags=dmarc_tags,
+        zone_url=entity_link("zone", zone.zone).url,
     )

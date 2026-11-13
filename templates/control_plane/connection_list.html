@@ -124,7 +124,7 @@ part's heading shows only when there is more than one.
             </td>
             <td class="connection-next">
               {% if connection.recommended_action %}{% include "partials/_page_action.html" with action=connection.recommended_action|workflow_action extra="compact" only %}{% endif %}
-              {% include "partials/_action_links.html" with actions=connection.row_actions extra="connection-direct-action" only %}
+              {% include "partials/_action_links.html" with actions=connection.row_actions extra="compact ghost" only %}
               {% if row.read_now %}{% include "partials/_ask.html" with ask=row.read_now|as_ask %}{% endif %}
               {% if not connection.recommended_action and not connection.row_actions and not row.read_now %}{% empty_value %}{% endif %}
             </td>

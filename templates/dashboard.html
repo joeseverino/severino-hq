@@ -32,7 +32,7 @@ count above and in the header.
 {% endcomment %}
 {% if needs_you %}
 {% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
-{% card css="problems tone-serious" label="Needs you" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
+{% card css="tone-serious" label="Needs you" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
   {% include "partials/_work_queue.html" with items=needs_you grouped=True triage=True glance=True only %}
 {% endcard %}
 {% endif %}

@@ -1,0 +1,4 @@
+{% comment %}The window the readings cover, how they were sampled and how old they are, on the title's line (`page_aside`).{% endcomment %}
+{% if latest %}{% title_meta %}
+  {{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %}{% dot %}estimated from 1 in {{ totals.sample_interval|counted:"visit" }}{% endif %}{% if observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=observed_at only %}{% endif %}{% if coverage.expected_days and not coverage.complete %}{% dot %}{{ coverage.covered_days|breakable }} of {{ coverage.expected_days|counted:"day" }} read so far, the rest still loading{% endif %}
+{% endtitle_meta %}{% endif %}

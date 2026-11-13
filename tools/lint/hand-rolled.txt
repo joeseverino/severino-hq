@@ -1,12 +1,6 @@
 # The classes each host template draws that no shared part declares yet, one
 # template and class a line. mise run fix drops a pair once its page draws
 # from the shared parts, and nothing adds one.
-analytics/overview.html bar-label
-analytics/overview.html bar-list
-analytics/overview.html bar-row
-analytics/overview.html bar-track
-analytics/overview.html bar-value
-analytics/overview.html reading-note
 base.html content
 control_plane/_connection_ability.html connection-evidence-*
 control_plane/_connection_ability.html is-unavailable
@@ -14,10 +8,6 @@ control_plane/_connection_read.html connection-evidence-*
 control_plane/_connection_read.html connection-sight-*
 control_plane/_connection_read.html connection-sight-state
 control_plane/_connection_read.html is-unavailable
-control_plane/_service_rows.html exposure
-control_plane/_service_rows.html exposure-*
-control_plane/_tool_dns.html lookup-grid
-control_plane/_whatif_result.html verdict
 control_plane/connection_list.html connection-ability-all
 control_plane/connection_list.html connection-ability-list
 control_plane/connection_list.html connection-authority
@@ -33,22 +23,9 @@ control_plane/connection_list.html connection-sight-refusal
 control_plane/connection_list.html connection-standing
 control_plane/connection_list.html connection-summary
 control_plane/connection_list.html connection-table
-control_plane/service_detail.html control-origin
-control_plane/service_detail.html exposure
-control_plane/service_detail.html exposure-*
-control_plane/zone_mail.html mail-record-value
-control_plane/zone_mail.html mail-stage
-control_plane/zone_mail.html mail-stage-concern
-control_plane/zone_mail.html mail-stage-head
-control_plane/zone_mail.html mail-stage-question
-control_plane/zone_mail.html mail-stage-warning
-control_plane/zone_mail.html mail-stages
-core/agent_policy.html agent-events
-core/agent_policy.html mcp-endpoint
 hq_api/reference.html api-reference
 hq_api/reference.html api-reference-failed
 hq_api/reference.html api-reference-loading
 hq_api/reference.html api-reference-status
 partials/approval_card.html approval-actions
 partials/approval_card.html approval-reason
-receipts/receipt_detail.html document-picture

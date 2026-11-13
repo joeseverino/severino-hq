@@ -26,7 +26,7 @@ commit() { git -C "$1" add -A && git -C "$1" -c commit.gpgsign=false commit --no
 # `10d;11d`) deleted.
 lowered() {
     git -C "$1" checkout -q -b "$2" main
-    sed -e "$3" "${repo_dir}/${baseline}" >"$1/${baseline}"
+    sed -e "$3" "${work}/baseline" >"$1/${baseline}"
     commit "$1" "$2"
 }
 
@@ -34,15 +34,23 @@ repo="${work}/repo"
 git init -q -b main "${repo}"
 mkdir -p "${repo}/tools/lint"
 cp "${repo_dir}/.gitattributes" "${repo}/"
-cp "${repo_dir}/${baseline}" "${repo}/${baseline}"
+# Rows in the baseline's shape, enough to drop from however few rows the
+# real one holds.
+{
+    echo "# A template and class a line."
+    i=1
+    while [ "${i}" -le 50 ]; do
+        echo "example/page_${i}.html example-part-${i}"
+        i=$((i + 1))
+    done
+} >"${work}/baseline"
+cp "${work}/baseline" "${repo}/${baseline}"
 commit "${repo}" base
-rows=$(grep -cv '^#' "${repo}/${baseline}")
-[ "${rows}" -ge 40 ] || fail "the baseline has too few rows to drop from: ${rows}"
 
 # Each side drops a run of rows that touches the other's, and one far away.
 lowered "${repo}" ours '10d;11d;30d'
 lowered "${repo}" theirs '12d;13d;40d'
-sed -e '10d;11d;12d;13d;30d;40d' "${repo_dir}/${baseline}" >"${work}/both-kept"
+sed -e '10d;11d;12d;13d;30d;40d' "${work}/baseline" >"${work}/both-kept"
 theirs=$(git -C "${repo}" rev-parse theirs)
 
 # A text merge cannot place adjacent drops from two sides.

@@ -7,21 +7,7 @@ say where the domain stands and nothing else: the records themselves live in
 the editor below, because a card that names its answer and then lists the same
 hostnames underneath says everything twice and is twice as tall for it.
 {% endcomment %}
-<div class="section-flow mail-stages">
-  {% for section in mail.sections %}
-    <article class="mail-stage{% if section.concern %} mail-stage-concern{% endif %}">
-      <div class="mail-stage-head">
-        {% control_label section.label %}
-        <strong>{{ section.answer|breakable }}</strong>
-      </div>
-      <p class="mail-stage-question">{{ section.question|breakable }}</p>
-      <p class="muted">{{ section.detail|breakable }}</p>
-      {% if section.concern %}
-        <p class="mail-stage-warning">{% status "Needs attention" tone="attention" %} {{ section.concern|breakable }}</p>
-      {% endif %}
-    </article>
-  {% endfor %}
-</div>
+{% include "partials/_insight_grid.html" with label="Mail" items=mail.insights level=2 only %}
 
 {% comment %}
 One section per stage, each posting only its own records. Separate forms rather
@@ -29,12 +15,12 @@ than one: they publish to different records, and a single Save rewriting all
 four would turn a typo in a DKIM selector into a mail outage.
 {% endcomment %}
 
-{% section "Senders (SPF)" %}
+{% section "Senders (SPF)" id="senders" %}
   {% include "partials/_form.html" with form=senders_form verb=senders_form.verb note=senders_form.note %}
 {% endsection %}
 
 {% if mail.dmarc_record %}
-  {% section "Failed mail (DMARC)" %}
+  {% section "Failed mail (DMARC)" id="failed-mail" %}
     {% include "partials/_form.html" with form=failures_form fields="control_plane/_mail_failures_fields.html" verb=failures_form.verb note=failures_form.note %}
   {% endsection %}
 {% endif %}
@@ -47,17 +33,17 @@ not designed. Adding or removing one is a record, through the domain's own
 {% endcomment %}
 {% for section in mail.sections %}
   {% if section.records and section.id == "receiving" or section.records and section.id == "signing" %}
-    {% if section.id == "receiving" %}{% firstof "Delivery (MX)" as heading %}{% else %}{% firstof "Signing (DKIM)" as heading %}{% endif %}
-    {% section heading %}
+    {% if section.id == "receiving" %}{% firstof "Delivery (MX)" as heading %}{% firstof "delivery" as anchor %}{% else %}{% firstof "Signing (DKIM)" as heading %}{% firstof "signing" as anchor %}{% endif %}
+    {% section heading id=anchor %}
       {% stack_list %}
         {% for record in section.records %}
           <li>
             <code>{{ record.name|breakable }}</code>
             {% if section.null_mx %}
-              <span class="mail-record-value">Null MX: this domain receives no mail</span>
+              <span class="muted">Null MX: this domain receives no mail</span>
             {% else %}
               {% if record.priority is not None %}{% status "Priority" record.priority %}{% endif %}
-              <span class="mail-record-value">{{ record.content|breakable }}</span>
+              <span class="muted">{{ record.content|breakable }}</span>
             {% endif %}
             {% if record.resource_key %}
               {% if record.edit_url %}<a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">Change</a>{% endif %}

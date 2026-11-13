@@ -49,11 +49,4 @@
 
   /* An age or a count that reads wrong split across two lines. */
   .nowrap { white-space: nowrap; }
-
-  /* Who can reach a name, in one word. Internet-facing is stated plainly,
-     since a public site is meant to be; only what HQ could not read is a
-     warning. Exposure raises urgency where it matters, on the finding. */
-  .exposure { font-size: var(--text-sm); white-space: nowrap; color: var(--muted); }
-  .exposure-open { color: var(--ink); font-weight: 600; }
-  .exposure-unknown { color: var(--warn); }
 }

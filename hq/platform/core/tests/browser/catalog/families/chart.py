@@ -180,4 +180,23 @@ ENTRIES = {
             )
         },
     ),
+    # Shares of the largest, ranked, in a flow of sections: a whole row, a
+    # sliver, and a label long enough to be cut on a phone.
+    "chart/share-list": Entry(
+        '<div class="section-flow">{% section "Example pages" %}{% include "partials/_share_list.html" %}'
+        '{% endsection %}{% section "Example sources" %}{% include "partials/_share_list.html" with rows=few %}'
+        "{% endsection %}</div>",
+        {
+            "rows": (
+                {"label": "/", "figure": "1,204", "share": 100},
+                {
+                    "label": "/example/articles/an-example-article-with-a-path-long-enough-to-cut/",
+                    "figure": "312",
+                    "share": 25.9,
+                },
+                {"label": "/example/about/", "figure": "4", "share": 0.3},
+            ),
+            "few": ({"label": "example.org", "figure": "48", "share": 100},),
+        },
+    ),
 }

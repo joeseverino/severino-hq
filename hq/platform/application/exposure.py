@@ -34,6 +34,10 @@ LABELS = {
 }
 # A few words each, for a table column; the sentence says the rest.
 SHORT = {OPEN: "Internet", GATED: "Internet, behind a login", UNKNOWN: "Unknown", UNROUTED: "Not reachable"}
+# The tone a page draws a level in. Internet-facing is stated plainly, since a
+# public site is meant to be; only what HQ could not read is a warning, and
+# exposure raises urgency where it matters, on the finding.
+TONES = {OPEN: "neutral", UNKNOWN: "attention", GATED: "neutral", PRIVATE: "neutral", UNROUTED: "neutral"}
 # What a serious problem becomes at each exposure. Unknown keeps it serious.
 _SERIOUS_AT = {
     OPEN: "serious",
@@ -97,6 +101,10 @@ class Exposure:
     def label(self) -> str:
         worst = self.worst
         return worst.label if worst is not None else LABELS[self.level]
+
+    @property
+    def tone(self) -> str:
+        return TONES[self.level]
 
     @property
     def short(self) -> str:

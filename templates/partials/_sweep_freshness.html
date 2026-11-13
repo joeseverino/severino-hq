@@ -45,7 +45,7 @@ or out of date.
     page's own content off a phone.
     {% endcomment %}
     {% section "Last read" count=inventory|length fold=True css="sweep" %}
-      <div class="sweep-grid">
+      <div class="sweep-grid" data-band>
         {% for snapshot in inventory %}
           <div class="sweep-item{% if not snapshot.reachable %} sweep-item-unreachable{% elif snapshot.state == "stale" or snapshot.state == "partial" %} sweep-item-stale{% endif %}">
             <span class="sweep-label">{{ snapshot.label|breakable }}</span>

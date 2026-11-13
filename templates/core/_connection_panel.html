@@ -10,7 +10,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
 <div class="conn" data-connection-panel data-fragment="{% url 'connection' %}" data-fragment-name="connection">
   {% if ask_readings %}{% include "partials/_visit_refresh.html" with subject="page" name="connection" refresh="[data-connection-panel]" %}{% endif %}
   {% include "partials/_example_connection.html" with notice=True %}
-  {% if request_path.findings %}{% card css="problems" %}{% include "partials/_work_queue.html" with items=request_path.finding_rows grouped=True here=True dense=True only %}{% endcard %}{% endif %}
+  {% if request_path.findings %}{% card %}{% include "partials/_work_queue.html" with items=request_path.finding_rows grouped=True here=True dense=True only %}{% endcard %}{% endif %}
 
   {% include "partials/_connection_peering.html" with connection=connection posture=posture only %}
 

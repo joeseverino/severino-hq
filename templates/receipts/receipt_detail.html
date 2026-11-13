@@ -10,7 +10,7 @@
 
 {% url "receipts:edit" receipt.pk as edit_url %}
 {% if file_picture %}
-{% section "File" figure=True lede=file_line data_receipt_file="picture" %}<img class="document-picture" src="{% url 'receipts:picture' receipt.pk %}" alt="The receipt, {{ receipt.original_filename|default:'as uploaded' }}" decoding="async">{% endsection %}
+{% section "File" figure=True lede=file_line data_receipt_file="picture" %}{% url 'receipts:picture' receipt.pk as picture_url %}{% firstof receipt.original_filename "as uploaded" as named %}{% include "partials/_document_picture.html" with src=picture_url alt="The receipt, "|add:named only %}{% endsection %}
 {% elif file_stored %}
 {% section "File" data_receipt_file="link" %}<p><a href="{% url 'receipts:file' receipt.pk %}">{{ receipt.original_filename|default:"The receipt's file"|breakable }}</a>{% if file_line %} <span class="muted">{{ file_line|breakable }}</span>{% endif %}</p>{% endsection %}
 {% elif file_missing %}

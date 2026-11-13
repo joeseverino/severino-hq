@@ -3246,7 +3246,8 @@
       "partials/_insight_grid.html": {
         "about": "Readings that need interpreting, each with its next step.",
         "optional": [
-          "label"
+          "label",
+          "level"
         ],
         "required": [
           "items"

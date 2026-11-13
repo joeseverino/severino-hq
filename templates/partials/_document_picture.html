@@ -1,0 +1,6 @@
+{% comment %}
+A picture of a document (a scan, a photo of a receipt) whose size HQ does not
+store, in a page's shape held before it arrives so nothing moves when it does:
+
+  {% include "partials/_document_picture.html" with src=picture_url alt="The receipt, as uploaded" only %}
+{% endcomment %}<img class="document-picture" src="{{ src }}" alt="{{ alt }}" decoding="async">

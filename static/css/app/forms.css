@@ -133,15 +133,9 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
 .content > form:not([class]) > :not([type=hidden]) ~ * { margin-block-start: var(--stack-gap); }
 .form-actions-note { font-size: var(--text-xs); }
 /* A row's editor ({% row_editor %}), in the line beneath its row: one panel
-   on the name's edge, as the row's other parts are. The server draws its row
-   open, which with no script only this shows, since no toggle can open it;
-   a narrow part stays in its row then, so the line holds no copy of it. */
+   on the name's edge, as the row's other parts are (tables.css opens it with
+   no script). */
 .row-editor > .form { padding: var(--space-6); border-radius: var(--radius); background: var(--bg-tint); }
-@media (scripting: none) {
-  .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-editor) { display: table-row; }
-  .data-table > tbody > tr.is-expanded + tr.row-detail > td > .row-columns > [data-narrow],
-  .data-table > tbody > tr.is-expanded + tr.row-detail > td > .row-columns:not(:has(> dd[data-label])) { display: none; }
-}
 
 /* ── Dropzone ───────────────────────────────────────────────────────
    The real file input covers the zone, so the click target and the drop target
@@ -428,21 +422,24 @@ select.toned:not(.toned-neutral) { border-color: currentColor; }
    out of the cell they were written in. */
 .connection-sight-list { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .connection-sight-list > li { font-size: var(--text-xs); }
-/* Opened beneath the row, what it reads and what it would also see fill the
-   line, row by row. */
-.row-detail :is(.connection-sight-list, .connection-read-list) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
-.row-detail :is(.connection-sight-list, .connection-read-list) > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
-/* Each reading carries its state's color, so what needs reading again shows. */
-.row-detail :is(.connection-sight-list, .connection-read-list) > li::before { content: ""; align-self: center; block-size: 7px; aspect-ratio: 1; border-radius: 50%; background: var(--ok); }
-.row-detail .connection-read-list > li.connection-sight-partial::before { background: var(--warn); }
-.row-detail .connection-read-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
-.row-detail .connection-read-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
-/* What it lets HQ change, as chips. They sit on the opened row's tinted
-   panel, which `--accent-tint` all but matches in light, so the chip is a
-   wash of the accent over whatever is behind it: darker than the panel in
-   light, lighter in dark. */
-.row-detail .connection-ability-all > li { display: block; padding: 1px var(--space-4); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
-.row-detail .connection-ability-all > li::before { content: none; }
+/* Opened beneath the row (`--cell: open`, tables.css), what it reads and
+   what it would also see fill the line, row by row, over the lists' own
+   rules (routes.css), which they name by both classes to outweigh. */
+@container style(--cell: open) {
+  :is(.connection-sight-list, .connection-ability-list.connection-read-list) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); margin: 0; }
+  :is(.connection-sight-list, .connection-ability-list.connection-read-list) > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+  /* Each reading carries its state's color, so what needs reading again shows. */
+  :is(.connection-sight-list, .connection-ability-list.connection-read-list) > li::before { content: ""; align-self: center; block-size: 7px; aspect-ratio: 1; border-radius: 50%; background: var(--ok); }
+  .connection-read-list > li.connection-sight-partial::before { background: var(--warn); }
+  .connection-read-list > li:is(.connection-sight-refused, .connection-sight-unreadable)::before { background: var(--danger); }
+  .connection-read-list > li:is(.connection-sight-never_swept, .connection-sight-not_connected)::before { background: var(--muted-2); }
+  /* What it lets HQ change, as chips. They sit on the opened row's tinted
+     panel, which `--accent-tint` all but matches in light, so the chip is a
+     wash of the accent over whatever is behind it: darker than the panel in
+     light, lighter in dark. */
+  .connection-ability-list.connection-ability-all > li { display: block; padding: 1px var(--space-4); border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+  .connection-ability-list.connection-ability-all > li::before { content: none; }
+}
 .connection-sight-state { font-weight: 600; }
 .connection-sight-refused .connection-sight-state,
 .connection-sight-unreadable .connection-sight-state,

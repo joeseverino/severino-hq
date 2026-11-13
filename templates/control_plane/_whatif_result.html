@@ -4,7 +4,7 @@ The answer to the policy test. The tailnet page answers it alone as its
 {% endcomment %}
 <div id="whatif-result" data-fragment="{% url 'control_plane:tailnet' %}" data-fragment-name="whatif">
 {% if verdict %}
-  <p class="verdict">
+  <p>
     {% if not verdict.known %}{% status verdict.label tone="unprobed" %}{% else %}{% status verdict.label tone=verdict.allowed|yesno:"reachable,unreachable" %}{% endif %}
     {{ verdict.detail|breakable }}
   </p>

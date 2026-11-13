@@ -376,6 +376,13 @@ a.reading, a.reading:hover { color: inherit; text-decoration: none; }
 .btn.primary, button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
 .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .btn.danger, button.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
+/* A quiet control: words only until hovered. */
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
+.btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
+/* A destructive action that should not be the loudest thing in its row: the
+   same surface and lift as its neighbors, in red. */
+.btn.ghost.danger { background: var(--surface); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); box-shadow: var(--shadow-sm); }
+.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
 /* A control in a row or a head among words, a line's height rather than a
    form's. */
 .btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }

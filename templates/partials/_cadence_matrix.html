@@ -8,13 +8,16 @@ is: one row per thing, one column per period, and the alignment down a column is
 what makes the comparison possible. Use _cadence.html for a single strip.
 
 Pass compact=True where it shares a row with a chart rather than owning a page.
+It is a table of marks (`data-marks`, docs/Design.md): in a narrow box the
+periods before the newest three leave, with the line under each row's name,
+since the whole history is on the page the row links to.
 {% endcomment %}
 {% table_region label|default:"Tracked" chart=True %}
-  <table class="data-table cadence-matrix{% if compact %} is-compact{% endif %}">
+  <table class="data-table" data-marks{% if compact %}="compact"{% endif %}>
     <thead>
       <tr>
         {% table_heading label|default:"Tracked" %}
-        {% for period in matrix.periods %}{% table_heading period "status" css="cadence-period" %}{% endfor %}
+        {% for period in matrix.periods %}{% if forloop.revcounter > 3 %}{% table_heading period "status" css="cadence-period wide-only" %}{% else %}{% table_heading period "status" css="cadence-period" %}{% endif %}{% endfor %}
         {% table_heading "Hit" "numeric" css="cadence-total" %}
       </tr>
     </thead>
@@ -23,10 +26,10 @@ Pass compact=True where it shares a row with a chart rather than owning a page.
         <tr>
           <th scope="row">
             {% if row.url %}<a href="{{ row.url }}">{{ row.label|breakable }}</a>{% else %}{{ row.label|breakable }}{% endif %}
-            {% if row.detail %}<span class="muted cadence-detail">{{ row.detail|breakable }}</span>{% endif %}
+            {% if row.detail %}<span class="muted cadence-detail wide-only">{{ row.detail|breakable }}</span>{% endif %}
           </th>
           {% for week in row.weeks %}
-            <td class="cadence-cell">
+            <td class="cadence-cell{% if forloop.revcounter > 3 %} wide-only{% endif %}">
               <span class="cadence-mark{% if week.hit %} is-hit{% elif week.no_data %} is-no-data{% endif %}" data-tip="{{ week.said }}" aria-hidden="true">{% if week.count > 1 %}{{ week.count|breakable }}{% endif %}</span>
               <span class="visually-hidden">{{ week.said|breakable }}</span>
             </td>

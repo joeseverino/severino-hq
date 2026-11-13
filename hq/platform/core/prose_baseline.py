@@ -14,6 +14,4 @@ and ``mise run audit:prose-strings`` every line of text the rules read.
 # on its first finding.
 BASELINED_RULES = frozenset({"Plain.Long", "Plain.Narrate", "Plain.Person", "Plain.Parts", "Label", "Kicker"})
 
-BASELINE: dict[tuple[str, str], int] = {
-    ("templates/partials/_connection_peering.html", "Label"): 1,
-}
+BASELINE: dict[tuple[str, str], int] = {}

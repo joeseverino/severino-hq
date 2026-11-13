@@ -354,7 +354,21 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 }
 @media (scripting: none) {
   .data-table .narrow-only { display: none; }
+  /* A row's editor (`row-editor`): the server draws its row open, which with no script only this shows, since no toggle can open it; a narrow part stays in its row then, so the line holds no copy of it. */
+  .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-editor) { display: table-row; }
+  .data-table > tbody > tr.is-expanded + tr.row-detail > td > .row-columns > [data-narrow],
+  .data-table > tbody > tr.is-expanded + tr.row-detail > td > .row-columns:not(:has(> dd[data-label])) { display: none; }
 }
+/* `wide-only`: what a narrow box lets go outright, held for no row's toggle, since what it says is on a page of its own (a table of marks' older periods). */
+@container style(--box: narrow) {
+  .data-table .wide-only { display: none; }
+}
+/* A table of marks (`data-marks`): one row a thing, one column a period, a mark in each cell, read down a column against the rows around it (the cadence matrix). Every heading but the names stands centered over its column. Its cells stand closer where it shares a row with a chart (`data-marks="compact"`), and in a narrow box, where the marks are what is read. */
+.data-table[data-marks] > thead > tr > :not(:first-child) { text-align: center; }
+@container style(--box: narrow) {
+  .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
+}
+.data-table[data-marks="compact"] > * > tr > * { padding: var(--space-3) var(--space-2); }
 /* With no script a toggle opens nothing, so nothing is held back for it and the table scrolls in its region; known before paint, so this moves nothing. */
 .data-table [data-row-toggle]:not([data-fold-toggle]) { display: none; }
 @media (scripting: enabled) {
@@ -433,8 +447,8 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 /* A column with nothing in any row is not drawn: the server marks each cell that says nothing (`data-blank`) and every cell of a column where all do (`data-blank-column`), never the naming column. */
 .data-table > * > tr > [data-blank-column] { display: none; }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
-/* What a row holds back, in the line the server drew beneath it (`table_tags._detail_row`), shown while the row is open: a column's part while its column is gone (`data-dropped`), a narrow part in a narrow box, a labeled block always; it asks its columns for no width (`contain`), so opening moves no column. */
-.row-detail { display: none; }
+/* What a row holds back, in the line the server drew beneath it (`table_tags._detail_row`), shown while the row is open: a column's part while its column is gone (`data-dropped`), a narrow part in a narrow box, a labeled block always; it asks its columns for no width (`contain`), so opening moves no column. A part in it asks `--cell` (below). */
+.row-detail { display: none; --cell: open; }
 @media (scripting: enabled) {
   .data-table > tbody > tr.is-expanded + .row-detail { display: table-row; }
 }
@@ -458,10 +472,16 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .row-columns dt { color: var(--muted); font-size: var(--text-2xs); }
 /* A value under its column's name has the line to itself, not the share its column had in the row, less the em a list's separator takes before a name. */
 .row-columns dd { min-width: 0; margin: 0; overflow-wrap: break-word; --hold: calc(100% - 1em); --name-hold: min(28ch, 100%); }
+/* Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or in the line beneath an open row (`open`, above). */
+.data-table > tbody > tr:not(.row-detail) > td { --cell: line; }
 /* What a row keeps for that line at any width (`row-below`): its tall parts, on the name's edge. */
 .data-table > tbody > tr:not(.row-detail) .row-below { display: none; }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
-/* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. */
+/* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. In a whole box, rows folded under a row rather than a group's heading, and their open lines, are set in under it. */
+@container style(--box: whole) {
+  .data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] > td.row-gutter,
+  .data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] + .row-detail > td { padding-inline-start: calc(var(--row-gutter) + var(--space-10)); }
+}
 @media (scripting: enabled) {
   .data-table tr[data-folded]:not([data-open]) { display: none; }
   /* The last row showing ends its section, as the last row does. */

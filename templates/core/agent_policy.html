@@ -90,11 +90,11 @@ it is not blocked, since removal never lifts a block.
                 {% if standing.beyond_role %}<p>Granted, but beyond {{ identity.person.get_username|breakable }}'s role: {% for name in standing.beyond_role %}<code>{{ name|breakable }}</code> {% endfor %}</p>{% endif %}
                 {% if standing.missing %}<p data-missing>Not granted: {% for name in standing.missing %}<code>{{ name|breakable }}</code> {% endfor %}</p><p data-missing>Grant {% if standing.missing|length == 1 %}it{% else %}them{% endif %} to <code>{{ identity.client_id|breakable }}</code> in your sign-in service, then sign it in again. {% entity client_setup|outside label="Client setup" %}</p>{% endif %}
                 {% if activity.latest %}
-                  <ul class="agent-events prose" data-label="Latest">
+                  {% stack_list data_label="Latest" %}
                     {% for event in activity.latest %}
-                      <li{% if event.action == "denied" %} data-refused{% endif %}><a href="{{ event.get_absolute_url }}">{{ event.summary|breakable }}</a>{% if event.metadata.count > 1 %} <span class="muted">{{ event.metadata.count|counted:"time" }}</span>{% endif %} <span class="muted">{{ event.created_at|when:"ago" }}</span></li>
+                      <li class="prose"{% if event.action == "denied" %} data-refused{% endif %}><a href="{{ event.get_absolute_url }}">{{ event.summary|breakable }}</a>{% if event.metadata.count > 1 %} <span class="muted">{{ event.metadata.count|counted:"time" }}</span>{% endif %} <span class="muted">{{ event.created_at|when:"ago" }}</span></li>
                     {% endfor %}
-                  </ul>
+                  {% endstack_list %}
                 {% endif %}
               </div>
             </th>
@@ -236,7 +236,7 @@ reads it, so whatever the server comes to list appears with nothing here to
 change. Asked for when opened: asking takes the server's SDK into the process.
 {% endcomment %}
 {% partialdef mcp_endpoint %}
-<div id="mcp-endpoint" class="mcp-endpoint" data-fragment data-fragment-name="mcp_endpoint">
+<div id="mcp-endpoint" data-fragment data-fragment-name="mcp_endpoint">
   {% if endpoint %}
     {% facts %}
       {% fact "Address" %}<code>{{ endpoint.url|breakable }}</code>{% endfact %}
@@ -277,7 +277,7 @@ change. Asked for when opened: asking takes the server's SDK into the process.
   {% if endpoint_read %}
     {% partial mcp_endpoint %}
   {% else %}
-    <div id="mcp-endpoint" class="mcp-endpoint" data-fragment="" data-fragment-name="mcp_endpoint" data-fragment-load data-fragment-failure="HQ could not ask its MCP server." data-fragment-fallback="?endpoint=1#mcp">
+    <div id="mcp-endpoint" data-fragment="" data-fragment-name="mcp_endpoint" data-fragment-load data-fragment-failure="HQ could not ask its MCP server." data-fragment-fallback="?endpoint=1#mcp">
       <p class="muted">Asked of HQ's MCP server when you open this. <a href="?endpoint=1#mcp">Ask now</a></p>
     </div>
   {% endif %}

@@ -1,5 +1,5 @@
 {% load nav_tags %}
-<div class="lookup-grid">
+<div class="section-flow">
   {% section "Name lookup" %}
     {% words "lookup.name.read" as verb %}
     {% include "partials/_form.html" with form=lookups|dictkey:"lookup.name.read" method="get" verb=verb only %}

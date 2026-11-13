@@ -20,8 +20,7 @@ whole.
 {% endcomment %}
 {% for entry in items %}{% with item=entry|decision %}
 <tr class="queue-row"{% if triage %} id="{{ item.anchor }}"{% endif %} data-attention-item{% if folded %} data-folded="{{ folded }}"{% endif %}>
-  <td class="queue-mark row-gutter">{% row_toggle %}</td>
-  <td class="queue-what">
+  <td class="queue-what row-gutter">
     <div class="attention-head">
       {% if glance %}<a class="attention-title cell-prose" href="{{ item.page }}">{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="attention-title cell-prose" href="{{ item.href }}">{{ item.label|breakable }}</a>{% else %}<span class="attention-title cell-prose">{{ item.label|breakable }}</span>{% endif %}
       {% if not item.aside %}{% include "partials/_urgency_pill.html" with item=item mark=True only %}{% endif %}
@@ -47,6 +46,7 @@ whole.
       </div>
       {% endif %}
     {% endif %}
+    {% row_toggle %}
   </td>
   {% comment %}
   <!-- ast-grep-ignore: hand-drawn-row-actions --> the queue row itself: Dismiss and Restore are the reader's own triage of an item, posted by its key
