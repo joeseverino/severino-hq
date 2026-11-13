@@ -11,59 +11,19 @@
     has a reconcile run against this exact declaration, what did the last
     reading decline to confirm, and how old is that reading.
   {% endcomment %}
-  <dl class="topology-facts">
+  {% facts %}
     {% if item.node.pageviews is not None %}
-      <div class="topology-fact">
-        <dt>Traffic{% dot %}{{ traffic_window_days|counted:"day" }}</dt>
-        <dd>
-          <strong>{{ item.node.pageviews|counted:"pageview" }}</strong> from
-          <strong>{{ item.node.visits|counted:"visit" }}</strong>.
-        </dd>
-      </div>
+      {% fact "Traffic" %}{{ item.node.pageviews|counted:"pageview" }} from {{ item.node.visits|counted:"visit" }}{% detail %}in the last {{ traffic_window_days|counted:"day" }}{% endfact %}
     {% endif %}
-    {% if not item.node.managed %}
-      <div class="topology-fact">
-        <dt>Changes</dt>
-        <dd>HQ only reads this. It does not change it.</dd>
-      </div>
-    {% endif %}
+    {% if not item.node.managed %}{% fact "Changes" value="HQ only reads this. It does not change it." %}{% endif %}
     {% if item.node.declared_revision or item.node.observed_revision %}
-      <div class="topology-fact">
-        <dt>Settings</dt>
-        <dd>
-          {% if not item.node.observed_revision %}
-            {% status "Applied, not yet checked" tone="attention" %}
-          {% elif item.node.observed_revision == item.node.declared_revision %}
-            {% status "Applied and checked" tone="good" %}
-          {% else %}
-            {% status "Your last change is not applied yet" tone="attention" %}
-          {% endif %}
-        </dd>
-      </div>
+      {% fact "Settings" %}{% if not item.node.observed_revision %}{% status "Applied, not yet checked" tone="attention" %}{% elif item.node.observed_revision == item.node.declared_revision %}{% status "Applied and checked" tone="good" %}{% else %}{% status "Your last change is not applied yet" tone="attention" %}{% endif %}{% endfact %}
     {% endif %}
     {% if item.node.unconfirmed_fields %}
-      <div class="topology-fact">
-        <dt>HQ could not check</dt>
-        <dd>
-          <ul class="topology-field-list">
-            {% for field in item.node.unconfirmed_fields %}<li><code>{{ field|breakable }}</code></li>{% endfor %}
-          </ul>
-        </dd>
-      </div>
+      {% fact "HQ could not check" %}{% for field in item.node.unconfirmed_fields %}<code>{{ field|breakable:forloop }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}
     {% endif %}
-    <div class="topology-fact">
-      <dt>Last read</dt>
-      <dd>
-        {% if item.observed_age %}
-          {{ item.node.observed_at|when:"ago" }}
-        {% elif item.observable %}
-          <span class="muted">Not read yet.</span>
-        {% else %}
-          <span class="muted">HQ does not read this.</span>
-        {% endif %}
-      </dd>
-    </div>
-  </dl>
+    {% fact "Last read" %}{% if item.observed_age %}{{ item.node.observed_at|when:"ago" }}{% elif item.observable %}<span class="muted">Not read yet.</span>{% else %}<span class="muted">HQ does not read this.</span>{% endif %}{% endfact %}
+  {% endfacts %}
 
   {% comment %}
     The edge a node stands at the end of, stated from where it stands.

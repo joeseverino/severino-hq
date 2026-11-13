@@ -421,7 +421,10 @@ value, then its words ("3 rules"). Its facts stand a fixed gap apart, under a
 rule when they follow the card's head. Its labels read on from the value, so
 they are written in lower case. A fact with an address is a link whole.
 A fact's detail is running words. Its lines are the ones its markup declares:
-a `<small>` each, or a `detail=` given as a list.
+a `<small>` each, or a `detail=` given as a list. What a fact holds past its
+lines (its record list, a disclosure of what runs now) follows them in the
+detail, so a page's summary cards are a band of facts too, never a grid of its
+own.
 A fact drawn by hand (a page's own band) is a shape `test_hand_drawn`
 counts, and so is a figure set bold apart from the words that count it.
 
@@ -888,11 +891,14 @@ save button, so a field's note says only what the change does.
 lint:ast-grep rules it names.
 
 **A queue row says what is wrong and holds what fixes it.** The queue is
-named "Needs you" wherever it appears. The queue page, the findings page, a
-thing's urgent problems and a domain's own attention list use one projection
+named "Needs you" wherever it appears. Every list of problems is drawn by it:
+the queue page, the findings page, the dashboard's short queue, a thing's
+problems, the checks a subject does not meet, the steps a request
+contradicts and a domain's own attention list use one projection
 (`hq/platform/application/decisions.py`) and draw it as one table
 (`partials/_work_queue.html`, its rows `partials/_queue_rows.html`), so every
-row's urgency, words and buttons share one edge. A row reads, in order:
+row's urgency, words and buttons share one edge. A page never draws a list
+of its own (`a list of findings` in `HAND_DRAWN`). A row reads, in order:
 
 - the title and, only when it is urgent, the word "Urgent" after it in its
   tone (the words are `decisions.URGENCY`; a row that needs attention carries
@@ -939,12 +945,23 @@ form, and the transport keeps the owner's full workflow. A dismissed row is
 its title and the way back. A link to a row (`/action-items/#…`) lands on it
 open.
 
+Several items of one family (`Insight(family=...)`) fold under a row saying
+how bad, what kind and how many, which opens to their rows: on the queue page
+(`partials/_queue_entries.html`) and wherever a thing's problems are drawn
+(`fold`). The findings page keeps each row its own, its filter being by rule.
+
+Problems drawn inside a section of a page about something else (a machine's
+containers, a container's checks, the request's path) are the row's dense
+form (`dense`): the title in the table's own size and weight, its marks and
+its buttons on one line, and what it means first in the line beneath, so the
+section's own content stays what it is about. `partials/_problems.html` draws
+a thing's problems this way under its urgent box and in each part's card.
+
 A queue of three or fewer is read on the dashboard, under the greeting, as
-short cards (`partials/_queue_glance.html`), under no heading of their own. A
-longer one is a count and a link to its page. There a card is its title, what
-it means, its age and its buttons, its words running to the buttons; its title
-opens the row on the page that shows the rest, steps included, or a held
-request's own page.
+the queue's own rows (`glance`), under no heading of their own. A longer one
+is a count and a link to its page. There a row is its title, what it means,
+its age and its buttons, holding nothing beneath; its title opens the row on
+the page that shows the rest, steps included, or a held request's own page.
 
 **A reading says how old it is.** Wherever a page shows what was read, its age
 is `partials/_reading_age.html`, over the reading's `Freshness` where the page

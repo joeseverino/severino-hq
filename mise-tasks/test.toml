@@ -48,4 +48,23 @@ run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties --noi
 description = "The Go controller's tests under the race detector"
 hide = true
 extends = "heavy"
+# What the Go tests read, which tools/pipeline/legs.py matches a pull
+# request's change against, so the Test job leaves them out when none moved:
+# the controller, the units and host files under deploy/ its host checks hold
+# to, and the three files of elsewhere its tests open.
+sources = [
+  "controller/**/*",
+  "deploy/**/*",
+  "hq/config/controller-connections.json",
+  "Dockerfile",
+  ".github/renovate.json",
+  ".github/workflows/ci.yml",
+  ".github/actions/toolchain/**/*",
+  "tools/lib/**/*",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "gotestsum --format standard-quiet --raw-command -- go -C controller test -json -race ./..."

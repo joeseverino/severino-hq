@@ -12,14 +12,18 @@ row keeps its words.
 Under a domain's own heading (`grouped`) a row does not repeat the domain; on
 the page of the thing it is about (`here`) its title is plain text; in a
 family (`folded`, the family row's id) it is folded under that row. A
-dismissed row is its title and the way back.
+dismissed row is its title and the way back. In a dense queue
+(`_work_queue.html`) the row is its title, its marks and its buttons on one
+line, its meaning first in the line beneath. Drawn away from the queue
+(`glance`), it holds nothing beneath: its title opens the page that shows it
+whole.
 {% endcomment %}
 {% for entry in items %}{% with item=entry|decision %}
 <tr class="queue-row"{% if triage %} id="{{ item.anchor }}"{% endif %} data-attention-item{% if folded %} data-folded="{{ folded }}"{% endif %}>
   <td class="queue-mark row-gutter">{% row_toggle %}</td>
   <td class="queue-what">
     <div class="attention-head">
-      {% if item.href and not here %}<a class="attention-title cell-prose" href="{{ item.href }}">{{ item.label|breakable }}</a>{% else %}<span class="attention-title cell-prose">{{ item.label|breakable }}</span>{% endif %}
+      {% if glance %}<a class="attention-title cell-prose" href="{{ item.page }}">{{ item.label|breakable }}</a>{% elif item.href and not here %}<a class="attention-title cell-prose" href="{{ item.href }}">{{ item.label|breakable }}</a>{% else %}<span class="attention-title cell-prose">{{ item.label|breakable }}</span>{% endif %}
       {% if not item.aside %}{% include "partials/_urgency_pill.html" with item=item mark=True only %}{% endif %}
       {% if not item.aside %}{% if item.since or item.observed_at or not grouped %}
       <span class="attention-meta">
@@ -30,9 +34,10 @@ dismissed row is its title and the way back.
       {% endif %}{% endif %}
     </div>
     {% if not item.aside %}
-      {% if item.detail %}<p class="attention-detail cell-prose">{{ item.detail|breakable }}</p>{% endif %}
-      {% if item.facts or item.advice or item.steps or item.reason or item.links %}
+      {% if item.detail and not dense %}<p class="attention-detail cell-prose">{{ item.detail|breakable }}</p>{% endif %}
+      {% if glance %}{% elif item.facts or item.advice or item.steps or item.reason or item.links or item.detail and dense %}
       <div class="row-below queue-more">
+        {% if item.detail and dense %}<p class="attention-detail">{{ item.detail|breakable }}</p>{% endif %}
         {% comment %}What was read that shows a problem (application.decisions): each label once, with every value it was given.{% endcomment %}
         {% if item.facts %}{% facts %}{% for fact in item.facts %}{% fact fact.label %}<ul class="dot-list">{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}</ul>{% endfact %}{% endfor %}{% endfacts %}{% endif %}
         {% if item.advice %}<p class="attention-advice">{{ item.advice|breakable }}</p>{% endif %}

@@ -373,16 +373,8 @@ a.discovery-link:hover strong { color: var(--accent); }
 .command-result-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); }
 .command-result { margin-bottom: var(--layout-gap); }
 .command-result > .section-body { border-left: 3px solid var(--ok); }
-/* The projected result: facts as a small grid, the list as a plain data table
-   with its count in the caption, and the JSON behind a disclosure below both. */
-.command-result-facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
-  gap: var(--space-4);
-  margin: var(--space-6) 0 0;
-}
-.command-result-facts dt { color: var(--muted); font-size: var(--text-xs); }
-.command-result-facts dd { margin: var(--space-1) 0 0; overflow-wrap: anywhere; font-weight: 600; }
+/* The projected result: its facts, the list as a plain data table with its
+   count in the caption, and the JSON behind a disclosure below both. */
 .command-result .table-scroll { margin-top: var(--space-6); }
 .command-result-table caption { caption-side: top; text-align: left; padding: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }
 .command-result-table td { overflow-wrap: anywhere; }

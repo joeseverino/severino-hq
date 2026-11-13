@@ -364,22 +364,45 @@ def _hardening():
                 ],
             },
         ),
-        (
-            "portainer.compose_project",
-            {
-                "connection_ref": PORTAINER,
-                "host": MACHINE,
-                "name": FRONTEND,
-                "config_files": [
-                    "/opt/example-applications/a-web-frontend-with-a-long-name/docker-compose.production.yml"
-                ],
-            },
-        ),
     ):
         ProviderInventory.objects.update_or_create(
             kind=kind,
             defaults={"records": [record], "reachable": True, "observed_at": timezone.now()},
         )
+    ProviderInventory.objects.update_or_create(
+        kind="portainer.compose_project",
+        defaults={"records": _projects(), "reachable": True, "observed_at": timezone.now()},
+    )
+
+
+# Short project directories, each ending in a hyphenated name a cell draws whole
+# where its column has room, beside one with no hyphen.
+PROJECT_NAMES = ("example-connect", "example2-proxy", "example2-proxy-web", "example-id", "example-hq", "example-labs")
+
+
+def _projects():
+    """The frontend's compose project, and a machine's worth of short ones
+    whose directories the Compose projects table draws in a wide column."""
+
+    return [
+        {
+            "connection_ref": PORTAINER,
+            "host": MACHINE,
+            "name": FRONTEND,
+            "config_files": ["/opt/example-applications/a-web-frontend-with-a-long-name/docker-compose.production.yml"],
+        },
+        *(
+            {
+                "connection_ref": PORTAINER,
+                "host": MACHINE,
+                "name": name,
+                "source": "compose",
+                "working_dir": f"/opt/apps/{name}",
+                "config_files": [f"/opt/apps/{name}/compose.yaml"],
+            }
+            for name in (*PROJECT_NAMES, "example")
+        ),
+    ]
 
 
 def _glance():

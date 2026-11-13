@@ -205,29 +205,31 @@ class BreakableTests(SimpleTestCase):
         self.assertIn("data-sole", breakable("example-docker-host-01"))
         self.assertNotIn("data-sole", breakable("Receipt for example-docker-host-01"))
 
-    def test_a_name_a_cell_may_cut_inside_a_part_has_a_box_to_cut_it(self):
-        """The box sits inside the token, so the token can ask for the name's
-        whole length around it; a name with no hyphenated part, or a word of
-        a sentence, has nothing to cut inside and no box."""
+    def test_a_name_has_its_box_and_its_strut_side_by_side_in_its_token(self):
+        """A name is drawn in a box of its own beside its strut, both in its
+        token, so whatever lays the name out holds the strut that sizes it
+        beside the box that draws it (cuts.css); a word of a sentence has
+        neither, and a line of words is cut by the line's own box."""
 
-        cut = '<span class="token" data-sole><span class="cut"><span class="whole">'
-        self.assertIn(cut, breakable("example-docker-host-01"))
-        self.assertNotIn('class="cut"', breakable("hq.example.com"))
-        self.assertNotIn('class="cut"', breakable("Receipt for example-docker-host-01"))
-        self.assertIn('class="cut"', cell_line("on example-web"))
-
-    def test_a_name_a_cell_may_cut_carries_an_unseen_strut_of_its_pieces(self):
-        """A cell sizes its column by the strut, so it holds the longest piece
-        an opened row cannot break; the strut says nothing a reader hears or
-        copies, and a word of a sentence has none."""
-
-        (strut,) = with_class(str(breakable("example.com/example-path")), "strut")
-        self.assertEqual(strut.attrs.get("aria-hidden"), "true")
-        self.assertEqual(strut.words, "")
-        pieces = strut.attrs["data-strut"].split("\u200b")
-        self.assertEqual("".join(pieces), "example.com/example-path")
-        self.assertGreater(len(pieces), 1)
+        for name in ("example.com/example-path", "hq.example.com"):
+            with self.subTest(name=name):
+                html = str(breakable(name))
+                (token,) = with_class(html, "token")
+                (strut,) = with_class(html, "strut")
+                (box,) = with_class(html, "cut")
+                self.assertEqual(strut.ancestors[-1:], (token,))
+                self.assertEqual(box.ancestors[-1:], (token,))
+                self.assertEqual(strut.attrs.get("aria-hidden"), "true")
+                self.assertEqual(strut.words, "")
+                pieces = strut.attrs["data-strut"].split("\u200b")
+                self.assertEqual("".join(pieces), name)
+                self.assertGreater(len(pieces), 1)
         self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "strut"), [])
+        self.assertEqual(with_class(str(breakable("Receipt for example-docker-host-01")), "cut"), [])
+        (line,) = with_class(str(cell_line("on example-web")), "cut")
+        self.assertIn("cell-line", line.ancestors[-1].classes)
+        (named,) = with_class(str(cell_line("example-web")), "cut")
+        self.assertIn("token", named.ancestors[-1].classes)
 
     def test_a_run_too_long_to_be_a_word_is_held_as_a_name(self):
         """A digest has no seam to wrap at, so a cell cuts it as it cuts a
@@ -236,7 +238,7 @@ class BreakableTests(SimpleTestCase):
 
         digest = "697a431011ba77cec8b221767743484b20217b9786894fea67f222af655f40a7"
         self.assertEqual(boxed(breakable(f"{digest} on example-oidc")), [digest, "example-oidc"])
-        self.assertIn('<span class="token" data-sole><span class="cut">', breakable(digest))
+        self.assertIn('<span class="cut"><span class="whole">', breakable(digest))
         self.assertEqual(boxed(breakable(f"sha256:{digest} pulled")), [digest])
         self.assertEqual(breakable("Example Finance"), "Example Finance")
 

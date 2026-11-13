@@ -7,11 +7,13 @@ Page field, so the SDK's Page is unchanged. `page_aside`, the same way, names
 a template drawn on the title's line: what a page says about its subject at a
 glance (how it is doing, where it runs), beside its name rather than under it. `page_facts`, the same way, is markup:
 a line of short facts under the lede (where a thing lives and runs, when it
-last changed), drawn the head's width where the lede keeps the measure.
+last changed), drawn the head's width where the lede keeps the measure. The
+trail's line ends with the note of a page about one thing (`page_visit`,
+partials/_visit_refresh.html).
 {% endcomment %}
 <header class="page-head">
   <div class="page-head-copy">
-    {% if page.trail %}<div class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</div>{% endif %}
+    {% if page.trail or page_visit %}<div class="page-trail-row">{% if page.trail %}<div class="page-trail">{% for label, url in page.trail %}<span><a href="{{ url }}">{{ label|breakable }}</a></span>{% endfor %}</div>{% endif %}{% if page_visit %}{% include "partials/_visit_refresh.html#note" %}{% endif %}</div>{% endif %}
     <div class="page-title-row">
       <h1>{{ page.title|breakable }}</h1>
       {% for badge in page_badges %}{% status badge.label tone=badge.tone title=badge.title %}{% endfor %}

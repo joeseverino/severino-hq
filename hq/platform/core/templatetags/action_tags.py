@@ -35,6 +35,13 @@ def row_value(item):
 
 
 @register.filter
+def families(items, fold):
+    """``{{ items|families:fold }}``: the queue's entries, a family folded under its name when ``fold``."""
+
+    return action_items.families(list(items or ()), fold=bool(fold))
+
+
+@register.filter
 def decision(item):
     return decisions.decision(item)
 
@@ -97,11 +104,14 @@ def remedies(context, actions):
 
 
 @register.simple_tag
-def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False):
+def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False, pressed=None):
     # A button of words is named by them, so its title only describes it; a
     # glyph (an arrow, a star) says nothing aloud and is named by its title.
+    # A toggle (`pressed`, true or false) says aloud which way it stands.
     glyph = not any(character.isalnum() for character in str(label))
     attributes = {"name": name, "value": value, "title": title, "aria-label": title if glyph else ""}
+    if pressed is not None:
+        attributes["aria-pressed"] = "true" if pressed else "false"
     return format_html(
         '<button type="submit" form="{}" formaction="{}" class="{}"{}{}>{}</button>',
         POST_FORM_ID,

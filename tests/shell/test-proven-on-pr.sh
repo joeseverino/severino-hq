@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Prove a push is promoted only on full proof, and checked in full otherwise.
+# Prove a push is promoted only on full proof, and checked in full otherwise,
+# and stands on its pull request's gates only when that run left none out.
 set -euo pipefail
 
 repo_dir="$(CDPATH='' cd -- "$(dirname -- "$0")/../.." && pwd)"
@@ -16,7 +17,8 @@ cat >"$bin/gh" <<'STUB'
 #!/bin/sh
 case "$2" in
   */pulls) [ -n "$TEST_PR" ] && echo "$TEST_PR $TEST_HEAD" || echo "null null" ;;
-  */runs*) echo "$TEST_CONCLUSION" ;;
+  */runs/*/jobs*) [ -z "$TEST_SKIPPED" ] || echo "$TEST_SKIPPED" ;;
+  */runs*) echo "42 $TEST_CONCLUSION" ;;
 esac
 STUB
 cat >"$bin/docker" <<'STUB'
@@ -39,6 +41,7 @@ proof() {
   (cd "$repo_dir" && PATH="$bin:$PATH" GITHUB_REPOSITORY=example/hq GITHUB_SHA=ffff \
     TEST_PR="${PR-176}" TEST_HEAD="$head_sha" TEST_CONCLUSION="${CONCLUSION-success}" \
     TEST_DIGEST="${DIGEST-$digest}" TEST_TREE="${TREE-$tree}" TEST_SIGNED_PR="${SIGNED-176}" \
+    TEST_SKIPPED="${SKIPPED-}" \
     tools/pipeline/proven-on-pr.sh 2>/dev/null)
 }
 expect_unproven() {
@@ -46,7 +49,10 @@ expect_unproven() {
 }
 
 [ "$(proof)" = "pr=176
-digest=ghcr.io/example/hq@$digest" ] || { echo "full proof was not promoted" >&2; exit 1; }
+digest=ghcr.io/example/hq@$digest
+gates=passed" ] || { echo "full proof was not promoted" >&2; exit 1; }
+[ "$(SKIPPED=Browser proof)" = "pr=176
+digest=ghcr.io/example/hq@$digest" ] || { echo "a pull request that left out a gate stood for the push" >&2; exit 1; }
 PR="" expect_unproven "no merged pull request"
 CONCLUSION=failure expect_unproven "the pull request's CI failed"
 CONCLUSION="" expect_unproven "the pull request's CI has not finished"

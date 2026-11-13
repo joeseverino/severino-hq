@@ -36,23 +36,17 @@
     once with its ends beside it, and under it on a narrow screen. Who read
     the ends and when is said once where one source read them all.
   {% endcomment %}
-  <dl class="relation-list">
+  {% facts %}
     {% for group in relationships.groups %}
     {% with shared=group.shared %}
-    <div class="relation-group">
-      <dt>{{ group.phrase|breakable }}</dt>
-      <dd>
-        <ul class="relation-ends">
-          {% for item in group.items %}
-          <li>{% entity item.entity %}{% if item.entity.detail %} <span class="muted">{{ item.entity.detail|breakable }}</span>{% endif %}{% if not shared %}{% if item.source or item.observed_at %} <span class="muted">({% if item.source %}through {% entity item.source %}{% endif %}{% if item.source and item.observed_at %}{% dot %}{% endif %}{% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %})</span>{% endif %}{% endif %}{% if item.stale %} {% status "Out of date" tone="attention" %}{% endif %}</li>
-          {% endfor %}
-        </ul>
-        {% if shared %}<p class="relation-source">From {% entity shared.source %}{% if shared.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=shared.observed_at only %}{% endif %}</p>{% endif %}
-      </dd>
-    </div>
+    {% fact group.phrase %}<ul class="dot-list">
+      {% for item in group.items %}
+      <li>{% entity item.entity %}{% if item.entity.detail %} <span class="muted">{{ item.entity.detail|breakable }}</span>{% endif %}{% if not shared %}{% if item.source or item.observed_at %} <span class="muted">({% if item.source %}through {% entity item.source %}{% endif %}{% if item.source and item.observed_at %}{% dot %}{% endif %}{% if item.observed_at %}{% include "partials/_reading_age.html" with at=item.observed_at only %}{% endif %})</span>{% endif %}{% endif %}{% if item.stale %} {% status "Out of date" tone="attention" %}{% endif %}</li>
+      {% endfor %}
+    </ul>{% detail %}{% if shared %}<small>From {% entity shared.source %}{% if shared.observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=shared.observed_at only %}{% endif %}</small>{% endif %}{% endfact %}
     {% endwith %}
     {% endfor %}
-  </dl>
+  {% endfacts %}
   {% partial rest %}
 {% aside %}{% if relationships.focus_url and not topology_url %}<a class="btn ghost compact" href="{{ relationships.focus_url }}">View on map</a>{% endif %}
 {% endsection %}

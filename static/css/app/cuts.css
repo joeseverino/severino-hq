@@ -13,30 +13,24 @@
 
 @layer components {
 /* Page furniture: a label, a name or a note held to its line. */
-/* A page's note stands in the band between the bar and the page, the
-   content's own top padding, its end under the person's control wherever the
-   bar puts it (page.css names it), so it takes no line of the page's. Placed
-   out of flow, it moves nothing whatever it says, and it says one line: the
-   band holds one. Its end keeps a ring's room inside the cut for the link it
-   may offer. Placed against the window, it keeps to the content's gutter
-   (`--note-side`), where the column stops widening, so on a wide screen it
-   ends where the page does, short of the person's control. */
-.content > .visit-status {
-  --note-side: max(var(--content-pad), (100% - var(--content-max)) / 2 + var(--content-pad));
-  position: absolute;
-  inset-block-start: var(--site-header-height);
-  inset-inline: var(--note-side);
-  inset-inline-end: max(var(--note-side), anchor(--account end, var(--content-pad)));
-  block-size: var(--content-pad);
-  margin: 0;
+/* A page's note ends the head's first line (page.css), and a script fills it
+   once the page is drawn: it asks the line for no size (`contain: size`),
+   takes the height the line's other part gives it and the width that part
+   leaves, and says one line in the line's own height, cut at its end, so
+   nothing moves whatever it says. Its end keeps a ring's room inside the cut
+   for the link it may offer. */
+.page-trail-row > .visit-status {
+  flex: 1 1 0;
+  align-self: stretch;
+  contain: size;
+  min-inline-size: 0;
   padding-inline-end: var(--space-2);
+  line-height: inherit;
   text-align: end;
-  line-height: var(--content-pad);
   white-space: nowrap;
   overflow-x: clip;
   text-overflow: ellipsis;
 }
-.glance-metrics dd { margin: 0; color: var(--ink); font-size: var(--text-sm); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .user-menu > button {
   display: flex;
   width: 100%;
@@ -79,22 +73,22 @@
 .data-table td strong > [data-entity],
 .data-table td strong > .cell-line { display: inline; overflow: visible; -webkit-line-clamp: none; line-clamp: none; }
 .data-table td .name-line > strong > [data-entity] { min-width: 0; padding-inline-end: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* Any other one-token name, and a `.cell-line`, is cut inside a hyphenated part rather than broken there: a grid track asks for its whole length and holds out for none, down to `--cut-floor` (tables.css), cut by the box inside it (`.cut`, line_breaks._token, value_tags.cell_line); an external link's arrow is a column of its own. */
+/* Any other one-token name, and a `.cell-line`, is cut inside a hyphenated part rather than broken there: the box that draws it (`.cut`, line_breaks._token, value_tags.cell_line) fills a grid track its strut sizes (figures.css), which asks for its whole length and holds out for none, down to `--cut-floor` (tables.css); a link or a line around the name is the grid, its token no box, and an external link's arrow is a column of its own. */
 .data-table td :is(
-  [data-entity]:not(strong > *, .row-gutter > *):has(> .token[data-sole] > .cut),
-  :is(.token[data-sole]:not([data-entity] *, .cell-line *), .cell-line:not(strong > *)):has(> .cut)
+  [data-entity]:not(strong > *, .row-gutter > *):has(> .token[data-sole] > .cut .whole),
+  .token[data-sole]:not([data-entity] *, .cell-line *):has(> .cut .whole),
+  .cell-line:not(strong > *):has(> :is(.cut, .token[data-sole]))
 ):not(code *, [data-cell~=name] *, [data-cell~=data] *) {
   display: inline-grid; grid-template-columns: minmax(0, max-content); grid-auto-flow: column; grid-auto-columns: max-content;
   min-width: var(--cut-floor); vertical-align: baseline;
-  & > :is(.token[data-sole], .cut) {
-    display: -webkit-box; -webkit-box-orient: vertical;
+  & > .token[data-sole] { display: contents; }
+  & > .cut, & > .token[data-sole] > .cut {
+    grid-area: 1 / 1; display: -webkit-box; -webkit-box-orient: vertical;
     /* It cuts what overruns its line, so nothing in it needs breaking where no seam is; Chromium would otherwise break a held part at an element's edge. */
     overflow-wrap: normal; -webkit-line-clamp: var(--cut-lines); line-clamp: var(--cut-lines); overflow: hidden; text-overflow: ellipsis;
   }
-  /* The track is the box's own max-content, which Chromium can measure a fraction short of the parts it then lays out, and a line short by a fraction sends the last part to a line the clamp hides: a float of no height asks the track for a pixel more, which no line gives up. WebKit's legacy box keeps its parts on their line without it. */
-  & > :is(.token[data-sole], .cut)::before { content: ""; float: inline-end; inline-size: 1px; }
   /* A part longer than the track is cut inside itself, so the name keeps the lines its seams give it rather than losing every part after the cut. */
-  & > :is(.token[data-sole], .cut) .whole { display: inline-block; max-width: 100%; white-space: nowrap; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
+  & > .cut .whole, & > .token[data-sole] > .cut .whole { display: inline-block; max-width: 100%; white-space: nowrap; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
 }
 /* In a phrase a part is a box (`.part`, line_breaks._whole) in a track that asks for its whole length and holds out for none: it moves whole, is cut only where longer than its cell, and never widens the table; an opened row (surfaces.css) and screen-reader text (cadence.css) make it text again. */
 .data-table td .token:not([data-sole]) > .whole:not([data-cell~=name] *, [data-cell~=prose] *, [data-cell~=data] *, code *, [data-entity] *, .cut *, .btn *, .table-clamp *, tr.is-expanded *, .visually-hidden *) {
@@ -126,19 +120,16 @@
 .search-snippet :is(.token, .whole) { display: inline; }
 /* A cell's own identifier (one in a sentence, a `p` or `li` or free text marked data or prose, wraps as a page's does and is never cut) never breaks across lines and never takes more than --identifier-max, a share of the region (`cqi`) since a percentage counts for nothing while columns are sized; past it, it is cut and the opened row shows it whole. Code of plain words (no part `breakable` marks, value_tags) is words no longer than a word may be, so it wraps between them as text does and is never cut. */
 .data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *):where(:has(.token, .whole)) { white-space: nowrap; overflow-wrap: normal; display: inline-block; max-width: min(var(--identifier-max), var(--hold)); vertical-align: bottom; overflow: hidden; text-overflow: ellipsis; }
-/* The chip's baseline is its token's: the grid's first row, ahead of the
-   strut's rows, whose text has none of the chip's padding. */
-.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole) > .token[data-sole] {
+/* The chip is the name's box, its baseline the grid's first row, ahead of
+   the strut's rows, whose text has none of the chip's padding. */
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole) > .token[data-sole] > .cut {
   display: block; justify-self: start; order: -1; max-width: 100%;
   padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint); overflow: hidden; text-overflow: ellipsis;
 }
-.data-table th[scope=row] > code > .token[data-sole] {
+.data-table th[scope=row] > code > .token[data-sole] > .cut {
   display: block; white-space: nowrap;
   padding: 1px calc(var(--space-2) + 1px) 1px var(--space-2); border-radius: 4px; background: var(--bg-tint); overflow: hidden; text-overflow: ellipsis;
 }
-
-/* A row dismissed in place on the dashboard: its title, on one line. */
-.attention-row[data-dismissed]::before { content: attr(data-dismissed); flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* The calendar: a day's events on one line each, inside the day. */
 /* A span is one bar across its days: rounded only where it starts and ends,

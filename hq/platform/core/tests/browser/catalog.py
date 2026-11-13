@@ -16,7 +16,7 @@ from django.utils.html import escape
 
 from hq.platform.application import calendar
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
-from hq.platform.application.card_items import Kpi, ListRow
+from hq.platform.application.card_items import Insight, Kpi, ListRow
 from hq.platform.application.drawings import AllocationBar, Share, Trend
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page, PageAction
@@ -30,6 +30,7 @@ from hq.platform.application.ui import (
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN, SPARSE_WIDTHS
+lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.core.templatetags.stylesheet_tags import stylesheets
 
 
@@ -194,6 +195,27 @@ def _month():
     )
 
 
+def _problems(*titles, family=""):
+    """The queue's items about a thing, each with its meaning and the check that reads again."""
+
+    return [
+        queue_item(
+            "example",
+            "Example",
+            Insight(
+                status="attention",
+                eyebrow="",
+                title=title,
+                value="",
+                body="What it means for the thing this page is about, in one sentence.",
+                key=f"example:{title}",
+                family=family,
+            ),
+        )
+        for title in titles
+    ]
+
+
 def _flow(*sections):
     """A run of sections in the flow (`.section-flow`), each named and holding
     what it is given."""
@@ -300,6 +322,25 @@ CATALOG = {
         '<table class="data-table"><thead><tr><th scope="col">Name</th><th scope="col">State</th></tr></thead>'
         "<tbody><tr><td>example-01</td><td>Online</td></tr><tr><td>example-02</td><td>Online</td></tr></tbody>"
         "</table>{% endtable_region %}{% aside %}<span>Example source</span>{% endsection %}"
+    ),
+    # A thing's problems inside one of its sections: the queue row's dense form,
+    # one line each, then the section's own table.
+    "part/queue-dense": Entry(
+        '{% section "Example containers" %}{% include "partials/_problems.html#rest" with rest=rest %}'
+        "<p>The section's own content.</p>{% endsection %}",
+        {"rest": _problems("example-web-01 runs an image by tag alone", "example-worker-02 restarts often")},
+    ),
+    # Several of one family: one row saying what kind and how many, opening to them.
+    "part/queue-family": Entry(
+        '{% section "Example containers" %}{% include "partials/_problems.html#rest" with rest=rest %}{% endsection %}',
+        {
+            "rest": _problems(
+                "example-web-01 runs an image by tag alone",
+                "example-web-02 runs an image by tag alone",
+                "example-web-03 runs an image by tag alone",
+                family="Example images by tag",
+            )
+        },
     ),
     # A list whose rows carry their own padding fills the frame as a table does.
     "part/section-rows": Entry(

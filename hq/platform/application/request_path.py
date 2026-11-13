@@ -28,10 +28,13 @@ from .request_connection import Connection, connection
 from .request_headers import Header, headers_of
 from .ui import ended
 lazy from . import connections
+lazy from .card_items import Insight
 lazy from .connection_security import observed_request_controls
+lazy from .dashboard import queue_item
 lazy from .derived_reads import serialize_hop
 lazy from .facts import Subject, readings
 lazy from .hq_self import own_addresses, served_at, served_port, site_label
+lazy from .item_help import instructions
 lazy from .locate import index_of
 lazy from .projection import complete, iso
 
@@ -670,6 +673,30 @@ class RequestPath:
     @property
     def findings(self) -> tuple[Hop, ...]:
         return tuple(hop for hop in self.hops if hop.check is not None and hop.check.state == CONTRADICTED)
+
+    @property
+    def finding_rows(self) -> tuple[dict[str, Any], ...]:
+        """Each step this request contradicts, as the queue's row: the step, what
+        disagrees, and the step that resolves it as what to do."""
+
+        return tuple(
+            queue_item(
+                "request-path",
+                "Request path",
+                Insight(
+                    status="attention",
+                    eyebrow="",
+                    title=hop.label,
+                    value="",
+                    body=hop.check.detail,
+                    workflow=instructions(f"request-path:{hop.step}", hop.check.step),
+                    key=f"request-path:{hop.step}",
+                    # A hop is judged from this request beside several readings, none of whose age is the finding's.
+                    observed_at=None,
+                ),
+            )
+            for hop in self.findings
+        )
 
     @property
     def proof(self) -> str:

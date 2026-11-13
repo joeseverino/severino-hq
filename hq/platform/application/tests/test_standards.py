@@ -27,3 +27,32 @@ class SummaryTests(SimpleTestCase):
         measurement = Measurement(subject=None, results=(CheckResult(_check("Main protected", "unprotected"), MET),))
 
         self.assertEqual(measurement.summary, "1 of 1 check passes")
+
+
+class GapTests(SimpleTestCase):
+    def test_gaps_are_the_queues_rows_serious_first_and_by_design_last(self):
+        from dataclasses import replace
+
+        from ..standards import INTENDED
+
+        measurement = Measurement(
+            subject=None,
+            results=(
+                CheckResult(_check("Alerts on", "Alerts are off"), UNMET),
+                CheckResult(_check("Port kept", "A host port is open"), INTENDED, "It answers DNS."),
+                CheckResult(replace(_check("Only you", "Someone else has access"), serious=True), UNMET),
+                CheckResult(_check("Main protected", "Main is unprotected"), MET),
+            ),
+        )
+
+        rows = measurement.gaps
+
+        self.assertEqual(
+            [(row["label"], row["status"]) for row in rows],
+            [
+                ("Someone else has access", "serious"),
+                ("Alerts are off", "attention"),
+                ("A host port is open by design", "good"),
+            ],
+        )
+        self.assertEqual(rows[2]["detail"], "It answers DNS.")

@@ -328,7 +328,7 @@ class TopologyWindowTests(TestCase):
         with mock.patch("hq.domains.control_plane.topology_views.HOST_TRAFFIC_DAYS", 30):
             body = self.client.get(reverse("control_plane:topology_node"), {"node": node.id})
 
-        self.assertIn("Traffic · 30 days", text(body))
+        self.assertIn("in the last 30 days", text(body))
 
 
 class PartRowTests(TestCase):

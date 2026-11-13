@@ -225,15 +225,8 @@ carries the device permission stands as them. Only theirs, never anybody else's.
   {% else %}
     <p class="muted">None registered.</p>
   {% endif %}
-  <form method="post" action="{{ device_url }}" class="form">
-    {% write_token %}
-    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-    <div class="field">
-      <label for="device-client">Client id</label>
-      <input type="text" id="device-client" name="client_id" required autocomplete="off" spellcheck="false">
-    </div>
-    <div class="form-actions"><button type="submit" name="registered" value="1" class="btn">{% words "agent.device.set" "on" %}</button></div>
-  </form>
+  {% words "agent.device.set" "on" as device_verb %}
+  {% include "partials/_form.html" with form=device_form action=device_url next=request.get_full_path verb=device_verb %}
 {% endsection %}
 
 {% comment %}

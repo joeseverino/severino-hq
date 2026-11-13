@@ -9,21 +9,7 @@ A check met everywhere is a word in one closing line.
 {% if repositories %}
   {% if unmet %}
     {% section "Failing" count=unmet|length %}
-    <ul class="posture-gaps">
-      {% for gap in unmet %}
-        <li class="{% if gap.check.serious %}is-serious{% endif %}">
-          <span class="posture-gap-icon">{% include "partials/_icon.html" with name="x-circle" %}</span>
-          <div class="posture-gap-body">
-            <strong>{{ gap.check.unmet|breakable }}</strong>
-            <p>{{ gap.check.why|breakable }} <span class="muted">{{ gap.check.fix|breakable }}</span></p>
-          </div>
-          <div class="posture-gap-repos">
-            {% for repo in gap.repos %}{% outside_link url=repo.url|add:"/settings" css="workflow-chip" %}{{ repo.short|breakable }}{% endoutside_link %}{% endfor %}
-            <small class="muted">{{ gap.repos|length }} of {{ gap.of|counted:"repository,repositories" }}</small>
-          </div>
-        </li>
-      {% endfor %}
-    </ul>
+    {% include "partials/_work_queue.html" with items=unmet grouped=True here=True only %}
     {% endsection %}
   {% endif %}
 

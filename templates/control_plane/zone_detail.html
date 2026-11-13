@@ -41,42 +41,31 @@ four domains behind a click and then need a second one to go anywhere.
   {% title %}{{ zone.zone|breakable }} is not managed{% endnotice %}
 {% endif %}
 
-<div class="control-summary">
-  {% comment %}
-  Each card is contributed by whatever owns the knowledge behind it: the
-  service catalog, the certificate registry, the records themselves. This
-  template knows there are cards, not what they are made of, so an insight
-  added later renders without an edit here.
+{% comment %}
+Each fact is contributed by whatever owns the knowledge behind it: the
+service catalog, the certificate registry, the records themselves. This
+template knows there are facts, not what they are made of, so an insight
+added later renders without an edit here.
 
-  The value is the link, so no card needs a second line of instruction to say
-  what the value already names.
-  {% endcomment %}
+The value is the link, so no fact needs a second line of instruction to say
+what the value already names. The dialog is an enhancement over a real link,
+never a replacement: the href reaches a page that answers the same question,
+so the fact still works if the dialog does not open.
+{% endcomment %}
+{% facts layout="band" label=zone.zone %}
   {% for insight in zone.cards %}
-    <div class="control-metric">
-      <span class="control-label">{{ insight.label|breakable }}</span>
-      <strong{% if insight.concern %} class="control-warn"{% endif %}>
-        {% if insight.url %}
-          {% comment %}
-          The dialog is an enhancement over a real link, never a replacement:
-          the href reaches a page that answers the same question, so the card
-          still works if the dialog does not open.
-          {% endcomment %}
-          <a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="{{ insight.modal_id }}"{% endif %}>{{ insight.value|breakable }}</a>
-        {% else %}{{ insight.value|breakable }}{% endif %}
-      </strong>
-      {% if insight.concern %}<span class="readout">{% status "Needs attention" tone="attention" %}</span>{% endif %}
-      {% if insight.detail %}<span>{{ insight.detail|breakable }}</span>{% endif %}
-      {% for label, links in insight.links %}
-        <span class="readout"><span class="readout-label">{{ label|breakable }}</span> {% for link in links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</span>
-      {% endfor %}
-      {% if insight.lines %}{% include "partials/_record_list.html" with rows=insight.lines label=insight.label %}{% endif %}
-      {% if insight.note %}<span class="muted"{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note|breakable }}</span>{% endif %}
-    </div>
-    {% if insight.rows %}
-      {% include "partials/_modal.html" with id=insight.modal_id title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
-    {% endif %}
+    {% fact insight.label tone=insight.concern|yesno:"attention," %}{% if insight.url %}<a href="{{ insight.url }}"{% if insight.rows %} data-modal-open="{{ insight.modal_id }}"{% endif %}>{{ insight.value|breakable }}</a>{% else %}{{ insight.value|breakable }}{% endif %}{% detail %}
+      {% if insight.concern %}<small>{% status "Needs attention" tone="attention" %}</small>{% endif %}
+      {% if insight.detail %}<small>{{ insight.detail|breakable }}</small>{% endif %}
+      {% for label, links in insight.links %}<small>{{ label|breakable }} {% for link in links %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</small>{% endfor %}
+      {% if insight.lines %}{% include "partials/_record_list.html" with rows=insight.lines label=insight.label only %}{% endif %}
+      {% if insight.note %}<small{% if insight.note_title %} title="{{ insight.note_title }}"{% endif %}>{{ insight.note|breakable }}</small>{% endif %}
+    {% endfact %}
   {% endfor %}
-</div>
+{% endfacts %}
+{% for insight in zone.cards %}{% if insight.rows %}
+  {% include "partials/_modal.html" with id=insight.modal_id title=insight.label lede=insight.detail body_template="partials/_record_list.html" rows=insight.rows %}
+{% endif %}{% endfor %}
 
 {% for notice in zone.notices %}
   {% notice tone="warning" %}<p>{{ notice.detail|breakable }}</p>{% title %}{{ notice.label|breakable:":" }} {{ notice.value|breakable }}{% endnotice %}

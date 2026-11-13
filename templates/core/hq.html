@@ -70,7 +70,7 @@ uptime and how the request came.
   {% include "partials/_example_connection.html" with notice=True %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.reach|not_urgent only %}
   {% include "control_plane/_path_hops.html" with route=found.route label="Request path" %}
-  {% for hop in found.findings %}<p class="notice notice-attention"><strong>{{ hop.label|breakable }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>{% endfor %}
+  {% if found.findings %}{% include "partials/_work_queue.html" with items=found.finding_rows grouped=True here=True dense=True only %}{% endif %}
 {% endsection %}
 {% endwith %}{% endif %}
 </div>

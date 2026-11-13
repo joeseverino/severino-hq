@@ -117,12 +117,6 @@
 @container kpi (min-width: 660px) {
   .card > .kpi-grid:has(> :nth-child(6):last-child) { --kpi-columns: 6; }
 }
-/* The totals across HQ, and the owner's links: each one surface, so neither
-   floats on the page between the cards. */
-.dashboard-counts { display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-9); padding: var(--surface-inset, var(--space-5) var(--space-8)); margin-bottom: var(--stack-gap); }
-.dashboard-counts .kpi { display: flex; flex: 0 1 auto; flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); padding: 0; background: none; }
-.dashboard-counts .kpi .value { font-size: var(--text-md); order: -1; }
-.dashboard-counts .kpi .muted { font-size: var(--text-2xs); }
 /* Sections side by side end their frames together: each frame takes what its
    row leaves under its head. */
 :is(.dashboard-patterns, .dashboard-highlights) > .section { display: flex; flex-direction: column; }

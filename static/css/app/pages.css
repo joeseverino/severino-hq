@@ -134,17 +134,6 @@
 .topology-node-link { color: inherit; text-decoration: none; }
 .topology-node-link:hover, .topology-node-link:focus-visible { color: var(--accent); text-decoration: underline; }
 
-/* Triage reads as a list of questions with answers, not a paragraph: each row
-   is one fact an operator checks, so the term stays scannable when the answer
-   runs long. */
-.topology-facts { display: grid; gap: var(--space-3); margin: 0; }
-.topology-fact { display: grid; gap: 1px; }
-.topology-fact dt { color: var(--muted); font-size: var(--text-xs); }
-.topology-fact dd { margin: 0; font-size: var(--text-xs); color: var(--ink-2); }
-.topology-fact dd .pill { margin-right: var(--space-2); vertical-align: baseline; }
-.topology-field-list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-1) 0; padding: 0; list-style: none; }
-.topology-field-list code { font-size: var(--text-2xs); }
-
 /* An edge stated from the node standing at one end of it. The arrow and the
    heading both carry the direction, because a verb alone reads the same in
    either, and the whole row is the link, so walking the graph is one click
@@ -249,22 +238,6 @@
 .bar-track::-webkit-meter-optimum-value { min-inline-size: 2px; border-radius: 4px; background: var(--bg-tint); }
 .bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: 4px; background: var(--bg-tint); }
 .bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
-
-/* Vitals sit under the breakdowns, not above them: they are the check you run
-   after the question you came to ask. Each takes an equal share of the card,
-   so a wide card is filled rather than gathered at its start. */
-.vitals-strip {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: var(--space-6) var(--space-16); margin: 0;
-}
-.vital { display: flex; flex-direction: column; gap: var(--space-1); }
-.vital dt { color: var(--muted); font-size: var(--text-xs); }
-.vital dd { margin: 0; display: flex; align-items: baseline; gap: var(--space-4); font-size: var(--text-lg); }
-.vital-rate { font-weight: 650; font-feature-settings: "tnum"; color: var(--attn); }
-/* 75% of samples good is what passing means; the color says which side of it
-   this metric is on rather than making the reader compare two numbers. */
-.vital-rate.is-passing { color: var(--ok); }
-.vital .unit { font-size: .8em; margin-inline-start: 1px; }
 
 /* A held request: who asks, what would happen, the decision. */
 .approval-card { border-left: 3px solid var(--line); }

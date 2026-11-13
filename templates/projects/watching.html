@@ -20,12 +20,12 @@ would be a page about anybody.
       <div>{% entity profile.url|outside label="@"|add:profile.login %}</div>
       {% if profile.bio %}<p>{{ profile.bio|breakable }}</p>{% endif %}
     </div>
-    <dl class="gh-stats">
-      <div><dt>Followers</dt><dd>{% entity profile.url|add:"?tab=followers"|outside label=profile.followers %}</dd></div>
-      <div><dt>Following</dt><dd>{% entity profile.url|add:"?tab=following"|outside label=profile.following %}</dd></div>
-      <div><dt>Public repos</dt><dd>{% entity profile.url|add:"?tab=repositories"|outside label=profile.public_repos %}</dd></div>
-      <div><dt>Starred</dt><dd>{% entity profile.url|add:"?tab=stars"|outside label=profile.starred %}</dd></div>
-    </dl>
+    {% facts layout="band" label="On GitHub" %}
+      {% fact "Followers" %}{% entity profile.url|add:"?tab=followers"|outside label=profile.followers %}{% endfact %}
+      {% fact "Following" %}{% entity profile.url|add:"?tab=following"|outside label=profile.following %}{% endfact %}
+      {% fact "Public repos" %}{% entity profile.url|add:"?tab=repositories"|outside label=profile.public_repos %}{% endfact %}
+      {% fact "Starred" %}{% entity profile.url|add:"?tab=stars"|outside label=profile.starred %}{% endfact %}
+    {% endfacts %}
   {% endcard %}
   {% section "Your GitHub account" %}
   {% facts %}

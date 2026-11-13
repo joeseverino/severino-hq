@@ -42,11 +42,10 @@ SELECTORS = {
     "decisions": "[data-attention-item]",
     # What a page says of the readings it asked for on opening.
     "ask_note": "[data-ask-note]",
-    # A page's note on its readings, the bar it stands under and the person's
-    # control at the bar's end.
-    "page_note": '.content > [data-ask-note][form="page-visit"]',
-    "bar": ".site-header",
-    "account": ".user-menu",
+    # A page's note on its readings, at the end of the head's first line, and
+    # the page it heads.
+    "page_note": '.page-trail-row > [data-ask-note][form="page-visit"]',
+    "content": "#content",
     # A family's toggle, the row toggle, and a row's own dismiss.
     "decision_family": "[data-queue-family] [data-fold-toggle]",
     "row_toggle": "[data-row-toggle]",
@@ -62,20 +61,19 @@ SELECTORS = {
     "decision_detail": ".attention-detail",
     # What an item says, and where its buttons are: the words run to the buttons.
     "decision_words": "[data-attention-item] :is(.attention-head, .attention-detail)",
-    "decision_buttons": ":is(.attention-end, .queue-act)",
+    "decision_buttons": ".queue-act",
     # Running text, and what an opened row shows beneath it: code in it is
     # never cut, since only a cell's own identifier is.
     "running_text": ":is(p, li, .row-detail)",
     "code": "code",
-    # The boxes that cut a cell's identifier: the token, a part inside it,
-    # the chip.
-    "cut_box": ":is(.token[data-sole], .token[data-sole] .whole, code, code > .token)",
+    # The boxes that cut a cell's identifier: the token, the box it draws
+    # the name in (a chip in code), a part inside it.
+    "cut_box": ":is(.token[data-sole], .token[data-sole] > .cut, .token[data-sole] .whole, code)",
     # The box a name in a cell is held by.
     "name_box": "[data-entity], code, .token[data-sole]",
-    # A one-token name a cell cuts, the box inside its track that cuts it,
-    # and the parts it lays out on its line.
-    "sole_token": ".token[data-sole]",
-    "name_cut": "main td :is(.token[data-sole], .cell-line, [data-entity]) > :is(.cut, .token[data-sole])",
+    # The box a cell cuts a one-token name in, and the parts it lays out on
+    # its line.
+    "name_cut": "main td :is(.token[data-sole], .cell-line):not(code *) > .cut:has(.whole)",
     "part": ".whole",
     "decision_actions": ".queue-act .attention-actions",
     # The queue's table, and its cells of what is wrong and of its buttons.

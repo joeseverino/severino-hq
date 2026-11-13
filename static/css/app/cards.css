@@ -147,33 +147,10 @@ a.kpi:hover { background: var(--surface-2); }
 
 /* ── The queue ──────────────────────────────────────────────────────
    What awaits a decision, scanned top-down in severity order. Wherever it is
-   drawn whole it is the table primitive (partials/_queue_rows.html): a dot,
-   what is wrong, what can be pressed, so every row's parts share one edge. The
-   dashboard's short list is the one place it is a list of cards. */
+   drawn it is the table primitive (partials/_queue_rows.html): a dot, what is
+   wrong, what can be pressed, so every row's parts share one edge. */
 
-/* The dashboard's list: what a card says, then what can be pressed and the
-   reader's own dismiss at its end, wrapping under it when the row is narrow. */
-.attention-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.attention-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: var(--space-2) var(--space-7);
-  padding: var(--space-5) 0;
-  border-top: 1px solid var(--line-2);
-}
-.attention-body { flex: 1 1 18rem; min-width: 0; }
-.attention-end { flex: 0 1 auto; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--space-3) var(--space-4); margin-left: auto; }
-.attention-end > .attention-actions { margin: 0; justify-content: flex-end; }
-.attention-row[data-dismissed] > .attention-end > :not([data-triage]) { display: none; }
-.attention-end form { margin: 0; }
-.attention-row:first-child { border-top: 0; padding-top: var(--space-2); }
-.attention-row:last-child { padding-bottom: 0; }
 .attention-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); }
-/* A row the reader has just dismissed, until the page is next drawn: one quiet
-   line in its place, with the way back. */
-.attention-row[data-dismissed] > .attention-body { display: none; }
-.attention-row[data-dismissed] { align-items: center; color: var(--muted); font-size: var(--text-sm); }
 
 /* Since when, and how old the reading behind it is: quiet while current, in
    the attention tone once out of date. */
@@ -202,7 +179,7 @@ a.kpi:hover { background: var(--surface-2); }
 .origin-panel { --surface-border: 0 none; --surface-radius: 0; --surface-bg: transparent; --surface-shadow: none; --surface-inset: 0; }
 /* What was read that shows it: each label once, its values beside it. */
 /* The queue's table: the title leads since it is what a reader presses, the urgency is one quiet word after it only when urgent (the pill keeps its word for a screen reader and its tip), the meaning wraps under it to the buttons, and the buttons end the row. */
-.queue-table > tbody > tr > :is(.queue-mark, .queue-what) { font-size: var(--text-md); line-height: 1.5; }
+.queue-table > tbody > tr > :is(.queue-mark, .queue-what) { font-size: var(--queue-size, var(--text-md)); line-height: 1.5; }
 /* The gutter is the queue's at every width, so the title and everything the
    opened line holds start on one edge whatever the rows offer. */
 .queue-table > tbody > tr > .queue-mark { width: 1%; padding-inline: var(--row-gutter) 0; }
@@ -211,6 +188,11 @@ a.kpi:hover { background: var(--surface-2); }
 .queue-table .attention-title { font-weight: 600; }
 .queue-table a.attention-title:hover { text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; }
 .queue-table .attention-detail { margin: var(--space-1) 0 0; font-size: var(--text-sm); line-height: 1.5; color: var(--muted); }
+/* The dense form (`_work_queue.html`'s `dense`), for problems inside a section
+   of a page about something else: a line of the table's own size and weight,
+   so the section's own rows stay what it is about. */
+.queue-table.is-dense { --queue-size: var(--text-sm); }
+.queue-table.is-dense .attention-title { font-weight: 500; }
 /* A table with no headings is read as one column, so the queue counts its own two for the share; with no script in a narrow box the title and the buttons share one. */
 .data-table.queue-table { --columns: 2; }
 @media (scripting: none) {
@@ -245,7 +227,7 @@ a.kpi:hover { background: var(--surface-2); }
     .queue-table :is(.queue-row:not([data-dismissed]), .queue-family) .queue-dismiss::before { content: "\00d7" / ""; font-size: var(--text-lg); line-height: 1; }
   }
 }
-/* The opened line (table_tags._detail_row): what the row holds back, then one place for every button the row holds, each the line's width on a phone, where a button asks the line for no width (`contain: inline-size`) so a long label never widens the table. */
+/* The opened line (table_tags._detail_row): what the row holds back, then one place for every button the row holds, each the line's width on a phone, in one track that asks the line for no width (`minmax(0, 1fr)`) so a long label never widens the table. A contained button (`contain: inline-size`) in a column would do the same, but WebKit measures its height at no width and draws it hundreds of pixels tall. */
 .queue-table .row-detail > td { padding-inline: calc(var(--row-gutter) + var(--space-6)) var(--space-6); }
 .queue-table .row-detail > td > * { margin-bottom: var(--space-8); }
 .queue-more > :first-child { margin-top: 0; }
@@ -262,8 +244,9 @@ a.kpi:hover { background: var(--surface-2); }
   .queue-table .row-columns > dd[data-narrow] > .narrow-more:not(.queue-later) { display: none; }
 }
 @container style(--box: narrow) {
-  .queue-table .row-detail .row-columns > dd { flex-direction: column; }
-  .queue-table .row-detail .row-columns > dd .btn { contain: inline-size; justify-content: center; white-space: normal; text-align: center; }
+  /* stylelint-disable-next-line rule-selector-property-disallowed-list -- one track that asks the line for no width, in place of a contained button, which WebKit draws hundreds of pixels tall */
+  .queue-table .row-detail .row-columns > dd { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .queue-table .row-detail .row-columns > dd .btn { justify-content: center; white-space: normal; text-align: center; }
 }
 /* A family: how bad, what kind and how many, opening to its rows, which are
    set in under its name. Its name heads them, so it reads below a title. */
@@ -282,13 +265,13 @@ a.kpi:hover { background: var(--surface-2); }
 .queue-row[data-dismissed] .attention-title { color: var(--muted); font-weight: 400; }
 .queue-row[data-dismissed] .attention-title::before { content: "Dismissed: " / "Dismissed: "; }
 .attention-clear { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
-/* A card of the problems about the thing a page shows holds only the queue's
-   rows, which keep their own gutter, so they reach its sides as a section's
-   table does. */
+/* A card of the problems about the thing a page shows, and the dashboard's
+   short queue, hold only the queue's rows, which keep their own gutter, so
+   they reach its sides as a section's table does. */
 .card.problems { padding-inline: 0; }
 /* The urgent ones: their box above the page. */
 .problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }
-/* The short queue on the dashboard, under the greeting: a card like any other. */
+/* The short queue on the dashboard, under the greeting. */
 .dash-needs { margin-bottom: var(--stack-gap); }
 /* Steps or checks side by side, each an icon, a title and a sentence. Read
    down each column, as a list is, so however many there are the columns end
@@ -383,8 +366,8 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    box, and neither does a region (`data-fragment`), which only says where its
    parts come from: what either holds reaches the sides as the body's own part
    would. */
-:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
-  .control-summary, .insight-grid, .connection-control-grid, .sweep-grid,
+:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .github-list, .posture-repos,
+  .insight-grid, .connection-control-grid, .sweep-grid,
   .month-grid, .list-rows, .setup-list, .day-panel-entry, .search-hits, .conn-rows) {
   --frame-inset: var(--section-side);
   margin-inline: calc(-1 * var(--section-side));
@@ -396,8 +379,8 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    when it starts or ends the frame, its corners the frame's. A list of rows
    or a month, whose outer rows draw no edge there, keeps the frame's padding
    above and below it. */
-:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .machine-telemetry-metrics, .relation-list, .github-list, .posture-gaps, .posture-repos,
-  .control-summary, .insight-grid, .connection-control-grid, .sweep-grid) {
+:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .github-list, .posture-repos,
+  .insight-grid, .connection-control-grid, .sweep-grid) {
   --section-corner: calc(var(--radius) - 1px);
   /* In a form that starts the body, its hidden fields draw nothing, so they
      do not count. */

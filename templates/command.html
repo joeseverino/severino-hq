@@ -13,9 +13,9 @@ button named for what it does. How it is built belongs to the API reference.
   opens only when there is nothing else to show.
   {% endcomment %}
   {% if result_facts %}
-    <dl class="command-result-facts">
-      {% for label, value in result_facts %}<div><dt>{{ label|breakable }}</dt><dd>{{ value|breakable }}</dd></div>{% endfor %}
-    </dl>
+    {% facts %}
+      {% for label, value in result_facts %}{% fact label value=value %}{% endfor %}
+    {% endfacts %}
   {% endif %}
   {% if result_table %}
     {% table_region result_table.label %}

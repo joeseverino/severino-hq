@@ -44,15 +44,9 @@ id, is shown again if it was open.
           </header>
           {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last reading failed ({{ panel.payload.refresh_failed|breakable:")." }} This is the one before it.</p>{% endif %}
           {% if panel.payload.metrics %}
-            <dl class="glance-metrics">
-              {% for metric in panel.readings %}
-                <div>
-                  <dt>{{ metric.label|breakable }}</dt>
-                  <dd>{{ metric.value|breakable }}</dd>
-                  {% if metric.detail %}<dd class="glance-metric-detail">{{ metric.detail|breakable }}</dd>{% endif %}
-                </div>
-              {% endfor %}
-            </dl>
+            {% facts %}
+              {% for metric in panel.readings %}{% fact metric.label value=metric.value detail=metric.detail %}{% endfor %}
+            {% endfacts %}
           {% else %}
             <p class="glance-note">{% if panel.refreshing %}{% refreshing %}{% elif panel.payload.summary %}{{ panel.payload.summary|breakable }}{% else %}{{ panel.empty|breakable }}{% endif %}</p>
           {% endif %}

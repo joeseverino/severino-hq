@@ -24,15 +24,13 @@
      frames in a row start together. A section inside a section
      is part of the outer frame. */
   :where(
-  .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section), .control-card,
-  .control-metric, .control-summary, .facts-band,
+  .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section),
+  .facts-band,
   .filter-bar, .kpi-grid, .insight-grid,
   .form,
   .auth-card, .mail-stage,
   .topology-workspace, .github-list,
-  .relation-list,
-  .posture-gaps, .posture-repos, .machine-telemetry-metrics, .route,
-  .dashboard-counts) {
+  .posture-repos, .route) {
     border: var(--surface-border, 1px solid var(--line));
     border-radius: var(--surface-radius, var(--radius));
     background: var(--surface-bg, var(--surface));
@@ -155,8 +153,8 @@
      dead space inside the card's padding. */
   /* A frame's own padding is its edge: the first and last thing in it keep no
      margin of their own, or a heading's top margin doubles the padding above it. */
-  :is(.card, .control-card, .two-col > section, .two-col > div, .section-flow > section) > :last-child { margin-bottom: 0; }
-  :is(.card, .control-card, .two-col > section, .two-col > div, .section-flow > section) > :first-child { margin-top: 0; }
+  :is(.card, .two-col > section, .two-col > div, .section-flow > section) > :last-child { margin-bottom: 0; }
+  :is(.card, .two-col > section, .two-col > div, .section-flow > section) > :first-child { margin-top: 0; }
 
 
   /* ── Disclosure: one marker for everything that opens in place ─────────
@@ -248,7 +246,6 @@
      reads the same as one on a phone. 27.5rem is two 220px cells; under it,
      never at it, as the facts' own tracks switch (`--fact-min`), so a band
      exactly that wide is laid out one way by both. */
-  :is(.facts-band, .control-summary) { container: band / inline-size; }
   @container band (width < 27.5rem) {
     /* The label keeps its words up to three fifths of the row and wraps past
        that, and the value never narrows past its longest run that cannot
@@ -262,14 +259,5 @@
     .facts-band .fact-label { grid-row: 1; grid-column: -3; font-size: var(--text-sm); }
     .facts-band .fact-value { grid-row: 1; grid-column: -2; text-align: right; font-size: var(--text-md); }
     .facts-band .fact-detail { grid-row: 2; grid-column: -3 / -1; }
-    .control-summary > .control-metric {
-      flex-direction: row;
-      flex-wrap: wrap;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--space-1) var(--space-5);
-      padding: var(--space-5) var(--space-6);
-    }
-    .control-summary > .control-metric > :not(.control-label):not(strong) { flex: 1 1 100%; }
   }
 }

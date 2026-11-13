@@ -35,6 +35,8 @@ from hq.platform.application.visit_refresh import worth_asking
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 
+from .forms import DashboardSettingsForm
+
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page.
 NEEDS_YOU_IN_PLACE = 3
@@ -245,6 +247,10 @@ class DashboardGlanceView(View):
         return render(request, self.template_name, glance_context(), status=status)
 
 
+def _settings_of(configuration) -> dict[str, str]:
+    return {name: getattr(configuration, name) for name in DashboardSettingsForm.base_fields}
+
+
 class DashboardGlanceSettingsView(View):
     def get(self, request):
         return render(
@@ -252,7 +258,7 @@ class DashboardGlanceSettingsView(View):
             "core/dashboard_glance_settings.html",
             {
                 **page_context("Dashboard settings", trail=(("Dashboard", reverse("dashboard")),)),
-                "settings": dashboard_configuration(),
+                "form": DashboardSettingsForm(initial=_settings_of(dashboard_configuration())),
             },
         )
 
@@ -260,10 +266,7 @@ class DashboardGlanceSettingsView(View):
         result = execute_posted(
             request,
             DASHBOARD_SETTINGS,
-            {
-                field: request.POST.get(field, "")
-                for field in ("weather_point", "weather_label", "infrastructure_label")
-            },
+            {field: request.POST.get(field, "") for field in DashboardSettingsForm.base_fields},
         )
         if not refused(request, result):
             messages.success(request, "Dashboard settings saved.")

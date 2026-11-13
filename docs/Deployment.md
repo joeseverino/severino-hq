@@ -77,9 +77,11 @@ release that cannot serve and proves the previous one comes back on its schema.
 When a pull request merges, the push to `main` asks
 `tools/pipeline/proven-on-pr.sh` whether the pull request already proved it:
 its last CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
-pushed commit's tree, and it is signed by that run. With all three, Lint,
-Test and Browser are skipped and Build promotes that image by digest to the
-commit's tag. Short of all three, every gate runs again.
+pushed commit's tree, and it is signed by that run. With all three, Build
+promotes that image by digest to the commit's tag, and Lint, Test and Browser
+are skipped when that run left none of them out
+([What a pull request runs](Development.md#what-a-pull-request-runs)). Short
+of all three, every gate runs again.
 
 ### Where a change stands
 

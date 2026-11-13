@@ -63,31 +63,13 @@
   .hardening-notes li { min-width: 0; overflow-wrap: anywhere; }
   [data-copy-target][hidden] { display: none; }
 
-  /* Posture, led by what is not met: a row per gap with the repositories
-     that miss it, then a row per repository with a segment per check. */
-  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the frame's corners clip its rows' fill, not their text */
-  .posture-gaps, .posture-repos { list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: hidden; }
-  .posture-gaps li, .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); }
-  .posture-gaps li + li { border-top: 1px solid var(--line-2); }
-  /* A repository's row is short: as many to a line as the frame holds, each
-     cell drawing its own hairlines as a band's do, so a wide frame is not a
-     column of rows ending halfway across it. */
+  /* Posture's repositories: a row per repository with a segment per check. A
+     row is short: as many to a line as the frame holds, each cell drawing its
+     own hairlines as a band's do, so a wide frame is not a column of rows
+     ending halfway across it. */
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the grid clips its cells' outer hairlines, not their text */
-  .posture-repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 32rem), 1fr)); overflow: clip; }
-  .posture-repos li { box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2); }
-  .posture-gaps li { align-items: flex-start; border-left: 3px solid var(--tone-caution-line); }
-  .posture-gaps li.is-serious { border-left-color: var(--danger); }
-  /* Failed on purpose, with the reason: a fact, not a gap. */
-  .posture-gaps li.is-intended { border-left-color: var(--line); }
-  .posture-gaps li.is-intended .posture-gap-icon { color: var(--muted); }
-  .posture-gap-icon { color: var(--tone-caution-ink); font-size: var(--text-lg); line-height: 1; }
-  .posture-gaps li.is-serious .posture-gap-icon { color: var(--danger); }
-  /* Never wider than the row beside its icon, so the icon keeps its line. */
-  .posture-gap-body { flex: 1 1 min(22rem, 100% - 3rem); min-width: 0; }
-  .posture-gap-body p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
-  .posture-gap-body p .muted { color: var(--muted-2); }
-  .posture-gap-repos { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); max-width: 100%; }
-  .posture-gap-repos .workflow-chip { padding: var(--space-1) var(--space-5); font-size: var(--text-xs); box-shadow: none; }
+  .posture-repos { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 32rem), 1fr)); list-style: none; margin: 0 0 var(--space-7); padding: var(--surface-inset, 0); overflow: clip; }
+  .posture-repos li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-6); padding: var(--space-5) var(--space-7); box-shadow: -1px 0 0 var(--line-2), 0 -1px 0 var(--line-2); }
   .posture-repo-name { flex: 0 1 14rem; min-width: 0; display: flex; flex-direction: column; }
   .posture-repo-name a { font-weight: 600; }
   /* The meter is one control, whose tip says what passes and what fails; it
@@ -115,12 +97,6 @@
   .nowrap { white-space: nowrap; }
   /* The same mark as a verified certificate: a check in a circle, one color. */
   .gh-verified { display: inline-flex; margin-left: var(--space-3); color: var(--accent-2); font-size: .9em; vertical-align: -.1em; cursor: default; }
-  .gh-stats { display: flex; flex-wrap: wrap; gap: var(--space-9); margin: 0; }
-  .gh-stats div { display: grid; gap: var(--space-1); }
-  .gh-stats dt { color: var(--muted); font-size: var(--text-xs); }
-  .gh-stats dd { margin: 0; font-size: var(--text-xl); font-weight: 650; font-feature-settings: "tnum"; }
-  .gh-stats dd a { color: inherit; }
-  .gh-stats dd a:hover { color: var(--accent-2); }
 
   /* Who can reach a name, in one word. Internet-facing is stated plainly,
      since a public site is meant to be; only what HQ could not read is a

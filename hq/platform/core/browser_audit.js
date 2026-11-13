@@ -59,7 +59,7 @@ async (page) => {
       const beside = shown(row).filter((k) => round(k.getBoundingClientRect().top) === top);
       return round(Math.max(...beside.map(filled)) - filled(card));
     };
-    const CARDS = '.card, .control-card, :is(' + PAIRS + ') > :is(section, .page-section)';
+    const CARDS = '.card, :is(' + PAIRS + ') > :is(section, .page-section)';
     document.querySelectorAll(CARDS).forEach((card) => {
       const kids = shown(card);
       if (!kids.length) return;

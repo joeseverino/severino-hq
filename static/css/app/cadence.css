@@ -100,9 +100,11 @@
 /* Anchored at the top-left of its containing block. At its static position, a
    label in the last column of a wide table would sit past the page edge,
    outside both the table's scroll box and main's clip, and scroll the whole
-   page sideways. */
+   page sideways. Each declaration is important, as Bootstrap's is, so no
+   part's own rule (a tight table's wrapping pill, a mark's padding) reopens
+   the pixel and lays the text out a letter a line. */
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- text for a screen reader alone, clipped to a pixel on purpose */
-.visually-hidden { position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.visually-hidden { position: absolute !important; inset-block-start: 0 !important; inset-inline-start: 0 !important; width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; border: 0 !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
 /* Text only a screen reader hears has no lines for a name to hold, and no
    part of it draws a box past the one pixel that clips it. A mark hidden from
    the reader (a dot between parts) is then neither seen nor heard, so it is

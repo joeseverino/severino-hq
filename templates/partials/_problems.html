@@ -8,21 +8,21 @@ them in two tags:
 is given. Under the thing's own name a problem does not say where it came
 from, and its title is not a link back to the page it is on.
 
-Each is the queue's own row (`_work_queue.html`); an urgent one is in a box
-above the page. The page's
-other problems share a card under that box; a page made of parts draws a
-part's problems in that part's card, as `rest`:
+Each is the queue's own row (`_work_queue.html`), a family folded under its
+name; an urgent one is in a box above the page. The page's other problems
+share a card under that box, in the row's dense form; a page made of parts
+draws a part's problems in that part's card, as `rest`:
 
     {% include "partials/_problems.html#rest" with rest=part_problems %}
 
 Nothing is drawn when nothing is open.
 {% endcomment %}
-{% partialdef rest %}{% if rest %}{% include "partials/_work_queue.html" with items=rest grouped=True here=True only %}{% endif %}{% endpartialdef %}
+{% partialdef rest %}{% if rest %}{% include "partials/_work_queue.html" with items=rest grouped=True here=True fold=True dense=True only %}{% endif %}{% endpartialdef %}
 {% with urgent=problems|urgent rest=problems|not_urgent %}
 {% if urgent %}
 {% card css="problems problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
   <h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
-  {% include "partials/_work_queue.html" with items=urgent grouped=True here=True only %}
+  {% include "partials/_work_queue.html" with items=urgent grouped=True here=True fold=True only %}
 {% endcard %}
 {% endif %}
 {% if rest %}

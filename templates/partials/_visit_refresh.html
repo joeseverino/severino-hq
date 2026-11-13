@@ -11,13 +11,13 @@ holds. It is an ask (partials/_ask.html) nobody presses: the same answer, the
 same following. What it read is swapped into the page in place, everything
 but itself, so the page never reloads or jumps under the reader.
 
-page.html and the dashboard draw it. A page's note stands beside the ask,
-a child of the content the refresh swaps with the rest, and names the form it
-speaks for, so the new note finds the form by that name; the stylesheet sets
-it in the band under the bar, under the person's control. A region that fills
-itself (`refresh="[data-connection-panel]"`, also shown in a dialog with no
-head) holds its note, and is fetched again from its own address when the
-reading lands.
+page.html and the dashboard draw it. A page's note (`#note`) ends the head's
+first line, the trail's or the dashboard's date, so it takes no line of its
+own. It names the form it speaks for, so it stands apart from the ask, in the
+head the refresh swaps with the rest, and the new note finds the form by that
+name. A region that fills itself (`refresh="[data-connection-panel]"`, also
+shown in a dialog with no head) holds its note, and is fetched again from its
+own address when the reading lands.
 {% endcomment %}
 <div class="ask ask-quiet" data-ask data-ask-state="idle" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
   <form method="post" action="{% url 'control_plane:visit' %}" data-ask-auto hidden{% if not refresh %} id="page-visit"{% endif %}>
@@ -27,4 +27,4 @@ reading lands.
   </form>
   {% if refresh %}<output class="visit-status" data-ask-note hidden></output>{% endif %}
 </div>
-{% if not refresh %}<output class="visit-status" form="page-visit" data-ask-note></output>{% endif %}
+{% partialdef note %}<output class="visit-status" form="page-visit" data-ask-note></output>{% endpartialdef %}

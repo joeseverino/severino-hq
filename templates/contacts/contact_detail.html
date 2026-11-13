@@ -37,14 +37,7 @@
 {% endsection %}
 
 {% section "Your notes" %}
-  <form method="post" class="form">
-    {% write_token %}
-    {% include "partials/_form_errors.html" %}
-    {{ form }}
-    <div class="form-actions">
-      {% if gap %}<button type="submit" class="primary" disabled>Save note</button> {% include "partials/_write_gap.html" %}{% else %}<button type="submit" class="primary">Save note</button>{% endif %}
-    </div>
-  </form>
+  {% include "partials/_form.html" with form=form verb="Save note" gap=gap %}
 {% endsection %}
 </div>
 {% endblock %}

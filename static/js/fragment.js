@@ -682,6 +682,10 @@ const hqFragment = (() => {
     const action = submitter?.hasAttribute("formaction") ? submitter.formAction : form.action;
     const url = posting ? action : `${action.split("?")[0]}?${new URLSearchParams(body)}`;
     const pressed = submitter && !form.contains(submitter) ? submitter : null;
+    // The one form a press posts was drawn with the page's first address; a
+    // region answered in place since may have moved it (a month paged), and
+    // the press comes back to where the reader is now.
+    if (pressed && body.has("next")) body.set("next", window.location.pathname + window.location.search);
     // A press's region is the page's, whose status lines are other forms'.
     const status =
       form.querySelector("[data-fragment-status]") || (pressed ? null : region.querySelector("[data-fragment-status]"));

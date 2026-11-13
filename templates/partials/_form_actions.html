@@ -2,7 +2,9 @@
 The closing row of every form HQ draws, so each ends the same way: its one
 primary verb (`verb`, from the view: the create command's words, or Save
 changes), Cancel back to `cancel_url`, and `note`, what saving does where the
-page says so.
+page says so. Where the connection cannot make the change (`gap`, an
+`adoption.WriteGap`), the verb is drawn unusable and what it needs stands
+beside it (partials/_write_gap.html).
 
 A switch is pressed as the words that set it (`choices`, each a value and its
 words, posted as `choice_field`), and only the one of a single choice is
@@ -16,9 +18,10 @@ the bottom of the screen once the form has changed (pages.css).
   {% if choices %}
     {% for value, words in choices %}<button class="btn{% if forloop.length == 1 %} primary{% endif %}" type="submit" name="{{ choice_field }}" value="{{ value }}">{{ words|breakable }}</button>{% endfor %}
   {% else %}
-    <button class="btn primary" type="submit">{{ verb|breakable }}</button>
+    <button class="btn primary" type="submit"{% if gap %} disabled{% endif %}>{{ verb|breakable }}</button>
   {% endif %}
-  {% if cancel_url %}<a class="btn" href="{{ cancel_url }}"{% if live %} data-live-cancel{% endif %}{% if in_place %} data-fragment-target=""{% endif %}>Cancel</a>{% endif %}
+  {% if gap %}{% include "partials/_write_gap.html" with gap=gap only %}{% endif %}
+  {% if cancel_url %}<a class="btn" href="{{ cancel_url }}"{% if live %} data-live-cancel{% endif %}{% if in_place is True %} data-fragment-target=""{% endif %}>Cancel</a>{% endif %}
   {% if note %}<span class="muted form-actions-note">{{ note|breakable }}</span>{% endif %}
   {% if live %}
     <span class="muted form-actions-note" data-fragment-status role="status"></span>

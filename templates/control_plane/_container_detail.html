@@ -73,7 +73,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
 <div class="section-flow">
 {% with chain=item.supply_chain standing=item.standing %}
 {% section "Source" id="supply-chain" %}
-  {% include "partials/_standard_gaps.html" with posture=chain %}
+  {% if chain.gaps %}{% include "partials/_work_queue.html" with items=chain.gaps grouped=True here=True dense=True only %}{% endif %}
   {% facts %}
     {% fact "Built from" %}<span class="prose">{% if standing.source|web_url %}{% entity standing.source|outside label=standing.upstream %} <span class="muted">{{ standing.source_known_by|breakable }}</span>{% elif edit_url %}<a href="{{ edit_url }}">Name its source repository</a><span class="muted">{% dot %}the image does not say</span>{% else %}<span class="muted">The image does not say.</span>{% endif %}</span>{% endfact %}
     {% if standing.commit_url or standing.provenance.builder or standing.built_on %}{% fact "Built" %}<span class="prose">{% if standing.commit_url|web_url %}<span class="muted">at</span> {% entity standing.commit_url|outside code=True label=standing.provenance.revision|slice:":7" %} {% endif %}{% if standing.provenance.builder|web_url %}<span class="muted">by</span> {% entity standing.provenance.builder|outside label="a workflow run" %} {% endif %}{% if standing.built_on %}<span class="muted">on</span> {% for base in standing.built_on %}<code>{{ base|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}</span>{% endfact %}{% endif %}
@@ -86,7 +86,7 @@ standard, with what it uses beside its limits. Each said once; the band above ha
 
 {% with posture=item.posture %}
 {% section "Runtime" id="how-it-runs" %}
-  {% include "partials/_standard_gaps.html" with posture=posture %}
+  {% if posture.gaps %}{% include "partials/_work_queue.html" with items=posture.gaps grouped=True here=True dense=True only %}{% endif %}
   {% with patch=item.hardening %}{% if patch.any %}
   <div id="hardening" class="hardening-patch">
     {% if patch.yaml %}

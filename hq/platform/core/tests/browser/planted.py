@@ -132,9 +132,9 @@ PLANTS = {
     ),
     # An item's meaning held to a measure, an empty band between it and its buttons.
     "short of its buttons": Plant(
-        '<ul class="attention-list"><li class="attention-row" data-attention-item><div class="attention-body">'
-        '<p class="attention-detail" style="max-inline-size: 8rem">Example</p></div>'
-        '<div class="attention-end"><a class="btn" href="/">Example</a></div></li></ul>'
+        '<table class="data-table queue-table"><tbody><tr class="queue-row" data-attention-item>'
+        '<td class="queue-what"><p class="attention-detail" style="max-inline-size: 8rem">Example</p></td>'
+        '<td class="queue-act"><a class="btn" href="/">Example</a></td></tr></tbody></table>'
     ),
     # A name in a sentence cut at a cap, as a cell cuts its own identifier.
     "cut code in text": Plant(

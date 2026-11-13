@@ -8,4 +8,4 @@ region's own); the form says where to come back to (`next`), the page with
 the editor closed, and its Cancel closes it there.
 {% endcomment %}
 <a id="row-{{ slug }}-edit" href="{% if open %}{{ close_url }}{% else %}{{ open_url }}{% endif %}" aria-expanded="{% if open %}true{% else %}false{% endif %}"{% if open %} aria-controls="row-{{ slug }}"{% endif %} data-row-edit data-fragment-target="">{{ label|breakable }}</a>
-{% if open %}<div class="row-editor" id="row-{{ slug }}">{% include "partials/_form.html" with form=form action=action verb=verb cancel_url=close_url next=close_url in_place=True note="" choices="" choice_field="" bar="" fields="" table_body="" %}</div>{% endif %}
+{% if open %}<div class="row-editor" id="row-{{ slug }}">{% include "partials/_form.html" with form=form action=action verb=verb cancel_url=close_url next=close_url in_place=True note="" choices="" choice_field="" bar="" fields="" table_body="" gap="" hooks="" %}</div>{% endif %}

@@ -915,8 +915,8 @@ A test that posts a form without opening its page first sends
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
 | `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
-| `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
-| `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
+| `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `gap`, `hooks`, `note`, `verb` | `action`, `fields`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
+| `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
 | `partials/_icon.html` | nothing | `name` | One of the host's icons, by `name`, the height of the text beside it. |
 | `partials/_insight_grid.html` | `items` | `label` | Readings that need interpreting, each with its next step. |
@@ -945,6 +945,7 @@ Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`
 | a fold | `{% section "Heading" fold=True %}`body`{% endsection %}` |
 | a form that writes | `{% include "partials/_form.html" %}`, or `{% post_button %}` for a single verb |
 | a heading | the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page |
+| a list of findings | `{% include "partials/_work_queue.html" with items=... %}` from the queue's items (hq_sdk.ui.Insight), with dense=True for problems inside a section |
 | a list of rows | `{% include "partials/_record_list.html" %}` from hq_sdk.ui.ListRow |
 | a notice | `{% notice %}` |
 | a row's actions | `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell |

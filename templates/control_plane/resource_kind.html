@@ -4,15 +4,5 @@
 Listed from the provider registry, so a provider added to it appears here with
 its own name and description: no edit to this page.
 {% endcomment %}
-<div class="control-summary">
-  {% for provider in providers %}
-    <a class="control-card kind-choice" href="{% url 'control_plane:create' %}?kind={{ provider.kind }}">
-      <strong>{{ provider.label|breakable }}</strong>
-      <span class="kind-choice-summary">{{ provider.summary|breakable }}</span>
-      {% if provider.public_effect %}
-        {% status "Visible on the internet" tone="attention" %}
-      {% endif %}
-    </a>
-  {% endfor %}
-</div>
+{% include "partials/_record_list.html" with rows=choices label="Things to add" only %}
 {% endblock %}

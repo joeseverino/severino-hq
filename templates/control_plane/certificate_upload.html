@@ -21,15 +21,8 @@
     key, so it cannot accept a private key. A release of HQ's host makes it.
   {% endnotice %}
 {% else %}
-  <form method="post" class="form">
-    {% write_token %}
-    {% include "partials/_form_errors.html" %}
-    {{ form }}
-    <div class="form-actions">
-      <button type="submit" class="primary">Upload</button>
-      <a class="btn" href="{% url 'control_plane:detail' resource.key %}">Cancel</a>
-    </div>
-  </form>
+  {% url 'control_plane:detail' resource.key as cancel_url %}
+  {% include "partials/_form.html" with form=form verb="Upload" cancel_url=cancel_url %}
 
   <p class="muted">
     HQ checks that the certificate and key match and have not expired. The key

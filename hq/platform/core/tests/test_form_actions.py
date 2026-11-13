@@ -29,17 +29,9 @@ ONE_VERB = frozenset(name for name, shape in PARTS if shape == "a form that writ
 # partials/_form.html; this only falls.
 OWN_ROW_TODAY = frozenset(
     {
-        "auth/login.html",
         "calendars/calendar.html",
-        "contacts/contact_detail.html",
-        "control_plane/certificate_upload.html",
         "control_plane/service_start.html",
         "control_plane/zone_mail.html",
-        "core/_public_address.html",
-        "core/agent_policy.html",
-        "core/dashboard_glance_settings.html",
-        "docs_index/import.html",
-        "partials/approval_card.html",
     }
 )
 

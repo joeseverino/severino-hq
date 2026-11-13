@@ -2,30 +2,13 @@
 {% load nav_tags %}
 {% block page %}
 {% if tailnet.known %}
-  <div class="control-summary">
-    <div class="control-metric">
-      <span class="control-label">Grants</span>
-      <strong>{{ tailnet.policy.grants|length }}</strong>
-    </div>
-    {% if tailnet.policy.acls %}
-      <div class="control-metric">
-        <span class="control-label">ACL rules</span>
-        <strong>{{ tailnet.policy.acls|length }}</strong>
-      </div>
-    {% endif %}
-    <div class="control-metric">
-      <span class="control-label">Groups</span>
-      <strong>{{ tailnet.policy.groups|length }}</strong>
-    </div>
-    <div class="control-metric">
-      <span class="control-label">Tags</span>
-      <strong>{{ tailnet.policy.tags|length }}</strong>
-    </div>
-    <div class="control-metric">
-      <span class="control-label">Policy tests</span>
-      <strong>{{ tailnet.policy.tests|length }}</strong>
-    </div>
-  </div>
+  {% facts layout="band" label="Tailnet policy" %}
+    {% fact "Grants" value=tailnet.policy.grants|length %}
+    {% if tailnet.policy.acls %}{% fact "ACL rules" value=tailnet.policy.acls|length %}{% endif %}
+    {% fact "Groups" value=tailnet.policy.groups|length %}
+    {% fact "Tags" value=tailnet.policy.tags|length %}
+    {% fact "Policy tests" value=tailnet.policy.tests|length %}
+  {% endfacts %}
 
   {% comment %}The settings and the grants share a row.{% endcomment %}
   <div class="section-flow">

@@ -101,7 +101,14 @@ class DashboardQueueTests(TestCase):
         (card,) = select(response, "data-triage-routes")
         self.assertEqual(card.attrs.get("aria-label"), "Needs you")
         inside = within(response, "data-triage-routes")
-        self.assertEqual([element for element in inside if element.tag in {"h1", "h2", "h3", "h4", "h5", "h6"}], [])
+        # A row's urgency opens what raised it in a popover, titled as a dialog is; that is no heading row.
+        headings = [
+            element
+            for element in inside
+            if element.tag in {"h1", "h2", "h3", "h4", "h5", "h6"}
+            and not any("popover" in ancestor.attrs for ancestor in element.ancestors)
+        ]
+        self.assertEqual(headings, [])
 
     def test_a_queue_with_nothing_urgent_is_only_the_count(self):
         calm = [item for item in work_queue() if item["status"] != "serious"]

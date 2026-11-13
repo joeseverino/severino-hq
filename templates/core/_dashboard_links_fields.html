@@ -1,0 +1,12 @@
+{% comment %}The dashboard links form's fields (core/_dashboard_links_form.html): a box to tick for each outward link.{% endcomment %}
+<ul class="ext-choices">
+  {% for choice in external_choices %}
+    <li>
+      <label>
+        <input type="checkbox" name="href" value="{{ choice.href }}"{% if choice.chosen %} checked{% endif %}>
+        <span class="ext-choice-label">{{ choice.label|breakable }}</span>
+        <span class="ext-choice-sub muted">{{ choice.sub|breakable }}</span>
+      </label>
+    </li>
+  {% endfor %}
+</ul>

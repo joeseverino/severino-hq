@@ -55,28 +55,26 @@ is open.
 
 {% if missing_facets or service.origin.parked or service.origin and not service.origin.external and not service.origin.known %}
 {% section "Not set up" id="parts" %}
-<div class="control-summary">
-  {% comment %}
-  The headline is the value, not the word "Declared". Each row comes from the
-  provider's own readout, so a new provider describes itself here without this
-  template learning anything about it.
-  {% endcomment %}
+{% comment %}
+The headline is the value, not the word "Declared". Each line comes from the
+provider's own readout, so a new provider describes itself here without this
+template learning anything about it. Each branch is one fact; the lines its
+readings add (one per reading kind, named unless the headline already is it)
+close every one.
+{% endcomment %}
+{% partialdef reading_lines %}{% for line in facet.reading_lines %}<small>{% if facet.present or facet.observed or not forloop.first %}{{ line.label|breakable }} {% endif %}{% if line.issued %}{{ line.detail|breakable }}{% else %}{% for link in line.entities %}{% entity link mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endif %}{% if line.expiry %}{% dot %}expires {{ line.expiry|breakable }}{% endif %}{% if line.stale %} {% status "Out of date" tone="attention" %}{% endif %}</small>{% endfor %}{% endpartialdef %}
+{% if missing_facets %}{% facts layout="band" label="Missing parts" %}
   {% for facet in missing_facets %}
-    <div class="control-metric">
-      <span class="control-label">{{ facet.label|breakable }}</span>
-      {% comment %}
-      A facet HQ both declares and watches says it once. The container's key is
-      its machine and its name joined, so printing it under them repeats both,
-      and the state comes from the sweep, because a declaration nothing
-      reconciles observes nothing.
-      {% endcomment %}
-      {% if facet.present and facet.observed %}
-        {% with claim=facet.claims.0 %}
-          <strong>{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}</strong>
-          <span class="readout prose">
-            {% entity claim.link code=True label=facet.observed.name %}
-            {% if facet.machine %}on {% entity facet.machine.link %}{% endif %}
-          </span>
+    {% comment %}
+    A facet HQ both declares and watches says it once. The container's key is
+    its machine and its name joined, so printing it under them repeats both,
+    and the state comes from the sweep, because a declaration nothing
+    reconciles observes nothing.
+    {% endcomment %}
+    {% if facet.present and facet.observed %}
+      {% with claim=facet.claims.0 %}
+        {% fact facet.label %}{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}{% detail %}
+          <small class="prose">{% entity claim.link code=True label=facet.observed.name %}{% if facet.machine %} on {% entity facet.machine.link %}{% endif %}</small>
           <details class="control-diagnostics">
             <summary>Running now</summary>
             {% facts %}
@@ -86,69 +84,63 @@ is open.
               {% if facet.observed.stack and facet.observed.stack != facet.observed.name %}{% fact "Compose project" %}<code>{{ facet.observed.stack|breakable }}</code>{% endfact %}{% endif %}
               {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
             {% endfacts %}
-            {% if claim.edit_url %}<span class="readout"><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}{% arrow %}</a></span>{% endif %}
+            {% if claim.edit_url %}<p><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}{% arrow %}</a></p>{% endif %}
           </details>
-        {% endwith %}
-      {% elif facet.present %}
+          {% partial reading_lines %}
+        {% endfact %}
+      {% endwith %}
+    {% elif facet.present %}
+      {% comment %}
+      The first reading of the first claim is the headline; where it runs is
+      said once, as a link, so "what else is on this machine" is one click away.
+      {% endcomment %}
+      {% fact facet.label %}{% with first=facet.claims.0.readings.0 %}{% if first %}{{ first.value|breakable }}{% else %}In HQ{% endif %}{% endwith %}{% detail %}
         {% for claim in facet.claims %}
           {% for reading in claim.readings %}
             {% if forloop.parentloop.first and forloop.first %}
-              <strong>{{ reading.value|breakable }}</strong>
-              {% if reading.drifted %}{% status "Changed outside HQ: HQ expects" reading.desired tone="serious" %}{% endif %}
+              {% if reading.drifted %}<small>{% status "Changed outside HQ: HQ expects" reading.desired tone="serious" %}</small>{% endif %}
             {% else %}
-              <span class="readout"><span class="readout-label">{{ reading.label|breakable }}</span> {{ reading.value|breakable }}{% if reading.drifted %} {% status "HQ expects" reading.desired tone="serious" %}{% endif %}</span>
+              <small>{{ reading.label|breakable }} {{ reading.value|breakable }}{% if reading.drifted %} {% status "HQ expects" reading.desired tone="serious" %}{% endif %}</small>
             {% endif %}
-          {% empty %}
-            <strong>In HQ</strong>
           {% endfor %}
-          <span class="readout">
-            {% entity claim.within_service code=True %}
-            {% status claim.health.label tone=claim.health.state %}
-            {% if claim.edit_url %}<a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>{% endif %}
-          </span>
+          <small>{% entity claim.within_service code=True %} {% status claim.health.label tone=claim.health.state %}{% if claim.edit_url %} <a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>{% endif %}</small>
         {% endfor %}
-        {% comment %}
-        Where it runs, once, as a link, so "what else is on this machine" is one
-        click away.
-        {% endcomment %}
-        {% if facet.machine %}
-          <span class="readout"><span class="readout-label">On</span> {% entity facet.machine.link %}</span>
-        {% endif %}
-      {% elif facet.readings %}
-        {% comment %}Observed through a reading joined to the name. Not a declaration. Its lines follow.{% endcomment %}
-        <strong>{{ facet.reading_lines.0.label|breakable }}</strong>
-      {% elif service.origin.external and facet.routes %}
-        {% comment %}
-        Not a gap. A name resolving straight to something outside is already
-        routed, and nothing on this network should answer for it: saying "nothing
-        supplies this" beside a card naming what does, or offering a proxy in front
-        of a site that must not have one, would both be wrong.
+        {% if facet.machine %}<small>On {% entity facet.machine.link %}</small>{% endif %}
+        {% partial reading_lines %}
+      {% endfact %}
+    {% elif facet.readings %}
+      {% comment %}Observed through a reading joined to the name. Not a declaration. Its lines follow.{% endcomment %}
+      {% fact facet.label %}{{ facet.reading_lines.0.label|breakable }}{% detail %}{% partial reading_lines %}{% endfact %}
+    {% elif service.origin.external and facet.routes %}
+      {% comment %}
+      Not a gap. A name resolving straight to something outside is already
+      routed, and nothing on this network should answer for it: saying "nothing
+      supplies this" beside a fact naming what does, or offering a proxy in front
+      of a site that must not have one, would both be wrong.
 
-        Named by what it would otherwise have taken, rather than by whoever
-        answers instead. Every facet that routes takes this branch, so naming
-        the operator here prints one fact once per card. Who serves it belongs
-        in one place: the note below the row.
+      Named by what it would otherwise have taken, rather than by whoever
+      answers instead. Every facet that routes takes this branch, so naming
+      the operator here prints one fact once per facet. Who serves it belongs
+      in one place: the note below the band.
 
-        What differs per card is what is not needed, and each facet already
-        says that: its own providers are the things it would otherwise want.
-        {% endcomment %}
-        <strong>{% status "Not needed" tone="unknown" pill=False %}</strong>
-        {% for kind, label in facet.declarable %}
-          <span class="readout">No {{ label|breakable }} needed.</span>
-        {% endfor %}
-        {% if facet.id == runtime_facet and not service.provider_answers %}
-          <span class="readout">Served by <strong>{{ service.origin.headline|breakable }}</strong> from <code>{{ service.origin.address|breakable }}</code></span>
-        {% endif %}
-      {% elif facet.observed %}
-        {% comment %}
-        Found, not declared. Two lines and a disclosure: the state and the name
-        are what a glance is for, and everything else is what you open when the
-        glance was not reassuring.
+      What differs per facet is what is not needed, and each facet already
+      says that: its own providers are the things it would otherwise want.
+      {% endcomment %}
+      {% fact facet.label %}{% status "Not needed" tone="unknown" pill=False %}{% detail %}
+        {% for kind, label in facet.declarable %}<small>No {{ label|breakable }} needed.</small>{% endfor %}
+        {% if facet.id == runtime_facet and not service.provider_answers %}<small>Served by <strong>{{ service.origin.headline|breakable }}</strong> from <code>{{ service.origin.address|breakable }}</code></small>{% endif %}
+        {% partial reading_lines %}
+      {% endfact %}
+    {% elif facet.observed %}
+      {% comment %}
+      Found, not declared. Two lines and a disclosure: the state and the name
+      are what a glance is for, and everything else is what you open when the
+      glance was not reassuring.
 
-        Never an Edit link. HQ does not manage this and must not imply it could.
-        {% endcomment %}
-        <strong>{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}</strong>
-        <span class="readout prose"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</span>
+      Never an Edit link. HQ does not manage this and must not imply it could.
+      {% endcomment %}
+      {% fact facet.label %}{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}{% detail %}
+        <small class="prose"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</small>
         <details class="control-diagnostics">
           <summary>Running now</summary>
           {% facts %}
@@ -167,8 +159,7 @@ is open.
             Portainer to stand up its own copy of something already serving,
             which, for the container running this page, means HQ redeploying
             itself.
-            {% endcomment %}
-            {% comment %}
+
             Defining it and cycling it are different claims. HQ can start, stop
             and restart any container, because those are Docker's verbs; it can
             only redefine one Portainer created, because everything else is
@@ -179,47 +170,39 @@ is open.
             {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer.{% for kind, label in facet.declarable %} <a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label|breakable }}{% arrow %}</a>{% endfor %}{% else %}A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.{% endif %}{% endfact %}
           {% endfacts %}
         </details>
-      {% elif read_only and facet.id == runtime_facet and hq_machine %}
-        {% comment %}HQ's own service: derived, never declared, never offered anything.{% endcomment %}
-        <strong>{{ hq_label|breakable }}</strong>
-        <span class="readout"><span class="readout-label">Runs on</span> {% entity hq_machine %}</span>
-      {% elif facet.not_visible and not facet.reading_lines %}
-        <strong>{% status "Not visible" tone="unknown" pill=False %}</strong>
-        <span>{% status facet.not_visible tone="unknown" pill=False %}</span>
-        {% if not read_only %}{% for kind, label in facet.declarable %}
-          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></span>
-        {% endfor %}{% endif %}
-      {% elif read_only %}
-        <strong>{% status "Not set up" tone="unknown" pill=False %}</strong>
-      {% else %}
-        <strong>{% status "Not set up" tone="unknown" pill=False %}</strong>
-        <span>{% status "HQ has none for" service.hostname|add:"." tone="unknown" pill=False %}</span>
-        {% comment %}
-        Named by the provider's own label. The bare kind reads as
-        "Add cloudflare.dns_record": an identifier where a sentence belongs.
-        The hostname rides along, so the form opens already knowing which name
-        it is being asked about.
-        {% endcomment %}
-        {% for kind, label in facet.declarable %}
-          <span class="readout"><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></span>
-        {% endfor %}
-        {% comment %}
-        Named, not silently dropped. An option disappearing without explanation
-        reads as a missing feature; the sentence turns it into an answer, and
-        each one names the alternative that does work.
-        {% endcomment %}
-        {% for label, reason in facet.unavailable %}
-          <span class="readout muted"><span class="readout-label">{{ label|breakable }}</span> {{ reason|breakable }}</span>
-        {% endfor %}
-      {% endif %}
-      {% comment %}One line per reading kind. The kind is named unless the headline above already is it.{% endcomment %}
-      {% for line in facet.reading_lines %}
-        <span class="readout">{% if facet.present or facet.observed or not forloop.first %}<span class="readout-label">{{ line.label|breakable }}</span> {% endif %}{% if line.issued %}{{ line.detail|breakable }}{% else %}{% for link in line.entities %}{% entity link mark=forloop %}{% if not forloop.last %}{% endif %}{% endfor %}{% endif %}{% if line.expiry %}{% dot %}expires {{ line.expiry|breakable }}{% endif %}{% if line.stale %} {% status "Out of date" tone="attention" %}{% endif %}</span>
-      {% endfor %}
-    </div>
+        {% partial reading_lines %}
+      {% endfact %}
+    {% elif read_only and facet.id == runtime_facet and hq_machine %}
+      {% comment %}HQ's own service: derived, never declared, never offered anything.{% endcomment %}
+      {% fact facet.label %}{{ hq_label|breakable }}{% detail %}<small>Runs on {% entity hq_machine %}</small>{% partial reading_lines %}{% endfact %}
+    {% elif facet.not_visible and not facet.reading_lines %}
+      {% fact facet.label %}{% status "Not visible" tone="unknown" pill=False %}{% detail %}
+        <small>{% status facet.not_visible tone="unknown" pill=False %}</small>
+        {% if not read_only %}{% for kind, label in facet.declarable %}<small><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}{% endif %}
+      {% endfact %}
+    {% elif read_only %}
+      {% fact facet.label %}{% status "Not set up" tone="unknown" pill=False %}{% detail %}{% partial reading_lines %}{% endfact %}
+    {% else %}
+      {% comment %}
+      Each offer is named by the provider's own label. The bare kind reads as
+      "Add cloudflare.dns_record": an identifier where a sentence belongs.
+      The hostname rides along, so the form opens already knowing which name
+      it is being asked about.
 
+      An option that is not available is named, not silently dropped. An
+      option disappearing without explanation reads as a missing feature; the
+      sentence turns it into an answer, and each one names the alternative
+      that does work.
+      {% endcomment %}
+      {% fact facet.label %}{% status "Not set up" tone="unknown" pill=False %}{% detail %}
+        <small>{% status "HQ has none for" service.hostname|add:"." tone="unknown" pill=False %}</small>
+        {% for kind, label in facet.declarable %}<small><a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Add {{ label|breakable }}{% arrow %}</a></small>{% endfor %}
+        {% for label, reason in facet.unavailable %}<small>{{ label|breakable }} {{ reason|breakable }}</small>{% endfor %}
+        {% partial reading_lines %}
+      {% endfact %}
+    {% endif %}
   {% endfor %}
-</div>
+{% endfacts %}{% endif %}
 
 {% comment %}
 What serves the name is in Relationships. Two things are said here because no

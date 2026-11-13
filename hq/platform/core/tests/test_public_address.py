@@ -58,8 +58,8 @@ class PublicAddressViewTests(TestCase):
             response = self.client.get(self.url, {"address": ADDRESS})
 
         self.assertIn("host.example.net", text(response))
-        self.assertContains(response, "Look up again")
-        self.assertContains(response, "csrfmiddlewaretoken")
+        (button,) = select(response, "formaction", self.url)
+        self.assertEqual((button.words, button.attrs["value"]), ("Look up again", ADDRESS))
 
     def test_a_get_with_nothing_stored_writes_nothing_and_offers_the_lookup(self):
         resolver, registry = nobody_asked()
@@ -67,14 +67,14 @@ class PublicAddressViewTests(TestCase):
             response = self.client.get(self.url, {"address": ADDRESS})
 
         self.assertContains(response, "Not looked up yet")
-        self.assertContains(response, "data-public-address-lookup")
+        self.assertTrue(select(response, "formaction", self.url))
         self.assertFalse(AddressReading.objects.exists())
 
     def test_a_non_routable_address_is_answered_locally_with_no_lookup_offered(self):
         response = self.client.get(self.url, {"address": "10.9.9.9"})
 
         self.assertContains(response, "private address")
-        self.assertNotContains(response, "data-public-address-lookup")
+        self.assertFalse(select(response, "formaction", self.url))
 
     def test_a_malformed_address_is_refused(self):
         response = self.client.get(self.url, {"address": "not-an-address"})

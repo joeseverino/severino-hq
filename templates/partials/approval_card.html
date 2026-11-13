@@ -39,19 +39,10 @@
   {% endif %}
 
   {% if entry.held.state == 'pending' %}
+    {% url 'control_plane:approval_decision' entry.held.id as decision_url %}
     <div class="approval-actions">
-      <form action="{% url 'control_plane:approval_decision' entry.held.id %}" method="post">
-        {% write_token %}
-        <input type="hidden" name="decision" value="approve">
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        <button type="submit" class="btn primary">Approve</button>
-      </form>
-      <form action="{% url 'control_plane:approval_decision' entry.held.id %}" method="post">
-        {% write_token %}
-        <input type="hidden" name="decision" value="reject">
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        <button type="submit" class="btn">Reject</button>
-      </form>
+      {% post_button "Approve" decision_url name="decision" value="approve" css="btn primary" %}
+      {% post_button "Reject" decision_url name="decision" value="reject" %}
     </div>
   {% endif %}
 {% endcard %}

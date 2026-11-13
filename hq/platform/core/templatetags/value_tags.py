@@ -397,9 +397,16 @@ def cell_line(text, url=""):
     for its whole length around the box that cuts it (``.cut``, figures.css),
     and a cut one reads whole as any cut value does (tables.js, ``markCut``)."""
 
+    drawn = breakable(text)
+    # A name brings its own box and strut; words are cut by the line's box.
+    inside = (
+        drawn
+        if drawn.startswith('<span class="token" data-sole')
+        else format_html('<span class="cut">{}</span>', drawn)
+    )
     if url:
-        return format_html('<a class="cell-line" href="{}"><span class="cut">{}</span></a>', url, breakable(text))
-    return format_html('<span class="cell-line"><span class="cut">{}</span></span>', breakable(text))
+        return format_html('<a class="cell-line" href="{}">{}</a>', url, inside)
+    return format_html('<span class="cell-line">{}</span>', inside)
 
 
 def _viewer(context):

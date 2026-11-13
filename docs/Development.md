@@ -156,6 +156,34 @@ On a pull request CI's **Ready** job needs every other job and fails when one
 did not pass. It is the one check the `main` ruleset requires, so a gate added
 to a job never touches the repository's settings (`VerdictNeedsTests`).
 
+### What a pull request runs
+
+A pull request runs Lint, Test, Test's Go tests and Browser only where its
+change can affect them, and Ready counts a leg left out as passed. Each leg
+declares the files it reads once, as the `sources` of the task its job runs:
+`lint` in `mise.toml`, `test` in `mise-tasks/test/_default`, `test:controller`
+in `mise-tasks/test.toml` and `browser` in `mise-tasks/browser`. CI's **Legs**
+job runs `tools/pipeline/legs.py`, which asks mise's `--affected` which of
+those tasks the change touches. A changed path that no leg's sources name runs
+every leg, and `test_legs` fails on any tracked file in that state, so a new
+top-level path is placed in the sources of each leg that reads it. Scan,
+Build, Build verify and Composition run on every pull request.
+
+To see what a change would run, against the base it merges into:
+
+```sh
+python3 -m tools.pipeline.legs origin/main HEAD
+```
+
+A push to `main` runs every leg. One whose pull request proved its tree
+promotes that image, and skips Lint, Test and Browser only when the pull
+request left none of them out ([Checked once](Deployment.md#checked-once)).
+
+Selection by GitHub's `on.pull_request.paths` gates a whole workflow, never a
+job, and a required check whose workflow never starts holds the merge, so it
+cannot serve Ready. A path-filter action would restate the paths the tasks
+already declare.
+
 `mise run check` answers "will the pipeline accept it?" and keeps going past a
 failure to name every gate that failed.
 

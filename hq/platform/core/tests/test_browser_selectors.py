@@ -131,6 +131,12 @@ def markup() -> tuple[set[str], set[str], str]:
         text.append(opening)
         for value in re.findall(r'\bclass="([^"]*)"', opening):
             classes.update(value.split())
+    # The notice tag writes its class in code too: each tone a script clones
+    # is drawn by the tag in the frames every page carries.
+    frames = engines["django"].get_template("partials/_notice_frames.html").render({})
+    text.append(frames)
+    for value in re.findall(r'\bclass="([^"]*)"', frames):
+        classes.update(value.split())
     for library in TAG_LIBRARIES.glob("*.py"):
         source = library.read_text(encoding="utf-8")
         # A tag library writes markup too: its attributes are rendered.

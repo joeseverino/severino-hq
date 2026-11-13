@@ -69,7 +69,7 @@
   width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);
 }
 /* A value no longer than the floor (`data-short`, line_breaks._short) holds out for all of it and no more, so no gulf follows it; the floor is on the box that cuts it. */
-.data-table tr:not(.is-expanded) td :is(:has(> .token[data-short]), .cell-line:has(> .cut > .token[data-short]), .name-line > strong:has(> [data-entity] > .token[data-short])):not(.muted *) { --cut-floor: max-content; }
+.data-table tr:not(.is-expanded) td :is(:has(> .token[data-short]), .name-line > strong:has(> [data-entity] > .token[data-short])):not(.muted *) { --cut-floor: max-content; }
 .data-table th, .data-table td { padding: var(--row-pad) var(--space-6); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); }
 .data-table thead th { background: var(--surface-2); font-size: var(--text-xs); line-height: var(--heading-line); color: var(--muted); font-weight: 600; }
 /* Sticky heading: the region is no scroll container (its table fits, so no `auto`), so the heading pins to the viewport under the chrome; `overflow: hidden` on the table, a transparent sticky cell or collapsed borders would each silently break it, and `overscroll-behavior` would trap the wheel. */
@@ -247,51 +247,51 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 /* A panel shown from the cell is not the column: there the token sets the track, and only the column holds out for the longest piece. */
 .data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *):has(> .token[data-sole]) {
   grid-template-columns: minmax(min-content, max-content);
-  & > .token[data-sole] { contain: inline-size; justify-self: stretch; }
+  & > .token[data-sole] > .cut { contain: inline-size; justify-self: stretch; }
 }
 /* The strut is the name twice, unseen: one holds out for the longest piece, one asks for the whole name, so a cap on the hold never caps the ask. */
 .strut { display: none; }
-.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut { display: contents; }
-.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut::before,
-.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut::after {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut { display: contents; }
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::before,
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::after {
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
   content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden; white-space: normal;
   padding-inline: var(--space-2) calc(var(--space-2) + 1px);
 }
-.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut::before {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::before {
   overflow-wrap: normal;
   /* No piece holds out for more than half its region: one longer breaks where it must (line_breaks.breakable), so the table still fits. */
   max-width: 50cqi;
 }
-.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .strut::after { overflow-wrap: anywhere; }
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::after { overflow-wrap: anywhere; }
 /* A narrow box has no width to hold out with (`--cut-floor`), read from the table's mark since a style query does not reach a pseudo-element in every engine. */
-.data-table[data-narrow] td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *) > .strut::before { display: none; }
+.data-table[data-narrow] td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *) > .token[data-sole] > .strut::before { display: none; }
 /* Outside it a closed row's chip holds out for its whole name, up to half the region, so it is cut only once its table has no column left to give way. One in a context line (`.muted`) holds out only for its longest piece, as a name there does (figures.css): the row's name sizes the column. */
-.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *, .muted *) > .strut::before { white-space: nowrap; }
+.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *, .muted *) > .token[data-sole] > .strut::before { white-space: nowrap; }
 /* With its cuts lifted an opened row lays an identifier out as a page does (base.css): a part that fits moves whole, and breaks inside only when longer than its line. */
 .data-table > tbody > tr.is-expanded > td .whole:not([data-cell~=name] *, [data-cell~=data] *, .visually-hidden *) { display: inline-block; }
 /* In a chip such a part is set by its top, so a part that wraps leaves the chip's first line on the baseline its line shares (a change's arrow beside it): an inline block's baseline is its last line, and WebKit has no `baseline-source`. The chip's token sets every part in its own face, so the top puts the first line where the baseline would. */
 .data-table > tbody > tr.is-expanded > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole) > .token[data-sole] .whole { vertical-align: top; }
 /* A box that cut a value is as wide as its track, never its content, or a run with no seam would push past the column. */
-.data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole) > .token[data-sole], [data-entity] > :is(.token[data-sole], .cut)) { width: 100%; }
+.data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole), [data-entity], .cell-line) > .token[data-sole] > .cut { width: 100%; }
 /* A row header's one-token name asks for its whole length and fills the room its row has, so the header gives way with the other columns; past it the chip is cut, and the opened row shows it whole. A grid, so the chip sits on its token's baseline as a cell's does. */
 .data-table th[scope=row] > code:has(> .token[data-sole]) {
   display: inline-grid; grid-template-columns: minmax(0, max-content);
   max-width: 100%; padding: 0; background: none; vertical-align: baseline;
 }
-.data-table th[scope=row] > code > .token[data-sole] .whole { display: contents; }
+.data-table th[scope=row] > code > .token[data-sole], .data-table th[scope=row] > code > .token[data-sole] .whole { display: contents; }
 /* Outside a narrow box a closed row's header holds out for its name up to its column's hold (`--hold`, a share of the region) through its strut, as a cell's chip does: one copy holds out, one asks for the whole name, and the name itself asks nothing. */
 .data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > th[scope=row] > code:has(> .token[data-sole]) {
   grid-template-columns: minmax(min-content, max-content);
-  & > .token[data-sole] { grid-area: 1 / 1; contain: inline-size; justify-self: stretch; }
-  & > .strut { display: contents; }
-  & > .strut::before, & > .strut::after {
+  & > .token[data-sole] > .cut { grid-area: 1 / 1; contain: inline-size; justify-self: stretch; }
+  & > .token[data-sole] > .strut { display: contents; }
+  & > .token[data-sole] > .strut::before, & > .token[data-sole] > .strut::after {
     /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
     content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden;
     padding-inline: var(--space-2) calc(var(--space-2) + 1px);
   }
-  & > .strut::before { grid-area: 2 / 1; white-space: nowrap; max-width: min(var(--identifier-max), var(--hold)); }
-  & > .strut::after { grid-area: 3 / 1; white-space: normal; overflow-wrap: anywhere; }
+  & > .token[data-sole] > .strut::before { grid-area: 2 / 1; white-space: nowrap; max-width: min(var(--identifier-max), var(--hold)); }
+  & > .token[data-sole] > .strut::after { grid-area: 3 / 1; white-space: normal; overflow-wrap: anywhere; }
 }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line, so its column can give way without hiding any of it. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
@@ -408,7 +408,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 @container style(--box: narrow) {
   /* A narrow box has no width to hold out with: a cut value takes what its neighbors leave, so the words beside it keep their lines. */
   .data-table > * { --cut-floor: min(4ch, var(--hold)); }
-  .data-table td :is(:has(> .token[data-short="16"]), .cell-line:has(> .cut > .token[data-short="16"]), .name-line > strong:has(> [data-entity] > .token[data-short="16"])):not(.muted *) { --cut-floor: inherit; }
+  .data-table td :is(:has(> .token[data-short="16"]), .name-line > strong:has(> [data-entity] > .token[data-short="16"])):not(.muted *) { --cut-floor: inherit; }
   .data-table > tbody > tr:not(.row-detail):has(> * .narrow-more) > * > [data-row-toggle] { display: inline-grid; }
   .data-table:has(> tbody > tr > * .narrow-more) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
   /* Touch has no hover title, so in a narrow box an openable table keeps the gutter: a cut value can always be opened. */

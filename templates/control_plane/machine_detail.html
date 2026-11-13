@@ -6,15 +6,9 @@
 
 {% if load_metrics %}
   {% section "Current load" lede=machine.telemetry.summary %}
-    <dl class="machine-telemetry-metrics">
-      {% for metric in load_metrics %}
-        <div title="{{ metric.detail }}">
-          <dt>{{ metric.label|breakable }}</dt>
-          <dd>{{ metric.value|breakable }}</dd>
-          {% if metric.detail %}<span>{{ metric.detail|breakable }}</span>{% endif %}
-        </div>
-      {% endfor %}
-    </dl>
+    {% facts layout="band" %}
+      {% for metric in load_metrics %}{% fact metric.label value=metric.value detail=metric.detail %}{% endfor %}
+    {% endfacts %}
   {% aside %}
     {% if machine.telemetry_observed_at %}
       <span class="muted">{% include "partials/_reading_age.html" with at=machine.telemetry_observed_at only %}</span>

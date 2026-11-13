@@ -162,6 +162,17 @@ class RequestPathTests(TestCase):
         self.assertTrue(ingress.check.step)
         self.assertIn(ingress, found.findings)
 
+    def test_a_finding_is_the_queues_row_with_its_fix_as_what_to_do(self):
+        found = self.walk(a_request(peer=LAPTOP, forwarded=""))
+        ingress = next(hop for hop in found.hops if hop.step == "ingress")
+
+        rows = [row for row in found.finding_rows if row["label"] == ingress.label]
+
+        self.assertEqual(len(found.finding_rows), len(found.findings))
+        (row,) = rows
+        self.assertEqual(row["detail"], ingress.check.detail)
+        self.assertIn(ingress.check.step, str(row["workflow"]))
+
     def test_a_tailnet_address_no_device_holds_is_a_finding(self):
         states = self.checks(a_request(forwarded="100.64.0.99"))
 

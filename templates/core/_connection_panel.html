@@ -10,13 +10,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
 <div class="conn" data-connection-panel data-fragment="{% url 'connection' %}" data-fragment-name="connection">
   {% if ask_readings %}{% include "partials/_visit_refresh.html" with subject="page" name="connection" refresh="[data-connection-panel]" %}{% endif %}
   {% include "partials/_example_connection.html" with notice=True %}
-  {% if request_path.findings %}
-    <div class="conn-findings">
-      {% for hop in request_path.findings %}
-        <p class="conn-agree conn-agree-no"><strong>{{ hop.label|breakable:":" }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>
-      {% endfor %}
-    </div>
-  {% endif %}
+  {% if request_path.findings %}{% card css="problems" %}{% include "partials/_work_queue.html" with items=request_path.finding_rows grouped=True here=True dense=True only %}{% endcard %}{% endif %}
 
   {% comment %}
   The two ends and the link between them, with the verdict on the link.
@@ -155,12 +149,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% endcomment %}
         {% fact "Peered as" %}<details class="conn-more">
             <summary>Both node keys</summary>
-            <dl class="conn-keys">
-              {% for label, key in connection.peer_keys %}
-                <dt>{{ label|breakable }}</dt>
-                <dd><code>{{ key|breakable }}</code></dd>
-              {% endfor %}
-            </dl>
+            {% facts %}
+              {% for label, key in connection.peer_keys %}{% fact label %}<code>{{ key|breakable }}</code>{% endfact %}{% endfor %}
+            {% endfacts %}
             <p class="conn-row-note">Compare with <code>tailscale status</code>.</p>
           </details>{% endfact %}
       {% endif %}

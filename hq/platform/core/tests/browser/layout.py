@@ -56,11 +56,12 @@ _ESCAPES_READ = (SIDEWAYS, ANY_SCROLLER)
 # between the bar and the page: where it stands, how far its end is from the
 # end of the person's control, and where each part of the page is with it
 # silent, saying that, and gone. The note is left saying what it said.
-_PAGE_NOTE = """([noteSelector, barSelector, accountSelector]) => [...document.querySelectorAll(noteSelector)].map((note) => {
-  const bar = document.querySelector(barSelector).getBoundingClientRect();
-  const account = document.querySelector(accountSelector).getBoundingClientRect();
-  const parent = note.parentElement;
-  const parts = () => [...parent.children].filter((part) => part !== note && part.getClientRects().length)
+_PAGE_NOTE = """([noteSelector, contentSelector]) => [...document.querySelectorAll(noteSelector)].map((note) => {
+  const content = document.querySelector(contentSelector);
+  const line = note.parentElement;
+  // Every part of the page but the note, where it lands.
+  const parts = () => [...line.children, ...content.querySelectorAll(':scope > *, :scope > * > *')]
+    .filter((part) => part !== note && part !== line && part.getClientRects().length)
     .map((part) => { const r = part.getBoundingClientRect(); return [r.top, r.left, r.width, r.height].map(Math.round).join(' '); });
   const said = note.textContent;
   note.textContent = '';
@@ -68,13 +69,13 @@ _PAGE_NOTE = """([noteSelector, barSelector, accountSelector]) => [...document.q
   note.textContent = 'Cannot refresh: ' + Array.from({length: 24}, (_, at) => `example reading ${at}`).join(', ') + '.';
   const saying = parts();
   const r = note.getBoundingClientRect();
-  const first = [...parent.children].find((part) => part !== note && part.getClientRects().length);
-  const placed = {top: r.top - bar.bottom, bottom: (first ? first.getBoundingClientRect().top : Infinity) - r.bottom,
-    start: r.left, end: account.right - r.right, lines: note.scrollHeight > note.clientHeight + 0.5};
+  const box = line.getBoundingClientRect();
+  const placed = {top: r.top - box.top, bottom: box.bottom - r.bottom, start: r.left - box.left, end: box.right - r.right,
+    lines: note.scrollHeight > note.clientHeight + 0.5};
   const sibling = note.nextSibling;
   note.remove();
   const gone = parts();
-  parent.insertBefore(note, sibling);
+  line.insertBefore(note, sibling);
   note.textContent = said;
   return {silent, saying, gone, placed};
 })"""
@@ -244,12 +245,11 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(found, [])
 
     def a_heads_note_costs_its_head_no_room(self, name):
-        """A page's note on its readings stands in the band between the bar
-        and the page, its end under the end of the person's control, on one
-        line however long what it says: the page is laid out as it is with no
-        note at all, and saying something moves nothing."""
+        """A page's note on its readings ends the head's first line, inside
+        it and on one line however long what it says: the page is laid out as
+        it is with no note at all, and saying something moves nothing."""
 
-        notes = self.page.evaluate(_PAGE_NOTE, [SELECTORS["page_note"], SELECTORS["bar"], SELECTORS["account"]])
+        notes = self.page.evaluate(_PAGE_NOTE, [SELECTORS["page_note"], SELECTORS["content"]])
         if 'form="page-visit"' in self.pages[name]:
             self.assertGreater(len(notes), 0, "the probe measured nothing")
         for note in notes:
@@ -259,7 +259,7 @@ class LayoutBrowserTests(BrowserGate):
             self.assertGreaterEqual(placed["top"], -0.5)
             self.assertGreaterEqual(placed["bottom"], -0.5)
             self.assertGreaterEqual(placed["start"], -0.5)
-            self.assertAlmostEqual(placed["end"], 0, delta=0.5)
+            self.assertGreaterEqual(placed["end"], -0.5)
             self.assertFalse(placed["lines"])
 
     def no_block_breaks_a_paragraph(self, _name):

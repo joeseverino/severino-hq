@@ -3051,6 +3051,10 @@
         "pattern": "<h[1-6]\\b",
         "write": "the heading of {% section \"Heading\" %}, a sub-head a {% section %} inside it (it heads itself a level down); the page's own title is the frame's, from page"
       },
+      "a list of findings": {
+        "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:attention-list|attention-row|attention-body|attention-end|posture-gaps|conn-findings)(?![\\w-])",
+        "write": "{% include \"partials/_work_queue.html\" with items=... %} from the queue's items (hq_sdk.ui.Insight), with dense=True for problems inside a section"
+      },
       "a list of rows": {
         "pattern": "\\bclass=\"(?:[^\"]*[\\s}])?(?:list-rows)(?![\\w-])",
         "write": "{% include \"partials/_record_list.html\" %} from hq_sdk.ui.ListRow"
@@ -3197,6 +3201,8 @@
           "choice_field",
           "choices",
           "form",
+          "gap",
+          "hooks",
           "note",
           "verb"
         ]
@@ -3207,6 +3213,7 @@
           "bar",
           "cancel_url",
           "choices",
+          "gap",
           "in_place",
           "live",
           "note"
@@ -3431,7 +3438,8 @@
           "value=",
           "css=",
           "title=",
-          "disabled="
+          "disabled=",
+          "pressed="
         ],
         "parts": []
       },

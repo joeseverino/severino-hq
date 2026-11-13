@@ -56,6 +56,10 @@ PARTS = {
     ("partials/_visit_refresh.html", "a form that writes"): "a hidden form the page's script submits, with no fields",
     ("core/_dashboard_glance.html", "a form that writes"): "hidden forms the page's script submits, with no fields",
     ("partials/_record_list.html", "a list of rows"): "the list part itself",
+    ("partials/_queue_rows.html", "a row's actions"): (
+        "the queue row itself: Dismiss and Restore are the reader's own triage of an item, posted by its key"
+    ),
+    ("partials/_queue_entries.html", "a row's actions"): "a family's Dismiss, the queue row's own triage, as above",
     ("partials/_kpi_grid.html", "a figure"): "the figure part itself",
     ("partials/_kpi_grid.html", "an icon"): "a figure's trend line, drawn by the figure part",
     ("partials/_icon.html", "an icon"): "the icon part itself",
@@ -96,7 +100,7 @@ class HandDrawnTests(SimpleTestCase):
     def test_the_baseline_only_falls(self):
         host = _host()
         moved = {key: f"{count} -> {host[key]}" for key, count in BASELINE.items() if host[key] < count}
-        self.assertEqual(moved, {}, "a page moved onto its part: lower or delete its entry in hand_drawn_baseline.py")
+        self.assertEqual(moved, {}, "a page moved onto its part: lower or delete its entry in hand_drawn_baseline/")
 
     def test_each_part_still_draws_its_shape(self):
         # An exception the template no longer needs leaves the list.

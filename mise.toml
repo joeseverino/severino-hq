@@ -340,6 +340,46 @@ description = "After editing, or when fast is not enough: CI's lint job, every l
 # No turn of its own: the gates whose memory needs one take it.
 env = { SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 run = "uv run python -m tools.gate.verdict lint mise run -c 'lint:*'"
+# What a pull request's Lint job reads, which tools/pipeline/legs.py matches
+# its change against (docs/Development.md, What a pull request runs).
+# Lint reads every tracked file: the source tests walk the tree and lint:patch
+# reads the whole change. So these name each top-level path, and a new one no
+# leg names runs every leg until it is placed here and in each leg it reaches.
+sources = [
+  ".github/**/*",
+  "composition/**/*",
+  "controller/**/*",
+  "demo/**/*",
+  "deploy/**/*",
+  "docs/**/*",
+  "examples/**/*",
+  "hq/**/*",
+  "hq_sdk/**/*",
+  "mise-tasks/**/*",
+  "policy/**/*",
+  "static/**/*",
+  "templates/**/*",
+  "tests/**/*",
+  "tools/**/*",
+  ".editorconfig",
+  ".gitattributes",
+  ".gitignore",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "Dockerfile",
+  "Dockerfile.dockerignore",
+  "LICENSE",
+  "README.md",
+  "complexipy.toml",
+  "entrypoint.sh",
+  "manage.py",
+  "mise.fast.toml",
+  "mise.lock",
+  "mise.toml",
+  "pyproject.toml",
+  "uv.lock",
+]
+outputs = []
 
 [tasks.scan]
 description = "To reproduce an alert CI's scan job raised: CodeQL's security-and-quality queries find no alert, and in CI none is open on GitHub for the analyzed ref; slow"

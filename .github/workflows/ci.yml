@@ -2,7 +2,9 @@ name: CI
 
 # Every gate a change passes, as one graph. On a pull request the image is
 # also checked and composed with the extensions (compose.yml), and Ready
-# passes only when every job did: the one check the ruleset requires. On main,
+# passes only when every job did: the one check the ruleset requires. Lint,
+# Test and Browser run on a pull request only where its change reaches them
+# (Legs, below); a push to main runs them all. On main,
 # Release starts Compose once the gates pass; Deploy (deploy.yml) is never
 # reached from a pull request.
 #
@@ -28,9 +30,10 @@ concurrency:
 
 jobs:
   # A push to main whose pull request already passed with this exact tree is
-  # not checked twice: Lint, Test and Browser stand on that run, and Build
-  # promotes the pull request's image instead of building another. Anything
-  # less than proof (tools/pipeline/proven-on-pr.sh) and every gate runs.
+  # not checked twice: Build promotes the pull request's image instead of
+  # building another, and Lint, Test and Browser stand on that run when it
+  # left none of them out. Anything less than proof
+  # (tools/pipeline/proven-on-pr.sh) and every gate runs.
   proven:
     name: Proven on its pull request
     if: github.event_name == 'push'
@@ -47,6 +50,7 @@ jobs:
     outputs:
       pr: ${{ steps.proof.outputs.pr }}
       digest: ${{ steps.proof.outputs.digest }}
+      gates: ${{ steps.proof.outputs.gates }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -79,10 +83,50 @@ jobs:
             echo "Proven on #$pr: its checks passed on this exact tree, and its image is promoted." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  # Which of Lint, Test, Test's Go tests and Browser a pull request's change
+  # can affect. Each declares what it reads as the `sources` of the task it
+  # runs, and tools/pipeline/legs.py asks mise's --affected which of those the
+  # change touches; a changed path none declares runs every leg. A leg left out
+  # is skipped, which Ready passes. A push to main skips this job, and a job
+  # that fails here leaves its outputs empty: either way every leg runs.
+  legs:
+    name: Legs
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      lint: ${{ steps.legs.outputs.lint }}
+      test: ${{ steps.legs.outputs.test }}
+      controller: ${{ steps.legs.outputs.controller }}
+      browser: ${{ steps.legs.outputs.browser }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit and its first parent, the base it merges into.
+          fetch-depth: 2
+      - name: Read the pinned mise
+        id: mise
+        run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
+      # mise alone: --affected reads the task definitions and installs nothing.
+      - name: Install the pinned mise
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
+        with:
+          version: ${{ steps.mise.outputs.version }}
+          install: false
+          cache: false
+      - name: The legs this change reaches
+        id: legs
+        run: python3 -m tools.pipeline.legs HEAD^1 HEAD
+
   lint:
     name: Lint
-    needs: proven
-    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
+    needs: [proven, legs]
+    if: ${{ !cancelled() && needs.proven.outputs.gates != 'passed' && needs.legs.outputs.lint != 'false' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 25
     permissions:
@@ -111,8 +155,8 @@ jobs:
 
   test:
     name: Test
-    needs: proven
-    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
+    needs: [proven, legs]
+    if: ${{ !cancelled() && needs.proven.outputs.gates != 'passed' && needs.legs.outputs.test != 'false' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
@@ -123,6 +167,8 @@ jobs:
     env:
       # `mise run test` walks this list; a leg is one interpreter.
       TEST_PYTHONS: ${{ matrix.python }}
+      # The Go tests, left out where the change reaches none of what they read.
+      MISE_TASK_SKIP: ${{ needs.legs.outputs.controller == 'false' && 'test:controller' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -146,8 +192,8 @@ jobs:
   # a job skipped before its matrix expands shows its name as written.
   browser:
     name: Browser
-    needs: proven
-    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
+    needs: [proven, legs]
+    if: ${{ !cancelled() && needs.proven.outputs.gates != 'passed' && needs.legs.outputs.browser != 'false' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 15
     # Playwright's image for the release uv.lock pins carries its browsers and
@@ -494,7 +540,7 @@ jobs:
 
   ready:
     name: Ready
-    needs: [proven, lint, test, browser, scan, build, build-verify, compose]
+    needs: [proven, legs, lint, test, browser, scan, build, build-verify, compose]
     # The one check the ruleset requires, accepted only from GitHub Actions:
     # it passes when every job above passed, so a gate added or removed here
     # never touches the repository's settings.

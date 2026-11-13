@@ -384,6 +384,21 @@ HAND_DRAWN: dict[str, dict[str, str]] = {
             " this shape is read by its opening words, so it finds one spelling of an empty line"
         ),
     },
+    # One of the lists each page drew its problems in before the queue row.
+    "a list of findings": {
+        "pattern": _class_word(
+            "attention-list",
+            "attention-row",
+            "attention-body",
+            "attention-end",
+            "posture-gaps",
+            "conn-findings",
+        ),
+        "write": (
+            '{% include "partials/_work_queue.html" with items=... %} from the queue\'s items'
+            " (hq_sdk.ui.Insight), with dense=True for problems inside a section"
+        ),
+    },
     # A button in a cell, read from the cell's start to its first button: a
     # `post_button` drawn as one (its default class, or a `css` naming `btn`)
     # or an element or include given the button class.

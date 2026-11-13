@@ -192,11 +192,9 @@ const flowGrids = [
   // of calendars side by side under it.
   ".calendar-aside",
   // A band's cells in one frame, counted into whole rows.
-  ":is(.control-summary, .insight-grid, .sweep-grid, .machine-telemetry-metrics, .kpi-grid:not(.card > *))",
-  ".control-summary",
+  ":is(.insight-grid, .sweep-grid, .kpi-grid:not(.card > *))",
   ".insight-grid",
   ".sweep-grid",
-  ".machine-telemetry-metrics",
   ".facts-band",
   ".connection-control-grid",
   // HQ's standard: its checks as a list in two columns at most.

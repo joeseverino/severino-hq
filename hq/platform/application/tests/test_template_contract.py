@@ -105,6 +105,7 @@ DRAWN = (
     "<strong>{{ refused_count }}</strong> refused\n"
     "{{ miles|floatformat:2 }} mi\n"
     '<div class="empty">\n<p class="muted">No notes yet.</p>\n'
+    '<ul class="attention-list">\n'
     '<td>{% post_button "A" "/a/" %}</td>\n'
     '{% comment %}<section>{% endcomment %}{% table_region "A" %}<table class="data-table"></table>'
     "{% endtable_region %}"
@@ -129,6 +130,7 @@ class HandDrawnTests(SimpleTestCase):
         "a figure apart from its word",
         "an empty state",
         "an empty line",
+        "a list of findings",
         "a row's actions",
     )
 

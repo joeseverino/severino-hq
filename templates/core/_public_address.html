@@ -1,4 +1,9 @@
-<div class="conn-rows" data-public-address data-fragment="{% url 'tool_public_address' %}" data-fragment-failure="The lookup could not be reached.">
+{% comment %}
+What HQ holds of a public address, and the button that looks it up again. The
+button posts the page's one form (post_button) and is answered in this
+region, found in the answer by its id.
+{% endcomment %}
+<div class="conn-rows" id="public-address" data-public-address data-fragment="{% url 'tool_public_address' %}" data-fragment-failure="The lookup could not be reached.">
 {% if reading %}
   <div class="conn-row">
     <code>{{ reading.address|breakable }}</code>
@@ -38,11 +43,10 @@
   </div>
 {% endif %}
 {% if not failure and not reading or reading.observed_at %}
-  <form class="conn-row" method="post" action="{% url 'tool_public_address' %}" data-public-address-lookup data-fragment-target>
-    {% write_token %}
-    <input type="hidden" name="address" value="{{ address }}">
-    <button class="btn" type="submit">{% if reading %}Look up again{% else %}Look up{% endif %}</button>
+  <div class="conn-row">
+    {% url 'tool_public_address' as lookup_url %}
+    {% if reading %}{% post_button "Look up again" lookup_url name="address" value=address %}{% else %}{% post_button "Look up" lookup_url name="address" value=address %}{% endif %}
     {% if reading.observed_at %}<span class="conn-row-note">{% include "partials/_reading_age.html" with at=reading.observed_at only %}</span>{% endif %}
-  </form>
+  </div>
 {% endif %}
 </div>

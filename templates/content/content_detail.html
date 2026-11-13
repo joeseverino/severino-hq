@@ -15,16 +15,10 @@
 {% if traffic.path and traffic.measured %}
   {% url 'analytics:overview' as analytics_url %}{% with days=traffic.days|stringformat:"s" %}
   {% section "Traffic" more_label="All analytics" more_url=analytics_url|add:"?days="|add:days %}
-    <dl class="vitals-strip">
-      <div class="vital">
-        <dt>Page views ({{ traffic.days|counted:"day" }})</dt>
-        <dd><span class="vital-rate">{{ traffic.pageviews|breakable }}</span></dd>
-      </div>
-      <div class="vital">
-        <dt>Visits ({{ traffic.days|counted:"day" }})</dt>
-        <dd><span class="vital-rate">{{ traffic.visits|breakable }}</span></dd>
-      </div>
-    </dl>
+    {% facts layout="band" %}
+      {% fact "Page views" %}{{ traffic.pageviews|breakable }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
+      {% fact "Visits" %}{{ traffic.visits|breakable }}{% detail %}in the last {{ traffic.days|counted:"day" }}{% endfact %}
+    {% endfacts %}
   {% endsection %}{% endwith %}
 {% endif %}
 

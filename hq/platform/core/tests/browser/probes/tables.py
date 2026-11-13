@@ -279,7 +279,7 @@ CUT_WITH_ROOM = (
       // The hold bounds the name's whole box, an external link's arrow with it.
       let holder = el;
       for (let up = el.parentElement; up && up !== cell; up = up.parentElement) {
-        if (up.matches(holders)) holder = up;
+        if (up.matches(holders) && up.getClientRects().length) holder = up;
       }
       const beside = holder.getBoundingClientRect().width - el.clientWidth;
       if (asks + beside <= hold + 1)

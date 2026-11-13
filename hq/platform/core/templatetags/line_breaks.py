@@ -168,17 +168,13 @@ def _token(word: str, *, sole: bool) -> str:
         # A word of a phrase: each part is cut on its own, at its cell's edge.
         return f'<span class="token">{_SEAM.join(_whole(part, boxed=True) for part in parts)}</span>'
     inside = _SEAM.join(_whole(part) for part in parts)
-    # A name a cell cuts inside a part it keeps is cut by a box within the
-    # token, so the token can ask for the name's whole length around it
-    # (figures.css).
-    if any(_kept(part) for part in parts):
-        inside = f'<span class="cut">{inside}</span>'
     # The name again, unseen and with nothing to copy, broken only where the
-    # name breaks once a row opens it: a table cell that cuts the name sizes
-    # its column by it, so the column already holds the longest piece
-    # (tables.css). First, so a mark after the name lands in the name.
+    # name breaks once a row opens it, beside the box that draws the name
+    # (`.cut`): a table cell's grid sizes its track by the strut's one run of
+    # text and the box asks nothing, so the box is never narrower than the
+    # name however an engine measures the box (cuts.css).
     strut = f'<span class="strut" data-strut="{"&#8203;".join(parts)}" aria-hidden="true"></span>'
-    return f'{strut}<span class="token" data-sole{_short(word)}>{inside}</span>'
+    return f'<span class="token" data-sole{_short(word)}>{strut}<span class="cut">{inside}</span></span>'
 
 
 # The characters a value a cell cuts holds out for (`--cut-floor`,

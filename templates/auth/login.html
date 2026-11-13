@@ -6,8 +6,6 @@
   <img class="auth-logo" src="{% static 'img/logo.png' %}" alt="{{ SITE_NAME }}" width="64" height="64">
   <h1>Sign in</h1>
 
-  {% include "partials/_form_errors.html" %}
-
   {% comment %}
   Reached on purpose, not by default. Under SSO the view redirects straight to
   Pocket ID, so this page is what you get after signing out, where bouncing
@@ -18,17 +16,7 @@
     {% if sso_failure %}{% notice tone="error" %}{{ sso_failure|breakable }}{% endnotice %}{% endif %}
     <p><a class="btn primary auth-sso" href="{% url 'oidc_authentication_init' %}{% if next %}?next={{ next|urlencode }}{% endif %}">Use single sign-on</a></p>
   {% else %}
-    <form method="post" action="">
-      {% csrf_token %}
-      <label for="id_username">Username</label>
-      <input type="text" name="username" id="id_username" autocomplete="username" required autofocus>
-
-      <label for="id_password">Password</label>
-      <input type="password" name="password" id="id_password" autocomplete="current-password" required>
-
-      {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-      <button type="submit" class="primary">Sign in</button>
-    </form>
+    {% include "partials/_form.html" with verb="Sign in" next=next %}
   {% endif %}
   <p class="muted auth-note">Unauthorized access is prohibited.</p>
 </div>

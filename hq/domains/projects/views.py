@@ -59,7 +59,8 @@ lazy from hq.platform.application.github_profile import KIND, READ_NOW, profile,
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
 lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
-lazy from hq.platform.application.standards import MET, UNMET
+lazy from hq.platform.application.standards import MET, UNMET, gap
+lazy from hq.platform.application.workflow_contracts import ActionLink
 
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
@@ -440,10 +441,20 @@ class PostureView(PageMixin, TemplateView):
             held = [state for _, state in states if state]
             failing = [repo for repo, state in states if state == UNMET]
             if failing:
-                unmet.append({"check": check, "repos": failing, "of": len(held)})
+                unmet.append((check, failing, len(held)))
             elif held and all(state == MET for state in held):
                 everywhere.append(check)
-        unmet.sort(key=lambda item: not item["check"].serious)
-        context["unmet"] = unmet
+        unmet.sort(key=lambda found: not found[0].serious)
+        context["unmet"] = [
+            gap(
+                check,
+                facts=(("Repositories", f"{len(failing)} of {held} {'repository' if held == 1 else 'repositories'}"),),
+                links=tuple(
+                    ActionLink(name="open", label=repo.short, effect="read", url=f"{repo.url}/settings")
+                    for repo in failing
+                ),
+            )
+            for check, failing, held in unmet
+        ]
         context["everywhere"] = everywhere
         return context

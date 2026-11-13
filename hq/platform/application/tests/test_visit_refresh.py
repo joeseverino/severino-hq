@@ -582,9 +582,9 @@ class VisitRefreshViewTests(TestCase):
 
     def test_the_note_is_swapped_with_the_content_and_the_ask_is_not(self):
         """The ask is a quiet child of the content, which its refresh
-        (everything but the quiet ones) never replaces, and the note is a
-        child the refresh draws again: the new note finds its form by the id
-        it names."""
+        (everything but the quiet ones) never replaces, and the note ends the
+        head's first line, in a child the refresh draws again: the new note
+        finds its form by the id it names."""
 
         self.client.force_login(self.user)
 
@@ -593,7 +593,9 @@ class VisitRefreshViewTests(TestCase):
         form = found.places.get("form", [])
         self.assertEqual(form[:1], [("main", "content", "")])
         self.assertIn("ask-quiet", form[1][2])
-        self.assertEqual(found.places.get("note"), [("main", "content", "")])
+        note = found.places.get("note", [])
+        self.assertEqual(note[:2], [("main", "content", ""), ("header", "", "page-head")])
+        self.assertNotIn("ask-quiet", " ".join(css for _tag, _id, css in note))
 
 
 class _Placement(HTMLParser):

@@ -2,6 +2,19 @@
 #MISE description="After a template or CSS change: every browser gate in WebKit, layout, navigation, table fit and the demo, one at a time, or the legs named"
 #MISE depends_post=["image:docker stop"]
 #MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
+# What every leg of a pull request's Browser job reads, which
+# tools/pipeline/legs.py matches its change against: the app, the demo, the
+# two files of elsewhere the app opens, the browser and lint-tool setup, and
+# the job's own definition.
+#MISE sources=[
+#MISE   "hq/**/*", "hq_sdk/**/*", "templates/**/*", "static/**/*", "demo/**/*", "manage.py",
+#MISE   "controller/api/*.openapi.json", "deploy/systemd/severino-hq-secrets.timer",
+#MISE   "tools/lib/**/*", "tools/lint/package.json", "tools/lint/package-lock.json",
+#MISE   "mise-tasks/setup/**/*", "mise-tasks/demo/**/*",
+#MISE   ".github/workflows/ci.yml", ".github/actions/toolchain/**/*",
+#MISE   "pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env",
+#MISE ]
+#MISE outputs=[]
 #USAGE arg "[target]..." var=#true double_dash="automatic" help="Legs by name (layout-1, navigation, demo), each the gate browser:<leg>; every leg but the Chromium ones by default. With --linux, a leg or test labels then any options for Django's test command, as mise run test takes them"
 #USAGE flag "--linux" help="In the Playwright image CI's browser job runs, on this checkout: a layout only CI's Linux shows, reproduced here"
 #USAGE flag "--engine <engine>" default="chromium" help="With --linux, the engine test labels are drawn in; a leg keeps its own" {

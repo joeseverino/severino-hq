@@ -41,21 +41,15 @@
 
     {% section "Page speed" %}
       {% if vitals_measured %}
-      <dl class="vitals-strip">
-        {% for key, metric in vitals.items %}
-          <div class="vital">
-            <dt>{% if key == "lcp" %}Loading (LCP){% elif key == "inp" %}Responsiveness (INP){% elif key == "cls" %}Layout shift (CLS){% else %}{{ key|upper|breakable }}{% endif %}</dt>
-            <dd>
-              {% if metric.percent is None %}
-                <span class="muted">not enough visits to measure</span>
-              {% else %}
-                <span class="vital-rate{% if metric.passing %} is-passing{% endif %}">{{ metric.percent|floatformat:"-1" }}<span class="unit">%</span></span>
-                <span class="muted">{{ metric.good|breakable }} of {{ metric.total|measured:"good" }}</span>
-              {% endif %}
-            </dd>
-          </div>
+      {% facts layout="band" %}
+        {% for label, metric in vitals_named %}
+          {% if metric.percent is None %}
+            {% fact label value="" detail="Not enough visits to measure" %}
+          {% else %}
+            {% fact label tone=metric.passing|yesno:"good,attention" %}{{ metric.percent|floatformat:"-1" }}%{% detail %}{{ metric.good|breakable }} of {{ metric.total|measured:"good" }}{% endfact %}
+          {% endif %}
         {% endfor %}
-      </dl>
+      {% endfacts %}
       {% endif %}
     {% empty %}Not enough visits to measure.
     {% endsection %}

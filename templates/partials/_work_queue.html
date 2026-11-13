@@ -1,14 +1,17 @@
 {% comment %}
-The queue as one table, wherever it is drawn whole: the findings page, a
-thing's urgent problems, a domain's attention list. Its rows are
-`_queue_rows.html`; the queue page's own sections are `_queue_groups.html`,
-the same rows under their domains. The dashboard's short list is
-`_queue_glance.html`.
+The queue as one table, wherever it is drawn whole: the findings page, the
+dashboard's short list, a thing's problems, a domain's attention list. Its
+entries are `_queue_entries.html`; the queue page's own sections are
+`_queue_groups.html`, the same rows under their domains.
+
+`fold` folds a family under its name, as the queue page does. `dense` is the
+row's compact form, for problems drawn inside a section of a page about
+something else: one line each, its meaning in the line beneath with the rest.
 {% endcomment %}
 {% if items %}
 {% table_region "Queue" %}
-  <table class="data-table queue-table">
-    <tbody>{% include "partials/_queue_rows.html" %}</tbody>
+  <table class="data-table queue-table{% if dense %} is-dense{% endif %}">
+    <tbody>{% with folding=fold|default:False %}{% include "partials/_queue_entries.html" with entries=items|families:folding prefix="problem" %}{% endwith %}</tbody>
   </table>
 {% endtable_region %}
 {% else %}

@@ -40,6 +40,7 @@ lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
 from .audit import record_event
+from .forms import OwnDeviceForm
 from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
@@ -342,6 +343,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
         context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
+        context["device_form"] = OwnDeviceForm()
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context

@@ -9,7 +9,7 @@ here names one.
 {% endcomment %}
 <header class="page-head dash-head">
   <div class="dash-hello">
-    <p class="dash-date">{{ calendar.today|when:"weekday" }}, {{ calendar.today|when:"day" }}</p>
+    <div class="page-trail-row"><p class="dash-date">{{ calendar.today|when:"weekday" }}, {{ calendar.today|when:"day" }}</p>{% if page_visit %}{% include "partials/_visit_refresh.html#note" %}{% endif %}</div>
     <h1>{{ greeting|breakable }}</h1>
     <p class="dash-status">
       {% if action_queue_count %}
@@ -41,8 +41,8 @@ count above and in the header.
 {% endcomment %}
 {% if needs_you %}
 {% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
-{% card css="dash-needs tone-serious" label="Needs you" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
-  {% include "partials/_queue_glance.html" with items=needs_you only %}
+{% card css="problems dash-needs tone-serious" label="Needs you" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
+  {% include "partials/_work_queue.html" with items=needs_you grouped=True triage=True glance=True only %}
 {% endcard %}
 {% endif %}
 
@@ -66,15 +66,9 @@ the row is gone once every step is done.
 
 {% include "core/_dashboard_highlights.html" %}
 
-{% if dashboard_cards %}<div class="dashboard-counts" role="group" aria-label="Across HQ">
-  {% for card in dashboard_cards %}
-    <a class="kpi{% if not card.value %} is-zero{% endif %}" href="{{ card.url }}">
-      <span class="label">{{ card.label|breakable }}</span>
-      <span class="value">{{ card.value|breakable }}</span>
-      {% if card.detail %}<span class="muted">{{ card.detail|breakable }}</span>{% endif %}
-    </a>
-  {% endfor %}
-</div>{% endif %}
+{% if dashboard_cards %}{% facts layout="band" label="Across HQ" %}
+  {% for card in dashboard_cards %}{% fact card.label value=card.value url=card.url detail=card.detail %}{% endfor %}
+{% endfacts %}{% endif %}
 
 {% comment %}
 Each domain's leading chart, a row of its own, so however many there are they

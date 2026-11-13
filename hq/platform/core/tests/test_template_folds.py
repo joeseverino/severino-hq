@@ -18,7 +18,7 @@ from hq.platform.application.tests.source import template_files
 
 # What draws a surface: the card tag, and the frames a few parts draw for
 # themselves (a fact's metric, a command's form). A child of a section flow or a column pair is framed by its parent.
-FRAMES = frozenset(("card", "control-card", "control-metric", "form"))
+FRAMES = frozenset(("card", "form"))
 FRAMING_PARENTS = frozenset(("section-flow", "two-col"))
 CARD_TAG = "hq-card"
 

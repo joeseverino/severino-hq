@@ -1759,22 +1759,24 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertNotIn("Logins", shown)
 
     @with_script
-    def test_a_name_a_cell_cuts_keeps_a_pixel_to_spare_on_its_line_where_its_cell_has_room(self):
-        """A one-token name cut by a box of its own, in a cell with room to
-        spare, draws every part on its one line uncut, with a pixel to spare
-        past them: a track sized to the parts' measure alone is short by the
-        fraction an engine can mismeasure them by, and then the last part
-        leaves the line and only its ellipsis shows. WebKit lays a clamped
-        box (`-webkit-box`) out as the legacy box it measures, which keeps
-        its parts on their line however close it comes, so there only the
-        parts are read."""
+    def test_a_name_a_cell_cuts_is_drawn_whole_on_its_line_where_its_cell_has_room(self):
+        """A one-token name cut by a box of its own (a bare name, a cell's
+        line, a link), in a cell with room to spare, draws every part on its
+        one line uncut, in a box at least as wide as what it draws. A box
+        sized by its own measure is short wherever an engine measures it a
+        fraction short of the parts it lays out, and then the last part
+        leaves the line and only its ellipsis shows. Read in every engine, at
+        each density a screen has, and again with the box measured as nothing,
+        as an engine that mismeasures it most would: the track never reads
+        the box's own measure."""
 
-        from hq.platform.core.templatetags.value_tags import breakable
+        from hq.platform.core.templatetags.value_tags import breakable, cell_line
 
-        names = [f"/opt/apps/{name}" for name in ("example-connect", "example-id", "example-a1")]
+        shapes = ("example-connect", "example2-proxy", "example2-proxy-web", "example-id", "example-hq", "example-a1")
+        names = [f"/opt/apps/{name}" for name in shapes]
         cells = [
             *(breakable(name) for name in names),
-            *(f'<span class="cell-line"><span class="cut">{breakable(name)}</span></span>' for name in names),
+            *(cell_line(name) for name in names),
             *(f'<a data-entity href="/example/">{breakable(name)}</a>' for name in names),
         ]
         rows = "".join(f"<tr><td>{cell}</td><td>Example</td></tr>" for cell in cells)
@@ -1785,32 +1787,35 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 f"</thead><tbody>{rows}</tbody></table></div>"
             ),
         }
-        short = """([boxes, sole, whole]) => {
+        short = """([boxes, whole]) => {
           const found = [];
           const range = document.createRange();
+          let read = 0;
           for (const box of document.querySelectorAll(boxes)) {
-            if (getComputedStyle(box.parentElement).display !== 'inline-grid') continue;
-            const token = box.closest(sole) ?? box.querySelector(sole);
+            if (!box.checkVisibility()) continue;
+            read += 1;
             const top = box.getClientRects()[0].top;
             const parts = [...box.querySelectorAll(whole)];
             const pad = getComputedStyle(box);
             range.selectNodeContents(box);
-            const inside = box.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+            const inside = box.getBoundingClientRect().width - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
             const spare = inside - range.getBoundingClientRect().width;
-            const off = parts.some((part) => part.getBoundingClientRect().top > top + 1 || part.scrollWidth > part.clientWidth);
-            if (off || (pad.display !== '-webkit-box' && spare < 0.75))
-              found.push(`${token.textContent} spares ${spare.toFixed(2)}px as ${pad.display}`);
+            const off = parts.filter((part) => part.getBoundingClientRect().top > top + 1 || part.scrollWidth > part.clientWidth);
+            if (off.length || spare < 0)
+              found.push(`${box.textContent} spares ${spare.toFixed(2)}px, ${off.length} of its parts off its line or cut`);
           }
-          return found;
+          return {read, found};
         }"""
-        for scale in (1, 2):
-            with self.subTest(scale=scale):
+        for scale, mismeasured in ((1, False), (1.5, False), (2, False), (1, True)):
+            with self.subTest(scale=scale, mismeasured=mismeasured):
                 self.start(java_script_enabled=True, device_scale_factor=scale)
                 self.open("name-room-probe", WIDE)
+                if mismeasured:
+                    add_css(self.page, ".cut { contain: inline-size; }")
                 self.page.evaluate(SETTLE)
-                self.assertEqual(
-                    self.page.evaluate(short, [SELECTORS["name_cut"], SELECTORS["sole_token"], SELECTORS["part"]]), []
-                )
+                drawn = self.page.evaluate(short, [SELECTORS["name_cut"], SELECTORS["part"]])
+                self.assertGreater(drawn["read"], 0)
+                self.assertEqual(drawn["found"], [])
 
     @with_script
     def test_a_table_whose_content_widens_after_its_fit_gives_way_again(self):
