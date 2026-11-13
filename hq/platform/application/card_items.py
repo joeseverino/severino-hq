@@ -140,6 +140,23 @@ class Insight:
             in_words(label, label=True)
 
 
+class RowLink(Protocol):
+    """What a row reads of the thing it names: an ``EntityLink`` fills it.
+
+    Named by its shape, as ``RowAction`` is, so a card's items stay clear of
+    the link builder and what it reads.
+    """
+
+    @property
+    def label(self) -> str: ...
+    @property
+    def url(self) -> str: ...
+    @property
+    def external(self) -> bool: ...
+    @property
+    def kind_label(self) -> str: ...
+
+
 class RowAction(Protocol):
     """What a row reads of an action it ends with: a ``PageAction`` fills it.
 
@@ -167,7 +184,7 @@ class ListRow:
     that needs interpreting belongs in ``_insight_grid.html``.
     """
 
-    title: str
+    title: str = ""
     # Inline after the title, muted: the one fact that distinguishes this row.
     detail: str = ""
     # Trailing, right-aligned, in words: a duration, a measure, "Due Oct 3".
@@ -187,9 +204,18 @@ class ListRow:
     # ``PageAction``: a link to a page, or a POST through ``post_button`` ("Move up", "Delete"). A
     # glyph's ``title`` names it aloud.
     actions: tuple[RowAction, ...] = ()
+    # The thing the row names, in place of ``title`` and ``url``: drawn as
+    # every mention of an entity is, so the name opens its page or, on that
+    # page, stands as plain text.
+    link: RowLink | None = None
+    # A project's category key ("homelab"), drawn as its color before the
+    # title; ``detail`` says it in words, since color is never alone.
+    category: str = ""
 
     def __post_init__(self) -> None:
         _one_of("ListRow status", self.status, STATUS_VALUES, or_empty=True)
+        if self.link is not None and (self.title or self.url or self.external):
+            raise ValueError("A ListRow names its record once: by its title and url, or by its link.")
         if self.status and not self.badge:
             raise ValueError("ListRow status needs a badge: state is never carried by color alone.")
 

@@ -1,9 +1,8 @@
-<div class="topology-node-body" data-topology-body-of="{{ item.node.id }}">
-  <header class="topology-detail-head">
-    <h2>{% entity item.link %}</h2>
-    <span class="muted">{{ item.node.subtitle|breakable }}{% dot %}{{ item.degree|counted:"link" }}</span>
-    {% if item.node.status_label %}{% status item.node.status_label tone=item.node.status %}{% endif %}
-  </header>
+{% comment %}
+The selected node in the details pane: its name, what kind of thing it is,
+how many links it has, how it stands and the way to its own page.
+{% endcomment %}
+{% section item.node.label count=item.degree lede=item.node.subtitle data_topology_body_of=item.node.id %}
   {% if item.node.detail %}<p class="muted">{{ item.node.detail|breakable }}</p>{% endif %}
 
   {% comment %}
@@ -75,4 +74,5 @@
     <a class="btn ghost compact" href="{{ item.inbound_url }}">Dependents</a>
     <a class="btn ghost compact" href="{{ item.outbound_url }}">Dependencies</a>
   </div>
-</div>
+{% aside %}{% if item.node.status_label %}{% status item.node.status_label tone=item.node.status %}{% endif %}{% if item.node.status_label and item.link.url %}{% dot %}{% endif %}{% if item.link.url %}{% entity item.link label="Open" %}{% endif %}
+{% endsection %}

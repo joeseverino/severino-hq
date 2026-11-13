@@ -395,7 +395,7 @@ class CommandResultProjectionTests(TestCase):
         self.assertEqual(result_title(response), "Done")
         # The JSON is still there for anyone checking HQ against another tool,
         # closed because the answer is already on the page.
-        (raw,) = with_class(response, "command-result-json")
+        (raw,) = select(response, "id", "command-result-json")
         self.assertNotIn("open", raw.attrs)
         self.assertIn('"resolver": "Example"', raw.words)
 
@@ -406,7 +406,7 @@ class CommandResultProjectionTests(TestCase):
 
         self.assertEqual(response.context["result_facts"], ())
         self.assertIsNone(response.context["result_table"])
-        (raw,) = with_class(response, "command-result-json")
+        (raw,) = select(response, "id", "command-result-json")
         self.assertIn("open", raw.attrs)
 
     def test_the_projection_is_pure_and_keeps_column_order(self):

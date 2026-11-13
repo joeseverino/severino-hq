@@ -164,6 +164,10 @@ async (page) => {
     // this is looking for.
     const SCROLL_SLOP = 1;
     document.querySelectorAll('*').forEach((el) => {
+      // A box the browser does not draw (inside a closed fold) shows no
+      // scrollbar, and measuring it lays out content the browser skips,
+      // which leaves the page changed for whatever reads it next.
+      if (!el.checkVisibility()) return;
       const style = getComputedStyle(el);
       const scrolls = (value) => value === 'auto' || value === 'scroll';
       const horizontal = el.scrollWidth - el.clientWidth;

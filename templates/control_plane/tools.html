@@ -14,6 +14,6 @@
     {% endif %}
     {% include tab.template %}
   {% else %}
-    <p class="muted">No tools available.</p>
+    {% include "partials/_empty_state.html" with message="No tools available." %}
   {% endif %}
 {% endblock %}

@@ -1,0 +1,46 @@
+# A data table stands in its region, which gives it its label, its scroll,
+# its row toggles and the columns a narrow screen lets go. A table is in a
+# region when it, or an element around it, comes after a {% table_region %}
+# with no {% endtable_region %} between. The grammar may read the opening tag
+# into the element before it (a void <input> holds the text after it), so a
+# sibling counts when it holds either tag. No fix: a region takes a label.
+id: hand-drawn-table
+language: html
+severity: error
+message: A table drawn outside its region.
+note: Write {% table_region "Label" %} around its <table class="data-table">.
+files:
+  - "**/templates/**/*.html"
+utils:
+  opens:
+    kind: text
+    regex: '\{%\s*table_region\b'
+  closes:
+    kind: text
+    regex: '\{%\s*endtable_region\b'
+  in-region:
+    follows:
+      any:
+        - matches: opens
+        - has:
+            matches: opens
+            stopBy: end
+      stopBy:
+        any:
+          - matches: closes
+          - has:
+              matches: closes
+              stopBy: end
+rule:
+  kind: element
+  has:
+    kind: start_tag
+    has:
+      kind: tag_name
+      regex: ^table$
+  not:
+    any:
+      - matches: in-region
+      - inside:
+          matches: in-region
+          stopBy: end

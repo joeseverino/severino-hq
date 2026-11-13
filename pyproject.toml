@@ -67,6 +67,10 @@ DEP003 = [
 ]
 # Development dependencies host code imports.
 DEP004 = [
+    # hq_sdk/template_contract.py writes docs/Plugins.md's table of hand-drawn
+    # shapes from the ast-grep rules (manage.py sdk_contract), which development
+    # alone runs.
+    "yaml",
     # hq/config/urls.py mounts the toolbar only when SEVERINO_DEBUG_TOOLBAR is
     # on, which development alone sets; the image installs no toolbar.
     "debug_toolbar",

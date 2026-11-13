@@ -1,0 +1,44 @@
+id: hand-drawn-findings
+snapshots:
+  <li class="attention-row">A</li>:
+    labels:
+    - source: <li class="attention-row">A</li>
+      style: primary
+      start: 0
+      end: 32
+    - source: class="attention-row"
+      style: secondary
+      start: 4
+      end: 25
+    - source: <li class="attention-row">
+      style: secondary
+      start: 0
+      end: 26
+  <ul class="attention-list"></ul>:
+    labels:
+    - source: <ul class="attention-list"></ul>
+      style: primary
+      start: 0
+      end: 32
+    - source: class="attention-list"
+      style: secondary
+      start: 4
+      end: 26
+    - source: <ul class="attention-list">
+      style: secondary
+      start: 0
+      end: 27
+  <ul class="posture-gaps"></ul>:
+    labels:
+    - source: <ul class="posture-gaps"></ul>
+      style: primary
+      start: 0
+      end: 30
+    - source: class="posture-gaps"
+      style: secondary
+      start: 4
+      end: 24
+    - source: <ul class="posture-gaps">
+      style: secondary
+      start: 0
+      end: 25

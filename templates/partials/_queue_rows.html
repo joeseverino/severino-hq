@@ -41,14 +41,16 @@ whole.
         {% comment %}What was read that shows a problem (application.decisions): each label once, with every value it was given.{% endcomment %}
         {% if item.facts %}{% facts %}{% for fact in item.facts %}{% fact fact.label %}<ul class="dot-list">{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}</ul>{% endfact %}{% endfor %}{% endfacts %}{% endif %}
         {% if item.advice %}<p class="attention-advice">{{ item.advice|breakable }}</p>{% endif %}
-        {% include "partials/_resolution_workflow.html" with steps=item.steps label=item.label only %}
+        {% include "partials/_resolution_workflow.html" with steps=item.steps only %}
         {% if item.reason %}<p class="attention-reason">{{ item.reason|breakable }}</p>{% endif %}
         {% if item.links %}<ul class="attention-links">{% for link in item.links %}<li>{% with icon=link|link_icon %}{% if icon %}<a class="icon-link" href="{{ link.url }}" data-tip="{{ link.label }}">{% include "partials/_icon.html" with name=icon only %}<span class="visually-hidden">{{ link.label|breakable }}</span></a>{% else %}<a href="{{ link.url }}">{{ link.label|breakable }}</a>{% endif %}{% endwith %}</li>{% endfor %}</ul>{% endif %}
       </div>
       {% endif %}
     {% endif %}
   </td>
-  <td class="queue-act">
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-row-actions --> the queue row itself: Dismiss and Restore are the reader's own triage of an item, posted by its key
+  {% endcomment %}<td class="queue-act">
     {% if item.actions and not item.aside or triage %}<div class="queue-buttons">{% endif %}
     {% remedies item.actions as shown %}{% if shown and not item.aside %}<div class="attention-actions narrow-more">{% include "partials/_action_links.html" with actions=shown|slice:":2" only %}</div>{% if shown|length > 2 %}<div class="attention-actions narrow-more queue-later">{% include "partials/_action_links.html" with actions=shown|slice:"2:" only %}</div>{% endif %}{% endif %}
     {% if triage %}

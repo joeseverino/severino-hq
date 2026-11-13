@@ -17,8 +17,10 @@ from django.test import Client
 from django.urls import reverse
 
 lazy from hq.domains.projects.models import Project
+lazy from hq.platform.application.capability_policy import field_name
 lazy from hq.platform.application.plugin_testing import form_keyed
 lazy from hq.platform.core.example_estate import REQUEST
+lazy from hq.platform.core.example_estate.names import ZONE
 
 if TYPE_CHECKING:
     from django.test.client import _MonkeyPatchedWSGIResponse
@@ -29,18 +31,18 @@ POST = "post:"
 
 @dataclass(frozen=True)
 class Posted:
-    """A form sent to ``route`` (reversed with ``args``) holding what ``data``
-    returns, read once the estate is built, and refused with ``status``: an
-    answer of any other status means the form no longer refuses it, and the
-    look fails."""
+    """A form sent to ``route`` (reversed with ``args``, or what ``args``
+    returns) holding what ``data`` returns, each read once the estate is
+    built, and refused with ``status``: an answer of any other status means
+    the form no longer refuses it, and the look fails."""
 
     route: str
-    args: tuple[str, ...]
+    args: tuple[str, ...] | Callable[[], tuple[str, ...]]
     data: Callable[[], Mapping[str, Any]]
     status: int = 400
 
     def address(self) -> str:
-        return reverse(self.route, args=self.args)
+        return reverse(self.route, args=self.args() if callable(self.args) else self.args)
 
     def send(self, client: Client, **headers: str) -> _MonkeyPatchedWSGIResponse:
         """The form sent once by ``client``, as production answers it, a
@@ -66,6 +68,16 @@ POSTS = {
     "project-create-taken": Posted("command", ("project.create",), _a_project_held),
     # The one question that starts publishing a service, answered with no name.
     "service-start-not-a-name": Posted("control_plane:service_start", (), lambda: {"hostname": "not a hostname"}),
+    # A domain's failed-mail policy applied to more than all of its mail: the
+    # error under the field, and the policy as sent.
+    "zone-mail-past-all": Posted(
+        "zones:mail", lambda: (ZONE,), lambda: {"section": "dmarc", "p": "reject", "pct": "150"}
+    ),
+    # A save of the agents' rules naming an action HQ no longer has: why that
+    # rule could not change, said over the tables.
+    "agent-policy-retired-action": Posted(
+        "agent_policy", (), lambda: {field_name("example-agent", "example.retired"): "deny"}
+    ),
 }
 
 

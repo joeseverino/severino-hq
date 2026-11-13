@@ -1,0 +1,78 @@
+id: hand-drawn-split-figure
+snapshots:
+  <p>Over the last 90 days</p>:
+    labels:
+    - source: Over the last 90 days
+      style: primary
+      start: 3
+      end: 24
+  <p>Read every 2.5 hours</p>:
+    labels:
+    - source: Read every 2.5 hours
+      style: primary
+      start: 3
+      end: 23
+  "<p>{{ limit|floatformat:\"-2\" }} CPUs</p>":
+    labels:
+    - source: "{{ limit|floatformat:\"-2\" }} CPUs"
+      style: primary
+      start: 3
+      end: 36
+  "<p>{{ miles|floatformat:2 }} mi</p>":
+    labels:
+    - source: "{{ miles|floatformat:2 }} mi"
+      style: primary
+      start: 3
+      end: 31
+  "<p>{{ n }}\n    checks</p>\n":
+    labels:
+    - source: |-
+        {{ n }}
+            checks
+      style: primary
+      start: 3
+      end: 21
+  "<p>{{ n }} day{{ n|pluralize }}</p>":
+    labels:
+    - source: "{{ n }} day{{ n|pluralize }}"
+      style: primary
+      start: 3
+      end: 31
+  "<p>{{ reads|length|add:\"-3\"|breakable }} more</p>":
+    labels:
+    - source: "{{ reads|length|add:\"-3\"|breakable }} more"
+      style: primary
+      start: 3
+      end: 45
+  "<p>{{ record.ttl|breakable }}&nbsp;s</p>":
+    labels:
+    - source: "{{ record.ttl|breakable }}"
+      style: primary
+      start: 3
+      end: 29
+    - source: s
+      style: secondary
+      start: 35
+      end: 36
+    - source: "&nbsp;"
+      style: secondary
+      start: 29
+      end: 35
+  "<p>{{ share }} %</p>":
+    labels:
+    - source: "{{ share }} %"
+      style: primary
+      start: 3
+      end: 16
+  "<p>{{ standing.findings|length }} lower</p>":
+    labels:
+    - source: "{{ standing.findings|length }} lower"
+      style: primary
+      start: 3
+      end: 39
+  "<td>{{ row.miles|floatformat:2|breakable }} mi</td>":
+    labels:
+    - source: "{{ row.miles|floatformat:2|breakable }} mi"
+      style: primary
+      start: 4
+      end: 46

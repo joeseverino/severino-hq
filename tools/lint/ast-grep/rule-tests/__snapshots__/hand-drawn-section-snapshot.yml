@@ -1,0 +1,56 @@
+id: hand-drawn-section
+snapshots:
+  <section aria-label="Details"><p>A</p></section>:
+    fixed: <section aria-label="Details"><p>A</p></section>
+    labels:
+    - source: <section aria-label="Details"><p>A</p></section>
+      style: primary
+      start: 0
+      end: 48
+    - source: section
+      style: secondary
+      start: 1
+      end: 8
+    - source: <section aria-label="Details">
+      style: secondary
+      start: 0
+      end: 30
+  "<section class=\"panel\">\n  <h2>{{ title }}</h2>\n</section>\n":
+    fixed: |
+      <section class="panel">
+        <h2>{{ title }}</h2>
+      </section>
+    labels:
+    - source: |-
+        <section class="panel">
+          <h2>{{ title }}</h2>
+        </section>
+      style: primary
+      start: 0
+      end: 57
+    - source: section
+      style: secondary
+      start: 1
+      end: 8
+    - source: <section class="panel">
+      style: secondary
+      start: 0
+      end: 23
+  <section><h2>Accounts</h2><p>body</p></section>:
+    fixed: |-
+      {% section "Accounts" %}
+        <p>body</p>
+      {% endsection %}
+    labels:
+    - source: <section><h2>Accounts</h2><p>body</p></section>
+      style: primary
+      start: 0
+      end: 47
+    - source: section
+      style: secondary
+      start: 1
+      end: 8
+    - source: <section>
+      style: secondary
+      start: 0
+      end: 9

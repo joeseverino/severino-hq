@@ -1,0 +1,42 @@
+id: hand-drawn-icon
+snapshots:
+  <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M0 0"/></svg>:
+    labels:
+    - source: <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M0 0"/></svg>
+      style: primary
+      start: 0
+      end: 66
+    - source: svg
+      style: secondary
+      start: 1
+      end: 4
+    - source: aria-hidden="true"
+      style: secondary
+      start: 5
+      end: 23
+    - source: <svg aria-hidden="true" viewBox="0 0 24 24">
+      style: secondary
+      start: 0
+      end: 44
+  "<svg class=\"icon\" focusable=\"false\"\n     aria-hidden=\"true\"></svg>\n":
+    labels:
+    - source: |-
+        <svg class="icon" focusable="false"
+             aria-hidden="true"></svg>
+      style: primary
+      start: 0
+      end: 66
+    - source: svg
+      style: secondary
+      start: 1
+      end: 4
+    - source: aria-hidden="true"
+      style: secondary
+      start: 41
+      end: 59
+    - source: |-
+        <svg class="icon" focusable="false"
+             aria-hidden="true">
+      style: secondary
+      start: 0
+      end: 60

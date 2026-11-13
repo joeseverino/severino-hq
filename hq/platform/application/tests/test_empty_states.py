@@ -63,7 +63,7 @@ class EmptyStateTemplateTests(SimpleTestCase):
     """Templates draw an empty state only through the partial."""
 
     def test_no_list_overrides_what_empty_means(self):
-        # An empty state drawn by hand is one of test_hand_drawn's shapes.
+        # An empty state drawn by hand is the hand-drawn-empty-state rule's.
         for name, text in _templates():
             with self.subTest(template=name):
                 self.assertNotIn("{% block empty %}", text, "a list says what empty means with table_empty")
@@ -134,12 +134,8 @@ class PageReadsTests(TestCase):
 
         page = all_elements(response)
         (setup,) = [element for element in page if element.attrs.get("id") == "setup-portainer"]
-        opened = [
-            element
-            for element in page
-            if element.tag == "details" and any(ancestor is setup for ancestor in element.ancestors)
-        ]
-        self.assertIn("open", opened[0].attrs)
+        self.assertEqual(setup.tag, "details")
+        self.assertIn("open", setup.attrs)
 
 
 class SetupOrderTests(TestCase):

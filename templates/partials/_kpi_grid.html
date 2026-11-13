@@ -1,4 +1,6 @@
-<div class="kpi-grid{% if featured %} is-featured{% endif %}"{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-figure --> the figure part itself
+{% endcomment %}<div class="kpi-grid{% if featured %} is-featured{% endif %}"{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
   {% for item in items %}
     {% with drawing=item.drawing %}
     {% comment %}
@@ -7,7 +9,9 @@
     cannot be: a link does not hold links. Its value links to the figure's
     page instead, and each of the others to its own.
     {% endcomment %}
-    {% if item.url and not item.holds_links %}<a class="kpi {% if item.is_zero %}is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi {% if item.is_zero %}is-zero{% endif %}">{% endif %}
+    {% if item.url and not item.holds_links %}{% comment %}
+    <!-- ast-grep-ignore: hand-drawn-figure --> the figure part itself
+    {% endcomment %}<a class="kpi {% if item.is_zero %}is-zero{% endif %}" href="{{ item.url }}">{% else %}<div class="kpi {% if item.is_zero %}is-zero{% endif %}">{% endif %}
       <span class="label">{% if item.icon %}{% include "partials/_icon.html" with name=item.icon only %}{% endif %}{{ item.label|breakable }}</span>
       <span class="kpi-figure">
         {% if item.url and item.holds_links %}<a class="value" href="{{ item.url }}">{% else %}<span class="value">{% endif %}{% if item.tone %}{% status item.value tone=item.tone pill=False %}{% else %}{{ item.value|breakable }}{% endif %}{% if item.url and item.holds_links %}</a>{% else %}</span>{% endif %}
@@ -28,7 +32,9 @@
           margin each side, so the dot on the first and the newest reading is
           whole.
           {% endcomment %}
-          <svg class="kpi-trend" viewBox="-5 -3 110 30" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline points="{{ drawing.points }}"></polyline>{% for mark in drawing.marks %}<rect class="kpi-trend-hit" x="{{ mark.left }}" y="0" width="{{ mark.width }}" height="24" data-tip="{{ mark.tip }}"></rect><line class="kpi-trend-dot{% if mark.latest %} is-latest{% endif %}" x1="{{ mark.x }}" y1="{{ mark.y }}" x2="{{ mark.x }}" y2="{{ mark.y }}"></line>{% endfor %}</svg>
+          {% comment %}
+          <!-- ast-grep-ignore: hand-drawn-icon --> a figure's trend line, drawn by the figure part
+          {% endcomment %}<svg class="kpi-trend" viewBox="-5 -3 110 30" preserveAspectRatio="none" aria-hidden="true" focusable="false"><polyline points="{{ drawing.points }}"></polyline>{% for mark in drawing.marks %}<rect class="kpi-trend-hit" x="{{ mark.left }}" y="0" width="{{ mark.width }}" height="24" data-tip="{{ mark.tip }}"></rect><line class="kpi-trend-dot{% if mark.latest %} is-latest{% endif %}" x1="{{ mark.x }}" y1="{{ mark.y }}" x2="{{ mark.x }}" y2="{{ mark.y }}"></line>{% endfor %}</svg>
         {% endif %}
       </span>
       {% comment %}The line under the value, alone or above the parts of its whole.{% endcomment %}

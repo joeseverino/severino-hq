@@ -846,13 +846,14 @@ by hand: the pill and tone classes are not public.
 No template draws by hand what a shared part draws: a `<section>`, a heading,
 a fold, a form that writes, a notice and the other shapes the table at the end
 of this section names, each beside the part to write instead. `hq plugin
-check` refuses each where it is drawn, and the host's own templates are held
-to the same table. A package whose pages still draw some has a
-`hand_drawn.json` beside its `plugin.py` that counts them by template and
-shape (`{"example_notes/index.html": {"a fold": 2}}`); the check refuses a
-count above it and one below it, so it only falls. It exists to be emptied:
-each page moved onto its part lowers its count, and the file goes when none
-is left. `PLUGIN_API_VERSION` 11 retires `{% section_head %}`, whose
+check` refuses each where it is drawn with the host's `hand-drawn-*` ast-grep
+rules (`tools/lint/ast-grep/rules`), which hold the host's own templates
+too, and `ast-grep scan --update-all` moves the ones whose rule carries a
+fix. A shape a page still draws is marked on the line above it, inside a
+Django comment no page receives, with why:
+`{% comment %}`, then `<!-- ast-grep-ignore: hand-drawn-fold --> why` alone
+on its line, then `{% endcomment %}` on the shape's own line before it. A
+mark no shape needs any more fails the check, so the marks only fall. `PLUGIN_API_VERSION` 11 retires `{% section_head %}`, whose
 head `{% section %}` draws, and publishes `partials/_icon.html`.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
@@ -914,8 +915,8 @@ A test that posts a form without opening its page first sends
 | `partials/_cadence_matrix.html` | `matrix` | `compact`, `label` | Several cadences over the same periods, from `hq_sdk.ui.CadenceMatrix`. |
 | `partials/_chart_tabs.html` | `charts`, `group` | nothing | Up to four charts of one thing in the space of one. |
 | `partials/_dropzone.html` | `field` | `hint`, `title` | A file field that also accepts a drop. |
-| `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
-| `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `gap`, `hooks`, `note`, `verb` | `action`, `fields`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
+| `partials/_empty_state.html` | `message` | `action_label`, `action_url`, `inline`, `remedy`, `why` | The one empty state: what is missing, then what would fill it. |
+| `partials/_form.html` | `bar`, `cancel_url`, `choice_field`, `choices`, `form`, `note`, `verb` | `action`, `fields`, `gap`, `hooks`, `in_place`, `method`, `next`, `table_body` | A form that writes: its token, its errors, its fields or its table, and its closing row. |
 | `partials/_form_actions.html` | `choice_field`, `verb` | `bar`, `cancel_url`, `choices`, `gap`, `in_place`, `live`, `note` | A form's closing row: its one verb, Cancel, and what saving does. |
 | `partials/_form_errors.html` | nothing | `form` | What was wrong with a submitted form as a whole, above its fields. |
 | `partials/_icon.html` | nothing | `name` | One of the host's icons, by `name`, the height of the text beside it. |
@@ -935,26 +936,27 @@ Classes: `actions-col`, `allocation`, `allocation-legend`, `btn`, `cell-data`, `
 
 Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`.
 
-| Drawn by hand | Write instead |
-| --- | --- |
-| a `<section>` element | `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout |
-| a count split from its words | {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}` |
-| a figure | `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi |
-| a figure apart from its word | {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit or a word the count leaves alone ("more"): the figure and its word as one value |
-| a filter bar | `{% filter_bar filtered=... clear=... %}`controls`{% summary %}`count`{% endfilter_bar %}` |
-| a fold | `{% section "Heading" fold=True %}`body`{% endsection %}` |
-| a form that writes | `{% include "partials/_form.html" %}`, or `{% post_button %}` for a single verb |
-| a heading | the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page |
-| a list of findings | `{% include "partials/_work_queue.html" with items=... %}` from the queue's items (hq_sdk.ui.Insight), with dense=True for problems inside a section |
-| a list of rows | `{% include "partials/_record_list.html" %}` from hq_sdk.ui.ListRow |
-| a notice | `{% notice %}` |
-| a row's actions | `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell |
-| a table outside its region | `{% table_region "Label" %}` around its `<table class="data-table">` |
-| a toned value | `{% status value tone=tone pill=False %}` |
-| an empty line | `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`; this shape is read by its opening words, so it finds one spelling of an empty line |
-| an empty state | `{% include "partials/_empty_state.html" with message="..." %}` |
-| an icon | `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img" |
-| label and value facts | `{% facts %}` around each `{% fact "Label" value=... %}`, or `{% facts layout="band" %}` for a band |
+| Rule | Drawn by hand | Write instead |
+| --- | --- | --- |
+| `hand-drawn-empty-line` | An empty line drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`, or a `{% section %}`'s `{% empty %}`. |
+| `hand-drawn-empty-state` | An empty state drawn by hand, where the empty state part draws it. | Write `{% include "partials/_empty_state.html" with message="..." %}`. |
+| `hand-drawn-facts` | Label and value facts drawn by hand, where the facts part draws them. | Write `{% facts %}` around each `{% fact "Label" value=... %}`, or `{% facts layout="band" %}` for a band. |
+| `hand-drawn-figure` | A figure drawn by hand, where the figure part draws it. | Write `{% include "partials/_kpi_grid.html" %}` from hq_sdk.ui.Kpi. |
+| `hand-drawn-filter-bar` | A filter bar drawn by hand, where the filter bar part draws it. | Write `{% filter_bar filtered=... clear=... %}`controls`{% summary %}`count`{% endfilter_bar %}`. |
+| `hand-drawn-findings` | A list of findings drawn by hand, where the work queue part draws it. | Write `{% include "partials/_work_queue.html" with items=... %}` from the queue's items (hq_sdk.ui.Insight), with dense=True for problems inside a section. |
+| `hand-drawn-fold` | A fold drawn by hand, where the section part draws it. | Write `{% section "Heading" fold=True %}`body`{% endsection %}`. |
+| `hand-drawn-form` | A form that writes drawn by hand, where the form part draws it. | Write `{% include "partials/_form.html" %}`, or `{% post_button %}` for a single verb. |
+| `hand-drawn-heading` | A heading drawn by hand, where the section part or the page frame draws it. | Write the heading of `{% section "Heading" %}`, a sub-head a `{% section %}` inside it (it heads itself a level down); the page's own title is the frame's, from page. |
+| `hand-drawn-icon` | An icon drawn by hand, where the icon part draws it. | Write `{% include "partials/_icon.html" with name="..." %}`; a drawing that says something is role="img". |
+| `hand-drawn-list-rows` | A list of rows drawn by hand, where the record list part draws it. | Write `{% include "partials/_record_list.html" %}` from hq_sdk.ui.ListRow. |
+| `hand-drawn-notice` | A notice drawn by hand, where the notice part draws it. | Write `{% notice %}`body`{% endnotice %}`, with tone= and a `{% title %}` part where it has them. |
+| `hand-drawn-row-actions` | A row's actions drawn by hand, where the row actions part draws them. | Write `{% row_actions actions %}` from hq_sdk.pages.PageAction, which draws the row's cell. |
+| `hand-drawn-row-group` | A group of rows headed by hand, where the row group tag heads it. | Write `{% row_group label count %}`. |
+| `hand-drawn-section` | A `<section>` element drawn by hand, where the section part draws it. | Write `{% section "Heading" %}`body`{% endsection %}`, or a `<div>` for one that only groups a layout. |
+| `hand-drawn-split-count` | A count split from its words, where the counted filter writes them as one. | Write {{ n\|counted:"thing" }}, the figure and its words as one, or `{% fact "Label" value=n %}`. |
+| `hand-drawn-split-figure` | A figure apart from its word, where a value filter writes them as one. | Write {{ n\|counted:"thing" }} for a count, or {{ x\|measured:"mi" }} for a unit or a word the count leaves alone ("more"), the figure and its word as one value. |
+| `hand-drawn-table` | A table drawn outside its region. | Write `{% table_region "Label" %}` around its `<table class="data-table">`. |
+| `hand-drawn-toned-value` | A toned value drawn by hand, where the status part draws it. | Write `{% status value tone=tone pill=False %}`. |
 
 <!-- /sdk_contract -->
 

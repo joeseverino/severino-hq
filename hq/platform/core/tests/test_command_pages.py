@@ -148,7 +148,11 @@ class EveryHeldRequestTests(TestCase):
 
     def said(self, held) -> tuple[str, str]:
         page = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
-        (card,) = [element.words for element in within(page, "class", "approval-head") if element.tag == "h2"]
+        (card,) = [
+            element.words
+            for element in within(page, "class", "approval-card")
+            if "section-lede" in element.attrs.get("class", "")
+        ]
         (bell,) = [item.title for item in waiting_for_approval() if item.key == f"approval:{held.id}"]
         return card, bell
 

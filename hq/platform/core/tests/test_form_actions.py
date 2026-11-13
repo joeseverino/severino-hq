@@ -11,7 +11,6 @@ import re
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.application.tests.test_hand_drawn import PARTS
 from hq.platform.application.tests.tree import ROOT
 
 TEMPLATES = ROOT / "templates"
@@ -23,16 +22,10 @@ _POSTS = re.compile(r"<form\b[^>]*\bmethod=\"post\"", re.IGNORECASE)
 _OWN_ROW = re.compile(r"type=\"submit\"|class=\"[^\"]*\bform-actions\b|<button\b(?![^>]*type=\"button\")")
 _COMMENT = re.compile(r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}|{#.*?#}", re.DOTALL)
 _FORM = re.compile(r"<form\b.*?</form>", re.DOTALL | re.IGNORECASE)
-# The forms that are one verb or none (a menu's button, a form a script
-# submits), which test_hand_drawn names as parts of their own.
-ONE_VERB = frozenset(name for name, shape in PARTS if shape == "a form that writes")
-# Today's forms that close with a row of their own, each to move onto
-# partials/_form.html; this only falls.
-OWN_ROW_TODAY = frozenset(
-    {
-        "control_plane/zone_mail.html",
-    }
-)
+# A form that is one verb or none (a menu's button, a form a script submits)
+# is marked as a part of its own where it is drawn, by the suppression of
+# the hand-drawn-form rule (tools/lint/ast-grep/rules), which says why.
+_ONE_VERB = re.compile(r"<!-- ast-grep-ignore:[^>]*\bhand-drawn-form\b")
 
 
 def form_templates() -> dict[str, str]:
@@ -86,19 +79,16 @@ class MissesTests(SimpleTestCase):
 class FormTemplateTests(SimpleTestCase):
     def test_every_form_closes_with_the_shared_row(self):
         forms = form_templates()
+        raw = {name: (TEMPLATES / name).read_text(encoding="utf-8") for name in forms}
 
         self.assertIn(FORM, forms)
         self.assertEqual(
             [
                 f"{name}: {missed}"
                 for name, source in forms.items()
-                if name not in ONE_VERB | OWN_ROW_TODAY and (missed := misses(source))
+                if not _ONE_VERB.search(raw[name]) and (missed := misses(source))
             ],
             [],
             f"A form closes with {{% include {PARTIAL!r} with verb=... cancel_url=... only %}}, its verb and its"
             " way back from the view",
         )
-
-    def test_each_form_left_to_move_still_closes_its_own_way(self):
-        forms = form_templates()
-        self.assertEqual(sorted(name for name in OWN_ROW_TODAY if not misses(forms.get(name, ""))), [])

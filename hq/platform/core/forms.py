@@ -32,3 +32,12 @@ class OwnDeviceForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, auto_id="device-%s", **kwargs)
+
+
+class PolicyForm(forms.Form):
+    """The agents' rules, saved together.
+
+    Each rule is a select its table cell draws (core/_policy_setting.html),
+    named by its agent and action, so the form declares no field of its own:
+    it carries what was wrong with a save, said over the tables.
+    """

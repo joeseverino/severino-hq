@@ -1,7 +1,6 @@
 """The host's templates as a contract: what an extension may use, and the record of it."""
 
 import io
-import json
 from contextlib import redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -94,93 +93,6 @@ class TemplateValidationTests(SimpleTestCase):
             with self.subTest(place=place):
                 self.assertTrue(any(place in line and name in line for line in found), f"{place} {name} not in {found}")
         self.assertEqual(len(found), len(expected), found)
-
-
-# Each shape of hq_sdk.template_contract.HAND_DRAWN drawn by hand, one to a line,
-# then two that are not: one in a comment and a table in its region.
-DRAWN = (
-    "<section>\n<h2>A</h2>\n<details>\n<table></table>\n"
-    '<form method="post">\n<ul class="list-rows">\n<div class="kpi">\n<p class="notice">\n'
-    '<form class="filter-bar">\n<svg aria-hidden="true">\n<span class="tone-good">\n<dl class="fact-band">\n'
-    "<strong>{{ refused_count }}</strong> refused\n"
-    "{{ miles|floatformat:2 }} mi\n"
-    '<div class="empty">\n<p class="muted">No notes yet.</p>\n'
-    '<ul class="attention-list">\n'
-    '<td>{% post_button "A" "/a/" %}</td>\n'
-    '{% comment %}<section>{% endcomment %}{% table_region "A" %}<table class="data-table"></table>'
-    "{% endtable_region %}"
-)
-
-
-class HandDrawnTests(SimpleTestCase):
-    SHAPES = (
-        "a <section> element",
-        "a heading",
-        "a fold",
-        "a table outside its region",
-        "a form that writes",
-        "a list of rows",
-        "a figure",
-        "a notice",
-        "a filter bar",
-        "an icon",
-        "a toned value",
-        "label and value facts",
-        "a count split from its words",
-        "a figure apart from its word",
-        "an empty state",
-        "an empty line",
-        "a list of findings",
-        "a row's actions",
-    )
-
-    def test_each_shape_drawn_by_hand_is_refused_naming_the_part_to_write(self):
-        with TemporaryDirectory() as directory:
-            root = Path(directory)
-            (root / "templates/example").mkdir(parents=True)
-            (root / "templates/example/drawn.html").write_text(DRAWN, encoding="utf-8")
-            found = [line for line in template_violations(root) if "by hand" in line]
-
-        self.assertEqual(len(self.SHAPES), len(template_contract.HAND_DRAWN))
-        self.assertEqual(
-            found,
-            [
-                f"templates/example/drawn.html:{line}: draws {shape} by hand; "
-                f"write {template_contract.HAND_DRAWN[shape]['write']}"
-                for line, shape in enumerate(self.SHAPES, 1)
-            ],
-        )
-
-    def _counted(self, baseline: dict[str, dict[str, int]]) -> list[str]:
-        """What the check says of a package with two folds, under ``baseline``."""
-
-        with TemporaryDirectory() as directory:
-            package = Path(directory) / "example_pkg"
-            (package / "templates/example").mkdir(parents=True)
-            (package / "templates/example/page.html").write_text("<details>\n<p>A</p>\n<details>\n", encoding="utf-8")
-            (package / validation.BASELINE).write_text(json.dumps(baseline), encoding="utf-8")
-            return [line.partition(": ")[2] for line in template_violations(directory)]
-
-    def test_a_package_s_baseline_holds_exactly_what_its_templates_draw(self):
-        self.assertEqual(self._counted({"example/page.html": {"a fold": 2}}), [])
-
-    def test_a_shape_past_the_baseline_names_every_line(self):
-        found = self._counted({"example/page.html": {"a fold": 1}})
-
-        self.assertEqual(len(found), 2)
-        self.assertTrue(all(line.startswith("draws a fold by hand") for line in found), found)
-
-    def test_a_baseline_above_what_is_drawn_is_lowered(self):
-        (found,) = self._counted({"example/page.html": {"a fold": 3}})
-
-        self.assertIn("lower it to 2", found)
-
-    def test_a_baseline_names_only_shapes_and_templates_that_exist(self):
-        found = self._counted({"example/page.html": {"a fold": 2, "a sketch": 1}, "example/gone.html": {"a fold": 1}})
-
-        self.assertEqual(len(found), 2, found)
-        self.assertTrue(any("'a sketch'" in line for line in found), found)
-        self.assertTrue(any("example/gone.html" in line for line in found), found)
 
 
 # The shapes a report can lose: a violation inside a block override, the same

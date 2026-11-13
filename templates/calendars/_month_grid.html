@@ -5,7 +5,9 @@ open day, if any. Its links open the calendar, wherever the grid is shown.
 The open day is a class: today's date link holds the grid's one aria-current,
 and a table cell outside a grid takes no aria-selected.
 {% endcomment %}
-<table class="month-grid">
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-table --> a month drawn as a grid of days, not a data table
+{% endcomment %}<table class="month-grid">
   <caption class="visually-hidden">{{ calendar.month|when:"month" }}</caption>
   <thead>
     <tr>

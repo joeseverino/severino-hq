@@ -1,5 +1,9 @@
-<section class="command-center-group" aria-labelledby="command-center-group-{{ group.key }}">
-  <h3 id="command-center-group-{{ group.key }}">{{ group.label|breakable }}</h3>
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-section --> a group of the palette's listbox: its heading labels a run of options inside one list, never a framed part
+{% endcomment %}<section class="command-center-group" aria-labelledby="command-center-group-{{ group.key }}">
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-heading --> the palette group's label, as above
+  {% endcomment %}<h3 id="command-center-group-{{ group.key }}">{{ group.label|breakable }}</h3>
   {% for item in group.items %}
     <a id="command-center-option-{{ group.key }}-{{ forloop.counter }}"
        class="command-center-option" href="{{ item.url }}" role="option"

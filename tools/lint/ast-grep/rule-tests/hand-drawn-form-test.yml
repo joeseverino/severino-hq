@@ -1,0 +1,10 @@
+id: hand-drawn-form
+valid:
+  - '{% include "partials/_form.html" with form=form %}'
+  - '<form method="get" class="search"><input name="q"></form>'
+  - '<form role="search"></form>'
+invalid:
+  - '<form method="post"><button>Save</button></form>'
+  - '<form action="/a/" method=post></form>'
+  - '<FORM METHOD="POST"></FORM>'
+  - '<form {% if a %}method="post"{% endif %}></form>'

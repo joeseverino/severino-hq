@@ -480,15 +480,18 @@ INSET_IN_THE_FRAME = (
 # one line, are followed by frames whose tops are on one line too (a pixel
 # apart is the same line in one engine or another). A section whose head stands
 # inside its frame is framed by its landmark, the edge around head and body.
+# A frame broken across columns starts where its first fragment does: its
+# bounding box spans every column it runs into.
 FRAMES_OUT_OF_ROW = (
     "([head, frame]) => {"
     + DESCRIBE
     + """
+  const start = (el) => el.getClientRects()[0] ?? box(el);
   const sections = [...document.querySelectorAll('main ' + head)].flatMap((h) => {
     const body = h.nextElementSibling;
     if (!h.checkVisibility() || !body?.matches(frame) || !body.checkVisibility()) return [];
     const enclosing = parseFloat(getComputedStyle(h.parentElement).borderTopWidth) > 0;
-    return [[h, box(h), box(enclosing ? h.parentElement : body)]];
+    return [[h, box(h), start(enclosing ? h.parentElement : body)]];
   });
   const found = [];
   sections.forEach(([a, ha, fa], at) => {

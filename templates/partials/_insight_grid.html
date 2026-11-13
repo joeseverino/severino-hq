@@ -24,16 +24,20 @@ communicated by color alone.
         {% if item.eyebrow %}{% status item.eyebrow tone=item.status|default:"neutral" %}{% endif %}
         {% if item.value %}<strong class="insight-value">{{ item.value|breakable }}</strong>{% endif %}
       </div>
-      <h3 class="insight-title">
+      {% comment %}
+      <!-- ast-grep-ignore: hand-drawn-heading --> an insight's title, the part's own
+      {% endcomment %}<h3 class="insight-title">
         {% if item.url %}<a href="{{ item.url }}">{{ item.title|breakable }}</a>{% else %}{{ item.title|breakable }}{% endif %}
       </h3>
+      {% headed %}
       {% if item.body %}<p class="insight-body">{{ item.body|breakable }}</p>{% endif %}
       {% if item.action %}<p class="insight-action">{{ item.action|breakable }}</p>{% endif %}
       {% if item.workflow %}{% with parts=item.workflow|workflow_parts %}
-        {% include "partials/_resolution_workflow.html" with steps=parts.steps fold=parts.fold label=item.title only %}
+        {% include "partials/_resolution_workflow.html" with steps=parts.steps fold=parts.fold only %}
         {% if parts.reason %}<p class="attention-reason">{{ parts.reason|breakable }}</p>{% endif %}
       {% endwith %}{% endif %}
       {% remedies item.actions as shown %}{% if shown %}<div class="attention-actions">{% include "partials/_action_links.html" with actions=shown only %}</div>{% endif %}
+      {% endheaded %}
     </article>
   {% endfor %}
 </div>

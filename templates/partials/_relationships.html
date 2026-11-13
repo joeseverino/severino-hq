@@ -17,16 +17,14 @@
     <p class="muted">Could not be read: {{ relationships.unreadable|join:", "|breakable:"." }} This list may be incomplete. <a class="subtle-link" href="{% url 'control_plane:connections' %}">Connections{% arrow %}</a></p>
   {% endif %}
   {% if relationships.readouts %}
-    <details class="section-readout">
-      <summary>Raw readings</summary>
+    {% section "Raw readings" fold=True %}
       {% for label, source, text in relationships.readouts %}
-        <details class="section-readout">
-          <summary>{{ label|breakable }}</summary>
+        {% section label fold=True %}
           {% if source %}<p class="muted">Through {% entity source %}</p>{% endif %}
           <pre tabindex="0">{{ text|breakable }}</pre>
-        </details>
+        {% endsection %}
       {% endfor %}
-    </details>
+    {% endsection %}
   {% endif %}
 {% endpartialdef %}
 {% if relationships.groups %}

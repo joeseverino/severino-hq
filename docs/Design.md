@@ -202,8 +202,8 @@ at the top, and no page sets its table's cells otherwise. What can be done to
 a row's record ends the row as `{% row_actions actions %}`, each a
 `PageAction` drawn as a compact control with its middle on the first line's,
 under a heading of kind `control`; a page never draws a button in a cell
-(*Gate:* the survey's `actions on the first line`, and `a row's actions` in
-`HAND_DRAWN`). A row's controls stand side by side on one line, which their
+(*Gate:* the survey's `actions on the first line`, and the
+`hand-drawn-row-actions` rule). A row's controls stand side by side on one line, which their
 column asks for, and wrap only in a tight table, where every kept line does
 (*Gate:* the survey's `row actions stacked with room`).
 *Gates:* `a_table_fits_its_box_at_every_width`,
@@ -425,16 +425,18 @@ a `<small>` each, or a `detail=` given as a list. What a fact holds past its
 lines (its record list, a disclosure of what runs now) follows them in the
 detail, so a page's summary cards are a band of facts too, never a grid of its
 own.
-A fact drawn by hand (a page's own band) is a shape `test_hand_drawn`
-counts, and so is a figure set bold apart from the words that count it.
+A fact drawn by hand (a page's own band) is refused by the
+`hand-drawn-facts` rule, and so is a figure set bold apart from the words that count it.
 
 What names a value (`.fact-label`, a tile's label, a `<dt>`) is sentence case
 in the muted voice. Capitals are for a kicker over a group (`.eyebrow`), never
-a value's name, a state or a tag; `lint:css` holds every selector to the
-kickers listed in `tools/lint/stylelint.config.mjs`.
+a value's name, a state or a tag; `lint:css` refuses a change of case
+anywhere but a kicker, whose rule says what it heads in its disable comment.
 
 A list of short steps (`.step-list`) is read down its columns, so its columns
-end within a step of each other. The
+end within a step of each other. Each step is `{% step icon=... %}`: its icon,
+then what it says; `tone` colors the icon by how a check stands, `done`
+draws a finished step quiet, and `title` is its tooltip. The
 dashboard's readings are one row when each has room and a list when not.
 
 **A route reads in one direction.** A path from one thing to another
@@ -492,6 +494,15 @@ search or lookup form does. The partial derives it (`asks_one_question`, then
 `.form.is-question`), so no page flags it.
 *Catalog:* `form/lookup`, and `form/lookup-help` with its help and an error.
 
+**A choice that has a consequence says it.** A field whose few answers each
+change something different declares `ChoiceCards(described=...)`
+(`hq/platform/application/forms.py`): each answer a card of its radio, its
+few words as the radio's name and what choosing it does as its description,
+the whole card pressable. A number with a unit declares
+`SuffixedInput(suffix=...)`, the unit beside the box. Both draw through the
+form's own loop, so no page writes their markup.
+*Catalog:* `form/choice-cards`.
+
 A form whose fields stand one to a row of a table (a group chosen for each
 record, a verdict for each request) is the same partial with `table_body`
 naming the template that draws the table, in its `table_region`. The form lays
@@ -510,7 +521,10 @@ page closes up rather than carrying a card that says "nothing here". An empty
 list says whether its own search or filters emptied it, and offers the way
 back. A page with nothing yet says what is missing and, where it can, what
 would fill it and where (`partials/_empty_state.html`: `message`, `why`, an
-action); controls that only make sense over data wait for the data. A
+action); controls that only make sense over data wait for the data. An
+absence where a value would stand (a fact, a cell, a row) is the same part
+with `inline=True`: its words, quiet, in the line that holds them, with no
+frame. A
 `{% table_region %}` whose tables hold no row draws that card in their place,
 so no page draws headings over nothing: its `empty=` says what is missing in
 the page's words, with `remedy=` (or `action_url=` and `action_label=`), and
@@ -590,10 +604,15 @@ address the link is left out, so a page passes the one it has. `figure=True`
 draws the section as a `<figure>`, its head the `<figcaption>`, for a drawing
 (a chart, a calendar) whose title, line under it and legend are a section's
 head like any other. A section inside a section heads itself a level
-down inside the outer frame, adding no frame or inset of its own, two of one
+down inside the outer frame, and so does one inside any other frame (a card,
+a form, a band's cell): the frame's `--surface-inset` is 0 there, so its head
+draws no rule and its body adds no frame or inset of its own. A part that
+draws its own title (a dialog, an insight card) wraps what it holds in
+`{% headed %}…{% endheaded %}`, so a section inside heads itself a level under
+that title. A `<pre>` in a section's body wraps and scrolls only in height. Two of one
 heading name their own ids, `id` is the section's own (a link to it, a
 region refreshed in place), `fold=True` draws it closed with its head as its
-toggle (`open` starts it open), and `css` and `data_*` are the section's, on a
+toggle (`open`, any truthy value such as a form's errors, starts it open), and `css` and `data_*` are the section's, on a
 landmark that never pads itself, whatever `css` names: the frame holds the
 padding. A section draws its head inside its frame, over a rule, unless its
 body is one table region and nothing else, whose head stands above the frame
@@ -706,7 +725,9 @@ through the platform's `command="show-modal"` invoker, with no script. It is
 never content the page's job depends on, which stays on the page. It goes in a
 section's body or a head's aside, never in a fold's summary: a button inside
 the summary is a control nested in the toggle, whose role a screen reader
-loses. Host-only, as the dialog it opens is.
+loses. Host-only, as the dialog it opens is. A panel a status opens in place
+(an urgency's origin) is the same `partials/_modal.html` with `popover=True`:
+it opens as a popover, and its close button hides it.
 
 **One filter bar.** `{% filter_bar filtered=... clear=... %}`: the page's
 search field and selects, one Filter (or the bar's own `verb=`), Clear
@@ -714,7 +735,7 @@ filters back to `clear` when anything is set, and the count of what shows
 (`{% summary %}`) at the row's end. A list's table toolbar is the same bar.
 The search takes the row's room; every other control is as wide as what it
 says, a select its longest option. No chip walls.
-*Gate:* `test_hand_drawn.py` refuses `.filter-bar` written by hand; the
+*Gate:* the `hand-drawn-filter-bar` rule refuses `.filter-bar` written by hand; the
 survey's "filter choices as wide as their options" finds a choice stretched
 over its bar.
 
@@ -846,7 +867,7 @@ itself: `{{ n|counted:"check" }}` for a count,
 `{{ miles|floatformat:2|measured:"mi" }}` for a unit or a word the count
 leaves alone (`measured:"more"`), and the value tags that say a figure in
 words (`bytes`, `seconds`, `when`) join theirs.
-*Gate:* "a figure apart from its word" in `HAND_DRAWN`, over the host's
+*Gate:* the `hand-drawn-split-figure` rule, over the host's
 templates and every extension's.
 
 A bare figure counting what a heading heads (`.count`) stands in that
@@ -904,7 +925,7 @@ contradicts and a domain's own attention list use one projection
 (`hq/platform/application/decisions.py`) and draw it as one table
 (`partials/_work_queue.html`, its rows `partials/_queue_rows.html`), so every
 row's urgency, words and buttons share one edge. A page never draws a list
-of its own (`a list of findings` in `HAND_DRAWN`). A row reads, in order:
+of its own (the `hand-drawn-findings` rule). A row reads, in order:
 
 - the title and, only when it is urgent, the word "Urgent" after it in its
   tone (the words are `decisions.URGENCY`; a row that needs attention carries
@@ -991,7 +1012,11 @@ A row of a record list (`.list-rows`) reads as one line: its meta follows its
 name a gap after, never at the row's far side across an empty middle. What can
 be done to the record ends its line: `ListRow.actions`, each a `PageAction`,
 drawn as compact controls, a POST through `post_button`, a glyph named aloud
-by its `title`, and one that cannot be pressed as `disabled`.
+by its `title`, and one that cannot be pressed as `disabled`. A row that
+names a thing HQ links (a related record, a project) is given its `link`, an
+`EntityLink`, in place of a `title` and a `url`, and draws it as every
+mention of a thing is drawn. A project's row gives its `category`, drawn as
+that category's color (`--cat-*`) before the title, its name in `detail`.
 
 A pair whose value is a list of names (`.address-list`, or a `.code-list` of
 two or more) takes a row of its own. So it never wraps beside another pair and
@@ -1002,7 +1027,14 @@ A value goes under its label only where the box cannot hold both on one line.
 The same holds for a node key beside its machine and a piece of evidence beside
 its kind (`.conn-rows` flows each row once it is too narrow for three columns).
 
-A thing's state sits on its title's line (`page_aside`), as words. The facts
+A thing's state sits on its title's line (`page_aside`), as words. A page about
+a day (the dashboard) names it with `page_dateline`, drawn over the title where
+a trail stands. A head with an aside and a line of facts (`page_facts`) stacks
+its words in a column of their own (the trail or day, the title, the facts) and
+stands the aside beside the whole column, as the dashboard's readings stand
+beside its greeting and what needs you. A card holding nothing but a line of
+facts is a strip of counts, with a narrower inset and its words a size under
+its values. The facts
 about it at a glance are a band under the head, as a service, a machine and
 HQ's own page open. A line that dates or sources a section goes beside its
 heading (`.heading-aside`), not loose under it. So does a card's way to
@@ -1036,8 +1068,7 @@ among them. *Gate:* `flows in reading order` and `flows share their rows` in
 the layout survey. No page
 writes an auto-fit grid of its own for this: `lint:css` refuses
 `repeat(auto-fit` and `repeat(auto-fill` outside the parts that lay out
-something else inside themselves (`flowGrids` in
-`tools/lint/stylelint.config.mjs`, each with its reason).
+something else inside themselves, each of which says so in its disable comment.
 
 **Only what is urgent is framed.** A thing's page draws the problems about it
 from `partials/_problems.html`. An urgent one is the queue's row in a box above

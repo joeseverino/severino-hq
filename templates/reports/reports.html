@@ -30,11 +30,7 @@ A year with no expenses is said by the count above; its breakdowns do not draw.
   {% endsection %}
 
   {% section "Largest expenses, "|add:shown_year %}
-    <ul class="list-rows">
-      {% for e in largest_expenses %}
-        <li><span class="row-main">{% entity "expense"|entity_of:e.pk label=e.label %}</span><span class="row-meta">{{ e.date|when }}{% dot %}{{ e.get_category_display|breakable }}{% dot %}<strong>{{ e.total_cost|money }}</strong></span></li>
-      {% endfor %}
-    </ul>
+    {% include "partials/_record_list.html" with rows=largest_expenses %}
   {% endsection %}
 </div>
 {% endwith %}
@@ -48,31 +44,23 @@ not drawn.
 <div class="section-flow">
   {% if status_groups %}
   {% section "By status" %}
-    <ul class="list-rows">
+    {% facts %}
       {% for group in status_groups %}
-        <li><span class="row-main"><strong>{{ group.label|breakable }}</strong></span><span class="row-meta">{% for status in group.counts %}<a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</span></li>
+        {% fact group.label %}<ul class="dot-list">{% for status in group.counts %}<li><a href="{{ status.url }}">{{ status.label|breakable }} {{ status.count|breakable }}</a></li>{% endfor %}</ul>{% endfact %}
       {% endfor %}
-    </ul>
+    {% endfacts %}
   {% endsection %}
   {% endif %}
 
   {% if assets_by_category %}
   {% section "Assets by category" %}
-    <ul class="list-rows">
-      {% for row in assets_by_category %}
-        <li><span class="row-main"><a href="{{ row.url }}">{{ row.label|breakable }}</a> <span class="muted">{{ row.n|breakable }}</span></span><span class="row-meta">{% if row.total %}<strong>{{ row.total|money }}</strong>{% endif %}</span></li>
-      {% endfor %}
-    </ul>
+    {% include "partials/_record_list.html" with rows=assets_by_category %}
   {% endsection %}
   {% endif %}
 
   {% if docs_needing_review %}
   {% section "Due for review" more_label="All" more_url=docs_needing_review_url %}
-    <ul class="list-rows">
-      {% for link, reviewed in docs_needing_review %}
-        <li><span class="row-main">{% entity link %}</span><span class="row-meta">{% if reviewed %}last reviewed {{ reviewed|when:"day" }}{% else %}never reviewed{% endif %}</span></li>
-      {% endfor %}
-    </ul>
+    {% include "partials/_record_list.html" with rows=docs_needing_review %}
   {% endsection %}
   {% endif %}
 

@@ -283,6 +283,22 @@ def others(rows, opened):
     return rows[:opened] + rows[opened + 1 :]
 
 
+# Each count of a strip: whether its number and its words share one line and
+# the count takes no second, whether it is a link, and the top of its line.
+_COUNTS_STRIP = """(strip, [cell, valued, labeled]) => ({counts: [...strip.children].filter(fact => fact.matches(cell)).map(fact => {
+  const value = fact.querySelector(valued).getBoundingClientRect();
+  const label = fact.querySelector(labeled).getBoundingClientRect();
+  const box = fact.getBoundingClientRect();
+  const line = Math.max(value.height, label.height);
+  return {
+    text: fact.textContent.trim(),
+    phrase: label.top < value.bottom && value.top < label.bottom && box.height < line * 1.5,
+    linked: Boolean(fact.querySelector(`${valued} a[href]`)),
+    top: Math.round(box.top),
+  };
+})})"""
+
+
 class ComponentLayoutTests(LayoutBrowserTests):
     """Rules with a setup of their own: one page, probe or control each."""
 
@@ -704,6 +720,40 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertTrue(widened)
         found = self.page.evaluate(SPILLED_LABELS, "main :is(.example-star, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
+
+    def test_a_word_before_a_name_in_a_cell_shares_the_name_s_line(self):
+        """The word a cell sets before a name ("on" a machine under a row's
+        name, "Created" a record in a cell of free text) stays on the line
+        the name opens, never alone above it."""
+
+        from hq.platform.core.templatetags.value_tags import breakable
+
+        host = breakable("example-primary-container-host-with-a-long-name")
+        record = breakable("an-example-proxy-host-with-a-deliberately-long-name")
+        self.pages = {
+            **self.pages,
+            "word-before-a-name-probe": probe(
+                '<div class="table-scroll" style="inline-size: 20rem"><table class="data-table"><thead><tr>'
+                '<th class="row-gutter">Name</th><th>Change</th></tr></thead><tbody><tr>'
+                '<td class="row-gutter"><strong data-cell="name">example.com</strong><br>'
+                f'<span class="muted">on <a href="#" data-entity="Machine">{host}</a></span></td>'
+                f'<td class="cell-data" data-cell="data">Created {record} from a request</td>'
+                "</tr></tbody></table></div>"
+            ),
+        }
+        self.open("word-before-a-name-probe", PHONE_SCREEN[0])
+        lines = self.page.evaluate(
+            """() => [...document.querySelectorAll('main td')].map((cell) => {
+              // The line under the row's name, and the cell of free text.
+              const box = cell.querySelector('br')?.nextElementSibling ?? cell;
+              const words = document.createRange();
+              words.selectNodeContents(box.firstChild);
+              const word = [...words.getClientRects()].find((r) => r.width);
+              const name = [...(box.querySelector('[data-entity]') ?? box.firstElementChild).getClientRects()].find((r) => r.width);
+              return [box.firstChild.data.trim(), Math.abs(word.top - name.top) < word.height / 2];
+            })"""
+        )
+        self.assertEqual(lines, [["on", True], ["Created", True]])
 
     @with_script
     def test_a_column_holds_out_for_the_longest_part_its_cut_names_cannot_break(self):
@@ -1338,6 +1388,23 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.assertGreater(len(rows), 1)
                     self.assertEqual({len(row) for row in rows}, {1})
                     self.assertEqual({round(row[0]["left"]) for row in rows}, {round(rows[0][0]["left"])})
+
+    def test_the_dashboards_counts_are_one_line_that_wraps_between_counts(self):
+        """Each count reads as one phrase, its number then its words on one
+        line, a link where it has an address; the strip is one line where the
+        counts fit and wraps between counts, never inside one, on a phone."""
+
+        for width in (PHONE_SCREEN[0], 820, WIDE, 1900):
+            with self.subTest(width=width):
+                self.open("dashboard", width)
+                strip = self.page.locator(SELECTORS["dashboard_counts"]).evaluate(
+                    _COUNTS_STRIP, [SELECTORS["band_fact_cell"], SELECTORS["fact_value"], SELECTORS["fact_label"]]
+                )
+                self.assertGreater(len(strip["counts"]), 2)
+                self.assertEqual([count for count in strip["counts"] if not count["phrase"]], [])
+                self.assertEqual([count for count in strip["counts"] if not count["linked"]], [])
+                if width >= WIDE:
+                    self.assertEqual(len({count["top"] for count in strip["counts"]}), 1, strip)
 
     @with_script
     def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):

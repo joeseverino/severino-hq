@@ -950,3 +950,18 @@ class BuilderValueTests(SimpleTestCase):
             found += unheld_builders(path.read_text(encoding="utf-8"), str(path.relative_to(root)))
 
         self.assertEqual([str(site) for site in found], [])
+
+
+@tag("source")
+class WordedFigureRuleTests(SimpleTestCase):
+    """The rule that refuses a figure apart from its word leaves alone every
+    filter that writes a figure with its own words, so a filter added to
+    WORDED_FIGURES is one the rule knows."""
+
+    def test_every_worded_figure_is_left_alone(self):
+        import yaml
+
+        rule = Path(settings.BASE_DIR) / "tools/lint/ast-grep/rules/hand-drawn-split-figure.yml"
+        worded = re.compile(yaml.safe_load(rule.read_text(encoding="utf-8"))["utils"]["worded-value"]["regex"])
+
+        self.assertEqual([name for name in WORDED_FIGURES if not worded.search(f"{{{{ n|{name} }}}} mi")], [])

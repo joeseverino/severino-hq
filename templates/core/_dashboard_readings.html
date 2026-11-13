@@ -1,0 +1,10 @@
+{% comment %}
+The dashboard's readings on its title's line (`page_aside`, partials/_page_head.html):
+how this browser reaches HQ, how the controller stands and the glance panels,
+one row of readings beside the greeting.
+{% endcomment %}
+<div class="dash-readings">
+  {% include "core/_dashboard_connection.html" with connection=request_connection only %}
+  {% include "core/_dashboard_controller.html" with controller=controller only %}
+  {% include "core/_dashboard_glance.html" %}
+</div>

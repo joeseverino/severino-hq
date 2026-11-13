@@ -66,15 +66,9 @@
   padding: var(--space-5) var(--space-6); background: var(--surface-2);
   min-width: 0; max-width: 100%;
 }
-.topology-lane { min-width: 0; padding: 0 0 var(--space-6); }
+.topology-lane { min-width: 0; margin-block-end: var(--space-6); }
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
-.topology-lane > header {
-  display: grid; break-inside: avoid; break-after: avoid;
-  grid-template-columns: auto 1fr; align-items: center; gap: var(--space-3);
-  padding: var(--space-1) var(--space-1) var(--space-4);
-}
 .topology-node-list > * { break-inside: avoid; }
-.topology-lane h2 { margin: 0; font-size: var(--text-sm); color: var(--muted); }
 .topology-kind-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .topology-kind-controller { background: var(--topology-controller); }
 .topology-kind-connection { background: var(--accent-2); }
@@ -120,13 +114,6 @@
   min-width: 0; padding: var(--space-6); border-top: 1px solid var(--line); background: var(--surface);
 }
 .topology-detail[aria-busy="true"] { opacity: .6; }
-.topology-detail-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
-.topology-detail-head h2 {
-  margin: 0; font-size: var(--text-md); letter-spacing: normal; color: var(--ink); overflow-wrap: anywhere;
-}
-.topology-detail-head .muted { font-size: var(--text-xs); }
-.topology-node-body { display: grid; gap: var(--space-5); min-width: 0; }
-.topology-node-body p { margin: 0; font-size: var(--text-xs); }
 .topology-node-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .topology-node-actions form { display: inline-flex; }
 /* A name is read whole: it wraps inside the node rather than being cut. */
@@ -199,6 +186,7 @@
 .tool-summary { margin: 0 0 var(--space-9); }
 /* Two tools side by side where there is room, stacked where there is not.
    Neither is primary, so neither takes the wider column. */
+/* stylelint-disable-next-line hq/flow-grid -- two tools whose intro, form and result share rows through subgrid, which a flex flow cannot hold */
 .lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
 
 /* ---- Analytics ---------------------------------------------------------- */
@@ -242,24 +230,13 @@
 /* A held request: who asks, what would happen, the decision. */
 .approval-card { border-left: 3px solid var(--line); }
 .approval-card[data-state="pending"] { border-left-color: var(--warn); }
-.approval-head h2 { margin: 0; font-size: var(--text-xl); font-weight: 500; line-height: 1.4; letter-spacing: 0; color: var(--ink); }
-.approval-head > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
-.approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-left: 2px solid var(--line-strong); color: var(--ink-2); font-size: var(--text-sm); }
-.approval-label { margin: var(--space-10) 0 var(--space-4); font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
+/* Their own words, a field of their own the card's padding holds. */
+.approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-radius: var(--radius); background: var(--bg-tint); color: var(--ink-2); font-size: var(--text-sm); }
 .approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
 
-/* Agents: the state and its one control, each agent with its own block, then every rule in a table. */
-.agent-state { display: grid; gap: var(--space-6); }
-.agent-state-main { display: flex; align-items: center; gap: var(--space-6); }
-.agent-state-main > .btn { margin: 0 0 0 auto; }
-/* The state is a status drawn in its tone, its dot in the same color. */
-.agent-state-mark::before { content: ""; display: inline-block; width: 10px; height: 10px; margin-inline-end: var(--space-4); border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 16%, transparent); vertical-align: 0.05em; }
-.agent-state-copy h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); font-weight: 650; letter-spacing: 0; }
-.agent-state-copy p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
 /* An agent's latest events, under its row: one line each, newest first. */
 .agent-events { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 .mcp-endpoint { display: grid; gap: var(--stack-gap); }
-.policy { display: grid; gap: var(--stack-gap); }
 .policy-table .policy-select { width: 100%; max-width: 11rem; }
 .policy-table thead th:first-child { color: var(--ink-2); font-size: var(--text-xs); }
 .policy-table tbody th { font-weight: 500; color: var(--ink); }
@@ -299,13 +276,6 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
 /* ── Dashboard ──────────────────────────────────────────────────────
    A header, then rows. Each row is a grid whose cards share one width and one
    height, so the page stays even whichever domains an installation has. */
-.dash-head { --head-room: calc(var(--stack-gap) + var(--space-4)); align-items: flex-end; margin-bottom: var(--head-room); }
-.dash-hello { display: grid; gap: var(--space-2); min-width: 0; }
-.dash-hello h1 { font-size: clamp(20px, .6vw + 16px, 24px); letter-spacing: -0.02em; line-height: 1.1; }
-.dash-date { margin: 0; color: var(--muted); font-size: var(--text-2xs); font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
-.dash-status { margin: 0; color: var(--muted); font-size: var(--text-md); }
-.dash-status a { color: var(--ink-2); }
-.dash-status strong { color: var(--accent); font-variant-numeric: tabular-nums; }
 /* What a page says while its own readings are being read, and once they are
    in: one quiet line, never a banner. A region that fills itself (a dialog's
    panel) says it at its top, in room held whether or not it says anything,
@@ -389,7 +359,6 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 
    It is a layer of its own so that a panel's popover opens over the cards
    below it; a container is otherwise painted beneath what follows it. */
-.dash-head > .dash-hello { flex: 0 1 auto; }
 .dash-readings {
   --readings: 2;
   /* The narrowest a reading stands beside another: under it, a phone's half
@@ -408,6 +377,7 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
      half the row; where half is, the whole row. The share alone, never what a
      reading says: one that lands saying more wraps in its place, and its
      neighbors stay where they were drawn. */
+  /* stylelint-disable-next-line hq/flow-grid -- the dashboard head's readings beside the greeting */
   grid-template-columns: repeat(auto-fit, max(
     calc(100% / var(--readings) - var(--space-5)),
     clamp(0px, (var(--readings) * var(--reading) - 100%) * 999, var(--half)),

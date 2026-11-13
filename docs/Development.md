@@ -211,6 +211,12 @@ which is how an agent's hand-back states its gates. A checkout that changed
 during the run judged no one tree, and the line is `tree -`. `HQ_GATE_TREE`
 names another checkout, as an extension's check names its package's.
 
+A `dev:look --rule survey` without `--css` is kept so too, per engine, in
+`var/gate/look-survey-<engine>.txt`, the pages and widths it judged beneath;
+one that found anything or judged nothing fails. Landing a change to
+`templates/`, `static/css` or `static/js` reads both engines' records for the
+tip's tree.
+
 The suite runs one worker per core (per performance core on Apple silicon);
 `DJANGO_TEST_PROCESSES` overrides it. `mise run fast --parallel 1` rules
 parallelism out when a failure looks order- or isolation-dependent.
@@ -837,7 +843,7 @@ tests instead.
 A run that judges takes no screenshots, since a shot and its bands cost more
 than the rule that reads the page: `--shots` takes them too, and `--base`,
 `--eval` and `--operation`, which read them, take them anyway. What a rule
-finds is written in the run's folder (`<page>-<width>.txt`) as the run goes, so a run stopped part way keeps it, and to `var/gate/look.txt`
+finds is written in the run's folder (`<page>-<width>.txt`) as the run goes, so a run stopped part way keeps it, and to `report.txt` there
 once the run ends. Console errors, uncaught script errors and policy refusals
 are judged as findings are: without a base any fails the run, against one only
 a new one does.

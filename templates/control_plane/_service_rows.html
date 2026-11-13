@@ -73,7 +73,7 @@ alphabetical is the order and there is nothing to move.
                   {% for line in facet.reading_lines %}
                     <span title="{{ line.hint }}">{{ line.label|breakable }}{% if line.detail %}<span class="muted">{% dot %}{{ line.detail|breakable }}</span>{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
                   {% endfor %}
-                  {% if not facet.claims and not facet.readings %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}<span class="muted">No record</span>{% else %}{% empty_value %}{% endif %}{% endif %}
+                  {% if not facet.claims and not facet.readings %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}{% include "partials/_empty_state.html" with message="No record" inline=True only %}{% else %}{% empty_value %}{% endif %}{% endif %}
                 {% endif %}
               </td>
             {% endif %}

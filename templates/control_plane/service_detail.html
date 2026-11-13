@@ -75,8 +75,7 @@ close every one.
       {% with claim=facet.claims.0 %}
         {% fact facet.label %}{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}{% detail %}
           <small class="prose">{% entity claim.link code=True label=facet.observed.name %}{% if facet.machine %} on {% entity facet.machine.link %}{% endif %}</small>
-          <details class="control-diagnostics">
-            <summary>Running now</summary>
+          {% section "Running now" fold=True %}
             {% facts %}
               {% if facet.observed.image %}{% fact "Image" %}<code>{{ facet.observed.image_label|breakable }}</code>{% endfact %}{% endif %}
               {% if facet.observed.published %}{% fact "Publishes" value=facet.observed.published %}{% endif %}
@@ -85,7 +84,7 @@ close every one.
               {% fact "Reading" %}{% include "partials/_reading_age.html" with at=facet.observed.observed_at only %}{% endfact %}
             {% endfacts %}
             {% if claim.edit_url %}<p><a class="subtle-link" href="{{ claim.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}{% arrow %}</a></p>{% endif %}
-          </details>
+          {% endsection %}
           {% partial reading_lines %}
         {% endfact %}
       {% endwith %}
@@ -141,8 +140,7 @@ close every one.
       {% endcomment %}
       {% fact facet.label %}{% status facet.observed.state|default:"unknown" tone=facet.observed.healthy|yesno:"good,serious" pill=False %}{% detail %}
         <small class="prose"><code>{{ facet.observed.name|breakable }}</code>{% if facet.machine %} on {% entity facet.machine.link %}{% else %} on {{ facet.observed.host|breakable }}{% endif %}</small>
-        <details class="control-diagnostics">
-          <summary>Running now</summary>
+        {% section "Running now" fold=True %}
           {% facts %}
             {% if facet.observed.image %}{% fact "Image" %}<code>{{ facet.observed.image_label|breakable }}</code>{% endfact %}{% endif %}
             {% if facet.observed.published %}{% fact "Publishes" value=facet.observed.published %}{% endif %}
@@ -169,7 +167,7 @@ close every one.
             {% endcomment %}
             {% fact "Defined by" %}{% if facet.observed.portainer_managed %}Portainer.{% for kind, label in facet.declarable %} <a class="subtle-link" href="{% url 'control_plane:create' %}?kind={{ kind }}&amp;hostname={{ service.hostname|urlencode }}">Manage as {{ label|breakable }}{% arrow %}</a>{% endfor %}{% else %}A compose file on {{ facet.observed.host|breakable:"." }} HQ cannot read it.{% endif %}{% endfact %}
           {% endfacts %}
-        </details>
+        {% endsection %}
         {% partial reading_lines %}
       {% endfact %}
     {% elif read_only and facet.id == runtime_facet and hq_machine %}

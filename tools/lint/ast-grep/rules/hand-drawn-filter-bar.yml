@@ -1,0 +1,18 @@
+# A filter bar is the filter bar part, which draws its controls, its count and
+# its clear link alike on every list. No fix: the part takes what is filtered.
+id: hand-drawn-filter-bar
+language: html
+severity: error
+message: A filter bar drawn by hand, where the filter bar part draws it.
+note: Write {% filter_bar filtered=... clear=... %}controls{% summary %}count{% endfilter_bar %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?filter-bar(?:[^\w-]|$)'

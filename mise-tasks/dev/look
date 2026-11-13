@@ -7,7 +7,7 @@
 #USAGE arg "[pages]" var=#true help="Pages, unless --docs: a gate page (connections, dense/services, derived/<app>/<list>, the last filled with the longest values its model holds, as LongestValueLayoutTests fills it), a component catalog entry by its family and name (part/notice-error, form/filter-bar, table/figures, chart/line: a key of CATALOG in hq/platform/core/tests/browser/catalog.py, drawn as CatalogLayoutTests draws it; part/notice or table is every entry it begins), the page a refused form answers, by a POST of POSTS in hq/platform/core/tests/look_posts.py (post:project-create-blank, sent to the seed's estate as its page sends it), api/docs, estate/<path>, a path (/infrastructure/containers/, its leading slash optional), the last word of exactly one estate page's path (contacts), a route name (control_plane:containers), one record's page of the estate by the route that takes it (control_plane:detail, its first record the estate's pages link to) or by a template it draws (template:control_plane/_container_detail.html, or template:_container_detail.html), estate/all (every estate page the layout gate reads: the navigation's, and a record's page of each kind the seed holds), or all (those, every gate page, every catalog entry, every named POST and api/docs). An estate page, a path or a route name takes a query as an address carries it (search/?q=hq is Command Center's results for hq). A name that is none is refused with the names to type instead, before the run waits for the heavy turn; a record's page by route or template is checked once the run draws the estate. Without --composed, a template no host directory holds or a route under a namespace the host lacks is refused as an extension's"
 #USAGE flag "--docs" help="Redraw every screenshot in the docs from the showcase demo instead, after a change to a page one shows"
 #USAGE flag "--widths <widths>" help="Comma-separated widths in CSS pixels; default the phone, 820 and 1360"
-#USAGE flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to var/gate/look.txt, and no screenshot is taken unless --shots asks"
+#USAGE flag "--rule <rule>" help="What to judge on each page: survey (every check the browser gates hold), tables (print each table) or one layout check by name, such as a_table_fits_its_box_at_every_width. Findings go to the run's report.txt, and no screenshot is taken unless --shots asks. A survey without --css keeps its verdict on the tree in var/gate/look-survey-<engine>.txt, which landing a page change reads"
 #USAGE flag "--shots" help="With --rule, take the screenshots too: a run that judges reports its findings alone, unless --base, --eval or --operation, which read the shots, take them"
 #USAGE flag "--css <css>" help="A stylesheet, as text or a file, laid over each page after its own sheets on every load, before the shot, --eval, --probe and --rule: a candidate fix or a planted defect, judged with no edit to static/css. It is adopted as a constructed sheet (document.adoptedStyleSheets), which the page's content security policy does not govern, where a <style> is refused; Playwright's bypass_csp would lift the whole policy, so the policy refusals the run reports would go unseen. A --base is drawn without it, so --base HEAD --css <file> --rule survey says what the sheet fixes and what it breaks"
 #USAGE flag "--probe <probe>" help="Run one browser probe, <module>:<NAME> of hq/platform/core/tests/browser/probes/ (boxes:ASIDES_WRAPPED_WITH_ROOM), on each shot the look takes, as the survey runs it, and print what it finds beside the shot (.probe.txt): each finding on a line, or what it returns or throws. A name that is none is refused with those its module offers"
@@ -90,10 +90,21 @@ fi
 looked=0
 # What the look prints is its output, which the test runner holds back for a
 # test that passes unless told not to.
-HQ_BROWSER_ENGINE="${usage_engine:?}" HQ_BROWSER_FACE="${usage_fallback_face:+fallback}" \
-    uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --noinput --parallel 1 --no-buffer \
-    ${keep} || looked=$?
+set -- uv run --group browser python manage.py test hq.platform.core.tests.look.Look.test_look --no-buffer \
+    --noinput --parallel 1 ${keep}
+# A survey of the tree runs under the gate verdict, kept per engine for the
+# landing to read; one with a sheet laid over its pages judged more than the
+# tree, so it keeps none.
+survey=""
+case "${usage_rule:-}" in
+    survey) survey=1 ;;
+    "") survey="${usage_base:+1}" ;;
+esac
+[ -z "${usage_css:-}" ] || survey=""
+[ -z "${survey}" ] || set -- uv run python -m tools.gate.verdict "look-survey-${usage_engine:?}" "$@"
+HQ_BROWSER_ENGINE="${usage_engine:?}" HQ_BROWSER_FACE="${usage_fallback_face:+fallback}" "$@" || looked=$?
 [ -z "${keep}" ] || rm -f "${kept}/running"
+eval "set -- ${usage_pages:?}"
 
 case "${usage_perf:-}" in
     true) measure=1 ;;

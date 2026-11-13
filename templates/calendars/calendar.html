@@ -21,21 +21,22 @@ opening a day ask this page for the `calendar` part and take it in place.
     {% if day %}
       {% section day.name moment=day.day when="day" id="day-panel" %}
         {% if entry %}
-          <article class="day-panel-entry" aria-label="{{ entry.object.title }}">
-            <h3>{{ entry.object.title|breakable }}</h3>
+          {% section entry.object.title id="day-entry" %}
             <p>{{ entry.when|breakable }}</p>
             {% if entry.object.location or entry.repeat %}<p class="muted">{% if entry.object.location %}{{ entry.object.location|breakable }}{% endif %}{% if entry.object.location and entry.repeat %}{% dot %}{% endif %}{{ entry.repeat|breakable }}</p>{% endif %}
             {% if entry.about %}<p class="muted">About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}</p>{% endif %}
             {% if entry.next %}<p class="muted">Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</p>{% endif %}
             {% if entry.object.notes %}<p>{{ entry.object.notes|breakable|linebreaksbr }}</p>{% endif %}
             <p class="page-actions">{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}</p>
-          </article>
+          {% endsection %}
         {% endif %}
         {% for source, rows in day_groups %}
-          <h3 class="day-panel-source"><i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>{{ source.label|breakable }}</h3>
-          {% include "partials/_record_list.html" with rows=rows label=source.label %}
+          {% section source.label %}
+            {% include "partials/_record_list.html" with rows=rows label=source.label %}
+          {% aside %}<i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>
+          {% endsection %}
         {% empty %}
-          {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
+          {% if not entry %}{% include "partials/_empty_state.html" with message="Nothing on this day." %}{% endif %}
         {% endfor %}
         <div><a href="{{ day.new_entry_url }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></div>
       {% aside %}
@@ -53,20 +54,22 @@ opening a day ask this page for the `calendar` part and take it in place.
       {% endsection %}
     {% endif %}
 
-    {% card css="calendar-sources" id="calendar-sources" label="Calendars" %}
+    {% partialdef sources %}
+      <ul>
+        {% for source in sources %}
+          <li class="series-{{ source.slot }}">
+            {% url 'calendar:source' source.id as source_url %}{% post_button source.label source_url name="shown" value=source.shown|yesno:"0,1" css="calendar-source" pressed=source.shown %}
+            {% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}
+            {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    {% endpartialdef %}
+    {% section "Calendars" id="calendar-sources" css="calendar-sources" %}
       {% for group, sources in calendar.groups %}
-        {% if group %}<h3>{{ group|breakable }}</h3>{% endif %}
-        <ul>
-          {% for source in sources %}
-            <li class="series-{{ source.slot }}">
-              {% url 'calendar:source' source.id as source_url %}{% post_button source.label source_url name="shown" value=source.shown|yesno:"0,1" css="calendar-source" pressed=source.shown %}
-              {% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}
-              {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
-            </li>
-          {% endfor %}
-        </ul>
+        {% if group %}{% section group %}{% partial sources %}{% endsection %}{% else %}{% partial sources %}{% endif %}
       {% endfor %}
-    {% endcard %}
+    {% endsection %}
   </aside>
 </div>
 {% endpartialdef %}

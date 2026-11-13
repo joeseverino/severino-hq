@@ -253,6 +253,40 @@ class MailPageTests(TestCase):
         self.assertEqual(len(with_class(response, "name-list-row")), 2)
         self.assertEqual(len(select(response, "data-name-list-remove")), 1)
 
+    def test_a_policy_past_all_failing_mail_is_refused_beside_its_field_as_sent(self):
+        before = ManagedResource.objects.get(key="dmarc").spec["content"]
+        response = self.client.post(
+            self.url, form_keyed({"section": "dmarc", "p": "reject", "rua": "mailto:box@example.com", "pct": "150"})
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(response.context["form"].errors["pct"])
+        sent = response.context["failures_form"]
+        self.assertEqual((sent["p"].value(), sent["pct"].value()), ("reject", "150"))
+        self.assertEqual(ManagedResource.objects.get(key="dmarc").spec["content"], before)
+
+    def test_an_answer_for_other_senders_the_page_never_offers_is_refused(self):
+        before = ManagedResource.objects.get(key="spf").spec["content"]
+        response = self.client.post(
+            self.url, form_keyed({"section": "spf", "rule": ["include:example.net"], "default": "x"})
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(response.context["form"].errors["default"])
+        self.assertEqual(ManagedResource.objects.get(key="spf").spec["content"], before)
+
+    @override_settings(SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS=False)
+    def test_a_publish_the_record_refuses_is_said_over_the_form_as_sent(self):
+        before = ManagedResource.objects.get(key="spf").spec["content"]
+        response = self.client.post(
+            self.url, form_keyed({"section": "spf", "rule": ["include:other.example"], "default": "~"})
+        )
+
+        self.assertGreaterEqual(response.status_code, 400)
+        self.assertTrue(response.context["form"].non_field_errors())
+        self.assertContains(response, 'value="include:other.example"', status_code=response.status_code)
+        self.assertEqual(ManagedResource.objects.get(key="spf").spec["content"], before)
+
 
 class SigningTests(SimpleTestCase):
     def dkim(self, selector, key="MIIBIjANBg"):

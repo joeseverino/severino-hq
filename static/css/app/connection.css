@@ -95,21 +95,6 @@
 .mail-records li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: var(--text-sm); }
 .mail-record-value { color: var(--muted); overflow-wrap: anywhere; }
 
-/* Choices side by side while each keeps a readable width. */
-.policy-choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-4); }
-.policy-choice { display: flex; gap: var(--space-5); align-items: flex-start; padding: var(--space-5) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; background: var(--surface); }
-.policy-choice:hover { border-color: var(--line-strong); background: var(--surface-2); }
-.policy-choice:has(input:checked) { border-color: var(--accent); background: var(--bg-tint); }
-.policy-choice input { margin-top: var(--space-1); flex: none; }
-.policy-choice-body { display: flex; flex-direction: column; gap: var(--space-1); }
-.policy-choice-label { font-weight: 600; font-size: var(--text-md); }
-.policy-choice-consequence { color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
-
-/* A number with its unit beside it, so a percentage never reads as a count. */
-.input-suffix { display: flex; align-items: center; gap: var(--space-2); max-width: 9rem; }
-.input-suffix input { flex: 1 1 auto; min-width: 0; }
-.input-suffix span { color: var(--muted); font-weight: 600; }
-
 /* ── Reachability answer ───────────────────────────────────────── */
 
 .verdict { display: flex; align-items: baseline; gap: var(--space-4); margin: var(--space-7) 0 var(--space-2); }
@@ -346,6 +331,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 }
 @keyframes conn-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
+  /* stylelint-disable-next-line hq/faded-text -- the live dot's pulse, a mark */
   50% { opacity: .35; transform: scale(.72); }
 }
 @media (prefers-reduced-motion: reduce) { .conn-pulse { animation: none; } }
@@ -377,6 +363,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
 .conn-peer { display: grid; gap: var(--space-1); justify-items: start; min-width: 0; }
 .conn-peering > .conn-peer:last-child { justify-items: end; text-align: right; }
 .conn-peer-role {
+  /* stylelint-disable-next-line property-disallowed-list -- a kicker: which end of the connection (you, HQ) over that end's facts */
   font-size: var(--text-3xs); letter-spacing: .07em; text-transform: uppercase; color: var(--muted-2);
 }
 .conn-peer strong { font-size: var(--text-md); }
@@ -490,6 +477,7 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
    block. Auto-fit lets a single row of readings take the whole width. */
 .sweep-grid {
   display: grid;
+  /* stylelint-disable-next-line hq/flow-grid -- a band's readings in one frame */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 228px), 1fr));
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the frame's corners clip its items' rings, not their text */
   border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden;

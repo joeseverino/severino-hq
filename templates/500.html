@@ -3,7 +3,9 @@
 {% block content %}
 <div class="notice-page">
   <p class="notice-code">500</p>
-  <h1>Something broke</h1>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
+  {% endcomment %}<h1>Something broke</h1>
   <p class="notice-body">
     The error is in the log{% if request_id %}, under request id <code>{{ request_id|breakable:"." }}</code>{% else %}.{% endif %} Trying again is safe.
   </p>

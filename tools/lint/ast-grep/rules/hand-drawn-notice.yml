@@ -1,0 +1,35 @@
+# A notice is the notice part, which draws its tone, its title and its role.
+# The fix moves a <div> or <p> whose class is the notice class alone; a toned
+# or titled one is moved by hand.
+id: hand-drawn-notice
+language: html
+severity: error
+message: A notice drawn by hand, where the notice part draws it.
+note: Write {% notice %}body{% endnotice %}, with tone= and a {% title %} part where it has them.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  pattern: $NOTICE
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?notice(?:[^\w-]|$)'
+rewriters:
+  - id: block
+    rule:
+      pattern: <div class="notice">$$$BODY</div>
+    fix: '{% notice %}$$$BODY{% endnotice %}'
+  - id: line
+    rule:
+      pattern: <p class="notice">$$$BODY</p>
+    fix: '{% notice %}$$$BODY{% endnotice %}'
+transform:
+  MOVED:
+    rewrite:
+      rewriters: [block, line]
+      source: $NOTICE
+fix: $MOVED

@@ -4,6 +4,7 @@ the detail under the value, flowing words or, given as lines, a line each. The v
 count of 0 and a linked count of 13 stand alike. url is an address in HQ; an
 outside one is written in the block form, its value {% entity url|outside %}
 in the fact. A tone, when there is one, colors the fact by what it means.
+<!-- ast-grep-ignore: hand-drawn-toned-value --> the fact part, toned by what its value means
 {% endcomment %}<div class="fact{% if tone %} tone-{{ tone }}{% endif %}">
   <dt>{% if icon %}<span class="band-icon">{% include "partials/_icon.html" with name=icon only %}</span>{% endif %}<span class="fact-label">{{ label|breakable }}</span></dt>
   <dd class="fact-value">{% if value == "" or value is None %}{% empty_value %}{% elif url %}<a href="{{ url }}">{{ value|breakable }}</a>{% else %}{{ value|breakable }}{% endif %}</dd>

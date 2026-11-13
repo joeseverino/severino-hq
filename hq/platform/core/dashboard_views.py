@@ -6,6 +6,7 @@ from typing import Any, ClassVar, override
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
@@ -19,6 +20,7 @@ from hq.platform.application.card_items import ListRow
 from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.glance import (
     DASHBOARD_REFRESH,
     DASHBOARD_REFRESH_STALE,
@@ -157,6 +159,15 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             )
             for item in snapshot["draft_content"]
         ]
+        project_rows = [
+            ListRow(
+                link=entity_link("project", project["slug"], label=project["name"]),
+                detail=project["category_label"],
+                category=project["category"],
+                at=project["updated_at"],
+            )
+            for project in snapshot["active_projects"]
+        ]
         published_rows = [
             ListRow(
                 title=item["title"],
@@ -193,7 +204,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             unread_contacts_count=inbox.unread()[0],
             content_rows=content_rows,
             published_rows=published_rows,
-            active_projects=snapshot["active_projects"],
+            project_rows=project_rows,
             active_project_count=snapshot["kpis"]["active_projects"],
             projects_needing_output=snapshot["kpis"]["projects_needing_output"],
             draft_content_count=snapshot["kpis"]["draft_content"],
@@ -219,7 +230,11 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
                 for chart in section["overview"].charts[:1]
             ],
             **glance,
+            **page_context(greeting),
+            page_dateline=timezone.localdate(),
+            page_aside="core/_dashboard_readings.html",
         )
+        ctx["page_facts"] = render_to_string("dashboard.html#status", ctx)
         return ctx
 
 

@@ -66,7 +66,7 @@ class NameListWidget(forms.Widget):
     # about something HQ is watching, and gives no way to tell which is which.
     notes: ClassVar[dict[str, str]] = {}
 
-    def _row(self, name: str, item: str):
+    def _row(self, name: str, item: str, named: str):
         """One value, editable unless HQ is the one that found it.
 
         A value carrying a note is one a sweep reports, a fact HQ holds whether
@@ -90,12 +90,13 @@ class NameListWidget(forms.Widget):
         return format_html(
             '<div class="name-list-row">'
             '<input type="text" name="{}" value="{}" spellcheck="false"'
-            ' autocapitalize="off" autocorrect="off">'
+            ' autocapitalize="off" autocorrect="off"{}>'
             '<button type="button" class="btn ghost" data-name-list-remove'
             ' aria-label="Remove {}">Remove</button>'
             "</div>",
             name,
             item,
+            named,
             item,
         )
 
@@ -107,15 +108,26 @@ class NameListWidget(forms.Widget):
         # nothing reports. Sorted so read-only rows never sit between inputs
         # and the blank row for adding one stays with the rest.
         values = sorted(self.format_value(value), key=lambda item: item not in self.notes)
-        rows = format_html_join("", "{}", ((self._row(name, item),) for item in values))
+        # Each row is named by the field's label (templates/django/forms/field.html
+        # gives it the id) and described by what the field describes itself with.
+        own = (attrs or {}).get("id")
+        named = format_html(
+            "{}{}",
+            format_html(' aria-labelledby="{}_label"', own) if own else "",
+            format_html(' aria-describedby="{}"', attrs["aria-describedby"])
+            if attrs and attrs.get("aria-describedby")
+            else "",
+        )
+        rows = format_html_join("", "{}", ((self._row(name, item, named),) for item in values))
         # Always one empty row, so adding a name needs no script and no
         # thinking about where the cursor goes.
         blank = format_html(
             '<div class="name-list-row">'
             '<input type="text" name="{}" value="" spellcheck="false"'
-            ' autocapitalize="off" autocorrect="off">'
+            ' autocapitalize="off" autocorrect="off"{}>'
             "</div>",
             name,
+            named,
         )
         return format_html(
             '<div class="name-list" data-name-list>{}{}'

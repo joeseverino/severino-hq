@@ -708,6 +708,8 @@ slotted(
     ("content",),
     frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
 )
+# One step or check of a `.step-list`: its icon, toned by how it stands, then what it says.
+slotted("step", "partials/_step.html", ("content",), frozenset(("icon", "tone", "done", "title")))
 slotted(
     "card",
     "partials/_card.html",

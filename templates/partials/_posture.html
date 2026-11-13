@@ -7,10 +7,8 @@ heading links to. An unread check says what would read it.
 {% section posture.advanced|yesno:"Advanced HQ Posture,HQ's standard" id="posture" %}
   <ol class="step-list posture-checks">
     {% for standing in posture.standings %}
-      <li class="tone-{{ standing.state }}"{% if standing.met %} title="{{ standing.check.holds }}"{% endif %}>
-        <span class="band-icon">{% include "partials/_icon.html" with name=standing.icon %}</span>
-        <span><strong>{{ standing.check.label|breakable }}</strong> <span class="muted">{% if standing.reading.evidence %}{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ standing.check.stops|breakable:"." }}</span></span>
-      </li>
+      {% step icon=standing.icon tone=standing.state title=standing.met|then:standing.check.holds %}
+        <strong>{{ standing.check.label|breakable }}</strong> <span class="muted">{% if standing.reading.evidence %}{% if standing.reading.remedy %}{{ standing.reading.evidence|breakable:":" }} {% if standing.reading.remedy_url %}<a href="{{ standing.reading.remedy_url }}">{{ standing.reading.remedy|breakable:"." }}</a>{% else %}{{ standing.reading.remedy|breakable:"." }}{% endif %}{% else %}{{ standing.reading.evidence|breakable:"." }}{% endif %} {% endif %}Stops {{ standing.check.stops|breakable:"." }}</span>{% endstep %}
     {% endfor %}
   </ol>
 {% aside %}<span class="count prose">{{ posture.count_line|breakable }}{% if posture.guide %}{% dot %}{% entity posture.guide|outside label="Checks guide" %}{% endif %}</span>

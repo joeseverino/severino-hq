@@ -12,6 +12,7 @@
    actions) takes the row. */
 .form {
   display: grid;
+  /* stylelint-disable-next-line hq/flow-grid -- a form's fields, the one form layout */
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
   gap: var(--space-7) var(--space-10);
   align-items: start;
@@ -50,7 +51,7 @@
 .field:has(> input[type=checkbox]) > label { grid-column: 2; grid-row: 1; margin: 0; }
 .field:has(> input[type=checkbox]) > :not(label, input) { grid-column: 1 / -1; }
 /* A group of boxes reads across, not one per line. */
-.field > div:has(> div input[type=checkbox], > div input[type=radio]) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); }
+.field > div:not(.choice-cards):has(> div input[type=checkbox], > div input[type=radio]) { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-8); }
 .field { margin-bottom: var(--space-7); }
 /* A control inside a table cell or a row, where the gap that separates stacked
    form fields is just a taller row. `.field` has to stay the wrapper: the
@@ -101,7 +102,31 @@
   font-weight: 600;
 }
 .errors { color: var(--danger); margin: var(--space-2) 0 0; padding-left: var(--space-8); font-size: var(--text-sm); }
+/* Choice cards (`ChoiceCards`, hq.platform.application.forms): each answer
+   a card of its radio, its few words and what choosing it does, side by side
+   while each keeps a readable width. The label reaches over its card, so
+   pressing anywhere on it chooses; the radio names the consequence as its
+   description, never its name. */
+/* stylelint-disable-next-line hq/flow-grid -- a form's choices, each a radio */
+.choice-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--space-4); }
+.choice-card { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-5); align-items: start; align-content: start; padding: var(--space-5) var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); }
+.choice-card:hover { border-color: var(--line-strong); background: var(--surface-2); }
+.choice-card:has(input:checked) { border-color: var(--accent); background: var(--bg-tint); }
+.choice-card > input { grid-row: 1 / span 2; margin: var(--space-1) 0 0; }
+.field .choice-card > label { margin: 0; font-size: var(--text-md); cursor: pointer; }
+.choice-card > label::after { content: ""; position: absolute; inset: 0; }
+.choice-card-what { grid-column: 2; margin: 0; color: var(--muted); font-size: var(--text-sm); line-height: 1.45; }
+/* A unit after its box (`SuffixedInput`), so a percentage never reads as a
+   count. */
+.input-suffix { display: flex; align-items: center; gap: var(--space-2); }
+.input-suffix > input { flex: 1 1 auto; min-width: 0; }
+.input-suffix > span { color: var(--muted); font-weight: 600; }
 .form-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin-top: var(--space-6); }
+/* A form whose rows stand in tables (`table_body`, partials/_form.html) adds
+   no box of its own, so where those tables stand in sections of the page,
+   the sections and its closing row stack as the page's own parts do
+   (`.content`, page.css). Its hidden fields take no place in the stack. */
+.content > form:not([class]) > :not([type=hidden]) ~ * { margin-block-start: var(--stack-gap); }
 .form-actions-note { font-size: var(--text-xs); }
 /* A row's editor ({% row_editor %}), in the line beneath its row: one panel
    on the name's edge, as the row's other parts are. The server draws its row
@@ -247,6 +272,7 @@
   font-size: var(--text-3xs);
   font-weight: 700;
   letter-spacing: .08em;
+  /* stylelint-disable-next-line property-disallowed-list -- a kicker: the heading over a group of Command Center's commands */
   text-transform: uppercase;
 }
 .command-center-option {
@@ -361,24 +387,14 @@ a.discovery-link:hover strong { color: var(--accent); }
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--warn) 7%, var(--surface));
 }
-.command-result pre {
-  margin: var(--space-7) 0 0;
-  overflow: auto;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 .command-result-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); }
 .command-result { margin-bottom: var(--layout-gap); }
 .command-result > .section-body { border-left: 3px solid var(--ok); }
-/* The projected result: its facts, the list as a plain data table with its
-   count in the caption, and the JSON behind a disclosure below both. */
+/* The projected result: its facts and the list as a plain data table with its
+   count in the caption. */
 .command-result .table-scroll { margin-top: var(--space-6); }
 .command-result-table caption { caption-side: top; text-align: left; padding: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }
 .command-result-table td { overflow-wrap: anywhere; }
-.command-result-json { margin-top: var(--space-6); }
-.command-result-json summary { cursor: pointer; }
-.command-result-json summary .muted { display: block; margin-top: var(--space-1); }
-.command-result-json pre { margin-top: var(--space-4); }
 .connection-summary {
   display: flex;
   gap: var(--space-4) var(--space-9);
@@ -398,18 +414,6 @@ a.discovery-link:hover strong { color: var(--accent); }
    not fit, cut only where it alone is longer than the cell (figures.css);
    with none, the words are one line, cut as any context line's are. */
 .connection-reach { display: flex; flex-wrap: wrap; gap: 0 .3em; contain: inline-size; white-space: nowrap; }
-/* Its own section under the table, not a second compartment of a card around it. */
-/* How to connect each provider not yet connected: one row each, opened for its steps. */
-.setup-list { margin: var(--space-4) 0 0; padding: 0; list-style: none; }
-.setup-list > li { padding-inline: var(--frame-inset, 0); border-top: 1px solid var(--line-2); }
-.setup-list summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) 0; cursor: pointer; }
-.setup-list details[open] { padding-bottom: var(--space-6); }
-/* Names share one edge so what each gives reads down one column; narrow, it wraps under its name. */
-.setup-list summary > strong { flex: 0 0 10rem; }
-.setup-list summary > .muted { flex: 1 1 18rem; }
-/* A family set up on its own: one line, its name under the services' names,
-   past the width of their disclosure mark and its gaps. */
-.setup-list > .setup-other { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); padding: var(--space-4) var(--frame-inset, 0) var(--space-4) calc(var(--frame-inset, 0px) + 1.05em + var(--space-1) + var(--space-5)); }
 .setup-permissions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin: var(--space-2) 0; padding: 0; list-style: none; font-size: var(--text-xs); }
 .setup-permissions code { white-space: nowrap; }
 .connection-more-scope { margin-top: var(--space-2); }

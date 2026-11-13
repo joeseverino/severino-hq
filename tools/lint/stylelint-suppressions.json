@@ -21,7 +21,7 @@
   },
   "static/css/app/figures.css": {
     "hq/restyled-primitive": {
-      "count": 16
+      "count": 15
     }
   },
   "static/css/app/forms.css": {
@@ -41,7 +41,7 @@
   },
   "static/css/app/pages.css": {
     "hq/restyled-primitive": {
-      "count": 8
+      "count": 7
     }
   },
   "static/css/app/routes.css": {

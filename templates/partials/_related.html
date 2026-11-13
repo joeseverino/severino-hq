@@ -9,7 +9,6 @@ the one shape every page draws its related records in.
 ones): a heading and its items, a link and a few words beside it. Nothing
 related: nothing drawn.
 {% endcomment %}
-{% partialdef items %}<ul class="list-rows">{% for item in group.items %}<li><span class="row-main">{% entity item.link %}</span>{% if item.note %}<span class="row-meta">{{ item.note|breakable }}</span>{% endif %}</li>{% endfor %}</ul>{% endpartialdef %}
 {% for group in groups %}
-  {% section group.heading count=group.items|length %}{% partial items %}{% endsection %}
+  {% section group.heading count=group.items|length %}{% include "partials/_record_list.html" with rows=group.rows %}{% endsection %}
 {% endfor %}

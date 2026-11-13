@@ -112,6 +112,8 @@ SELECTORS = {
     # Each reading in the dashboard's row: a mark, then its lines.
     "readings": ".dash-readings .glance-panel-head",
     "patterns": ".dashboard-patterns > .section",
+    # The dashboard's strip of counts across HQ, by the name it gives a reader.
+    "dashboard_counts": "main dl[aria-label='Across HQ']",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A link that goes somewhere.
@@ -139,6 +141,8 @@ SELECTORS = {
     "cell_content": "main td *, main th *",
     # A page's title.
     "page_title": ".page-head h1",
+    # A head's line of facts under its title (`page_facts`).
+    "head_facts": ".page-head .page-facts",
     # What holds the content and so stays inside its gutter: a card, a block
     # of code.
     "gutter_bound": "pre, .card",
@@ -246,6 +250,7 @@ SELECTORS = {
     "fact_band": ".facts-band",
     "band_fact_cell": ".fact",
     "fact_value": ".fact-value",
+    "fact_label": ".fact-label",
     # A tab of a tabbed chart, the radio inside it, and the panels they choose.
     "chart_tab": ".chart-tablist > .chart-tab",
     "chart_tab_input": ".chart-tab-input",
@@ -256,10 +261,11 @@ SELECTORS = {
     "dialog": 'dialog.modal[id^="modal-"]',
     # The controls that open the dialog `modal-{id}`, once `{id}` is filled
     # in (partials/_modal.html states the contract): a link the page's wiring
-    # intercepts, a control that says it opens a dialog and names it, and the
-    # platform's own invoker.
+    # intercepts, a control that says it opens a dialog and names it, the
+    # platform's own invoker, and a status naming the popover panel it opens
+    # (an urgency's origin, static/js/app.js).
     "dialog_opener": (
         '[data-modal-open="{id}"], [aria-haspopup="dialog"][aria-controls="modal-{id}"],'
-        ' [command="show-modal"][commandfor="modal-{id}"]'
+        ' [command="show-modal"][commandfor="modal-{id}"], [data-origin="modal-{id}"]'
     ),
 }

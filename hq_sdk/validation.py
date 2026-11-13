@@ -235,30 +235,6 @@ _CLASS = re.compile(r"\bclass=\"([^\"]*)\"")
 _LITERAL = re.compile(r"([\"'])(.*)\1")
 _HOOK = re.compile(r"\s(data-[a-z][a-z0-9-]*)")
 _STYLE = re.compile(r"\sstyle\s*=", re.IGNORECASE)
-_COMMENTED = re.compile(r"\{%\s*comment\b.*?%\}.*?\{%\s*endcomment\s*%\}|\{#.*?#\}", re.DOTALL)
-
-
-def _blank(match: re.Match[str]) -> str:
-    """Text taken out of a template, its line breaks kept so lines still count."""
-
-    return "\n" * match.group().count("\n")
-
-
-def hand_drawn(text: str, shapes: dict[str, dict[str, str]]) -> list[tuple[int, str]]:
-    """``(line, shape)`` for each of ``shapes`` (``template_contract.HAND_DRAWN``)
-    a template draws by hand, read with its comments taken out."""
-
-    text = _COMMENTED.sub(_blank, text)
-    found: list[tuple[int, str]] = []
-    for name, shape in shapes.items():
-        searched = text
-        if outside := shape.get("outside"):
-            part = rf"\{{%\s*{outside}\b.*?\{{%\s*end{outside}\s*%\}}"
-            searched = re.sub(part, _blank, text, flags=re.DOTALL)
-        found.extend(
-            (searched.count("\n", 0, match.start()) + 1, name) for match in re.finditer(shape["pattern"], searched)
-        )
-    return sorted(found)
 
 
 def _is_register(node: ast.AST) -> bool:
@@ -362,8 +338,6 @@ class _Template:
     loaded: set[str] = field(default_factory=set)
     # The open host tags that have later parts, innermost last.
     enclosing: list[str] = field(default_factory=list)
-    # How many of each hand-drawn shape the package's baseline counts here.
-    baseline: dict[str, int] = field(default_factory=dict)
 
     def problem(self, line: int, message: str) -> None:
         self.problems.append((line, message))
@@ -385,23 +359,7 @@ class _Template:
             if token.token_type == TokenType.BLOCK:
                 self._tag(bits, line)
         self._markup(text)
-        self._hand_drawn(text)
         return self.problems
-
-    def _hand_drawn(self, text: str) -> None:
-        shapes = self.contract["hand_drawn"]
-        drawn: dict[str, list[int]] = {}
-        for line, shape in hand_drawn(text, shapes):
-            drawn.setdefault(shape, []).append(line)
-        for shape, lines in drawn.items():
-            if len(lines) > self.baseline.get(shape, 0):
-                for line in lines:
-                    self.problem(line, f"draws {shape} by hand; write {shapes[shape]['write']}")
-        for shape, counted in self.baseline.items():
-            if shape not in shapes:
-                self.problem(1, f"{BASELINE} counts {shape!r}, which is no hand-drawn shape")
-            elif (left := len(drawn.get(shape, []))) < counted:
-                self.problem(1, f"{BASELINE} counts {counted} of {shape} here and {left} are left: lower it to {left}")
 
     def _tag(self, bits: list[str], line: int) -> None:
         tag = bits[0]
@@ -531,25 +489,10 @@ class _Template:
             self.problem(line, "writes a style attribute, which HQ's policy refuses; draw it through a public partial")
 
 
-# A package's count of the shapes its templates still draw by hand, by
-# template and shape, beside its plugin.py: ``{"example/page.html": {"a fold": 2}}``.
-# A count above it or below it is refused, so it only falls; it exists to be
-# emptied (docs/Plugins.md).
-BASELINE = "hand_drawn.json"
-
-
-def _baselines(root: Path) -> dict[str, dict[str, int]]:
-    counted: dict[str, dict[str, int]] = {}
-    for path in sorted(root.rglob(BASELINE)):
-        counted.update(json.loads(path.read_text(encoding="utf-8")))
-    return counted
-
-
 def template_violations(source_root: str | Path, contract: dict[str, Any] | None = None) -> list[str]:
     """Return stable ``path:line: problem`` lines for templates outside the public contract."""
 
     root = Path(source_root).resolve()
-    baselines = _baselines(root)
     templates = (contract or json.loads(_CONTRACT.read_text(encoding="utf-8")))["templates"]
     own_templates = _own_templates(root)
     own_libraries = _own_libraries(root)
@@ -564,12 +507,8 @@ def template_violations(source_root: str | Path, contract: dict[str, Any] | None
             text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError:  # noqa: S112 - an image or font kept beside the templates is no template
             continue
-        reader = _Template(name, templates, own_templates, own_libraries, baseline=baselines.get(name, {}))
+        reader = _Template(name, templates, own_templates, own_libraries)
         found.extend((path.relative_to(root).as_posix(), line, message) for line, message in reader.check(text))
-    found.extend(
-        (BASELINE, 1, f"counts {name}, which is no template of this package")
-        for name in sorted(set(baselines) - set(own_templates))
-    )
     return [f"{path}:{line}: {message}" for path, line, message in sorted(found)]
 
 

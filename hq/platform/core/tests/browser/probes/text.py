@@ -132,9 +132,13 @@ BROKEN_WORDS_IN_TEXT = (
 # the text, or one a part of a run draws before itself and nothing clips), a
 # line that holds only marks (an icon, an asterisk) apart from the words they
 # belong to, or one word alone that the line before cut from its number ("12"
-# above "days"). Each block's lines are read from what it lays out in them:
-# its own text, and each box set in its line whole (a link drawn as a block,
-# an icon) as one piece. A wrapping flex box's items are its lines, and an
+# above "days") or, in a cell, that a box set whole after it left behind
+# ("on" above a name), where the break between them is a wrap and not a `br`:
+# a cell cuts a name, so one never needs a line of its own. A value of a list
+# (a user's code before the next) is no running word, so a list wrapping
+# between its values leaves none behind. Each block's
+# lines are read from what it lays out in them: its own text, and each box set
+# in its line whole (a link drawn as a block, an icon) as one piece. A wrapping flex box's items are its lines, and an
 # item opening a row opens a line. Text kept from sight (`unseen`) is
 # not drawn.
 STRAYS_OPENING_A_LINE = (
@@ -189,6 +193,7 @@ STRAYS_OPENING_A_LINE = (
         }
       } else if (child.nodeType === Node.ELEMENT_NODE) {
         if (child.matches(`${unseen}, script, style, template, pre`) || !child.checkVisibility({visibilityProperty: true})) continue;
+        if (child.matches('br')) { add(blockOf(child.parentElement), {br: true}); continue; }
         const separator = drawnSeparator(child);
         if (separator) add(blockOf(child), {ch: separator, rect: [...child.getClientRects()].find((r) => r.width), el: child});
         if (!atomic(child)) { walk(child); continue; }
@@ -198,7 +203,12 @@ STRAYS_OPENING_A_LINE = (
         // tick) as a mark.
         const rect = child.getBoundingClientRect();
         const words = child.matches(TYPED) ? child.value || child.placeholder || 'field' : child.textContent;
-        if (drawnRect(child, rect)) add(blockOf(child.parentElement), {ch: words.trim() || '▪', rect, el: child});
+        // Its opening character is drawn by what holds its first text (a
+        // path's code), which says whether that character is a separator.
+        const texts = document.createTreeWalker(child, NodeFilter.SHOW_TEXT);
+        let first = texts.nextNode();
+        while (first && !first.data.trim()) first = texts.nextNode();
+        if (drawnRect(child, rect)) add(blockOf(child.parentElement), {ch: words.trim() || '▪', rect, el: child, opens: first?.parentElement ?? child, whole: true});
         if (!child.matches('svg, img')) walk(child);
       }
     }
@@ -210,11 +220,14 @@ STRAYS_OPENING_A_LINE = (
     // starts the next one.
     const lines = [];
     let gap = false;
+    let forced = false;
     for (const piece of list) {
+      if (piece.br) { forced = true; continue; }
       if (!piece.rect) { gap = true; continue; }
       const line = lines.at(-1);
       if (!line || piece.rect.top >= line.bottom - Math.min(piece.rect.height, line.bottom - line.top) / 2) {
-        lines.push({top: piece.rect.top, bottom: piece.rect.bottom, pieces: [piece], text: piece.ch});
+        lines.push({top: piece.rect.top, bottom: piece.rect.bottom, pieces: [piece], text: piece.ch, forced});
+        forced = false;
       } else {
         line.bottom = Math.max(line.bottom, piece.rect.bottom);
         line.text += (gap ? ' ' : '') + piece.ch;
@@ -224,13 +237,16 @@ STRAYS_OPENING_A_LINE = (
     }
     if (lines.length < 2) continue;
     const name = describe(block);
+    const inCell = Boolean(block.closest('td, th'));
     lines.forEach((line, index) => {
       const text = line.text.trim();
       const opening = line.pieces.find((piece) => piece.ch.trim());
-      if (index && SEPARATOR.test(text) && !opening.el.closest(identifier)) found.push(`${name} opens a line with "${text[0]}": "${text.slice(0, 30)}"`);
+      if (index && SEPARATOR.test(text) && !(opening.opens ?? opening.el).closest(identifier)) found.push(`${name} opens a line with "${text[0]}": "${text.slice(0, 30)}"`);
       else if (MARKS_ONLY.test(text)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
-      else if (index && /^\p{L}+[.,;:]?$/u.test(text) && /\p{N}%?$/u.test(lines[index - 1].text.trim())) {
+      else if (index && !line.forced && /^\p{L}+[.,;:]?$/u.test(text) && /\p{N}%?$/u.test(lines[index - 1].text.trim())) {
         found.push(`${name} cuts "${text}" from its number "${lines[index - 1].text.trim().split(/\s/).at(-1).slice(-30)}"`);
+      } else if (inCell && (!index || line.forced) && !line.pieces.some((piece) => piece.whole || piece.el?.closest(identifier)) && /^\p{L}+$/u.test(text) && lines[index + 1] && !lines[index + 1].forced && lines[index + 1].pieces[0].whole) {
+        found.push(`${name} cuts "${text}" from "${lines[index + 1].text.trim().slice(0, 30)}" after it`);
       }
     });
   }
@@ -502,11 +518,19 @@ CUT_DECISIONS = (
 BASELINES = r"""
 const range = document.createRange();
 const rects = (node) => { range.selectNodeContents(node); return [...range.getClientRects()].filter((r) => r.width); };
+// Text in content the browser skips (a closed fold, `hidden="until-found"`)
+// is not drawn, though WebKit gives it rects once any read lays it out; it is
+// judged by the box that holds it, since a box of `display: contents` has
+// none to judge.
+const skipped = (el) => {
+  while (el && getComputedStyle(el).display === 'contents') el = el.parentElement;
+  return !!el && !el.checkVisibility();
+};
 const drawn = (root) => {
   const found = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (node.data.trim() && !node.parentElement.closest(unseen) && rects(node).length) found.push(node);
+    if (node.data.trim() && !node.parentElement.closest(unseen) && !skipped(node.parentElement) && rects(node).length) found.push(node);
   }
   return found;
 };

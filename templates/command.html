@@ -28,10 +28,7 @@ button named for what it does. How it is built belongs to the API reference.
       </table>
     {% endtable_region %}
   {% endif %}
-  <details class="command-result-json"{% if not result_facts and not result_table %} open{% endif %}>
-    <summary>Raw JSON</summary>
-    <pre tabindex="0"><code>{{ result_json|breakable }}</code></pre>
-  </details>
+  {% section "Raw JSON" fold=True open=result_json_open id="command-result-json" %}<pre tabindex="0"><code>{{ result_json|breakable }}</code></pre>{% endsection %}
 {% aside %}
   {% if return_url %}<a class="btn compact" href="{{ return_url }}">Back</a>{% endif %}
   {% if resource_url %}<a class="btn compact ghost" href="{{ resource_url }}">Open {{ resource_label|breakable }}</a>{% endif %}

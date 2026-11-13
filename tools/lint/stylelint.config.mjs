@@ -4,11 +4,7 @@
 
 const tokens = "../../static/css/app/tokens.css";
 const cuts = "../../static/css/app/cuts.css";
-// The sheets the table primitive is drawn in (docs/Design.md, "A table fits
-// its box"); every other app sheet is a page's.
 const sheet = (name) => `../../static/css/app/${name}.css`;
-const tableSheets = ["base", "cuts", "figures", "tables", "surfaces"];
-const tablePrimitive = tableSheets.map(sheet);
 const reference = "../../static/css/api-reference.css";
 
 // CSS Color 4's system colors. color-named knows only the named colors, and
@@ -85,59 +81,19 @@ const strandedMark =
   "/(?<!\\\\[0-9a-f]{1,6}) (?:[·•→←↗›‹»«]|\\\\0*(?:b7|2022|2192|2190|2197|203a|2039|bb|ab)(?![0-9a-f]))/i";
 const unspokenContent = { "/^content$/": [`/^\\s*(["'])(?:(?!\\1).)+\\1\\s*$/`, strandedMark] };
 
-// What an opacity under 1 may fade: an inactive control, which WCAG 1.4.3
-// does not hold to 4.5:1, and a mark that is not text. A state is inactive
-// on the element or on what holds it: a disabled or aria-disabled control,
-// and a region aria-busy while its answer is on the way. A mark is named by
-// the compound a selector styles: a chart's shapes, lines and marks, the
-// nav's caret and the calendar's dots (a mark's, a timed line's). An opacity of 0 draws nothing, so it fades nothing.
-
-// The rest of a compound: classes, attributes and pseudo-classes, each
-// argument whole, so a name inside `:is()` is not the compound's.
-const compound = String.raw`(?:::?[\w-]+(?:\([^()]*\))?|\.[\w-]+|\[[^\]]*\])*`;
-const fadedText = [
-  true,
+// Capitals are for a kicker over a group (`.eyebrow`), never a value's name,
+// a state or a tag, which are said in sentence case (docs/Design.md). A rule
+// that sets a kicker's case says what it heads in a disable comment.
+const caseProperties = ["text-transform", "font-variant-caps"];
+const disallowedProperties = (properties) => [
+  properties,
   {
-    inactive: [
-      "(?<!:not\\()(:disabled|\\[aria-disabled=\"true\"\\])",
-      "\\[aria-busy=\"true\"\\]",
-    ],
-    marks: [
-      `(^|[\\s>+~])(rect|path|circle|line|polyline)${compound}$`,
-      `\\.(nav-caret|chart-trend|chart-mark|route-line|month-mark)(?![-\\w])${compound}$`,
-      "\\.month-item::before$",
-    ],
-    animations: ["conn-pulse"],
+    message: (property) =>
+      caseProperties.includes(property)
+        ? `"${property}" changes a text's case: capitals are for a kicker over a group, so say it in sentence case, or say in a disable comment what the kicker heads`
+        : `Disallowed property "${property}"`,
   },
 ];
-
-// Capitals are for a kicker over a group (`.eyebrow`), never a value's name,
-// a state or a tag, which are said in sentence case (docs/Design.md). These
-// are the kickers, each a whole selector, and the only rules that may change
-// a text's case.
-const kickers = [
-  // The kicker primitive, over a heading or a group of facts.
-  ".eyebrow",
-  // The month over a timeline's entries.
-  ".timeline-month",
-  // The weekday row over a month grid's days.
-  ".month-grid th",
-  // The weekday row over the activity calendar's days.
-  ".calendar-weekday",
-  // The weekday over each day of a week plan.
-  ".week-plan-label",
-  // The date over the dashboard.
-  ".dash-date",
-  // The heading over a group of Command Center's commands.
-  ".command-center-group h3",
-  // Which end of the connection (you, HQ) over that end's facts.
-  ".conn-peer-role",
-];
-const kicker = kickers.map((selector) => selector.replaceAll(".", "\\.").replaceAll(" ", "\\s+")).join("|");
-// A selector list that is not kickers alone: one that names anything else,
-// or a kicker's descendant or variant, sets its own case.
-const notKicker = `(?!\\s*(${kicker})\\s*(,\\s*(${kicker})\\s*)*$)`;
-const caseProperties = ["text-transform", "font-variant-caps"];
 // How wide a box in a table is, its own or its tracks', is the table
 // primitive's: an open row holds every box in it to its cell (surfaces.css),
 // and a page that sizes one inside a table reopens what that closes. A
@@ -145,90 +101,23 @@ const caseProperties = ["text-transform", "font-variant-caps"];
 // cell, or the line beneath a row.
 const inTable = "(\\.data-table(?![-\\w])[^,]*[\\s>+~]|(^|[\\s>+~(,])(td|th)(?![-\\w])|\\.row-(detail|columns)(?![-\\w]))";
 const boxWidth = ["/^(min-|max-)?(width|inline-size)$/", "flex", "flex-basis", "/^grid(-template)?(-columns)?$/"];
-// The first key a selector matches is the only one read, so a selector in a
-// table that is not a kicker is held to both.
-const pageSelectorProperties = {
-  [`/^(?=[\\s\\S]*${inTable})${notKicker}/`]: [...boxWidth, ...caseProperties],
-  [`/${inTable}/`]: boxWidth,
-  [`/^${notKicker}/`]: caseProperties,
-};
-const selectorProperties = (keys) => [
-  keys,
-  {
-    message: (selector, property) =>
-      caseProperties.includes(property)
-        ? `"${selector}" sets "${property}": capitals are for a kicker over a group, so say it in sentence case or add the kicker to \`kickers\` in stylelint.config.mjs with what it heads`
-        : `Disallowed property "${property}" for selector "${selector}"`,
-  },
-];
-
-// What the table primitive's rules tell a cell's parts apart by: the role the
-// region marks on each (`data-cell`, table_tags.mark_cells) and the parts the
-// primitive draws, never a page's class or what a cell leads with. A table a
-// page writes later then sets as every other does, with nothing added here.
-const cell = "(?:^|[\\s>+~(,])(?:td|th)(?![-\\w])|\\.row-(?:detail|columns)(?![-\\w])";
-const cellParts = [
-  "btn", "cell-line", "cell-part", "cell-whole", "cut", "data-table", "external-link", "is-expanded",
-  "kept-line", "muted", "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions",
-  "row-below", "row-columns", "row-detail", "row-gutter", "row-less", "row-more", "strut", "table-clamp",
-  "table-scroll", "token", "visually-hidden", "whole",
-];
-const cellRoles = [
-  // A cell's content by its tags, where the row's name is `[data-cell~=name]`.
-  `/(?:^|[\\s>+~(,])(?:td|th)(?![-\\w])(?:\\[[^\\]]*\\]|\\.[\\w-]+|:[\\w-]+)*(?:\\s*>\\s*|:has\\(\\s*>\\s*)(?:a(?![-\\w])[^\\s>,()]*\\s*>\\s*)?strong(?![-\\w])/`,
-  // Any class inside a cell but the primitive's parts: a role is its mark.
-  `/(?:${cell})[\\s\\S]*\\.(?!(?:${cellParts.join("|")})(?![-\\w]))[a-zA-Z][\\w-]*/`,
-];
-
-// A run of sibling sections or cards is the flow (`.section-flow`), so these
-// are the only rules that write an auto-fit or auto-fill grid: each a part
-// that lays out something else inside itself, never a run of sections. The
-// list does not grow to pass `hq/flow-grid`; a new run of sections is the flow.
-const flowGrids = [
-  // A pair: at most two to a row, like beside like, a lone one keeping half
-  // the row so a chart keeps its scale; an hq_sdk class extensions write.
-  ".two-col",
-  // The calendar's aside: one column beside the month, its day and its list
-  // of calendars side by side under it.
-  ".calendar-aside",
-  // A band's cells in one frame, counted into whole rows.
-  ":is(.insight-grid, .sweep-grid, .kpi-grid:not(.card > *))",
-  ".insight-grid",
-  ".sweep-grid",
-  ".facts-band",
-  ".connection-control-grid",
-  // HQ's standard: its checks as a list in two columns at most.
-  ".posture-checks",
-  // A form's choices, each a radio.
-  ".policy-choices",
-  // A timeline's entries, in reading order down and across.
-  ".timeline-list",
-  // A repository's row of posture segments, cells of one frame.
-  ".posture-repos",
-  // The hours of a day at a glance, tiles of one strip.
-  ".glance-hours",
-  // The dashboard head's readings beside the greeting.
-  ".dash-readings",
-  // Two tools whose intro, form and result share rows through subgrid,
-  // which a flex flow cannot hold.
-  ".lookup-grid",
-  // Vital figures in one card.
-  ".vitals-strip",
-  // A form's fields (`.form`, the one form layout).
-  ".form",
-  // A command result's facts.
-  ".command-result-facts",
-];
 
 // A primitive looks one way, drawn in the sheets that draw it, so a page
 // built from it looks like every other (`hq/restyled-primitive`). Each is
 // the classes that name it, a table its own elements too, and those sheets.
+// The table's are where it is drawn (docs/Design.md, "A table fits its box"),
+// and its parts are what its rules tell a cell's parts apart by.
 const primitives = [
   {
     name: "table",
     classes: "data-table|row-detail|row-columns",
     names: String.raw`(?:\.(?:data-table|row-detail|row-columns)(?![-\w])|(?<![-\w.#])(?:table|caption|thead|tbody|tfoot|tr|td|th)(?![-\w]))`,
-    sheets: tableSheets,
+    sheets: ["base", "cuts", "figures", "tables", "surfaces"],
+    parts: [
+      "btn", "cell-line", "cell-part", "cell-whole", "cut", "external-link", "is-expanded", "kept-line", "muted",
+      "name-line", "narrow-more", "narrow-only", "part", "pill", "readout", "row-actions", "row-below", "row-gutter",
+      "row-less", "row-more", "strut", "table-clamp", "table-scroll", "token", "visually-hidden", "whole",
+    ],
   },
   { name: "button", classes: "btn", sheets: ["page"] },
   { name: "facts", classes: String.raw`facts-(?:list|band)|fact(?:-label|-value|-detail)?`, sheets: ["layout", "figures", "surfaces"] },
@@ -238,6 +127,21 @@ const primitives = [
   { name: "notice", classes: String.raw`notice(?:-(?:attention|error|info|success|warning))?`, sheets: ["routes"] },
   { name: "card", classes: "card", sheets: ["layout", "surfaces"] },
 ];
+const [table] = primitives;
+const tablePrimitive = table.sheets.map(sheet);
+
+// What the table primitive's rules tell a cell's parts apart by: the role the
+// region marks on each (`data-cell`, table_tags.mark_cells) and the parts the
+// primitive draws, never a page's class or what a cell leads with. A table a
+// page writes later then sets as every other does, with nothing added here.
+const cell = "(?:^|[\\s>+~(,])(?:td|th)(?![-\\w])|\\.row-(?:detail|columns)(?![-\\w])";
+const cellRoles = [
+  // A cell's content by its tags, where the row's name is `[data-cell~=name]`.
+  `/(?:^|[\\s>+~(,])(?:td|th)(?![-\\w])(?:\\[[^\\]]*\\]|\\.[\\w-]+|:[\\w-]+)*(?:\\s*>\\s*|:has\\(\\s*>\\s*)(?:a(?![-\\w])[^\\s>,()]*\\s*>\\s*)?strong(?![-\\w])/`,
+  // Any class inside a cell but the primitive's own and its parts: a role is its mark.
+  `/(?:${cell})[\\s\\S]*\\.(?!(?:${[table.classes, ...table.parts].join("|")})(?![-\\w]))[a-zA-Z][\\w-]*/`,
+];
+
 // A sheet that draws a primitive may write that one's variants. Today's
 // instances are counted in stylelint-suppressions.json beside it, a count
 // per sheet that only falls: `mise run fix` lowers it (StylesheetLintTests
@@ -262,8 +166,8 @@ export default {
   reportDescriptionlessDisables: true,
   reportNeedlessDisables: true,
   rules: {
-    "hq/faded-text": fadedText,
-    "hq/flow-grid": { allowed: flowGrids },
+    "hq/faded-text": true,
+    "hq/flow-grid": true,
     "hq/ground-cover": true,
     // Any other sheet draws none.
     "hq/restyled-primitive": { primitives },
@@ -291,14 +195,15 @@ export default {
     // preloaded beside the stylesheet so it usually is (StyleContractTests).
     "at-rule-property-required-list": { "font-face": ["font-display"] },
     "declaration-property-value-allowed-list": { "font-display": ["optional"] },
-    "rule-selector-property-disallowed-list": selectorProperties(pageSelectorProperties),
+    "property-disallowed-list": disallowedProperties(caseProperties),
+    "rule-selector-property-disallowed-list": { [`/${inTable}/`]: boxWidth },
   },
   overrides: [
     {
       // The table primitive sizes what a table holds.
       files: tablePrimitive,
       rules: {
-        "rule-selector-property-disallowed-list": selectorProperties({ [`/^${notKicker}/`]: caseProperties }),
+        "rule-selector-property-disallowed-list": null,
         "selector-disallowed-list": [
           cellRoles,
           {
@@ -333,7 +238,7 @@ export default {
       files: [reference],
       rules: {
         "function-disallowed-list": [`/^(${colorFunctions}|color-mix)$/i`],
-        "property-disallowed-list": ["font-family"],
+        "property-disallowed-list": disallowedProperties([...caseProperties, "font-family"]),
         "declaration-property-value-disallowed-list": disallowedValues({
           "/(^|-)font-size$/": ["/^[\\d.]/"],
           ...spacingLiteral,

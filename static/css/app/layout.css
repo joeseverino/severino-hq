@@ -10,6 +10,7 @@
    tracks it is one column with no breakpoint. A card is as tall as what it
    holds: stretched to a taller neighbor, a short card is mostly empty frame,
    which reads worse than a card that is honestly short. */
+/* stylelint-disable-next-line hq/flow-grid -- a pair, like beside like, at most two to a row; an hq_sdk class extensions write */
 .two-col { container: pair / inline-size; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, max(320px, (100% - var(--layout-gap)) / 2)), 1fr)); gap: var(--layout-gap); align-items: start; margin: 0 0 var(--stack-gap); }
 
 /* A main panel with a companion. Unlike two equal siblings, the companion is
@@ -135,6 +136,15 @@
    as its longest line, so on a phone its content wraps inside it rather than
    pushing it past the screen's edge. */
 .card { min-inline-size: 0; }
+/* A card holding nothing but a line of facts (`{% facts layout="inline" %}`)
+   is a strip of counts: a narrower inset than a card of content, its words a
+   size under its values. A section's body under its head is the section's,
+   so its line keeps the body's inset and size. */
+.card:not(.section-body):has(> .facts-inline:only-child) {
+  padding: var(--surface-inset, var(--space-5) var(--space-8));
+  & > .facts-inline { font-size: var(--text-xs); }
+  & .fact-value { font-size: var(--text-md); }
+}
 /* Inside a layout container the gap is the separation, so a section's own
    stacking margin is dead space. Declared after the section rules above so it
    wins on source order at equal specificity. */
@@ -228,6 +238,7 @@
 .calendar-month { container: month / inline-size; }
 /* Seven equal columns: the one fixed grid here, because weeks must line up. */
 .month-grid { width: 100%; border-collapse: collapse; table-layout: fixed; }
+/* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday row over a month grid's days */
 .month-grid th { padding: 0 var(--space-2) var(--space-3); color: var(--muted); font-size: var(--text-2xs); font-weight: 600; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
 .month-day {
   height: 6.5rem;
@@ -247,6 +258,7 @@
    on every source's fill as words still followed must, its dots fainter. */
 .month-day.is-past :is(.month-span, .month-item) { color: var(--ink-3); }
 .month-day.is-past .month-span.is-start { border-left-color: color-mix(in srgb, var(--source) 62%, var(--surface)); }
+/* stylelint-disable-next-line hq/faded-text -- a past day's dots, marks */
 .month-day.is-past .month-mark, .month-day.is-past .month-item::before { opacity: .62; }
 .month-day.is-selected { box-shadow: inset 0 0 0 2px var(--accent); }
 /* The date and the day's marks share one row, so marks take no height of
@@ -277,6 +289,7 @@
 .month-mark.is-missed {
   background: linear-gradient(135deg, transparent 44%, var(--source) 44% 56%, transparent 56%);
   box-shadow: inset 0 0 0 1.5px var(--source);
+  /* stylelint-disable-next-line hq/faded-text -- a missed day's dot, a mark */
   opacity: .6;
 }
 .month-span.is-start { margin-left: 0; border-left: 3px solid var(--source); border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
@@ -299,14 +312,8 @@
 /* Beside the month it keeps its basis: the month's grow outweighs it a
    thousand to one. Wrapped under the month it is alone on its line and takes
    the width, its day and its list of calendars side by side. */
+/* stylelint-disable-next-line hq/flow-grid -- the calendar's aside: its day and its list of calendars side by side under the month */
 .calendar-aside { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); align-items: start; gap: var(--layout-gap); }
-.calendar-sources { padding: var(--space-5); }
-.day-panel-entry { margin-bottom: var(--space-5); padding: 0 var(--frame-inset, 0) var(--space-5); border-bottom: 1px solid var(--line-2); }
-.day-panel-entry h3 { margin: 0 0 var(--space-2); }
-.day-panel-entry p { margin: 0 0 var(--space-2); font-size: var(--text-sm); }
-.day-panel-entry .page-actions { margin: var(--space-4) 0 0; }
-.day-panel-source, .calendar-sources h3 { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0 var(--space-2); color: var(--muted); font-size: var(--text-xs); font-weight: 650; }
-.calendar-sources h3:first-child { margin-top: 0; }
 .calendar-swatch { width: 8px; height: 8px; border-radius: 2px; background: var(--source); }
 .calendar-sources ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
 /* A source is a toggle ({% post_button %} with `pressed`): the whole line is
@@ -379,6 +386,7 @@
   border-radius: 9px;
 }
 .week-plan-day.is-planned { background: var(--surface-2); border-color: var(--line-2); }
+/* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday over each day of a week plan */
 .week-plan-label { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .week-plan-day.is-planned .week-plan-label { color: var(--ink); }
 .week-plan-mark { display: flex; align-items: center; justify-content: center; gap: var(--space-1); min-height: 8px; }
@@ -443,6 +451,7 @@
   font-size: var(--text-3xs);
   font-weight: 700;
   letter-spacing: .08em;
+  /* stylelint-disable-next-line property-disallowed-list -- a kicker: the weekday row over the activity calendar's days */
   text-transform: uppercase;
   text-align: center;
 }
@@ -490,8 +499,9 @@
 .list-rows .row-meta { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
 /* A row's actions end its line, after the meta or, with none, in its place. */
 .list-rows .row-actions { margin-left: auto; }
-.list-rows a strong { color: var(--ink); font-weight: 600; }
-.list-rows a:hover strong { color: var(--accent); }
+/* A title is ink however it links: its own address, or a thing it names. */
+.list-rows :is(a strong, strong > a) { color: var(--ink); font-weight: 600; }
+.list-rows :is(a:hover strong, strong > a:hover) { color: var(--accent); }
 
 /* Prose list: sentences, where .list-rows carries chips.
    `.row-main` is a flex container, which is right for a row assembled from a
@@ -571,16 +581,18 @@ td > .subtle-link:not(:only-child) { display: table; }
 td .facts-list { font-size: var(--text-xs); gap: var(--space-1) var(--space-6); }
 /* Opened to read more (a disclosure, a popover, a dialog) or set above what a
    form changes, a list is a few short pairs under what it serves: its pairs
-   sit closer, and it ends where what holds it ends. A folded section is a
-   part of the page, so its list is the page's. Where only, so a table's row
-   in any of them keeps its own small print. */
-:where(details:not(.section-fold), [popover], dialog, form) .facts-list { row-gap: var(--space-2); }
-:where(details:not(.section-fold), [popover], dialog, form) .facts-list:last-child { margin-bottom: 0; }
+   sit closer, and it ends where what holds it ends. A folded section on the
+   page is a part of the page, so its list is the page's; one folded inside a
+   frame (a resource's other settings) is opened to read more. Where only, so
+   a table's row in any of them keeps its own small print. */
+:where(details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) .facts-list { row-gap: var(--space-2); }
+:where(details:not(.section-fold), .section-body .section-fold, [popover], dialog, form) .facts-list:last-child { margin-bottom: 0; }
 /* Addresses, one to a line, each beside its network: the networks in one
    column and the addresses in the next. */
 .address-list { display: grid; grid-template-columns: max-content minmax(0, max-content); gap: var(--space-1) var(--space-3); align-items: baseline; margin: 0; padding: 0; list-style: none; }
 .address-list li { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; }
 .address-list span { color: var(--muted); }
+/* stylelint-disable-next-line property-disallowed-list -- the kicker primitive, over a heading or a group of facts */
 .eyebrow { display: block; margin-bottom: var(--space-1); color: var(--muted-2); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 
 @media (max-width: 640px) {

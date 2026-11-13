@@ -22,7 +22,7 @@
   under it. How they stand is the band at the top of the page.
   {% endcomment %}
 {% section "Containers" %}
-  {% if unused_images %}<ul class="dot-list"><li class="tone-attention">{{ unused_images|length|counted:"unused image,unused images" }}, {{ unused_size|breakable }} can be freed</li></ul>{% endif %}
+  {% if unused_images %}<ul class="dot-list"><li>{% status unused_images|length|counted:"unused image,unused images"|add:"," unused_size "can be freed" tone="attention" pill=False %}</li></ul>{% endif %}
   {% if unused_images %}{% include "partials/_command.html" with command="ssh "|add:machine.name|add:' "sudo docker image prune -a"' only %}{% endif %}
   {% include "partials/_problems.html#rest" with rest=problems_in.containers %}
   {% if machine.containers %}{% include "control_plane/_container_rows.html" with containers=machine.on_show label="Shown containers" %}{% endif %}
@@ -32,10 +32,9 @@
     not what anybody opened this page to look at. Folded rather than dropped,
     because a container HQ can act on and does not show is worse than either.
     {% endcomment %}
-    <details>
-      <summary>{{ machine.folded|length|measured:"hidden" }}</summary>
+    {% section "Hidden" count=machine.folded|length fold=True %}
       {% include "control_plane/_container_rows.html" with containers=machine.folded label="Hidden containers" %}
-    </details>
+    {% endsection %}
   {% endif %}
 {% aside %}{% if docker %}<span class="muted">{% if docker.version %}Docker {{ docker.version|breakable }}{% else %}Docker{% endif %}{% if docker.status and docker.status != "up" %} {{ docker.status|breakable }}{% endif %}{% if docker.connection %}{% dot %}<span class="prose">read through {% entity docker.connection %}</span>{% endif %}</span>{% endif %}
 {% endsection %}

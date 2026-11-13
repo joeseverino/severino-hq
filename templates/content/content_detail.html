@@ -9,7 +9,7 @@
   {% fact "Added to HQ" %}<span class="muted">{{ item.created_at|when }}</span>{% endfact %}
   {% fact "Updated" %}<span class="muted">{{ item.updated_at|when }}</span>{% endfact %}
   {% comment %}No visits is a fact about the page, said beside the others rather than in a card of its own.{% endcomment %}
-  {% if traffic.path and not traffic.measured %}{% fact "Traffic" %}<span class="muted">No visits in the last {{ traffic.days|counted:"day" }}</span>{% endfact %}{% endif %}
+  {% if traffic.path and not traffic.measured %}{% fact "Traffic" %}{% with days=traffic.days|counted:"day" %}{% include "partials/_empty_state.html" with message="No visits in the last "|add:days inline=True %}{% endwith %}{% endfact %}{% endif %}
 {% endfacts %}{% endcard %}
 
 {% if traffic.path and traffic.measured %}

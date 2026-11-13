@@ -35,6 +35,7 @@ vars.classes = """\
   hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests \
   hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests \
   hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests \
+  hq.platform.core.tests.browser.head_strip.HeadAndStripBrowserTests \
   hq.platform.core.tests.browser.planted.PlantedBrowserTests"""
 
 # The layout legs in Chromium, so a break WebKit happens not to show still

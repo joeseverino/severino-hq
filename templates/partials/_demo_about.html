@@ -5,8 +5,7 @@ base.html draws on a saved copy (SEVERINO_RENDERED_COPY) and nowhere else.
 Each thing to try is a fact band's cell that leads to the page it names.
 {% endcomment %}
 <p class="modal-lede">HQ is the app one person runs a homelab from, shown here with sample data. Its own pages are saved as static files, so nothing you do here saves beyond this browser.</p>
-<div class="demo-about-part">
-  <h3 class="eyebrow" id="demo-about-try">Things to try</h3>
+{% section "Things to try" %}
   {% facts layout="band" %}
     {% url 'core:audit_list' as audit_url %}
     {% fact "Approval" value="Agent DNS change" url=audit_url|add:"?awaiting=1" icon="shield" %}
@@ -16,9 +15,8 @@ Each thing to try is a fact band's cell that leads to the page it names.
     {% fact "Needs you" value="Triage the queue" url=needs_url icon="check-circle" %}
     {% fact "Search" icon="search" %}<a href="{% url 'search' %}" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">Find anything</a>{% endfact %}
   {% endfacts %}
-</div>
-<nav class="demo-about-part" aria-labelledby="demo-about-behind">
-  <h3 class="eyebrow" id="demo-about-behind">Built with</h3>
+{% endsection %}
+{% section "Built with" %}
   <ul class="ext-links">
     <li>{% outside_link url="https://github.com/joeseverino/severino-hq" %}Repository<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
     <li>{% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" %}Demo build<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
@@ -26,5 +24,5 @@ Each thing to try is a fact band's cell that leads to the page it names.
     <li>{% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/docs/Development.md" %}Developing HQ<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
     <li>{% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/docs/AI.md" %}AI and HQ<span class="ext-arrow" aria-hidden="true">↗</span>{% endoutside_link %}</li>
   </ul>
-</nav>
+{% endsection %}
 <p class="demo-about-foot">Made by {% entity "https://jseverino.com"|outside label="Joe Severino" %}{% dot %}saved {{ saved_copy|when:"day" }}</p>

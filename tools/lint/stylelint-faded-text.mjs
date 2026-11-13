@@ -4,12 +4,9 @@
 // since a fade lowers its contrast below what its token was chosen for.
 // Stylelint's own rule-selector-property-disallowed-list matches a whole
 // selector list by one pattern and cannot read the value, so this reads each
-// selector of a list and the value it fades to.
-//
-// Options: `inactive`, patterns of which one anywhere in a selector says it
-// is an inactive state (on the element or a container); `marks`, patterns
-// a selector that styles a non-text mark matches; `animations`, the
-// @keyframes names that fade a mark.
+// selector of a list and the value it fades to. Any other mark a rule fades
+// (a chart's trend line, a calendar's dot, an animation's pulse) says so in a
+// disable comment beside its declaration.
 
 import stylelint from "stylelint";
 
@@ -22,10 +19,20 @@ const ruleName = "hq/faded-text";
 
 const messages = ruleMessages(ruleName, {
   rejected: (selector) =>
-    `"${selector}" fades by opacity, which is for an inactive control or a mark: give text an ink token that clears 4.5:1`,
+    `"${selector}" fades by opacity, which is for an inactive control or a mark: give text an ink token that clears 4.5:1, or say in a disable comment what mark it fades`,
   animation: (name) =>
-    `@keyframes ${name} fades by opacity, which is for an inactive control or a mark: name it in animations if it moves a mark`,
+    `@keyframes ${name} fades by opacity, which is for an inactive control or a mark: give text an ink token that clears 4.5:1, or say in a disable comment what mark it moves`,
 });
+
+// A state is inactive on the element or on what holds it: a disabled or
+// aria-disabled control, and a region aria-busy while its answer is on the
+// way.
+const INACTIVE = [/(?<!:not\()(:disabled|\[aria-disabled="true"\])/, /\[aria-busy="true"\]/];
+// The rest of a compound: classes, attributes and pseudo-classes, each
+// argument whole, so a name inside `:is()` is not the compound's.
+const compound = String.raw`(?:::?[\w-]+(?:\([^()]*\))?|\.[\w-]+|\[[^\]]*\])*`;
+// A shape a chart draws is a mark, whatever its classes.
+const SHAPE = new RegExp(String.raw`(^|[\s>+~])(rect|path|circle|line|polyline)${compound}$`);
 
 // The selectors of a list, split at its top-level commas, so `:is(a, b)`
 // stays one.
@@ -55,20 +62,8 @@ function fades(value) {
   return amount > 0 && amount < 1;
 }
 
-const rule = (primary, options) => (root, result) => {
-  const valid = validateOptions(
-    result,
-    ruleName,
-    { actual: primary, possible: [true] },
-    {
-      actual: options,
-      possible: { inactive: [(v) => typeof v === "string"], marks: [(v) => typeof v === "string"], animations: [(v) => typeof v === "string"] },
-    },
-  );
-  if (!valid) return;
-  const inactive = (options.inactive ?? []).map((pattern) => new RegExp(pattern));
-  const marks = (options.marks ?? []).map((pattern) => new RegExp(pattern));
-  const animations = new Set(options.animations ?? []);
+const rule = (primary) => (root, result) => {
+  if (!validateOptions(result, ruleName, { actual: primary, possible: [true] })) return;
 
   root.walkDecls(/^opacity$/i, (decl) => {
     if (!fades(decl.value)) return;
@@ -76,14 +71,11 @@ const rule = (primary, options) => (root, result) => {
     if (owner?.type !== "rule") return;
     const frames = owner.parent;
     if (frames?.type === "atrule" && /keyframes$/i.test(frames.name)) {
-      if (!animations.has(frames.params.trim())) {
-        report({ message: messages.animation, messageArgs: [frames.params.trim()], node: decl, result, ruleName });
-      }
+      report({ message: messages.animation, messageArgs: [frames.params.trim()], node: decl, result, ruleName });
       return;
     }
     for (const selector of selectors(owner.selector)) {
-      if (inactive.some((pattern) => pattern.test(selector))) continue;
-      if (marks.some((pattern) => pattern.test(selector))) continue;
+      if (INACTIVE.some((pattern) => pattern.test(selector)) || SHAPE.test(selector)) continue;
       report({ message: messages.rejected, messageArgs: [selector], node: decl, result, ruleName });
     }
   });

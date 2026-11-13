@@ -21,8 +21,9 @@ lazy from hq.platform.core.templatetags.value_tags import breakable
 from .display_words import display
 from .labels import DOT_MARKUP
 
-# The arrow that ends a link onward, as {% arrow %} draws it.
-ARROW = mark_safe('&nbsp;<span aria-hidden="true">&rarr;</span>')
+# The arrow that ends a link onward, written inside its last word's box as
+# breakable writes a mark, so a wrapped label never leaves it alone on a line.
+ARROW = "\N{NO-BREAK SPACE}\N{RIGHTWARDS ARROW}"
 
 
 def html_attributes(named: Mapping[str, object]) -> SafeString:
@@ -141,9 +142,11 @@ class SectionPart:
 
         if not self.more_url:
             return mark_safe(said)  # noqa: S308 - escaped above or the template's own output
-        link = format_html(
-            '<a class="subtle-link" href="{}">{}{}</a>', self.more_url, breakable(self.more_label), ARROW
-        )
+        # The label is words, also when a template's literal arrives marked
+        # safe: as a plain str, breakable writes the arrow inside its last
+        # word's box.
+        label = breakable(str.__str__(strip_tags(self.more_label)), ARROW)
+        link = format_html('<a class="subtle-link" href="{}">{}</a>', self.more_url, label)
         # said is escaped above or the template's own output; the rest is HQ's own markup.
         return mark_safe(f"{said}{DOT_MARKUP if said else ''}{link}")  # noqa: S308 - see above
 
@@ -166,7 +169,8 @@ class SectionPart:
             ),
             "id": self.id,
             "aria-labelledby": heading_id,
-            "open": self.fold and self.open,
+            # A flag, whatever a template passes for it (a form's errors).
+            "open": bool(self.fold and self.open),
             "data-head": self.head or None,
         }
         named |= {f"data-{name.replace('_', '-')}": value for name, value in self.data.items()}

@@ -164,17 +164,13 @@ part's heading shows only when there is more than one.
     {% if connections.caller_path.primary %}{% include "control_plane/_path_hops.html" with route=connections.caller_path.primary label="Request path" %}{% endif %}
   {% empty %}HQ cannot work out the path to its own name.
   {% endsection %}
-  <div class="connection-control-grid">
+  <div class="section-flow">
     {% for control in connections.posture.controls %}
-      <article class="connection-control connection-control-{{ control.state }}">
-        <header>
-          <h3>{{ control.label|breakable }}</h3>
-          {% status control.answer tone=control.state %}
-        </header>
-        <strong>{{ control.evidence|breakable }}</strong>
-        <p>{{ control.detail|breakable }}</p>
-        {% if control.id == "edge" %}<a href="{% url 'connection' %}" data-modal-open="connection">Your connection</a>{% endif %}
-      </article>
+      {% section control.label data_connection_control=control.id %}
+        <p><strong>{{ control.evidence|breakable }}</strong></p>
+        <p class="muted">{{ control.detail|breakable }}{% if control.id == "edge" %} <a href="{% url 'connection' %}" data-modal-open="connection">Your connection</a>{% endif %}</p>
+      {% aside %}{% status control.answer tone=control.state %}
+      {% endsection %}
     {% endfor %}
   </div>
 {% aside %}<span class="muted">This request and each connection's credentials: {{ connections.posture.check_summary|breakable }}</span>

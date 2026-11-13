@@ -1,0 +1,56 @@
+# A line may break at any space a template writes between a figure and the
+# word after it, so that word opens the next line alone ("3.57" above "mi");
+# the value filters join the two (line_breaks.held). A value is a figure
+# unless what it reads says it is words: a field that holds a name, or a
+# last filter that writes its own words (worded-value, which holds every
+# filter of hq_sdk.template_contract.WORDED_FIGURES, as
+# test_template_values holds it to). The word after it is a unit or a
+# counted word unless it is one of the closed classes of words that follow
+# a name in a sentence. A run of text is read whole, so one that also holds a
+# name, a worded value or a function word after a figure is left alone. No
+# fix: counted and measured are the reader's to choose.
+id: hand-drawn-split-figure
+language: html
+severity: error
+message: A figure apart from its word, where a value filter writes them as one.
+note: Write {{ n|counted:"thing" }} for a count, or {{ x|measured:"mi" }} for a unit or a word the count leaves alone ("more"), the figure and its word as one value.
+files:
+  - "**/templates/**/*.html"
+utils:
+  # A value or a number written in the text, and the word after it.
+  figure-then-word:
+    regex: '(?:\{\{\s*[\w.]+(?:\|\w+(?::(?:"[^"]*"|''[^'']*''|[\w.-]+))?)*\s*\}\}|(?:^|[^\w.,:$#/+-])\d+(?:[.,:]\d+)*)\s+(?:(?:[a-z][A-Za-z]*|[A-Z]+s)(?:[^\w''-]|$)|%(?:[^}]|$))'
+  # A run that ends on a figure, then a no-break space, then the word.
+  figure-then-entity:
+    all:
+      - regex: '(?:\{\{\s*[\w.]+(?:\|\w+(?::(?:"[^"]*"|''[^'']*''|[\w.-]+))?)*\s*\}\}|(?:^|[^\w.,:$#/+-])\d+(?:[.,:]\d+)*)$'
+      - precedes:
+          kind: entity
+          regex: ^&(?:nbsp|#160);$
+          precedes:
+            kind: text
+            regex: '^(?:(?:[a-z][A-Za-z]*|[A-Z]+s)(?:[^\w''-]|$)|%(?:[^}]|$))'
+  name-value:
+    regex: '\{\{\s*(?:\w+\.)*(?:get_username|host|kind|label|name|risk|status|title|username)\s*(?:\|[^}]*)?\}\}(?:\s+[A-Za-z%]|$)'
+  worded-value:
+    regex: '\|(?:ago|ago_short|bytes|capfirst|counted|day|door_words|expiry|interface_label|kind_label|lower|measured|money|readable|seconds|signed_in|span|title|upper|when|yesno)(?::(?:"[^"]*"|''[^'']*''|[\w.-]+))?\s*\}\}(?:\s+[A-Za-z%]|$)'
+  function-word:
+    regex: '(?:\}\}|\d)\s+(?:a|across|after|an|and|are|as|at|be|because|been|before|beyond|but|by|can|cannot|could|did|do|does|for|from|had|has|have|he|her|his|if|in|into|is|it|its|itself|may|might|must|nor|not|now|of|on|once|only|or|over|per|she|should|since|so|still|than|that|the|their|them|then|these|they|this|those|through|to|under|until|was|we|were|when|where|which|while|who|will|with|within|without|would|yet|you)\b'
+  # A number inside a template tag ({% if n > 1 %}), which no reader sees.
+  number-in-a-tag:
+    regex: '\d(?:[.,:]\d+)*\s+(?:[a-z][A-Za-z]*|[A-Z]+s)[^{}]*[%}]\}'
+  # A note to the template's reader, which no page shows.
+  in-a-comment:
+    regex: '\{%\s*(?:end)?comment\b|\{#|#\}'
+rule:
+  kind: text
+  any:
+    - matches: figure-then-word
+    - matches: figure-then-entity
+  not:
+    any:
+      - matches: name-value
+      - matches: worded-value
+      - matches: function-word
+      - matches: number-in-a-tag
+      - matches: in-a-comment

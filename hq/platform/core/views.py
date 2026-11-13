@@ -40,7 +40,7 @@ lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
 from .audit import record_event
-from .forms import OwnDeviceForm
+from .forms import OwnDeviceForm, PolicyForm
 from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
@@ -344,6 +344,7 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["placement"] = agent_devices.placement_posture()
         context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
         context["device_form"] = OwnDeviceForm()
+        context.setdefault("form", PolicyForm())
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context
@@ -362,17 +363,23 @@ class AgentPolicyView(PageMixin, TemplateView):
         return policy
 
     def post(self, request):
+        form = PolicyForm(request.POST)
+        form.is_valid()
         result = execute_posted(
             request, capability_policy.SET_POLICY, {"rules": capability_policy.submitted_rules(request.POST)}
         )
-        if refused(request, result):
-            return redirect("agent_policy")
+        if refusal := refused(request, result, form=form):
+            return self.render_to_response(self.get_context_data(form=form), status=refusal.status)
         changed, problems = result["changed"], result["problems"]
-        for problem in problems:
-            messages.error(request, problem)
         if changed:
             messages.success(request, f"Saved {counted(changed, 'change')}. Each is in the audit log.")
-        elif not problems:
+        # A rule that could not change is said over the tables, drawn as they
+        # now hold, beside the ones that did.
+        if problems:
+            for problem in problems:
+                form.add_error(None, problem)
+            return self.render_to_response(self.get_context_data(form=form), status=400)
+        if not changed:
             messages.info(request, "Nothing changed.")
         return redirect("agent_policy")
 

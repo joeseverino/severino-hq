@@ -18,7 +18,7 @@
                     <td><code class="cell-whole">{{ answer.value|breakable }}</code></td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="3" class="muted">No public records.</td></tr>
+                  <tr><td colspan="3">{% include "partials/_empty_state.html" with message="No public records." only %}</td></tr>
                 {% endfor %}
               </tbody>
             </table>

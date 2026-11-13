@@ -62,11 +62,7 @@
   <div class="topology-stage">
   <div class="topology-map" id="map" tabindex="-1" role="region" aria-label="Map lanes">
     {% for group in topology_groups %}{% if group.items %}
-      <div class="topology-lane" data-topology-lane="{{ group.kind }}">
-        <header>
-          <span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
-          <h2 id="topology-{{ group.kind }}">{{ group.label|breakable }} <span class="count" data-topology-count title="{{ group.count }}" aria-label="{{ group.count }}">{{ group.items|length }}</span></h2>
-        </header>
+      {% section group.label count=group.items|length id="topology-"|add:group.kind css="topology-lane" data_topology_lane=group.kind %}
         <div class="topology-node-list">
           {% for item in group.items %}
             {% comment %}
@@ -90,7 +86,8 @@
             </article>
           {% endfor %}
         </div>
-      </div>
+      {% aside %}<span class="topology-kind-mark topology-kind-{{ group.kind }}" aria-hidden="true"></span>
+      {% endsection %}
     {% endif %}{% empty %}
       {% if active_lens %}
         {% include "partials/_empty_state.html" with message="Nothing matches." %}
@@ -99,7 +96,9 @@
       {% endif %}
     {% endfor %}
   </div>
-  <section class="topology-detail" id="topology-detail" tabindex="-1" aria-label="Details" aria-live="polite" data-topology-detail="{{ focus_node }}" data-fragment-failure="Details did not load."{% if not topology_detail %} hidden{% endif %}>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-section --> the map's details pane: a labeled live region the selection moves focus to, titled by the node it shows
+  {% endcomment %}<section class="topology-detail" id="topology-detail" tabindex="-1" aria-label="Details" aria-live="polite" data-topology-detail="{{ focus_node }}" data-fragment-failure="Details did not load."{% if not topology_detail %} hidden{% endif %}>
     {% if topology_detail %}{% include "control_plane/_topology_node_body.html" with item=topology_detail %}{% endif %}
   </section>
   </div>

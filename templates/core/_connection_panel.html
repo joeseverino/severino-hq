@@ -121,7 +121,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         {% fact "Connection" %}<div class="conn-carriage conn-carriage-{{ connection.peering.id }}">
           <strong>{{ connection.peering.label|breakable }}</strong>
           {% if connection.peering.public %}
-            <details class="conn-more" data-peering-detail>
+            {% comment %}
+            <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
+            {% endcomment %}<details class="conn-more" data-peering-detail>
               <summary>
                 About <code>{{ connection.peering.address|breakable }}</code>
               </summary>
@@ -147,7 +149,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
         The two keys the rows above rest on, checkable against `tailscale
         status` on either machine. Folded: wanted only when the claim is doubted.
         {% endcomment %}
-        {% fact "Peered as" %}<details class="conn-more">
+        {% fact "Peered as" %}{% comment %}
+        <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
+        {% endcomment %}<details class="conn-more">
             <summary>Both node keys</summary>
             {% facts %}
               {% for label, key in connection.peer_keys %}{% fact label %}<code>{{ key|breakable }}</code>{% endfact %}{% endfor %}
@@ -162,7 +166,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
     <ol class="conn-layers">
       {% for hop in request_path.hops %}
         <li class="conn-layer conn-layer-{{ hop.check.layer_state|default:'unknown' }}">
-          <details data-connection-hop="{{ hop.step }}"{% if hop.check.state == 'contradicted' %} open{% endif %}>
+          {% comment %}
+          <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
+          {% endcomment %}<details data-connection-hop="{{ hop.step }}"{% if hop.check.state == 'contradicted' %} open{% endif %}>
             <summary>
               <span class="conn-tick" aria-hidden="true">{% if hop.check.state == 'proven' %}&check;{% elif hop.check.state == 'contradicted' %}&times;{% else %}?{% endif %}</span>
               <span class="conn-layer-boundary">{{ hop.label|breakable }}</span>
@@ -193,7 +199,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
                 <ol class="conn-layers">
                   {% for layer in hop.layers %}
                     <li class="conn-layer conn-layer-{{ layer.state }}">
-                      <details data-connection-layer="{{ layer.id }}">
+                      {% comment %}
+                      <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
+                      {% endcomment %}<details data-connection-layer="{{ layer.id }}">
                         <summary>
                           <span class="conn-tick" aria-hidden="true">{% if layer.state == 'unknown' %}?{% elif layer.holds %}&check;{% else %}&times;{% endif %}</span>
                           <span class="conn-check"><span class="conn-layer-label">{{ layer.label|breakable }}</span>{% if layer.evidence %} <code class="conn-layer-evidence">{{ layer.evidence|breakable }}</code>{% endif %}</span>
@@ -266,7 +274,9 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
           {% endif %}{% endfor %}
         </div>
         {% if request_path.unread_headers %}
-          <details class="conn-more">
+          {% comment %}
+          <!-- ast-grep-ignore: hand-drawn-fold --> the request inspector's own disclosures, a part of its own
+          {% endcomment %}<details class="conn-more">
             <summary>{{ request_path.unread_headers|length|measured:"unread" }}</summary>
             <div class="conn-rows">
               {% for header in request_path.unread_headers %}

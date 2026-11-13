@@ -1,0 +1,25 @@
+id: hand-drawn-split-count
+# The bold runs of the host's templates the shape was read from: each figure
+# set apart from the words that count it, and the bolded names of prose and
+# of rows, which it leaves alone.
+valid:
+  - "<p><strong>{{ name|breakable }}</strong> stops running, and whatever it serves stops answering</p>"
+  - "Served by <strong>{{ service.origin.headline|breakable }}</strong> from <code>{{ a }}</code>"
+  - "<p>Removes <strong>{{ record.title|breakable }}</strong> (<code>{{ record.doc_id }}</code>)</p>"
+  - "<strong>{{ hop.label|breakable }}</strong> {{ hop.check.detail|breakable }}"
+  - '<strong>{{ step.label|breakable }}</strong> <span class="muted">{{ step.detail }}</span>'
+  - "<p><strong>{{ switch.state|breakable }}</strong></p>"
+  - "<strong>{{ connection.status }}</strong> since today"
+  - "<strong>{{ row.address }}</strong> answers"
+  - '<strong>{{ finding_entries|length|counted:"problem" }}</strong>{% if one %}, urgent{% endif %}'
+  - '<strong>{{ item.node.pageviews|counted:"pageview" }}</strong> from'
+  - "Total <strong>{{ totals.total|money }}</strong>{% if narrowed %} total{% endif %}"
+  - "<strong>{{ account.name }}</strong> signs in"
+invalid:
+  - '<a href="?awaiting=1"><strong>{{ awaiting_count|breakable }}</strong> held for approval</a>'
+  - '<a href="?action=denied"><strong>{{ refused_count|breakable }}</strong> refused in the last day</a>'
+  - "<p><strong>{{ item.node.pageviews|breakable }}</strong> pageviews from</p>"
+  - "<p><strong>{{ item.node.visits|breakable }}</strong> visits.</p>"
+  - "<p>A, <strong>{{ finding_counts.serious|breakable }}</strong> urgent{% endif %}</p>"
+  - "<p>A, <strong>{{ finding_counts.attention|breakable }}</strong> need attention{% endif %}</p>"
+  - "<p><strong>{{ rules|length }}</strong> grants</p>"

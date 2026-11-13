@@ -1,0 +1,22 @@
+# A group of a table's rows is headed by {% row_group %} alone, so every group
+# row spans its table, keeps the rows' edge and folds alike. A group row is
+# known by its class or by its heading's scope. No fix: the tag takes the
+# group's count.
+id: hand-drawn-row-group
+language: html
+severity: error
+message: A group of rows headed by hand, where the row group tag heads it.
+note: Write {% row_group label count %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      any:
+        - regex: '(?:^|\})class=["''](?:[^"'']*\W)?row-group(?:\W|$)'
+        - regex: '(?:^|\})scope=["'']rowgroup["'']'

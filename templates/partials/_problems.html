@@ -21,7 +21,9 @@ Nothing is drawn when nothing is open.
 {% with urgent=problems|urgent rest=problems|not_urgent %}
 {% if urgent %}
 {% card css="problems problems-here tone-serious" id="problems-here" heading="problems-here-heading" %}
-  <h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-heading --> the urgent problems' notice, whose heading is for a screen reader alone: nothing visible titles it
+  {% endcomment %}<h2 class="visually-hidden" id="problems-here-heading">{{ urgent|length|counted:"urgent problem,urgent problems" }}</h2>
   {% include "partials/_work_queue.html" with items=urgent grouped=True here=True fold=True only %}
 {% endcard %}
 {% endif %}

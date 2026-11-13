@@ -1,0 +1,10 @@
+id: hand-drawn-icon
+valid:
+  - '{% include "partials/_icon.html" with name="check" %}'
+  - '<svg role="img" aria-label="Trend"><path d="M0 0"/></svg>'
+  - '<span aria-hidden="true">…</span>'
+invalid:
+  - '<svg aria-hidden="true" viewBox="0 0 24 24"><path d="M0 0"/></svg>'
+  - |
+    <svg class="icon" focusable="false"
+         aria-hidden="true"></svg>

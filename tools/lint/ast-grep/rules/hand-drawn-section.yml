@@ -1,0 +1,38 @@
+# A framed part of a page is the section part, which draws its heading at
+# the level its nesting gives it, its count, lede and foot, so every page's
+# parts read and fold alike; a <div> groups a layout. The fix moves a bare
+# <section> that opens on a plain <h2>; any other is moved by hand.
+id: hand-drawn-section
+language: html
+severity: error
+message: A <section> element drawn by hand, where the section part draws it.
+note: Write {% section "Heading" %}body{% endsection %}, or a <div> for one that only groups a layout.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  pattern: $PART
+  has:
+    kind: start_tag
+    has:
+      kind: tag_name
+      regex: ^section$
+rewriters:
+  - id: headed
+    rule:
+      pattern: <section><h2>$HEAD</h2>$$$BODY</section>
+    constraints:
+      HEAD:
+        kind: text
+        not:
+          regex: '[{}"]'
+    fix: |-
+      {% section "$HEAD" %}
+        $$$BODY
+      {% endsection %}
+transform:
+  MOVED:
+    rewrite:
+      rewriters: [headed]
+      source: $PART
+fix: $MOVED

@@ -41,7 +41,8 @@
 .quick-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0 0 var(--space-10); }
 .quick-actions form { margin: 0; }
 
-/* Category color dots: paired with project rows */
+/* A record list row's category as its color (`ListRow.category`), before
+   its title; the row says the category in words too. */
 .cat-dot {
   width: 7px; height: 7px; border-radius: 2px; display: inline-block; flex-shrink: 0;
   background: var(--muted-2);
@@ -124,6 +125,7 @@ a.kpi:hover { background: var(--surface-2); }
   display: grid;
   /* A narrower track ceiling lets four insights share one row at desktop
      widths instead of stranding the fourth alone beside two empty columns. */
+  /* stylelint-disable-next-line hq/flow-grid -- a band's cells in one frame, counted into whole rows */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, clamp(240px, 22%, 290px)), 1fr));
   margin: 0 0 var(--stack-gap);
 }
@@ -289,6 +291,7 @@ a.kpi:hover { background: var(--surface-2); }
 .step-list .muted { display: block; margin-top: var(--space-1); }
 /* HQ's standard: its checks read as a list in two columns at most (4 and 3),
    never a row of five with two under it. */
+/* stylelint-disable-next-line hq/flow-grid -- HQ's standard: its checks as a list in two columns at most */
 .posture-checks { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(20rem, 40%)), 1fr)); }
 
 /* A card's steps (partials/_resolution_workflow.html): one stands alone,
@@ -314,8 +317,6 @@ a.kpi:hover { background: var(--surface-2); }
 ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .resolution-workflow li > strong { color: var(--ink); font-weight: 650; }
 .resolution-workflow li > p { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
-.resolution-fold { margin-top: var(--space-3); }
-.resolution-fold > summary { width: fit-content; max-width: 100%; color: var(--ink-2); font-size: var(--text-sm); cursor: pointer; }
 
 .quick-actions.vertical { display: grid; grid-template-columns: 1fr; }
 
@@ -336,25 +337,36 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
 /* The landmark never pads itself: whatever a page's css= names on it, its
    head starts at the column's edge and its frame spans the column. */
 :is(section, details, figure).section { padding: 0; }
+/* Inside any other frame (a section's body, a card, a form, a band) a section
+   is part of that frame. The frame rule (surfaces.css) sets --surface-inset
+   to 0 for all it holds and leaves it unset elsewhere, so the value the
+   landmark inherits is the test: in a frame, its head draws no rule and no
+   inset of its own and its body adds none. */
+.section {
+  --section-head-pad: var(--surface-inset) 0 var(--space-5);
+  --section-head-rule: var(--surface-inset);
+  --section-inset: var(--surface-inset);
+}
 /* A figure's own margin is the browser's; the page's stacking gives it its room. */
 :where(figure.section) { margin: 0; }
-.section > .section-head { margin-bottom: var(--space-5); }
+/* A heading is never left alone at the foot of a column or a printed page:
+   Chromium keeps the break after a flex head only when the head is whole. */
+.section > .section-head { margin-bottom: var(--space-5); break-inside: avoid; break-after: avoid; }
 /* A head inside the frame stands at the inset the body's words stand at. */
 .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)) > .section-head {
-  margin: 0; padding: var(--space-4) var(--space-9);
-  border-block-end: 1px solid var(--line);
+  margin: 0; padding: var(--section-head-pad, var(--space-4) var(--space-9));
+  border-block-end: var(--section-head-rule, 1px solid var(--line));
 }
 /* A section's heading line is one control tall, its words centered in it, so
    a control beside it (a button, a month's arrows) adds no height, and heads
    that share a row are one height and start their frames together. */
 .section > .section-head > :is(h2, h3, h4, h5, h6) { min-block-size: var(--control-size); align-content: center; }
 .section > .section-body {
-  --section-start: var(--space-8);
+  --section-start: var(--section-inset, var(--space-8));
   --section-end: var(--space-8);
   --section-side: var(--space-9);
-  padding: var(--section-start) var(--section-side) var(--section-end);
+  padding: var(--section-inset, var(--section-start) var(--section-side) var(--section-end));
 }
-.section .section > .section-body { --section-start: 0; padding: 0; }
 /* A heading inside a frame heads part of the section above it, so it reads
    quieter than that section's, never as its sibling. */
 .section .section > .section-head :is(h3, h4, h5, h6) { color: var(--muted); font-size: var(--text-sm); font-weight: 600; }
@@ -367,8 +379,8 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    parts come from: what either holds reaches the sides as the body's own part
    would. */
 :is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .github-list, .posture-repos,
-  .insight-grid, .connection-control-grid, .sweep-grid,
-  .month-grid, .list-rows, .setup-list, .day-panel-entry, .search-hits, .conn-rows) {
+  .insight-grid, .sweep-grid,
+  .month-grid, .list-rows, .search-hits, .conn-rows) {
   --frame-inset: var(--section-side);
   margin-inline: calc(-1 * var(--section-side));
   max-inline-size: calc(100% + 2 * var(--section-side));
@@ -380,7 +392,7 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
    or a month, whose outer rows draw no edge there, keeps the frame's padding
    above and below it. */
 :is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .github-list, .posture-repos,
-  .insight-grid, .connection-control-grid, .sweep-grid) {
+  .insight-grid, .sweep-grid) {
   --section-corner: calc(var(--radius) - 1px);
   /* In a form that starts the body, its hidden fields draw nothing, so they
      do not count. */
@@ -398,6 +410,9 @@ details.card > summary::before { margin-inline-start: calc(-1em - var(--space-1)
   }
 }
 .section-body > * + .section, .section-body > .section + * { margin-block-start: var(--stack-gap); }
+/* A reading a section holds (raw JSON, a provider's readout) has paths of any
+   length: wrapped, so only its height scrolls and never the page sideways. */
+.section-body > pre { max-block-size: 18rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 /* A folded section's mark hangs before its heading, so the heading starts
    where every other section's does. */
 details.section.section-fold > summary.section-head::before { margin-inline: calc(-1em - var(--space-1)) calc(var(--space-1) - var(--space-6)); }

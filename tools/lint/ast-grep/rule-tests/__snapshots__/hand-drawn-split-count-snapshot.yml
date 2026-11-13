@@ -1,0 +1,128 @@
+id: hand-drawn-split-count
+snapshots:
+  "<a href=\"?action=denied\"><strong>{{ refused_count|breakable }}</strong> refused in the last day</a>":
+    labels:
+    - source: <strong>{{ refused_count|breakable }}</strong>
+      style: primary
+      start: 25
+      end: 71
+    - source: strong
+      style: secondary
+      start: 26
+      end: 32
+    - source: <strong>
+      style: secondary
+      start: 25
+      end: 33
+    - source: refused in the last day
+      style: secondary
+      start: 72
+      end: 95
+  "<a href=\"?awaiting=1\"><strong>{{ awaiting_count|breakable }}</strong> held for approval</a>":
+    labels:
+    - source: <strong>{{ awaiting_count|breakable }}</strong>
+      style: primary
+      start: 22
+      end: 69
+    - source: strong
+      style: secondary
+      start: 23
+      end: 29
+    - source: <strong>
+      style: secondary
+      start: 22
+      end: 30
+    - source: held for approval
+      style: secondary
+      start: 70
+      end: 87
+  "<p><strong>{{ item.node.pageviews|breakable }}</strong> pageviews from</p>":
+    labels:
+    - source: <strong>{{ item.node.pageviews|breakable }}</strong>
+      style: primary
+      start: 3
+      end: 55
+    - source: strong
+      style: secondary
+      start: 4
+      end: 10
+    - source: <strong>
+      style: secondary
+      start: 3
+      end: 11
+    - source: pageviews from
+      style: secondary
+      start: 56
+      end: 70
+  "<p><strong>{{ item.node.visits|breakable }}</strong> visits.</p>":
+    labels:
+    - source: <strong>{{ item.node.visits|breakable }}</strong>
+      style: primary
+      start: 3
+      end: 52
+    - source: strong
+      style: secondary
+      start: 4
+      end: 10
+    - source: <strong>
+      style: secondary
+      start: 3
+      end: 11
+    - source: visits.
+      style: secondary
+      start: 53
+      end: 60
+  "<p><strong>{{ rules|length }}</strong> grants</p>":
+    labels:
+    - source: <strong>{{ rules|length }}</strong>
+      style: primary
+      start: 3
+      end: 38
+    - source: strong
+      style: secondary
+      start: 4
+      end: 10
+    - source: <strong>
+      style: secondary
+      start: 3
+      end: 11
+    - source: grants
+      style: secondary
+      start: 39
+      end: 45
+  "<p>A, <strong>{{ finding_counts.attention|breakable }}</strong> need attention{% endif %}</p>":
+    labels:
+    - source: <strong>{{ finding_counts.attention|breakable }}</strong>
+      style: primary
+      start: 6
+      end: 63
+    - source: strong
+      style: secondary
+      start: 7
+      end: 13
+    - source: <strong>
+      style: secondary
+      start: 6
+      end: 14
+    - source: need attention{% endif %}
+      style: secondary
+      start: 64
+      end: 89
+  "<p>A, <strong>{{ finding_counts.serious|breakable }}</strong> urgent{% endif %}</p>":
+    labels:
+    - source: <strong>{{ finding_counts.serious|breakable }}</strong>
+      style: primary
+      start: 6
+      end: 61
+    - source: strong
+      style: secondary
+      start: 7
+      end: 13
+    - source: <strong>
+      style: secondary
+      start: 6
+      end: 14
+    - source: urgent{% endif %}
+      style: secondary
+      start: 62
+      end: 79

@@ -1,0 +1,44 @@
+id: hand-drawn-toned-value
+snapshots:
+  "<li class=\"tone-{{ standing.state }}\">A</li>":
+    labels:
+    - source: <li class="tone-{{ standing.state }}">A</li>
+      style: primary
+      start: 0
+      end: 44
+    - source: class="tone-{{ standing.state }}"
+      style: secondary
+      start: 4
+      end: 37
+    - source: <li class="tone-{{ standing.state }}">
+      style: secondary
+      start: 0
+      end: 38
+  "<span class=\"figure tone-attention\">{{ n }}</span>":
+    labels:
+    - source: <span class="figure tone-attention">{{ n }}</span>
+      style: primary
+      start: 0
+      end: 50
+    - source: class="figure tone-attention"
+      style: secondary
+      start: 6
+      end: 35
+    - source: <span class="figure tone-attention">
+      style: secondary
+      start: 0
+      end: 36
+  <span class="tone-good">A</span>:
+    labels:
+    - source: <span class="tone-good">A</span>
+      style: primary
+      start: 0
+      end: 32
+    - source: class="tone-good"
+      style: secondary
+      start: 6
+      end: 23
+    - source: <span class="tone-good">
+      style: secondary
+      start: 0
+      end: 24

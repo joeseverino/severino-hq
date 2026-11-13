@@ -12,6 +12,7 @@
   margin: var(--space-2) 0 0;
   padding: 0;
   display: grid;
+  /* stylelint-disable-next-line hq/flow-grid -- a timeline's entries, in reading order down and across */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
   column-gap: var(--space-14);
   /* Each item draws the rule above it and the list clips the first row's, so
@@ -29,6 +30,7 @@
   box-shadow: 0 -1px 0 var(--line-2);
 }
 .timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }
+/* stylelint-disable-next-line property-disallowed-list -- a kicker: the month over a timeline's entries */
 .timeline-month { color: var(--muted); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .timeline-day { color: var(--ink); font-size: var(--text-2xl); font-weight: 650; line-height: 1.1; }
 .timeline-year { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 600; letter-spacing: .04em; }
@@ -205,6 +207,7 @@
 .route-band-5.route-swatch { background: var(--route-band-5); }
 .route-marker { stroke: var(--surface); stroke-width: 2.5; }
 .route-scale { stroke: var(--ink-2); stroke-width: 2; }
+/* stylelint-disable-next-line hq/faded-text -- a route's lines are marks, faded beside the one hovered */
 .route-map:hover .route-line:not(:hover) { opacity: .55; }
 
 /* ── Background jobs ────────────────────────────────────────────── */

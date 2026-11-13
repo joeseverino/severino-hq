@@ -24,7 +24,7 @@ from django.db.models.functions import Cast
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 lazy from . import entity_links, security
-lazy from .card_items import Insight
+lazy from .card_items import Insight, ListRow
 lazy from .demo import showing_demo
 lazy from .entity_links import NODE_KINDS, entity_link, kind_label, node_name
 lazy from .projection import read_once
@@ -667,6 +667,12 @@ class Mentions:
 
     heading: str
     items: tuple[Mention, ...]
+
+    @property
+    def rows(self) -> tuple[ListRow, ...]:
+        """The items as the record list part draws them."""
+
+        return tuple(ListRow(link=item.link, meta=item.note) for item in self.items)
 
 
 def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Mentions, ...]:

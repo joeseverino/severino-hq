@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 lazy import inspect
 
+# Read only by hand_drawn_rules, which development alone runs: no image installs it.
+lazy import yaml
 lazy from django.template import engines
 lazy from django.template.backends.django import get_installed_libraries
 lazy from django.template.base import FilterExpression, NodeList, Variable
@@ -218,24 +220,9 @@ HOOKS = (
 )
 
 
-def _class_word(*words: str, prefix: bool = False) -> str:
-    """A ``class`` attribute holding one of ``words`` whole, or one beginning
-    with one of them when ``prefix`` is set (``tone-`` and ``tone-{{ t }}``)."""
-
-    after = "" if prefix else r"(?![\w-])"
-    return rf'\bclass="(?:[^"]*[\s}}])?(?:{"|".join(words)}){after}'
-
-
-# What a figure written apart from its word is read by. A line may break at
-# any space the template writes between a figure and the word after it, so
-# that word opens the next line alone ("3.57" above "mi"); the value tags join
-# the two (line_breaks.held). A value is a figure unless what it reads says
-# it is words: a field that holds a name, or a filter that writes its own
-# words. The word after it is a unit or a counted word unless it is one of the
-# closed classes of words that follow a name in a sentence.
-_NAME_FIELDS = ("get_username", "host", "kind", "label", "name", "risk", "status", "title", "username")
 # The value tags that write a figure together with its own words, each joined
 # where a line could break inside it (value_tags, through line_breaks.held).
+# The hand-drawn-split-figure rule leaves each alone (test_template_values).
 WORDED_FIGURES = {
     "ago": "an age in words",
     "ago_short": "an age in words",
@@ -248,167 +235,6 @@ WORDED_FIGURES = {
     "seconds": "a run time",
     "signed_in": "an age in words",
     "span": "a length of time",
-}
-# Sorted, so the pattern contract.json records does not move with the order.
-_WORDED_FILTERS = sorted(
-    (
-        *WORDED_FIGURES,
-        "capfirst",
-        "door_words",
-        "interface_label",
-        "kind_label",
-        "lower",
-        "readable",
-        "title",
-        "upper",
-        "when",
-        "yesno",
-    )
-)
-_FUNCTION_WORDS = (
-    "a", "across", "after", "an", "and", "are", "as", "at", "be", "because", "been", "before", "beyond", "but", "by",
-    "can", "cannot", "could", "did", "do", "does", "for", "from", "had", "has", "have", "he", "her", "his",
-    "if", "in", "into", "is", "it", "its", "itself", "may", "might", "must", "nor", "not", "now", "of", "on",
-    "once", "only", "or", "over", "per", "she", "should", "since", "so", "still", "than", "that", "the",
-    "their", "them", "then", "these", "they", "this", "those", "through", "to", "under", "until", "was",
-    "we", "were", "when", "where", "which", "while", "who", "will", "with", "within", "without", "would",
-    "yet", "you",
-)  # fmt: skip
-_ARGUMENT = r"""(?::(?:"[^"]*"|'[^']*'|[\w.-]+))?"""
-_FIGURE_VALUE = (
-    rf"\{{\{{\s*(?!(?:\w+\.)*(?:{'|'.join(_NAME_FIELDS)})\s*(?:\||\}}\}}))[\w.]+"
-    rf"(?:(?:\|\w+{_ARGUMENT})*\|(?!(?:{'|'.join(_WORDED_FILTERS)})\b)\w+{_ARGUMENT})?\s*\}}\}}"
-)
-# A figure written in the text itself ("30 days"), outside a tag.
-_FIGURE_LITERAL = r"(?<![\w.,:$#/+-])\d+(?:[.,:]\d+)*(?![^{}]*[%}]\})"
-_FIGURE_SPLIT = (
-    rf"(?:{_FIGURE_VALUE}|{_FIGURE_LITERAL})(?![^<>]*>)(?:\s|&nbsp;|&#160;)+"
-    rf"(?!(?:{'|'.join(_FUNCTION_WORDS)})\b)(?:(?:[a-z][A-Za-z]*|[A-Z]+s)\b(?![-'])|%)"
-)
-
-
-# The shapes a page draws by hand where a shared part draws it, each with the
-# part to write instead: hq_sdk.validation refuses each in an extension's
-# templates, and the host's source test (test_hand_drawn.py) holds the host's
-# own to the same table, so one table says what hand-rolling is. A pattern is
-# read over a template with its comments taken out; ``outside`` names a block
-# tag inside which the shape is the part itself.
-HAND_DRAWN: dict[str, dict[str, str]] = {
-    "a <section> element": {
-        "pattern": r"<section\b",
-        "write": '{% section "Heading" %}body{% endsection %}, or a <div> for one that only groups a layout',
-    },
-    "a heading": {
-        "pattern": r"<h[1-6]\b",
-        "write": (
-            'the heading of {% section "Heading" %}, a sub-head a {% section %} inside it (it heads itself a'
-            " level down); the page's own title is the frame's, from page"
-        ),
-    },
-    "a fold": {
-        "pattern": r"<details\b",
-        "write": '{% section "Heading" fold=True %}body{% endsection %}',
-    },
-    "a table outside its region": {
-        "pattern": r"<table\b",
-        "outside": "table_region",
-        "write": '{% table_region "Label" %} around its <table class="data-table">',
-    },
-    "a form that writes": {
-        "pattern": r'(?i)<form\b[^>]*\bmethod=["\']?post\b',
-        "write": '{% include "partials/_form.html" %}, or {% post_button %} for a single verb',
-    },
-    "a list of rows": {
-        "pattern": _class_word("list-rows"),
-        "write": '{% include "partials/_record_list.html" %} from hq_sdk.ui.ListRow',
-    },
-    "a figure": {
-        "pattern": _class_word("kpi", "kpi-grid"),
-        "write": '{% include "partials/_kpi_grid.html" %} from hq_sdk.ui.Kpi',
-    },
-    "a notice": {
-        "pattern": _class_word("notice"),
-        "write": "{% notice %}",
-    },
-    "a filter bar": {
-        "pattern": _class_word("filter-bar"),
-        "write": "{% filter_bar filtered=... clear=... %}controls{% summary %}count{% endfilter_bar %}",
-    },
-    "an icon": {
-        "pattern": r'<svg\b[^>]*\baria-hidden="true"',
-        "write": '{% include "partials/_icon.html" with name="..." %}; a drawing that says something is role="img"',
-    },
-    "a toned value": {
-        "pattern": _class_word("tone-", prefix=True),
-        "write": "{% status value tone=tone pill=False %}",
-    },
-    # One of the bands each page drew its facts in before the part.
-    "label and value facts": {
-        "pattern": _class_word(
-            "fact-band",
-            "service-band",
-            "control-summary",
-            "control-metric",
-            "vitals-strip",
-            "glance-metrics",
-            "agent-state-facts",
-            "attention-facts",
-        ),
-        "write": '{% facts %} around each {% fact "Label" value=... %}, or {% facts layout="band" %} for a band',
-    },
-    # A figure set bold apart from the words that count it ("<strong>{{ n }}</strong>
-    # refused"): read by what names a count (a `_count`, a `counts.`, a total,
-    # a `|length`, a plural), so the bolded names of prose are left alone.
-    "a count split from its words": {
-        "pattern": (
-            r"<strong>\{\{\s*(?:(?:[\w.]*[._])?(?:count|counts|total)\b[\w.]*|[\w.]*[a-z][^\Wsu]s|[\w.]+\|length)"
-            r"(?:\|(?!counted)\w+(?::\S+)?)*\s*\}\}</strong>\s+[a-z]"
-        ),
-        "write": '{{ n|counted:"thing" }}, the figure and its words as one, or {% fact "Label" value=n %}',
-    },
-    "a figure apart from its word": {
-        "pattern": _FIGURE_SPLIT,
-        "write": (
-            '{{ n|counted:"thing" }} for a count, or {{ x|measured:"mi" }} for a unit or a word the count'
-            ' leaves alone ("more"): the figure and its word as one value'
-        ),
-    },
-    "an empty state": {
-        "pattern": _class_word("empty"),
-        "write": '{% include "partials/_empty_state.html" with message="..." %}',
-    },
-    "an empty line": {
-        "pattern": (r'<(?:p|span|td|li|dd)\b[^>]*\bclass="muted"[^>]*>\s*(?:No|Nothing|None|There (?:is|are) no)\b'),
-        "write": (
-            '{% include "partials/_empty_state.html" with message="..." %}, or a {% section %}\'s {% empty %};'
-            " this shape is read by its opening words, so it finds one spelling of an empty line"
-        ),
-    },
-    # One of the lists each page drew its problems in before the queue row.
-    "a list of findings": {
-        "pattern": _class_word(
-            "attention-list",
-            "attention-row",
-            "attention-body",
-            "attention-end",
-            "posture-gaps",
-            "conn-findings",
-        ),
-        "write": (
-            '{% include "partials/_work_queue.html" with items=... %} from the queue\'s items'
-            " (hq_sdk.ui.Insight), with dense=True for problems inside a section"
-        ),
-    },
-    # A button in a cell, read from the cell's start to its first button: a
-    # `post_button` drawn as one (its default class, or a `css` naming `btn`)
-    # or an element or include given the button class.
-    "a row's actions": {
-        "pattern": (
-            r"(?s)<td\b[^>]*>(?:(?!</td>).)*?"
-            r'(?:\{%\s*post_button\b(?![^%]*\bcss=)|\b(?:class|css)="(?:[^"]*\s)?btn(?![\w-]))'
-        ),
-        "write": "{% row_actions actions %} from hq_sdk.pages.PageAction, which draws the row's cell",
-    },
 }
 
 # Read by every template through the host's context processors and Django's
@@ -693,7 +519,6 @@ def describe() -> dict[str, Any]:
         "django": _django(engine),
         "classes": _checked(CLASSES, defined.__contains__, "classes"),
         "hooks": _checked(HOOKS, lambda hook: _read_by(scripts, hook), "hooks"),
-        "hand_drawn": HAND_DRAWN,
     }
 
 
@@ -736,6 +561,17 @@ def _cell(text: str) -> str:
     return re.sub(r"(\{%.*?%\}|<[a-z/][^>]*>|partials/\S+\.html)", r"`\1`", text).replace("|", "\\|")
 
 
+def hand_drawn_rules() -> list[dict[str, str]]:
+    """Each rule that refuses a shape a shared part draws, drawn by hand in a
+    template (``tools/lint/ast-grep/rules/hand-drawn-*.yml``), which the host's
+    lint and an extension's plugin check both run."""
+
+    return [
+        yaml.safe_load(path.read_text(encoding="utf-8"))
+        for path in sorted((ROOT / "tools/lint/ast-grep/rules").glob("hand-drawn-*.yml"))
+    ]
+
+
 def markdown(templates: dict[str, Any]) -> str:
     """The shared UI contract as docs/Plugins.md states it."""
 
@@ -772,8 +608,8 @@ def markdown(templates: dict[str, Any]) -> str:
         "",
         f"Script hooks: {_code(templates['hooks'])}.",
         "",
-        "| Drawn by hand | Write instead |",
-        "| --- | --- |",
-        *(f"| {_cell(name)} | {_cell(shape['write'])} |" for name, shape in templates["hand_drawn"].items()),
+        "| Rule | Drawn by hand | Write instead |",
+        "| --- | --- | --- |",
+        *(f"| `{rule['id']}` | {_cell(rule['message'])} | {_cell(rule['note'])} |" for rule in hand_drawn_rules()),
     ]
     return "\n".join(lines) + "\n"

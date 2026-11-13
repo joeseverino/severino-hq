@@ -48,8 +48,7 @@ declaration's machinery: the controller's actions are the buttons above, and
         {% fact "Expires" %}{% if resource.status.not_after %}{{ resource.status.not_after|expiry }}{% else %}Not read yet{% endif %}{% endfact %}
         {% fact "Renews" %}{% if renewal_at %}From {{ renewal_at|when:"day" }}, {% endif %}{{ resolved_spec.renewal_window_days|counted:"day" }} before it expires{% endfact %}
       {% endfacts %}
-      <h3>Names</h3>
-      <p>{% for domain in resolved_spec.domains %}{% status domain chip=True %}{% endfor %}</p>
+      {% section "Names" %}<p>{% for domain in resolved_spec.domains %}{% status domain chip=True %}{% endfor %}</p>{% endsection %}
     {% endsection %}
     {% section "Installed on" %}
       {% if display_consumers %}
@@ -78,14 +77,13 @@ declaration's machinery: the controller's actions are the buttons above, and
       seven is still a reading, and this is the part it does not cover.
       {% endcomment %}
       {% if resource.status.unreachable_consumers %}
-        <details class="operation-evidence" open>
-          <summary>{{ resource.status.unreachable_consumers|length|measured:"unchecked" }}</summary>
+        {% section "Unchecked" count=resource.status.unreachable_consumers|length fold=True open=True %}
           <ul>
             {% for item in resource.status.unreachable_consumers %}
               <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
             {% endfor %}
           </ul>
-        </details>
+        {% endsection %}
       {% endif %}
     {% empty %}Not installed anywhere yet.
     {% endsection %}
@@ -177,8 +175,7 @@ stretches across the page.
     under a heading promising more says nothing.
     {% endcomment %}
     {% if spec_rows.primary or spec_rows.advanced %}
-      <details class="control-diagnostics">
-        <summary>Other settings</summary>
+      {% section "Other settings" fold=True %}
         {% facts %}
           {% for row_label, value in spec_rows.primary %}
             {% fact row_label %}{{ value|readout }}{% endfact %}
@@ -187,7 +184,7 @@ stretches across the page.
             {% fact row_label %}{{ value|readout }}{% endfact %}
           {% endfor %}
         {% endfacts %}
-      </details>
+      {% endsection %}
     {% endif %}
   {% endsection %}
   {% endif %}
@@ -201,7 +198,7 @@ certificate, so the relation reads from both ends.
     {% if certificate_use.used_by %}
       <p>{{ certificate_use.used_by|length|counted:"service" }}: {% for hostname in certificate_use.used_by %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
       {% if certificate_use.unused %}
-        <p class="muted">Nothing is served under {% for name in certificate_use.unused %}{% with mark=forloop.last|then:"." %}<code>{{ name|breakable:mark }}</code>{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
+        {% facts %}{% fact "Not served" %}<span class="code-list">{% for name in certificate_use.unused %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endfact %}{% endfacts %}
       {% endif %}
     {% endif %}
   {% empty %}No service is served with this certificate.
@@ -246,8 +243,8 @@ certificate, so the relation reads from both ends.
 </div>
 
 {% section "Raw data" fold=True %}
-  <h3>HQ's config</h3><pre tabindex="0">{{ spec_json|breakable }}</pre>
-  <h3>Last reading</h3><pre tabindex="0">{{ diagnostic_status|breakable }}</pre>
+  {% section "HQ's config" %}<pre tabindex="0">{{ spec_json|breakable }}</pre>{% endsection %}
+  {% section "Last reading" %}<pre tabindex="0">{{ diagnostic_status|breakable }}</pre>{% endsection %}
 {% endsection %}
 
 {% comment %}

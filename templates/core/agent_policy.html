@@ -1,25 +1,26 @@
 {% extends "page.html" %}
 {% block page %}
-{% card css="agent-state" %}
-  <div class="agent-state-main">
-    <div class="agent-state-copy">
-      <h2>{% if agents_paused %}{% status "Agents blocked" tone="attention" pill=False css="agent-state-mark" %}{% else %}{% status "Agents allowed" tone="good" pill=False css="agent-state-mark" %}{% endif %}</h2>
-      {% if agents_paused %}<p>Every agent call is refused.</p>{% endif %}
-    </div>
-    {% url 'agent_access' as agent_access_url %}
-    {% if agents_paused %}
-      {% words "agent.access.set" "off" as allow %}{% post_button allow agent_access_url name="paused" value="0" css="btn primary" %}
-    {% else %}
-      {% words "agent.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
-    {% endif %}
-  </div>
+{% comment %}
+Whether agents may act at all, with the one control that switches it beside
+the heading, then what the rules below allow and what they held or refused.
+{% endcomment %}
+{% if agents_paused %}{% firstof "Every agent call is refused." as said %}{% else %}{% firstof "" as said %}{% endif %}
+{% section "Access" lede=said id="agent-access" %}
   {% url 'core:audit_list' as audit_url %}
   {% facts layout="inline" %}
     {% if rule_count == 1 %}{% fact "rule" value=rule_count %}{% else %}{% fact "rules" value=rule_count %}{% endif %}
     {% if awaiting_count %}{% fact "held for approval" value=awaiting_count url=audit_url|add:"?awaiting=1" %}{% endif %}
     {% fact "refused in the last day" value=refused_count url=audit_url|add:"?action=denied" %}
   {% endfacts %}
-{% endcard %}
+{% aside %}
+  {% url 'agent_access' as agent_access_url %}
+  {% if agents_paused %}{% status "Agents blocked" tone="attention" pill=False %}{% else %}{% status "Agents allowed" tone="good" pill=False %}{% endif %}
+  {% if agents_paused %}
+    {% words "agent.access.set" "off" as allow %}{% post_button allow agent_access_url name="paused" value="0" css="btn primary" %}
+  {% else %}
+    {% words "agent.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
+  {% endif %}
+{% endsection %}
 
 {% comment %}
 Each device an agent called from that waits for the reader's approval: theirs,
@@ -97,12 +98,12 @@ it is not blocked, since removal never lifts a block.
                 {% endif %}
               </div>
             </th>
-            <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.beyond_role %}<br><span class="muted">{{ standing.beyond_role|length|breakable }} beyond its person's role</span>{% endif %}{% if standing.missing %}<br><span class="figure tone-attention">{{ standing.missing|length|breakable }} not granted</span>{% endif %}</td>
+            <td data-sort="{{ standing.in_force|length }}">{{ standing.in_force|length|breakable }} of {{ identity.granted|length|breakable }}{% if standing.beyond_role %}<br><span class="muted">{{ standing.beyond_role|length|breakable }} beyond its person's role</span>{% endif %}{% if standing.missing %}<br>{% status standing.missing|length "not granted" tone="attention" pill=False %}{% endif %}</td>
             <td>{{ identity.last_seen|when:"ago" }}</td>
             <td data-sort="{{ activity.changes }}">
               {{ activity.changes|counted:"change" }}
-              {% if activity.refused %}<br><span class="figure tone-attention">{{ activity.refused|measured:"refused" }}</span>{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
-              {% with streams=standing.streams %}{% if streams.full %}<br><span class="figure tone-attention" data-streams="full">{{ streams.open|breakable }} of {{ streams.cap|counted:"stream" }} open</span> <span class="muted">so another is refused</span>{% endif %}{% endwith %}
+              {% if activity.refused %}<br>{% status activity.refused|measured:"refused" tone="attention" pill=False %}{% if activity.limited == activity.refused %} <span class="muted">for calling too much</span>{% elif activity.limited %} <span class="muted">{{ activity.limited|breakable }} for calling too much</span>{% endif %}{% endif %}
+              {% with streams=standing.streams %}{% if streams.full %}<br>{% status streams.open "of" streams.cap|counted:"stream" "open" tone="attention" pill=False data_streams="full" %} <span class="muted">so another is refused</span>{% endif %}{% endwith %}
             </td>
             {% row_actions actions %}
           </tr>
@@ -111,7 +112,7 @@ it is not blocked, since removal never lifts a block.
     </table>
   {% endtable_region %}
 {% else %}
-  <p class="muted">No agent has connected yet.</p>
+  {% include "partials/_empty_state.html" with message="No agent has connected yet." %}
 {% endif %}
 {% comment %}
 Where a call is placed: on the device tailscaled says sent it, where its socket
@@ -130,12 +131,12 @@ this links to it only for how a provider's permission list is written.
 {% endcomment %}
 {% section "Setup" fold=True id="setup" open=setup_open %}
   <ol class="step-list">
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="card" %}</span><span><strong>Public client</strong> <span class="muted">Register one public client per agent, with PKCE.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="shield" %}</span><span><strong>Who signs in</strong> <span class="muted">Set the user groups allowed to sign it in.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="lock" %}</span><span><strong>Permissions</strong> <span class="muted">Grant all {{ offered|counted:"permission" }} HQ offers, then narrow each agent with the rules below. {% entity client_setup|outside label="Client setup" %}</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="clock" %}</span><span><strong>Token life</strong> <span class="muted">Set its access token life to about an hour.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="laptop" %}</span><span><strong>First sign-in</strong> <span class="muted">Sign it in once in a browser, then approve each device it calls from.</span></span></li>
-    <li><span class="band-icon">{% include "partials/_icon.html" with name="server" %}</span><span><strong>Unattended agents</strong> <span class="muted">Sign it in with a federated client assertion, granted only what its work needs.</span></span></li>
+    {% step icon="card" %}<strong>Public client</strong> <span class="muted">Register one public client per agent, with PKCE.</span>{% endstep %}
+    {% step icon="shield" %}<strong>Who signs in</strong> <span class="muted">Set the user groups allowed to sign it in.</span>{% endstep %}
+    {% step icon="lock" %}<strong>Permissions</strong> <span class="muted">Grant all {{ offered|counted:"permission" }} HQ offers, then narrow each agent with the rules below. {% entity client_setup|outside label="Client setup" %}</span>{% endstep %}
+    {% step icon="clock" %}<strong>Token life</strong> <span class="muted">Set its access token life to about an hour.</span>{% endstep %}
+    {% step icon="laptop" %}<strong>First sign-in</strong> <span class="muted">Sign it in once in a browser, then approve each device it calls from.</span>{% endstep %}
+    {% step icon="server" %}<strong>Unattended agents</strong> <span class="muted">Sign it in with a federated client assertion, granted only what its work needs.</span>{% endstep %}
   </ol>
 {% endsection %}
 
@@ -183,7 +184,7 @@ approved, and a block stops that device alone.
               <td>{% status device.label tone=device.tone %}{% if device.waits_for %}<br><span class="muted">For {{ device.waits_for|breakable }}</span>{% endif %}</td>
               <td>{{ device.first_seen|when:"ago" }}</td>
               <td>{{ device.last_seen|when:"ago" }}</td>
-              <td data-sort="{{ device.calls }}">{{ device.calls|counted:"call" }}{% if device.refused %}<br><span class="figure tone-attention">{{ device.refused|measured:"refused" }}</span>{% endif %}</td>
+              <td data-sort="{{ device.calls }}">{{ device.calls|counted:"call" }}{% if device.refused %}<br>{% status device.refused|measured:"refused" tone="attention" pill=False %}{% endif %}</td>
               {% row_actions actions %}
             </tr>
           {% endfor %}
@@ -223,7 +224,7 @@ carries the device permission stands as them. Only theirs, never anybody else's.
       </table>
     {% endtable_region %}
   {% else %}
-    <p class="muted">None registered.</p>
+    {% include "partials/_empty_state.html" with message="None registered." %}
   {% endif %}
   {% words "agent.device.set" "on" as device_verb %}
   {% include "partials/_form.html" with form=device_form action=device_url next=request.get_full_path verb=device_verb %}
@@ -283,34 +284,9 @@ change. Asked for when opened: asking takes the server's SDK into the process.
 {% endsection %}
 
 {% comment %}
-The rules that differ from the default, then every other action folded under
-its own heading. Each row is in one table only, so the form posts each rule once.
-The folded table is drawn when opened, inside the form: a save before then
-posts only the changed rules, and a rule not posted is left as it holds.
+The rules, one form over their tables (core/_policy_rules.html). The part
+the fold asks for when opened is drawn here, by its name on this page.
 {% endcomment %}
-{% partialdef every_rule %}
-<div id="every-rule" data-fragment data-fragment-name="every_rule">
-  {% include "core/_policy_table.html" with groups=default_groups label="Defaults" %}
-</div>
-{% endpartialdef %}
-<form method="post" class="policy" data-submit-busy data-submit-label="Working…">
-  {% write_token %}
-  {% if changed_groups %}
-    {% section "Rules" %}
-      {% include "core/_policy_table.html" with groups=changed_groups label="Rules" %}
-    {% endsection %}
-  {% endif %}
-  {% if default_groups %}
-    {% section "Defaults" count=default_count fold=True id="every-action" open=every_read %}
-      {% if every_read %}
-        {% partial every_rule %}
-      {% else %}
-        <div id="every-rule" data-fragment="" data-fragment-name="every_rule" data-fragment-load data-fragment-failure="HQ could not draw these rules." data-fragment-fallback="?all=1#every-action">
-          <p class="muted">Drawn when you open this. <a href="?all=1#every-action">Show them</a></p>
-        </div>
-      {% endif %}
-    {% endsection %}
-  {% endif %}
-  {% include "partials/_form_actions.html" with verb="Save changes" bar=True only %}
-</form>
+{% partialdef every_rule %}{% include "core/_every_rule.html" %}{% endpartialdef %}
+{% include "partials/_form.html" with form=form table_body="core/_policy_rules.html" verb="Save changes" bar=True hooks="data-policy" %}
 {% endblock %}

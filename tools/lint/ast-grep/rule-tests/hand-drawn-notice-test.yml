@@ -1,0 +1,8 @@
+id: hand-drawn-notice
+valid:
+  - '{% notice tone="attention" %}A{% endnotice %}'
+  - '<p class="noticed">A</p>'
+invalid:
+  - '<p class="notice">Sign in again.</p>'
+  - '<div class="notice"><p>A</p><p>B</p></div>'
+  - '<div class="notice notice-attention" role="status">A</div>'

@@ -43,7 +43,9 @@ SPILLED_LABELS = (
   for (const el of document.querySelectorAll(selector)) {
     if (!el.checkVisibility() || !el.textContent.trim()) continue;
     const style = getComputedStyle(el);
-    if (style.overflowX !== 'visible' || style.display === 'inline') continue;
+    // A box whose content the browser skips (`hidden="until-found"`) draws
+    // no label until it is found.
+    if (style.overflowX !== 'visible' || style.display === 'inline' || style.contentVisibility === 'hidden') continue;
     const start = el.getBoundingClientRect().left + parseFloat(style.borderLeftWidth);
     const held = Math.round(reach(el) - start + parseFloat(style.paddingRight));
     if (held > el.clientWidth + 1) {

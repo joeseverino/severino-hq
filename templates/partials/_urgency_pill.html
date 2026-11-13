@@ -7,24 +7,19 @@ dismissed like any popover. With `mark` (a queue row) it is a small word in its 
 after the title when the item is urgent, and for a screen reader only when it
 is not.
 {% endcomment %}
-{% with panel="origin-"|add:item.origin.key|slugify %}
-{% if not mark %}{% status item.urgency tone=item|urgency_tone tip=item|origin_tip data_origin=panel %}{% elif item.notice or item.status != "serious" %}{% status item.urgency tone=item|urgency_tone css="is-mark visually-hidden" tip=item|origin_tip:"mark" data_origin=panel %}{% else %}{% status item.urgency tone=item|urgency_tone css="is-mark" tip=item|origin_tip:"mark" data_origin=panel %}{% endif %}
-<div class="modal origin-panel" id="{{ panel }}" popover>
-  <div class="modal-panel">
-    <div class="modal-head">
-      <h2>{{ item.label|breakable }}</h2>
-      <button type="button" class="modal-close" popovertarget="{{ panel }}" popovertargetaction="hide" aria-label="Close">&times;</button>
-    </div>
-    {% facts %}
-      {% if item.origin.rule %}
-        {% fact "Rule" %}{{ item.origin.title|breakable }} <code>{{ item.origin.rule|breakable }}</code>{% endfact %}
-        {% fact "Severity" value=item.origin.severity %}
-        {% if item.origin.where %}{% fact "Defined at" %}<code>{{ item.origin.where|breakable }}</code>{% endfact %}{% endif %}
-        {% if item.origin.subsumes %}{% fact "Stands in for" %}{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
-      {% endif %}
-      {% fact "From" value=item.origin.source %}
-      {% fact "Key" %}<code>{{ item.origin.key|breakable }}</code>{% endfact %}
-    {% endfacts %}
-  </div>
-</div>
-{% endwith %}
+{% partialdef origin %}
+{% facts %}
+  {% if item.origin.rule %}
+    {% fact "Rule" %}{{ item.origin.title|breakable }} <code>{{ item.origin.rule|breakable }}</code>{% endfact %}
+    {% fact "Severity" value=item.origin.severity %}
+    {% if item.origin.where %}{% fact "Defined at" %}<code>{{ item.origin.where|breakable }}</code>{% endfact %}{% endif %}
+    {% if item.origin.subsumes %}{% fact "Stands in for" %}{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
+  {% endif %}
+  {% fact "From" value=item.origin.source %}
+  {% fact "Key" %}<code>{{ item.origin.key|breakable }}</code>{% endfact %}
+{% endfacts %}
+{% endpartialdef %}
+{% with panel="origin-"|add:item.origin.key|slugify %}{% with dialog="modal-"|add:panel %}
+{% if not mark %}{% status item.urgency tone=item|urgency_tone tip=item|origin_tip data_origin=dialog %}{% elif item.notice or item.status != "serious" %}{% status item.urgency tone=item|urgency_tone css="is-mark visually-hidden" tip=item|origin_tip:"mark" data_origin=dialog %}{% else %}{% status item.urgency tone=item|urgency_tone css="is-mark" tip=item|origin_tip:"mark" data_origin=dialog %}{% endif %}
+{% include "partials/_modal.html" with id=panel title=item.label body_template="partials/_urgency_pill.html#origin" modal_class="origin-panel" popover=True %}
+{% endwith %}{% endwith %}

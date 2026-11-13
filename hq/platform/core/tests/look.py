@@ -12,6 +12,7 @@ import inspect
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -67,6 +68,7 @@ from hq.platform.core.tests.look_report import (
     Measured,
     beside,
     closing,
+    failed_pages,
     looked,
     unmatched,
 )
@@ -96,9 +98,31 @@ BASE_OUT = "base"
 # this tree's test files, so a finding is new for what the change drew rather
 # than for how it was judged: the probes the survey runs.
 LENS = (AUDIT.resolve(),)
-# A look against a base writes its whole report here and prints only its new
-# findings and its verdict, so a long report is never cut short where it is read.
-REPORT = Path(settings.BASE_DIR) / "var" / "gate" / "look.txt"
+# A run with a rule writes its whole report here, in its own folder, and prints
+# only its verdict and, against a base, its new findings, so a long report is
+# never cut short where it is read.
+REPORT = "report.txt"
+# The files a gate running the look hands it (tools/gate/verdict.py names
+# them too), where a run says what it judged and what reruns what it failed:
+# mise-tasks/dev/look runs a survey so, kept as `look-survey-<engine>`.
+GATE_DETAIL = "HQ_GATE_DETAIL"
+GATE_RERUN = "HQ_GATE_RERUN"
+# A rule's verdict when it judged no page at any width: none matched, or none drew.
+JUDGED_NOTHING = "{} judged no page: none matched, or none drew"
+# The flags that change what a run draws or reads, named in what it says it judged.
+DRAWN_WITH = (
+    "base",
+    "seed",
+    "widths",
+    "dialog",
+    "dark",
+    "fallback_face",
+    "open",
+    "expand",
+    "no_script",
+    "deep",
+    "composed",
+)
 REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
 # What the console errors, uncaught errors and policy refusals a page had are
 # reported as: judged as a rule's findings are, so only a new one fails against a base.
@@ -1119,6 +1143,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.draw_with_script(not _asked().switch("no_script"))
         self.errors: Found = {}
         self.unanswered_pages: dict[str, int | None] = {}
+        # Each page and width the rule ran to its end on, whatever it found.
+        self.judged_at: dict[tuple[str, int], None] = {}
         if _asked().switch("deep"):
             self.follow(widths[0])
         self.measured: Measured = {}
@@ -1130,8 +1156,9 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     def close(self, rule, found) -> list[str]:
         """What the run found and heard said, each new one against a base on
-        a line and each verdict last, the rule's report kept in ``REPORT``;
-        the verdicts that failed."""
+        a line and each verdict last, the rule's report kept in the run's
+        ``REPORT``; the verdicts that failed. A rule that judged no page fails,
+        so a run of it over nothing never passes."""
 
         ref = _asked().text("base")
         base_errors = self.base_errors if self.base is not None else None
@@ -1140,10 +1167,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         if rule:
             judged, said, rule_failed = closing(rule, found, self.base, ref)
             head = _commit("HEAD") + (f" against {ref} at {_commit(ref)}" if self.base is not None else "")
-            REPORT.parent.mkdir(parents=True, exist_ok=True)
-            REPORT.write_text(f"{head}\n{judged}\n{report}\n", encoding="utf-8")
-            printed = [f"Page by page: {REPORT}", *said, *printed]
+            kept = this_run() / REPORT
+            kept.write_text(f"{head}\n{judged}\n{report}\n", encoding="utf-8")
+            printed = [f"Page by page: {_shown(kept)}", *said, *printed]
             failed = [said[-1]] * rule_failed + failed
+            if not self.judged_at:
+                failed.append(nothing := JUDGED_NOTHING.format(rule))
+                printed.append(nothing)
         # A page that did not answer was not looked at, here or at a base, so it fails either way.
         unanswered = [
             f"{name} answered {status}, not {posted(name).status if is_post(name) else 200}"
@@ -1158,7 +1188,39 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         # Last, as it voids every verdict before it.
         changed = [moved] if (moved := changed_since(self.tree, Path(settings.BASE_DIR))) else []
         print(*printed, *unanswered, shots, *changed, sep="\n", flush=True)
+        if rule:
+            again = [*failed_pages(found), *(name for (name, _), heard in self.errors.items() if heard)]
+            self.tell_the_gate(rule, said[-1], [*again, *self.unanswered_pages])
         return failed + unanswered + changed
+
+    def tell_the_gate(self, rule, verdict, blamed):
+        """What the rule judged, under its verdict, and the look that runs it
+        again on the pages that failed (or on all it was asked, when none is
+        to blame), to the gate running the look, when one does: the reader of
+        a survey's record tells a survey of one page from one of all. A base's
+        run is this run's to judge, so it says nothing."""
+
+        asked = _asked()
+        if not (into := os.environ.get(GATE_DETAIL)) or asked.text(_FINDINGS):
+            return
+        given = {flag: asked.text(flag) for flag in DRAWN_WITH if asked.text(flag) not in ("", "false")}
+        drawn = [
+            f"--{flag.replace('_', '-')}" + ("" if value == "true" else f" {shlex.quote(value)}")
+            for flag, value in given.items()
+        ]
+        lines = [
+            verdict,
+            f"asked: {' '.join(asked.repeated(_ASKED))}",
+            f"judged: {', '.join(dict.fromkeys(name for name, _ in self.judged_at)) or 'none'}",
+            f"at: {', '.join(dict.fromkeys(str(width) for _, width in self.judged_at)) or 'none'}",
+            f"with: {' '.join(drawn) or 'the defaults'}",
+        ]
+        Path(into).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        pages = list(dict.fromkeys(blamed)) or list(asked.repeated(_ASKED))
+        engine = asked.text("engine") or "webkit"
+        again = ["mise run dev:look", f"--rule {rule}", f"--engine {engine}", *drawn, shlex.join(pages)]
+        if rerun := os.environ.get(GATE_RERUN):
+            Path(rerun).write_text(" ".join(again) + "\n", encoding="utf-8")
 
     def look_at_every_page(self, widths, rule) -> Found:
         """Each page at each width, said as it starts, so a look that hangs
@@ -1247,9 +1309,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         try:
             getattr(self, rule)(name)
         except AssertionError as found:
+            self.judged_at[name, width] = None
             return [line.strip() for line in str(found).splitlines() if line.strip()]
         except BrowserError as broke:
             return self.shoot_failure(name, width, f"{rule} could not run ({str(broke).splitlines()[0]})")
+        self.judged_at[name, width] = None
         return []
 
     def with_each_popover(self, name, width, rule, beneath) -> list[str]:

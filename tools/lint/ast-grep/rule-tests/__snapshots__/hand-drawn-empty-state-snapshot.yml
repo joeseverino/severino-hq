@@ -1,0 +1,47 @@
+id: hand-drawn-empty-state
+snapshots:
+  "<div class=\"empty compact\"><p>{{ message }}</p></div>":
+    fixed: <div class="empty compact"><p>{{ message }}</p></div>
+    labels:
+    - source: <div class="empty compact"><p>{{ message }}</p></div>
+      style: primary
+      start: 0
+      end: 53
+    - source: class="empty compact"
+      style: secondary
+      start: 5
+      end: 26
+    - source: <div class="empty compact">
+      style: secondary
+      start: 0
+      end: 27
+  <div class="empty">No notes.</div>:
+    fixed: "{% include \"partials/_empty_state.html\" with message=\"No notes.\" %}"
+    labels:
+    - source: <div class="empty">No notes.</div>
+      style: primary
+      start: 0
+      end: 34
+    - source: class="empty"
+      style: secondary
+      start: 5
+      end: 18
+    - source: <div class="empty">
+      style: secondary
+      start: 0
+      end: 19
+  <p class="empty">Nothing here yet.</p>:
+    fixed: "{% include \"partials/_empty_state.html\" with message=\"Nothing here yet.\" %}"
+    labels:
+    - source: <p class="empty">Nothing here yet.</p>
+      style: primary
+      start: 0
+      end: 38
+    - source: class="empty"
+      style: secondary
+      start: 3
+      end: 16
+    - source: <p class="empty">
+      style: secondary
+      start: 0
+      end: 17

@@ -9,10 +9,14 @@ repeats the refusal's own text, which names permissions by their identifiers.
 <div class="notice-page">
   <p class="notice-code">403</p>
   {% if stale %}
-    <h1>Form expired</h1>
+    {% comment %}
+    <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
+    {% endcomment %}<h1>Form expired</h1>
     <p class="notice-body">The page it came from was open too long, or you signed in again since. Go back, reload the page and try once more. Nothing was saved.</p>
   {% else %}
-    <h1>Access denied</h1>
+    {% comment %}
+    <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
+    {% endcomment %}<h1>Access denied</h1>
     <p class="notice-body">Your account is not allowed to see or do this. If it should be, change what your sign-in allows, then sign in again.</p>
   {% endif %}
   <p class="page-actions">

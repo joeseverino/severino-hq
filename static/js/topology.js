@@ -95,7 +95,7 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       const visible = [...lane.querySelectorAll("[data-topology-node]")]
         .filter((node) => !node.hidden);
       lane.hidden = visible.length === 0;
-      const count = lane.querySelector("[data-topology-count]");
+      const count = lane.querySelector(".section-head .count");
       if (count) {
         count.textContent = visible.length;
         const label = `${visible.length} shown`;

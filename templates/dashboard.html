@@ -1,37 +1,28 @@
-{% extends "base.html" %}
+{% extends "page.html" %}
 {% block title %}Dashboard{% endblock %}
-{% block content %}
+{% block page %}
 {% comment %}
 Rows, not columns: each row is a grid whose cards share one width and one
 height, so the page stays even whatever set of domains an installation has.
 Domains contribute through their cards, overviews and attention items; nothing
-here names one.
+here names one. The head is the frame's: the day over the greeting, the
+readings beside it (core/_dashboard_readings.html) and under it what needs
+you, the line drawn here as `status`.
 {% endcomment %}
-<header class="page-head dash-head">
-  <div class="dash-hello">
-    <div class="page-trail-row"><p class="dash-date">{{ calendar.today|when:"weekday" }}, {{ calendar.today|when:"day" }}</p>{% if page_visit %}{% include "partials/_visit_refresh.html#note" %}{% endif %}</div>
-    <h1>{{ greeting|breakable }}</h1>
-    <p class="dash-status">
-      {% if action_queue_count %}
-        <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>{% if notice_count %}<span class="muted">{% dot %}{{ notice_count|counted:"notice,notices" }}</span>{% endif %}
-      {% elif notice_count %}
-        Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
-      {% elif aside_count %}
-        Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count|measured:"dismissed" }}</a>
-      {% elif not controller.known %}
-        {% comment %}An empty queue the controller never filled is not a clear one.{% endcomment %}
-        HQ has read nothing yet.
-      {% else %}
-        Nothing needs you.
-      {% endif %}
-    </p>
-  </div>
-  <div class="dash-readings">
-    {% include "core/_dashboard_connection.html" with connection=request_connection only %}
-    {% include "core/_dashboard_controller.html" with controller=controller only %}
-    {% include "core/_dashboard_glance.html" %}
-  </div>
-</header>
+{% partialdef status %}
+{% if action_queue_count %}
+  <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>{% if notice_count %}{% dot %}{{ notice_count|counted:"notice,notices" }}{% endif %}
+{% elif notice_count %}
+  Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
+{% elif aside_count %}
+  Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count|measured:"dismissed" }}</a>
+{% elif not controller.known %}
+  {% comment %}An empty queue the controller never filled is not a clear one.{% endcomment %}
+  HQ has read nothing yet.
+{% else %}
+  Nothing needs you.
+{% endif %}
+{% endpartialdef %}
 
 {% comment %}
 Serious items show here as the queue's own cards, fix button included, with no
@@ -54,10 +45,7 @@ the row is gone once every step is done.
 {% section "Get started" id="dash-start" css="dash-start" %}
   <ol class="step-list">
     {% for step in getting_started %}
-      <li{% if step.done %} class="is-done"{% endif %}>
-        <span class="band-icon">{% include "partials/_icon.html" with name=step.done|yesno:"check-circle,"|default:step.icon %}</span>
-        <span>{% if step.done %}<strong>{{ step.label|breakable }}</strong> <span class="muted">Done.</span>{% else %}<a href="{{ step.url }}">{{ step.label|breakable }}</a> <span class="muted">{{ step.why|breakable }}</span>{% endif %}</span>
-      </li>
+      {% step icon=step.done|yesno:"check-circle,"|default:step.icon done=step.done %}{% if step.done %}<strong>{{ step.label|breakable }}</strong> <span class="muted">Done.</span>{% else %}<a href="{{ step.url }}">{{ step.label|breakable }}</a> <span class="muted">{{ step.why|breakable }}</span>{% endif %}{% endstep %}
     {% endfor %}
   </ol>
 {% aside %}<span class="count">{{ getting_started_left|measured:"left" }}{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>
@@ -66,9 +54,9 @@ the row is gone once every step is done.
 
 {% include "core/_dashboard_highlights.html" %}
 
-{% if dashboard_cards %}{% facts layout="band" label="Across HQ" %}
+{% if dashboard_cards %}{% card element="div" %}{% facts layout="inline" label="Across HQ" %}
   {% for card in dashboard_cards %}{% fact card.label value=card.value url=card.url detail=card.detail %}{% endfor %}
-{% endfacts %}{% endif %}
+{% endfacts %}{% endcard %}{% endif %}
 
 {% comment %}
 Each domain's leading chart, a row of its own, so however many there are they
@@ -98,22 +86,9 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   {% endif %}
   {% endpartialdef %}
 
-  {% url 'projects:create' as add_project_url %}{% if active_projects %}{% url 'projects:list' as projects_url %}{% endif %}
+  {% url 'projects:create' as add_project_url %}{% if project_rows %}{% url 'projects:list' as projects_url %}{% endif %}
   {% section "Projects" remedy_label="Add one" remedy_url=add_project_url more_label="All projects" more_url=projects_url %}
-    {% if active_projects %}
-      <ul class="list-rows">
-        {% for p in active_projects %}
-          <li>
-            <span class="row-main">
-              <span class="cat-dot cat-{{ p.category }}" aria-hidden="true"></span>
-              {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display|breakable }}</span>{% endif %}
-              <strong>{% entity "project"|entity_of:p.slug label=p.name %}</strong>
-            </span>
-            <span class="row-meta">{{ p.updated_at|when:"day" }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    {% endif %}
+    {% if project_rows %}{% include "partials/_record_list.html" with rows=project_rows %}{% endif %}
   {% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|measured:"active" }}{% if projects_needing_output %}{% dot %}{{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}
   {% empty %}No active projects.
   {% endsection %}

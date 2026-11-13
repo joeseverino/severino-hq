@@ -3,15 +3,19 @@ Record list: a compact list of records that speak for themselves.
 
   {% include "partials/_record_list.html" with rows=recent empty="Nothing yet." %}
 
-`rows` are application.ui.ListRow. A row's `actions` (PageAction) end its
+`rows` are application.ui.ListRow, each named by its `title` and `url` or
+by its `link`, an entity drawn as `{% entity %}` draws one. A row's `actions` (PageAction) end its
 line as compact controls, a POST one through `post_button`. Use _insight_grid.html instead when each
 entry needs interpreting rather than just identifying.
 {% endcomment %}
-<ul class="list-rows"{% if label %} aria-label="{{ label }}"{% endif %}>
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-list-rows --> the list part itself
+{% endcomment %}<ul class="list-rows"{% if label %} aria-label="{{ label }}"{% endif %}>
   {% for row in rows %}
     <li>
       <span class="row-main">
-        {% if row.url and row.external %}<strong>{% entity row.url|outside label=row.title %}</strong>{% elif row.url %}<a href="{{ row.url }}"><strong>{{ row.title|breakable }}</strong></a>{% else %}<strong>{{ row.title|breakable }}</strong>{% endif %}
+        {% if row.category %}<span class="cat-dot cat-{{ row.category }}" aria-hidden="true"></span>{% endif %}
+        {% if row.link %}<strong>{% entity row.link %}</strong>{% elif row.url and row.external %}<strong>{% entity row.url|outside label=row.title %}</strong>{% elif row.url %}<a href="{{ row.url }}"><strong>{{ row.title|breakable }}</strong></a>{% else %}<strong>{{ row.title|breakable }}</strong>{% endif %}
         {% if row.detail %}<span class="muted">{{ row.detail|breakable }}</span>{% endif %}
         {% if row.badge %}{% status row.badge tone=row.status|default:"neutral" %}{% endif %}
       </span>

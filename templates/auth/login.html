@@ -4,7 +4,9 @@
 {% block content %}
 <div class="auth-card">
   <img class="auth-logo" src="{% static 'img/logo.png' %}" alt="{{ SITE_NAME }}" width="64" height="64">
-  <h1>Sign in</h1>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-heading --> the sign-in page stands outside the page frame, so it titles itself
+  {% endcomment %}<h1>Sign in</h1>
 
   {% comment %}
   Reached on purpose, not by default. Under SSO the view redirects straight to

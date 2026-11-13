@@ -25,7 +25,9 @@ holds its note, and is fetched again from its own address when the reading
 lands.
 {% endcomment %}
 <div class="ask ask-quiet" data-ask data-ask-state="idle" data-ask-refresh="{{ refresh|default:'#content > :not(.ask-quiet)' }}"{% if not refresh %} hidden{% endif %}>
-  <form method="post" action="{% url 'control_plane:visit' %}" data-ask-auto hidden{% if not refresh %} id="page-visit"{% endif %}>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-form --> a hidden form the page's script submits, with no fields
+  {% endcomment %}<form method="post" action="{% url 'control_plane:visit' %}" data-ask-auto hidden{% if not refresh %} id="page-visit"{% endif %}>
     {% write_token %}
     <input type="hidden" name="subject" value="{% firstof visit.subject subject %}">
     <input type="hidden" name="name" value="{% firstof visit.name name %}">

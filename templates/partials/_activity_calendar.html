@@ -18,7 +18,9 @@ can be linked to directly and works without JavaScript.
     {% if calendar.kept %}<span class="count">{{ calendar.kept|measured:"planned days kept" }}</span>{% endif %}
   </div>
   {% comment %}A chart for the layout audit: each day's tip repeats what its hidden text already says.{% endcomment %}
-  <table class="activity-calendar" data-chart>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-table --> a month drawn as a grid, a chart part
+  {% endcomment %}<table class="activity-calendar" data-chart>
     <caption class="visually-hidden">{% if calendar.period_label %}{{ calendar.title|breakable:"," }} {{ calendar.period_label|breakable:"." }}{% else %}{{ calendar.title|breakable:"." }}{% endif %} {{ calendar.description|breakable }}</caption>
     <thead>
       <tr>

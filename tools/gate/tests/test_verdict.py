@@ -233,6 +233,32 @@ class RerunTests(GateTestCase):
         self.assertTrue(latest.splitlines()[1].startswith("[kept] passed in"), latest)
         self.assertTrue(before.splitlines()[1].endswith("; rerun: mise run lint:ruff"), before)
 
+    # A command that says what it judged in the file its gate hands it, and exits as told.
+    SAYS_JUDGED = (
+        "import os, sys; from pathlib import Path;"
+        " Path(os.environ['HQ_GATE_DETAIL']).write_text('judged: example/one\\nat: 402\\n'); sys.exit(int(sys.argv[1]))"
+    )
+
+    def test_what_a_command_says_it_judged_is_kept_under_the_verdict_line_whichever_way_it_ends(self):
+        for code, outcome in ((1, "FAILED"), (0, "passed")):
+            with self.subTest(outcome=outcome):
+                self.gate("judging", sys.executable, "-c", self.SAYS_JUDGED, str(code))
+                kept = Path(gate_verdict.VERDICTS, "judging.txt").read_text().splitlines()
+                self.assertTrue(kept[0].startswith("tree "), kept)
+                self.assertTrue(kept[1].startswith(f"[judging] {outcome} in"), kept)
+                self.assertEqual(kept[2:4], ["judged: example/one", "at: 402"])
+
+    def test_a_command_that_says_what_reruns_it_is_rerun_so_and_not_by_its_test_labels(self):
+        says_again = (
+            "import os, sys; from pathlib import Path;"
+            " Path(os.environ['HQ_GATE_RERUN']).write_text('mise run dev:look --rule survey example/one\\n');"
+            f" exec({SAYS!r})"
+        )
+        result = self.gate("again", sys.executable, "-c", says_again, "[]", "example.tests.Look.test_look")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        closing = result.stdout.splitlines()[-1]
+        self.assertTrue(closing.endswith("; rerun: mise run dev:look --rule survey example/one"), closing)
+
 
 @tag("source")
 class ConcurrentCloseTests(GateTestCase):

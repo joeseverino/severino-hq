@@ -22,7 +22,8 @@ class Plant:
 
     ``css`` is added once the page is drawn, for a rule on a part a partial
     writes; ``then`` runs once it is drawn, for a defect that is a change
-    rather than markup, which ``scripted`` runs with script on. ``path`` is
+    rather than markup, which ``scripted`` runs with script on, or a read
+    that changes how the page measures (a fold's content laid out). ``path`` is
     the page the survey reads it as, for a check it runs on one page only.
     ``values`` are what the markup prints (``probe``'s)."""
 
@@ -352,17 +353,46 @@ _FLOWS = (
 PASSES = {
     # The dot held inside the name's box, the dot after a clamped link that
     # opens its line, a count's noun held to its figure, a run of parts whose
-    # dot before a part that opens a row is clipped, and a filter bar whose
-    # search fills its row, a field for words and no mark.
+    # dot before a part that opens a row is clipped, a filter bar whose
+    # search fills its row, a field for words and no mark, a word a `br` puts
+    # under a count, a box set whole whose first text is a path's code, and a
+    # cell's list of codes wrapping between its values.
     "lines opening on a stray": Plant(
         "{% load filter_tags %}"
+        + '<table class="data-table" style="inline-size: 28rem"><tbody><tr><td><code>{{ user|breakable }}</code> '
+        f"<code>{{{{ account|breakable }}}}</code></td><td>{_LINES}</td></tr></tbody></table>"
+        + '<p>Example 12<br>Example</p><p style="inline-size: 16ch">Example words <span style="display: inline-flex">'
+        "<code>/etc/example-path</code></span></p>"
         '<p style="inline-size: 12ch"><span style="display: inline-block; inline-size: 100%">example-name&nbsp;·</span>'
         ' Example</p><p style="inline-size: 16ch">Example read through <a href="#" style="display: -webkit-inline-box;'
         ' -webkit-box-orient: vertical; -webkit-line-clamp: 2">Example Home</a>&nbsp;· Example</p>'
         '<p style="inline-size: 6ch">Example 12&nbsp;days</p>'
         '<ul class="dot-list" style="inline-size: 12ch"><li>Example one</li><li>Example two</li></ul>'
         '<div style="inline-size: 16rem">{% filter_bar %}<input type="search" name="q" aria-label="Example"'
-        ' placeholder="Example names, vendors and notes">{% endfilter_bar %}</div>'
+        ' placeholder="Example names, vendors and notes">{% endfilter_bar %}</div>',
+        values={"user": "root", "account": "an-example-service-account"},
+    ),
+    # A fact inside its frame whose closed fold holds a line wider than the
+    # frame, laid out by a read before the check, as any earlier probe's may.
+    "facts inside their frame": Plant(
+        '<div style="border: 1px solid; padding: 1rem; inline-size: 16rem">{% facts %}{% fact "Example" %}'
+        '<details><summary>Example</summary><span style="white-space: nowrap">Example words far wider than'
+        " the frame that holds them</span></details>{% endfact %}{% endfacts %}</div>",
+        then="() => { for (const el of document.querySelectorAll('details *')) void el.scrollWidth; }",
+    ),
+    # A box that scrolls what it holds, inside a closed fold: no scrollbar is
+    # drawn there.
+    "audit": Plant(
+        '<details><summary>Example</summary><div style="overflow: auto; inline-size: 4rem">'
+        '<span style="white-space: nowrap">Example words wider than their box</span></div></details>'
+    ),
+    # A label wider than its box in a cell, in content the browser skips
+    # until it is found.
+    "cell labels": Plant(
+        _TABLE.format(
+            '<span hidden="until-found" style="display: inline-block; inline-size: 2rem; white-space: nowrap">'
+            "Example label</span>"
+        )
     ),
     # Three short facts of a band, together at its start however wide it is.
     "facts together": Plant(
@@ -444,6 +474,12 @@ _OUTRANKED = (
 )
 
 
+# A word a name set whole leaves alone on its line in a cell, where no `br`
+# stands between them.
+_LEFT = "planted/left-behind"
+_LEFT_BEHIND = _TABLE.format('on <span style="display: inline-block">example-name-wider-than-its-cell</span>')
+
+
 def _said(finding):
     """A finding as a value a set holds: the audit's are dicts."""
 
@@ -463,16 +499,19 @@ class PlantedBrowserTests(LayoutBrowserTests):
     def render(cls):
         pages = {page_of(check): probe(plant.markup, **plant.values) for check, plant in PLANTS.items()}
         passes = {page_of(check, "passes"): probe(plant.markup, **plant.values) for check, plant in PASSES.items()}
-        return {**pages, **passes, _BARE: probe(""), _LIFTED: probe(_OUTRANKED)}
+        return {**pages, **passes, _BARE: probe(""), _LIFTED: probe(_OUTRANKED), _LEFT: probe(_LEFT_BEHIND)}
 
     def found(self, name, plant):
         self.open(name, WIDE)
         if plant.css:
             add_css(self.page, plant.css)
         if plant.then:
-            self.settle()
+            # With script off a page runs no frame callback to settle on.
+            if plant.scripted:
+                self.settle()
             self.page.evaluate(plant.then)
-            self.settle()
+            if plant.scripted:
+                self.settle()
         return self.findings(plant.path or name, WIDE)
 
     def assert_each_found(self, scripted):
@@ -493,6 +532,10 @@ class PlantedBrowserTests(LayoutBrowserTests):
         for check, plant in PASSES.items():
             with self.subTest(check=check):
                 self.assertEqual(self.found(page_of(check, "passes"), plant).get(check, []), [])
+
+    def test_a_word_a_name_leaves_behind_opens_a_line_on_a_stray(self):
+        found = self.found(_LEFT, Plant("")).get("lines opening on a stray", [])
+        self.assertTrue([said for said in found if 'cuts "on" from "example-name' in said], found)
 
     def records_layout_shifts(self):
         return self.page.evaluate("() => PerformanceObserver.supportedEntryTypes.includes('layout-shift')")

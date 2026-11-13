@@ -168,10 +168,7 @@ pre ::selection { color: var(--code-ink); }
   inline-size: 7px; block-size: 7px; border-radius: 50%;
   background: var(--accent-2); box-shadow: 0 0 0 3px var(--accent-tint);
 }
-/* The dialog it opens is the modal's lede, a fact band of things to try, a row
-   of links behind it and a muted line of who made it and when, each part
-   under its kicker. The band and the links keep their own spacing. */
-.demo-about-part > .eyebrow { margin-block: 0 var(--space-3); }
+/* The dialog it opens ends with a muted line of who made it and when. */
 .demo-about-foot { margin: var(--space-4) 0 0; color: var(--muted); font-size: var(--text-sm); }
 
 /* ── Header ─────────────────────────────────────────────────────── */

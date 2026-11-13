@@ -1,41 +1,45 @@
-{% comment %}Expects `entry` from approvals.review(). Decisions only while pending.{% endcomment %}
-{% card element="article" css="approval-card" data_state=entry.held.state %}
-  <header class="approval-head">
-    <h2 class="prose"><code>{{ entry.asked.actor|breakable }}</code> {{ entry.asked.before|breakable }}{% if entry.asked.target %}{% if entry.resource_url %}<a href="{{ entry.resource_url }}">{{ entry.asked.target|breakable }}</a>{% else %}<code>{{ entry.asked.target|breakable }}</code>{% endif %}{% endif %}{{ entry.asked.after|breakable }}</h2>
-    <p class="muted">
-      {{ entry.held.requested_interface|interface_label|breakable }}{% dot %}asked {{ entry.held.created_at|ago }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
-      {% else %}{% dot %}<strong>{{ entry.held.get_state_display|breakable }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor|breakable }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
-      {% endif %}
-    </p>
-    {% if entry.held.reason %}<blockquote class="approval-reason">{{ entry.held.reason|breakable }}</blockquote>{% endif %}
-    {% if entry.held.decision_note %}<p class="approval-reason">{{ entry.held.decision_note|breakable }}</p>{% endif %}
-  </header>
+{% comment %}
+Expects `entry` from approvals.review(). Its heading names what it is, the
+sentence under it what was asked, and the aside links what it acts on.
+Decisions only while pending.
+{% endcomment %}
+{% section "Request" lede=entry.asked|stringformat:"s" css="approval-card" data_state=entry.held.state more_label=entry.asked.target more_url=entry.resource_url %}
+  <p class="muted">
+    {{ entry.held.requested_interface|interface_label|breakable }}{% dot %}asked {{ entry.held.created_at|ago }}{% if entry.held.state == 'pending' %}{% dot %}expires {{ entry.held.expires_at|when:"ahead" }}
+    {% else %}{% dot %}<strong>{{ entry.held.get_state_display|breakable }}</strong>{% if entry.held.decided_actor %} by <code>{{ entry.held.decided_actor|breakable }}</code>{% endif %}{% if entry.held.decided_at %} {{ entry.held.decided_at|ago }}{% endif %}
+    {% endif %}
+  </p>
+  {% if entry.held.reason %}<blockquote class="approval-reason">{{ entry.held.reason|breakable }}</blockquote>{% endif %}
+  {% if entry.held.decision_note %}<p class="approval-reason">{{ entry.held.decision_note|breakable }}</p>{% endif %}
 
   {% if entry.warnings %}
     {% notice tone="warning" title="What this affects" %}
       <ul>{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}</ul>
     {% endnotice %}
   {% endif %}
-  {% if entry.preview.label %}<h3 class="approval-label">{{ entry.preview.label|breakable }}</h3>{% endif %}
-  {% if entry.preview.rows %}
-    {% table_region entry.preview.label %}
-      <table class="data-table compact-table">
-        {% if entry.preview.compares %}<thead><tr>{% table_heading "Field" "identifier" local_sort=True %}{% table_heading "Now" local_sort=True %}{% table_heading "After" local_sort=True %}</tr></thead>{% endif %}
-        <tbody>
-          {% for row in entry.preview.rows %}
-            <tr>
-              <th>{{ row.label|breakable }}</th>
-              {% if entry.preview.compares %}<td>{% if row.before %}{{ row.before|breakable }}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
-              <td>{% if row.after %}{{ row.after|breakable }}{% else %}{% empty_value %}{% endif %}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
-  {% endif %}
-  {% if entry.preview.lines %}
-    <pre tabindex="0"><code>{% for line in entry.preview.lines %}{{ line|breakable }}
+  {% if not entry.preview.empty %}
+    {% section entry.preview.label %}
+      {% if entry.preview.rows %}
+        {% table_region entry.preview.label %}
+          <table class="data-table compact-table">
+            {% if entry.preview.compares %}<thead><tr>{% table_heading "Field" "identifier" local_sort=True %}{% table_heading "Now" local_sort=True %}{% table_heading "After" local_sort=True %}</tr></thead>{% endif %}
+            <tbody>
+              {% for row in entry.preview.rows %}
+                <tr>
+                  <th>{{ row.label|breakable }}</th>
+                  {% if entry.preview.compares %}<td>{% if row.before %}{{ row.before|breakable }}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
+                  <td>{% if row.after %}{{ row.after|breakable }}{% else %}{% empty_value %}{% endif %}</td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endtable_region %}
+      {% endif %}
+      {% if entry.preview.lines %}
+        <pre tabindex="0"><code>{% for line in entry.preview.lines %}{{ line|breakable }}
 {% endfor %}</code></pre>
+      {% endif %}
+    {% endsection %}
   {% endif %}
 
   {% if entry.held.state == 'pending' %}
@@ -45,4 +49,4 @@
       {% post_button "Reject" decision_url name="decision" value="reject" %}
     </div>
   {% endif %}
-{% endcard %}
+{% endsection %}

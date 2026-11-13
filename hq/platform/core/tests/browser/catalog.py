@@ -20,6 +20,7 @@ from hq.platform.application.calendar import CalendarEvent, CalendarSource, cale
 from hq.platform.application.card_items import Insight, Kpi, ListRow
 from hq.platform.application.drawings import AllocationBar, Share, Trend
 from hq.platform.application.entity_links import EntityLink
+from hq.platform.application.forms import ChoiceCards, SuffixedInput
 from hq.platform.application.pages import Page, PageAction
 from hq.platform.application.ui import (
     ActivityCalendar,
@@ -129,6 +130,25 @@ _WEEK = date(2026, 1, 5)
 class _ExampleForm(forms.Form):
     name = forms.CharField(label="Example name", help_text="An example of what the name is for.")
     notes = forms.CharField(label="Example notes", required=False, widget=forms.Textarea)
+
+
+_EXAMPLE_ANSWERS = (
+    ("refuse", "Refuse it", "Every example nobody listed is refused, which is what the example policy needs to work."),
+    ("mark", "Mark it as suspicious", "Receivers usually accept it and flag it."),
+    ("allow", "Allow it", "Every example passes."),
+)
+
+
+class _ExampleChoices(forms.Form):
+    answer = forms.ChoiceField(
+        label="Every other example",
+        choices=[(value, label) for value, label, _ in _EXAMPLE_ANSWERS],
+        widget=ChoiceCards(described={value: what for value, _, what in _EXAMPLE_ANSWERS}),
+        help_text="What happens to an example the list above leaves out.",
+    )
+    share = forms.IntegerField(
+        label="Apply it to", min_value=0, max_value=100, widget=SuffixedInput(suffix="%"), help_text="Of every example."
+    )
 
 
 class _NoFields(forms.Form):
@@ -440,6 +460,26 @@ CATALOG = {
         "<tbody><tr><td>Example DNS</td><td>Working</td></tr></tbody></table>{% endtable_region %}{% endsection %}"
         "{% endsection %}"
     ),
+    # A section inside a card, as a topology node or a held request's preview
+    # draws it: part of the card's frame, its head with no rule or inset.
+    "part/section-in-card": Entry(
+        "{% card %}<p>An example line about the card.</p>"
+        '{% section "Example preview" count=2 %}<p>An example line in the inner section.</p>'
+        '{% aside %}<span class="pill pill-neutral">Example state</span>{% endsection %}{% endcard %}'
+    ),
+    # A reading as a folded section, open: its long lines wrap in the frame and
+    # only its height scrolls.
+    "part/section-readout": Entry(
+        '{% section "Example readings" %}{% section "Example reading" fold=True open=True %}'
+        '<pre tabindex="0">{"example_key_with_a_long_name": "an-example-value-long-enough-to-wrap-at-a-phone-width",'
+        ' "another_example_key": "another-example-value"}</pre>{% endsection %}{% endsection %}'
+    ),
+    # A link onward whose words wrap at a phone's width: its arrow stays with
+    # its last word.
+    "part/section-more-wrapped": Entry(
+        '{% section "Example request" more_label="example-service-with-a-deliberately-long-name.example.com"'
+        ' more_url="/example/" %}<p>An example line of prose in the frame.</p>{% endsection %}'
+    ),
     # A trail of steps a word of two letters long: each is a small target, so
     # the survey's small targets hold it by its spacing from the next, the
     # slash between them belonging to neither.
@@ -544,6 +584,53 @@ CATALOG = {
                 ListRow("Example docs", url="https://example.com/", external=True),
             ]
         },
+    ),
+    # Rows named by the things they link, as a record's related lists and
+    # the dashboard's projects draw them: a note, a day, a long name, and a
+    # project's category as its color.
+    "part/record-list-links": Entry(
+        '{% section "Example related" %}{% include "partials/_record_list.html" %}{% endsection %}',
+        {
+            "rows": [
+                ListRow(
+                    link=EntityLink("example-host-one", "/example/host/", kind="machine", kind_label="machine"),
+                    meta="An example note",
+                ),
+                ListRow(
+                    link=EntityLink(
+                        "An example document with a title long enough to wrap",
+                        "/example/document/",
+                        kind="document",
+                        kind_label="document",
+                    ),
+                    detail="Example category",
+                    at=date(2026, 11, 2),
+                ),
+                ListRow(
+                    link=EntityLink("Example project", "/example/project/", kind="project", kind_label="project"),
+                    detail="Homelab",
+                    category="homelab",
+                    at=date(2026, 11, 3),
+                ),
+            ]
+        },
+    ),
+    # An absence said where a value would stand, beside a value that is
+    # there, in a list of facts and in a table's cell.
+    "part/empty-inline": Entry(
+        '{% section "Example runs on" %}{% facts %}'
+        '{% fact "Example container" %}{% include "partials/_empty_state.html" with message="No example container is known." inline=True %}{% endfact %}'
+        '{% fact "Example image" value="example-1.2.3" %}'
+        "{% endfacts %}{% endsection %}"
+    ),
+    # Steps and checks side by side: met, unmet, done and plain.
+    "part/steps": Entry(
+        '{% section "Example standard" %}<ol class="step-list">'
+        '{% step icon="check-circle" tone="good" title="An example check holds." %}<strong>Example met</strong> <span class="muted">Stops an example.</span>{% endstep %}'
+        '{% step icon="shield" tone="attention" %}<strong>Example unmet</strong> <span class="muted">An example is open: <a href="/example/">close it.</a> Stops an example.</span>{% endstep %}'
+        '{% step icon="check-circle" done=True %}<strong>Example done</strong> <span class="muted">Done.</span>{% endstep %}'
+        '{% step icon="card" %}<strong>Example step</strong> <span class="muted">An example sentence that says what the step is for.</span>{% endstep %}'
+        "</ol>{% endsection %}"
     ),
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
@@ -833,11 +920,11 @@ CATALOG = {
         '{% fact "Example name" value="example-01" %}'
         '{% fact "Example image" %}<code>{{ image|breakable }}</code>{% endfact %}'
         "{% endfacts %}"
-        '<details class="control-diagnostics"><summary>Example other settings</summary>{% facts %}'
+        '{% section "Example other settings" fold=True open=True %}{% facts %}'
         '{% fact "Example port" value="8123" %}'
         '{% fact "Example restart" value="unless-stopped" %}'
         '{% fact "Example network" %}<code>example-network</code>{% endfact %}'
-        "{% endfacts %}</details>{% endsection %}",
+        "{% endfacts %}{% endsection %}{% endsection %}",
         {"image": "registry.example.com/example-team/example-image:2024.11.3"},
         premise=(_TIGHTER, SELECTORS["facts_list"]),
     ),
@@ -900,6 +987,14 @@ CATALOG = {
                 "#",
             ),
         },
+    ),
+    # A form whose answers each say what choosing them does (`ChoiceCards`), one
+    # card a choice, and a number with its unit after the box
+    # (`SuffixedInput`), sent with the number past its limit.
+    "form/choice-cards": Entry(
+        '{% section "Example policy" %}{% include "partials/_form.html" with form=form verb="Save example" '
+        'cancel_url="" note="" choices="" choice_field="" bar="" %}{% endsection %}',
+        {"form": _ExampleChoices(data={"answer": "refuse", "share": "150"})},
     ),
     "form/lookup": Entry(
         '{% section "Example lookup" %}{% include "partials/_form.html" with method="get" form=form verb="Look up" '

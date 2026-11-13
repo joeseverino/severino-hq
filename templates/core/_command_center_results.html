@@ -3,8 +3,12 @@
     <div id="command-center-options" class="command-center-options" role="listbox" aria-label="Results">
       {% for group in palette_estate %}{% include "core/_command_center_group.html" %}{% endfor %}
       {% for group in palette_search_groups %}
-        <section class="command-center-group" aria-labelledby="command-center-group-search-{{ group.scope }}">
-          <h3 id="command-center-group-search-{{ group.scope }}">{{ group.label|breakable }}</h3>
+        {% comment %}
+        <!-- ast-grep-ignore: hand-drawn-section --> the palette's search groups, the same listbox group as core/_command_center_group.html
+        {% endcomment %}<section class="command-center-group" aria-labelledby="command-center-group-search-{{ group.scope }}">
+          {% comment %}
+          <!-- ast-grep-ignore: hand-drawn-heading --> the palette group's label, as above
+          {% endcomment %}<h3 id="command-center-group-search-{{ group.scope }}">{{ group.label|breakable }}</h3>
           {% for item in group.items %}
             <a id="command-center-option-search-{{ group.scope }}-{{ forloop.counter }}"
                class="command-center-option" href="{% if item.url %}{{ item.url }}{% else %}{% url 'core:audit_list' %}?q={{ q|urlencode }}{% endif %}"

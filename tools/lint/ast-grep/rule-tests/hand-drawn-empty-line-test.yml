@@ -1,0 +1,13 @@
+id: hand-drawn-empty-line
+valid:
+  - '{% include "partials/_empty_state.html" with message="No notes yet." %}'
+  - '<p class="muted">Notes kept for a year.</p>'
+  - '<p class="muted">Nobody signed in.</p>'
+  - '<p class="muted small">No notes yet.</p>'
+  - '<div class="muted">No notes yet.</div>'
+invalid:
+  - '<p class="muted">No notes yet.</p>'
+  - '<span class="muted">None composed into this build</span>'
+  - '<td class="muted">Nothing</td>'
+  - '<li class="muted">There are no rules.</li>'
+  - '<p class="muted">No visits in the last {{ days|counted:"day" }}</p>'

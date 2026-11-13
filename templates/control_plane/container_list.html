@@ -61,7 +61,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
                   {% endif %}
                 </div>
               </td>
-              <td>{% if plan %}{{ plan.change_label|breakable }}<br><span class="muted">risk {{ plan.risk|breakable }}</span>{% else %}<span class="muted">No newer release</span>{% endif %}</td>
+              <td>{% if plan %}{{ plan.change_label|breakable }}<br><span class="muted">risk {{ plan.risk|breakable }}</span>{% else %}{% include "partials/_empty_state.html" with message="No newer release" inline=True %}{% endif %}</td>
               <td>{% if plan.fixes %}{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}<br><span class="muted">the change fixes {{ plan.fixes|length|counted:"advisory,advisories" }}</span>{% elif standing.state == "vulnerable" %}{% status "Vulnerable" tone=standing.serious|yesno:"serious,attention" %}{% else %}{% empty_value %}{% endif %}</td>
               <td class="prose">{% for item in group.containers %}<a href="{{ item.url }}">{{ item.running.name|breakable }}</a> <span class="muted">on {{ item.machine.name|breakable }}</span>{% if not forloop.last %}<br>{% endif %}{% endfor %}</td>
             </tr>

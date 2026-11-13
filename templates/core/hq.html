@@ -43,7 +43,7 @@ uptime and how the request came.
     {% fact "Signature" %}{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}{% endfact %}
     {% fact "Vulnerabilities" %}<span class="prose">{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}
     {% endif %}
-    {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}{% endfact %}
+    {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
   {% endfacts %}
 {% endsection %}
 {% if machine %}
@@ -57,7 +57,7 @@ uptime and how the request came.
     {% fact "How it is run" %}{{ posture.met|breakable }} of {{ posture.measured|counted:"check met,checks met" }}{% for result in posture.unmet %}<br><span class="muted">{{ result.check.unmet|breakable }}</span>{% endfor %}{% endfact %}
     {% endwith %}
     {% endwith %}{% else %}
-    {% fact "Container" %}<span class="muted">No container HQ reads is known to be HQ's.</span>{% endfact %}
+    {% fact "Container" %}{% include "partials/_empty_state.html" with message="No container HQ reads is known to be HQ's." inline=True %}{% endfact %}
     {% endif %}
     {% if work.services %}
     {% fact "Kept running by" %}{% for job in work.services %}{% include "partials/_unit.html" with title=job.title unit=job.name only %}{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% endfact %}

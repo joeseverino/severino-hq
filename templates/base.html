@@ -169,7 +169,9 @@
           site. Agents is global, unlike Demo, and sends a state, not a toggle.
           {% endcomment %}
           <div class="menu-settings">
-            <form action="{% url 'demo_mode' %}" method="post">
+            {% comment %}
+            <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
+            {% endcomment %}<form action="{% url 'demo_mode' %}" method="post">
               {% write_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
               <button type="submit" class="menu-item menu-setting" role="switch" aria-checked="{% if request.showing_demo %}true{% else %}false{% endif %}">
@@ -177,7 +179,9 @@
                 <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
               </button>
             </form>
-            <form action="{% url 'agent_access' %}" method="post">
+            {% comment %}
+            <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
+            {% endcomment %}<form action="{% url 'agent_access' %}" method="post">
               {% write_token %}
               <input type="hidden" name="next" value="{{ request.get_full_path }}">
               <input type="hidden" name="paused" value="{% if agents_paused %}0{% else %}1{% endif %}">
@@ -191,7 +195,9 @@
           Three choices, so a set of buttons rather than a switch; each sends
           the choice it names. System follows the operating system.
           {% endcomment %}
-          <form action="{% url 'theme' %}" method="post" class="menu-theme">
+          {% comment %}
+          <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
+          {% endcomment %}<form action="{% url 'theme' %}" method="post" class="menu-theme">
             {% write_token %}
             <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <span class="menu-theme-label" id="menu-theme-label">Theme</span>
@@ -216,7 +222,9 @@
               <span>Connection</span>
               <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label|breakable }}</span></span>
             </a>
-            <form action="{% url 'logout' %}" method="post">
+            {% comment %}
+            <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
+            {% endcomment %}<form action="{% url 'logout' %}" method="post">
               {% write_token %}
               <button type="submit" class="menu-item">Sign out</button>
             </form>
@@ -266,7 +274,9 @@
     The one form every post_button submits. Outside everything else on the
     page, so a button inside another form still posts only what it names.
     {% endcomment %}
-    <form id="hq-post" method="post" hidden>{% write_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"></form>
+    {% comment %}
+    <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names
+    {% endcomment %}<form id="hq-post" method="post" hidden>{% write_token %}<input type="hidden" name="next" value="{{ request.get_full_path }}"></form>
     {% include "partials/_modal.html" with id="command-center" title="Search" body_template="core/_command_center_modal.html" modal_class="command-center-modal" %}
     {% comment %}
     Empty until opened. The panel behind it reads the tailnet inventory and

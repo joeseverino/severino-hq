@@ -27,12 +27,11 @@ is about to be deleted.
   {% endfor %}
 {% endfacts %}
 {% if spec_rows.advanced %}
-  <details class="control-diagnostics">
-    <summary>Other settings <span class="count">{{ spec_rows.advanced|length }}</span></summary>
+  {% section "Other settings" count=spec_rows.advanced|length fold=True %}
     {% facts %}
       {% for label, value in spec_rows.advanced %}
         {% fact label %}<code>{{ value|breakable }}</code>{% endfact %}
       {% endfor %}
     {% endfacts %}
-  </details>
+  {% endsection %}
 {% endif %}

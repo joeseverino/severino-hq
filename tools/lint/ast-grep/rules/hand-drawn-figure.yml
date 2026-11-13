@@ -1,0 +1,18 @@
+# A headline figure is the figure part, drawn from hq_sdk.ui.Kpi, with its
+# label, trend and link. No fix: the part reads a projection.
+id: hand-drawn-figure
+language: html
+severity: error
+message: A figure drawn by hand, where the figure part draws it.
+note: Write {% include "partials/_kpi_grid.html" %} from hq_sdk.ui.Kpi.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?(?:kpi|kpi-grid)(?:[^\w-]|$)'

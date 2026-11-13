@@ -1,0 +1,8 @@
+id: hand-drawn-facts
+valid:
+  - '{% facts %}{% fact "Label" value=v %}{% endfacts %}'
+  - '<dl class="fact-bands"></dl>'
+invalid:
+  - '<dl class="fact-band"></dl>'
+  - '<div class="vitals-strip"></div>'
+  - '<div class="card attention-facts"></div>'

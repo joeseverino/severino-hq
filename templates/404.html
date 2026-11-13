@@ -3,7 +3,9 @@
 {% block content %}
 <div class="notice-page">
   <p class="notice-code">404</p>
-  <h1>Page not found</h1>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
+  {% endcomment %}<h1>Page not found</h1>
   <p class="notice-body">The link may be old, or what it pointed to was deleted.</p>
   {% if user.is_authenticated %}
   {% url 'search' as search_url %}

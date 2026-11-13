@@ -1,0 +1,5 @@
+{% comment %}
+A SuffixedInput (hq.platform.application.forms): the box, then its unit
+beside it (forms.css, "A unit after its box").
+{% endcomment %}
+<span class="input-suffix">{% include "django/forms/widgets/input.html" %}<span>{{ widget.suffix|breakable }}</span></span>

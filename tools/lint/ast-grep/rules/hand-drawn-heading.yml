@@ -1,0 +1,17 @@
+# A heading is the section part's, at the level its nesting gives it, and the
+# page's title is the frame's, so the outline of every page is whole. No fix:
+# what a heading heads runs to the next one, which only a reader can see.
+id: hand-drawn-heading
+language: html
+severity: error
+message: A heading drawn by hand, where the section part or the page frame draws it.
+note: Write the heading of {% section "Heading" %}, a sub-head a {% section %} inside it (it heads itself a level down); the page's own title is the frame's, from page.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    kind: start_tag
+    has:
+      kind: tag_name
+      regex: ^h[1-6]$

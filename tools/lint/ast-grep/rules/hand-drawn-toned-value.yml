@@ -1,0 +1,19 @@
+# A value in a tone is the status part, which says the tone in words as well
+# as color. Read by the class's tone- prefix, so tone-{{ t }} is one too. No
+# fix: the part takes the value as an expression, which the markup does not.
+id: hand-drawn-toned-value
+language: html
+severity: error
+message: A toned value drawn by hand, where the status part draws it.
+note: Write {% status value tone=tone pill=False %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?tone-'

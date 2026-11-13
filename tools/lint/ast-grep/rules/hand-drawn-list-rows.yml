@@ -1,0 +1,20 @@
+# A list of rows is the record list part, drawn from hq_sdk.ui.ListRow, so
+# every row's name, meta and actions sit alike. No fix: the part reads a
+# projection the template does not hold. Like each class rule, it reads the
+# class attribute for the word whole, written plain or after a template tag.
+id: hand-drawn-list-rows
+language: html
+severity: error
+message: A list of rows drawn by hand, where the record list part draws it.
+note: Write {% include "partials/_record_list.html" %} from hq_sdk.ui.ListRow.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?list-rows(?:[^\w-]|$)'

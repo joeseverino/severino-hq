@@ -71,6 +71,22 @@ class ListRowTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             ListRow(title="Import", status="warning", badge="Warning")
 
+    def test_a_row_named_by_its_link_draws_it_as_every_mention_is_drawn(self):
+        from django.template.loader import render_to_string
+
+        from ..card_items import ListRow
+        from ..entity_links import EntityLink
+        from .markup import select
+
+        host = EntityLink("example-host", "/example/host/", kind="machine", kind_label="machine")
+        drawn = render_to_string("partials/_record_list.html", {"rows": [ListRow(link=host, meta="An example note")]})
+
+        (mention,) = select(drawn, "data-entity")
+        self.assertEqual((mention.attrs.get("href"), mention.words), ("/example/host/", "example-host"))
+        for named in ({"title": "Example host"}, {"url": "/example/other/"}):
+            with self.subTest(named=named), self.assertRaises(ValueError):
+                ListRow(link=host, **named)
+
     def test_a_moment_is_a_value_the_row_says_in_words(self):
         from django.template.loader import render_to_string
         from django.utils import timezone

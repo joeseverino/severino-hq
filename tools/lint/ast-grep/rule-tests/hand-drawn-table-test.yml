@@ -1,0 +1,18 @@
+id: hand-drawn-table
+valid:
+  - '{% table_region "A" %}<table class="data-table"></table>{% endtable_region %}'
+  - |
+    {% table_region "A" %}
+      <div class="table-scroll"><table class="data-table"></table></div>
+    {% endtable_region %}
+  - |
+    <form method="post">
+      <input type="hidden" name="action" value="assign">
+      {% table_region "Accounts" %}
+        <table class="data-table"></table>
+      {% endtable_region %}
+    </form>
+invalid:
+  - '<table class="data-table"></table>'
+  - '{% table_region "A" %}<table></table>{% endtable_region %}<table></table>'
+  - '<div><table><tr><td>A</td></tr></table></div>'

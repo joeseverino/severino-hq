@@ -36,6 +36,14 @@ ROOT = Path(__file__).resolve().parents[2]
 # helper does not import, so it runs where only tools/ is). GateVerdictTests
 # runs that runner's record under a gate, which holds the two to one shape.
 REPORTS = "HQ_TEST_REPORTS"
+# A file each command is handed, where it may say what it judged, for a gate
+# whose name alone does not (the pages and widths a survey drew): its lines
+# are kept under the verdict line.
+DETAIL = "HQ_GATE_DETAIL"
+# A file each command is handed for the one command that runs again what it
+# failed, for a command whose failures no task or test label reruns (a look
+# that reads its task's flags): it stands for that step in the rerun.
+RERUN = "HQ_GATE_RERUN"
 # A line of mise's `-c` summary, and the line a task that failed alone ends on,
 # under the name of each task it runs inside. Anchored, so a tool that quotes
 # such a line from a file (a formatter's diff of a test) names nothing.
@@ -179,6 +187,9 @@ class Step:
     unimported: list[str] = field(default_factory=list)
     # The command the step ran, which reruns a failure it names nothing in.
     command: list[str] = field(default_factory=list)
+    # What the command said it judged, through DETAIL, and what reruns it, through RERUN.
+    detail: list[str] = field(default_factory=list)
+    again: str = ""
     # Each failed test's label, by the task whose run printed it.
     under: dict[str, str] = field(default_factory=dict)
     # The last lines printed under each task's name, and the step's own under "".
@@ -300,7 +311,9 @@ def run(
     with tempfile.TemporaryDirectory(prefix="gate-") as reports:
         # mise turns its Finished line off in a task's own environment, so a mise run
         # inside a task prints it only when asked.
+        detail, again = Path(reports, "detail.txt"), Path(reports, "rerun.txt")
         env = {**os.environ, "PYTHONUNBUFFERED": "1", REPORTS: reports, "MISE_TASK_TIMINGS": "1"}
+        env |= {DETAIL: str(detail), RERUN: str(again)}
         with subprocess.Popen(cmd, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
             if proc.stdout is None:
                 raise RuntimeError("the gate was started without a pipe from its output")
@@ -315,6 +328,8 @@ def run(
                 proc.wait()
                 raise
         step.tests = failed_tests(Path(reports))
+        step.detail = detail.read_text(encoding="utf-8").splitlines() if detail.is_file() else []
+        step.again = again.read_text(encoding="utf-8").strip() if again.is_file() else ""
     hand_on(step.tests)
     step.seconds = time.monotonic() - started
     step.code = proc.returncode
@@ -348,15 +363,17 @@ def test_reruns(name: str, steps: list[Step], tests: str) -> dict[str, list[str]
 def rerun(name: str, steps: list[Step], tests: str = "") -> str:
     """The command that runs again just what failed: each failed leaf task, the
     failed tests by label rather than the task that ran them, and a failed step
-    that names neither by its own command. Every `mise run` among them is one,
-    `:::` between its runs."""
+    that names neither by its own command, a step that said what reruns it by
+    that. Every `mise run` among them is one, `:::` between its runs."""
 
     aggregates = leaves(steps)
-    failed = [step for step in steps if not step.ok]
+    said = [step.again for step in steps if not step.ok and step.again]
+    failed = [step for step in steps if not step.ok and not step.again]
     runs = [
         task for step in failed for task in step.tasks if task not in aggregates and task not in step.under.values()
     ]
-    others = [typed for step in failed if not step.tasks and not step.tests and (typed := command_line(step.command))]
+    others = [*said]
+    others += [typed for step in failed if not step.tasks and not step.tests and (typed := command_line(step.command))]
     others += [
         shlex.join([*shlex.split(command), *narrowed(named)])
         for command, named in test_reruns(name, failed, tests).items()
@@ -437,13 +454,14 @@ class Gate:
         with contextlib.suppress(FileNotFoundError):
             path.replace(path.with_name(f"{self.stem}.prev.txt"))
         kept = [traceback for step in steps for traceback in step.tracebacks()]
+        detail = [said for step in steps for said in step.detail]
         tails = {task: said for step in steps for task, said in step.tails(aggregates).items()}
         ended = [part for task, said in tails.items() for part in ("", f"{task} ended on:", *said)]
         with tempfile.NamedTemporaryFile(
             "w", dir=path.parent, prefix=f".{self.stem}.", suffix=".txt", delete=False
         ) as whole:
             judged = TREE_LINE.format(self.judged() or UNSETTLED)
-            whole.write("\n".join([judged, line, *named, *ended, *timings(steps), *kept]) + "\n")
+            whole.write("\n".join([judged, line, *detail, *named, *ended, *timings(steps), *kept]) + "\n")
         Path(whole.name).replace(path)
         for task, said in tails.items():
             shown = (f"[{name}]   {said_line}" for said_line in said[-TAIL_SHOWN:])

@@ -1,0 +1,12 @@
+id: hand-drawn-section
+valid:
+  - '{% section "Heading" %}body{% endsection %}'
+  - '<div class="split"><p>A</p></div>'
+  - '<p>a section of text</p>'
+invalid:
+  - '<section><h2>Accounts</h2><p>body</p></section>'
+  - |
+    <section class="panel">
+      <h2>{{ title }}</h2>
+    </section>
+  - '<section aria-label="Details"><p>A</p></section>'

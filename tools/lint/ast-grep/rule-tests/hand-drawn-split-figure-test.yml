@@ -1,0 +1,40 @@
+id: hand-drawn-split-figure
+# A figure and the word it counts or measures with a space the template
+# writes between them, in each form a template can write one, and the forms
+# that join them or are no figure and its word.
+valid:
+  - '<p>{{ miles|floatformat:2|measured:"mi" }}</p>'
+  - '<p>{{ n|counted:"check" }} pass</p>'
+  - "<p>{{ rx|bytes }} in</p>"
+  - "<p>{{ posture.met|breakable }} of {{ n }}</p>"
+  - "<p>{{ host|breakable }} itself</p>"
+  - "<p>{{ sight.label|breakable }} refused this credential</p>"
+  - "<p>{{ identity.person.get_username|breakable }} holds no role</p>"
+  - '<p>{{ panel.failed|breakable:")." }} This</p>'
+  - "<p>{{ year }} CSV</p>"
+  - '<div class="conn-{{ connection.channel.id }} conn-verdict"></div>'
+  - "<p>{% if n > 1 and shown %}A{% endif %}</p>"
+  - "<p>{{ start|when }} to {{ end|when }}</p>"
+  - "<p>{{ n }}%</p>"
+  - "<p>v2 release</p>"
+  - '<tr>{% table_heading "Bank" drop=1 %}{% table_heading "Group" "control" %}</tr>'
+  - "<p>{% if routes|length == 1 %}via {{ route }}{% endif %}</p>"
+  - "<p>{# a 24px grid, 1.5 stroke #}</p>"
+  - |
+    <p>{% comment %}
+    A reader announcing 60 bars one at a time.
+    {% endcomment %}</p>
+invalid:
+  - "<p>{{ miles|floatformat:2 }} mi</p>"
+  - "<td>{{ row.miles|floatformat:2|breakable }} mi</td>"
+  - "<p>{{ standing.findings|length }} lower</p>"
+  - '<p>{{ reads|length|add:"-3"|breakable }} more</p>'
+  - |
+    <p>{{ n }}
+        checks</p>
+  - "<p>{{ record.ttl|breakable }}&nbsp;s</p>"
+  - "<p>{{ n }} day{{ n|pluralize }}</p>"
+  - '<p>{{ limit|floatformat:"-2" }} CPUs</p>'
+  - "<p>{{ share }} %</p>"
+  - "<p>Over the last 90 days</p>"
+  - "<p>Read every 2.5 hours</p>"

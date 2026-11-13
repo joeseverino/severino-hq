@@ -1,0 +1,27 @@
+# A count set bold apart from the words that count it ("<strong>{{ n }}</strong>
+# refused") reads as two values, and a line may break between them. The
+# counted filter writes the figure and its words as one. A count is read by
+# what names one (a _count, a counts., a total, a |length, a plural), so the
+# bolded names of prose are left alone. No fix: the counted words are the
+# reader's to choose.
+id: hand-drawn-split-count
+language: html
+severity: error
+message: A count split from its words, where the counted filter writes them as one.
+note: Write {{ n|counted:"thing" }}, the figure and its words as one, or {% fact "Label" value=n %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  all:
+    - has:
+        kind: start_tag
+        has:
+          kind: tag_name
+          regex: ^strong$
+    - regex: '^<strong>\{\{\s*(?:(?:[\w.]*[._])?(?:count|counts|total)\b[\w.]*|[\w.]*[a-z][^\Wsu]s|[\w.]+\|length)(?:\|\w+(?::\S+)?)*\s*\}\}</strong>$'
+    - not:
+        regex: '\|counted\b'
+    - precedes:
+        kind: text
+        regex: '^[a-z]'

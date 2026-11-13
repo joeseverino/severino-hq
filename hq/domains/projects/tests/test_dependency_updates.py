@@ -175,7 +175,7 @@ class UpdatesSurfaceTests(TestCase):
         self.assertIn("/projects/alpha/#updates", hrefs(response))
         self.assertIn("1 open update", text(response))
         # The alert count is a figure, so its state is its ink, never a chip.
-        self.assertIn("2 open alerts", [figure.words for figure in with_class(response, "tone-attention")])
+        self.assertIn("2 open alerts", [figure.words for figure in with_class(response, "toned-attention")])
         self.assertEqual({project.slug for project in filtered.context["object_list"]}, {"alpha"})
 
     def test_the_record_carries_the_update_state_when_it_names_a_repository(self):
