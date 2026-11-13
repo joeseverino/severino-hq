@@ -403,7 +403,8 @@ class StyleContractTests(SimpleTestCase):
             findings,
             [],
             f"reachable endpoints in tracked files: {findings}. A dotted number that is not an address,"
-            " such as a specification's section, passes written as section-3.1.3.7.",
+            " such as a specification's section, passes written as section-3.1.3.7. A host key a fixture"
+            " needs passes written short, under 32 base64 characters after AAAA.",
         )
 
     def test_images_live_where_images_belong(self):
@@ -708,7 +709,6 @@ HAND_ROLLED: dict[str, str] = {
         "calendar-aside calendar-layout calendar-month calendar-source calendar-source-failure calendar-source-note "
         "calendar-sources calendar-swatch"
     ),
-    "command.html": "command-result command-result-note command-result-table",
     "contacts/contact_detail.html": "quick-actions",
     "contacts/contact_list.html": "msg-preview row-unread status-tab",
     "control_plane/_connection_ability.html": "connection-evidence-*",
@@ -758,7 +758,6 @@ HAND_ROLLED: dict[str, str] = {
         "control-label mail-record-value mail-records mail-stage-head mail-stage-question mail-stage-warning "
         "mail-stages"
     ),
-    "core/_command_fields.html": "command-state command-target field-label",
     "core/_connection_loading.html": "conn-pending",
     "core/_connection_panel.html": (
         "conn conn-* conn-agree conn-agree-no conn-agree-yes conn-aside conn-carriage conn-carriage-* conn-check "

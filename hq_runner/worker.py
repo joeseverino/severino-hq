@@ -10,13 +10,13 @@ procedure's timeout passes.
 """
 
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from . import tracing
 from .bridge import BridgeError
-from .claim import CAPABILITY, Claimed, Procedure, Refused, Run, bind, claimed
+from .claim import CAPABILITY, Claimed, Installed, Reach, Refused, Run, bind, claimed
 from .events import Event, bounded, from_ansible, learned, strike
 from .journal import Journal
 
@@ -140,11 +140,17 @@ def _finish(run: Run, status: str, hold: _Hold, events: list[Event]) -> dict[str
 
 
 def run_claimed(
-    bridge: Bridge, controller_id: str, run: Run, runner: Runner, clock: Callable[[], float]
+    bridge: Bridge,
+    controller_id: str,
+    run: Run,
+    runner: Runner,
+    clock: Callable[[], float],
+    secrets: Collection[str] = (),
 ) -> dict[str, Any]:
-    """Run ``run`` under its held lease and answer the report it ends with."""
+    """Run ``run`` under its held lease and answer the report it ends with,
+    struck of ``secrets``, of its secret parameters and of its key paths."""
 
-    secrets = learned(run.parameters)
+    secrets = learned(run.parameters) | frozenset(secrets) | {str(target.identity) for target in run.targets}
     hold = _Hold(bridge, controller_id, run, clock, secrets)
     events: list[Event] = []
 
@@ -169,16 +175,30 @@ def work_once(
     bridge: Bridge,
     *,
     controller_id: str,
-    installed: Mapping[str, Procedure],
+    installed: Installed,
+    reach: Reach,
     journal: Journal,
     runner: Runner,
     clock: Callable[[], float] = time.monotonic,
+    secrets: Collection[str] = (),
 ) -> Outcome | None:
-    """Claim one run and see it through to its report; None when nothing waits."""
+    """Claim one run and see it through to its report; None when nothing waits.
+
+    ``installed`` resolves the procedure a claim names and ``reach`` the
+    connection to each of its machines; ``secrets`` are struck from the report
+    wherever they appear, as the run's own secrets are.
+    """
 
     with tracing.span("automation run", **{"hq.capability": CAPABILITY}):
         outcome = _pass(
-            bridge, controller_id=controller_id, installed=installed, journal=journal, runner=runner, clock=clock
+            bridge,
+            controller_id=controller_id,
+            installed=installed,
+            reach=reach,
+            journal=journal,
+            runner=runner,
+            clock=clock,
+            secrets=secrets,
         )
         if outcome is not None:
             tracing.note(**{"hq.operation.id": outcome.operation, "hq.ok": outcome.report["success"] is True})
@@ -189,10 +209,12 @@ def _pass(
     bridge: Bridge,
     *,
     controller_id: str,
-    installed: Mapping[str, Procedure],
+    installed: Installed,
+    reach: Reach,
     journal: Journal,
     runner: Runner,
     clock: Callable[[], float],
+    secrets: Collection[str],
 ) -> Outcome | None:
     entry = journal.begin()
     pending = bridge.claim(controller_id, capability=CAPABILITY, lease_seconds=LEASE_SECONDS, attempt=entry.attempt)
@@ -208,12 +230,13 @@ def _pass(
         report = entry.report or _report(claim.generation, success=False, message=UNKNOWN, reason="OutcomeUnknown")
     else:
         try:
-            run = bind(claim, installed)
+            run = bind(claim, installed, reach)
         except Refused as refused:
-            report = _report(claim.generation, success=False, message=refused.message, reason=refused.reason)
+            message = strike(refused.message, secrets)
+            report = _report(claim.generation, success=False, message=message, reason=refused.reason)
         else:
             entry = journal.started(entry, claim.operation)
-            report = run_claimed(bridge, controller_id, run, runner, clock)
+            report = run_claimed(bridge, controller_id, run, runner, clock, secrets)
             entry = journal.finished(entry, report)
     bridge.report(controller_id, claim.operation, report)
     journal.clear()

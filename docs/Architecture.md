@@ -1277,6 +1277,7 @@ declares, and why:
 | --- | --- | --- |
 | `id` | A dotted name, `example.service_logs` | A run, an approval and a grant name the procedure by it. |
 | `revision` | The reviewed commit, 40 lowercase hex | What was reviewed is what runs. A new commit is a new procedure, and an approval of the old one no longer holds. |
+| `playbook` | The playbook's path inside the project at that commit, `playbooks/service_logs.yml`: relative, each part starting with a letter, digit or underscore, ending `.yml` | The manifest names what runs, and only one spelling of it, so an approval pins it. The repository and the project's directory come from the host's root configuration, never from a manifest or a claim. |
 | `input_type` | A `StrictCommand` subclass | A run's parameters are validated the way every capability's are. |
 | `target_kinds` | The resource kinds it may act on, at least one | A run's target is held to what the procedure was written for. |
 | `hosts` | The hosts it may act on, empty for any of those kinds | A procedure written for one machine says so. |
@@ -1333,21 +1334,56 @@ validated and its hosts as they resolve then (`approvals.measured_by`), so a
 new revision, a parameter that validates to another value or a host that now
 resolves elsewhere stales the approval.
 
+A queued run is stored, then announced: once its transaction commits, HQ
+rings the automation worker's doorbell (`cadence.ring_automation_doorbell`),
+a file named `automation-doorbell` beside the controller's, which starts the
+worker on the host. It says only that a run waits; the worker claims it over
+the bridge, so a forged or replayed ring starts a worker that finds nothing.
+A refused run, or a retry answered with the run already queued, rings nothing.
+
 ### The automation worker
 
 `hq_runner/` is the worker that claims a run (`automation.operation:run`) and
 runs it. It imports nothing of HQ, ships in an image of its own (the web image
 holds neither it nor ansible-runner, its `runner` dependency group), and talks
-to HQ only over the bridge socket, trusted as the controller trusts it. What
-runs is the procedure its claim names, as the worker has it installed at the
-claim's reviewed revision; any other revision is refused before it runs. The
-playbook and project come from that installation, the hosts and extra-vars
-from the claim's `input`, and every ansible-runner argument is fixed in
-`hq_runner/ansible.py`, with its artifacts in a private directory removed when
-the run ends. While it runs the worker renews the lease, and stops when HQ
-answers stop, a renewal fails or the manifest's `timeout_seconds` passes. Its
-report carries one event per task and machine, built from Ansible's message
-alone and struck of secrets. A journal names each claim before it is sent and
-records a run once it starts, so a claim retried after a crash is answered the
-same run, which is reported as unknown and never run again. `mise run
-smoke:runner` runs a real playbook on the local machine through it.
+to HQ only over the bridge socket, trusted as the controller trusts it.
+`python -m hq_runner` claims runs one pass at a time until none is left, then
+exits. Its environment names everything it reads, each as an
+`HQ_AUTOMATION_*` variable (`hq_runner/__main__.py`), since on the host
+"runner" is the Actions runner's word: the bridge socket, the journal, the
+connections document, the ssh directory, the scratch space each pass works
+in, the repository its procedures come from with the directory inside it they
+run from, and the file holding the token that repository is fetched with.
+Nothing in a claim names any of them.
+
+What runs is the procedure its claim names, at the claim's reviewed revision
+(`hq_runner/procedures.py`). Each pass fetches that one commit into a fresh
+directory of its scratch space (`git fetch --depth 1` by the commit's id, then
+a detached checkout) and runs only once the checkout's `HEAD` is that commit,
+so an id that names a tag or any other object is refused. Git reads no
+configuration but the worker's own, set through its environment: no system or
+global file, no hooks, https alone, every received object checked, and the
+token as an `http.extraHeader`, never on its command line. The playbook is the
+claim's `spec.playbook`, checked again by the worker: a plain relative `.yml`
+path that, once every link is followed, stays inside the project directory.
+
+Each of the run's hosts is reached through the `ssh_transport` connection
+whose ref is the host's name and whose role is `runner`
+(`hq_runner/connections.py`), read from the connections document as the
+controller reads it, and through nothing else; a host no such connection
+reaches is refused before anything runs. Its inventory entry is that
+connection's address, port and user, its identity file alone (no agent, no
+password), its pinned `known_hosts` with host key checking on, and its
+`shell_type` when it carries one. The hosts and extra-vars come from the
+claim's `input`, and every ansible-runner argument is fixed in
+`hq_runner/ansible.py`, with its artifacts, Ansible's own working files and
+ssh's control sockets in a private directory removed when the run ends. While
+it runs the worker renews the lease, and stops when HQ answers stop, a renewal
+fails or the manifest's `timeout_seconds` passes. Its report carries one event
+per task and machine, built from Ansible's message alone and struck of
+secrets: the run's secret parameters, the token and each identity's path. A
+journal names each claim before it is sent and records a run once it starts,
+so a claim retried after a crash is answered the same run, which is reported
+as unknown and never run again. `mise run smoke:runner` runs a real playbook
+on the local machine through its entry point, fetched from a repository on
+the same machine.

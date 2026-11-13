@@ -75,8 +75,11 @@ class TracedTests(PassTestCase):
 
         spans = self.sent.get_finished_spans()
         (root,) = [span for span in spans if span.parent is None]
-        (ran,) = [span for span in spans if span.parent is not None]
-        self.assertEqual(ran.parent.span_id, root.context.span_id)
+        children = {span.name: span for span in spans if span.parent is not None}
+        self.assertEqual(set(children), {"resolve procedure", "ansible-runner"})
+        self.assertTrue(all(span.parent.span_id == root.context.span_id for span in children.values()))
+        ran = children["ansible-runner"]
+        self.assertEqual(children["resolve procedure"].attributes["hq.procedure"], fakes.PROCEDURE)
         self.assertEqual(root.attributes["hq.operation.id"], fakes.OPERATION)
         self.assertTrue(root.attributes["hq.ok"])
         self.assertEqual(ran.attributes["hq.procedure"], fakes.PROCEDURE)

@@ -586,6 +586,22 @@ def ring_glance_doorbell() -> bool:
     return _ring(_controller_doorbell().with_name("glance-doorbell"))
 
 
+# The automation worker's doorbell, beside the controller's; the unit that
+# starts the worker waits for a file of this name.
+AUTOMATION_DOORBELL = "automation-doorbell"
+
+
+def ring_automation_doorbell() -> bool:
+    """Tell the host a procedure's run is queued, and nothing else.
+
+    Its own file beside the controller's doorbell starts the automation worker,
+    which claims the run over the bridge. Forged or replayed, it starts a
+    worker that finds nothing to claim.
+    """
+
+    return _ring(_controller_doorbell().with_name(AUTOMATION_DOORBELL))
+
+
 def _controller_doorbell() -> Path:
     return _path("SEVERINO_CONTROLLER_DOORBELL", "controller-doorbell")
 

@@ -111,7 +111,7 @@ class Bridge:
 
     def __init__(self, path: str, *, uid: int | None = None, timeout: float = BRIDGE_TIMEOUT_SECONDS) -> None:
         if not path:
-            raise BridgeError("SEVERINO_BRIDGE_SOCKET must name HQ's bridge socket")
+            raise BridgeError("no bridge socket is named")
         self._path = path
         self._uid = os.geteuid() if uid is None else uid
         self._timeout = timeout

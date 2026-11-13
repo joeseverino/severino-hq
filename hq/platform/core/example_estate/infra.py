@@ -218,11 +218,14 @@ def proxy():
 def host():
     """What the host reports of itself: its firewall, perimeter, disks, restart and load."""
 
-    # A kernel and a library installed two days ago wait on a restart, which is
-    # scheduled for a quiet hour.
+    # The controller's own machine waits on nothing. On the edge, a kernel and a
+    # library installed two days ago wait on a restart, which is scheduled for a
+    # quiet hour.
+    store("host.reboot", {"pending": False, "read_at": stamp()})
     store(
-        "host.reboot",
+        "host.edge_reboot",
         {
+            "connection_ref": SSH,
             "pending": True,
             "since": stamp(timedelta(days=2)),
             "packages": ["linux-image-generic", "libc6"],

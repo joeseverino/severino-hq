@@ -566,7 +566,10 @@ a deploy cannot rewrite its own remote authorization.
   `/usr/local/sbin/severino-hq-edge-controller`. The edge key is forced to
   [`deploy/targets/severino-hq-edge-dispatch`](../deploy/targets/severino-hq-edge-dispatch),
   also root-owned, and that account may sudo only the receiver. `version`
-  prints the version the controller's messages name (`edge.Version`).
+  prints the version the controller's messages name (`edge.Version`), and
+  `edge.Operations` is every operation it answers. `reboot`, from version 5,
+  says whether the edge waits on a restart; an older edge refuses it, and HQ
+  says to redeploy.
 - A cPanel account runs
   [`deploy/targets/severino-hq-cpanel-controller`](../deploy/targets/severino-hq-cpanel-controller),
   installed as that account, with its key forced to the script.

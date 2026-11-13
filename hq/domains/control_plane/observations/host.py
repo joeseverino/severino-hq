@@ -301,6 +301,15 @@ class HostRebootRecord(ObservationRecord):
     read_at: UnitInstant = Field(description="When root read the flag and asked logind.")
 
 
+class HostEdgeRebootRecord(HostRebootRecord):
+    """Whether an edge waits on a restart: the host.edge_reboot reading's
+    record for each edge, read the same way by its receiver's reboot
+    operation and handed over its SSH transport.
+    """
+
+    connection_ref: str = Field(description="The edge's SSH transport, which names the machine it reads.")
+
+
 FIREWALL_KIND = "host.firewall"
 PERIMETER_KIND = "host.perimeter"
 RENDER_STATUS_KIND = "host.render_status"
@@ -308,6 +317,7 @@ UNIT_KIND = "host.unit"
 TAILNET_LOCK_KIND = "host.tailnet_lock"
 FILESYSTEM_KIND = "host.filesystem"
 REBOOT_KIND = "host.reboot"
+EDGE_REBOOT_KIND = "host.edge_reboot"
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
@@ -364,6 +374,14 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "host",
         "Pending restart",
         HostRebootRecord,
+        title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
+        relation="Restart state of",
+    ),
+    ObservationSpec(
+        EDGE_REBOOT_KIND,
+        "ssh",
+        "Pending restart on an edge",
+        HostEdgeRebootRecord,
         title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
         relation="Restart state of",
     ),

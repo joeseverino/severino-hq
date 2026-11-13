@@ -730,9 +730,11 @@ class FindingsTests(SentinelMixin, TestCase):
         for rule in finding_rules():
             with self.subTest(rule=rule.name):
                 text = f"{rule.name} {rule.title}".lower()
+                named = sorted(word for word in vocabulary if word in text.split())
                 self.assertFalse(
-                    [word for word in vocabulary if word in text.split()],
-                    f"{rule.name} names a provider family",
+                    named,
+                    f"{rule.name} names the provider family {', '.join(named)} in its name or title; "
+                    "a host rule says what is wrong in words no provider owns",
                 )
 
     def test_serialization_names_the_rule_it_was_narrowed_by(self):

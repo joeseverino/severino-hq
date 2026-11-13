@@ -3,15 +3,16 @@
 An update that waits on a restart runs the code it replaced until the machine
 restarts, and the restart takes down everything on the machine while it
 happens, so this says both before either surprises anyone. It reads the
-``host.reboot`` reading's one fact per machine (docs/Derived-Facts.md says
-how it is taken).
+``host.reboot`` reading's one fact for the controller's machine and the
+``host.edge_reboot`` reading's for each edge (docs/Derived-Facts.md says how
+they are taken).
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
-from hq.domains.control_plane.observations.host import REBOOT_KIND
+from hq.domains.control_plane.observations.host import EDGE_REBOOT_KIND, REBOOT_KIND
 
 from .finding_model import FindingRule, OperatorStep, cannot_run_commands, machine_step
 from .moments import when
@@ -20,6 +21,7 @@ from .timestamps import moment
 from .topology_model import TopologyNode
 
 REBOOT_STATE = "reboot-state"
+EDGE_REBOOT_STATE = "edge-reboot-state"
 
 # What logind's scheduled action does, as a sentence says it.
 _ACTIONS = {"reboot": "restart", "poweroff": "power off", "halt": "halt"}
@@ -58,27 +60,57 @@ class RebootState(FactRow):
         return _ACTIONS.get(self.scheduled_action, self.scheduled_action)
 
 
+@dataclass(frozen=True, slots=True)
+class EdgeRebootState(RebootState):
+    """An edge's restart state, with the connection its receiver answered through."""
+
+    KEY = EDGE_REBOOT_STATE
+    KIND = EDGE_REBOOT_KIND
+
+    connection_ref: str = ""
+
+
+def _said(record: dict[str, Any]) -> dict[str, str]:
+    """What a restart record says, as a row's fields."""
+
+    return {
+        "pending": "true" if record.get("pending") else "",
+        "since": str(record.get("since", "") or ""),
+        "packages": " ".join(str(name) for name in record.get("packages") or ()),
+        "scheduled_action": str(record.get("scheduled_action", "") or ""),
+        "scheduled_at": str(record.get("scheduled_at", "") or ""),
+        "read_at": str(record.get("read_at", "") or ""),
+    }
+
+
 def reboot_state(record: dict[str, Any]) -> RebootState:
     """One ``host.reboot`` record as the rule reads it."""
 
-    return RebootState(
-        pending="true" if record.get("pending") else "",
-        since=str(record.get("since", "") or ""),
-        packages=" ".join(str(name) for name in record.get("packages") or ()),
-        scheduled_action=str(record.get("scheduled_action", "") or ""),
-        scheduled_at=str(record.get("scheduled_at", "") or ""),
-        read_at=str(record.get("read_at", "") or ""),
-    )
+    return RebootState(**_said(record))
+
+
+def edge_reboot_state(record: dict[str, Any]) -> EdgeRebootState:
+    """One ``host.edge_reboot`` record as the rule reads it."""
+
+    return EdgeRebootState(**_said(record), connection_ref=str(record.get("connection_ref", "") or ""))
 
 
 def add(nodes: dict[str, TopologyNode], machine: Callable[[Any], str]) -> None:
-    """The machine's restart state, on the node of the controller that read it."""
+    """The controller's machine's restart state on its node, and each edge's
+    on the machine its connection reaches."""
 
     state_on_controller(
         nodes,
         machine,
         RebootState,
         lambda snapshot: rows_of(snapshot, reboot_state, lambda reason: RebootState(reason=reason)),
+    )
+    state_on_controller(
+        nodes,
+        machine,
+        EdgeRebootState,
+        lambda snapshot: rows_of(snapshot, edge_reboot_state, lambda reason: EdgeRebootState(reason=reason)),
+        through=lambda row: row.connection_ref,
     )
 
 
@@ -145,6 +177,8 @@ _waiting = OnEachMachine(
     evidence=_evidence,
     steps=_steps,
 )
+# The same, of each edge.
+_edge_waiting = replace(_waiting, row=EdgeRebootState)
 
 
 # The rules this module raises, beside the detectors that decide them.
@@ -153,7 +187,7 @@ RULES: tuple[FindingRule, ...] = (
         "reboot-pending",
         "Waiting on a restart",
         "attention",
-        _waiting,
+        lambda estate: (*_waiting(estate), *_edge_waiting(estate)),
         operator_action="On the machine, read what waits on the restart, then schedule it for a time that suits.",
         no_help_reason=cannot_run_commands(),
     ),

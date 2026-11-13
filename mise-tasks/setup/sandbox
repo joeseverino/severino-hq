@@ -1,11 +1,13 @@
 #!/bin/sh
-#MISE description="Make every path an audit task's sandbox lets it write, before the sandbox opens: on Linux, Landlock drops the rule for an allowed path that does not exist yet"
+#MISE description="Ready what an audit task's sandbox needs before it opens: the project's environment synced, since the sandbox refuses uv's write of it, and every path the sandbox lets it write made, since on Linux Landlock drops the rule for an allowed path that does not exist yet"
 #MISE hide=true
 #MISE env={SANDBOX_WRITES="{% if os() == 'macos' %}{{ exec(command='getconf DARWIN_USER_TEMP_DIR') }}{% else %}{{ get_env(name='TMPDIR', default='') }}{% endif %}:{% if os() == 'macos' %}{{ env.HOME }}/Library/Caches{% else %}{{ xdg_cache_home }}{% endif %}/go-build:var/perf"}
 
 # SANDBOX_WRITES is the audit template's allow_write and each audit task's
 # own, joined by colons; test_audit_tasks.py holds it to them.
 set -euf
+
+uv sync --locked --quiet
 
 IFS=:
 for path in $SANDBOX_WRITES; do

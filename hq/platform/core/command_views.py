@@ -33,6 +33,7 @@ from hq.platform.application.payload_words import value_words
 from hq.platform.application.records import says_only_its_title
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.service_context import Cell, ServiceSection
 from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import refused, run_posted
 
@@ -50,7 +51,7 @@ def _cell(value) -> str:
     return MISSING if value is None else value_words(value)
 
 
-def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict | None]:
+def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], ServiceSection | None]:
     """The facts a result states, and the one list it carries, if any.
 
     A result is a machine contract that a person reads as facts: its scalars
@@ -82,15 +83,17 @@ def _is_flat_records(value: object) -> bool:
     )
 
 
-def _result_table(key: str, records: list[dict]) -> dict:
-    """A list of records as a table: a column for every field any record has."""
+def _result_table(key: str, records: list[dict]) -> ServiceSection:
+    """A list of records as a table: a column for every field any record has,
+    drawn as every registry-driven table is (partials/_page_sections.html)."""
 
     columns = tuple(dict.fromkeys(column for item in records for column in item))
-    return {
-        "label": key.replace("_", " "),
-        "columns": tuple(column.replace("_", " ") for column in columns),
-        "rows": tuple(tuple(_cell(item.get(column)) for column in columns) for item in records),
-    }
+    return ServiceSection(
+        id="command-result-list",
+        label=key.replace("_", " ").strip() or "records",
+        columns=tuple(column.replace("_", " ") for column in columns),
+        records=tuple(tuple(Cell(_cell(item.get(column))) for column in columns) for item in records),
+    )
 
 
 class CommandView(View):
@@ -156,7 +159,8 @@ class CommandView(View):
             "form": form,
             "result": result,
             "result_facts": facts,
-            "result_table": table,
+            # The one list it carries, as the sections partials/_page_sections.html draws.
+            "result_sections": (table,) if table else (),
             "result_json": (json.dumps(result["payload"], indent=2, sort_keys=True) if result else ""),
             # The JSON opens only when the result shows nothing else.
             "result_json_open": not facts and table is None,

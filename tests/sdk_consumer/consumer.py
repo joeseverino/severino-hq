@@ -733,6 +733,7 @@ def an_operation() -> None:
     operation = automation.OperationManifest(
         id="example.service_logs",
         revision="0123456789abcdef0123456789abcdef01234567",
+        playbook="playbooks/service_logs.yml",
         input_type=Noting,
         target_kinds=("example.machine",),
         privilege=None,
@@ -747,6 +748,7 @@ def an_operation() -> None:
     assert_type(integration.operations, Callable[[], Iterable[Any]] | None)
     assert_type(operation.admits("example.machine", "app.example.com"), bool)
     assert_type(operation.hosts, tuple[str, ...])
+    assert_type(operation.playbook, str)
 
     automation.OperationManifest(id="example.service_logs")  # type: ignore[call-arg]
     operation.admits("example.machine")  # type: ignore[call-arg]

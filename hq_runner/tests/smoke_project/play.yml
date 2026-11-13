@@ -1,8 +1,11 @@
-# The smoke run's procedure: it acts on the machine it runs on alone.
+# The smoke run's procedure: it acts on the machine it runs on alone. Its
+# inventory reaches the host over ssh, as every run's does, so the play's own
+# vars, which outrank the inventory's, set the connection to local.
 - name: Smoke
   hosts: all
-  connection: local
   gather_facts: false
+  vars:
+    ansible_connection: local
   tasks:
     - name: Say which service
       ansible.builtin.debug:

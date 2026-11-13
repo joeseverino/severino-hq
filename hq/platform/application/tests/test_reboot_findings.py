@@ -21,6 +21,7 @@ from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 # Written out rather than imported, so the module loads where the reading is
 # not declared yet.
 KIND = "host.reboot"
+EDGE_KIND = "host.edge_reboot"
 RULE = "reboot-pending"
 
 
@@ -38,12 +39,27 @@ def reading(*, pending: bool = True, **said) -> dict:
     return {"pending": pending, **waiting, "read_at": stamp(), **said}
 
 
-def sweep(*records, **fields) -> None:
+def sweep(*records, kind: str = KIND, **fields) -> None:
     """The reading as a sweep stores it, through the schema."""
 
-    kept, refused = OBSERVATIONS[KIND].clean(records)
+    kept, refused = OBSERVATIONS[kind].clean(records)
     assert not refused, records
-    store(KIND, *kept, **fields)
+    store(kind, *kept, **fields)
+
+
+def edge(ref: str = "example-edge") -> None:
+    """An SSH transport, which is the machine at its other end, named by its ref."""
+
+    from hq.domains.control_plane.models import ProviderConnection
+
+    ProviderConnection.objects.create(
+        connection_ref=ref,
+        controller_id="example-controller",
+        provider="ssh",
+        endpoint="198.51.100.7:22",
+        reachable=True,
+        observed_at=timezone.now(),
+    )
 
 
 def evidence(finding) -> dict[str, str]:
@@ -144,6 +160,31 @@ class WaitingTests(TestCase):
 
         # Its "check again" returns to the rule's findings, carried URL-encoded.
         self.assertContains(page, f"rule%3D{RULE}")
+
+    def test_an_edge_that_waits_shows_it_on_its_own_machines_page(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+
+        edge()
+        # The controller's own machine waits on nothing; the edge's receiver
+        # says it waits on its kernel.
+        sweep(reading(pending=False))
+        sweep(reading(connection_ref="example-edge", packages=["linux-image-example"]), kind=EDGE_KIND)
+        self.client.force_login(get_user_model().objects.create_user(username="an-operator", password="not-used"))
+
+        (finding,) = raised(RULE)
+        page = self.client.get(reverse("control_plane:machine", kwargs={"name": "example-edge"}))
+
+        self.assertIn("example-edge", finding["title"])
+        self.assertIn("linux-image-example", evidence(finding).get("Packages", ""))
+        self.assertContains(page, f"rule%3D{RULE}")
+        self.assertContains(page, "linux-image-example")
+        # Its steps run on the edge, the machine that waits.
+        commands = steps()
+        self.assertEqual(len(commands), 2)
+        self.assertTrue(all("example-edge" in command for command in commands), commands)
+        self.assertIn("/run/reboot-required.pkgs", commands[0])
+        self.assertIn("shutdown -r", commands[1])
 
     def test_nothing_waiting_raises_nothing(self):
         sweep(reading(pending=False))

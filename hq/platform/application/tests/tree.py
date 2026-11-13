@@ -18,7 +18,16 @@ from hq.platform.application.tests.apart import apart
 lazy from hq.platform.application.tests.source import source_files
 
 ROOT = Path(__file__).resolve().parents[4]
-SUITE = ("hq", "hq_sdk", "tools", "tests")
+
+
+def packages(root: Path) -> tuple[str, ...]:
+    """A checkout's top-level Python packages: each directory at its root that holds an ``__init__.py``."""
+
+    return tuple(sorted(entry.name for entry in root.iterdir() if (entry / "__init__.py").is_file()))
+
+
+# The packages the suite lives in, read from the tree so a new one joins every reader at once.
+SUITE = packages(ROOT)
 SETUP = ("setUp", "setUpClass", "setUpTestData")
 
 # A definition found by name: the module it lives in and its node.

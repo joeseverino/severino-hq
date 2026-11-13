@@ -167,7 +167,13 @@ class FastGateTreeTests(GateTestCase):
     def test_a_module_of_any_package_the_suite_lives_in_reaches_the_tree_tests(self):
         # A new test file is one the walks read and no import reaches: the
         # source scans read it, and the tree tag's guard reads its tests.
-        modules = ["hq/domains/example/models.py", "hq_sdk/ui.py", "hq/platform/core/tests/task.py"]
+        # A package of the checkout is one by its __init__.py, never by a list written down.
+        modules = [
+            "hq/domains/example/models.py",
+            "hq_sdk/ui.py",
+            "hq/platform/core/tests/task.py",
+            "hq_runner/worker.py",
+        ]
         modules += [f"{package}/example/tests/test_example.py" for package in SUITE]
         for path in modules:
             with self.subTest(path=path):

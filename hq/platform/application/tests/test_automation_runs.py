@@ -2,7 +2,10 @@
 queued for the automation worker; nothing runs. Every manifest here is a
 synthetic ``example.*`` one, supplied as an extension supplies it."""
 
-from django.test import TestCase
+import tempfile
+from pathlib import Path
+
+from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.platform.core.models import IdempotencyRecord
@@ -56,6 +59,23 @@ class QueuedRunTests(RunTestCase):
         self.assertEqual(answer["operation"]["correlation"], "example-investigation-7")
         self.assertEqual(operation.resource.spec["revision"], REVISION)
 
+    def test_the_claim_names_the_playbook_the_manifest_declares(self):
+        self.supply(manifest(playbook="playbooks/linux/service_restart.yml"))
+        self.ask(run_payload())
+
+        claimed = claim_next_operation("example-worker", capabilities=((KIND, "run"),))
+
+        self.assertEqual(claimed["resource"]["spec"]["playbook"], "playbooks/linux/service_restart.yml")
+        self.assertEqual(claimed["resource"]["spec"]["revision"], REVISION)
+
+    def test_the_procedure_s_page_says_its_playbook(self):
+        from hq.domains.control_plane.provider_adapters.automation import OPERATION
+
+        self.ask(run_payload())
+
+        readout = {label: value for label, _, value in OPERATION.readout(ManagedResource.objects.get().spec, {})}
+        self.assertEqual(readout["Playbook"], "playbooks/service_restart.yml")
+
     def test_hosts_are_resolved_to_the_machine_each_is(self):
         from ..machines import Machine
 
@@ -91,6 +111,48 @@ class QueuedRunTests(RunTestCase):
 
         resource = ManagedResource.objects.get(key=RESTART_KEY)
         self.assertEqual((resource.spec["revision"], resource.generation), (NEXT_REVISION, 2))
+
+
+class DoorbellTests(RunTestCase):
+    """A queued run rings the automation worker's doorbell once it is stored, and nothing else does."""
+
+    def setUp(self):
+        super().setUp()
+        directory = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.enterContext(override_settings(SEVERINO_CONTROLLER_DOORBELL=str(directory / "controller-doorbell")))
+        self.marker = directory / "automation-doorbell"
+
+    def test_a_queued_run_rings_once_it_commits(self):
+        with self.captureOnCommitCallbacks() as committed:
+            self.assertTrue(self.ask(run_payload())["queued"])
+            self.assertFalse(self.marker.exists(), "The doorbell rang before the run was stored.")
+
+        for callback in committed:
+            callback()
+        self.assertTrue(self.marker.exists())
+
+    def test_a_refused_run_does_not_ring(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.ask(run_payload())
+        self.marker.unlink()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.refused(run_payload(DB), "precondition", key="example-run-2")
+
+        self.assertFalse(self.marker.exists())
+
+    def test_a_retried_run_does_not_ring_again(self):
+        with self.captureOnCommitCallbacks(execute=True):
+            self.ask(run_payload())
+        self.marker.unlink()
+        # Past the replay record, so the run's own key is what answers.
+        IdempotencyRecord.objects.all().delete()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.ask(run_payload())
+
+        self.assertEqual(OperationRequest.objects.count(), 1)
+        self.assertFalse(self.marker.exists())
 
 
 class RefusedRunTests(RunTestCase):

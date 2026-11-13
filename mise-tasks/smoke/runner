@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="To see the automation worker run a real playbook: one run through ansible-runner and ansible-playbook on this machine alone (connection local), over a fake bridge, with the runner group installed; outside check, since no gate installs that group"
+#MISE description="To see the automation worker run a real playbook: one run through its entry point, fetched at its commit from a local git repository and run by ansible-runner and ansible-playbook on this machine alone (connection local), over a fake bridge, with the runner group installed; outside check, since no gate installs that group"
 #MISE hide=true
 set -eu
 # Its own environment under var/, so the checkout's .venv keeps the default

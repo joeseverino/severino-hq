@@ -32,6 +32,7 @@ from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import plugins
 lazy from .approvals import ApprovalSubject, measured_by
+lazy from .cadence import ring_automation_doorbell
 lazy from .entity_links import kind_label
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
@@ -319,6 +320,9 @@ def request_run(
             input={"generation": resource.generation, **asked},
         )
         OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
+    # The worker pulls the run over the bridge; the ring only says one waits,
+    # and only once it is stored for the claim to find.
+    transaction.on_commit(ring_automation_doorbell)
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
 
 
@@ -357,6 +361,7 @@ def about(manifest: OperationManifest) -> CommandAbout:
         CommandFact("Recovery", _statements(manifest.recovery)),
         CommandFact("Retry", RETRY_WORDS[manifest.retry]),
         CommandFact("Reviewed commit", manifest.revision),
+        CommandFact("Playbook", manifest.playbook),
     )
     every = f"{reverse('jobs:list')}?{urlencode({'kind': capability_name(manifest.id)})}"
     runs = recent_work(recent_runs(manifest.id), by_machine=False, more_url=every)

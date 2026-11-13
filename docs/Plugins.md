@@ -34,7 +34,7 @@ plugin = PluginManifest(
     distribution="example-notes",
     source_repository="example/example-notes",
     source_workflow=".github/workflows/admit-plugin.yml",
-    api_version=11,
+    api_version=12,
     integration_provider="example_notes.plugin:integration",
     django_apps=("example_notes",),
     url_prefix="notes/",
@@ -583,6 +583,14 @@ Fields that shape the Command Center form:
   token HQ gave a live record). Search links there instead of to the form,
   and the form says where to start. `ON_ITS_PAGE` marks one that the page of
   whatever it acts on sends, which search does not offer.
+- `about` is what the command's page says of it under the form: a callable,
+  read each time the page is drawn, that returns a `CommandAbout(label,
+  facts, sections)`. Its `facts` are drawn as one section headed `label`
+  (required once there are facts), each a `CommandFact(label, value,
+  detail)` whose `detail` is the lines under the value. `sections` holds the
+  host's own page sections (a procedure's latest runs), which `hq_sdk` offers
+  no way to build, so an extension supplies a label and facts. Both types are
+  in `hq_sdk.capabilities`; `None` leaves the page to its form.
 
 A command's fields say what they are through markers in their `Annotated`
 type, the ones the host's commands use, all from `hq_sdk.capabilities`:
@@ -1182,6 +1190,7 @@ def operations():
         OperationManifest(
             id="example.service_logs",
             revision="0123456789abcdef0123456789abcdef01234567",
+            playbook="playbooks/service_logs.yml",
             input_type=ServiceLogs,
             target_kinds=("example.machine",),
             privilege=None,
@@ -1203,8 +1212,13 @@ def integration():
 installed extension's manifests, skipping one that supplies none, and refuses
 an item that is not an `OperationManifest` with an error naming the extension.
 The `OperationRegistry` built from them refuses one id supplied twice, by one
-extension or two. The field and the module are additive, so
-`PLUGIN_API_VERSION` stays 11.
+extension or two.
+
+`playbook` is the playbook's path inside the project at `revision`
+(`playbooks/service_logs.yml`): relative, each part starting with a letter,
+digit or underscore, ending `.yml`. Which repository and which directory of it
+are the project is the host's own configuration, never a manifest's. A
+manifest without one is refused, so `PLUGIN_API_VERSION` 12 adds it.
 
 ## Derived reads
 

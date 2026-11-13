@@ -17,9 +17,9 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 from django.utils.functional import SimpleLazyObject, empty
 
+from hq.platform.application.tests.tree import SUITE
 from hq.platform.core.tests.registries import ENTRYPOINTS, PREFIX, module_of, registries
 from hq.platform.core.tests.test_settings_env import REPO_ROOT
-from hq.platform.core.tests.test_startup import PYTHON_ROOTS
 
 MOVE_IT = (
     "registered only as its module loads, which a lazy import never makes happen: register it from its "
@@ -228,7 +228,7 @@ class SubmoduleShadowTests(SimpleTestCase):
     def test_no_package_binds_a_name_its_submodule_has(self):
         found = [
             f"{init.relative_to(REPO_ROOT)}:{hit}"
-            for root in PYTHON_ROOTS
+            for root in SUITE
             for init in sorted((REPO_ROOT / root).rglob("__init__.py"))
             for hit in shadowed(init.read_text(encoding="utf-8"), submodules_of(init.parent))
         ]

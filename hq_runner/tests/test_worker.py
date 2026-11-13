@@ -35,7 +35,8 @@ class PassTestCase(unittest.TestCase):
         return work_once(
             bridge,
             controller_id=fakes.WORKER,
-            installed=fakes.INSTALLED,
+            installed=fakes.installed,
+            reach=fakes.reach,
             journal=self.journal,
             runner=runner,
             clock=self.clock,
@@ -76,7 +77,7 @@ class SuccessTests(PassTestCase):
         self.work(bridge, runner)
 
         (run,) = runner.runs
-        self.assertEqual(run.procedure, fakes.INSTALLED[fakes.PROCEDURE])
+        self.assertEqual(run.procedure, fakes.PROCEDURES[fakes.PROCEDURE])
         self.assertEqual(run.hosts, (fakes.APP,))
         self.assertEqual(run.parameters, {"service": "db"})
         action, sent = bridge.calls[0]

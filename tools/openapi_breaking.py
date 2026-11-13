@@ -10,15 +10,20 @@ line oasdiff could read as an entry to carry its reason before oasdiff runs.
 The base is fast's: the merge base with the ref named, or else with the branch HEAD lands on.
 """
 
+import json
 import subprocess
 import sys
+from collections import Counter
 from collections.abc import Iterable
+from pathlib import Path
 
 from tools.gate.fast import ROOT, merge_base
 
 DOCUMENT = "hq/platform/api/hq-api.openapi.json"
 EXEMPTIONS = "hq/platform/api/hq-api.breaking-exemptions.md"
 REASON = "Reason:"
+# The ``level`` oasdiff's JSON gives a change (checker.ERR and checker.WARN).
+ERR, WARN = 3, 2
 
 
 def unexplained(lines: Iterable[str]) -> list[int]:
@@ -47,15 +52,62 @@ def main(argv: list[str]) -> int:
         return 1
     base = merge_base(argv[0] if argv and argv[0] else None)
     print(f"lint:openapi-breaking: {DOCUMENT} against {base[:9]}", flush=True)
-    command = ["oasdiff", "breaking", "--fail-on", "ERR", "--format", "singleline", "--err-ignore", EXEMPTIONS]
-    judged = subprocess.run([*command, f"{base}:{DOCUMENT}", DOCUMENT], cwd=ROOT, check=False)
-    if judged.returncode:
+    return judge(f"{base}:{DOCUMENT}", DOCUMENT, ROOT)
+
+
+def judge(base: str, revision: str, cwd: Path) -> int:
+    """Fail on each change from ``base`` to ``revision`` that breaks a client and no exemption admits.
+
+    The errors print last, with their count, and the warnings only as a count, so a run cut to its
+    tail still shows what it failed on. ``changelog --level ERR`` prints the errors alone, in the
+    line an exemption copies; oasdiff's JSON gives each change's level to count."""
+
+    ignore = ["--err-ignore", EXEMPTIONS]
+    found = subprocess.run(
+        ["oasdiff", "breaking", "--format", "json", *ignore, base, revision],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if found.returncode:
+        print(found.stderr, end="", file=sys.stderr)
+        return found.returncode
+    levels = Counter(change["level"] for change in json.loads(found.stdout or "[]"))
+    if levels[WARN]:
+        listing = f"oasdiff breaking --format singleline {' '.join(ignore)} {base} {revision}"
+        print(f"lint:openapi-breaking: {levels[WARN]} warnings, which fail nothing; `{listing}` lists them", flush=True)
+    errors = subprocess.run(
+        [
+            "oasdiff",
+            "changelog",
+            "--level",
+            "ERR",
+            "--fail-on",
+            "ERR",
+            "--format",
+            "singleline",
+            *ignore,
+            base,
+            revision,
+        ],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if errors.returncode and not levels[ERR]:
+        print(errors.stderr, end="", file=sys.stderr)
+        return errors.returncode
+    if levels[ERR]:
+        print(errors.stdout.rstrip(), flush=True)
         print(
-            "lint:openapi-breaking: each error above breaks a client of /api/v2/. Keep the old shape, or admit"
-            f" the break: copy its line into {EXEMPTIONS} and add {REASON} and why clients can take it.",
+            f"lint:openapi-breaking: each of the {levels[ERR]} errors above breaks a client of /api/v2/. Keep the old"
+            f" shape, or admit the break: copy its line into {EXEMPTIONS} and add {REASON} and why clients can take it.",
             file=sys.stderr,
         )
-    return judged.returncode
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

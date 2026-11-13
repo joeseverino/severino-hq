@@ -22,6 +22,7 @@ from urllib.parse import urljoin, urlsplit
 from django.conf import settings
 from django.urls import Resolver404, resolve
 
+from hq.platform.application.tests.example_procedures import supplied
 from hq.platform.core.tests.browser.estate import fragments_of, navigation, owner_client
 from hq.platform.core.tests.task import Drawn
 lazy from hq.platform.core.example_estate import REQUEST
@@ -50,6 +51,7 @@ class EstatePages:
 
     def _ask(self, address: str, **headers: str) -> Any:
         if self._client is None:
+            self._stack.enter_context(supplied())
             self._client = self._stack.enter_context(owner_client(self.seed))
         return self._client.get(address, secure=True, follow=True, HTTP_SEC_PURPOSE="prefetch", **REQUEST, **headers)
 

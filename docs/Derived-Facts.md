@@ -304,7 +304,17 @@ the contract admits only as dpkg spells them, at most 64. The launcher names
 the file whether or not it could be taken, and a logind that did not answer is
 a failed read that keeps the last one.
 
-`hq/platform/application/reboot_findings.py` raises, on the same node:
+`host.edge_reboot` is the same of each Caddy edge, one record each: its
+receiver answers the document to its `reboot` operation (`controller/edge`,
+version 5 on) over the edge's SSH transport, which the record names as
+`connection_ref`. Since it logs in, a page visit never asks for it. An edge
+that does not answer, one older than version 5 included, is a refused part
+scoped to that connection, so every other edge's record still stands; the
+read fails only when no edge answered.
+
+`hq/platform/application/reboot_findings.py` raises, on the controller's
+machine node for `host.reboot` and on the machine an edge's connection
+reaches for `host.edge_reboot`:
 
 | Finding | When | Severity |
 |---|---|---|

@@ -8,11 +8,15 @@ recorded from a real playbook run (``recorded_events.json``).
 
 import copy
 import json
+import os
 from collections.abc import Callable, Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from hq_runner.claim import Procedure, Run
+
+if TYPE_CHECKING:
+    from hq_runner.connections import Target
 
 REVISION = "0123456789abcdef0123456789abcdef01234567"
 OTHER_REVISION = "89abcdef0123456789abcdef0123456789abcdef"
@@ -20,7 +24,57 @@ PROCEDURE = "example.service_restart"
 OPERATION = "11111111-2222-4333-8444-555555555555"
 APP = "app.example.com"
 WORKER = "example-worker"
-INSTALLED = {PROCEDURE: Procedure(REVISION, Path("/srv/example/project"), "play.yml")}
+PLAYBOOK = "playbooks/restart.yml"
+PROCEDURES = {PROCEDURE: Procedure(REVISION, Path("/srv/example/project"), PLAYBOOK)}
+SSH_DIR = Path("/run/example/ssh")
+
+
+def connection(ref: str, **transport: str) -> dict[str, Any]:
+    """One ssh_transport connection as the root renderer writes it into the
+    connections document (``controller/api/hq-connections.openapi.json``)."""
+
+    return {
+        "ref": ref,
+        "provider": "ssh",
+        "manages": False,
+        "store": {"vault": "Example", "item": f"example-{ref}"},
+        "ssh_transport": {
+            "host": "192.0.2.10",
+            "host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAexample",
+            "identity": f"example-{ref}-key",
+            "port": "22",
+            "user": "example-read",
+            **transport,
+        },
+    }
+
+
+def write_connections(path: Path, *connections: Mapping[str, Any], schema_version: int = 2, mode: int = 0o600) -> Path:
+    """A connections document at ``path``, this account's own file, as the renderer leaves it."""
+
+    path.unlink(missing_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+        json.dump({"schema_version": schema_version, "connections": list(connections)}, handle)
+    path.chmod(mode)
+    return path
+
+
+def installed(procedure_id: str, revision: str, playbook: str) -> Procedure | None:
+    """The worker's procedures as a test has them, by id alone."""
+
+    return PROCEDURES.get(procedure_id)
+
+
+def reach(host: str) -> Target | None:
+    """The one machine a test's worker reaches, through its runner connection."""
+
+    from hq_runner.connections import Target
+
+    if host != APP:
+        return None
+    return Target(APP, "192.0.2.10", 22, "example-read", SSH_DIR / APP, SSH_DIR / "known_hosts")
+
 
 # Every event of the recorded run, in order: tasks that were fine, changed
 # something, were hidden (no_log) and were skipped, then one that failed.
@@ -70,6 +124,7 @@ def pending(
             "spec": {
                 "operation": PROCEDURE,
                 "revision": revision,
+                "playbook": PLAYBOOK,
                 "timeout_seconds": timeout,
                 "retry": "never",
                 "hosts": [],

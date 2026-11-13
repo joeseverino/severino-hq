@@ -1,5 +1,5 @@
 {
-  "api_version": 11,
+  "api_version": 12,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -203,6 +203,7 @@
           "*",
           "id",
           "revision",
+          "playbook",
           "input_type",
           "target_kinds",
           "hosts=",
@@ -225,6 +226,9 @@
             "required": true
           },
           "input_type": {
+            "required": true
+          },
+          "playbook": {
             "required": true
           },
           "preconditions": {

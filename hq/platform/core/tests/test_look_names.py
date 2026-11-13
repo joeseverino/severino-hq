@@ -174,7 +174,9 @@ class EarlyRefusalTests(SimpleTestCase):
 
 
 class PostNamesTests(TestCase):
-    def test_every_named_post_is_refused_on_the_seed_as_it_says(self):
+    def test_every_named_post_is_answered_on_the_seed_as_it_says(self):
+        """A refused POST draws its errors; an answered one, its result."""
+
         from hq.platform.core.tests.look_posts import post_names, posted
 
         names = post_names()
@@ -185,7 +187,10 @@ class PostNamesTests(TestCase):
                     sent = posted(name)
                     response = sent.send(client)
                     self.assertEqual(response.status_code, sent.status)
-                    self.assertTrue(response.context["form"].errors)
+                    if sent.status == 200:
+                        self.assertTrue(response.context["result"])
+                    else:
+                        self.assertTrue(response.context["form"].errors)
 
     def test_a_post_that_is_none_is_refused_with_the_nearest(self):
         with self.assertRaises(AssertionError) as refused:
@@ -268,6 +273,15 @@ class RecordPagesTests(TestCase):
         [(route, templates)] = self.drawn(detail)
         self.assertEqual(route, "control_plane:detail")
         self.assertIn("control_plane/resource_detail.html", templates)
+
+    def test_the_example_procedure_has_a_record_page_the_look_reaches(self):
+        from hq.platform.application.automation_runs import resource_key
+        from tests.fixtures.example_hq_plugin.operations import CACHE_FLUSH
+
+        name = estate_name(reverse("control_plane:detail", args=(resource_key(CACHE_FLUSH),)))
+        [page] = _named(name)
+
+        self.assertEqual(page, name)
 
     def test_a_template_named_whole_or_by_its_file_reaches_the_estate_page_that_draws_it(self):
         [container] = _named("template:control_plane/_container_detail.html", "template:_container_detail.html")

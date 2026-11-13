@@ -48,6 +48,18 @@ def buttons(page) -> list[str]:
     return [element.words for element in within(page, "data-command-form") if element.attrs.get("type") == "submit"]
 
 
+def standing(page, spec) -> list[str]:
+    """Where the form says the switch ``spec`` stands: each value of a fact
+    its title names."""
+
+    drawn = within(page, "data-command-form")
+    return [
+        next(later.words for later in drawn[index + 1 :] if later.tag == "dd")
+        for index, element in enumerate(drawn)
+        if element.tag == "dt" and element.words == spec.title
+    ]
+
+
 def stated(page, effect: str) -> bool:
     return effect not in CONFIRMED or bool(select(page, "name", "__confirm_effect"))
 
@@ -203,8 +215,7 @@ class SwitchPageTests(TestCase):
             with self.subTest(project=slug):
                 page = self.client.get(command_url(DEPENDENCY_UPDATES, slug))
 
-                said = [element.words for element in within(page, "data-command-state") if element.tag == "strong"]
-                self.assertEqual(said, [state])
+                self.assertEqual(standing(page, spec), [state])
                 self.assertEqual(buttons(page), [offered])
                 self.assertFalse(select(page, "data-command-blanks"))
 
@@ -238,9 +249,6 @@ class DeclaredStateSwitchTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    def said(self, page) -> list[str]:
-        return [element.words for element in within(page, "data-command-state") if element.tag == "strong"]
-
     def test_the_agents_pause_says_where_it_stands(self):
         spec = capability_registry()[SET_AGENT_ACCESS]
         for paused, state, offered in ((True, "On", spec.words("off")), (False, "Off", spec.words("on"))):
@@ -248,7 +256,7 @@ class DeclaredStateSwitchTests(TestCase):
             with self.subTest(paused=paused):
                 page = self.client.get(command_url(SET_AGENT_ACCESS))
 
-                self.assertEqual(self.said(page), [state])
+                self.assertEqual(standing(page, spec), [state])
                 self.assertEqual(buttons(page), [offered])
 
     def test_a_machines_place_on_the_dashboard_says_where_it_stands(self):
@@ -262,7 +270,7 @@ class DeclaredStateSwitchTests(TestCase):
             with self.subTest(machine=machine.key):
                 page = self.client.get(command_url(DASHBOARD_MACHINE, machine.key))
 
-                self.assertEqual(self.said(page), [state])
+                self.assertEqual(standing(page, spec), [state])
                 self.assertEqual(buttons(page), [offered])
 
 

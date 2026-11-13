@@ -375,10 +375,6 @@ a.discovery-link:hover strong { color: var(--accent); }
 .command-hint { margin: var(--space-2) 0 0; }
 /* A key to press is said only where there are keys: not on a touch screen. */
 @media (hover: none) { .keyboard-only { display: none; } }
-/* What a command acts on, when the page was opened for one thing, and where
-   a switch stands for it: facts the form names, not fields to fill. */
-:is(.command-target, .command-state) p { margin: 0; }
-:is(.command-target, .command-state) .field-label { display: block; color: var(--muted); font-size: var(--text-xs); }
 .command-confirm {
   padding: var(--space-6) var(--space-7);
   /* A callout, like .notice: inside a surface its tint and its bar, not a frame. */
@@ -387,14 +383,6 @@ a.discovery-link:hover strong { color: var(--accent); }
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--warn) 7%, var(--surface));
 }
-.command-result-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); }
-.command-result { margin-bottom: var(--layout-gap); }
-.command-result > .section-body { border-left: 3px solid var(--ok); }
-/* The projected result: its facts and the list as a plain data table with its
-   count in the caption. */
-.command-result .table-scroll { margin-top: var(--space-6); }
-.command-result-table caption { caption-side: top; text-align: left; padding: 0 0 var(--space-3); font-size: var(--text-sm); font-weight: 600; }
-.command-result-table td { overflow-wrap: anywhere; }
 .connection-summary {
   display: flex;
   gap: var(--space-4) var(--space-9);

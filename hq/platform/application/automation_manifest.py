@@ -74,6 +74,14 @@ EXECUTION_FIELDS = frozenset(
 # A full commit: an abbreviation can come to name a second commit.
 REVISION = r"^[0-9a-f]{40}$"
 
+# A playbook's path inside the reviewed commit, in one spelling: relative,
+# each part starting with a letter, digit or underscore (so no `.` or `..`
+# part, no empty one, and nothing ansible-playbook reads as an option), and a
+# YAML file. Which repository and which directory of it hold the project is
+# the host's own configuration, never a manifest's.
+PLAYBOOK = r"^(?:[A-Za-z0-9_][A-Za-z0-9_.-]*/)*[A-Za-z0-9_][A-Za-z0-9_.-]*\.yml$"
+PLAYBOOK_LONGEST = 200
+
 
 def _hosts(names: tuple[str, ...]) -> tuple[str, ...]:
     for name in names:
@@ -124,6 +132,7 @@ class OperationManifest(BaseModel):
 
     id: DottedName
     revision: Annotated[str, StringConstraints(pattern=REVISION)]
+    playbook: Annotated[str, StringConstraints(pattern=PLAYBOOK, max_length=PLAYBOOK_LONGEST)]
     input_type: type[BaseModel]
     target_kinds: Annotated[tuple[DottedName, ...], Field(min_length=1), AfterValidator(_sorted_unique)]
     # Empty: any host of those kinds.

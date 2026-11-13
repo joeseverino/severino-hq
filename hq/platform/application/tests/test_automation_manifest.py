@@ -30,6 +30,7 @@ def declared(**changes: Any) -> dict[str, Any]:
     return {
         "id": "example.service_logs",
         "revision": "0123456789abcdef0123456789abcdef01234567",
+        "playbook": "playbooks/service_logs.yml",
         "input_type": ServiceLogs,
         "target_kinds": ("example.machine",),
         "hosts": ("app.example.com",),
@@ -62,6 +63,11 @@ class DeclarationTests(SimpleTestCase):
         self.assertEqual(built.privilege, "example.package_maintenance")
         self.assertIs(built.input_type, Nested)
 
+    def test_a_playbook_is_a_path_inside_the_project(self) -> None:
+        for playbook in ("site.yml", "playbooks/service_logs.yml", "playbooks/linux/disk-report.v2.yml"):
+            with self.subTest(playbook):
+                self.assertEqual(manifest(playbook=playbook).playbook, playbook)
+
     def test_it_cannot_change_once_declared(self) -> None:
         built = manifest()
 
@@ -86,7 +92,7 @@ class InvalidShapeTests(SimpleTestCase):
             manifest(**changes)
 
     def test_an_unknown_field(self) -> None:
-        self.assertRefused(playbook="site.yml")
+        self.assertRefused(inventory="inventory.yml")
 
     def test_a_bad_id(self) -> None:
         for bad in ("Example.Logs", "example..logs", "example.logs-tail", "", ".example"):
@@ -97,6 +103,32 @@ class InvalidShapeTests(SimpleTestCase):
         for bad in ("0123456", "0123456789ABCDEF0123456789ABCDEF01234567", "g" * 40, "0" * 41, "main"):
             with self.subTest(bad):
                 self.assertRefused(revision=bad)
+
+    def test_a_playbook_outside_the_project_or_not_a_playbook(self) -> None:
+        for bad in (
+            "",
+            "/srv/ansible/site.yml",
+            "../site.yml",
+            "playbooks/../../site.yml",
+            "./site.yml",
+            "playbooks//site.yml",
+            "playbooks/.hidden.yml",
+            "-e@vars.yml",
+            "site.yaml",
+            "site",
+            ".yml",
+            "playbooks/",
+            "playbooks\\site.yml",
+            "~/site.yml",
+            "play books/site.yml",
+            f"{'p' * 200}.yml",
+        ):
+            with self.subTest(bad):
+                self.assertRefused(playbook=bad)
+
+    def test_a_playbook_must_be_said(self) -> None:
+        with self.assertRaises(ValidationError):
+            OperationManifest(**{key: value for key, value in declared().items() if key != "playbook"})
 
     def test_a_missing_or_empty_statement(self) -> None:
         for field in ("preconditions", "verification", "recovery"):

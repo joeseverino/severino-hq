@@ -43,7 +43,7 @@ MARKERS = override_settings(
 OLD = timedelta(hours=3)
 # Kinds whose readers call a provider's API, and ones whose readers log in.
 FAST = "adguard.rewrite"
-LOGS_IN = ("host.perimeter", "caddy.route")
+LOGS_IN = ("host.perimeter", "host.edge_reboot", "caddy.route")
 
 
 def store(kind: str, *, age: timedelta = timedelta(0), attempted: timedelta | None = None) -> None:
@@ -382,6 +382,7 @@ class AskableSourceTests(SimpleTestCase):
                 "controller/providers/controller.go",
                 "controller/providers/glance.go",
                 "controller/providers/host_readings.go",
+                "controller/providers/host_reboot.go",
                 "controller/providers/tls.go",
             ],
         )

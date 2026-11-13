@@ -1520,7 +1520,7 @@
             }
           ],
           "posture": {
-            "abilities": 49,
+            "abilities": 50,
             "controls": [
               {
                 "detail": "HQ has no reading of an access list for this name.",
@@ -1746,7 +1746,7 @@
               "provider": "ssh",
               "tally": [
                 {
-                  "count": 2,
+                  "count": 3,
                   "state": "Readable"
                 }
               ]
@@ -2073,7 +2073,7 @@
             "never_read": 1,
             "not_connected": [],
             "out_of_date": 0,
-            "read": 42,
+            "read": 43,
             "readings": [
               {
                 "error": "",
@@ -2349,7 +2349,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 43,
+          "count": 44,
           "items": [
             {
               "error": "",
@@ -2362,7 +2362,7 @@
             }
           ],
           "next": null,
-          "total": 43,
+          "total": 44,
           "truncated": false
         },
         "ok": true
@@ -3230,9 +3230,9 @@
           ],
           "schema_version": 2,
           "summary": {
-            "edges": 306,
+            "edges": 307,
             "kinds": {
-              "ability": 60,
+              "ability": 61,
               "connection": 10,
               "controller": 1,
               "machine": 3,
@@ -3242,7 +3242,7 @@
               "target": 2,
               "zone": 1
             },
-            "nodes": 128
+            "nodes": 129
           },
           "trace": null
         },

@@ -226,6 +226,11 @@ class PerConnectionSightTests(TestCase):
             observed_at=now,
         )
         ProviderInventory.objects.create(
+            kind="host.edge_reboot",
+            records=[{"connection_ref": "edge", "pending": False, "read_at": "2030-01-01T00:00:00Z"}],
+            observed_at=now,
+        )
+        ProviderInventory.objects.create(
             kind="caddy.route",
             records=[
                 {"connection_ref": "edge", "domain": name, "upstream": "app:80"}
@@ -240,9 +245,10 @@ class PerConnectionSightTests(TestCase):
     def test_each_connection_counts_only_what_was_read_through_it(self):
         connected, _ = sight_by_connection({"edge": "ssh", "shared-host": "ssh"})
 
-        self.assertEqual(self.labels(connected["edge"]), {"host.perimeter": 1, "caddy.route": 3})
+        self.assertEqual(self.labels(connected["edge"]), {"host.perimeter": 1, "host.edge_reboot": 1, "caddy.route": 3})
         seen = self.labels(connected["shared-host"])
         self.assertNotIn("host.perimeter", seen)
+        self.assertNotIn("host.edge_reboot", seen)
         self.assertNotIn("caddy.route", seen)
 
     def test_the_provider_view_still_counts_every_connection(self):

@@ -219,8 +219,8 @@ run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser p
 # sandbox (Seatbelt, Landlock), so whatever words it is handed, it writes only
 # to /tmp, /dev, the temporary directory and Go's build cache. On macOS the
 # temporary directory is the user's, which mktemp uses whatever TMPDIR says.
-# uv works from a throwaway cache there and never writes .venv, so one out of
-# sync fails the task rather than syncing. django's env is restated so an
+# uv works from a throwaway cache there and never writes .venv, so
+# setup:sandbox syncs it before the sandbox opens. django's env is restated so an
 # audit that boots Django takes this template alone.
 [task_templates.audit]
 deny_write = true

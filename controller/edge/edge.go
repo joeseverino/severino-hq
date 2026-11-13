@@ -18,8 +18,11 @@
 //     each put in place whole through atomicfile with its owner and mode set
 //     before the rename, and restores the previous contents when Caddy's
 //     reload fails.
-//   - It starts docker and systemctl only through hostcore.Process, handing in
-//     Env as the whole environment, with standard input closed.
+//   - Besides what it installs it reads only whether the machine waits on a
+//     restart: the flag at RebootRequired and its package list, which are
+//     world-readable, through hostcore.ReadReboot.
+//   - It starts docker, systemctl and busctl only through hostcore.Process,
+//     handing in Env as the whole environment, with standard input closed.
 package edge
 
 import (
@@ -47,14 +50,17 @@ import (
 // Version is bumped whenever an operation is added. A controller that finds
 // an operation refused tells the operator to redeploy the edge at this
 // version, so a stale edge reads as one.
-const Version = "4"
+const Version = "5"
 
 // The operations an edge answers.
 const (
-	OperationVersion      = "version"
-	OperationPreflight    = "preflight"
-	OperationSnapshot     = "snapshot"
-	OperationPerimeter    = "perimeter"
+	OperationVersion   = "version"
+	OperationPreflight = "preflight"
+	OperationSnapshot  = "snapshot"
+	OperationPerimeter = "perimeter"
+	// OperationReboot is whether the machine waits on a restart, as
+	// hostcore.RebootReading; an edge older than version 5 refuses it.
+	OperationReboot       = "reboot"
 	OperationRoutes       = "routes"
 	OperationRoutesWrite  = "routes:write"
 	OperationDeploy       = "deploy"
@@ -90,8 +96,13 @@ type Receiver struct {
 	RoutesFile string
 	// Owner and Group own what the receiver installs, by name or number.
 	Owner, Group string
-	// Docker and Systemctl are the programs it starts.
-	Docker, Systemctl string
+	// Docker, Systemctl and Busctl are the programs it starts.
+	Docker, Systemctl, Busctl string
+	// RebootRequired is the flag an update leaves when it waits on a restart
+	// (hostcore.RebootRequired), and Born when a file was created
+	// (hostcore.Born).
+	RebootRequired string
+	Born           func(path string) (time.Time, error)
 	// Env is every program's whole environment.
 	Env []string
 	// Now is the clock an expiry and a reading are judged by.
@@ -110,15 +121,18 @@ func Defaults(getenv func(string) string) Receiver {
 		return fallback
 	}
 	return Receiver{
-		CertDir:    value("SEVERINO_HQ_CADDY_CERT_DIR", "/opt/apps/caddy/certs"),
-		RoutesFile: value("SEVERINO_HQ_CADDY_ROUTES", "/opt/apps/caddy/config/hq-routes.caddy"),
-		Owner:      value("SEVERINO_HQ_CERT_OWNER", "root"),
-		Group:      value("SEVERINO_HQ_CERT_GROUP", "root"),
-		Docker:     "docker",
-		Systemctl:  "systemctl",
-		Env:        hostcore.RootEnvironment(),
-		Now:        time.Now,
-		Addresses:  net.InterfaceAddrs,
+		CertDir:        value("SEVERINO_HQ_CADDY_CERT_DIR", "/opt/apps/caddy/certs"),
+		RoutesFile:     value("SEVERINO_HQ_CADDY_ROUTES", "/opt/apps/caddy/config/hq-routes.caddy"),
+		Owner:          value("SEVERINO_HQ_CERT_OWNER", "root"),
+		Group:          value("SEVERINO_HQ_CERT_GROUP", "root"),
+		Docker:         "docker",
+		Systemctl:      "systemctl",
+		Busctl:         hostcore.ScheduledShutdown[0],
+		RebootRequired: hostcore.RebootRequired,
+		Born:           hostcore.Born,
+		Env:            hostcore.RootEnvironment(),
+		Now:            time.Now,
+		Addresses:      net.InterfaceAddrs,
 	}
 }
 
@@ -157,8 +171,8 @@ func (r Receiver) Run(ctx context.Context, args []string, stdin io.Reader, stdou
 // Operations is every operation the receiver answers.
 func Operations() []string {
 	return []string{
-		OperationVersion, OperationPreflight, OperationSnapshot, OperationPerimeter, OperationRoutes,
-		OperationRoutesWrite, OperationDeploy, OperationCertificates, OperationCertificate,
+		OperationVersion, OperationPreflight, OperationSnapshot, OperationPerimeter, OperationReboot,
+		OperationRoutes, OperationRoutesWrite, OperationDeploy, OperationCertificates, OperationCertificate,
 	}
 }
 
@@ -182,6 +196,8 @@ func (r Receiver) answer(ctx context.Context, args []string, stdin io.Reader, st
 		return r.snapshot(stdout)
 	case OperationPerimeter:
 		return r.perimeter(ctx, stdout)
+	case OperationReboot:
+		return r.reboot(ctx, stdout, stderr)
 	case OperationRoutes:
 		// Emitted whole and parsed by HQ, so the part likely to change stays
 		// in the repository rather than on a host that takes a root install.

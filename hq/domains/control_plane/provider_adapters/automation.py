@@ -10,6 +10,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from hq.platform.application.automation_manifest import PLAYBOOK, PLAYBOOK_LONGEST, REVISION
 from hq.platform.application.ui import ended
 
 from ..provider_spec import ProviderModel, ProviderSpec, locked
@@ -24,7 +25,9 @@ class OperationSpec(ProviderModel):
     """One supplied manifest, every field but its input type, which its schema's digest stands for."""
 
     operation: str = Field(min_length=1, max_length=160, title="Procedure")
-    revision: str = Field(pattern=r"^[0-9a-f]{40}$", title="Reviewed commit")
+    revision: str = Field(pattern=REVISION, title="Reviewed commit")
+    # Inside the project the host's configuration names at that commit.
+    playbook: str = Field(pattern=PLAYBOOK, max_length=PLAYBOOK_LONGEST, title="Playbook")
     input_schema_sha256: str = Field(pattern=r"^[0-9a-f]{64}$", title="Input schema")
     target_kinds: list[str] = Field(min_length=1, title="Acts on")
     hosts: list[str] = Field(default_factory=list, title="Hosts")
@@ -42,6 +45,7 @@ def _readout(spec: dict[str, Any], _status: dict[str, Any]) -> tuple[tuple[str, 
 
     return (
         ("Reviewed commit", "", str(spec.get("revision", ""))),
+        ("Playbook", "", str(spec.get("playbook", ""))),
         ("Effect", "", str(spec.get("effect", ""))),
         ("Privilege profile", "", str(spec.get("privilege", "")) or "none"),
         ("Acts on", "", ", ".join(spec.get("target_kinds", ()))),

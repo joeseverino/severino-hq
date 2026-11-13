@@ -49,6 +49,7 @@ def operations() -> tuple[OperationManifest, ...]:
     return (
         _manifest(
             id=CACHE_FLUSH,
+            playbook="playbooks/cache_flush.yml",
             input_type=CacheFlush,
             preconditions=("The cache's service is running on the machine.",),
             verification=("The cache reports no entries.",),
@@ -56,6 +57,7 @@ def operations() -> tuple[OperationManifest, ...]:
         ),
         _manifest(
             id=DISK_REPORT,
+            playbook="playbooks/disk_report.yml",
             input_type=DiskReport,
             effect="read",
             timeout_seconds=60,
@@ -66,6 +68,7 @@ def operations() -> tuple[OperationManifest, ...]:
         ),
         _manifest(
             id=PACKAGE_UPGRADE,
+            playbook="playbooks/package_upgrade.yml",
             input_type=PackageUpgrade,
             privilege="example.package_admin",
             timeout_seconds=1800,

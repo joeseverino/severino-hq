@@ -25,7 +25,7 @@ import (
 // what its secret renderers say about their own runs, in host_tailnet_lock.go
 // its daemon's tailnet lock status, in host_units.go the state of its systemd
 // units, in host_filesystem.go the space on its filesystems and, in
-// host_reboot.go, whether it waits on a restart.
+// host_reboot.go, whether it and each edge wait on a restart.
 
 // PublishedContainer is a container the sweep found and the ports it publishes.
 // Host is the environment's connection ref, HostAddress its address.
@@ -69,6 +69,7 @@ func (r *Registry) admitHostReadings() {
 	r.readsHeld(runtime.ResourceKindHostFilesystem, func() bool { return r.Env.HostFilesystems != "" })
 	r.reader(runtime.ResourceKindHostReboot, r.hostReboot)
 	r.readsHeld(runtime.ResourceKindHostReboot, func() bool { return r.Env.HostReboot != "" })
+	r.reader(runtime.ResourceKindHostEdgeReboot, r.hostEdgeReboot)
 }
 
 // What a status document's record says of the read itself.

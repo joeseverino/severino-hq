@@ -3864,6 +3864,59 @@
         },
         "type": "object"
       },
+      "HostEdgeRebootRecord": {
+        "additionalProperties": false,
+        "description": "Whether an edge waits on a restart: the host.edge_reboot reading's record for each edge, read the same way by its receiver's reboot operation and handed over its SSH transport.",
+        "properties": {
+          "pending": {
+            "description": "Whether /run/reboot-required is there: an update waits on a restart.",
+            "type": "boolean"
+          },
+          "since": {
+            "default": "",
+            "description": "When the flag was first written, when one is there; empty when none is.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "packages": {
+            "default": [],
+            "description": "The packages /run/reboot-required.pkgs names as waiting on it, each once.",
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9+.-]{1,99}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "scheduled_action": {
+            "default": "",
+            "description": "What logind's ScheduledShutdown will do (reboot, poweroff, halt); empty when nothing is scheduled.",
+            "pattern": "^(?:|[a-z][a-z0-9-]{0,31})$",
+            "type": "string"
+          },
+          "scheduled_at": {
+            "default": "",
+            "description": "When logind will do it; empty when nothing is scheduled.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "read_at": {
+            "description": "When root read the flag and asked logind.",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "type": "string"
+          },
+          "connection_ref": {
+            "description": "The edge's SSH transport, which names the machine it reads.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pending",
+          "read_at",
+          "connection_ref"
+        ],
+        "type": "object"
+      },
       "HostFilesystemRecord": {
         "additionalProperties": false,
         "description": "One real filesystem on the controller's machine, as statfs(2) states it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs or zfs mount the machine shows, one per device, and sends where it is mounted and its space; no device, option or file name.",
@@ -5313,6 +5366,7 @@
           "github.dependency_run",
           "github.profile",
           "github.repository",
+          "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
           "host.perimeter",
@@ -5376,6 +5430,7 @@
           "ResourceKindGitHubDependencyRun",
           "ResourceKindGitHubProfile",
           "ResourceKindGitHubRepository",
+          "ResourceKindHostEdgeReboot",
           "ResourceKindHostFilesystem",
           "ResourceKindHostFirewall",
           "ResourceKindHostPerimeter",
@@ -5441,6 +5496,7 @@
           "github.dependency_run",
           "github.profile",
           "github.repository",
+          "host.edge_reboot",
           "host.filesystem",
           "host.firewall",
           "host.perimeter",
@@ -5488,6 +5544,7 @@
           "SweptGitHubDependencyRun",
           "SweptGitHubProfile",
           "SweptGitHubRepository",
+          "SweptHostEdgeReboot",
           "SweptHostFilesystem",
           "SweptHostFirewall",
           "SweptHostPerimeter",

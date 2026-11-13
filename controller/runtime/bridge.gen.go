@@ -654,6 +654,7 @@ const (
 	ResourceKindGitHubProfile                ResourceKind = "github.profile"
 	ResourceKindGitHubRepository             ResourceKind = "github.repository"
 	ResourceKindHQRequestPath                ResourceKind = "hq.request_path"
+	ResourceKindHostEdgeReboot               ResourceKind = "host.edge_reboot"
 	ResourceKindHostFilesystem               ResourceKind = "host.filesystem"
 	ResourceKindHostFirewall                 ResourceKind = "host.firewall"
 	ResourceKindHostPerimeter                ResourceKind = "host.perimeter"
@@ -742,6 +743,8 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindGitHubRepository:
 		return true
 	case ResourceKindHQRequestPath:
+		return true
+	case ResourceKindHostEdgeReboot:
 		return true
 	case ResourceKindHostFilesystem:
 		return true
@@ -873,6 +876,7 @@ const (
 	SweptGitHubDependencyRun          SweptKind = "github.dependency_run"
 	SweptGitHubProfile                SweptKind = "github.profile"
 	SweptGitHubRepository             SweptKind = "github.repository"
+	SweptHostEdgeReboot               SweptKind = "host.edge_reboot"
 	SweptHostFilesystem               SweptKind = "host.filesystem"
 	SweptHostFirewall                 SweptKind = "host.firewall"
 	SweptHostPerimeter                SweptKind = "host.perimeter"
@@ -942,6 +946,8 @@ func (e SweptKind) Valid() bool {
 	case SweptGitHubProfile:
 		return true
 	case SweptGitHubRepository:
+		return true
+	case SweptHostEdgeReboot:
 		return true
 	case SweptHostFilesystem:
 		return true
@@ -1692,6 +1698,30 @@ type GlanceWeatherTarget struct {
 	// Endpoint The National Weather Service API the forecast is read from, as HQ's connection states it.
 	Endpoint string `json:"endpoint"`
 	Point    string `json:"point"`
+}
+
+// HostEdgeRebootRecord Whether an edge waits on a restart: the host.edge_reboot reading's record for each edge, read the same way by its receiver's reboot operation and handed over its SSH transport.
+type HostEdgeRebootRecord struct {
+	// ConnectionRef The edge's SSH transport, which names the machine it reads.
+	ConnectionRef string `json:"connection_ref"`
+
+	// Packages The packages /run/reboot-required.pkgs names as waiting on it, each once.
+	Packages []string `json:"packages,omitempty"`
+
+	// Pending Whether /run/reboot-required is there: an update waits on a restart.
+	Pending bool `json:"pending"`
+
+	// ReadAt When root read the flag and asked logind.
+	ReadAt string `json:"read_at"`
+
+	// ScheduledAction What logind's ScheduledShutdown will do (reboot, poweroff, halt); empty when nothing is scheduled.
+	ScheduledAction string `json:"scheduled_action,omitempty"`
+
+	// ScheduledAt When logind will do it; empty when nothing is scheduled.
+	ScheduledAt string `json:"scheduled_at,omitempty"`
+
+	// Since When the flag was first written, when one is there; empty when none is.
+	Since string `json:"since,omitempty"`
 }
 
 // HostFilesystemRecord One real filesystem on the controller's machine, as statfs(2) states it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs or zfs mount the machine shows, one per device, and sends where it is mounted and its space; no device, option or file name.

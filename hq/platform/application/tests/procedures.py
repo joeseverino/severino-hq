@@ -29,6 +29,7 @@ def manifest(**fields: Any) -> OperationManifest:
         **{
             "id": RESTART,
             "revision": REVISION,
+            "playbook": "playbooks/service_restart.yml",
             "input_type": ServiceRestart,
             "target_kinds": ("machine",),
             "privilege": None,

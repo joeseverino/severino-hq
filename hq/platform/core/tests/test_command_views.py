@@ -40,6 +40,12 @@ def chosen_options(page) -> list[str]:
     return [option.attrs["value"] for option in within(page, "name", "__target") if "selected" in option.attrs]
 
 
+def cells(section) -> tuple[tuple[str, ...], ...]:
+    """A result list's rows, each as the words of its cells."""
+
+    return tuple(tuple(cell.text for cell in record) for record in section.records)
+
+
 def result_title(page) -> str | None:
     found = select(page, "id", "command-result-heading")
     return found[0].words if found else None
@@ -385,13 +391,15 @@ class CommandResultProjectionTests(TestCase):
             dict(response.context["result_facts"]),
             {"name": "example.test", "resolver": "Example", "resolves": "yes"},
         )
-        table = response.context["result_table"]
-        self.assertEqual(table["label"], "answers")
-        self.assertEqual(table["columns"], ("name", "type", "value", "ttl"))
-        self.assertEqual(table["rows"][0], ("example.test", "A", "192.0.2.1", MISSING))
+        (table,) = response.context["result_sections"]
+        self.assertEqual(table.label, "answers")
+        self.assertEqual(table.columns, ("name", "type", "value", "ttl"))
+        self.assertEqual(cells(table)[0], ("example.test", "A", "192.0.2.1", MISSING))
         # Each heading is its column's name, then the sort control's mark.
         self.assertIn("type", [heading.split()[0] for heading in texts(response, "th")])
-        self.assertIn("answers · 2", text(response))
+        # The list is a section of the result's own, named for it with its count.
+        (heading,) = select(response, "id", "command-result-list-heading")
+        self.assertEqual(heading.words.split(), ["answers", "2"])
         self.assertEqual(result_title(response), "Done")
         # The JSON is still there for anyone checking HQ against another tool,
         # closed because the answer is already on the page.
@@ -405,7 +413,7 @@ class CommandResultProjectionTests(TestCase):
         response = self._run("lookup.name.read", payload, {"name": "example.test"})
 
         self.assertEqual(response.context["result_facts"], ())
-        self.assertIsNone(response.context["result_table"])
+        self.assertEqual(response.context["result_sections"], ())
         (raw,) = select(response, "id", "command-result-json")
         self.assertIn("open", raw.attrs)
 
@@ -415,8 +423,8 @@ class CommandResultProjectionTests(TestCase):
         facts, table = _result_projection({"ok": True, "count": 2, "note": None, "rows": [{"b": 1, "a": 2}, {"c": 3}]})
 
         self.assertEqual(facts, (("count", "2"), ("note", MISSING)))
-        self.assertEqual(table["columns"], ("b", "a", "c"))
-        self.assertEqual(table["rows"], (("1", "2", MISSING), (MISSING, MISSING, "3")))
+        self.assertEqual(table.columns, ("b", "a", "c"))
+        self.assertEqual(cells(table), (("1", "2", MISSING), (MISSING, MISSING, "3")))
 
     def test_the_table_is_the_first_list_of_flat_records(self):
         """An empty list, an empty or nested record and plain values are no table."""
@@ -434,4 +442,4 @@ class CommandResultProjectionTests(TestCase):
             }
         )
 
-        self.assertEqual((table["label"], table["columns"], table["rows"]), ("first rows", ("a",), (("1",),)))
+        self.assertEqual((table.label, table.columns, cells(table)), ("first rows", ("a",), (("1",),)))

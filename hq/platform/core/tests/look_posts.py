@@ -1,6 +1,6 @@
-"""The refused forms dev:look draws, each a POST by name (``post:<name>``):
-what a reader sees after a form they sent was refused, its errors drawn, looked
-at without a browser test that fills and sends it.
+"""The forms dev:look draws as sent, each a POST by name (``post:<name>``):
+what a reader sees after a form they sent was refused, its errors drawn, or
+answered, looked at without a browser test that fills and sends it.
 
 Each is posted by the estate's signed-in owner to the seed's estate as the
 page's own form would send it, with a retry key of its own, and the page is
@@ -33,8 +33,9 @@ POST = "post:"
 class Posted:
     """A form sent to ``route`` (reversed with ``args``, or what ``args``
     returns) holding what ``data`` returns, each read once the estate is
-    built, and refused with ``status``: an answer of any other status means
-    the form no longer refuses it, and the look fails."""
+    built, and answered with ``status``, a refusal's or 200 for one answered:
+    an answer of any other status means the form no longer answers it so,
+    and the look fails."""
 
     route: str
     args: tuple[str, ...] | Callable[[], tuple[str, ...]]
@@ -66,6 +67,10 @@ POSTS = {
     # A command's form whose values pass the form and are refused by the
     # command itself: the refusal said over the form as sent.
     "project-create-taken": Posted("command", ("project.create",), _a_project_held),
+    # A read answered: the page a command's result is drawn on, its facts and
+    # its JSON. A documentation address is answered by HQ itself, so the POST
+    # asks no one and writes nothing.
+    "address-read": Posted("command", ("lookup.address.read",), lambda: {"address": "192.0.2.1"}, status=200),
     # The one question that starts publishing a service, answered with no name.
     "service-start-not-a-name": Posted("control_plane:service_start", (), lambda: {"hostname": "not a hostname"}),
     # A domain's failed-mail policy applied to more than all of its mail: the

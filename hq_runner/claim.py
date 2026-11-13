@@ -1,17 +1,22 @@
 """A claimed run, read from the bridge's answer, and what it binds the worker to.
 
 What runs is decided here and only here: the procedure the claim names, at the
-revision it was reviewed at, as this worker has it installed. The playbook and
-project come from that installation, the hosts and extra-vars from the run's
-input as HQ validated and approved it; nothing in a claim names a path, a
-module, a callback or an Ansible option.
+revision it was reviewed at, as this worker resolves it (``procedures``), on
+the machines its runner connections reach (``connections``). The project comes
+from the worker's own configuration, the playbook's path inside it from the
+procedure's record, and the hosts and extra-vars from the run's input as HQ
+validated and approved it; nothing in a claim names a module, a callback, a
+connection setting or an Ansible option.
 """
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from . import tracing
+from .connections import ConnectionsError, Target
 
 RUN_KIND = "automation.operation"
 RUN_ACTION = "run"
@@ -39,6 +44,14 @@ class Procedure:
     playbook: str
 
 
+# The procedure ``(procedure_id, revision, playbook)`` names, as this worker
+# has it at that revision; None when it has no such procedure. It may refuse.
+Installed = Callable[[str, str, str], Procedure | None]
+# The connection a machine is reached through; None when none reaches it. It
+# may raise ConnectionsError when the connections cannot be read.
+Reach = Callable[[str], Target | None]
+
+
 @dataclass(frozen=True, slots=True)
 class Run:
     """A claimed run of one installed procedure."""
@@ -48,6 +61,8 @@ class Run:
     procedure_id: str
     procedure: Procedure
     hosts: tuple[str, ...]
+    # How each of ``hosts`` is reached, in the same order.
+    targets: tuple[Target, ...]
     parameters: Mapping[str, Any]
     timeout_seconds: int
 
@@ -83,9 +98,9 @@ def _text(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
-def bind(claim: Claimed, installed: Mapping[str, Procedure]) -> Run:
-    """The run ``claim`` names, bound to what this worker has installed, or
-    ``Refused`` before anything runs."""
+def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
+    """The run ``claim`` names, bound to the procedure ``installed`` resolves and
+    the machines ``reach`` reaches, or ``Refused`` before anything runs."""
 
     pending = claim.pending
     operation = pending["operation"]
@@ -103,14 +118,9 @@ def bind(claim: Claimed, installed: Mapping[str, Procedure]) -> Run:
         raise Refused("Unrunnable", "The run's input names another procedure or revision than its record.")
     if not _REVISION.fullmatch(revision):
         raise Refused("Unrunnable", "The run names no reviewed commit.")
-    procedure = installed.get(procedure_id)
-    if procedure is None:
-        raise Refused("NotInstalled", f"This worker has no procedure {procedure_id} installed.")
-    if procedure.revision != revision:
-        raise Refused(
-            "RevisionMismatch",
-            f"The run was reviewed at {revision[:12]}, and this worker has {procedure.revision[:12]} installed.",
-        )
+    playbook = _text(spec.get("playbook"))
+    if not playbook:
+        raise Refused("Unrunnable", "The procedure's record names no playbook.")
     hosts = run_input.get("hosts")
     parameters = run_input.get("parameters")
     if not isinstance(hosts, list) or not hosts or not all(isinstance(host, str) and host for host in hosts):
@@ -120,12 +130,33 @@ def bind(claim: Claimed, installed: Mapping[str, Procedure]) -> Run:
     timeout = spec.get("timeout_seconds")
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout < 1:
         raise Refused("Unrunnable", "The procedure's record declares no timeout.")
+    targets = tuple(_reached(host, reach) for host in hosts)
+    with tracing.span("resolve procedure", **{"hq.procedure": procedure_id}):
+        procedure = installed(procedure_id, revision, playbook)
+    if procedure is None:
+        raise Refused("NotInstalled", f"This worker has no procedure {procedure_id} installed.")
+    if procedure.revision != revision:
+        raise Refused(
+            "RevisionMismatch",
+            f"The run was reviewed at {revision[:12]}, and this worker has {procedure.revision[:12]} installed.",
+        )
     return Run(
         operation=claim.operation,
         generation=claim.generation,
         procedure_id=procedure_id,
         procedure=procedure,
         hosts=tuple(hosts),
+        targets=targets,
         parameters=dict(parameters),
         timeout_seconds=timeout,
     )
+
+
+def _reached(host: str, reach: Reach) -> Target:
+    try:
+        target = reach(host)
+    except ConnectionsError as exc:
+        raise Refused("NoConnection", f"The worker's connections could not be read: {exc}.") from exc
+    if target is None:
+        raise Refused("NoConnection", f"No runner connection reaches {host}.")
+    return target

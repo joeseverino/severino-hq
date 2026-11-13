@@ -5,34 +5,28 @@ A command is its title, what it will change (the lede), its fields and one
 button named for what it does. How it is built belongs to the API reference.
 {% endcomment %}
 {% if result %}
-{% section "Done" id="command-result" css="command-result" %}
-  {% if result.replayed %}<p class="muted command-result-note">This was already done earlier. Nothing ran again.</p>{% endif %}
+<div class="section-flow">
+{% section "Done" id="command-result" %}
+  {% if result.replayed %}{% notice tone="info" %}<p>This was already done earlier. Nothing ran again.</p>{% endnotice %}{% endif %}
   {% comment %}
   The answer in the shape a person reads: the facts the result states and the
-  one list it carries. The JSON is the same result as API and MCP see it, and
-  opens only when there is nothing else to show.
+  one list it carries, a section of its own in this one. The JSON is the same
+  result as API and MCP see it, and opens only when there is nothing else to
+  show.
   {% endcomment %}
   {% if result_facts %}
     {% facts %}
       {% for label, value in result_facts %}{% fact label value=value %}{% endfor %}
     {% endfacts %}
   {% endif %}
-  {% if result_table %}
-    {% table_region result_table.label %}
-      <table class="data-table command-result-table">
-        <caption>{{ result_table.label|breakable }}{% dot %}{{ result_table.rows|length }}</caption>
-        <thead><tr>{% for column in result_table.columns %}{% if forloop.first %}{% table_heading column local_sort=True gutter=True %}{% elif forloop.length > 2 %}{% table_heading column local_sort=True drop=forloop.revcounter %}{% else %}{% table_heading column local_sort=True %}{% endif %}{% endfor %}</tr></thead>
-        <tbody>
-          {% for row in result_table.rows %}<tr>{% for cell in row %}<td>{{ cell|breakable }}</td>{% endfor %}</tr>{% endfor %}
-        </tbody>
-      </table>
-    {% endtable_region %}
-  {% endif %}
+  {% include "partials/_page_sections.html" with sections=result_sections spans_row=True %}
+  {% include "partials/_page_sections.html" with sections=result_sections spans_row=False %}
   {% section "Raw JSON" fold=True open=result_json_open id="command-result-json" %}<pre tabindex="0"><code>{{ result_json|breakable }}</code></pre>{% endsection %}
 {% aside %}
   {% if return_url %}<a class="btn compact" href="{{ return_url }}">Back</a>{% endif %}
   {% if resource_url %}<a class="btn compact ghost" href="{{ resource_url }}">Open {{ resource_label|breakable }}</a>{% endif %}
 {% endsection %}
+</div>
 {% endif %}
 {% endblock %}
 

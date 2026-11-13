@@ -698,6 +698,7 @@ class OperationSupplyTests(SimpleTestCase):
         return OperationManifest(
             id=operation_id,
             revision="0123456789abcdef0123456789abcdef01234567",
+            playbook="playbooks/service_logs.yml",
             input_type=ServiceLogs,
             target_kinds=("example.machine",),
             hosts=("app.example.com",),
