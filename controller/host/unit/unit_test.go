@@ -274,12 +274,12 @@ func accepted(t *testing.T) (client net.Conn, stdin *os.File) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	listener, err := net.Listen("unix", filepath.Join(dir, "unit.sock"))
+	listener, err := new(net.ListenConfig).Listen(t.Context(), "unix", filepath.Join(dir, "unit.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer listener.Close()
-	client, err = net.Dial("unix", listener.Addr().String())
+	client, err = new(net.Dialer).DialContext(t.Context(), "unix", listener.Addr().String())
 	if err != nil {
 		t.Fatal(err)
 	}

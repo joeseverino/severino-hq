@@ -124,6 +124,9 @@ def sentences(registrar: str) -> None:
     # A standing state, its words after a steady dot in its tone.
     assert_type(ui.status_pill("Allowed", tone="good", dot=True), SafeString)
     ui.status_pill("Allowed", dot="yes")  # type: ignore[arg-type]
+    # A heading's own words after the dot, in the ink around them.
+    assert_type(ui.status_pill("Tailnet", tone="good", dot=True, ink="context"), SafeString)
+    ui.status_pill("Tailnet", dot=True, ink="page")  # type: ignore[arg-type]
     assert_type(ui.status_pill("django", chip=True), SafeString)
     ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
     assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)

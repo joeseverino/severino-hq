@@ -131,12 +131,21 @@ class Connection:
 
     @property
     def verdict(self) -> str:
-        """The dot's tone: "confirmed" only when every check held on evidence,
-        "failing" when one did not, else "unconfirmed"."""
+        """The checks, "confirmed" only when every one held on evidence, "failing" when
+        one did not, else "unconfirmed"."""
 
         if self.failing:
             return "failing"
         return "confirmed" if self.holds else "unconfirmed"
+
+    @property
+    def tone(self) -> str:
+        """The dot's tone: the network's, except that the tailnet's is held
+        back until every check on the way in is confirmed."""
+
+        if self.channel.id != "tailnet" or self.verdict == "confirmed":
+            return self.channel.tone
+        return "attention" if self.verdict == "failing" else "neutral"
 
     @property
     def summary(self) -> str:

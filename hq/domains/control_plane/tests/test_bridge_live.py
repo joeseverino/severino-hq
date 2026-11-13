@@ -82,7 +82,12 @@ class ConcurrentCallTests(LiveBridge):
     def test_one_operation_claimed_by_many_at_once_is_leased_to_one(self, _policy):
         operation = self.queue_one_operation()
         with ThreadPoolExecutor(max_workers=12) as pool:
-            answers = list(pool.map(lambda i: self.call(f"/claim?controller-id=controller-{i}"), range(12)))
+            answers = list(
+                pool.map(
+                    lambda i: self.call(f"/claim?controller-id=controller-{i}&capability=tls.certificate:reconcile"),
+                    range(12),
+                )
+            )
         self.assertEqual([status for status, _ in answers], [200] * 12, answers)
         leased = [answer["operation"] for _, answer in answers if answer["operation"] is not None]
         self.assertEqual(len(leased), 1, leased)

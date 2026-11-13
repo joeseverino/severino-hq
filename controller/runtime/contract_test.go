@@ -92,13 +92,13 @@ func TestPendingResponses(t *testing.T) {
 	if strict[Pending](t, none).Operation != nil {
 		t.Fatal("an empty queue must decode to a nil operation")
 	}
-	claimed := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 1, "claimed_by": "controller-1", "completed_at": null, "created_at": "2026-10-03T12:00:00.123456+00:00", "id": "7", "lease_expires_at": "2026-10-03T12:05:00+00:00", "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-a", "result": {}, "state": "claimed"}, "resource": {"enabled": true, "generation": 3, "key": "dns-a", "kind": "adguard.rewrite", "observed": {}, "spec": {"answer": "192.0.2.10", "domain": "a.example"}}, "schema_version": 1}`
+	claimed := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 1, "correlation": "", "claimed_by": "controller-1", "completed_at": null, "created_at": "2026-10-03T12:00:00.123456+00:00", "id": "7", "lease_expires_at": "2026-10-03T12:05:00+00:00", "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-a", "result": {}, "state": "claimed"}, "resource": {"enabled": true, "generation": 3, "key": "dns-a", "kind": "adguard.rewrite", "observed": {}, "spec": {"answer": "192.0.2.10", "domain": "a.example"}}, "schema_version": 1}`
 	conforms(t, "Pending", []byte(claimed))
 	pending := strict[Pending](t, claimed)
 	if pending.Operation == nil || pending.Operation.ID != "7" || pending.Operation.CompletedAt != nil || pending.Resource.Generation != 3 {
 		t.Fatalf("claimed operation decoded wrong: %+v", pending)
 	}
-	unresolvable := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 0, "claimed_by": "", "completed_at": null, "created_at": "2026-10-03T12:00:00+00:00", "id": "8", "lease_expires_at": null, "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-b", "result": null, "state": "queued"}, "unresolvable": "Missing delivery target."}`
+	unresolvable := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 0, "correlation": "", "claimed_by": "", "completed_at": null, "created_at": "2026-10-03T12:00:00+00:00", "id": "8", "lease_expires_at": null, "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-b", "result": null, "state": "queued"}, "unresolvable": "Missing delivery target."}`
 	conforms(t, "Pending", []byte(unresolvable))
 }
 

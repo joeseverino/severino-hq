@@ -53,7 +53,7 @@ func TestASecretInARefusalNeverLeavesTheBinary(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			socket := filepath.Join(dir, "bridge.sock")
-			listener, err := net.Listen("unix", socket)
+			listener, err := new(net.ListenConfig).Listen(t.Context(), "unix", socket)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -67,7 +67,7 @@ func TestASecretInARefusalNeverLeavesTheBinary(t *testing.T) {
 			})}
 			go func() { _ = server.Serve(listener) }()
 			defer server.Close()
-			command := exec.Command(binary, "--apply")
+			command := exec.CommandContext(t.Context(), binary, "--apply")
 			command.Env = []string{"PATH=" + os.Getenv("PATH"), BridgeSocket + "=" + socket, "HQ_CONTROLLER_ID=e2e", "HQ_CONTROLLER_CONNECTIONS=" + held}
 			var stdout, stderr bytes.Buffer
 			command.Stdout, command.Stderr = &stdout, &stderr

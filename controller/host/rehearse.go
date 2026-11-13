@@ -343,7 +343,7 @@ func (r *rehearsing) exec(ctx context.Context, name string, args ...string) (str
 // fileSize is a file's size, or nothing for one that is not there.
 func fileSize(path string) uint64 {
 	if info, err := os.Stat(path); err == nil {
-		return uint64(info.Size())
+		return uint64(info.Size()) //nolint:gosec // G115: a regular file's size is never negative
 	}
 	return 0
 }

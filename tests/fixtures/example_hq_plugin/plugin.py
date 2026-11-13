@@ -4,10 +4,11 @@ from hq_sdk.plugin import NavigationItem, PluginIntegration, PluginManifest
 
 
 def integration() -> PluginIntegration:
+    from .operations import operations
     from .outbound import work
     from .projections import dashboard_cards, ready
 
-    return PluginIntegration(dashboard=dashboard_cards, health=ready, outbound=work)
+    return PluginIntegration(dashboard=dashboard_cards, health=ready, outbound=work, operations=operations)
 
 
 plugin = PluginManifest(

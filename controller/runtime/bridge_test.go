@@ -455,7 +455,7 @@ func BenchmarkBridgeCall(b *testing.B) {
 	}
 	defer os.RemoveAll(dir)
 	path := filepath.Join(dir, "bridge.sock")
-	listener, err := net.Listen("unix", path)
+	listener, err := new(net.ListenConfig).Listen(b.Context(), "unix", path)
 	if err != nil {
 		b.Fatal(err)
 	}

@@ -491,6 +491,7 @@ class ControllerStandingTests(TestCase):
 
         self.assertFalse(standing.known)
         self.assertFalse(standing.silent)
+        self.assertEqual(standing.tone, "neutral")
 
     def test_a_controller_that_just_arrived_is_not_silent(self):
         cadence.note_controller()
@@ -498,12 +499,14 @@ class ControllerStandingTests(TestCase):
 
         self.assertTrue(standing.known)
         self.assertFalse(standing.silent)
+        self.assertEqual(standing.tone, "good")
 
     def test_one_that_stopped_arriving_is_silent(self):
         cadence.note_controller()
         later = timezone.now() + cadence.CONTROLLER_SILENT_AFTER + timedelta(minutes=1)
 
         self.assertTrue(cadence.controller_standing(later).silent)
+        self.assertEqual(cadence.controller_standing(later).tone, "attention")
 
     def test_the_arrival_is_noted_on_the_claim_every_applying_run_makes(self):
         """An idle pass claims too, so a healthy controller with nothing to do

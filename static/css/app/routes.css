@@ -147,23 +147,6 @@
 .connection-ability-all > li { flex: none; }
 /* Opened, the rest are listed, so their count is not. */
 .row-detail .connection-ability-more { display: none; }
-.connection-state {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--tone-ink, var(--muted));
-  font-size: var(--text-2xs);
-  font-weight: 650;
-  white-space: nowrap;
-}
-.connection-state::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: currentColor;
-}
 /* A row's own commands are drawn by the shared action renderer as buttons and
    read here as quiet words, so the column stays as narrow as its longest
    phrase. The element qualifier outranks the button's tone variants

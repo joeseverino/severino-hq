@@ -307,7 +307,7 @@ func copyGlanceConnections(from, to string) error {
 	if data, err = document.Encode(); err != nil {
 		return err
 	}
-	return os.WriteFile(to, data, 0o400)
+	return os.WriteFile(to, data, 0o400) //nolint:gosec // G703: to is a fixed name in the run directory, which MkdirTemp made under the root-only SecretDir
 }
 
 // copyTree copies the regular files and directories under from into to, if
@@ -362,7 +362,7 @@ func (c *Controller) image(ctx context.Context) (string, string, error) {
 // read-only at target.
 func (c *Controller) give(run, name string, data []byte, target string) ([]string, error) {
 	path := filepath.Join(run, name)
-	if err := os.WriteFile(path, data, 0o400); err != nil {
+	if err := os.WriteFile(path, data, 0o400); err != nil { //nolint:gosec // G703: run is MkdirTemp's under the root-only SecretDir, and every name given is a literal or a Renderers entry
 		return nil, err
 	}
 	root, err := os.OpenRoot(run)

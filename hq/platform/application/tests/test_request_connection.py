@@ -599,21 +599,19 @@ class DashboardConnectionTileTests(SimpleTestCase):
     def test_a_failed_check_takes_the_attention_tone(self):
         self.assertIn("is-attention", self.tile(failing=("a layer",)))
 
-    def test_the_dot_says_the_verdict_not_only_the_network(self):
-        self.assertIn("conn-verdict-unconfirmed", self.tile(failing=()))
-
 
 class VerdictTests(SimpleTestCase):
     """Green only when every check on the way in is confirmed."""
 
-    def connection(self, *layers):
+    def connection(self, *layers, channel=None):
         from types import SimpleNamespace
 
+        from ..request_channel import TAILNET_CHANNEL
         from ..request_connection import Connection
 
         return Connection(
             address="100.64.0.20",
-            channel=SimpleNamespace(id="tailnet"),
+            channel=channel or TAILNET_CHANNEL,
             device=None,
             serves=None,
             observer=None,
@@ -638,3 +636,25 @@ class VerdictTests(SimpleTestCase):
 
     def test_one_failed_check_is_failing(self):
         self.assertEqual(self.verdict((False, True), (True, False)), "failing")
+
+    def test_the_dot_takes_the_tailnets_tone_only_once_every_check_is_confirmed(self):
+        for layers, tone in (
+            (((True, True),), "good"),
+            (((True, False),), "neutral"),
+            (((False, True),), "attention"),
+        ):
+            with self.subTest(layers):
+                self.assertEqual(self.connection(*layers).tone, tone)
+
+    def test_any_other_network_keeps_its_own_tone_whatever_the_checks_say(self):
+        from ..request_channel import ELSEWHERE_CHANNEL, LOOPBACK_CHANNEL, NETWORK_CHANNEL, OPAQUE_CHANNEL
+
+        for channel, tone in (
+            (NETWORK_CHANNEL, "attention"),
+            (LOOPBACK_CHANNEL, "attention"),
+            (OPAQUE_CHANNEL, "serious"),
+            (ELSEWHERE_CHANNEL, "serious"),
+        ):
+            for layers in (((True, True),), ((True, False),), ((False, True),)):
+                with self.subTest(channel.id, layers=layers):
+                    self.assertEqual(self.connection(*layers, channel=channel).tone, tone)

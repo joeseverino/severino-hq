@@ -703,7 +703,7 @@ HAND_ROLLED: dict[str, str] = {
     "analytics/overview.html": "bar-label bar-list bar-row bar-track bar-value chip reading-note window-switch",
     "auth/login.html": "auth-card auth-logo auth-note auth-sso",
     "base.html": (
-        "action-badge brand conn-badge-* conn-dot content demo-about demo-about-dot demo-flag demo-foot global-search "
+        "action-badge brand content demo-about demo-about-dot demo-flag demo-foot global-search "
         "menu-identity menu-identity-picture menu-identity-when menu-identity-who menu-item menu-item-note "
         "menu-item-split menu-item-status menu-places menu-setting menu-settings menu-theme menu-theme-label "
         "menu-theme-option menu-theme-options messages nav-group nav-group-label nav-group-panel nav-toggle "
@@ -746,7 +746,7 @@ HAND_ROLLED: dict[str, str] = {
         "connection-ability-all connection-ability-list connection-ability-more connection-authority "
         "connection-authority-* connection-depends connection-more-scope connection-next connection-problems "
         "connection-reach connection-read-list connection-row-meta connection-sight-list connection-sight-refusal "
-        "connection-standing connection-state connection-state-* connection-summary connection-table is-attention"
+        "connection-standing connection-summary connection-table is-attention"
     ),
     "control_plane/container_list.html": "container-advisories container-reach github-gap",
     "control_plane/machine_detail.html": "node-key",
@@ -782,17 +782,13 @@ HAND_ROLLED: dict[str, str] = {
     "core/_connection_loading.html": "conn-pending",
     "core/_connection_panel.html": (
         "conn conn-* conn-agree conn-agree-no conn-agree-yes conn-aside conn-carriage conn-carriage-* conn-check "
-        "conn-dot conn-headline conn-hop-detail conn-hop-more conn-hop-page conn-layer conn-layer-* conn-layer-body "
+        "conn-headline conn-hop-detail conn-hop-more conn-hop-page conn-layer conn-layer-* conn-layer-body "
         "conn-layer-boundary conn-layer-evidence conn-layer-label conn-layers conn-link conn-link-* conn-link-line "
         "conn-more conn-note conn-path conn-peer conn-peer-name conn-peer-role conn-peering conn-row-note "
         "conn-rules conn-sub conn-tick conn-verdict-*"
     ),
-    "core/_dashboard_connection.html": (
-        "conn-badge-* conn-dot conn-verdict-* dash-reading glance-caption glance-lead glance-panel-head glance-symbol"
-    ),
-    "core/_dashboard_controller.html": (
-        "conn-dot dash-reading glance-caption glance-lead glance-panel-head glance-symbol"
-    ),
+    "core/_dashboard_connection.html": "dash-reading glance-caption glance-lead glance-panel-head glance-symbol",
+    "core/_dashboard_controller.html": "dash-reading glance-caption glance-lead glance-panel-head glance-symbol",
     "core/_dashboard_glance.html": (
         "dashboard-glance glance-alert glance-caption glance-expanded glance-expanded-foot glance-expanded-head "
         "glance-freshness glance-hours glance-lead glance-lead-empty glance-note glance-panel glance-panel-head "

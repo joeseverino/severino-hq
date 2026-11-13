@@ -315,6 +315,26 @@ class RunOnTheCallingThreadTests(TestCase):
         for state in (QUEUED, RUNNING, DONE, FAILED):
             self.assertIn(Standing(state).label, Job.State.labels)
 
+    def test_an_automation_run_s_state_is_called_what_the_job_state_it_reads_as_is(self):
+        """A run and a job share one list on Jobs, so each run state reads as one job state, in its words."""
+
+        from hq.domains.control_plane.models import OperationState
+
+        read_as = {state.value: OperationState(state).as_job for state in OperationState}
+
+        self.assertEqual(
+            read_as,
+            {
+                "queued": Job.State.QUEUED,
+                "claimed": Job.State.RUNNING,
+                "succeeded": Job.State.SUCCEEDED,
+                "failed": Job.State.FAILED,
+                "cancelled": Job.State.LOST,
+            },
+        )
+        for state in OperationState:
+            self.assertEqual(state.label, state.as_job.label)
+
     def test_failed_is_the_sentence_the_control_says(self):
         from hq.platform.application.asks import job_standing
 

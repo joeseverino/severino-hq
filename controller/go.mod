@@ -2,7 +2,7 @@ module github.com/joeseverino/severino-hq/controller
 
 go 1.27
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 tool (
 	github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen

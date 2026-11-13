@@ -265,8 +265,12 @@ Beside the tests it runs each quick gate the change affects, as mise's
 `--affected` reads it from the merge base: a quick gate is a task tagged
 `fast`, and it is affected when a changed or deleted file matches its
 `sources` (`!` patterns take paths out) or its own definition changed. Every
-quick gate's sources also name the dependencies, tool pins and task
-definitions, so a change to one runs them all, and each declares
+quick gate's sources also name the tool pins and task definitions, and each
+one that runs Python its dependencies (`pyproject.toml`, `uv.lock`), so a
+change to one runs every gate that reads it. The controller's Go tests
+(`test:controller`) are a quick gate too: they take the heavy lock
+themselves, so they run once the rest has passed, and Go's own test cache
+reruns only the packages a change reached. Each quick gate declares
 `outputs = []`, so a direct `mise run` of it never skips as up to date. The
 shell gate also runs when a path the change touched is one
 `tools/gate/shell-sources.sh` names (a deleted one as the base had it), which

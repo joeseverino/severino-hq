@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"testing"
@@ -26,14 +27,14 @@ func TestUnixStamp(t *testing.T) {
 
 func TestAnAddressResolvesNamesAndKeepsAddresses(t *testing.T) {
 	r := New(runtime.Environment{}, supplied(), &fakeHTTP{routes: map[string]any{}, fail: map[string]error{}})
-	r.Resolve = func(host string) (string, error) {
+	r.Resolve = func(_ context.Context, host string) (string, error) {
 		if host == "named.example" {
 			return "192.0.2.7", nil
 		}
 		return "", errors.New("does not resolve")
 	}
 	for host, want := range map[string]string{"named.example": "192.0.2.7", "other.example": "other.example", "192.0.2.1": "192.0.2.1"} {
-		if got := r.anAddress(host); got != want {
+		if got := r.anAddress(t.Context(), host); got != want {
 			t.Errorf("anAddress(%q) = %q, want %q", host, got, want)
 		}
 	}

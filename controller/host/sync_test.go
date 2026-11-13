@@ -70,6 +70,25 @@ func TestAUnitNamingWhatTheTreeLacksIsRefused(t *testing.T) {
 	}
 }
 
+func TestAUnitNamingAPathOutsideTheTreeIsRefused(t *testing.T) {
+	f := newFakeHost(t)
+	// The file is there, beside the tree being staged, in the tree it replaces.
+	if err := os.WriteFile(filepath.Join(f.machine.Lib, "outside"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	named := "/usr/local/lib/severino-hq/../" + filepath.Base(f.machine.Lib) + "/outside"
+	if err := os.WriteFile(filepath.Join(f.image, "deploy", "systemd", "severino-hq-escape.service"),
+		[]byte("[Service]\nExecStart="+named+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	err := f.machine.Sync(context.Background(), next)
+
+	if err == nil || !strings.Contains(err.Error(), named) {
+		t.Fatalf("got %v", err)
+	}
+}
+
 func TestAnImageThatIsNotHereIsNotSynced(t *testing.T) {
 	f := newFakeHost(t)
 	f.fail = []string{"docker image inspect"}

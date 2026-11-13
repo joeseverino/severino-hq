@@ -20,10 +20,13 @@ from tools.structural.classify import TEST
 ROOT = Path(__file__).resolve().parents[3]
 # The shell gate's own lister, which fast asks rather than restating.
 SOURCES = ROOT / "tools" / "gate" / "shell-sources.sh"
-# What every quick gate reads: the dependencies, the tool pins and the task
-# definitions, so each one's sources name them all and a change to one runs
-# every quick gate.
-EVERY = ("pyproject.toml", "uv.lock", "mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env")
+# What every quick gate reads: the tool pins and the task definitions, and the
+# dependencies of each that runs Python, so each one's sources name them all
+# and a change to one runs every quick gate that reads it.
+EVERY = ("mise.toml", "mise.lock", "mise-tasks/*.toml", "tools/pipeline/toolchain.env")
+PYTHON = ("pyproject.toml", "uv.lock")
+# The Go tests, the quick gate that reads no Python dependency.
+GO = "test:controller"
 # Each lint gate fast never selects, and why: it reaches the network, so it is
 # left to `mise run check`, or fast runs its check another way. A lint task
 # neither tagged fast nor named here is one fast would skip unseen.
@@ -89,7 +92,8 @@ class FastGateTaskSelectionTests(GateTestCase):
                 sources = tasks[task]["sources"]
                 # Sources and no outputs would have mise skip a direct run of the gate whose sources it saw pass.
                 self.assertEqual(tasks[task]["outputs"], [], f"{task}: declare outputs = [], so mise never skips it")
-                self.assertLessEqual(set(EVERY), set(sources), f"{task}: its sources name what every gate reads")
+                every = {*EVERY, *(PYTHON if task != GO else ())}
+                self.assertLessEqual(every, set(sources), f"{task}: its sources name what every gate reads")
                 for pattern in (p for p in sources if not p.startswith("!")):
                     self.assertTrue(any(f.full_match(pattern) for f in files), f"{task}: {pattern} names no file")
 
@@ -131,6 +135,19 @@ class FastGateTaskSelectionTests(GateTestCase):
             with self.subTest(changed=changed):
                 self.assertNotIn("lint:shell", selected(changed))
 
+    def test_a_change_to_a_file_a_drift_gate_derives_from_runs_that_gate(self):
+        """Each file the generator reads besides Python, which a change can move without regenerating."""
+        for changed, gate in (
+            ("hq/domains/control_plane/bridge_base.json", "lint:drift-bridge-contract"),
+            ("hq/platform/api/openapi-examples.json", "lint:drift-api-document"),
+            ("templates/base.html", "lint:drift-sdk-contract"),
+            ("static/css/app/base.css", "lint:drift-sdk-contract"),
+            ("static/js/app.js", "lint:drift-sdk-contract"),
+            ("tools/lint/ast-grep/rules/hand-drawn-table.yml", "lint:drift-sdk-contract"),
+        ):
+            with self.subTest(changed=changed):
+                self.assertIn(gate, selected(changed))
+
     def test_a_python_change_runs_the_python_gates_and_not_the_stylesheet_ones(self):
         picked = selected("hq/domains/docs_index/importer.py")
         self.assertLessEqual({"lint:ruff", "lint:mypy", "test:migrations", "lint:drift-api-document"}, picked)
@@ -157,9 +174,30 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertNotIn("lint:complexity", selected("hq/domains/example/migrations/0001_initial.py"))
 
     def test_a_change_to_what_every_gate_reads_runs_them_all(self):
-        for changed in ("uv.lock", "mise-tasks/lint.toml", "mise-tasks/test.toml", "tools/pipeline/toolchain.env"):
+        for changed in ("mise-tasks/lint.toml", "mise-tasks/test.toml", "tools/pipeline/toolchain.env"):
             with self.subTest(changed=changed):
                 self.assertEqual(selected(changed), set(fast_gate.quick_gates()))
+        self.assertEqual(selected("uv.lock"), set(fast_gate.quick_gates()) - {GO})
+
+    def test_a_change_the_go_tests_can_break_on_runs_them_and_no_other_change_does(self):
+        """The controller's code and module, the contracts generated for it and the bridge base they are
+        generated from, and the fixtures its tests read."""
+        for changed in (
+            "controller/runtime/contract_test.go",
+            "controller/host/verify.go",
+            "controller/go.mod",
+            "controller/go.sum",
+            "controller/api/hq-controller.openapi.json",
+            "controller/api/hq-connections.openapi.json",
+            "hq/domains/control_plane/bridge_base.json",
+            "controller/providers/testdata/cloudflare-normalization.json",
+            "controller/edge/testdata/fuzz/FuzzReadBundle/sparse-file-past-the-body",
+        ):
+            with self.subTest(changed=changed):
+                self.assertIn(GO, selected(changed))
+        for changed in ("docs/Example.md", "hq/domains/docs_index/importer.py", "templates/base.html"):
+            with self.subTest(changed=changed):
+                self.assertNotIn(GO, selected(changed))
 
     def test_a_change_to_mise_toml_or_a_workflow_runs_the_gates_that_read_them(self):
         self.assertLessEqual({"lint:mise-format", "lint:workflows"}, selected("mise.toml"))

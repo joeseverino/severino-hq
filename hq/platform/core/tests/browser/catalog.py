@@ -874,6 +874,15 @@ CATALOG = {
         ' {% status "−$40.00" tone="attention" pill=False %} {% status "−$900.00" tone="serious" pill=False %}'
         ' {% status "$0.00" tone="neutral" pill=False %}</p>{% endsection %}'
     ),
+    # A standing state after its dot: its words in its tone, then a heading's
+    # own words in the ink around them, the dot alone toned.
+    "status/dot": Entry(
+        '{% section "Example states" %}<p>{% status "Allowed" tone="good" dot=True %}'
+        ' {% status "Paused" tone="attention" dot=True %} {% status "Refused" tone="serious" dot=True %}'
+        ' {% status "Not tested" tone="neutral" dot=True %}</p>'
+        '<p><strong>{% status "Example network" tone="good" dot=True ink="context" %}</strong>'
+        ' {% status "Example controller" tone="attention" dot=True ink="context" %}</p>{% endsection %}'
+    ),
     # The names a record carries, as chips beside its name: each as written.
     "status/chip": Entry(
         '{% section "Example project" %}<p><strong>example-app</strong> {% status "django" chip=True %}'

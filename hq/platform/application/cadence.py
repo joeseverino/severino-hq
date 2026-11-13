@@ -165,6 +165,15 @@ class ControllerStanding:
         return self.seen_at is not None
 
     @property
+    def tone(self) -> str:
+        """Good while it arrives, attention once it has gone quiet, neutral
+        where it has never run, which is known to be neither."""
+
+        if self.silent:
+            return "attention"
+        return "good" if self.known else "neutral"
+
+    @property
     def takes_reads(self) -> bool:
         """Whether a read asked for now will be read: a controller reaches
         this HQ, and has lately. Readings alone never say so, since a copy of

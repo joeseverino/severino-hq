@@ -30,7 +30,7 @@ const (
 	SSHDirName      = "ssh"
 	lockName        = "refresh.lock"
 	sshLockName     = "ssh.lock"
-	mcpTokenName    = "severino_mcp_token"
+	mcpTokenName    = "severino_mcp_token" //nolint:gosec // G101: a file's name
 	stagePrefix     = ".refresh."
 	maxFileBytes    = 16 << 20
 	sshLockWait     = 60 * time.Second

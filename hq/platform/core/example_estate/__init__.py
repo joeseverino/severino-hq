@@ -17,7 +17,7 @@ from hq.platform.application import cadence, pins, roles
 from hq.platform.application.linked_accounts import GITHUB, record_claimed_accounts
 from hq.platform.core.network import SOCKET_PEER
 
-from . import agents, docker, history, infra, network, records, web, work
+from . import agents, automation, docker, history, infra, network, records, web, work
 from .names import HQ, LAPTOP, OWNER, OWNER_NAME, OWNER_USERNAME, PROXY, SSO
 
 # The services the operator starred, to keep at the top of the list.
@@ -88,3 +88,5 @@ def seed(owner=None):
         agents.seen(owner)
     history.settle()
     agents.lately(owner)
+    # Last, so no later step's claim ends the run whose worker went quiet.
+    automation.runs(owner)

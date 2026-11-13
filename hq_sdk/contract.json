@@ -2503,6 +2503,7 @@
           "pill=",
           "chip=",
           "dot=",
+          "ink=",
           "**data"
         ]
       },
@@ -3549,6 +3550,7 @@
           "pill=",
           "chip=",
           "dot=",
+          "ink=",
           "**data"
         ],
         "parts": []

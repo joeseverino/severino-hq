@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -113,7 +114,7 @@ var built = sync.OnceValues(func() (string, error) {
 		return "", err
 	}
 	binary := filepath.Join(dir, "hq-controller")
-	if out, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(context.Background(), "go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
 		return "", fmt.Errorf("build: %w\n%s", err, out)
 	}
 	return binary, nil
@@ -155,7 +156,7 @@ func setUp(t *testing.T) (binary string, bridge *stubBridge) {
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
 	bridge = &stubBridge{Socket: filepath.Join(dir, "bridge.sock")}
-	listener, err := net.Listen("unix", bridge.Socket)
+	listener, err := new(net.ListenConfig).Listen(t.Context(), "unix", bridge.Socket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +171,7 @@ func setUp(t *testing.T) (binary string, bridge *stubBridge) {
 
 func runBinary(t *testing.T, binary string, bridge *stubBridge, args ...string) (int, []call, []string) {
 	t.Helper()
-	cmd := exec.Command(binary, args...)
+	cmd := exec.CommandContext(t.Context(), binary, args...)
 	cmd.Env = []string{"PATH=" + os.Getenv("PATH"), BridgeSocket + "=" + bridge.Socket, "HQ_CONTROLLER_ID=e2e"}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr

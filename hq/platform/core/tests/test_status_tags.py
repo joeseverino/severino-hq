@@ -98,6 +98,24 @@ class StatusPillTests(SimpleTestCase):
                 self.assertIn(f"toned-{shown}", drawn.classes)
                 self.assertIn("toned-dot", drawn.classes)
 
+    def test_a_dotted_state_in_context_ink_tones_only_its_dot(self):
+        """A heading's or a menu's own words ("Tailnet", "Controller") keep the
+        ink around them, and the dot alone says the state."""
+
+        drawn = elements(_drawn('{% status "Tailnet" tone="good" dot=True ink="context" %}'), "span")[0]
+        self.assertEqual(drawn.words, "Tailnet")
+        self.assertIn("toned-good", drawn.classes)
+        self.assertIn("toned-dot", drawn.classes)
+        self.assertIn("toned-ink-context", drawn.classes)
+        self.assertNotIn(
+            "toned-ink-context", elements(_drawn('{% status "Up" tone="good" dot=True %}'), "span")[0].classes
+        )
+
+    def test_context_ink_is_only_for_a_dotted_state(self):
+        for options in ({"ink": "context"}, {"ink": "context", "pill": False}, {"ink": "other", "dot": True}):
+            with self.subTest(options), self.assertRaises(ValueError):
+                status_pill("Up", tone="good", **options)
+
     def test_only_a_dotted_state_carries_the_dot(self):
         for source in ('{% status "Up" tone="good" %}', '{% status "Up" tone="good" pill=False %}'):
             with self.subTest(source):

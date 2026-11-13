@@ -6,6 +6,7 @@ from pathlib import Path
 from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
 from hq.platform.core.tests.browser.probes.palette import _COLOR, _PAINTED_BY
+from hq.platform.core.tests.browser.probes.settle import settled
 from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # Where setup:lint-tools installs the release tools/lint/package.json pins.
@@ -60,9 +61,9 @@ def axe_probe():
 
     A contrast finding names the tokens its ink and its ground are painted
     in, as the fill check's do, so the fix goes to the token every page
-    shares."""
+    shares. It reads the page settled (``settled``)."""
 
-    return (
+    return settled(
         "async ([scope, only, leftOut, vendored]) => {"
         + "const setTimeout = (run, delay, ...args) => { if (!delay) Promise.resolve().then(() => run(...args)); return 0; };"
         + "const clearTimeout = () => {};"

@@ -40,6 +40,17 @@ FONTS_READY = "() => document.fonts.ready.then(() => document.fonts.status)"
 # transition ends.
 FINISH_TRANSITIONS = """() => document.getAnimations().forEach((a) => { try { a.finish(); } catch { a.cancel(); } })"""
 
+
+def settled(source):
+    """``source``, a probe of the colors a page paints, run once every
+    transition on the page has finished, so it reads the colors the page
+    settles on and never one caught mid-change (a button's fill fading
+    while its ink is already drawn). Finished rather than waited for, since
+    a page without script runs no frame to wait on."""
+
+    return f"async (arg) => {{ ({FINISH_TRANSITIONS})(); return ({source})(arg); }}"
+
+
 # The disclosures a page loads closed, and closing them again: a rule opens
 # them to lay out what they hold, and the page read at its next width is the
 # page as it loaded.

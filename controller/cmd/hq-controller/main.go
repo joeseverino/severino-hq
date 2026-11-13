@@ -122,7 +122,7 @@ func ready(ctx context.Context, args []string, stdout io.Writer) int {
 	}
 	ctx, cancel := context.WithTimeout(ctx, readyTimeout)
 	defer cancel()
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, args[0], http.NoBody)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, args[0], http.NoBody) //nolint:gosec // G704: the URL is the image's own HEALTHCHECK command line, a loopback address the Dockerfile fixes
 	if err != nil {
 		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		return 2
@@ -131,7 +131,7 @@ func ready(ctx context.Context, args []string, stdout io.Writer) int {
 		Transport:     &http.Transport{Proxy: nil, DisableKeepAlives: true},
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	response, err := client.Do(request)
+	response, err := client.Do(request) //nolint:gosec // G704: the request built above, to the healthcheck's own loopback URL
 	if err != nil {
 		_ = json.NewEncoder(stdout).Encode(failure{Message: err.Error()})
 		return 1

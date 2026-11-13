@@ -41,6 +41,16 @@
                 "type": "string"
               }
             }
+          },
+          {
+            "name": "attempt",
+            "in": "query",
+            "required": false,
+            "description": "The claimant's name for this claim. A claim retried with the same name is answered the operation it already leased.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
           }
         ],
         "responses": {
@@ -173,6 +183,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/renew": {
+      "post": {
+        "operationId": "renew",
+        "summary": "Extend a claimed operation's lease, and say whether to go on.",
+        "x-bridge-action": "renew",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "required": true,
+            "description": "Operation id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lease-seconds",
+            "in": "query",
+            "required": false,
+            "description": "Lease length in seconds, from now.",
+            "schema": {
+              "$ref": "#/components/schemas/LeaseSeconds"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Renewal"
                 }
               }
             }
@@ -989,6 +1057,14 @@
           },
           "message": {
             "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/RunEvent"
+            },
+            "description": "A run's task outcomes; an operation other than a run reports none."
           }
         },
         "additionalProperties": false,
@@ -996,6 +1072,77 @@
           "success",
           "observed_generation"
         ]
+      },
+      "RunEvent": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "maxLength": 253
+          },
+          "task": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "changed",
+              "failed",
+              "skipped",
+              "unreachable"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "host",
+          "task",
+          "outcome",
+          "message"
+        ],
+        "description": "One task's outcome on one machine, in a run's report."
+      },
+      "Renewal": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "continue": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "",
+              "Held",
+              "Cancelled"
+            ],
+            "description": "Why the claimant stops: its asker is held by the pause or a block, or the operation was cancelled. Empty while it goes on."
+          },
+          "lease_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "continue",
+          "reason",
+          "lease_expires_at"
+        ],
+        "description": "A renewed lease. continue false tells the claimant to stop; a held operation's lease is still extended so it can report what it did."
       },
       "ConnectionRecord": {
         "type": "object",

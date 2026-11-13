@@ -124,7 +124,7 @@ part's heading shows only when there is more than one.
               together off the edge of a phone.
               {% endcomment %}
               <span class="connection-standing">
-                <span class="connection-state connection-state-{{ row.lifecycle }}">{{ row.state_label|breakable }}</span>
+                {% status row.state_label tone=row.lifecycle.tone dot=True %}
                 {% if row.read_requested_at %}<span class="muted narrow-more">Read asked {{ row.read_requested_at|ago }}</span>
                 {% elif row.state_line %}<span class="connection-authority connection-authority-{{ connection.authority }} {% if row.state_line_quiet %}row-more{% else %}narrow-more{% endif %}">{{ row.state_line|breakable }}</span>
                 {% elif row.changes_only and connection.instance.observed_at %}<span class="muted narrow-more">Checked {{ connection.instance.observed_at|ago }}</span>

@@ -93,7 +93,7 @@ def _ask_for_a_project(client):
 def _apply(*, success):
     """The controller's run of the operation an approval queued, through its own door."""
 
-    claimed = claim_next_operation(CONTROLLER)
+    claimed = claim_next_operation(CONTROLLER, capabilities=(("tailscale.policy", "reconcile"),))
     operation = OperationRequest.objects.get(pk=claimed["operation"]["id"])
     report_operation(
         str(operation.pk),
@@ -177,7 +177,7 @@ class HeldTaskTests(TestCase):
         approved = approve(ApproveCommand(created.task_id), principal=self.person)
         queued = self._read(created.task_id)
         operation = OperationRequest.objects.get()
-        claim_next_operation(CONTROLLER)
+        claim_next_operation(CONTROLLER, capabilities=(("tailscale.policy", "reconcile"),))
         applying = self._read(created.task_id)
 
         for read in (queued, applying):

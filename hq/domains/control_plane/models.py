@@ -458,6 +458,13 @@ class OperationState(models.TextChoices):
     FAILED = "failed", JobState.FAILED.label
     CANCELLED = "cancelled", JobState.LOST.label
 
+    @property
+    def as_job(self) -> JobState:
+        """The job state this one reads as on Jobs, found by the word both say,
+        so the label above is the one declaration of the mapping."""
+
+        return next(state for state in JobState if state.label == self.label)
+
 
 class OperationRequest(TimestampedModel):
     class Action(models.TextChoices):
@@ -513,6 +520,10 @@ class OperationRequest(TimestampedModel):
     claimed_by = models.CharField(max_length=160, blank=True)
     claimed_at = models.DateTimeField(null=True, blank=True)
     lease_expires_at = models.DateTimeField(null=True, blank=True)
+    # The claimant's name for the claim that leased it, so a claim retried
+    # with the same name is answered this operation again
+    # (``controller.claim_next_operation``).
+    claim_attempt = models.CharField(max_length=64, blank=True, default="")
     attempt_count = models.PositiveIntegerField(default=0)
     completed_at = models.DateTimeField(null=True, blank=True)
 
@@ -556,6 +567,30 @@ class OperationRequest(TimestampedModel):
     @override
     def __str__(self) -> str:
         return f"{self.get_action_display()}: {self.resource.key}"
+
+
+class OperationHost(models.Model):
+    """One machine a run acts on, as a row, so "the runs on this machine" is an
+    indexed query rather than a read of every run's ``input``.
+
+    ``host`` is the machine's canonical name, as ``automation_runs.resolved_hosts``
+    gives it: machines are a projection of many readings rather than rows, so
+    there is no row to point at. Written with the run, in its transaction, by
+    ``automation_runs.request_run``, its one writer.
+    """
+
+    operation = models.ForeignKey(OperationRequest, on_delete=models.CASCADE, related_name="hosts")
+    host = models.CharField(max_length=253)
+
+    class Meta:
+        constraints = [
+            # Leads with the host, so it is also the index a machine's runs are found by.
+            models.UniqueConstraint(fields=("host", "operation"), name="one_row_per_run_and_host"),
+        ]
+
+    @override
+    def __str__(self) -> str:
+        return self.host
 
 
 class ApprovalState(models.TextChoices):

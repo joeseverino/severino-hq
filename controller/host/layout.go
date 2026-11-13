@@ -41,7 +41,7 @@ func StartPeriod(value string) (time.Duration, error) {
 
 const (
 	// SecretsUnit renders the application environment from the vault.
-	SecretsUnit = "severino-hq-secrets.service"
+	SecretsUnit = "severino-hq-secrets.service" //nolint:gosec // G101: a unit's name
 	// ControllerUnit runs one controller pass.
 	ControllerUnit = "severino-hq-controller.service"
 	// GlanceUnit runs one glance pass, beside a controller pass.

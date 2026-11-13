@@ -380,6 +380,10 @@ sources = [
   "**/*.py",
   "hq_sdk/**",
   "docs/Plugins.md",
+  "templates/**",
+  "static/css/**",
+  "static/js/**",
+  "tools/lint/ast-grep/rules/hand-drawn-*.yml",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -398,6 +402,7 @@ tags = ["fast"]
 sources = [
   "**/*.py",
   "hq/platform/api/hq-api.openapi.json",
+  "hq/platform/api/openapi-examples.json",
   "pyproject.toml",
   "uv.lock",
   "mise.toml",
@@ -435,6 +440,7 @@ hide = true
 tags = ["fast"]
 sources = [
   "**/*.py",
+  "hq/domains/control_plane/bridge_base.json",
   "controller/api/**",
   "hq/config/controller-connections.json",
   "pyproject.toml",

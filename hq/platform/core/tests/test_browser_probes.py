@@ -5,6 +5,7 @@ import pkgutil
 import re
 from collections import Counter
 from pathlib import Path
+from unittest import mock
 
 from django.test import SimpleTestCase, tag
 
@@ -58,7 +59,7 @@ from hq.platform.core.tests.browser.probes import (
 from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, losses, lost_fills
 from hq.platform.core.tests.browser.serving import static_file
-from hq.platform.core.tests.browser.survey import survey_checks
+from hq.platform.core.tests.browser.survey import palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import WIDE
 from hq.platform.core.tests.browser_modules import browser_modules
 
@@ -184,6 +185,22 @@ class PlantTests(SimpleTestCase):
         self.assertEqual(sorted(set(checks) - set(planted.PLANTS)), [], "a check with no plant in planted.PLANTS")
         self.assertEqual(sorted(set(planted.PLANTS) - set(checks)), [], "a plant for no check the survey runs")
         self.assertEqual(sorted(set(planted.PASSES) - set(checks)), [], "a near miss for no check the survey runs")
+
+    def test_every_palette_check_reads_the_page_settled(self):
+        """A color caught mid-transition is one the page never settles on,
+        so each check of the colors a page paints finishes its transitions
+        first; the near miss of PASSES["contrast"] shows one caught so."""
+
+        first = f"async (arg) => {{ ({settle.FINISH_TRANSITIONS})(); return "
+        axe.axe_probe.cache_clear()
+        try:
+            with mock.patch.object(axe, "axe_core", return_value=""):
+                sources = {check: source for check, (source, _arg) in palette_probes().items()}
+                sources["axe"] = axe.rules_read()[0]
+        finally:
+            axe.axe_probe.cache_clear()
+        self.assertIn("contrast", sources)
+        self.assertEqual(sorted(check for check, source in sources.items() if not source.startswith(first)), [])
 
 
 def _declared_names(path: Path) -> list[str]:

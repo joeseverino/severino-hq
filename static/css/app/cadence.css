@@ -176,14 +176,17 @@
    colored by which way it went, with the sign and the number carrying the
    meaning, so the color is never the only thing saying it. */
 .toned { font-variant-numeric: tabular-nums; }
-.toned-good { color: var(--ok); }
-.toned-attention { color: var(--warn); }
-.toned-serious { color: var(--danger); }
-.toned-neutral { color: var(--ink-2); }
-/* A standing state (`dot=True`): a dot in the words' own color leads them.
-   It never moves, since a moving dot says a thing is live. */
+.toned:where(:not(.toned-ink-context)) { color: var(--toned); }
+.toned-good { --toned: var(--ok); }
+.toned-attention { --toned: var(--warn); }
+.toned-serious { --toned: var(--danger); }
+.toned-neutral { --toned: var(--ink-2); }
+/* A standing state (`dot=True`): a dot in the state's tone leads its words,
+   which take that tone too, or with `ink="context"` the ink around them, as a
+   heading's or a menu's own words do. It never moves, since a moving dot says
+   a thing is live. */
 .toned-dot { display: inline-flex; align-items: center; gap: var(--space-3); }
-.toned-dot::before { content: "" / ""; inline-size: 8px; block-size: 8px; flex: none; border-radius: 50%; background: currentcolor; }
+.toned-dot::before { content: "" / ""; inline-size: 8px; block-size: 8px; flex: none; border-radius: 50%; background: var(--toned); }
 
 /* A finding stated once, with its arithmetic underneath. The claim is what
    gets read; the numbers are what make it checkable. */

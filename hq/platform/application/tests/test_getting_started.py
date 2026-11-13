@@ -112,5 +112,5 @@ class ControllerTileTests(TestCase):
 
         response = self.client.get("/")
 
-        self.assertContains(response, "dash-controller is-arriving")
+        self.assertEqual(response.context["controller"].tone, "good")
         self.assertNotContains(response, "Not configured")

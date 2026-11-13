@@ -18,7 +18,7 @@ const (
 	WebUnit = "severino-hq-web.service"
 
 	// SecretDir is the root-only, noswap tmpfs the renderer installs into.
-	SecretDir = "/run/severino-hq-secrets"
+	SecretDir = "/run/severino-hq-secrets" //nolint:gosec // G101: a directory's path
 	// AppEnvName is the application environment's file name, in the web's
 	// secret directory on the host and in /run/secrets in the container.
 	AppEnvName = "severino_hq_env"

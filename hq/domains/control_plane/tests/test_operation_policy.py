@@ -245,7 +245,9 @@ class OperationPolicyTests(TestCase):
             principal=cli_principal(),
             current_key=self.resource.key,
         )
-        claim_payload = bridge_client.call("claim", controller_id="example-controller")
+        claim_payload = bridge_client.call(
+            "claim", controller_id="example-controller", capability=["tls.certificate:reconcile"]
+        )
         self.assertEqual(claim_payload["operation"]["id"], queued["operation"]["id"])
         self.assertEqual(
             claim_payload["resource"]["spec"]["certificate_name"],

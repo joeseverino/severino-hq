@@ -75,9 +75,10 @@ class RefusalTests(TestCase):
             bridge_client.call("claim", controller_id="x", lease_seconds="45", capability=["a:b", "c:d"])
             bridge_client.call("claim", controller_id="x")
         self.assertEqual(
-            claim.call_args_list[0].kwargs, {"lease_seconds": 45, "capabilities": (("a", "b"), ("c", "d"))}
+            claim.call_args_list[0].kwargs,
+            {"lease_seconds": 45, "capabilities": (("a", "b"), ("c", "d")), "attempt": ""},
         )
-        self.assertEqual(claim.call_args_list[1].kwargs, {"lease_seconds": 300, "capabilities": ()})
+        self.assertEqual(claim.call_args_list[1].kwargs, {"lease_seconds": 300, "capabilities": (), "attempt": ""})
 
     def test_a_malformed_capability(self):
         self.refused(400, "kind:action", "/peek", query={"capability": "no-colon"})

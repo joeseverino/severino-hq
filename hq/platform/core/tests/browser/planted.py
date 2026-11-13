@@ -354,6 +354,13 @@ _FLOWS = (
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
 PASSES = {
+    # A primary button caught as its fill fades in, its ink already drawn:
+    # it is read as it settles.
+    "contrast": Plant(
+        '<button type="button" class="btn" data-example-fading>Example lookup</button>',
+        css="[data-example-fading] { transition: background-color 1000s linear }",
+        then="() => document.querySelector('[data-example-fading]').setAttribute('class', 'btn primary')",
+    ),
     # The dot held inside the name's box, the dot after a clamped link that
     # opens its line, a count's noun held to its figure, a run of parts whose
     # dot before a part that opens a row is clipped, a filter bar whose

@@ -170,7 +170,7 @@ func newFakeHost(t *testing.T) *fakeHost {
 		t.Fatal(err)
 	}
 	// The image ships the same tree, its programs and a marker of its own.
-	if err := exec.Command("cp", "-R", filepath.Join(lib, "deploy"), filepath.Join(f.image, "deploy")).Run(); err != nil {
+	if err := exec.CommandContext(t.Context(), "cp", "-R", filepath.Join(lib, "deploy"), filepath.Join(f.image, "deploy")).Run(); err != nil {
 		t.Fatal(err)
 	}
 	for name, body := range map[string]string{

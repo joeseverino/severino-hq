@@ -20,6 +20,7 @@ from hq.platform.application.controller import (
     claim_next_operation,
     controller_registry,
     peek_next_operation,
+    renew_operation,
     report_operation,
     schedule_automatic_operations,
 )
@@ -57,6 +58,16 @@ def _claim(parameters: Parameters, payload: Any) -> Any:
         parameters["controller-id"],
         lease_seconds=parameters["lease-seconds"],
         capabilities=_capabilities(parameters),
+        attempt=parameters["attempt"] or "",
+    )
+
+
+def _renew(parameters: Parameters, payload: Any) -> Any:
+    del payload
+    return renew_operation(
+        parameters["operation"],
+        controller_id=parameters["controller-id"],
+        lease_seconds=parameters["lease-seconds"],
     )
 
 
@@ -156,6 +167,7 @@ ACTIONS: tuple[Action, ...] = (
     Action("sweep-due", "The controller asked which readings are due", _sweep_due),
     Action("glance-plan", "The controller asked which panels to refresh", _glance_plan),
     Action("glance", "The controller refreshed the dashboard", _recorded(record_dashboard_observations)),
+    Action("renew", "A worker kept its lease on queued work", _renew),
     Action("report", "The controller said how queued work ended", _report),
     Action("registry", "The controller read what each provider declares", _registry),
     Action("job", "The controller ran scheduled work", _job),

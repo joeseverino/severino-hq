@@ -17,7 +17,7 @@ from django.db import transaction
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictStr, create_model
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
-lazy from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationRequest
+lazy from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationHost, OperationRequest
 lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
@@ -56,6 +56,12 @@ def capability_name(operation_id: str) -> str:
     """The command a procedure is run through, which a grant or a rule names it by."""
 
     return f"automation.{operation_id}.run"
+
+
+def run_title(operation_id: str) -> str:
+    """A procedure's run in words, as its command's button and a list of work say it."""
+
+    return f"{OperationRequest.Action.RUN.label} {operation_id}"
 
 
 def resource_key(operation_id: str) -> str:
@@ -250,14 +256,13 @@ def _holding(resource: ManagedResource, hosts: list[str]) -> OperationRequest | 
     this, read under the write lock every request takes.
     """
 
-    active = OperationRequest.objects.filter(
+    active = OperationRequest.objects.select_related("resource").filter(
         action=OperationRequest.Action.RUN, state__in=(OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED)
     )
     same = active.filter(resource=resource).first()
     if same is not None:
         return same
-    wanted = set(hosts)
-    return next((run for run in active.order_by("created_at") if wanted & set(run.input.get("hosts") or ())), None)
+    return active.filter(hosts__host__in=hosts).order_by("created_at").first()
 
 
 @transaction.atomic
@@ -305,6 +310,7 @@ def request_run(
             reason=command.reason,
             input={"generation": resource.generation, **asked},
         )
+        OperationHost.objects.bulk_create(OperationHost(operation=operation, host=host) for host in bound["hosts"])
     return {"ok": True, "queued": True, "operation": serialize_operation(operation)}
 
 
@@ -336,7 +342,7 @@ def _capability(manifest: OperationManifest) -> CapabilitySpec:
             "Refuse while another run waits or works on this procedure or on one of those machines.",
             "Queue it once for the automation worker, which runs it outside this request.",
         ),
-        label=f"{OperationRequest.Action.RUN.label} {manifest.id}",
+        label=run_title(manifest.id),
         verb=OperationRequest.Action.RUN.label,
         # Read on a held run's card, where the procedure is what was asked for.
         wants=f"carry out the procedure {manifest.id}",

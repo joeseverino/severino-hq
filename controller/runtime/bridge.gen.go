@@ -608,6 +608,27 @@ func (e Refusal) Valid() bool {
 	}
 }
 
+// Defines values for RenewalReason.
+const (
+	RenewalReasonCancelled RenewalReason = "Cancelled"
+	RenewalReasonEmpty     RenewalReason = ""
+	RenewalReasonHeld      RenewalReason = "Held"
+)
+
+// Valid indicates whether the value is a known member of the RenewalReason enum.
+func (e RenewalReason) Valid() bool {
+	switch e {
+	case RenewalReasonCancelled:
+		return true
+	case RenewalReasonEmpty:
+		return true
+	case RenewalReasonHeld:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ResourceKind.
 const (
 	ResourceKindAdGuardClient                ResourceKind = "adguard.client"
@@ -794,6 +815,33 @@ func (e ResourceKind) Valid() bool {
 	case ResourceKindTailscaleSettings:
 		return true
 	case ResourceKindTailscaleUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for RunEventOutcome.
+const (
+	Changed     RunEventOutcome = "changed"
+	Failed      RunEventOutcome = "failed"
+	OK          RunEventOutcome = "ok"
+	Skipped     RunEventOutcome = "skipped"
+	Unreachable RunEventOutcome = "unreachable"
+)
+
+// Valid indicates whether the value is a known member of the RunEventOutcome enum.
+func (e RunEventOutcome) Valid() bool {
+	switch e {
+	case Changed:
+		return true
+	case Failed:
+		return true
+	case OK:
+		return true
+	case Skipped:
+		return true
+	case Unreachable:
 		return true
 	default:
 		return false
@@ -1373,9 +1421,12 @@ type ControllerRegistry struct {
 
 // ControllerReport defines model for ControllerReport.
 type ControllerReport struct {
-	Conditions         []Condition `json:"conditions,omitempty"`
-	Message            string      `json:"message,omitempty"`
-	ObservedGeneration int64       `json:"observed_generation"`
+	Conditions []Condition `json:"conditions,omitempty"`
+
+	// Events A run's task outcomes; an operation other than a run reports none.
+	Events             []RunEvent `json:"events,omitempty"`
+	Message            string     `json:"message,omitempty"`
+	ObservedGeneration int64      `json:"observed_generation"`
 
 	// Status The provider's status for the resource; its shape belongs to the kind.
 	Status  any  `json:"status,omitempty"`
@@ -2168,6 +2219,19 @@ type RefusedPart struct {
 	Scope   string       `json:"scope"`
 }
 
+// Renewal A renewed lease. continue false tells the claimant to stop; a held operation's lease is still extended so it can report what it did.
+type Renewal struct {
+	Continue       bool       `json:"continue"`
+	LeaseExpiresAt *time.Time `json:"lease_expires_at"`
+	OK             bool       `json:"ok"`
+
+	// Reason Why the claimant stops: its asker is held by the pause or a block, or the operation was cancelled. Empty while it goes on.
+	Reason RenewalReason `json:"reason"`
+}
+
+// RenewalReason Why the claimant stops: its asker is held by the pause or a block, or the operation was cancelled. Empty while it goes on.
+type RenewalReason string
+
 // Resource defines model for Resource.
 type Resource struct {
 	Enabled    bool   `json:"enabled"`
@@ -2186,6 +2250,17 @@ type Resource struct {
 
 // ResourceKind Every kind of resource or reading HQ's provider registry declares.
 type ResourceKind string
+
+// RunEvent One task's outcome on one machine, in a run's report.
+type RunEvent struct {
+	Host    string          `json:"host"`
+	Message string          `json:"message"`
+	Outcome RunEventOutcome `json:"outcome"`
+	Task    string          `json:"task"`
+}
+
+// RunEventOutcome defines model for RunEvent.Outcome.
+type RunEventOutcome string
 
 // StepFailure Work one pass could not finish; subject is the connection ref it used.
 type StepFailure struct {
@@ -2278,6 +2353,9 @@ type ClaimParams struct {
 
 	// Capability A kind:action the controller can perform.
 	Capability []string `form:"capability,omitempty" json:"capability,omitempty"`
+
+	// Attempt The claimant's name for this claim. A claim retried with the same name is answered the operation it already leased.
+	Attempt string `form:"attempt,omitempty" json:"attempt,omitempty"`
 }
 
 // ConnectionsJSONBody defines parameters for Connections.
@@ -2329,6 +2407,18 @@ type MaterialParams struct {
 type PeekParams struct {
 	// Capability A kind:action the controller can perform.
 	Capability []string `form:"capability,omitempty" json:"capability,omitempty"`
+}
+
+// RenewParams defines parameters for Renew.
+type RenewParams struct {
+	// ControllerID The reporting controller.
+	ControllerID string `form:"controller-id" json:"controller-id"`
+
+	// Operation Operation id.
+	Operation string `form:"operation" json:"operation"`
+
+	// LeaseSeconds Lease length in seconds, from now.
+	LeaseSeconds LeaseSeconds `form:"lease-seconds,omitempty" json:"lease-seconds,omitempty"`
 }
 
 // ReportParams defines parameters for Report.
@@ -2626,6 +2716,11 @@ type ClientInterface interface {
 	//
 	// Corresponds with POST /registry (the `Registry` operationId).
 	Registry(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// Renew Extend a claimed operation's lease, and say whether to go on.
+	//
+	// Corresponds with POST /renew (the `Renew` operationId).
+	Renew(ctx context.Context, params *RenewParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// ReportWithBody Report an operation's result.
 	//
@@ -2941,6 +3036,21 @@ func (c *Client) Registry(ctx context.Context, reqEditors ...RequestEditorFn) (*
 	return c.Client.Do(req)
 }
 
+// Renew Extend a claimed operation's lease, and say whether to go on.
+//
+// Corresponds with POST /renew (the `Renew` operationId).
+func (c *Client) Renew(ctx context.Context, params *RenewParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRenewRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // ReportWithBody Report an operation's result.
 //
 // Takes any type of body and a specified content type.
@@ -3196,6 +3306,14 @@ func NewClaimRequest(server string, params *ClaimParams) (*http.Request, error) 
 				}
 			}
 
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "attempt", params.Attempt, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
 		}
 
 		if encoded := queryValues.Encode(); encoded != "" {
@@ -3682,6 +3800,72 @@ func NewRegistryRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewRenewRequest constructs an http.Request for the Renew method
+func NewRenewRequest(server string, params *RenewParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/renew")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		// queryValues collects non-styled parameters (passthrough, JSON)
+		// that are safe to round-trip through url.Values.Encode().
+		queryValues := queryURL.Query()
+		// rawQueryFragments collects pre-encoded query fragments from
+		// styled parameters, preserving literal commas as delimiters
+		// per the OpenAPI spec (e.g. "color=blue,black,brown").
+		var rawQueryFragments []string
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "controller-id", params.ControllerID, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "operation", params.Operation, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "lease-seconds", params.LeaseSeconds, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			return nil, err
+		} else {
+			for _, qp := range strings.Split(queryFrag, "&") {
+				rawQueryFragments = append(rawQueryFragments, qp)
+			}
+		}
+
+		if encoded := queryValues.Encode(); encoded != "" {
+			rawQueryFragments = append(rawQueryFragments, encoded)
+		}
+		queryURL.RawQuery = strings.Join(rawQueryFragments, "&")
+	}
+
+	req, err := http.NewRequest(http.MethodPost, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewReportRequest calls the generic Report builder with application/json body
 func NewReportRequest(server string, params *ReportParams, body ReportJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -4078,6 +4262,13 @@ type ClientWithResponsesInterface interface {
 	//
 	// Corresponds with POST /registry (the `Registry` operationId).
 	RegistryWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*RegistryResponse, error)
+
+	// RenewWithResponse Extend a claimed operation's lease, and say whether to go on.
+	//
+	// Returns a wrapper object for the known response body format(s).
+	//
+	// Corresponds with POST /renew (the `Renew` operationId).
+	RenewWithResponse(ctx context.Context, params *RenewParams, reqEditors ...RequestEditorFn) (*RenewResponse, error)
 
 	// ReportWithBodyWithResponse Report an operation's result.
 	//
@@ -4698,6 +4889,54 @@ func (r RegistryResponse) ContentType() string {
 	return ""
 }
 
+type RenewResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	// JSON200 the response for an HTTP 200 `application/json` response
+	JSON200 *Renewal
+	// ApplicationProblemJSONDefault the response for an HTTP default `application/problem+json` response
+	ApplicationProblemJSONDefault *Problem
+}
+
+// GetJSON200 returns the response for an HTTP 200 `application/json` response
+func (r RenewResponse) GetJSON200() *Renewal {
+	return r.JSON200
+}
+
+// GetApplicationProblemJSONDefault returns the response for an HTTP default `application/problem+json` response
+func (r RenewResponse) GetApplicationProblemJSONDefault() *Problem {
+	return r.ApplicationProblemJSONDefault
+}
+
+// GetBody returns the raw response body bytes
+func (r RenewResponse) GetBody() []byte {
+	return r.Body
+}
+
+// Status returns HTTPResponse.Status
+func (r RenewResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RenewResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r RenewResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 type ReportResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -5109,6 +5348,19 @@ func (c *ClientWithResponses) RegistryWithResponse(ctx context.Context, reqEdito
 		return nil, err
 	}
 	return ParseRegistryResponse(rsp)
+}
+
+// RenewWithResponse Extend a claimed operation's lease, and say whether to go on.
+//
+// Returns a wrapper object for the known response body format(s).
+//
+// Corresponds with POST /renew (the `Renew` operationId).
+func (c *ClientWithResponses) RenewWithResponse(ctx context.Context, params *RenewParams, reqEditors ...RequestEditorFn) (*RenewResponse, error) {
+	rsp, err := c.Renew(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRenewResponse(rsp)
 }
 
 // ReportWithBodyWithResponse Report an operation's result.
@@ -5568,6 +5820,39 @@ func ParseRegistryResponse(rsp *http.Response) (*RegistryResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ControllerRegistry
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest Problem
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.ApplicationProblemJSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRenewResponse parses an HTTP response from a RenewWithResponse call
+func ParseRenewResponse(rsp *http.Response) (*RenewResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RenewResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest Renewal
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

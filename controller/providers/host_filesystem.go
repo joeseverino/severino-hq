@@ -66,7 +66,7 @@ func (r *Registry) hostFilesystems(context.Context) ([]any, error) {
 		}
 		found = append(found, runtime.HostFilesystemRecord{
 			Mount:      filesystem.Mount,
-			FreeBytes:  int(filesystem.FreeBytes),
+			FreeBytes:  int(filesystem.FreeBytes), //nolint:gosec // G115: FreeBytes is at most TotalBytes, which the loop refuses past math.MaxInt64
 			TotalBytes: int(filesystem.TotalBytes),
 			ReadAt:     reading.ReadAt,
 		})

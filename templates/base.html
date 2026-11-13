@@ -216,11 +216,11 @@
           shape depending on where you are sitting.
           {% endcomment %}
           <div class="menu-places">
-            <a class="menu-item menu-item-split conn-badge-{{ CONNECTION_CHANNEL.id }}"
+            <a class="menu-item menu-item-split"
                href="{% url 'connection' %}"
                data-modal-open="connection">
               <span>Connection</span>
-              <span class="menu-item-status"><span class="conn-dot" aria-hidden="true"></span><span class="menu-item-note">{{ CONNECTION_CHANNEL.label|breakable }}</span></span>
+              <span class="menu-item-status">{% status CONNECTION_CHANNEL.label tone=CONNECTION_CHANNEL.tone dot=True ink="context" css="menu-item-note" %}</span>
             </a>
             {% comment %}
             <!-- ast-grep-ignore: hand-drawn-form --> the frame's menu verbs, each one button, and the one form every post button names

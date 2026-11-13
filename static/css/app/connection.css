@@ -130,14 +130,6 @@ textarea.code {
   background: var(--ground);
 }
 
-.conn-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex: none;
-  background: var(--muted-2);
-}
-.conn-badge-tailnet .conn-dot { background: var(--ok); }
-.conn-badge-network .conn-dot, .conn-badge-loopback .conn-dot { background: var(--warn); }
-.conn-badge-elsewhere .conn-dot { background: var(--danger); }
-
 /* The panel is read in a dialog and on a page of its own, so what it does when
    it is narrow is asked of the panel, not the screen. */
 .conn { container: conn / inline-size; }
@@ -152,17 +144,12 @@ textarea.code {
 .conn-peering.conn-tailnet { border-left: 3px solid var(--ok); }
 .conn-peering:is(.conn-network, .conn-loopback) { border-left: 3px solid var(--warn); }
 .conn-peering.conn-elsewhere { border-left: 3px solid var(--danger); }
-.conn-tailnet .conn-dot { background: var(--ok); }
-.conn-network .conn-dot, .conn-loopback .conn-dot { background: var(--warn); }
-.conn-elsewhere .conn-dot { background: var(--danger); }
 /* The tailnet's color only once every check on the way in is confirmed
    (Connection.verdict). */
-.conn-verdict-unconfirmed:is(.conn-tailnet, .conn-badge-tailnet) .conn-dot { background: var(--muted-2); }
-.conn-verdict-failing:is(.conn-tailnet, .conn-badge-tailnet) .conn-dot { background: var(--attn); }
 .conn-peering.conn-tailnet.conn-verdict-unconfirmed { border-left-color: var(--line); }
 .conn-peering.conn-tailnet.conn-verdict-failing { border-left-color: var(--attn); }
 .conn-verdict-unconfirmed .conn-link:not(.conn-link-relayed) .conn-link-line { background: var(--line); }
-.conn-headline { display: inline-flex; align-items: center; gap: var(--space-3); font-size: var(--text-lg); font-weight: 650; margin: 0; }
+.conn-headline { display: inline-flex; align-items: center; font-size: var(--text-lg); font-weight: 650; margin: 0; }
 .conn-sub { margin: 0; color: var(--muted); font-size: var(--text-xs); text-align: center; }
 /* In a flow, the route asks for room for a hop's kind, its value and its
    checks on one line before it shares a row. */
@@ -343,8 +330,6 @@ details[open] > summary .conn-hop-more::after { transform: rotate(90deg); }
   cursor: pointer; font-size: var(--text-xs); color: var(--muted); padding: var(--space-4) 0 var(--space-2);
 }
 .conn-opaque { border-left-color: var(--danger); }
-.conn-opaque .conn-dot { background: var(--danger); }
-.conn-badge-opaque .conn-dot { background: var(--danger); }
 .conn-rules { display: grid; gap: var(--space-2); margin: 0; justify-items: start; }
 .conn-rules code { font-size: var(--text-2xs); }
 

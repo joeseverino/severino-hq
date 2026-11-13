@@ -959,8 +959,28 @@ connection no controller has, or whose domain HQ neither expects nor has read.
 Controllers claim operations with an expiring lease and receive a minimal,
 versioned, desired-only JSON contract. A controller resolves connection
 references, runs provider adapters, verifies each declared consumer, and
-reports only public status and conditions. Expired claims return to the queue;
-only one queued or claimed operation may exist per resource and action.
+reports only public status and conditions. Expired claims return to the queue,
+all but a run's (below); only one queued or claimed operation may exist per
+resource and action.
+
+A claim names the `kind:action` pairs its claimant has a handler for, and one
+naming none is offered nothing, so no worker takes work only another has a
+handler for. A claim may carry an `attempt` name: retried under the same
+name, as Amazon SQS's receive attempt id is, it is answered the operation it
+already leased rather than a second one.
+
+Long work keeps its lease through `renew`, which only the claimant may call
+and only before the lease runs out. It answers `continue: false` once the
+asker is held by the pause or a block (the lease is still extended, so the
+worker has time to stop and report) or the operation was cancelled. A run
+whose lease lapses may have changed machines, so the next claim ends it
+`failed` with `reason: OutcomeUnknown` instead of queuing it again, unless
+its manifest's `retry` is `safe`; `observe_first` fails the same way and says
+so, and the observation is the worker's to make. A run's report writes
+nothing to its procedure's record: a `status` is refused, and its `events`
+(each task's outcome on one machine, bounded by the contract's `RunEvent` and
+struck of secrets at the bridge's door) land on the run's result, each changed
+or failed one an audit row under the run's own id that leads back to the ask.
 
 A provider's declaration is Django's. Its controller half is Go, in
 `controller/providers/`: one file set per integration, each registering its
@@ -1285,7 +1305,8 @@ manifest's: a read runs under `read`, a change needs `manage_infrastructure`,
 and a destructive one waits for a person when an agent asks. A run passes the
 one capability checkpoint like any command (authority, retry key, validation,
 pause, approval) and queues an operation for the automation worker; nothing
-runs in the request, and the controller never claims one.
+runs in the request, and the controller never claims one. How the worker
+holds its lease and reports: [The controller](#the-controller).
 
 The command takes `hosts` (machines by their name in HQ), `parameters` (the
 manifest's input type), an optional `correlation` (up to 200 printable
@@ -1295,7 +1316,9 @@ machine `machine_catalog()` knows, by its name or an alias, and is held to
 `admits`. The operation's `input` carries `operation`, `revision`,
 `parameters` as validated, `hosts` as resolved and `correlation`; the web
 process holds no SSH user, key or host key, which stay in the connections
-document the worker reads.
+document the worker reads. Each resolved host is also an `OperationHost` row
+written in the same transaction, so a machine's runs, and the one-writer check
+below, are one indexed query.
 
 Each procedure has one record, of kind `automation.operation`, written when a
 run is first asked for and pinned to the manifest at every ask. Its spec is

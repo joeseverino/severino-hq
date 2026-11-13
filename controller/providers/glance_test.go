@@ -211,7 +211,7 @@ func glanceSite(t *testing.T) (*Registry, runtime.GlancePlan) {
 	held := supplied(apiTokenConnection(runtime.ConnectionProviderPortainer, "portainer-example", server.URL, "synthetic"),
 		sshConnection("edge", connections.SSHTransport{Host: "192.0.2.20", User: "hq", Port: "22", HostKey: "ssh-ed25519 AAAA"}))
 	r := New(env, held, keyed{mustClient(t)})
-	r.Resolve = func(string) (string, error) { return "192.0.2.100", nil }
+	r.Resolve = func(context.Context, string) (string, error) { return "192.0.2.100", nil }
 	r.Commands = &Commands{Env: env, Supplied: held, Remote: func(context.Context, string, string, []byte) ([]byte, []byte, int, error) {
 		return []byte(`{"cpu_percent":5,"cores":2,"load_1m":0.1,"memory_used":1,"memory_total":2,"storage_used":1,"storage_total":2}`), nil, 0, nil
 	}}

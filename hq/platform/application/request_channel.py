@@ -23,6 +23,16 @@ class Channel:
     def private(self) -> bool:
         return self.id in {"tailnet", "network", "loopback"}
 
+    @property
+    def tone(self) -> str:
+        """The tone of the network a caller is on: the tailnet the private way
+        in, a private network the one to notice, any other the exposed one."""
+
+        return _TONES.get(self.id, "serious")
+
+
+_TONES = {"tailnet": "good", "network": "attention", "loopback": "attention"}
+
 
 TAILNET_CHANNEL = Channel(
     "tailnet",

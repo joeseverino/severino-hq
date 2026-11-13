@@ -31,7 +31,7 @@ when opened (visit_refresh.PAGES) fill it in place wherever it is shown.
       {% endif %}
     </div>
     <div class="conn-link conn-link-{{ connection.path }}">
-      <p class="conn-headline"><span class="conn-dot" aria-hidden="true"></span>{{ connection.channel.label|breakable }}</p>
+      <p class="conn-headline">{% status connection.channel.label tone=connection.tone dot=True ink="context" %}</p>
       <span class="conn-link-line" aria-hidden="true"></span>
       <p class="conn-sub">This request: {{ connection.tally|lower|breakable }}{% if connection.path_label %}{% dot %}{{ connection.path_label|breakable }}{% endif %}{% dot %}{{ connection.transport|breakable }}</p>
       {% if posture %}<p class="conn-sub"><a href="{% url 'control_plane:connections' %}#posture-heading">{% if posture.advanced %}{% include "partials/_icon.html" with name="lock" %} Advanced HQ Posture enabled{% else %}HQ's standard{% endif %}</a>{% dot %}{{ posture.count_line|breakable }}</p>

@@ -43,7 +43,7 @@ type sshServer struct {
 
 func newSSHServer(t *testing.T, authorized ssh.PublicKey, hostKeys ...ssh.Signer) *sshServer {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -360,7 +360,7 @@ func TestSSHStopsWhenItsContextEnds(t *testing.T) {
 	})
 
 	t.Run("a host that never answers", func(t *testing.T) {
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		listener, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -441,7 +441,7 @@ func readOffer(conn net.Conn) (clientOffer, error) {
 }
 
 func TestSSHOffersNoInsecureKeyExchangeOrMAC(t *testing.T) {
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := new(net.ListenConfig).Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
