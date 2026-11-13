@@ -2,6 +2,8 @@ from django.template import engines
 from django.test import SimpleTestCase, tag
 from django.utils.safestring import mark_safe
 
+from hq.platform.application.tests.reads import reads
+
 from ..labels import dotted, dotted_html, lower_first, plural
 from .markup import elements, links, text
 
@@ -66,6 +68,7 @@ class DottedTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/*.py")
 class LowerFirstSourceTests(SimpleTestCase):
     """One definition of lower_first in the source."""
 

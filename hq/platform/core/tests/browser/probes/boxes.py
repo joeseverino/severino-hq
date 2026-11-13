@@ -573,16 +573,19 @@ HEAD_CONTROLS = (
     const name = describe(actions);
     const menu = actions.querySelector(`:scope > ${menuSelector}`);
     const beside = [...actions.children].filter((el) => el !== menu && seen(el));
-    const listed = menu ? [...menu.querySelectorAll(`${panelSelector} > *`)].filter(shown) : [];
-    if (beside.length > 2) found.push(`${name} draws ${beside.length} controls beside the title`);
+    // The menu's entries, its copies of the controls beside the title among them.
+    const inMenu = menu ? [...menu.querySelectorAll(`${panelSelector} > :not(.overflow-menu-copies), ${panelSelector} > .overflow-menu-copies > *`)] : [];
+    const listed = inMenu.filter((el) => shown(el) && (el.parentElement.matches(panelSelector) || shown(el.parentElement)));
+    // Two beside the title, or as many as a page that names more keeps (``MOST_BESIDE``).
+    const most = actions.hasAttribute('data-many') ? 4 : 2;
+    if (beside.length > most) found.push(`${name} draws ${beside.length} controls beside the title`);
     if (menu && menu.checkVisibility() !== listed.length > 0) found.push(`${name} draws a menu that holds ${listed.length} controls`);
     const besideWords = beside.map(said);
     const listedWords = listed.map(said);
     for (const words of listedWords.filter((words) => besideWords.includes(words))) {
       found.push(`${name} offers "${words}" beside the title and in its menu`);
     }
-    const entries = menu ? [...menu.querySelectorAll(`${panelSelector} > *`)] : [];
-    const offered = new Set([...actions.children].filter((el) => el !== menu).concat(entries).map(said));
+    const offered = new Set([...actions.children].filter((el) => el !== menu).concat(inMenu).map(said));
     for (const words of offered) {
       if (!besideWords.includes(words) && !listedWords.includes(words)) found.push(`${name} hides "${words}" with no way to it`);
     }

@@ -96,6 +96,11 @@ class _Cell:
     # Where the value of its start tag's class attribute starts, past its
     # start, or None when it has none.
     class_at: int | None = None
+    # Whether each element at its top is a pill, and whether text stands
+    # there beside them: a status said by one pill alone is as wide as its
+    # column (`data-pill-only`), so the pills down a column line up.
+    tops: list[bool] = field(default_factory=list)
+    loose: bool = False
     # Whether it holds a row's toggle, and one that opens a folded group,
     # which is the row's own.
     toggled: bool = False
@@ -261,6 +266,8 @@ class Cells(HTMLParser):
             cell.sort_mark = self.getpos()
         first = not self.children[-1]
         self.children[-1] += 1
+        if len(self.open) == 1:
+            cell.tops.append("pill" in classes)
         # The row's name is what a cell leads with in bold, itself or as its
         # link's words: the row header of a table that has none.
         leads = len(self.open) == 1 or (len(self.open) == 2 and self.open[1] == "a" and self.firsts[1])
@@ -335,6 +342,8 @@ class Cells(HTMLParser):
             self.cell.longest = max(self.cell.longest, self.cell.line)
         if not SAYS_NOTHING.fullmatch(data):
             self.cell.says_nothing = False
+        if len(self.open) == 1 and data.strip():
+            self.cell.loose = True
 
     def _role(self, start: Position, attrs: dict[str, str | None]) -> None:
         """Note the roles an element's classes declare. An element already
@@ -437,6 +446,8 @@ class Cells(HTMLParser):
             cell.names = []
         if body and not named and kind in ("prose", "status") and long:
             marks.append(" data-long")
+        if body and kind == "status" and cell.tops == [True] and not cell.loose:
+            marks.append(" data-pill-only")
         return marks
 
     def _name(self, row: _Row) -> None:

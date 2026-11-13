@@ -8,6 +8,7 @@ from django.test import SimpleTestCase, tag
 
 from hq.platform.application.infrastructure import RESOURCE_TONES
 from hq.platform.application.tests.markup import elements
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.ui import STATUS_VALUES
 from hq.platform.core.templatetags.status_tags import severity_tone, status_pill
 
@@ -170,6 +171,7 @@ _CLASS_WORDS = re.compile(r"\s+|\{%|%\}")
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class StatusDrawnByTheTagTests(SimpleTestCase):
     def test_no_template_draws_a_status_by_hand(self):
         """A pill, a toned figure or a state's words in its tone are

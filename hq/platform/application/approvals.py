@@ -589,10 +589,32 @@ def _settle(
     """
 
     with _its_operation(held, operation, principal, rebinds=rebinds), transaction.atomic():
-        held.state = state
-        held.decided_at = timezone.now()
-        held.decision_note = note
-        held.save(update_fields=("state", "decided_at", "decision_note", "updated_at"))
+        _record(held, state, decision_note=note)
+
+
+def _refuse_decided(row: ApprovalRequest) -> None:
+    if row.state != ApprovalRequest.State.PENDING:
+        raise ApprovalError(f"That request is already {row.get_state_display().lower()}.")
+
+
+def _lock_pending(held: ApprovalRequest) -> ApprovalRequest:
+    """Re-read a request under a lock, inside the caller's transaction, and refuse one already decided."""
+
+    locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
+    _refuse_decided(locked)
+    return locked
+
+
+def _record(row: ApprovalRequest, state: str, *, decider: Principal | None = None, **fields: Any) -> None:
+    """Write a decision: its state, when, who (when a person decided) and the fields it sets."""
+
+    if decider is not None:
+        fields = {"decided_actor": decider.actor, "decided_interface": decider.interface, **fields}
+    row.state = state
+    row.decided_at = timezone.now()
+    for name, value in fields.items():
+        setattr(row, name, value)
+    row.save(update_fields=("state", "decided_at", *fields, "updated_at"))
 
 
 def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
@@ -600,8 +622,7 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
         held = ApprovalRequest.objects.get(pk=approval_id)
     except (ApprovalRequest.DoesNotExist, ValueError) as exc:
         raise ApprovalError("That approval request was not found.") from exc
-    if held.state != ApprovalRequest.State.PENDING:
-        raise ApprovalError(f"That request is already {held.get_state_display().lower()}.")
+    _refuse_decided(held)
     if held.expires_at <= timezone.now():
         _settle(held, ApprovalRequest.State.EXPIRED, _LAPSED_NOTE, operation=LAPSE, principal=principal)
         raise Settled("That request expired before it was decided, so nothing was written.")
@@ -706,30 +727,14 @@ def _apply(held: ApprovalRequest, principal: Principal) -> ApprovalApplied:
         # Re-read under a lock. Two people can have this page open, and an
         # approval applied twice is the change made twice, which for a queued
         # operation is caught by its idempotency key and for a declaration is not.
-        locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
-        if locked.state != ApprovalRequest.State.PENDING:
-            raise ApprovalError(f"That request is already {locked.get_state_display().lower()}.")
+        locked = _lock_pending(held)
         # The one binding that runs as someone other than whoever started the
         # operation: the approver agreed, and the change is the requester's.
         with audit_operation(operation=spec.name, principal=acting, operation_id=str(held.id), rebinds=True):
             result = execute_approved(
                 spec, command, locked.target or None, principal=acting, sent=frozenset(held.payload)
             )
-        locked.state = ApprovalRequest.State.APPROVED
-        locked.decided_actor = principal.actor
-        locked.decided_interface = principal.interface
-        locked.decided_at = timezone.now()
-        locked.result = result
-        locked.save(
-            update_fields=(
-                "state",
-                "decided_actor",
-                "decided_interface",
-                "decided_at",
-                "result",
-                "updated_at",
-            )
-        )
+        _record(locked, ApprovalRequest.State.APPROVED, decider=principal, result=result)
     return {"ok": True, "approved": str(locked.id), "result": result}
 
 
@@ -770,12 +775,8 @@ def withdraw(command: WithdrawCommand, *, principal: Principal) -> ApprovalWithd
         raise RecordNotFound("No held request of yours has that id.")
     held = _decidable(str(held.pk), principal)
     with _its_operation(held, WITHDRAW, principal), transaction.atomic():
-        locked = ApprovalRequest.objects.select_for_update().get(pk=held.pk)
-        if locked.state != ApprovalRequest.State.PENDING:
-            raise ApprovalError(f"That request is already {locked.get_state_display().lower()}.")
-        locked.state = ApprovalRequest.State.WITHDRAWN
-        locked.decided_at = timezone.now()
-        locked.save(update_fields=("state", "decided_at", "updated_at"))
+        locked = _lock_pending(held)
+        _record(locked, ApprovalRequest.State.WITHDRAWN)
     return {"ok": True, "withdrawn": str(locked.id)}
 
 
@@ -785,22 +786,9 @@ def reject(command: RejectCommand, *, principal: Principal) -> ApprovalRejected:
     held = _decidable(command.approval_id, principal)
     _require_person(principal, held)
     with _its_operation(held, REJECT, principal), transaction.atomic():
-        held.state = ApprovalRequest.State.REJECTED
-        held.decided_actor = principal.actor
-        held.decided_interface = principal.interface
-        held.decided_at = timezone.now()
-        held.decision_note = command.note.strip()[:300]
-        held.save(
-            update_fields=(
-                "state",
-                "decided_actor",
-                "decided_interface",
-                "decided_at",
-                "decision_note",
-                "updated_at",
-            )
-        )
-    return {"ok": True, "rejected": str(held.id)}
+        locked = _lock_pending(held)
+        _record(locked, ApprovalRequest.State.REJECTED, decider=principal, decision_note=command.note.strip()[:300])
+    return {"ok": True, "rejected": str(locked.id)}
 
 
 def for_audit_event(event) -> ApprovalRequest | None:

@@ -1,33 +1,37 @@
 {% comment %}
 Expects `preview`, an approval_review.ChangePreview, and `bodies`, what
 belongs to no record and then each record that changes, from
-change_tags.change_table. A record that moves is a row for each field, named
-by the record and the field. A record that comes or goes whole is one row,
-its name and what it is on the side it is on, with its fields folded under
-it, each value on that same side and the other left blank. A record
-the change lets do more has its rows marked for attention. The rows keep the
-change's own order, so no heading sorts them. The count is of what moves as
-a reader sees it, a whole record as one.
+change_tags.change_table. A record that changes is one row, its name and its
+status, with its fields folded under it. One that comes or goes whole says
+what it is on the side it is on, and its fields each give their value on that
+same side and leave the other blank, since the record's row says its change;
+the fields of a record that moves each say their own. A record the change
+lets do more has its rows marked for attention. The rows keep the change's
+own order, so no heading sorts them. The count is of what moves as a reader
+sees it, a record as one. Status says each row's kind of change: New,
+Changed or Removed.
 {% endcomment %}{% if not preview.empty %}
 {% section preview.label count=preview.moves|default:"" %}
   {% if bodies %}
     {% table_region preview.label compare=preview.compares %}
       <table class="data-table compact-table">
-        <thead><tr>{% table_heading "Field" "identifier" local_sort=False gutter=folds %}{% if preview.compares %}{% table_heading "Before" local_sort=False %}{% table_heading "After" local_sort=False %}{% else %}{% table_heading "Value" local_sort=False %}{% endif %}</tr></thead>
+        <thead><tr>{% table_heading "Field" "identifier" local_sort=False gutter=folds %}{% if preview.compares %}{% table_heading "Before" local_sort=False %}{% table_heading "After" local_sort=False %}{% else %}{% table_heading "Value" local_sort=False %}{% endif %}{% table_heading "Status" "status" local_sort=False %}</tr></thead>
         {% for body in bodies %}
         <tbody>
           {% if body.head %}
           <tr id="{{ body.folds }}"{% if body.rows %} data-folds{% endif %}{% if body.attention %} data-attention{% endif %}>
             <th>{% if body.rows %}{% include "partials/_row_fold.html" with label=body.head.label only %}{% endif %}{{ body.head.label|breakable }}</th>
-            {% if preview.compares %}<td class="cell-data" data-side="before">{% if body.head.before %}{{ body.head.before|breakable }}{% else %}{% empty_value %}{% endif %}</td>{% endif %}
-            <td class="cell-data" data-side="after">{% if body.head.after %}{{ body.head.after|breakable }}{% else %}{% empty_value %}{% endif %}</td>
+            {% if preview.compares %}<td class="cell-data" data-side="before">{% if body.head.before %}{{ body.head.before|breakable }}{% elif body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
+            <td class="cell-data" data-side="after">{% if body.head.after %}{{ body.head.after|breakable }}{% elif body.whole %}{% empty_value %}{% endif %}</td>
+            <td>{% change_status body.head.change %}</td>
           </tr>
           {% endif %}
           {% for row in body.rows %}
           <tr{% if body.head %} data-folded="{{ body.folds }}"{% elif body.attention %} data-attention{% endif %}>
             <th>{{ row.label|breakable }}</th>
-            {% if preview.compares %}<td class="cell-data{% if row.redacted %} muted{% endif %}" data-side="before">{% if row.redacted and row.change != "added" %}redacted{% elif row.before %}{{ row.before|breakable }}{% elif not body.head %}{% empty_value %}{% endif %}</td>{% endif %}
-            <td class="cell-data{% if row.redacted %} muted{% endif %}" data-side="after">{% if row.redacted and row.change != "removed" %}redacted{% elif row.after %}{{ row.after|breakable }}{% elif not body.head %}{% empty_value %}{% endif %}</td>
+            {% if preview.compares %}<td class="cell-data{% if row.redacted %} muted{% endif %}" data-side="before">{% if row.redacted and row.change != "added" %}redacted{% elif row.before %}{{ row.before|breakable }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>{% endif %}
+            <td class="cell-data{% if row.redacted %} muted{% endif %}" data-side="after">{% if row.redacted and row.change != "removed" %}redacted{% elif row.after %}{{ row.after|breakable }}{% elif not body.whole %}{% empty_value %}{% endif %}</td>
+            <td>{% if not body.whole %}{% change_status row.change %}{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>

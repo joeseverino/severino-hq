@@ -17,6 +17,7 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 from django.utils.functional import SimpleLazyObject, empty
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.tree import SUITE
 from hq.platform.core.tests.registries import ENTRYPOINTS, PREFIX, module_of, registries
 from hq.platform.core.tests.test_settings_env import REPO_ROOT
@@ -224,6 +225,7 @@ def submodules_of(package: Path) -> set[str]:
 
 
 @tag("source", "tree")
+@reads("**/*.py", lists=("*",))
 class SubmoduleShadowTests(SimpleTestCase):
     def test_no_package_binds_a_name_its_submodule_has(self):
         found = [

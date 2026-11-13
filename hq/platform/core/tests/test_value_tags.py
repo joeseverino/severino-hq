@@ -405,7 +405,7 @@ class LeadActionTests(SimpleTestCase):
     def lead(self, *actions):
         from hq.platform.core.templatetags.action_tags import head_actions
 
-        beside, _menu = head_actions(actions)
+        beside, _copies, _rest = head_actions(actions)
         return beside[0].label
 
     def test_a_destructive_control_never_leads_while_another_is_offered(self):
@@ -437,11 +437,11 @@ class LeadActionTests(SimpleTestCase):
 class HeadActionsTests(SimpleTestCase):
     """A head draws two controls beside its title and offers the rest in its menu."""
 
-    def split(self, *actions):
+    def split(self, *actions, beside=""):
         from hq.platform.core.templatetags.action_tags import head_actions
 
-        beside, menu = head_actions(actions)
-        return [action.label for action in beside], [action.label for action in menu]
+        shown, copies, rest = head_actions(actions, beside)
+        return [action.label for action in shown], [action.label for action in (*copies, *rest)]
 
     def test_the_lead_and_the_next_stand_beside_the_title_and_a_destructive_one_waits(self):
         from hq.platform.application.pages import PageAction
@@ -468,3 +468,13 @@ class HeadActionsTests(SimpleTestCase):
 
         self.assertEqual(self.split(PageAction("Edit", "/edit/")), (["Edit"], []))
         self.assertEqual(self.split(), ([], []))
+
+    def test_a_page_that_names_more_keeps_them_beside_the_title_and_their_copies_in_the_menu(self):
+        from hq.platform.application.pages import PageAction
+        from hq.platform.core.templatetags.action_tags import MOST_BESIDE
+
+        actions = [PageAction(label, f"/{label}/") for label in "abcde"]
+        self.assertEqual(self.split(*actions, beside=MOST_BESIDE), (["a", "b", "c", "d"], ["b", "c", "d", "e"]))
+        for wrong in (1, MOST_BESIDE + 1):
+            with self.subTest(beside=wrong), self.assertRaises(ValueError):
+                self.split(*actions, beside=wrong)

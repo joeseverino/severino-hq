@@ -12,6 +12,8 @@ import re
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
+
 from .source import template_files
 
 _PRE = re.compile(r"<pre(?![\w-])[^>]*>")
@@ -23,6 +25,7 @@ _CONTROL = re.compile(
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class KeyboardReachTests(SimpleTestCase):
     def test_every_code_block_takes_focus(self):
         unreachable = [

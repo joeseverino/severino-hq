@@ -14,6 +14,7 @@ from typing import override
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 
 # What draws a surface: the card tag, and the frames a few parts draw for
@@ -192,6 +193,7 @@ class FoldRuleTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class TemplateFoldTests(SimpleTestCase):
     def test_every_page_level_fold_sits_on_a_surface(self):
         sources = {name: path.read_text(encoding="utf-8") for name, path in template_files()}

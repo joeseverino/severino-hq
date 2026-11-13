@@ -198,7 +198,7 @@ class ToggleTests(TestCase):
             copy = self.client.get(reverse("dashboard"))
 
         inside = [element.attrs.get("href") for element in within(copy, "id", "modal-demo-about")]
-        self.assertIn(reverse("control_plane:procedures"), inside)
+        self.assertIn(reverse("control_plane:playbooks"), inside)
 
     def test_the_switch_carries_the_state_rather_than_the_label(self):
         """A menu entry that renames itself makes you read the button to work

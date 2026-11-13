@@ -8,6 +8,8 @@ from django.template import Context, Template, TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
+
 from .markup import elements, select, texts, with_class
 from .source import template_files
 
@@ -273,6 +275,7 @@ class ReadingTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class SharedMarkupTemplateTests(SimpleTestCase):
     """No template writes by hand what a shared partial or tag draws."""
 

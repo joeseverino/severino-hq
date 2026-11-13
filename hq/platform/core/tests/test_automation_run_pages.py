@@ -231,7 +231,7 @@ class ProcedurePageTests(TestCase):
     def test_each_procedure_s_page_leads_back_to_playbooks(self):
         from hq.platform.application.automation_adoption import procedures
 
-        home = reverse("control_plane:procedures")
+        home = reverse("control_plane:playbooks")
         for procedure in procedures():
             with self.subTest(procedure=procedure.id):
                 html = self.page(procedure.id)

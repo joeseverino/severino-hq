@@ -14,6 +14,7 @@ from django.test import SimpleTestCase, tag
 from hq.platform.api import openapi
 from hq.platform.api.management.commands import api_openapi as command
 from hq.platform.api.openapi import document, render
+from hq.platform.application.tests.reads import reads
 from tests.mise_tasks import ROOT, mise_tasks
 
 
@@ -86,6 +87,7 @@ class PruneTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/*.py", "mise-tasks/**", "mise*.toml", "mise.lock", "tools/pipeline/toolchain.env", "controller/go.mod")
 class RecordingTests(SimpleTestCase):
     def test_the_recording_runs_every_test_that_calls_the_api(self):
         """A recording replaces the examples file whole, so a module it does not run loses its examples."""

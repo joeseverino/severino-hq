@@ -286,6 +286,7 @@
           "REQUEST_CERTIFICATE_RENEWAL",
           "UPLOAD_CERTIFICATE",
           "UPLOAD_RECEIPT",
+          "ADOPT_PLAYBOOKS",
           "DECIDE_APPROVALS",
           "GOVERN_AGENTS",
           "SET_PREFERENCES",

@@ -204,18 +204,22 @@ class ExampleEstateTests(TestCase):
         self.assertTrue(preview.rows)
         self.assertFalse(preview.lines)
 
-    def test_the_agents_held_adoption_warns_of_what_it_widens_and_reads_each_procedure_apart(self):
-        (held,) = (held for held in approvals.pending(principal=cli_principal()) if held.capability == ADOPT)
-        shown = approval_review.review(held)
-        groups = {group.label: group for group in shown["preview"].groups}
+    def test_the_newest_scan_waits_for_a_person_marks_what_it_widens_and_reads_each_procedure_apart(self):
+        from hq.platform.application.automation_sources import standing
+
+        pending = standing().pending
+        self.assertIsNotNone(pending, "a commit newer than the one adopted waits")
+        self.assertEqual(pending.proposal.revision, automation.WIDENED_REVISION)
+        groups = {group.label: group for group in pending.preview.groups}
 
         self.assertTrue(
-            shown["warnings"] or any(group.widens for group in groups.values()),
-            "a widening is marked before anything is approved",
+            pending.unmarked or any(group.widens for group in groups.values()),
+            "a widening is marked before anything is adopted",
         )
         self.assertEqual(set(groups), {procedure["title"] for procedure in automation.PROCEDURES + automation.WIDENED})
         self.assertTrue(any(group.changed for group in groups.values()))
-        self.assertTrue(shown["preview"].unchanged, "a playbook that stays is named")
+        self.assertTrue(pending.preview.unchanged, "a playbook that stays is named")
+        self.assertFalse([held for held in approvals.pending(principal=cli_principal()) if held.capability == ADOPT])
 
     def test_each_held_request_s_card_links_the_record_it_acts_on_by_name(self):
         client = Client()
@@ -232,10 +236,6 @@ class ExampleEstateTests(TestCase):
                     [link for link in elements(page, "a") if link.attrs.get("href") == record and link.words],
                     "the aside's link says where it goes",
                 )
-
-    def test_the_held_adoption_s_card_links_the_procedures_page(self):
-        (held,) = (held for held in approvals.pending(principal=cli_principal()) if held.capability == ADOPT)
-        self.assertEqual(approval_review.review(held)["resource_url"], reverse("control_plane:procedures"))
 
     def test_the_repository_was_scanned_into_a_proposal_hq_cannot_adopt_and_once_failed(self):
         scans = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN)

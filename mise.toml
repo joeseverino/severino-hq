@@ -245,7 +245,7 @@ env = { UV_NO_CACHE = "1", SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1
 # task reads. The profile's invariants come after the file, so it cannot
 # change them.
 [tasks.dev]
-description = "The operator's long-lived server on real data, behind a TLS proxy with single sign-on and 1Password secrets; an agent runs dev:scratch"
+description = "The operator's long-lived server on real data, behind a TLS proxy with single sign-on and 1Password secrets, with the automation worker beside it; an agent runs dev:scratch"
 raw = true
 usage = '''
 flag "--fresh" help="Delete its database and migrate a new one"
@@ -311,7 +311,7 @@ flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds
 }
 flag "--port <port>" help="A fixed port instead of a free one"
 flag "--reload" negate="--no-reload" help="Restart on each change to Python or a template, as it does by default; --no-reload serves the code it started with, without the reloader's supervising process and its memory"
-flag "--runner" help="To walk Playbooks end to end: serve the bridge and start the real automation worker on each Refresh or run, scanning tools/dev/scratch_playbooks and running each play on this machine alone"
+flag "--runner" help="To walk Playbooks end to end, as dev always does: serve the bridge and start the real automation worker on each Refresh or run, scanning tools/dev/scratch_playbooks and running each play on this machine alone"
 flag "--plan" help="Print what it would run under and exit"
 '''
 run = "tools/dev/dev.sh"

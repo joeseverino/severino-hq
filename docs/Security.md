@@ -224,7 +224,7 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   only when no user is attached. Logins, refusals, settings changes, deletions
   and every change to a resource or credential are kept indefinitely. The
   same job deletes an automation proposal past that window unless it is the
-  newest, the one adopted now, or one a held adoption names; each adopted
+  newest or the one adopted now; each adopted
   catalog is kept, so the history of what HQ ran from stays whole.
 - The audit log is append-only by SQLite's own rule
   (`hq/platform/core/append_only.py`). Two triggers refuse an UPDATE or
@@ -437,7 +437,8 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
     behind it (a client-credentials grant).
   - A device holds what its person's browser holds, their role, bounded by
     its token's grant. `DEVICE_INTERFACE` is one of `INTERACTIVE_INTERFACES`, so what is
-    held for a person (`HELD_ONLY_AT`: approving, pausing agents, uploads)
+    held for a person (`HELD_ONLY_AT`: approving, pausing agents, uploads,
+    adopting playbooks)
     is in its reach. Nothing it asks for is held for
     approval, and the capability policy's agent rules do not apply to it.
   - A use case that keeps something of a person's finds them by the token's

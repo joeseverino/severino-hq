@@ -1,10 +1,11 @@
-"""The automation worker beside a scratch server, for `mise run dev:scratch --runner`.
+"""The automation worker beside a development server: always beside `mise run
+dev`, and beside `mise run dev:scratch --runner`.
 
-The scratch server serves the bridge on a socket of its own, as the image
-does, and `watch` stands where the host's automation units stand: when HQ
-rings the automation doorbell, or a floor's time after the last worker ended,
-it writes the worker's connections from the scratch database's machines and
-starts the real worker (`work`), which drains what is queued and exits.
+The server serves the bridge on a socket of its own, as the image does, and
+`watch` stands where the host's automation units stand: when HQ rings the
+automation doorbell, or a floor's time after the last worker ended, it writes
+the worker's connections from the server database's machines and starts the
+real worker (`work`), which drains what is queued and exits.
 
 Its security properties:
 
@@ -12,11 +13,12 @@ Its security properties:
   answered only to this account; nothing new listens on a network address.
 - The worker is given the `HQ_AUTOMATION_*` variables and nothing of HQ's own
   environment: no signing key, no database path.
-- Its repository is `scratch_playbooks/`, committed to a repository under the
-  scratch state and fetched over git's file transport, with no token, so no
-  fetch leaves this machine.
-- Every login it is given reaches 127.0.0.1, and every scratch play runs with
-  connection local, so no run reaches another host.
+- Its repository is `scratch_playbooks/`, committed to a repository beside
+  the server's database and fetched over git's file transport, with no token,
+  so no fetch leaves this machine, whatever the database adopted before.
+- Every login it is given reaches 127.0.0.1, whatever machines the database
+  holds, and every play there runs with connection local, so no run reaches
+  another host.
 
 What it cannot show: GitHub's word on a commit's signature, since the
 repository is local, so `work` vouches for each commit it scans; the
@@ -47,27 +49,27 @@ lazy from hq_runner.tests.remote import Remote
 
 ROOT = Path(__file__).resolve().parents[2]
 PLAYBOOKS = Path(__file__).with_name("scratch_playbooks")
-WORKER = "scratch-worker"
-# The repository the worker names; its origin is the scratch state's.
+WORKER = "dev-worker"
+# The repository the worker names; its origin is beside the database.
 REPOSITORY = "example/automation"
 # The profiles each machine is reached as: the read login, and each privilege
 # a scratch playbook names.
 PROFILES = ("read",)
 LOOPBACK = "127.0.0.1"
 # A login's account, which a local connection never uses.
-USER = "scratch"
+USER = "dev"
 # As the host's timer: a doorbell missed still starts a worker this long after the last.
 FLOOR_SECONDS = 15 * 60
 POLL_SECONDS = 1.0
 # The doorbell's name, as hq.platform.application.cadence.AUTOMATION_DOORBELL.
 DOORBELL = "automation-doorbell"
 # The verification `work` reports for a commit of the local repository.
-VOUCHED = {"verified": True, "reason": "valid", "committer": "scratch"}
+VOUCHED = {"verified": True, "reason": "valid", "committer": "dev"}
 
 
 @dataclass(frozen=True, slots=True)
 class State:
-    """Where the worker keeps what it reads and writes, under the scratch state."""
+    """Where the worker keeps what it reads and writes, beside the server's database."""
 
     root: Path
 
@@ -158,7 +160,7 @@ def write_connections(path: Path, document: Mapping[str, Any]) -> None:
 
 
 def write_reaches() -> None:
-    """The worker's connections from the scratch database's machines; run inside `manage.py shell`."""
+    """The worker's connections from the server database's machines; run inside `manage.py shell`."""
 
     state = State.of(settings.DATABASES["default"]["NAME"])
     write_connections(state.connections, connections(machine.name for machine in machine_catalog()))

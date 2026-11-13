@@ -8,6 +8,7 @@ from unittest import mock
 
 from django.test import TestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests import look
 from hq.platform.core.tests.look_records import EstatePages
 from hq.platform.core.tests.task import ROOT
@@ -21,6 +22,19 @@ def _templates() -> list[str]:
 
 
 @tag("source", "tree")
+@reads(
+    "**/templates/**",
+    "static/**",
+    "hq/domains/control_plane/bridge_base.json",
+    "hq/platform/api/openapi-examples.json",
+    "hq/platform/core/browser_audit.js",
+    "mise-tasks/**",
+    "mise*.toml",
+    "mise.lock",
+    "tools/pipeline/toolchain.env",
+    "controller/go.mod",
+    lists=("**/*.py", "**/locale/**"),
+)
 class EveryTemplateTests(TestCase):
     def test_every_template_reaches_a_page_or_a_catalog_entry(self):
         unreached = {}

@@ -11,6 +11,7 @@ from django.test import SimpleTestCase, tag
 
 from hq.platform.application.automation_adoption import REFUSED_KINDS
 from hq.platform.application.cadence import AUTOMATION_DOORBELL
+from hq.platform.application.tests.reads import reads
 from hq_runner import catalog, connections
 from hq_runner.__main__ import Config
 from tools.dev import scratch_automation
@@ -51,6 +52,7 @@ class ReachTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("tools/dev/scratch_playbooks/**")
 class PlaybookTests(SimpleTestCase):
     def test_every_play_runs_on_this_machine(self):
         for path, text in scratch_automation.playbook_files().items():

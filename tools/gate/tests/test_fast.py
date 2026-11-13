@@ -17,7 +17,7 @@ from django.test.runner import DiscoverRunner
 from django.test.utils import iter_test_cases
 
 from hq.config.sandbox import RUN
-from hq.platform.application.tests.tree import SUITE, tagged
+from hq.platform.application.tests.tree import SUITE
 from hq.platform.core.test_runner import excluded_tags
 from hq.platform.core.tests.task import Usage, names, trusted_mise
 from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks, takes_the_turn
@@ -299,25 +299,48 @@ class FastGateMappingTests(GateTestCase):
 @tag("source")
 class FastGateTreeTests(GateTestCase):
     @tag("tree")
-    def test_a_change_of_any_kind_reaches_the_tree_tests_and_none_does_not(self):
+    def test_a_change_of_any_kind_reaches_a_tree_test_that_declares_nothing_and_none_does_not(self):
         """A walk reads a new test module, a template and a doc alike, by no import and no name."""
         modules = [f"{package}/example/tests/test_example.py" for package in SUITE]
         others = ["static/css/app.css", "templates/base.html", "docs/Example.md", ".github/workflows/ci.yml"]
-        with patch.object(fast_gate, "tagged", return_value=["hq.a.tests.test_tree.Walks"]):
+        with patch.object(fast_gate, "tree_tests", return_value=[("hq.a.tests.test_tree.Walks", None)]):
             for path in [*modules, *others]:
                 with self.subTest(path=path):
                     self.assertIn("hq.a.tests.test_tree.Walks", fast_gate.with_tree([], [path]))
             self.assertEqual(fast_gate.with_tree([], []), [])
 
     @tag("tree")
-    def test_a_change_adds_every_tree_test_to_the_one_run(self):
-        tree = tagged(ROOT, "tree")
-        self.assertIn("hq.platform.application.tests.test_tree_tag.TreeTagTests", tree)
+    def test_a_tree_test_that_declares_what_it_reads_runs_on_a_change_to_those_files_alone(self):
+        """An edit reaches a file it opens; only an added or deleted file reaches one it lists."""
+        walks = "hq.a.tests.test_tree.Walks"
+        declared = [(walks, (("templates/**/*.html",), ("hq/**/*.py",)))]
+        with patch.object(fast_gate, "tree_tests", return_value=declared):
+            for paths, listed in (
+                (["templates/partials/table.html"], []),
+                (["templates/new.html"], ["templates/new.html"]),
+                (["hq/domains/example/views.py"], ["hq/domains/example/views.py"]),
+            ):
+                with self.subTest(paths=paths, listed=listed):
+                    self.assertEqual(fast_gate.with_tree([], paths, listed), [walks])
+            for paths, listed in (
+                (["hq/domains/example/views.py"], []),
+                (["static/css/app.css", "docs/Example.md"], ["docs/Example.md"]),
+            ):
+                with self.subTest(paths=paths, listed=listed):
+                    self.assertEqual(fast_gate.with_tree([], paths, listed), [])
+
+    @tag("tree")
+    def test_a_change_adds_each_tree_test_it_reaches_to_the_one_run(self):
+        from hq.platform.application.tests.tree import tree_tests
+
+        tree = tree_tests(ROOT)
+        undeclared = {label for label, held in tree if held is None}
+        self.assertIn("hq.platform.application.tests.test_tree_tag.TreeTagTests", undeclared)
         # The walk above is this checkout's; with_tree asks for it once and adds what it answers.
-        with patch.object(fast_gate, "tagged", return_value=tree) as walked:
-            labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["hq/domains/example/models.py"])
-        walked.assert_called_once_with(fast_gate.ROOT, "tree")
-        self.assertEqual(set(labels), {"hq.a.tests.test_b", *tree})
+        with patch.object(fast_gate, "tree_tests", return_value=tree) as walked:
+            labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["hq/domains/example/models.py"], [])
+        walked.assert_called_once_with(fast_gate.ROOT)
+        self.assertLessEqual({"hq.a.tests.test_b", *undeclared}, set(labels))
         command = fast_gate.run_command((), [], labels, "2")
         self.assertLessEqual(set(labels), set(command))
         self.assertNotIn("--tag", command)
@@ -327,11 +350,31 @@ class FastGateTreeTests(GateTestCase):
 
     @tag("tree")
     def test_the_walk_started_beside_the_selection_is_the_one_read(self):
-        with patch.object(fast_gate, "tagged", return_value=["hq.a.tests.test_tree.Walks"]) as walked:
+        walks = [("hq.a.tests.test_tree.Walks", None)]
+        with patch.object(fast_gate, "tree_tests", return_value=walks) as walked:
             walking = fast_gate.walk_for_tree()
-            labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"], walking)
-        walked.assert_called_once_with(fast_gate.ROOT, "tree")
+            labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"], None, walking)
+        walked.assert_called_once_with(fast_gate.ROOT)
         self.assertEqual(labels, ["hq.a.tests.test_b", "hq.a.tests.test_tree.Walks"])
+
+    def test_the_paths_a_listing_can_tell_are_those_added_or_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            git = fixture_git(root)
+            git("init", "--quiet")
+            for name in ("kept.txt", "edited.txt", "deleted.txt"):
+                (root / name).write_text("base\n")
+            git("add", "-A")
+            git("commit", "--quiet", "--no-verify", "-m", "base")
+            base = git("rev-parse", "HEAD")
+            (root / "edited.txt").write_text("edited\n")
+            (root / "deleted.txt").unlink()
+            (root / "staged.txt").write_text("new\n")
+            git("add", "staged.txt")
+            (root / "untracked.txt").write_text("new\n")
+            with patch.object(fast_gate, "ROOT", root):
+                listed = fast_gate.listed_change(base, ["deleted.txt"])
+        self.assertEqual(listed, ["deleted.txt", "staged.txt", "untracked.txt"])
 
     def test_a_test_both_selected_and_tagged_tree_runs_once(self):
         module = "tools.gate.tests.test_turn"

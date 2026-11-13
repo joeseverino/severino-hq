@@ -21,7 +21,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
-from hq.platform.application.tests.tree import tagged
+from hq.platform.application.tests.reads import Reads
+from hq.platform.application.tests.tree import TreeTests, tree_tests
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
 from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
 from tools.gate import testmap
@@ -737,28 +738,40 @@ def group_tasks(files: list[Path], reached: set[str], touched: set[str]) -> tupl
     return tuple(sorted({group_tests()[m] for m in picked}))
 
 
-def with_tree(labels: list[str], paths: list[str], walking: Future[list[str]] | None = None) -> list[str]:
-    """The selected labels, and every test tagged tree when anything changed:
-    those ``walking`` finds, or else a walk run now.
-
-    A test that walks a directory finds a file there by no import and no name,
-    a module, a template or a doc alike, so any change runs every test tagged
-    tree, in the same run as the rest
-    (hq/platform/application/tests/test_tree_tag.py holds the tag to the
-    walks)."""
+def with_tree(
+    labels: list[str],
+    paths: list[str],
+    listed: list[str] | None = None,
+    walking: Future[TreeTests] | None = None,
+) -> list[str]:
+    """The selected labels, and each test tagged tree (test_tree_tag.py) that ``paths`` reach, of those
+    ``walking`` finds or else of a walk run now: a walk finds a file by no import or name, so one that declares
+    nothing runs on any change, and one that declares its reads (reads.py) on a change to them, ``listed``
+    (``paths`` when not given) being what was added or deleted."""
 
     if not paths:
         return labels
-    return [*labels, *(walking.result() if walking else tagged(ROOT, "tree"))]
+    found = walking.result() if walking else tree_tests(ROOT)
+    names = paths if listed is None else listed
+    reached = [label for label, held in found if held is None or Reads(*held).selects(paths, names)]
+    print(f"[fast] {len(reached)} of the {len(found)} tests tagged tree run: those the change reaches")
+    return [*labels, *reached]
 
 
-def walk_for_tree() -> Future[list[str]]:
+def listed_change(base: str, deleted: list[str]) -> list[str]:
+    """The paths a change adds or deletes since ``base``, untracked ones included: all a listing can tell."""
+
+    added = names("diff", "--name-only", "--no-renames", "--diff-filter=A", base, root=ROOT)
+    return sorted({*added, *names("ls-files", "--others", "--exclude-standard", root=ROOT), *deleted})
+
+
+def walk_for_tree() -> Future[TreeTests]:
     """The walk for the tests tagged tree, started now on a thread: it runs in a
     process of its own (``apart``), so it overlaps the reading of the import
     graph and the paths the modules name, which it does not depend on."""
 
     pool = ThreadPoolExecutor(max_workers=1)
-    walking = pool.submit(tagged, ROOT, "tree")
+    walking = pool.submit(tree_tests, ROOT)
     # Leaving the pool's block would wait for the walk; this lets it run on.
     pool.shutdown(wait=False)
     return walking
@@ -960,11 +973,10 @@ def main(asked: Usage) -> int:
         print(f"[fast] {said}: the whole suite and every quick gate run, so a pass records this tree and its map")
         labels, every_test = whole_suite(files), True
 
-    # Read before the tests tagged tree join: they run on any change, so they say nothing of its reach.
-    unreached = unreached_recordings(selected, [*changed, *deleted], labels) if gate and not every_test else []
-    if changed or deleted:
-        print("[fast] every test tagged tree runs too: each walks the checkout, which the change is part of")
-    labels = with_tree(labels, [*changed, *deleted], walking)
+    paths = [*changed, *deleted]
+    # Read before the tests tagged tree join: their selection says nothing of the change's reach.
+    unreached = unreached_recordings(selected, paths, labels) if gate and not every_test else []
+    labels = with_tree(labels, paths, listed_change(base, deleted) if paths else [], walking)
     if gate is None:
         print("\n".join(labels))
         return 0

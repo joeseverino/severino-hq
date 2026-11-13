@@ -9,6 +9,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.markup import elements, select, with_class
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 from hq.platform.core.tests.test_template_values import template_sources
 
@@ -207,6 +208,7 @@ class FilterBarFaultTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class FilterBarUseTests(SimpleTestCase):
     def test_every_filter_bar_says_its_count_and_its_empty_choice_through_the_part(self):
         """Every bar reads the same: the search first, an empty choice only

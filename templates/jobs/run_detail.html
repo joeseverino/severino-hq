@@ -4,6 +4,10 @@ One run of a playbook, or one scan of its source (`run_pages.run_context`):
 what it ran and on which machines, who asked and who approved it, its lease
 while a runner holds it, how it ended, and each task's outcome, drawn as
 every registry-driven table is. Its state is the badge beside its title.
+A scan that read a commit (`scan`, `run_pages.scan_context`) names it and
+the commit adopted now, then what adopting it changes, each playbook HQ
+can't adopt on its own row; Adopt all and Reject all are the page's actions
+while it waits.
 {% endcomment %}
 {% block page %}
 <div class="section-flow">
@@ -26,8 +30,27 @@ every registry-driven table is. Its state is the badge beside its title.
     {% if run.evidence.worker %}{% fact "Lease" %}{{ run.evidence.worker|breakable }}{% detail %}<small>Until {{ run.evidence.lease_until|when:"exact" }}</small>{% endfact %}{% endif %}
     {% if operation.attempt_count > 1 %}{% fact "Attempts" value=operation.attempt_count %}{% endif %}
     {% if run.note %}{% fact "Result" value=run.note %}{% endif %}
+    {% if scan %}
+      {% fact "Commit read" %}{{ scan.revision|breakable }} on {{ scan.proposal.branch|breakable }}{% if scan.proposal.committer %} from {{ scan.proposal.committer|breakable }}{% endif %}{% endfact %}
+      {% fact "Commit adopted" value=adopted_revision|or_empty %}
+      {% if scan.proposal.rejected_at %}
+        {% fact "Rejected by" value=scan.proposal.rejected_by|or_empty %}
+        {% fact "Rejected" %}{{ scan.proposal.rejected_at|when:"exact" }}{% endfact %}
+      {% endif %}
+    {% endif %}
   {% endfacts %}
 {% endsection %}
+{% if scan.unplaced %}
+  {% notice tone="error" %}
+    <ul>{% for reason in scan.unplaced %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
+  {% title %}HQ can't adopt this commit{% endnotice %}
+{% endif %}
+{% if scan.unmarked %}
+  {% notice tone="warning" title="More access" %}
+    <ul>{% for widening in scan.unmarked %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
+  {% endnotice %}
+{% endif %}
+{% if scan.preview %}{% change_table scan.preview %}{% endif %}
 {% include "partials/_page_sections.html" with spans_row=True %}
 </div>
 {% endblock %}

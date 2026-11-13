@@ -309,7 +309,7 @@ class DemoSiteTests(unittest.TestCase):
         # no warning or error notice and no failed scan. A playbook Playbooks
         # links has a run a person approved that finished, each task's outcome
         # beside it.
-        for path in ("infrastructure/procedures", "jobs"):
+        for path in ("infrastructure/playbooks", "jobs"):
             with self.subTest(path=path):
                 # A <template> is a frame a script fills, never drawn as it stands.
                 page = re.sub(
@@ -320,7 +320,7 @@ class DemoSiteTests(unittest.TestCase):
                 )
                 marks = {mark for classes, hook in _MARK.findall(page) for mark in (classes.split() or [hook])}
                 self.assertFalse(marks & {"notice-warning", "notice-error", "data-scan-failed"})
-        playbooks = (OUT / "infrastructure" / "procedures" / "index.html").read_text(encoding="utf-8")
+        playbooks = (OUT / "infrastructure" / "playbooks" / "index.html").read_text(encoding="utf-8")
         runs = sorted(set(re.findall(r'href="(/commands/[^"/]+\.run/)"', playbooks)))
         self.assertTrue(runs, "Playbooks links each playbook's runs")
         approved = []

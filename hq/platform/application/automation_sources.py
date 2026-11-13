@@ -41,20 +41,22 @@ from .integration_specs import CapabilitySpec
 from .security import Capability, Principal
 from .ui import ended
 lazy from . import asks, automation_adoption
+lazy from .action_links import capability_action_link
 lazy from .approval_review import grouped, marked
 lazy from .cadence import ring_automation_doorbell
 lazy from .findings import rule_for
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .moments import ago
-lazy from .record_errors import PolicyError, RecordNotFound
+lazy from .pages import PageAction
+lazy from .record_errors import RecordNotFound
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
-lazy from .work_runs import run_seen_state
+lazy from .routes import reverse
+lazy from .work_runs import run_seen_state, run_url
 
 if TYPE_CHECKING:
     from hq.domains.control_plane.models import (
         AdoptedCatalog,
-        ApprovalRequest,
         ManagedResource,
         OperationRequest,
         SourceProposal,
@@ -65,7 +67,7 @@ if TYPE_CHECKING:
 
 REFRESH = "automation.source.refresh"
 # The page the source's and its playbooks' commands belong to.
-PLAYBOOKS = "control_plane:procedures"
+PLAYBOOKS = "control_plane:playbooks"
 # The one source's record: the repository is the host's configuration, so
 # HQ knows of one source and never which repository it is.
 SOURCE_KEY = "automation-source"
@@ -246,15 +248,18 @@ def refresh(command: RefreshCommand, *, principal: Principal) -> OperationQueued
 
 @dataclass(frozen=True, slots=True)
 class Reviewed:
-    """One proposal as a person decides on it: what adopting it changes and
-    each way that lets a run do more, or every reason HQ will not adopt it."""
+    """One proposal as a person decides on it: what adopting it changes,
+    each way that lets a run do more, and every reason HQ will not adopt it."""
 
     proposal: SourceProposal
-    # None when it cannot be adopted, or is the commit adopted now.
+    # None when it is the commit adopted now.
     preview: ChangePreview | None
     widens: tuple[str, ...] = ()
-    # The ways it widens that no playbook's row of ``preview`` carries, said above it.
+    # What no playbook's row of ``preview`` carries, said above it: the ways
+    # it widens and the commit's own reasons HQ won't adopt it.
     unmarked: tuple[str, ...] = ()
+    unplaced: tuple[str, ...] = ()
+    # Every reason HQ will not adopt it, each playbook's by its sidecar.
     refused: tuple[str, ...] = ()
     # Whether it is the catalog adopted now, so adopting it changes nothing.
     adopted: bool = False
@@ -263,20 +268,17 @@ class Reviewed:
     def revision(self) -> str:
         return self.proposal.revision[:SHORT_REVISION]
 
+    @property
+    def pending(self) -> bool:
+        """Whether it waits for a person: neither adopted nor rejected."""
 
-@dataclass(frozen=True, slots=True)
-class HeldAdoption:
-    """An adoption an agent asked for, waiting for a person to decide it."""
-
-    approval: ApprovalRequest
-    proposal: int
-    revision: str
+        return not self.adopted and self.proposal.rejected_at is None
 
 
 @dataclass(frozen=True, slots=True)
 class SourceStanding:
     """Where the automation source stands: its newest scan and how it went,
-    a proposal reviewed, the catalog adopted now, and what waits for a person."""
+    the newest proposal reviewed, and the catalog adopted now."""
 
     scan: OperationRequest | None
     scanned: Standing
@@ -287,11 +289,16 @@ class SourceStanding:
     proposal: Reviewed | None
     catalog: AdoptedCatalog | None
     procedures: tuple[Any, ...]
-    held: tuple[HeldAdoption, ...]
 
     @property
     def revision(self) -> str:
         return self.catalog.revision[:SHORT_REVISION] if self.catalog else ""
+
+    @property
+    def pending(self) -> Reviewed | None:
+        """The newest proposal, while it waits for a person to adopt or reject it."""
+
+        return self.proposal if self.proposal is not None and self.proposal.pending else None
 
 
 def _scans():
@@ -329,27 +336,26 @@ def _stands(scan: OperationRequest) -> Standing:
     return replace(standing, note=WORKER_ABSENT.format(seen=seen) if late else WORKER_DUE)
 
 
-def _reviewed(proposal: SourceProposal) -> Reviewed:
-    try:
-        planned = automation_adoption.plan(proposal.pk)
-    except PolicyError as refusal:
-        refused = (refusal.details or {}).get("refused", ())
-        return Reviewed(proposal, None, refused=tuple(str(each) for each in refused))
-    if planned.digest == planned.current:
+def reviewed(proposal: SourceProposal) -> Reviewed:
+    """``proposal`` as a person decides on it, compared with the catalog adopted now."""
+
+    planned = automation_adoption.judged(proposal.pk)
+    if planned.digest == planned.current and not planned.refused:
         return Reviewed(proposal, None, adopted=True)
     compared = planned.compared
-    shown, unmarked = marked(grouped(compared["before"], compared["after"], label="Changes"), planned.widens)
-    return Reviewed(proposal, shown, widens=planned.widens, unmarked=unmarked)
-
-
-def _held() -> tuple[HeldAdoption, ...]:
-    waiting = models.ApprovalRequest.objects.filter(
-        capability=automation_adoption.ADOPT, state=models.ApprovalRequest.State.PENDING
-    ).order_by("-created_at")
-    return tuple(
-        HeldAdoption(held, int(held.payload["proposal"]), str(held.baseline.get("revision", ""))[:SHORT_REVISION])
-        for held in waiting
-        if isinstance(held.payload.get("proposal"), int)
+    # A playbook HQ can't adopt is marked as one that widens is, its row
+    # saying why.
+    unadoptable = tuple(f"{named} can't be adopted." for named in planned.unadoptable)
+    shown, unmarked = marked(
+        grouped(compared["before"], compared["after"], label="Changes"), (*planned.widens, *unadoptable)
+    )
+    return Reviewed(
+        proposal,
+        shown,
+        widens=planned.widens,
+        unmarked=tuple(each for each in unmarked if each not in unadoptable),
+        unplaced=planned.unplaced,
+        refused=planned.refused,
     )
 
 
@@ -375,18 +381,38 @@ def standing(proposal: int | None = None) -> SourceStanding:
         scanned=scanned,
         reached=reached,
         reach=asks.operation_standing(reached) if reached is not None else asks.Standing(),
-        proposal=_reviewed(found) if found is not None else None,
+        proposal=reviewed(found) if found is not None else None,
         catalog=catalog,
         procedures=automation_adoption.procedures(catalog.digest) if catalog else (),
-        held=_held(),
     )
+
+
+def decisions(pending: Reviewed | None, principal: Principal, *, diff: bool) -> tuple[PageAction, ...]:
+    """What a person may do about the commit waiting to be adopted, in the
+    order the Playbooks page and its scan's page draw them: View diff (on
+    the Playbooks page, ``diff``), Adopt all when HQ can adopt every
+    playbook, and Reject all. Nothing when no commit waits."""
+
+    if pending is None:
+        return ()
+    proposal = pending.proposal
+    shown: list[PageAction] = []
+    if diff:
+        shown.append(PageAction("View diff", run_url(str(proposal.operation_id))))
+    if not pending.refused and capability_action_link(automation_adoption.ADOPT, principal=principal):
+        adopt = reverse("control_plane:playbooks_adopt", kwargs={"pk": proposal.pk})
+        shown.append(PageAction("Adopt all", adopt, method="post"))
+    if capability_action_link(automation_adoption.REJECT, principal=principal):
+        reject = reverse("control_plane:playbooks_reject", kwargs={"pk": proposal.pk})
+        shown.append(PageAction("Reject all", reject, method="post"))
+    return tuple(shown)
 
 
 def capability_specs() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
             REFRESH,
-            "Scan your repository for playbooks and keep the scan result. Nothing in it runs until you adopt it.",
+            "Scan your repository for playbooks and keep the scan result. Nothing in it runs until a person adopts it.",
             "remote_write",
             Capability.MANAGE_INFRASTRUCTURE,
             RefreshCommand,

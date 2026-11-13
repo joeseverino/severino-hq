@@ -128,8 +128,9 @@ def mark_cells(markup: str, *, sorts: bool = True) -> str | None:
     """The region's tables with each cell marked for what the stylesheet reads.
 
     A blank body cell is ``data-blank``, a cell of a column blank in every row
-    ``data-blank-column``, prose or a status past its floor ``data-long``, and a
-    group's heading row spans every declared column. What a kept line says is
+    ``data-blank-column``, prose or a status past its floor ``data-long``, a
+    status said by one pill alone ``data-pill-only``, and a group's heading row
+    spans every declared column. What a kept line says is
     one ``.kept-line``, and after each row that holds something back is its open
     line (``_detail_row``), so opening a row moves nothing of the row itself.
     What a part of a cell is, which decides how it wraps, is its ``data-cell``:

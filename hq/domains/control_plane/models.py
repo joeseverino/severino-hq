@@ -622,6 +622,10 @@ class SourceProposal(TimestampedModel):
     # Each machine and privilege profile the worker said it has a login for,
     # which a run is held to when it is asked (``automation_runs.reached``).
     reaches = models.JSONField(default=list)
+    # Set when a person rejects it (``automation_adoption.reject``), so it no
+    # longer waits to be decided.
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.CharField(max_length=150, blank=True)
 
     class Meta:
         ordering = ("-created_at",)

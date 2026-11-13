@@ -1051,14 +1051,15 @@
             "adopted": false,
             "branch": "main",
             "committer": "example-maintainer",
-            "held": "",
             "id": 3,
+            "pending": true,
             "read_at": "2026-01-15T06:30:00+00:00",
-            "refused": [
-              "playbooks/package_upgrade.hq.yml: Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."
-            ],
-            "revision": "000cb167aee92601ea8a6c0811081a69038d2d91",
-            "widens": []
+            "refused": [],
+            "revision": "52889585fc55b53dd6aabcf75e024d74d94c2567",
+            "widens": [
+              "Empty a cache gains sudo (example.cache_admin).",
+              "Free space on a mount is new, and it changes a live system."
+            ]
           },
           "ok": true
         },
@@ -2487,14 +2488,15 @@
                 "adopted": false,
                 "branch": "main",
                 "committer": "example-maintainer",
-                "held": "",
                 "id": 3,
+                "pending": true,
                 "read_at": "2026-01-15T06:30:00+00:00",
-                "refused": [
-                  "playbooks/package_upgrade.hq.yml: Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."
-                ],
-                "revision": "000cb167aee92601ea8a6c0811081a69038d2d91",
-                "widens": []
+                "refused": [],
+                "revision": "52889585fc55b53dd6aabcf75e024d74d94c2567",
+                "widens": [
+                  "Empty a cache gains sudo (example.cache_admin).",
+                  "Free space on a mount is new, and it changes a live system."
+                ]
               }
             ],
             "next": null,
@@ -3950,30 +3952,6 @@
               "properties": {
                 "data": {
                   "$ref": "#/components/schemas/AddressLookedUp"
-                },
-                "ok": {
-                  "$ref": "#/components/schemas/Outcome",
-                  "const": true
-                }
-              },
-              "required": [
-                "ok",
-                "data"
-              ],
-              "type": "object"
-            }
-          }
-        },
-        "description": "Success."
-      },
-      "AdoptedSuccess": {
-        "content": {
-          "application/json": {
-            "schema": {
-              "additionalProperties": false,
-              "properties": {
-                "data": {
-                  "$ref": "#/components/schemas/Adopted"
                 },
                 "ok": {
                   "$ref": "#/components/schemas/Outcome",
@@ -5820,33 +5798,6 @@
         "description": "The notes kept on it, for HQ only. Empty for none.",
         "type": "string"
       },
-      "Adopted": {
-        "additionalProperties": false,
-        "description": "What an adoption did: whether the adopted playbooks changed, and what runs may now do.",
-        "properties": {
-          "adopted": {
-            "description": "False when this scan result was already adopted.",
-            "type": "boolean"
-          },
-          "digest": {
-            "description": "The digest that names the adopted playbooks.",
-            "type": "string"
-          },
-          "widened": {
-            "description": "What runs may now do that they could not before.",
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "adopted",
-          "digest",
-          "widened"
-        ],
-        "type": "object"
-      },
       "AdvisoryPart": {
         "additionalProperties": false,
         "properties": {
@@ -6695,44 +6646,6 @@
             },
             "required": [
               "operation_id"
-            ],
-            "type": "object"
-          }
-        },
-        "required": [
-          "payload"
-        ],
-        "type": "object"
-      },
-      "AutomationSourceAdoptRequest": {
-        "additionalProperties": false,
-        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
-        "properties": {
-          "expected_updated_at": {
-            "$ref": "#/components/schemas/ExpectedUpdatedAt"
-          },
-          "payload": {
-            "additionalProperties": false,
-            "description": "The scan result to adopt, and why.",
-            "properties": {
-              "idempotency_key": {
-                "$ref": "#/components/schemas/IdempotencyKey"
-              },
-              "proposal": {
-                "description": "The scan result's ID.",
-                "minimum": 1,
-                "title": "Scan result",
-                "type": "integer"
-              },
-              "reason": {
-                "default": "",
-                "description": "Why it is adopted, kept with the adoption.",
-                "maxLength": 300,
-                "type": "string"
-              }
-            },
-            "required": [
-              "proposal"
             ],
             "type": "object"
           }
@@ -16513,13 +16426,13 @@
             "description": "Who committed it, as GitHub names them; empty when it said no one.",
             "type": "string"
           },
-          "held": {
-            "description": "The id of an adoption of it that waits for approval, which `approvals` reads; empty for none.",
-            "type": "string"
-          },
           "id": {
-            "description": "The scan result's id, which `automation.source.adopt` takes as the scan result to adopt.",
+            "description": "The scan result's id.",
             "type": "integer"
+          },
+          "pending": {
+            "description": "Whether it waits for a person to adopt or reject it in HQ. Only a person decides it.",
+            "type": "boolean"
           },
           "read_at": {
             "anyOf": [
@@ -16544,7 +16457,7 @@
             "type": "string"
           },
           "widens": {
-            "description": "Each way adopting it lets a run do more than it may now. An agent's adoption that widens waits for an operator's approval, whatever its rules say.",
+            "description": "Each way adopting it lets a run do more than it may now.",
             "items": {
               "type": "string"
             },
@@ -19533,80 +19446,9 @@
         ]
       }
     },
-    "/api/v2/capabilities/automation.source.adopt/": {
-      "post": {
-        "description": "Adopt a scanned commit as the playbooks HQ runs. A commit GitHub did not verify, or one carrying an ansible.cfg or a plugins directory, is refused.",
-        "operationId": "automationSourceAdoptV2",
-        "parameters": [
-          {
-            "$ref": "#/components/parameters/IdempotencyKey"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AutomationSourceAdoptRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/AdoptedSuccess"
-          },
-          "202": {
-            "$ref": "#/components/responses/AwaitingApprovalAccepted"
-          },
-          "400": {
-            "$ref": "#/components/responses/UntargetedChangeBadRequest"
-          },
-          "401": {
-            "$ref": "#/components/responses/Unauthorized"
-          },
-          "403": {
-            "$ref": "#/components/responses/ChangeForbidden"
-          },
-          "404": {
-            "$ref": "#/components/responses/ChangeNotFound"
-          },
-          "405": {
-            "$ref": "#/components/responses/MethodNotAllowed"
-          },
-          "409": {
-            "$ref": "#/components/responses/ChangeConflict"
-          },
-          "413": {
-            "$ref": "#/components/responses/RequestTooLarge"
-          },
-          "415": {
-            "$ref": "#/components/responses/UnsupportedMediaType"
-          },
-          "429": {
-            "$ref": "#/components/responses/ChangeTooManyRequests"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
-          },
-          "503": {
-            "$ref": "#/components/responses/ServiceUnavailable"
-          }
-        },
-        "summary": "Adopt the playbooks",
-        "tags": [
-          "hq.jobs"
-        ],
-        "x-hq-capability": "automation.source.adopt",
-        "x-hq-effect": "infrastructure_change",
-        "x-hq-required-capabilities": [
-          "manage_infrastructure"
-        ]
-      }
-    },
     "/api/v2/capabilities/automation.source.refresh/": {
       "post": {
-        "description": "Scan your repository for playbooks and keep the scan result. Nothing in it runs until you adopt it.",
+        "description": "Scan your repository for playbooks and keep the scan result. Nothing in it runs until a person adopts it.",
         "operationId": "automationSourceRefreshV2",
         "parameters": [
           {
@@ -23831,7 +23673,6 @@
                 "asset.update",
                 "asset.upsert",
                 "automation.run.cancel",
-                "automation.source.adopt",
                 "automation.source.refresh",
                 "calendar.entry.create",
                 "calendar.entry.delete",
@@ -26937,7 +26778,7 @@
     },
     "/api/v2/resources/playbook_scans/": {
       "get": {
-        "description": "The newest scan of your playbooks' repository, or one by its id. It says what adopting it widens, and `automation.source.adopt` adopts it.",
+        "description": "The newest scan of your playbooks' repository, or one by its id. It says what adopting it widens; a person adopts or rejects it in HQ.",
         "operationId": "listPlaybookScansV2",
         "parameters": [
           {

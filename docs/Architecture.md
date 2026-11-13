@@ -1277,8 +1277,7 @@ An automation procedure (an Ansible playbook a worker runs against a host) is
 declared beside its playbook, in the repository the worker reads
 ([Declaring a playbook](#declaring-a-playbook)). HQ learns a repository's
 procedures by a Refresh, which proposes them as that repository's tip declares
-them, and runs one only once a person has adopted the proposal through
-approval. Each procedure of the adopted commit is then an `OperationManifest`
+them, and runs one only once a person has adopted the proposal. Each procedure of the adopted commit is then an `OperationManifest`
 (`hq/platform/application/automation_manifest.py`), and an
 `OperationRegistry` is built from them. No extension supplies a manifest, and
 the host's source names no procedure. The registry refuses two manifests with
@@ -1542,8 +1541,8 @@ against are built from. Its digest names it, so each process builds its
 commands anew at its next request once another process adopts, with no
 restart.
 
-`plan()` judges a proposal before anything is written, and refuses it with
-every reason at once, in `details.refused`:
+`judged()` compares a proposal with the catalog adopted now, and `plan()`
+refuses it with every reason at once, in `details.refused`:
 
 - a commit whose signature GitHub did not verify, as the scan recorded it
   with the worker's token (the web process holds none);
@@ -1557,27 +1556,32 @@ playbook and file by file, and each way it lets a run do more is a widening. A
 widening is a playbook that may run on more machines or kinds of record, a
 raised effect, a new privilege, or a playbook whose files change. So is a new
 playbook that does more than read, and a changed file every playbook may read
-or that names the collections a run may use. Adopting is a person's act: a
-person adopts at once, an agent's ask waits for a person, and a widening waits
-whatever the agent's rule allows. A held adoption is measured against the
-proposal and the catalog adopted now, so another adoption while it waits makes
-it stale, and its card lists the widenings above the comparison.
+or that names the collections a run may use. A playbook HQ can't adopt is a
+row of the comparison of its own, its problems in it, lined up by its id with
+the playbook it would replace.
 
-The Playbooks page (`control_plane:procedures`) is where a person does all
-of this. Refresh is followed while its scan runs, and the title's line says
-when a scan last read the repository and why the newest failed. A held
-adoption is drawn by the approval card its audit entry draws
-(`partials/approval_card.html`), with the widenings above the comparison and
-Approve and Reject in place. The newest commit no card holds and no adoption
-made follows: its refusals, or its comparison and widenings with Adopt for a
-person who may; any proposal is reached by its id the same way. The catalog
-adopted now closes the page, its commit in the section's lede and each
-playbook linking its command page. Every value is the catalog's or a scan's
-(`automation_sources.standing`), and the repository the commit belongs to is
-the deployment's configuration, never named on the page. The
-`automation.source` record lives on this page, where a held adoption's card
-links it, and offers no hand edit or removal (`ProviderSpec.sourced`), since
-the host's configuration names the source.
+Adopting is a person's act. Adopt and `automation.source.reject` (Reject)
+take `adopt_playbooks`, which `security.HELD_ONLY_AT` keeps at the operator's
+own interfaces: an agent may refresh, and its adoption or rejection is refused
+before anything is held, whatever its grant or rules say. Reject marks a
+proposal rejected (`SourceProposal.rejected_at`, by whom), so nothing waits.
+The newest proposal waits for a person while it is neither the catalog
+adopted now nor rejected (`SourceStanding.pending`).
+
+The Playbooks page (`control_plane:playbooks`) is the catalog adopted now,
+each playbook linking its command page, with the commit it was adopted at on
+the title's line. Refresh is followed while its scan runs, and the same line
+says why the newest scan failed. While a commit waits, the head carries View
+diff, Adopt all (when HQ can adopt every playbook) and Reject all beside
+Refresh (`automation_sources.decisions`). View diff opens the scan's own page
+(`jobs:run`, `run_pages.scan_context`): who refreshed and when, the commit read
+and the commit adopted, the commit's own refusals, and the comparison as the
+change table, with Adopt all and Reject all while it waits. Every value is the
+catalog's or a scan's (`automation_sources.standing`), and the repository the
+commit belongs to is the deployment's configuration, never named on the page.
+The `automation.source` record lives on this page and offers no hand edit or
+removal (`ProviderSpec.sourced`), since the host's configuration names the
+source.
 
 ### The automation worker on the host
 

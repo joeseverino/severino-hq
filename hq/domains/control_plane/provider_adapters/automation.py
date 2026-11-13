@@ -133,7 +133,7 @@ SOURCE = ProviderSpec(
     hostnames=None,
     # The Playbooks page draws everything about the source: its scans, its
     # scan results and the playbooks adopted from it.
-    home=lambda _resource: reverse("control_plane:procedures"),
+    home=lambda _resource: reverse("control_plane:playbooks"),
     # HQ never reads the host's configuration, only what its record says: a
     # Refresh writes the one source, named by the host, so no person edits
     # or removes it by hand.

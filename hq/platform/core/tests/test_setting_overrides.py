@@ -13,6 +13,7 @@ from django.conf import settings
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.apart import apart
+from hq.platform.application.tests.reads import reads
 
 from .setting_overrides import overridden
 
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[4]
 
 
 @tag("source", "tree")
+@reads("**/*.py")
 class SettingOverrideTests(SimpleTestCase):
     def test_every_overridden_setting_is_declared(self):
         found = apart(overridden, ROOT)

@@ -22,6 +22,7 @@ from django.urls.resolvers import RoutePattern
 from django.utils import timezone
 
 from hq.platform.application.routes import routed
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.audit import stamped
 from hq.platform.core.models import AuditLog
 from hq.platform.core.network import parse_ip
@@ -876,6 +877,7 @@ class FormActionTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/*.py")
 class SourceBoundaryTests(SimpleTestCase):
     """What the shipped sources may contain, read from the checkout."""
 

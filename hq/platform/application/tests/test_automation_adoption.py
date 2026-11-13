@@ -1,7 +1,8 @@
 """Adopting a proposal makes one scanned commit the catalog HQ runs
-procedures from, once a person agrees: a commit GitHub did not verify, or one
-carrying an Ansible configuration or plugins, is refused; an agent's adoption
-waits for a person, and a widening waits whatever the agent's rule says; and
+procedures from, and only a person adopts or rejects one: a commit GitHub did
+not verify, or one carrying an Ansible configuration or plugins, is refused;
+an agent's adoption is refused, never held, whatever its rule says; what a
+person decides on marks each widening and each playbook HQ can't adopt; and
 every process's commands follow the catalog without a restart.
 
 Each catalog is in the bridge contract's ``SourceCatalog`` shape and arrives
@@ -18,14 +19,19 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, OperationRequest
 
 from ..approvals import ApprovalError, ApproveCommand, approve
+from ..automation_adoption import REJECT
 from ..capabilities import capability_registry, run_capability
 from ..machines import Machine
-from ..security import Capability, Principal, agent_subject, mcp_principal
+from ..security import MCP_INTERFACE, Capability, Principal, agent_subject, mcp_principal
 from .test_approvals import an_operator
 from .test_automation_sources import RefreshTestCase
 
 ADOPT = "automation.source.adopt"
-OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE}))
+OPERATOR = Principal(
+    "example-operator",
+    "web",
+    frozenset({Capability.READ, Capability.MANAGE_INFRASTRUCTURE, Capability.ADOPT_PLAYBOOKS}),
+)
 READER = Principal("example-reader", "web", frozenset({Capability.READ}))
 FIRST, SECOND = "1" * 40, "2" * 40
 APP = "app.example.com"
@@ -238,44 +244,45 @@ class RegistryTests(AdoptionTestCase):
         self.assertEqual(heard, [True])
 
 
-class HeldAdoptionTests(AdoptionTestCase):
+class AgentAdoptionTests(AdoptionTestCase):
     def setUp(self):
-        self.agent = mcp_principal()
+        # An agent whose grant names adopting too, as a token could.
+        self.agent = Principal("example-agent", MCP_INTERFACE, OPERATOR.capabilities)
 
-    def held(self, proposal: int, key: str = "example-agent-adopt") -> ApprovalRequest:
-        answer = self.adopt(proposal, self.agent, key=key)
-        self.assertEqual(answer.get("status"), "awaiting_approval", answer)
-        return ApprovalRequest.objects.get(pk=answer["approval"]["id"])
+    def test_an_agent_s_adoption_or_rejection_is_refused_and_nothing_is_held_whatever_its_rule_says(self):
+        proposal = self.proposed(catalog(procedure("check")))
+        for capability in (ADOPT, REJECT):
+            CapabilityRule.objects.create(capability=capability, subject=agent_subject(self.agent), rule="allow")
+            with self.subTest(capability=capability):
+                answer = run_capability(
+                    capability, {"proposal": proposal}, principal=self.agent, idempotency_key=f"example-{capability}"
+                ).answer
 
-    def allowed(self) -> None:
-        CapabilityRule.objects.create(capability=ADOPT, subject=agent_subject(self.agent), rule="allow")
-
-    def test_an_agent_s_adoption_waits_for_a_person_who_sees_what_it_changes(self):
-        from ..approval_review import preview
-
-        held = self.held(self.proposed(catalog(procedure("check"))))
-
+                self.assertEqual(answer["error"]["code"], "forbidden", answer)
+        self.assertFalse(ApprovalRequest.objects.exists())
         self.assertEqual(self.adopted(), [])
-        self.assertEqual(held.baseline["committer"], "example-maintainer")
-        shown = {row.label: row for row in preview(held).changes}
-        # Each playbook is read by its title.
-        self.assertTrue(
-            any("The check procedure" in label and row.change == "added" for label, row in shown.items()), shown
-        )
+        from hq.domains.control_plane.models import SourceProposal
 
-        approve(ApproveCommand(str(held.id)), principal=an_operator())
+        self.assertIsNone(SourceProposal.objects.get(pk=proposal).rejected_at)
 
-        self.assertEqual(self.adopted(), [FIRST])
+
+class ReviewTests(AdoptionTestCase):
+    """What a person decides on: the commit read against the one adopted."""
+
+    def review(self, proposal: int):
+        from hq.domains.control_plane.models import SourceProposal
+
+        from ..automation_sources import reviewed
+
+        return reviewed(SourceProposal.objects.get(pk=proposal))
 
     def test_a_new_playbook_s_rows_say_what_its_command_page_says_and_name_its_inputs(self):
-        from ..approval_review import preview
         from ..automation_runs import about, operation_registry
 
-        held = self.held(self.proposed(catalog(procedure("check", effect="infrastructure_change"))))
-        (group,) = [group for group in preview(held).groups if group.whole == "added"]
+        proposal = self.proposed(catalog(procedure("check", effect="infrastructure_change")))
+        (group,) = [group for group in self.review(proposal).preview.groups if group.whole == "added"]
         rows = {row.label: row.after for row in group.rows}
-        with self.captureOnCommitCallbacks(execute=True):
-            approve(ApproveCommand(str(held.id)), principal=an_operator())
+        self.adopt(proposal)
         page = {fact.label: fact.value for fact in about(operation_registry()["example.check"], OPERATOR).facts}
 
         for label in ("Effect", "Access", "Timeout", "Retry"):
@@ -285,18 +292,8 @@ class HeldAdoptionTests(AdoptionTestCase):
         self.assertFalse([label for label in rows if label.startswith("Inputs ")], rows)
         self.assertNotIn("Title", rows, "the playbook's row is named by its title already")
 
-    def test_a_narrow_adoption_runs_under_the_agent_s_rule(self):
-        self.allowed()
-
-        answer = self.adopt(self.proposed(catalog(procedure("check"))), self.agent)
-
-        self.assertTrue(answer.get("adopted"), answer)
-
-    def test_a_widening_waits_for_a_person_whatever_the_agent_s_rule_says(self):
-        from ..approval_review import review
-
-        self.allowed()
-        self.adopt(self.proposed(catalog(procedure("check"))), self.agent)
+    def test_each_widening_is_marked_for_the_person_who_decides(self):
+        self.adopt(self.proposed(catalog(procedure("check"))))
         widenings = {
             "a new write": catalog(procedure("check"), procedure("wipe", effect="destructive"), revision=SECOND),
             "a privilege": catalog(procedure("check", effect="infrastructure_change", privilege="example.root")),
@@ -307,14 +304,32 @@ class HeldAdoptionTests(AdoptionTestCase):
             "a read's files": catalog(procedure("check"), changed="roles/check/tasks/main.yml"),
         }
 
-        for index, (widening, found) in enumerate(widenings.items()):
+        # Each at a commit of its own, as a change to any file is.
+        for index, (widening, found) in enumerate(widenings.items(), start=2):
             with self.subTest(widening=widening):
-                held = self.held(self.proposed(found), key=f"example-agent-adopt-{index}")
+                shown = self.review(self.proposed({**found, "revision": str(index) * 40}))
 
-                shown = review(held)
-                marked = shown["warnings"] or any(group.widens for group in shown["preview"].groups)
-                self.assertTrue(marked, "the person deciding is shown what it widens")
+                self.assertTrue(shown.unmarked or any(group.widens for group in shown.preview.groups))
         self.assertEqual(self.adopted(), [FIRST])
+
+    def test_a_playbook_hq_cannot_adopt_is_its_own_row_with_its_problems_and_nothing_else_moves(self):
+        self.adopt(self.proposed(catalog(procedure("check"), procedure("other"))))
+        broken = procedure("check")
+        broken["problems"] = ["Role check_v2 is missing. Add it at roles/check_v2/ in the repository."]
+        unbounded = procedure("fresh")
+        unbounded["roles"][0]["argument_spec"]["options"]["service"] = {"type": "dict"}
+
+        shown = self.review(self.proposed(catalog(broken, procedure("other"), unbounded, revision=SECOND)))
+
+        groups = {group.label: group for group in shown.preview.groups}
+        self.assertEqual([row.label for row in groups["The check procedure"].rows], ["Problems"])
+        self.assertTrue(groups["The check procedure"].widens, "its row is marked")
+        self.assertEqual(groups["The fresh procedure"].whole, "added")
+        self.assertIn("free-form type", " ".join(row.after for row in groups["The fresh procedure"].rows))
+        self.assertFalse(groups["The other procedure"].changed)
+        self.assertFalse([said for said in shown.unmarked if "can't be adopted" in said])
+        self.assertFalse(shown.unplaced, "every reason is on a playbook's row")
+        self.assertEqual(len(shown.refused), 2)
 
     def test_a_widening_names_each_playbook_by_its_title_and_its_id_only_beside_a_shared_title(self):
         from ..automation_adoption import plan
@@ -334,15 +349,34 @@ class HeldAdoptionTests(AdoptionTestCase):
             ],
         )
 
-    def test_a_held_adoption_goes_stale_when_another_is_adopted_first(self):
-        held = self.held(self.proposed(catalog(procedure("check"))))
 
-        self.adopt(self.proposed(catalog(procedure("other"), revision=SECOND)))
-        decided(held)
+class RejectTests(AdoptionTestCase):
+    def reject(self, proposal: int, principal: Principal = OPERATOR, key: str = "example-reject") -> dict[str, Any]:
+        return run_capability(REJECT, {"proposal": proposal}, principal=principal, idempotency_key=key).answer
 
-        held.refresh_from_db()
-        self.assertEqual(held.state, ApprovalRequest.State.STALE)
-        self.assertEqual(self.adopted(), [SECOND])
+    def test_a_person_rejects_a_scan_once_and_it_waits_no_more(self):
+        from hq.domains.control_plane.models import SourceProposal
+
+        from ..automation_sources import standing
+
+        self.adopt(self.proposed(catalog(procedure("check"))))
+        newer = self.proposed(catalog(procedure("other"), revision=SECOND))
+        self.assertEqual(standing().pending.proposal.pk, newer)
+
+        self.assertTrue(self.reject(newer)["rejected"])
+        self.assertFalse(self.reject(newer, key="example-reject-again")["rejected"])
+
+        rejected = SourceProposal.objects.get(pk=newer)
+        self.assertEqual(rejected.rejected_by, OPERATOR.actor)
+        self.assertIsNone(standing().pending)
+        self.assertEqual(self.adopted(), [FIRST])
+
+    def test_the_commit_hq_runs_from_is_not_rejected_and_a_reader_rejects_nothing(self):
+        adopted = self.proposed(catalog(procedure("check")))
+        self.adopt(adopted)
+
+        self.assertEqual(self.reject(adopted)["error"]["code"], "precondition")
+        self.assertEqual(self.reject(adopted, READER, key="example-reader")["error"]["code"], "forbidden")
 
 
 class StaleRunTests(AdoptionTestCase):

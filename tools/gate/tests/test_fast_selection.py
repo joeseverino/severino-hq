@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from django.test import tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.task import names, trusted_mise
 from tests.mise_tasks import mise_tasks
 from tools.gate import fast as fast_gate
@@ -53,7 +54,9 @@ def exclusions(task: str) -> list[str]:
     return [pattern[1:] for pattern in mise_tasks()[task]["sources"] if pattern.startswith("!")]
 
 
+# Every path is listed by name; the tasks are read from mise, which opens its config and task files.
 @tag("source", "tree")
+@reads("mise-tasks/**", "mise*.toml", "mise.lock", "tools/pipeline/toolchain.env", "controller/go.mod", lists=("**",))
 class FastGateTaskSelectionTests(GateTestCase):
     def test_every_quick_gate_reads_files_of_this_tree_and_what_every_gate_reads_and_is_never_skipped_as_fresh(self):
         files = [PurePath(path) for path in names("ls-files", root=ROOT)]

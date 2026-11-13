@@ -11,6 +11,7 @@ import re
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.tree import ROOT
 
 TEMPLATES = ROOT / "templates"
@@ -76,6 +77,7 @@ class MissesTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class FormTemplateTests(SimpleTestCase):
     def test_every_form_closes_with_the_shared_row(self):
         forms = form_templates()

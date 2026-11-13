@@ -45,6 +45,10 @@ class Capability(StrEnum):
     # Hands HQ a receipt's file. Held at the operator's own interfaces as a
     # certificate is: a file arrives through a person, never a token.
     UPLOAD_RECEIPT = "upload_receipt"
+    # Makes a scanned commit the playbooks HQ runs, or sets it aside. Held at
+    # the operator's own interfaces: an agent may refresh, and a person decides
+    # what of the repository HQ runs.
+    ADOPT_PLAYBOOKS = "adopt_playbooks"
     # A person's own decisions, held only in the browser (``HELD_ONLY_AT``): no
     # credential approves what a credential asked for, or pauses or grants agents.
     DECIDE_APPROVALS = "decide_approvals"
@@ -127,13 +131,15 @@ AGENT_SURFACES = frozenset({MCP_INTERFACE, API_INTERFACE})
 
 # Capabilities held only at these interfaces, whatever a grant says: the two
 # that would let an agent lift its own limits, HQ's own back-channel logout,
-# and the uploads, whose bytes this keeps out of a hold, the audit log and an
-# answer. An agent's token that names one is refused it in
-# ``Principal.require``, the first thing the capability runner asks, so
-# nothing it sends is held for approval, stored or logged.
+# the uploads, whose bytes this keeps out of a hold, the audit log and an
+# answer, and adopting playbooks, which decides what code HQ runs. An
+# agent's token that names one is refused it in ``Principal.require``, the
+# first thing the capability runner asks, so nothing it sends is held for
+# approval, stored or logged.
 HELD_ONLY_AT: dict[str, frozenset[str]] = {
     Capability.UPLOAD_CERTIFICATE: OPERATOR_INTERFACES,
     Capability.UPLOAD_RECEIPT: OPERATOR_INTERFACES,
+    Capability.ADOPT_PLAYBOOKS: OPERATOR_INTERFACES,
     Capability.DECIDE_APPROVALS: INTERACTIVE_INTERFACES,
     Capability.GOVERN_AGENTS: INTERACTIVE_INTERFACES,
     Capability.END_SESSIONS: frozenset({INTERNAL_INTERFACE}),

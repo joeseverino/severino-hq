@@ -5,7 +5,7 @@ from django.test import SimpleTestCase
 
 from hq.platform.application.approval_review import ChangePreview, compare
 from hq.platform.application.payload_words import ChangeRow
-from hq.platform.application.tests.markup import elements, select, with_class, within
+from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
 from hq.platform.application.ui import MISSING
 
 
@@ -36,36 +36,49 @@ class ChangeTableTests(SimpleTestCase):
     def test_a_value_that_moves_is_read_beside_what_it_was(self):
         html = _drawn(compare({"example_name": "before"}, {"example_name": "after"}, label="Would change"))
 
-        self.assertEqual(_headings(html), ["Field", "Before", "After"])
+        self.assertEqual(_headings(html), ["Field", "Before", "After", "Status"])
         self.assertTrue(with_class(html, "is-compare"), "the two values share the row evenly")
-        self.assertEqual([cell.words for cell in elements(html, "td")], ["before", "after"])
+        self.assertEqual([cell.words for cell in select(html, "data-side")], ["before", "after"])
 
     def test_what_is_written_where_nothing_stood_is_one_column(self):
         html = _drawn(compare({}, {"example_name": "after"}, label="Would be applied"))
 
         self.assertNotIn("Before", _headings(html))
-        self.assertEqual([cell.words for cell in elements(html, "td")], ["after"])
+        self.assertEqual([cell.words for cell in select(html, "data-side")], ["after"])
 
     def test_a_redacted_value_is_said_to_have_changed_and_never_shown(self):
         row = ChangeRow(label="Example token", before="", after="", change="changed", redacted=True)
         html = _drawn(ChangePreview(label="Changes", rows=(row,), lines=()))
 
-        self.assertEqual([cell.words for cell in elements(html, "td")], ["redacted", "redacted"])
+        self.assertEqual([cell.words for cell in select(html, "data-side")], ["redacted", "redacted"])
 
-    def test_each_field_a_record_moves_is_a_row_named_by_both_and_one_that_stays_is_only_named(self):
+    def test_a_record_that_moves_is_one_row_its_fields_folded_under_it_and_one_that_stays_is_only_named(self):
         from hq.platform.application.approval_review import grouped
 
         records = {"example.first": {"example_effect": "read"}, "example.second": {"example_effect": "read"}}
-        moved = {**records, "example.first": {"example_effect": "change"}}
+        moved = {**records, "example.first": {"example_effect": "change", "example_mode": "fast"}}
         html = _drawn(grouped({"records": records}, {"records": moved}, label="Would change"))
 
-        (row,) = [row for row in elements(html, "tr") if "example.first" in row.words]
-        self.assertIn("Example effect", row.words, "the row names the field beside its record")
-        self.assertEqual([cell.words for cell in elements(html, "td")], ["read", "change"])
+        # One parse, so each cell's row is the same object as the row.
+        shown = all_elements(html)
+        (head,) = [row for row in shown if "data-folds" in row.attrs]
+        in_head = [element for element in shown if any(row is head for row in element.ancestors)]
+        (name,) = [cell for cell in in_head if cell.tag == "th"]
+        self.assertEqual(name.words.strip(), "example.first", "the row is named by its record alone")
+        self.assertNotIn("›", html, "no row is named by its record and its field")
+        (status,) = [pill for pill in in_head if "pill" in pill.classes]
+        self.assertEqual(status.words, "Changed")
+        folds = head.attrs["id"]
+        fields = [cell.words for cell in within(html, "data-folded", folds) if cell.tag == "th"]
+        self.assertEqual(fields, ["Example effect", "Example mode"])
+        self.assertEqual(_sides(html, folds), {"before": ["read", MISSING], "after": ["change", "fast"]})
+        said = [pill.words for pill in within(html, "data-folded", folds) if "pill" in pill.classes]
+        self.assertEqual(said, ["Changed", "New"], "each field of a record that moves says its own change")
         self.assertFalse(with_class(html, "row-group"), "no row only says what the rows under it say")
-        self.assertFalse(select(html, "data-folds"), "nothing that changes is folded away")
         (foot,) = with_class(html, "section-foot")
         self.assertIn("example.second", foot.words)
+        (count,) = [element for element in with_class(html, "count") if element.words.strip().isdigit()]
+        self.assertEqual(count.words.strip(), "1", "a record that moves counts as one")
 
     def test_a_record_the_change_widens_has_its_rows_marked_and_no_sentence_of_its_own(self):
         from dataclasses import replace
@@ -106,7 +119,7 @@ class ChangeTableTests(SimpleTestCase):
 
         (head,) = select(html, "data-folds")
         self.assertIn(summary["label"], head.words)
-        cells = [cell for cell in elements(html, "td") if any("data-folds" in row.attrs for row in cell.ancestors)]
+        cells = [cell for cell in select(html, "data-side") if any("data-folds" in row.attrs for row in cell.ancestors)]
         self.assertEqual(len(cells), 2)
         self.assertEqual(cells[0].words, MISSING, "nothing stood before it")
         self.assertEqual(cells[1].words, summary["value"], "what it is, after")
@@ -138,3 +151,31 @@ class ChangeTableTests(SimpleTestCase):
 
         (code,) = elements(html, "pre")
         self.assertIn("+second", code.words)
+
+
+class ChangeKindTests(SimpleTestCase):
+    def test_each_row_says_in_its_status_column_whether_it_is_new_changed_or_removed_each_in_its_own_tone(self):
+        from hq.platform.application.approval_review import grouped
+
+        before = {"example.kept": {"example_effect": "read"}, "example.gone": {"example_effect": "read"}}
+        after = {"example.kept": {"example_effect": "change"}, "example.fresh": {"example_effect": "read"}}
+        html = _drawn(grouped({"records": before}, {"records": after}, label="Would change"))
+
+        self.assertEqual(_headings(html)[-1], "Status")
+        # One parse, so each cell's row and each pill's cell are the same objects.
+        shown = all_elements(html)
+        last = {}
+        for cell in (element for element in shown if element.tag == "td"):
+            row = [around for around in cell.ancestors if around.tag == "tr"][-1]
+            last[id(row)] = (row, cell)
+        said, tones = {}, {}
+        for row, status in last.values():
+            if "data-folded" in row.attrs:
+                if "kept" not in row.attrs["data-folded"]:
+                    self.assertEqual(status.words, "", "a record that comes or goes whole says its change")
+                continue
+            (name,) = [name for name in ("example.kept", "example.gone", "example.fresh") if name in row.words]
+            (pill,) = [el for el in shown if "pill" in el.classes and any(a is status for a in el.ancestors)]
+            said[name], tones[name] = pill.words, pill.classes
+        self.assertEqual(said, {"example.kept": "Changed", "example.gone": "Removed", "example.fresh": "New"})
+        self.assertEqual(len(set(tones.values())), 3, "each kind of change is drawn in a tone of its own")

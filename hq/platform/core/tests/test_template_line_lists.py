@@ -14,6 +14,7 @@ from django.template.base import Lexer, TokenType
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.markup import with_class
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.test_template_values import template_sources
 
 # What a row holds back until it opens, and the hint standing in for it.
@@ -45,6 +46,7 @@ def counted_folds(source: str) -> list[str]:
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class LineListSourceTests(SimpleTestCase):
     def test_no_template_folds_a_list_at_a_count(self):
         found = {name: held for name, source in template_sources().items() if (held := counted_folds(source))}

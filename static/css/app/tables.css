@@ -117,10 +117,10 @@
 .data-table .date-col { white-space: nowrap; }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Two values set side by side to be compared (a `compare` region) share the room evenly, so neither is squeezed into breaking inside its words, and leave the field they belong to a fifth of it. */
+/* Two values set side by side to be compared (the `data-side` cells of a `compare` region) share the room evenly, so neither is squeezed into breaking inside its words, and leave the field they belong to, and its status, a fifth of it. */
 /* The table is as wide as its region, so the shares are of the region: a table of auto width grows until its field's own width is the fifth that is left. */
 .table-scroll.is-compare > .data-table { inline-size: 100%; }
-.table-scroll.is-compare > .data-table > tbody > tr > td { inline-size: 40%; }
+.table-scroll.is-compare > .data-table > tbody > tr > td[data-side] { inline-size: 40%; }
 /* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
 .data-table > tbody > tr[data-emphasized] > * { background: var(--accent-tint); }
 .data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
@@ -223,6 +223,9 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 
 /* A pill fits the cell's line, so a row holding one is no taller than one without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
+/* A status said by one pill alone (`data-pill-only`, table_cells) fills its column, which is as wide as its widest pill, so the pills down a column share both edges. */
+.data-table > tbody > tr > td[data-pill-only] > .kept-line { display: flex; width: auto; max-width: none; }
+.data-table > tbody > tr > td[data-pill-only] .pill { display: flex; flex: auto; justify-content: center; text-align: center; }
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }
 /* Cut to one line, a token is plain text: the ellipsis lands in it and no part draws a box past the cut. */

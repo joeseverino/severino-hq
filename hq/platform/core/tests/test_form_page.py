@@ -11,6 +11,7 @@ from django.views.generic.edit import DeletionMixin, ModelFormMixin
 
 from hq.platform.application.routes import routed
 from hq.platform.application.tests.markup import elements, select, with_class
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.tree import ROOT
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 
@@ -97,6 +98,7 @@ class FormCatalogTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**", lists=("*",))
 class FormCardTests(SimpleTestCase):
     def test_only_the_frame_draws_a_form_card(self):
         """A page that is one form extends the frame, so its card is never

@@ -9,6 +9,7 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.tests.reads import reads
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
@@ -153,6 +154,7 @@ class SourcedRecordTests(TestCase):
 
 
 @tag("source", "tree")
+@reads("**/*.py", "**/templates/**")
 class OfferedLinksTests(SimpleTestCase):
     def test_only_offered_builds_a_declarations_edit_or_removal_link(self):
         files = [*ROOT.joinpath("hq").rglob("*.py"), *ROOT.joinpath("templates").rglob("*.html")]

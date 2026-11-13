@@ -26,10 +26,16 @@ from django.contrib.auth import get_user_model
 from django.db.models.signals import pre_save
 from django.utils import timezone
 
-from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest, SourceProposal
+from hq.domains.control_plane.models import (
+    AdoptedCatalog,
+    CapabilityRule,
+    ManagedResource,
+    OperationRequest,
+    SourceProposal,
+)
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.approvals import is_held
-from hq.platform.application.automation_adoption import ADOPT, AdoptProposal, adopt, catch_up
+from hq.platform.application.automation_adoption import AdoptProposal, adopt, catch_up
 from hq.platform.application.automation_manifest import OperationManifest
 from hq.platform.application.automation_runs import capability_name, command_type, operation_registry, request_run
 from hq.platform.application.automation_sources import RefreshCommand, refresh
@@ -210,7 +216,7 @@ def _renamed(procedure: dict[str, Any], name: str, **found: Any) -> dict[str, An
 
 
 _FLUSH, _REPORT, _UPGRADE = PROCEDURES
-# The next commit: emptying a cache escalates now, and the disk role grows a
+# The newest commit: emptying a cache escalates now, and the disk role grows a
 # procedure that frees space, so adopting it widens what a run may do.
 WIDENED = (
     _moved(_FLUSH, declared={"privilege": "example.cache_admin"}),
@@ -236,7 +242,7 @@ WIDENED = (
     _UPGRADE,
 )
 WIDENED_REVISION = _commit("Escalate the cache flush; add a disk cleanup.")
-# The commit after it, whose upgrade names a role the repository does not
+# The commit before it, whose upgrade names a role the repository does not
 # hold, said as the worker's scan says it (``hq_runner.ansible.role_spec``).
 UNREADY = (
     _FLUSH,
@@ -283,26 +289,26 @@ def adopted(person: Principal) -> None:
     scan = _scanned(person, "example-refresh", catalog(), "Read the playbooks.", timedelta(days=20))
     with doors.page("command", name="automation.source.adopt"):
         adopt(AdoptProposal(proposal=scan.result["proposal"]), principal=person)
+    # Adopted the day it was read, as the scan was.
+    adopted_at = scan.created_at + timedelta(hours=1)
+    AdoptedCatalog.objects.filter(proposal_id=scan.result["proposal"]).update(
+        created_at=adopted_at, updated_at=adopted_at
+    )
     # A seed's transaction has not committed, so this process reads what it adopted now.
     catch_up()
 
 
-def proposed(person: Principal, agent: Principal) -> None:
+def proposed(person: Principal) -> None:
     """The commits after the one adopted, each refreshed by ``person``: one
-    that widens what a run may do, which ``agent`` asks to adopt and so waits
-    for a person; one whose procedures HQ cannot adopt; and a scan that failed."""
+    whose procedures HQ cannot adopt, then the newest, which widens what a
+    run may do and waits for a person to adopt or reject it; and a scan that
+    failed after them."""
 
-    widened = _scanned(
-        person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the playbooks.", timedelta(days=1)
-    )
-    with doors.mcp():
-        held = run_capability(
-            ADOPT, {"proposal": widened.result["proposal"]}, principal=agent, idempotency_key="example-agent-adopt"
-        ).answer
-    if not is_held(held):
-        raise RuntimeError(f"The agent's adoption was not held for a person: {held}")
     _scanned(
-        person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the playbooks.", timedelta(hours=3)
+        person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the playbooks.", timedelta(days=1)
+    )
+    _scanned(
+        person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the playbooks.", timedelta(hours=3)
     )
     _scanned(person, "example-refresh-failed", None, "HQ couldn't reach your repository's host.", timedelta(minutes=25))
 
@@ -398,7 +404,7 @@ def runs(
     person = web_principal(owner) if owner is not None else cli_principal()
     agent = token_principal(CLAIMS, MCP_INTERFACE)
     adopted(person)
-    proposed(person, agent)
+    proposed(person)
     supplied = procedures()
     first, *others = supplied
     approved = replace(agent, approved_by=person.actor)

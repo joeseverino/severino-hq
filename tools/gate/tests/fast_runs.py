@@ -17,7 +17,8 @@ def run_main(
     **fakes: Any,
 ) -> tuple[int, list[str]]:
     """fast's run on a change to ``changed``, its quick gates ``selected``, each step through ``step``
-    when given, what it prints written into ``printed``: its exit code and printed lines. The gate
+    when given, what it prints written into ``printed``: its exit code and printed lines. Each changed path
+    reads as added, so a tree test that lists it runs. The gate
     judged no one tree unless ``judged`` is faked, so no run records a pass or a map in this
     repository, and no tree passed and no map is read unless ``passed_ancestor`` or
     ``recorded_ancestor`` is faked; no fix mode runs unless ``fix`` is."""
@@ -28,6 +29,7 @@ def run_main(
         "recorded_ancestor": None,
         "record_map": None,
         "changed_paths": (list(changed), []),
+        "listed_change": list(changed),
         "selected_tasks": selected,
         "fix": [],
         **fakes,

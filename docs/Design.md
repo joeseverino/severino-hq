@@ -235,7 +235,9 @@ middle on the first line's. A page never draws a button in a cell (*Gate:* the
 survey's `actions on the first line`, and the `hand-drawn-row-actions` rule). A
 row's controls stand side by side on one line, which their column asks for, and
 wrap only in a tight table, where every kept line does (*Gate:* the survey's
-`row actions stacked with room`). *Gates:*
+`row actions stacked with room`). A status said by one pill alone fills its
+column, as wide as its widest pill, so the pills down a column share both
+edges (`data-pill-only`, marked by the region). *Gates:*
 `a_table_fits_its_box_at_every_width`,
 `test_a_blank_column_is_not_drawn_and_a_short_word_is_not_split`,
 `only_a_table_scrolls_sideways`, and the page crawl, which fails any

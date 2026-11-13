@@ -23,8 +23,9 @@ mise prints the tasks live, so this file does not list them:
 What the listing does not say:
 
 - `fast` selects through Python imports, app names and the paths a module
-  names, and runs every walk of the tree on any change, so only a test that
-  finds a file by a name computed as it runs needs `check`.
+  names, and runs every walk of the tree the change reaches (each on any
+  change, unless its class declares what it reads with `@reads`), so only a
+  test that finds a file by a name computed as it runs needs `check`.
 - A new test is proven to fail without the fix by `mise run test --at <base>
   <labels>`, never by a base worktree, snapshot or checkout made by hand.
 - In a worktree of your own, try a change on `dev:scratch`, a throwaway

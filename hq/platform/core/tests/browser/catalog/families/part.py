@@ -45,6 +45,7 @@ from hq.platform.application.ui import (
     PageSection,
 )
 from hq.platform.core.models import AgentIdentity
+from hq.platform.core.templatetags.action_tags import MOST_BESIDE
 from hq.platform.core.tests.browser.catalog.common import HEAD, Entry
 from hq.platform.core.tests.browser.selectors import SELECTORS
 lazy from hq.platform.application.dashboard import queue_item
@@ -1583,14 +1584,18 @@ ENTRIES = {
     ),
     # Many records of one kind, as a catalog's playbooks: what belongs to
     # none, one that moves, one that is new (said by its summary, its fields
-    # folded), one that stays and so is only named under the table, and a
-    # document that would not parse, said as a line diff.
+    # folded), one that goes, one that stays and so is only named under the
+    # table, and a document that would not parse, said as a line diff. Each
+    # kind of change has its own status.
     "part/change-table-many": Entry(
         "{% change_table preview %}",
         {
             "preview": replace(
                 grouped(
-                    {"commit": {"revision": "0123456789abcdef" * 2 + "01234567"}, "records": _RECORDS},
+                    {
+                        "commit": {"revision": "0123456789abcdef" * 2 + "01234567"},
+                        "records": {**_RECORDS, "example.retired": {"example_effect": "read"}},
+                    },
                     {
                         "commit": {"revision": "fedcba9876543210" * 2 + "fedcba98"},
                         "records": {
@@ -1787,6 +1792,31 @@ ENTRIES = {
                     ),
                 ),
             )
+        },
+        heads_the_page=True,
+    ),
+    # A page that names more controls beside its title (``page_beside``): a
+    # decision's controls side by side, folded into the menu where the head
+    # is too narrow for them.
+    "part/head-many-actions": Entry(
+        '{% include "partials/_page_head.html" %}',
+        {
+            "page": Page(
+                title="Example playbooks",
+                actions=(
+                    Ask("Refresh", "/example/refresh/", title="Reads the example repository again."),
+                    PageAction("View diff", "/example/scan/"),
+                    PageAction("Adopt all", "/example/adopt/", method="post"),
+                    PageAction("Reject all", "/example/reject/", method="post"),
+                ),
+            ),
+            "page_beside": MOST_BESIDE,
+            "page_aside": "control_plane/_playbooks_read.html",
+            "sources": {
+                "catalog": {"branch": "main", "committer": "example-maintainer", "created_at": _NOW},
+                "revision": "0123456789ab",
+                "scan": True,
+            },
         },
         heads_the_page=True,
     ),

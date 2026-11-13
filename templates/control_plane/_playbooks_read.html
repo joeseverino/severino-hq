@@ -1,0 +1,11 @@
+{% comment %}
+The title line of the Playbooks page: the commit the playbooks were adopted
+at, and whether HQ reaches the repository, from the newest scan that ended,
+so a Refresh still waiting leaves it standing. A failure says why, then when
+a scan last reached it, in the same line so the two never read as one event.
+With no scan at all, it says so.
+{% endcomment %}{% with catalog=sources.catalog %}{% if catalog or failed_tone or not sources.scan %}{% title_meta element="ul" %}
+  {% if catalog %}<li data-adopted-commit>Commit {{ sources.revision|breakable }} on {% if catalog.committer %}{{ catalog.branch|breakable }} from {{ catalog.committer|breakable:"," }}{% else %}{{ catalog.branch|breakable:"," }}{% endif %} adopted {{ catalog.created_at|when:"ago" }}.</li>{% endif %}
+  {% if failed_tone %}<li data-scan-failed>{% status sources.reach.note tone=failed_tone pill=False %}{% if read_at %} Last reached {{ read_at|when:"ago" }}.{% endif %}</li>
+  {% elif not sources.scan %}<li data-scan-none>No scan yet.</li>{% endif %}
+{% endtitle_meta %}{% endif %}{% endwith %}

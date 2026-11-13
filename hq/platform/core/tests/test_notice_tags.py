@@ -12,6 +12,7 @@ from django.template.loader import render_to_string
 from django.test import RequestFactory, SimpleTestCase, tag
 
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 from hq_sdk.testing import plain
 
@@ -151,6 +152,7 @@ _FRAME = re.compile(r'<template data-notice="(\w+)">(.*?)</template>', re.DOTALL
 
 
 @tag("source", "tree")
+@reads("static/js/**/*.js", "demo/demo.js", "**/templates/**")
 class NoticeFrameTests(SimpleTestCase):
     def test_every_tone_a_script_clones_is_an_empty_frame_on_every_page(self):
         """A script never writes a notice's class: it clones the part the

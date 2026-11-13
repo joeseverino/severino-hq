@@ -32,24 +32,25 @@ and what needs you; with no facts line, the aside stays on the title's line.
   {% if page_aside and page_facts %}{% include page_aside %}{% endif %}
   {% if page.actions %}
     {% comment %}
-    The lead control and the next the page names beside the title, and every
-    one but the lead in the menu, which the stylesheet trims to what is not
-    already beside it and folds the second into on a narrow head. So a head is
-    always one short line: a toolbar wrapped between a title and its lede
-    reads as neither.
+    The lead control and the next the page names beside the title (as many as
+    `page_beside` names, where a decision takes several side by side), and a
+    menu holding a copy of each of those but the lead, then every other one.
+    The stylesheet shows the copies only where the head is too narrow for the
+    controls beside its title, and folds those in. So a head is always one
+    short line: a toolbar wrapped between a title and its lede reads as neither.
     {% endcomment %}
-    {% with split=page.actions|head_actions %}
-    <div class="page-actions">
+    {% head_split page.actions as split %}
+    <div class="page-actions"{% if split.0|length > 2 %} data-many{% endif %}>
       {% for action in split.0 %}{% include "partials/_page_action.html" with extra="" heard=True %}{% endfor %}
-      {% if split.1 %}
+      {% if split.1 or split.2 %}
         <div class="overflow-menu" data-menu>
           <button type="button" popovertarget="page-actions-more" aria-label="More actions">{% include "partials/_icon.html" with name="more" %}</button>
           <div class="overflow-menu-panel" id="page-actions-more" popover>
-            {% for action in split.1 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}
+            {% if split.1 %}<div class="overflow-menu-copies">{% for action in split.1 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}</div>{% endif %}
+            {% for action in split.2 %}{% include "partials/_page_action.html" with extra="" %}{% endfor %}
           </div>
         </div>
       {% endif %}
     </div>
-    {% endwith %}
   {% endif %}
 </header>

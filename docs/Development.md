@@ -106,8 +106,8 @@ database it opens; `tools/dev/dev.sh` refuses what env cannot express.
 | --- | --- |
 | `dev:scratch` | a throwaway server on this checkout's scratch database, loopback only |
 | `dev:scratch --no-reload` | one that only needs to answer: one process instead of three |
-| `dev:scratch --runner` | one with the automation worker beside it, to walk Playbooks end to end ([The worker beside a scratch server](#the-worker-beside-a-scratch-server)) |
-| `dev` | the long-lived server behind a TLS proxy, configured by the gitignored `dev.local.toml` (copy `tools/dev/dev.local.example.toml`) |
+| `dev:scratch --runner` | one with the automation worker beside it, to walk Playbooks end to end ([The automation worker beside a development server](#the-automation-worker-beside-a-development-server)) |
+| `dev` | the long-lived server behind a TLS proxy, configured by the gitignored `dev.local.toml` (copy `tools/dev/dev.local.example.toml`), with the automation worker always beside it |
 
 Every one collects versioned assets and runs Uvicorn with reload on the
 production ASGI path. It watches this checkout and each extension's sources
@@ -132,42 +132,47 @@ Every loopback server shares the browser's cookies for `127.0.0.1` whatever the
 port, so signing in to a second one signs the first out: open the second as
 `http://localhost:<port>`.
 
-### The worker beside a scratch server
+### The automation worker beside a development server
 
-`mise run dev:scratch --seed showcase --runner` serves the bridge and runs the
-real automation worker (`hq_runner`), so a Refresh on Playbooks is scanned, its
-commit can be adopted, and a run is claimed, run by ansible-playbook and
-reported with each task's outcome, on the machine page and in Jobs. Reach for
-it to walk that loop; without the flag a Refresh or a run stays queued.
+`mise run dev` always serves the bridge and runs the real automation worker
+(`hq_runner`) beside it, and `mise run dev:scratch --seed showcase --runner`
+does the same for a scratch server. A Refresh on Playbooks is then scanned,
+its commit can be adopted, and a run is claimed, run by ansible-playbook and
+reported with each task's outcome, on the machine page and in Jobs. Without
+`--runner`, a scratch server's Refresh or run stays queued.
 
 The server serves the bridge as the image does (`SEVERINO_BRIDGE_SOCKET`), on
-a socket in a private directory under `$TMPDIR`, since the checkout's path is
-too long for one. `tools/dev/scratch_automation.py` stands where the host's
-automation units stand: on each automation doorbell, or 15 minutes after the
-last worker ended, it writes a connections document from the scratch
-database's machines and starts the worker from the runner group's environment
-(`var/runner/venv`, which `smoke:runner` shares). It stops with the server and
-removes the socket's directory.
+a socket in a private directory under `$TMPDIR`, one per database, since the
+database's directory can be too long a path for one. `tools/dev/scratch_automation.py` stands
+where the host's automation units stand: on each automation doorbell, or 15
+minutes after the last worker ended, it writes a connections document from
+the database's machines and starts the worker from the runner group's
+environment (`var/runner/venv`, which `smoke:runner` shares). It watches the
+reloader's own process, so a reload leaves it running and starts no second
+one, and each worker it starts runs the code as it stands then. It stops with
+the server and removes the socket's directory.
 
 What it holds to:
 
-- The bridge is a Unix socket only this account reaches; the web server stays
-  on loopback.
+- The bridge is a Unix socket only this account reaches; the web server
+  listens where it did.
 - The worker gets its `HQ_AUTOMATION_*` variables and nothing of HQ's
   environment, and no token or credential.
 - Its repository is `tools/dev/scratch_playbooks/`, committed to a repository
-  under `var/dev/scratch/automation/` at each start and fetched over git's file
-  transport.
-- Every login reaches 127.0.0.1, and every scratch play sets its connection to
-  local, so a run acts on this Mac alone.
+  in an `automation/` directory beside the database at each start and fetched
+  over git's file transport, whatever the database adopted before.
+- Every login reaches 127.0.0.1, whatever machines the database holds, and
+  every play there sets its connection to local, so a run acts on this Mac
+  alone.
 
-What it cannot show: GitHub's word on a commit's signature, so the scratch
-worker reports each commit it scans as verified; the renderer's real runner
+What it cannot show: GitHub's word on a commit's signature, so the worker
+reports each commit it scans as verified; the renderer's real runner
 connections and identities; and the egress table and container confinement the
-host gives the worker. The showcase's runs name a commit the scratch
-repository does not hold, so the first pass ends any it finds waiting as
-failed to fetch. Adopting the scratch commit makes `example.disk_report` its
-one playbook.
+host gives the worker. A run that names a commit the local repository does not
+hold, as the showcase's do, is ended as failed to fetch by the first pass that
+finds it waiting, and a database that adopted another commit shows the local
+one as pending. Adopting the local commit makes `example.disk_report` its one
+playbook.
 
 Python dependencies come from `uv.lock`. `mise.toml` sets `UV_LOCKED`, so
 every task's `uv run` refuses a lock that `pyproject.toml` has moved past, and
@@ -346,10 +351,17 @@ The tests it selects are:
   builds, read from its code (`Named` in
   `hq/platform/application/tests/tree.py`);
 - the architecture tests;
-- every test tagged `tree`, on any change. Such a test finds its files (a
+- every test tagged `tree` the change reaches. Such a test finds its files (a
   module, a template, a doc) by walking this checkout, which no import or name shows
   (`test_tree_tag.py` holds the tag to the walks; a test that patches the
-  `ROOT` of the code it drives walks a fixture and carries none);
+  `ROOT` of the code it drives walks a fixture and carries none). One whose
+  class declares what it reads, `@reads("**/templates/**", lists=("**",))`
+  (`hq/platform/application/tests/reads.py`), runs when the change edits, adds
+  or deletes a file it opens, or adds or deletes one it lists or stats; any other runs
+  on every change. The declaration holds the class as it runs, as Bazel's
+  sandbox holds a test to its declared inputs: an open, a listing, a stat or a program
+  that reaches past it fails the test, naming each path, so a declaration that
+  falls short fails in CI's whole run rather than going unselected;
 - the extensions' suites, composed, when `mise.local.toml` names a set and the
   change reaches what extensions render through (`templates/`, `static/`,
   `hq_sdk/`, the shared table, page, UI and moment modules, template tags).

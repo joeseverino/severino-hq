@@ -50,8 +50,9 @@ The catalogs' `permitted` flags (capabilities, resources and connections,
 here and on `/api/mcp/` alike) say what the caller may use after that cap, by
 the same rule its use is refused by.
 
-A capability held only by a person (an upload, an approval) is out of any
-token's reach, whatever its grant. So neither the catalog nor the OpenAPI
+A capability held only by a person (an upload, an approval, adopting
+playbooks) is out of any token's reach, whatever its grant. So neither the
+catalog nor the OpenAPI
 document lists it for one. A person's own settings, pins and set-asides are a
 token's only where a person signed it in, so the catalog lists them to that
 token and never to a machine's own.
@@ -164,9 +165,9 @@ Every adopted playbook lists at `GET /v2/resources/playbooks/`: its id, the
 command that runs it (`automation.<id>.run`), its effect, and in `reachable`
 the machines a run of it may name now, the ones HQ's runner has a login to as
 the playbook needs. A read of one adds what its Run page states of it. The
-newest scan of the repository reads at `/v2/resources/playbook_scans/`: the
-`id` that `automation.source.adopt` takes as `proposal`, what HQ refuses in it,
-and what adopting it widens.
+newest scan of the repository reads at `/v2/resources/playbook_scans/`: what
+HQ refuses in it, what adopting it widens, and whether it waits for a person,
+who adopts or rejects it in HQ; a token is refused both.
 
 A held call's `approval.id` reads where it stands at
 `GET /v2/resources/approvals/<id>/` (MCP: `get_resource` of `approvals`, or

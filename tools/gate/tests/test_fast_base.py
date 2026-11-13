@@ -11,6 +11,7 @@ from unittest.mock import Mock, patch
 
 from django.test import tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.task import RefError
 from tests.mise_tasks import ROOT, body, mise_tasks
 from tools.gate import fast as fast_gate
@@ -313,6 +314,7 @@ class FastGateFixModeTests(GateTestCase):
 
 
 @tag("source", "tree")
+@reads(".github/**", "mise-tasks/**", "mise*.toml", "mise.lock")
 class FixFlagPasserTests(GateTestCase):
     def test_only_fast_and_fix_pass_the_fix_flag(self):
         """A fix mode writes the tree, so a run that judges a tree it cannot change (CI's check, its lint job)

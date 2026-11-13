@@ -142,7 +142,7 @@ class CommandViewTests(TestCase):
         name, from its trail and its Cancel."""
 
         spec = capability_registry()["automation.source.refresh"]
-        home = reverse("control_plane:procedures")
+        home = reverse("control_plane:playbooks")
         response = self.client.get(f"/commands/{spec.name}/")
 
         trail = [

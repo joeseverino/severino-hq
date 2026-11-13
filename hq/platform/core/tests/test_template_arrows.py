@@ -11,6 +11,7 @@ import re
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 
 ARROW = re.compile(r"→|←|&rarr;|&larr;|&#8594;|&#8592;|&#x2192;|&#x2190;")
@@ -56,6 +57,7 @@ class StrayArrowTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class TemplateArrowTests(SimpleTestCase):
     def test_no_template_types_an_arrow_between_two_values(self):
         found = [

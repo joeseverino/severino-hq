@@ -228,7 +228,7 @@ class MachineDetailView(PageMixin, TemplateView):
         if len(self.playbooks_here) == 1:
             return (PageAction(label, self.playbooks_here[0][1]),)
         dialog = PageDialog("run-playbook", label, "control_plane/_run_playbook.html")
-        return (PageAction(label, reverse("control_plane:procedures"), modal=dialog),)
+        return (PageAction(label, reverse("control_plane:playbooks"), modal=dialog),)
 
     @override
     def get_context_data(self, **kwargs):

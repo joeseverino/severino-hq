@@ -152,8 +152,11 @@ def post_form(context, action, extra=""):
     )
 
 
-# How many controls a head draws beside its title; the rest wait in its menu.
+# How many controls a head draws beside its title; the rest wait in its
+# menu. A page names more (``page_beside``) where a decision takes several
+# controls side by side, up to ``MOST_BESIDE``.
 BESIDE_THE_TITLE = 2
+MOST_BESIDE = 4
 
 
 def _ranked(actions):
@@ -172,19 +175,32 @@ def _ranked(actions):
     ]
 
 
-@register.filter
-def head_actions(actions):
-    """``(beside, menu)``: the controls a head draws beside its title, the
-    first two it reaches for, and every one but the lead for its menu, the
-    second first. The stylesheet leaves out the menu's copy of a control drawn
-    beside the title, and folds the second in where the head is narrow."""
+@register.simple_tag(takes_context=True)
+def head_split(context, actions):
+    """``{% head_split page.actions as split %}``: ``head_actions`` with as
+    many beside the title as the page names (``page_beside``), two where it
+    names none."""
 
+    return head_actions(actions, context.get("page_beside", ""))
+
+
+def head_actions(actions, beside=""):
+    """``(beside, copies, rest)``: the controls a head draws beside its
+    title, the first it reaches for (``BESIDE_THE_TITLE``, or ``beside`` where
+    the page names more); the menu's copies of each of those but the lead;
+    and every other control, for the menu. The stylesheet shows the copies
+    only where the head is too narrow for the controls beside its title, and
+    folds those in."""
+
+    most = int(beside) if beside else BESIDE_THE_TITLE
+    if not BESIDE_THE_TITLE <= most <= MOST_BESIDE:
+        raise ValueError(f"A head keeps {BESIDE_THE_TITLE} to {MOST_BESIDE} controls beside its title, not {most}.")
     actions = tuple(actions or ())
-    beside = tuple(_ranked(actions)[:BESIDE_THE_TITLE])
-    if not beside:
-        return (), ()
-    rest = tuple(action for action in actions if all(action is not shown for shown in beside))
-    return beside, (*beside[1:], *rest)
+    shown = tuple(_ranked(actions)[:most])
+    if not shown:
+        return (), (), ()
+    rest = tuple(action for action in actions if all(action is not drawn for drawn in shown))
+    return shown, shown[1:], rest
 
 
 @register.filter

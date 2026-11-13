@@ -1,10 +1,12 @@
 """What a run's own page shows (``jobs/run_detail.html``): the facts of one
 run of a playbook or scan of its source, the approval it ran under, and each
-task's outcome in the table every registry-driven band is drawn as."""
+task's outcome in the table every registry-driven band is drawn as. A scan
+that read a commit shows it against the commit adopted now, as the change
+table every comparison is drawn as."""
 
 from typing import Any
 
-from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
+from hq.domains.control_plane.models import ApprovalRequest, OperationRequest, SourceProposal
 
 from .action_links import command_url
 from .capabilities import capability_registry
@@ -13,6 +15,7 @@ from .pages import offered
 from .routes import reverse
 from .service_context import Cell, ServiceSection
 from .work_runs import WorkRun
+lazy from . import automation_adoption, automation_sources
 
 
 def approval_of(operation: OperationRequest) -> ApprovalRequest | None:
@@ -60,4 +63,22 @@ def run_context(run: WorkRun, operation: OperationRequest, *, user: Any) -> dict
         "playbook_url": command_url(run.kind) if capability_registry().get(run.kind) else "",
         "approval_url": approval_url if approval_url and offered(user, approval_url) else "",
         "sections": (tasks,) if tasks else (),
+    }
+
+
+def scan_context(operation: OperationRequest) -> dict[str, Any]:
+    """What a scan read, for its page: the commit, reviewed against the
+    commit adopted now, and whether it is the newest and waits for a person;
+    nothing for a run, or a scan that read none."""
+
+    proposal = SourceProposal.objects.filter(operation=operation).first()
+    if proposal is None:
+        return {}
+    catalog = automation_adoption.adopted()
+    review = automation_sources.reviewed(proposal)
+    newest = not SourceProposal.objects.filter(pk__gt=proposal.pk).exists()
+    return {
+        "scan": review,
+        "scan_pending": newest and review.pending,
+        "adopted_revision": catalog.revision[: automation_sources.SHORT_REVISION] if catalog else "",
     }

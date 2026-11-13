@@ -1034,14 +1034,15 @@
           "adopted": false,
           "branch": "main",
           "committer": "example-maintainer",
-          "held": "",
           "id": 3,
+          "pending": true,
           "read_at": "2026-01-15T06:30:00+00:00",
-          "refused": [
-            "playbooks/package_upgrade.hq.yml: Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."
-          ],
-          "revision": "000cb167aee92601ea8a6c0811081a69038d2d91",
-          "widens": []
+          "refused": [],
+          "revision": "52889585fc55b53dd6aabcf75e024d74d94c2567",
+          "widens": [
+            "Empty a cache gains sudo (example.cache_admin).",
+            "Free space on a mount is new, and it changes a live system."
+          ]
         },
         "ok": true
       }
@@ -2477,14 +2478,15 @@
               "adopted": false,
               "branch": "main",
               "committer": "example-maintainer",
-              "held": "",
               "id": 3,
+              "pending": true,
               "read_at": "2026-01-15T06:30:00+00:00",
-              "refused": [
-                "playbooks/package_upgrade.hq.yml: Role packages_v2 is missing. Add it at roles/packages_v2/ in the repository."
-              ],
-              "revision": "000cb167aee92601ea8a6c0811081a69038d2d91",
-              "widens": []
+              "refused": [],
+              "revision": "52889585fc55b53dd6aabcf75e024d74d94c2567",
+              "widens": [
+                "Empty a cache gains sudo (example.cache_admin).",
+                "Free space on a mount is new, and it changes a live system."
+              ]
             }
           ],
           "next": null,

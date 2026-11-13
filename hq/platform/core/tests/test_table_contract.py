@@ -16,6 +16,7 @@ from hq.platform.application.plugin_testing import hand_drawn_tables, table_prob
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
 from hq.platform.application.tests.markup import all_elements, elements, links, select, with_class, within
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 
 from .signed_in_case import _AuthedTestCase
@@ -39,6 +40,7 @@ FITTED = {"dropped", "narrow"}
 
 
 @tag("source", "tree")
+@reads("**/templates/**", "static/css/**", "static/js/**")
 class TableContractTests(SimpleTestCase):
     maxDiff = None
 
@@ -426,6 +428,31 @@ class TableTagTests(SimpleTestCase):
         )
         kept = with_class(_render(source), "kept-line")
         self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["short"])
+
+    def test_a_status_said_by_one_pill_alone_is_marked_to_take_its_columns_width(self):
+        """So the pills down a status column share both edges, whatever their words."""
+
+        cells = {
+            "one": '{% status "Changed" tone="attention" %}',
+            "other": '{% status "New" tone="good" %}',
+            "linked": '{% status "Open" href="/example/" %}',
+            "beside words": '{% status "Up" tone="good" %} since Nov 2',
+            "two": '{% status "Up" %}{% status "Pinned" %}',
+            "words": "Up",
+            "blank": "",
+        }
+        rows = "".join(f'<tr><td>a</td><td data-col="{name}">{cell}</td></tr>' for name, cell in cells.items())
+        prose = '<tr><td>b</td><td>x</td><td data-col="prose">{% status "Up" %}</td></tr>'
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            f'{{% table_heading "State" "status" %}}</tr></thead><tbody>{rows}</tbody></table>{{% endtable_region %}}'
+            '{% table_region "Others" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            f'{{% table_heading "Kind" %}}{{% table_heading "Note" %}}</tr></thead><tbody>{prose}</tbody></table>'
+            "{% endtable_region %}"
+        )
+        cells = elements(_render("{% load status_tags %}" + source), "td")
+        marked = [each.attrs.get("data-col") for each in cells if "data-pill-only" in each.attrs]
+        self.assertEqual(marked, ["one", "other", "linked"])
 
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
         """After a row is the line its toggle opens: the blocks it keeps

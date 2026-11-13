@@ -15,6 +15,7 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.apart import apart
+from hq.platform.application.tests.reads import reads
 
 ROOT = Path(__file__).resolve().parents[4]
 # Where HQ's Python lives, walked but for each package's tests.
@@ -65,6 +66,7 @@ def asked(provider: str) -> tuple[str, ...]:
 
 
 @tag("source", "tree")
+@reads("**/*.py", "controller/providers/*.go", lists=("*",))
 class PermissionLiteralTests(SimpleTestCase):
     def assert_none(self, found: Iterable[str]) -> None:
         self.assertEqual(

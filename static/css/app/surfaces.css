@@ -201,17 +201,26 @@
   .section-fold > summary :is(h2, h3) { margin: 0; }
   .section-fold[open] > summary { margin-bottom: var(--space-5); }
 
-  /* A head's controls: the lead and the next beside the title, the menu
-     holding every other. Its copy of the second is left out wherever the
-     second stands beside the title, and a menu holding nothing else with it.
-     A head too narrow for three controls folds the second in as well, so it
-     keeps the lead and the menu (the head is the container, page.css). */
-  .page-head .overflow-menu-panel > :first-child { display: none; }
-  .page-head .overflow-menu:not(:has(.overflow-menu-panel > :nth-child(2))) { display: none; }
+  /* A head's controls: the lead and the next beside the title (more where
+     the page names them, data-many), the menu holding a copy of each of those
+     but the lead, then every other. The copies are left out wherever their
+     controls stand beside the title, and a menu holding nothing else with
+     them. A head too narrow for its controls folds them in: one holding more
+     than two keeps two, and one too narrow for three keeps the lead and the
+     menu (the head is the container, page.css). */
+  .page-head .overflow-menu-copies { display: none; }
+  .page-head .overflow-menu:not(:has(.overflow-menu-panel > :not(.overflow-menu-copies))) { display: none; }
+  @container page-head (width < 48rem) {
+    .page-head .page-actions:where([data-many]) > :nth-child(n + 3):not(.overflow-menu) { display: none; }
+    .page-head .page-actions:where([data-many]) .overflow-menu-copies { display: contents; }
+    .page-head .page-actions:where([data-many]) .overflow-menu-copies > :first-child { display: none; }
+    .page-head .page-actions:where([data-many]) .overflow-menu:not(:has(.overflow-menu-panel > :not(.overflow-menu-copies))) { display: flex; }
+  }
   @container page-head (width < 30rem) {
-    .page-head .page-actions > :nth-child(2):not(.overflow-menu) { display: none; }
-    .page-head .overflow-menu-panel > :first-child { display: revert; }
-    .page-head .overflow-menu:not(:has(.overflow-menu-panel > :nth-child(2))) { display: flex; }
+    .page-head .page-actions > :nth-child(n + 2):not(.overflow-menu) { display: none; }
+    .page-head .page-actions .overflow-menu-copies { display: contents; }
+    .page-head .page-actions .overflow-menu-copies > :first-child { display: revert; }
+    .page-head .overflow-menu:not(:has(.overflow-menu-panel > :not(.overflow-menu-copies))) { display: flex; }
   }
 
   /* A row's toggle, drawn by the server where a row holds something back or heads rows folded under it: the one disclosure a row has, sized to be hit, turned when open. */

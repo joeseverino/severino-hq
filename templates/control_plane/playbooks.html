@@ -1,0 +1,31 @@
+{% extends "page.html" %}
+{% block page %}
+{% comment %}
+Expects `adopted`, the rows of the catalog adopted now. The commit they were
+adopted at is said on the title's line (`_playbooks_read.html`), and what to
+do about a newer scanned commit is the page's actions, so the table is all
+the body holds. Every name on it is the catalog's.
+{% endcomment %}
+{% table_region "Playbooks" empty="No playbooks are adopted yet." %}
+  <table class="data-table" data-adopted-playbooks>
+    <thead>
+      <tr>
+        {% table_heading "Playbook" local_sort=True %}
+        {% table_heading "Effect" local_sort=True %}
+        {% table_heading "Runs on" "identifier" drop=1 local_sort=True %}
+        {% table_heading "Access" drop=2 local_sort=True %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in adopted %}
+      <tr>
+        <td><a href="{{ row.url }}">{{ row.procedure.title|breakable }}</a></td>
+        <td>{{ row.effect|breakable }}</td>
+        <td>{% for host in row.procedure.hosts %}{% entity "machine"|entity_of:host %}{% if not forloop.last %}<br>{% endif %}{% empty %}{{ row.anywhere|breakable }}{% endfor %}</td>
+        <td>{{ row.access|breakable }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endtable_region %}
+{% endblock %}

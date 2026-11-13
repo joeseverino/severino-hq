@@ -87,10 +87,9 @@ class ChangePreview:
     @property
     def moves(self) -> int:
         """How many things a reader sees move: each value apart from any
-        record, each changed field of a record, and a record that comes or goes
-        whole as one."""
+        record, and each record that changes as one."""
 
-        return len(self.rows) + sum(1 if group.whole else len(group.rows) for group in self.groups)
+        return len(self.rows) + sum(1 for group in self.groups if group.changed)
 
     @property
     def unchanged(self) -> tuple[str, ...]:
