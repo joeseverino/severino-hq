@@ -315,7 +315,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
         )
         self.page.evaluate(SETTLE)
         found = {"sideways, opened": self.page.evaluate(SIDEWAYS, SELECTORS["sideways"])}
-        probes = {check: probe for check, probe in geometry_probes(path, width).items() if check in _IN_A_POPOVER}
+        probes = {check: probe for check, probe in geometry_probes().items() if check in _IN_A_POPOVER}
         for (label, _slug), _alike in self.each_popover_kind():
             self.page.evaluate(SETTLE)
             found |= {f"{check}, with {label} shown": said for check, said in self.checked(probes).items()}

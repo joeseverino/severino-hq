@@ -130,14 +130,14 @@ The one copy of the steps for adding an agent. docs/API.md links here, and
 this links to it only for how a provider's permission list is written.
 {% endcomment %}
 {% section "Setup" fold=True id="setup" open=setup_open %}
-  <ol class="step-list">
+  {% steps %}
     {% step icon="card" %}<strong>Public client</strong> <span class="muted">Register one public client per agent, with PKCE.</span>{% endstep %}
     {% step icon="shield" %}<strong>Who signs in</strong> <span class="muted">Set the user groups allowed to sign it in.</span>{% endstep %}
     {% step icon="lock" %}<strong>Permissions</strong> <span class="muted">Grant all {{ offered|counted:"permission" }} HQ offers, then narrow each agent with the rules below. {% entity client_setup|outside label="Client setup" %}</span>{% endstep %}
     {% step icon="clock" %}<strong>Token life</strong> <span class="muted">Set its access token life to about an hour.</span>{% endstep %}
     {% step icon="laptop" %}<strong>First sign-in</strong> <span class="muted">Sign it in once in a browser, then approve each device it calls from.</span>{% endstep %}
     {% step icon="server" %}<strong>Unattended agents</strong> <span class="muted">Sign it in with a federated client assertion, granted only what its work needs.</span>{% endstep %}
-  </ol>
+  {% endsteps %}
 {% endsection %}
 
 {% comment %}

@@ -1,0 +1,7 @@
+id: hand-drawn-stack-list
+valid:
+  - '{% stack_list %}<li>A</li>{% endstack_list %}'
+  - '<ul class="stack-list-wide"></ul>'
+invalid:
+  - '<ul class="stack-list"><li>A</li></ul>'
+  - '<ul class="row-below stack-list"></ul>'

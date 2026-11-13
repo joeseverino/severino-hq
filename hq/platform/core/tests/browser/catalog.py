@@ -991,6 +991,29 @@ CATALOG = {
         '{% step icon="card" %}<strong>Example step</strong> <span class="muted">An example sentence that says what the step is for.</span>{% endstep %}'
         "{% endsteps %}{% endsection %}"
     ),
+    # A stack list ({% stack_list %}): a status with its words, one whose
+    # link stands alone, and a note; then in a table, a row's notes under its name and a list
+    # the open row shows under its label. A new option of the tag comes with
+    # an entry here (test_stack_tags).
+    "part/stack-list": Entry(
+        '{% section "Example advisories" %}{% stack_list data_example="example" %}'
+        '<li class="prose">{% status "High" tone="serious" %} <a href="/example/advisory/">EXAMPLE-2026-0001</a> '
+        "An example advisory long enough to wrap onto a second line on a phone.</li>"
+        '<li>{% status "Low" tone="attention" %} <a href="/example/advisory/2/">EXAMPLE-2026-0002</a></li>'
+        '<li class="muted">and 2 more on its page</li>'
+        "{% endstack_list %}{% endsection %}"
+    ),
+    "part/stack-list-in-a-row": Entry(
+        '{% section "Example checks" %}{% table_region "Example checks" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Check" gutter=True %}{% table_heading "Result" %}</tr></thead><tbody>'
+        "<tr><td>Example reading"
+        '{% stack_list %}<li class="muted">An example reason it is not read.</li>'
+        '<li class="muted">Another example reason.</li>{% endstack_list %}</td>'
+        '<td class="cell-data">{% status "Failed" tone="serious" %}<br><strong>2 example names differ</strong>'
+        '{% stack_list below="Example affected" %}<li><strong>example-proxy</strong>{% dot %}example.com</li>'
+        "<li><strong>example-mail</strong>{% dot %}mail.example.com</li>{% endstack_list %}</td></tr>"
+        "</tbody></table>{% endtable_region %}{% endsection %}"
+    ),
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
     "part/month-gone-by": Entry(
@@ -1761,6 +1784,35 @@ CATALOG = {
             "page": Page(title="Example readings", lede="An example lede long enough to take the head's line."),
             "page_facts": "An example fact · another example fact",
             "page_aside": _Drawn(_READINGS_EMPTY),
+        },
+        heads_the_page=True,
+    ),
+    # The facts on a title's line ({% title_meta %}): a run of parts with a
+    # dot between each, long enough to wrap under the title on a phone; and
+    # as a list whose parts each wrap whole. A new option of the tag comes
+    # with an entry here (test_title_tags).
+    "part/title-meta": Entry(
+        '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
+        {
+            "page": Page(title="example-host-01"),
+            "page_aside": _Drawn(
+                '{% title_meta %}{% status "Online" tone="good" %} since 3 days ago{% dot %}example role'
+                "{% dot %}<code>192.0.2.10</code>{% dot %}also known as <code>example-host-01.example.com</code>"
+                "{% endtitle_meta %}"
+            ),
+        },
+        heads_the_page=True,
+    ),
+    "part/title-meta-list": Entry(
+        '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
+        {
+            "page": Page(title="Example record"),
+            "page_aside": _Drawn(
+                '{% title_meta element="ul" data_example="example" %}'
+                '<li><strong>{% status "Out of date" tone="attention" pill=False %}</strong> since 2 hours ago</li>'
+                '<li>{% status "An example sentence that says what the state means." tone="attention" pill=False %}</li>'
+                "{% endtitle_meta %}"
+            ),
         },
         heads_the_page=True,
     ),

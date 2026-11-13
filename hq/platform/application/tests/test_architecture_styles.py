@@ -5,19 +5,12 @@ import subprocess
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
-from django.test.signals import template_rendered
 
-from hq.platform.core.interface_text import TEMPLATE_COMMENT
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
-from hq_sdk.template_contract import CLASSES
-lazy from hq.platform.core.tests.browser.catalog import CATALOG
 
+from .hand_rolled import BASELINE, hand_rolled_classes, held, literal_classes, lowered, written
 from .source import template_files
-from .test_style_usage import TEMPLATE_PREFIX
-
-# The host's own templates, which no extension's check reads.
-TEMPLATES = STATIC.parent / "templates"
 
 
 def _is_address(text: str, found: re.Match[str]) -> bool:
@@ -552,83 +545,6 @@ class StyleContractTests(SimpleTestCase):
             )
 
 
-# Decided at render time, so a word joined to one is not a literal class.
-_INTERPOLATED = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
-
-
-def literal_classes(text: str) -> set[str]:
-    """Every class a template names in full, outside its comments: in a class
-    attribute, or as the css= a tag draws as one."""
-
-    text = TEMPLATE_COMMENT.sub("", text)
-    options = [css for tag in _INTERPOLATED.findall(text) for css in re.findall(r'\bcss="([^"]*)"', tag)]
-    attributes = re.findall(r'\bclass="([^"]*)"', _INTERPOLATED.sub("\0", text))
-    return {word for value in (*options, *attributes) for word in value.split() if "\0" not in word}
-
-
-def built_prefixes(text: str) -> set[str]:
-    """Each class a template builds at render time, as its prefix and ``*``:
-    ``is-{{ state }}`` is ``is-*``."""
-
-    text = re.sub(r"\{%.*?%\}", " ", re.sub(r"\{\{.*?\}\}", "{{}}", TEMPLATE_COMMENT.sub("", text), flags=re.DOTALL))
-    attributes = re.findall(r'\bclass="([^"]*)"', text, flags=re.DOTALL)
-    return {f"{prefix}*" for value in attributes for prefix in TEMPLATE_PREFIX.findall(value)}
-
-
-def _drawn_by_the_catalog() -> dict[str, set[str]]:
-    """The templates the component catalog draws, each with what of it is
-    drawn: its own name for the whole file, else the ``{% partialdef %}``
-    names drawn on their own."""
-
-    drawn: dict[str, set[str]] = {}
-
-    def record(sender, template, **kwargs):
-        if template.origin and template.origin.template_name:
-            drawn.setdefault(template.origin.template_name, set()).add(template.name)
-
-    template_rendered.connect(record)
-    try:
-        for name, entry in CATALOG.items():
-            entry.drawn(name)
-    finally:
-        template_rendered.disconnect(record)
-    return drawn
-
-
-def _fragment(text: str, name: str) -> re.Match[str] | None:
-    return re.search(rf"\{{%\s*partialdef\s+{re.escape(name)}\b.*?\{{%\s*endpartialdef\b.*?%\}}", text, re.DOTALL)
-
-
-def hand_rolled_classes() -> set[tuple[str, str]]:
-    """Each class a host template draws that no shared part declares, with
-    the template's name.
-
-    A shared class is one ``hq_sdk``'s CLASSES publishes, a table role the
-    region reads, or one a part the component catalog draws writes or builds.
-    A part is declared by its catalog entry, so a page's markup moved into a
-    partial with none is still the page's own: its classes count here."""
-
-    drawn = _drawn_by_the_catalog()
-    shared = set(CLASSES) | set(ROLE_CLASSES)
-    pages = []
-    for path in sorted(TEMPLATES.rglob("*.html")):
-        name, text = path.relative_to(TEMPLATES).as_posix(), path.read_text(encoding="utf-8")
-        whole = name in drawn.get(name, ())
-        fragments = [found.group() for part in drawn.get(name, ()) if (found := _fragment(text, part))]
-        for markup in [text] if whole else fragments:
-            shared |= literal_classes(markup) | built_prefixes(markup)
-        if not whole:
-            for fragment in fragments:
-                text = text.replace(fragment, "")
-            pages.append((name, text))
-    return {
-        (name, word)
-        for name, text in pages
-        for word in literal_classes(text) | built_prefixes(text)
-        if word not in shared
-    }
-
-
 def defined_classes() -> set[str]:
     """Every class a stylesheet HQ serves defines: the bundle every page
     links, and a sheet one page links on its own."""
@@ -666,23 +582,48 @@ class TemplateClassStyleTests(SimpleTestCase):
     def test_host_templates_draw_only_the_shared_parts_classes(self):
         """A host page is drawn from the shared parts, so a class of its own is
         a hand-rolled part the survey never sees and an extension cannot draw.
-        The classes held below are the pages not yet moved onto parts; the
-        list only shrinks."""
+        The baseline holds the pages not yet moved onto parts, and only
+        shrinks: ``mise run fix`` drops each pair the reader no longer finds."""
 
         found = hand_rolled_classes()
-        held = {(name, word) for name, words in HAND_ROLLED.items() for word in words.split()}
+        baseline = held(BASELINE.read_text(encoding="utf-8"))
         self.assertEqual(
-            sorted(f"templates/{name}: .{word}" for name, word in found - held),
+            sorted(f"templates/{name}: .{word}" for name, word in found - baseline),
             [],
             "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a template "
             "the component catalog draws); a widget with no part becomes one, with its own entry in "
             "hq/platform/core/tests/browser/catalog.py",
         )
         self.assertEqual(
-            sorted(f"templates/{name}: .{word}" for name, word in held - found),
+            sorted(f"templates/{name}: .{word}" for name, word in baseline - found),
             [],
-            "no longer hand-rolled: delete it from HAND_ROLLED",
+            "no longer hand-rolled: mise run fix drops it from the baseline",
         )
+
+    def test_the_baseline_is_as_fix_writes_it(self):
+        """Sorted, one pair a line, with no merge conflict left in it, so two
+        branches' drops merge."""
+
+        text = BASELINE.read_text(encoding="utf-8")
+        self.assertEqual(text, written(held(text)), "tools/lint/hand-rolled.txt: run mise run fix, which writes it")
+
+    def test_fix_drops_each_pair_no_longer_found_and_adds_none(self):
+
+        text = written({("a.html", "gone"), ("a.html", "kept"), ("b.html", "gone")})
+        lowered_text = lowered(text, {("a.html", "kept"), ("a.html", "new")})
+        self.assertEqual(held(lowered_text), {("a.html", "kept")})
+        self.assertEqual(lowered_text, written({("a.html", "kept")}))
+
+    def test_fix_settles_a_merge_conflict_from_both_sides(self):
+        """Two branches that each drop a pair conflict on neighboring lines; the
+        baseline reads as both sides' pairs, so fix keeps what is still found."""
+
+        conflicted = "<<<<<<< HEAD\na.html one\n=======\na.html two\n>>>>>>> theirs\nb.html three\n"
+        self.assertEqual(
+            lowered(conflicted, {("a.html", "two"), ("b.html", "three")}),
+            written({("a.html", "two"), ("b.html", "three")}),
+        )
+        self.assertNotEqual(conflicted, written(held(conflicted)), "a conflict left in the file fails the check")
 
     def test_literal_classes_reads_attributes_and_tag_options(self):
 
@@ -694,92 +635,13 @@ class TemplateClassStyleTests(SimpleTestCase):
             {"note", "on", "frame", "wide"},
         )
 
+    def test_literal_classes_reads_a_word_glued_to_a_tag(self):
 
-# Each host template's classes that no shared part declares yet, by template.
-# An entry leaves as its page moves onto a part, and none is ever added.
-HAND_ROLLED: dict[str, str] = {
-    "analytics/overview.html": "bar-label bar-list bar-row bar-track bar-value chip reading-note window-switch",
-    "base.html": "content",
-    "calendars/_entry_fields.html": "field-range",
-    "calendars/calendar.html": (
-        "calendar-aside calendar-layout calendar-month calendar-source calendar-source-failure calendar-source-note "
-        "calendar-sources calendar-swatch"
-    ),
-    "contacts/contact_detail.html": "quick-actions",
-    "contacts/contact_list.html": "msg-preview row-unread status-tab",
-    "control_plane/_connection_ability.html": "connection-evidence-*",
-    "control_plane/_connection_read.html": "connection-evidence-* connection-sight-* connection-sight-state",
-    "control_plane/_container_band.html": "github-gap",
-    "control_plane/_container_detail.html": (
-        "band-note hardening-head hardening-notes hardening-patch upgrade-blockers upgrade-reasons upgrade-steps"
-    ),
-    "control_plane/_credential_fix.html": (
-        "connection-credential-fix connection-credential-fix-headline connection-credential-steps"
-    ),
-    "control_plane/_machine_band.html": "band-note",
-    "control_plane/_machine_status.html": "page-title-meta",
-    "control_plane/_path_hops.html": "hop-body hop-icon hop-label hop-proof-key path-proof-note request-path route",
-    "control_plane/_record_status.html": "page-title-meta",
-    "control_plane/_service_rows.html": "exposure exposure-* pin-move pin-toggle pinned service-name",
-    "control_plane/_tool_dns.html": "lookup-grid",
-    "control_plane/_topology_node_body.html": (
-        "topology-hop topology-node-actions topology-relation topology-relation-* topology-relation-arrow "
-        "topology-relation-heading topology-relation-kind topology-relation-link topology-relation-list "
-        "topology-relation-other topology-relation-set topology-relation-source topology-relation-value "
-        "topology-relation-values topology-relation-verb"
-    ),
-    "control_plane/_whatif_form.html": "control-label",
-    "control_plane/_whatif_result.html": "verdict",
-    "control_plane/_zone_records.html": "zone-value",
-    "control_plane/connection_list.html": (
-        "connection-ability-all connection-ability-list connection-ability-more connection-authority "
-        "connection-authority-* connection-depends connection-more-scope connection-next connection-problems "
-        "connection-reach connection-read-list connection-row-meta connection-sight-list connection-sight-refusal "
-        "connection-standing connection-summary connection-table is-attention"
-    ),
-    "control_plane/container_list.html": "container-advisories container-reach github-gap",
-    "control_plane/machine_detail.html": "node-key",
-    "control_plane/resource_detail.html": "operation-evidence operation-result",
-    "control_plane/service_detail.html": "control-origin exposure exposure-*",
-    "control_plane/tools.html": "tool-summary tool-tabs",
-    "control_plane/topology.html": (
-        "topology-detail topology-hint topology-kind-* topology-kind-filters topology-kind-mark "
-        "topology-lane topology-lens-note topology-map topology-node topology-node-* topology-node-degree "
-        "topology-node-link topology-node-list topology-node-select topology-node-title topology-relations "
-        "topology-search topology-stage topology-toolbar topology-trace-bar topology-trace-controls topology-view "
-        "topology-workspace"
-    ),
-    "control_plane/zone_detail.html": "zone-switch zone-switch-note",
-    "control_plane/zone_mail.html": (
-        "control-label mail-record-value mail-records mail-stage-head mail-stage-question mail-stage-warning "
-        "mail-stages"
-    ),
-    "core/_connection_loading.html": "conn-pending",
-    "core/_connection_panel.html": (
-        "conn conn-* conn-agree conn-agree-no conn-agree-yes conn-aside conn-carriage conn-carriage-* conn-check "
-        "conn-headline conn-hop-detail conn-hop-more conn-hop-page conn-layer conn-layer-* conn-layer-body "
-        "conn-layer-boundary conn-layer-evidence conn-layer-label conn-layers conn-link conn-link-* conn-link-line "
-        "conn-more conn-note conn-path conn-peer conn-peer-name conn-peer-role conn-peering conn-row-note "
-        "conn-rules conn-sub conn-tick conn-verdict-*"
-    ),
-    "core/_dashboard_glance.html": "glance-hours is-wet",
-    "core/_hq_status.html": "page-title-meta",
-    "core/_policy_setting.html": "policy-select policy-unavailable rule-*",
-    "core/_policy_table.html": "effect-* policy-default policy-effect policy-table",
-    "core/agent_policy.html": "agent-events mcp-endpoint",
-    "core/auditlog_detail.html": "compare-table",
-    "core/hq.html": "cell-notes",
-    "hq_api/reference.html": "api-reference api-reference-failed api-reference-loading api-reference-status",
-    "list_page.html": "select-column",
-    "page.html": "page-foot",
-    "partials/_discovery_catalog.html": "discovery-link discovery-list discovery-main discovery-meta",
-    "partials/_linked_text.html": "linked-text",
-    "partials/_operator_step.html": "operator-step",
-    "partials/_posture.html": "posture-checks",
-    "partials/_queue_groups.html": "queue-table",
-    "partials/approval_card.html": "approval-actions approval-card approval-reason",
-    "projects/posture.html": (
-        "is-unmet posture-access posture-meter posture-meter-break posture-repo-name posture-repos posture-score"
-    ),
-    "receipts/receipt_detail.html": "document-picture",
-}
+        self.assertEqual(
+            literal_classes(
+                '<a class="tab{% if a %} tab-current{% endif %}"><b class="{% if a %}band{% else %}list{% endif %}">'
+                '<i class="table{% if dense %} is-dense{% endif %}"><s class="series-{{ slot }}{% if a %} is-start{% endif %}">'
+                '<u class="tone-{% if a %}ok{% endif %} mark-{% if a %}{% endif %}">'
+            ),
+            {"tab", "tab-current", "band", "list", "table", "is-dense", "is-start"},
+        )

@@ -59,8 +59,6 @@
 }
 .zone-switch-note { color: var(--muted); font-size: var(--text-2xs); font-weight: 500; }
 .zone-switch a[aria-current] .zone-switch-note { color: inherit; }
-/* A record's value is data, set as code is; where it wraps is `breakable`'s. */
-.zone-value { font-family: var(--font-mono); font-size: var(--text-xs); }
 /* A status pill is a label: wrapped it grows its row, so it stays whole until its table is tight (tables.css). */
 .data-table .pill { white-space: nowrap; }
 /* A row's name set in one line with its controls (`name-line`): the controls and the name are a grid's columns, never a flex row, since WebKit keeps a flex row's min-content from before a row closes, so its column reopened narrower than the name it holds out for. */
@@ -370,11 +368,10 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* Each control is its own POST, so its own form, laid inline so the actions row does not stack them as blocks. */
 .page-actions form { margin: 0; display: inline-flex; }
 
-.operation-result { max-width: 34rem; overflow-wrap: anywhere; }
-.operation-result > strong { display: block; line-height: 1.35; }
-.operation-evidence { margin-top: var(--space-3); color: var(--ink); }
-.operation-evidence li { margin: var(--space-1) 0; }
-.operation-evidence pre { max-height: 18rem; margin-top: var(--space-4); }
+/* A stack list ({% stack_list %}): items read down, each its parts inline. */
+.stack-list { display: grid; gap: var(--space-2); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+/* A raw answer kept for the open row scrolls inside it rather than lengthening it. */
+.row-below > pre { max-block-size: 18rem; }
 .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
 .btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
 /* A destructive action that should not be the loudest thing in its row. */

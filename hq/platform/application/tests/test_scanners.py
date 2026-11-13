@@ -44,14 +44,32 @@ class ScannerTests(SimpleTestCase):
     def test_composes_scan_is_the_task_and_the_attested_sbom_is_the_file_it_scanned(self):
         """Compose scans through image:trivy, which runs the Trivy mise.lock
         checksums and writes each report to a file rather than the package
-        table. The release attests the SBOM the vulnerability gate scanned,
-        and secrets in the image are a pass of their own."""
+        table. Each image the release signs is scanned, and the SBOM attested
+        for it is the one the vulnerability gate scanned; secrets in the image
+        are a pass of their own."""
         compose_steps = [step for job in jobs(workflow("compose.yml")).values() for step in steps(job)]
-        (scan,) = [step for step in compose_steps if "mise run image:trivy" in script(step)]
-        (written,) = re.findall(r"--sbom (\S+)", script(scan))
-        (attest,) = [step for step in compose_steps if "cosign attest" in script(step)]
-        self.assertIn(f"--predicate {written} ", script(attest))
-        self.assertNotIn("trivy ", script(attest))
+        (sign,) = [step for step in compose_steps if "cosign sign " in script(step)]
+        # Each image it signs is handed to it as a variable of its own.
+        shipped = set(sign.get("env", {}))
+        self.assertTrue(shipped)
+        scanned = {
+            image: sbom
+            for step in compose_steps
+            for image, sbom in re.findall(r'mise run image:trivy "\$(\w+)" --sbom (\S+)', script(step))
+        }
+        attested = {
+            image: sbom
+            for step in compose_steps
+            if "cosign attest" in script(step)
+            for sbom, image in re.findall(r'--predicate (\S+) "\$(\w+)"', script(step))
+        }
+        for image in shipped:
+            with self.subTest(image=image):
+                self.assertIn(image, scanned)
+                self.assertEqual(attested.get(image), scanned[image])
+        for step in compose_steps:
+            if "cosign attest" in script(step):
+                self.assertNotIn("trivy ", script(step))
         # One command per line, its continuation lines joined to it.
         commands = re.sub(r"\\\n\s*", " ", code((ROOT / "mise-tasks" / "image" / "trivy").read_text())).splitlines()
         (sbom,) = [re.search(r"--output (\S+)", line)[1] for line in commands if "--format cyclonedx" in line]

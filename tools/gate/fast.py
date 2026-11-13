@@ -15,11 +15,10 @@ import re
 import subprocess
 import sys
 import tempfile
-from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
-from hq.platform.application.tests.tree import SUITE, tagged
+from hq.platform.application.tests.tree import tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
 from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
 from tools.gate.verdict import Gate, Step, run
@@ -41,12 +40,6 @@ SKIP_PARTS = {"node_modules", "controller", ".venv", "staticfiles"}
 # django.setup import, so an import added anywhere they reach is one the
 # test's own imports never select.
 ALWAYS = ("architecture", "new_domain", "test_startup")
-# A test that walks a directory finds a module there through no import, so a
-# change to a module of any package the suite lives in runs every test tagged
-# tree, in the same run as the rest: the walks read every one of them, test
-# files among them (hq/platform/application/tests/test_tree_tag.py holds the
-# tag to the walks and reads each test module of those packages).
-TREE = tuple(f"{package}/*.py" for package in SUITE)
 # The module every test that reads the tasks goes through; a change to a task
 # definition, or to a file a task runs, reaches those tests as a change to it would.
 TASK_READER = "tests.mise_tasks"
@@ -90,10 +83,6 @@ def defines_tasks(path: str) -> bool:
 
 def touches_shared_ui(paths: list[str]) -> bool:
     return any(path.startswith(SHARED_UI) or "/templatetags/" in path for path in paths)
-
-
-def reaches_tree(paths: list[str]) -> bool:
-    return any(fnmatch(path, pattern) for path in paths for pattern in TREE)
 
 
 def quick_gates() -> tuple[str, ...]:
@@ -270,11 +259,11 @@ def import_graph(files: list[Path], *flags: str) -> dict[str, list[str]]:
     return json.loads(found.stdout)
 
 
-def django_apps() -> dict[str, str]:
+def django_apps(files: list[Path] | None = None) -> dict[str, str]:
     """Actual AppConfig source prefixes mapped to their stable Django labels."""
 
     apps: dict[str, str] = {}
-    for path in python_files():
+    for path in python_files() if files is None else files:
         if path.name == "apps.py" and path.parts[0] == "hq":
             apps.update(app_configs(ast.parse((ROOT / path).read_text(encoding="utf-8"))))
     return apps
@@ -329,10 +318,10 @@ def affected(changed: list[str], deleted: list[str], files: list[Path]) -> tuple
     """
 
     reverse = importers(files)
-    apps = django_apps()
+    apps = django_apps(files)
     paths = [*changed, *deleted]
     touched = {label for path in paths if (label := owner(path, apps))}
-    return app_reach(touched, apps, reverse) | import_reach(seeds(paths), reverse), touched
+    return app_reach(touched, apps, reverse) | import_reach(seeds(paths), reverse) | reading(paths, files), touched
 
 
 def seeds(paths: list[str]) -> set[str]:
@@ -341,6 +330,91 @@ def seeds(paths: list[str]) -> set[str]:
 
     found = {module_name(Path(path)) for path in paths if path.endswith(".py")}
     return (found | {TASK_READER}) if any(defines_tasks(path) for path in paths) else found
+
+
+def reading(paths: list[str], files: list[Path]) -> set[str]:
+    """The modules a change reaches through the files their source names
+    (docs/Development.md, What `fast` runs, says how a path is named), so a
+    test that reads a workflow, a template or a doc as text runs when it
+    changes. The guard in test_fast.py holds this to every path a test module
+    builds (``hq.platform.application.tests.tree.Named``)."""
+
+    index = Naming(named(ROOT, tuple(files)))
+    # A module that names a file, and a test that imports it, one hop out: two reach much of the suite.
+    near: set[str] = set()
+    # A test that names a directory above a module: the modules that name a package are many.
+    alone: set[str] = set()
+    for parts in (Path(path).parts for path in paths):
+        if parts[-1].endswith(".py"):
+            near |= index(parts)
+            alone |= {module for n in range(2, len(parts)) for module in index(parts[:n])}
+        else:
+            near |= index.file(parts)
+    as_modules = {module_name(Path(path)) for path in near}
+    return import_reach(as_modules, importers(files), 1) | {module_name(Path(path)) for path in alone}
+
+
+class Naming:
+    """The files that name a path, read from the index ``named`` builds."""
+
+    def __init__(self, index: dict[tuple[tuple[str, ...], bool], set[str]]):
+        self.index = index
+
+    def __call__(self, parts: tuple[str, ...], *, joined: bool = False) -> set[str]:
+        """The files that spell ``parts``, or only those that join it to a path before it."""
+
+        return self.index.get((parts, True), set()) | (set() if joined else self.index.get((parts, False), set()))
+
+    def file(self, parts: tuple[str, ...]) -> set[str]:
+        """The files that name a file that is not Python: by its path or a directory above it, from the root or
+        from a directory above the naming file, and by the name Django loads it by."""
+
+        # The loader and the finders name a file from its directory, wherever it lies, from any module.
+        loaded = [n for n, part in enumerate(parts[:-1]) if part in LOADED]
+        found = self(parts[loaded[-1] + 1 :]) if loaded else set()
+        for n in range(len(parts)):
+            scope, rest = "/".join(parts[:n]), parts[n:]
+            # A directory of one part is a common word and a URL's first segment ("docs/"), so it counts joined.
+            above = {module for k in range(1, len(rest)) for module in self(rest[:k], joined=k == 1)}
+            found |= {module for module in self(rest) | above if not scope or module.startswith(f"{scope}/")}
+        return found
+
+
+# The directories Django's template loaders and staticfiles finders read,
+# which name a file by its path below them ("partials/table.html").
+LOADED = ("templates", "static")
+# A run of string literals joined by `/` (`root / "a" / "b.yml"`) or listed
+# as arguments (`Path("a", "b.yml")`), and the `/` that joins it to a path
+# before it, if one does.
+LITERALS = re.compile(r"""(/\s*)?(["'][^"'\n]*["'](?:\s*[/,]\s*["'][^"'\n]*["'])*)""")
+LITERAL = re.compile(r"""["']([^"'\n]*)["']\s*([/,]?)""")
+
+
+@functools.cache
+def named(root: Path, files: tuple[Path, ...]) -> dict[tuple[tuple[str, ...], bool], set[str]]:
+    """(the parts of a path, whether a `/` joins it to a path before it) -> the
+    files whose source spells it, read once per tree and file list."""
+
+    index: dict[tuple[tuple[str, ...], bool], set[str]] = {}
+    for path in files:
+        for joined, literals in LITERALS.findall((root / path).read_text(encoding="utf-8")):
+            for parts in spelled(literals):
+                index.setdefault((parts, bool(joined)), set()).add(path.as_posix())
+    return index
+
+
+def spelled(literals: str) -> list[tuple[str, ...]]:
+    """The paths a run of literals spells: the whole run, and each run of the
+    arguments from the first, since `source_files(root / "a", "*.js")` names
+    the directory "a"."""
+
+    parts: list[str] = []
+    found = []
+    for literal, joiner in LITERAL.findall(literals):
+        parts += [part for part in literal.split("/") if part]
+        if joiner != "/" and parts:
+            found.append(tuple(parts))
+    return found
 
 
 def app_reach(touched: set[str], apps: dict[str, str], reverse: dict[str, set[str]]) -> set[str]:
@@ -355,43 +429,26 @@ def app_reach(touched: set[str], apps: dict[str, str], reverse: dict[str, set[st
     return members | {i for m in members for i in reverse[m]}
 
 
-def import_reach(start: set[str], reverse: dict[str, set[str]]) -> set[str]:
-    """``start`` and the modules that import it, ``REACH`` hops out."""
+def import_reach(start: set[str], reverse: dict[str, set[str]], hops: int = REACH) -> set[str]:
+    """``start`` and the modules that import it, ``hops`` out."""
 
     reached = frontier = set(start)
-    for _ in range(REACH):
+    for _ in range(hops):
         frontier = {i for m in frontier for i in reverse.get(m, ())} - reached
         reached |= frontier
     return reached
 
 
-def path_references(path: str) -> list[re.Pattern[str]]:
-    """How a test names a file it reads: the path, or its directory when that
-    is more than a top-level one, as one string ("a/b.yml") or as segments
-    (`root / "a" / "b.yml"`, `Path("a", "b.yml")`)."""
-
-    parts = Path(path).parts
-    named = [parts, parts[:-1]] if len(parts) > 2 else [parts]
-    between = r"""(?:/|["']\s*[/,]\s*["'])"""
-    return [re.compile(rf"""["']{between.join(map(re.escape, p))}(?![\w.-])""") for p in named]
-
-
-def test_labels(
-    files: list[Path], reached: set[str], touched: set[str], read: list[str] | tuple[str, ...] = ()
-) -> tuple[list[str], int]:
+def test_labels(files: list[Path], reached: set[str], touched: set[str]) -> tuple[list[str], int]:
     """The test modules to run: those ``chosen`` picks, and the architecture tests."""
 
     tests = {module_name(p): p for p in files if is_test(p)}
-    picked = chosen(tests, reached, touched, read) | {t for t in tests if any(a in t for a in ALWAYS)}
+    picked = chosen(tests, reached, touched) | {t for t in tests if any(a in t for a in ALWAYS)}
     return sorted(picked), len(tests)
 
 
-def chosen(
-    modules: dict[str, Path], reached: set[str], touched: set[str], read: list[str] | tuple[str, ...]
-) -> set[str]:
-    """Those of ``modules`` the change reaches by import, those that name an
-    app it touched, and those that name a file it changed that is not Python
-    (`read`)."""
+def chosen(modules: dict[str, Path], reached: set[str], touched: set[str]) -> set[str]:
+    """Those of ``modules`` the change reaches, and those that name an app it touched."""
 
     picked = {m for m in modules if m in reached}
     # A test that names an app exercises it: a URL namespace ("projects:list"),
@@ -403,7 +460,6 @@ def chosen(
         )
         for app in touched
     ]
-    words += [pattern for path in read for pattern in path_references(path)]
     for name, path in modules.items():
         if name not in picked and any(word.search((ROOT / path).read_text(encoding="utf-8")) for word in words):
             picked.add(name)
@@ -427,21 +483,25 @@ def group_tests() -> dict[str, str]:
     return found
 
 
-def group_tasks(
-    files: list[Path], reached: set[str], touched: set[str], read: list[str] | tuple[str, ...] = ()
-) -> tuple[str, ...]:
+def group_tasks(files: list[Path], reached: set[str], touched: set[str]) -> tuple[str, ...]:
     """The test tasks whose group-run modules the change reaches as it would reach a test module."""
 
     present = {module_name(p): p for p in files}
     modules = {m: present[m] for m in group_tests() if m in present}
-    picked = chosen(modules, reached, touched, read)
+    picked = chosen(modules, reached, touched)
     return tuple(sorted({group_tests()[m] for m in picked}))
 
 
 def with_tree(labels: list[str], paths: list[str]) -> list[str]:
-    """The selected labels, and every test tagged tree when a module of the suite's packages changed."""
+    """The selected labels, and every test tagged tree when anything changed.
 
-    return [*labels, *tagged(ROOT, "tree")] if reaches_tree(paths) else labels
+    A test that walks a directory finds a file there by no import and no name,
+    a module, a template or a doc alike, so any change runs every test tagged
+    tree, in the same run as the rest
+    (hq/platform/application/tests/test_tree_tag.py holds the tag to the
+    walks)."""
+
+    return [*labels, *tagged(ROOT, "tree")] if paths else labels
 
 
 # The module every test that reads each of the browser gate's modules goes
@@ -569,21 +629,20 @@ def main(asked: Usage) -> int:
     changed, deleted = changed_paths(base, ROOT)
     files = python_files()
     reached, touched = affected(changed, deleted, files)
-    read = [path for path in [*changed, *deleted] if not path.endswith(".py")]
-    labels, total = test_labels(files, reached, touched, read)
+    labels, total = test_labels(files, reached, touched)
     every_test = len(labels) == total > 0
     print(f"[fast] base {base[:9]}: {len(changed)} changed, {len(deleted)} deleted, {len(labels)}/{total} test modules")
     if total and len(labels) / total > WIDE:
         print("[fast] wide change: most of the suite is reached; `mise run check` is the honest gate")
 
-    if reaches_tree([*changed, *deleted]):
-        print(f"[fast] a module under {', '.join(f'{p}/' for p in SUITE)} changed: every test tagged tree runs too")
+    if changed or deleted:
+        print("[fast] every test tagged tree runs too: each walks the checkout, which the change is part of")
     labels = with_tree(labels, [*changed, *deleted])
     if gate is None:
         print("\n".join(labels))
         return 0
 
-    tasks = (*selected_tasks([*changed, *deleted], base), *group_tasks(files, reached, touched, read))
+    tasks = (*selected_tasks([*changed, *deleted], base), *group_tasks(files, reached, touched))
     steps = gates_and_tests(tasks, labels, files, parallel)
     if touches_shared_ui([*changed, *deleted]):
         steps.extend(extension_suites(parallel))

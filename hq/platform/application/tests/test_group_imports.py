@@ -257,7 +257,7 @@ class GroupImportTests(SimpleTestCase):
             "hq_runner/build-constraints.{in,txt} pin the build of a package with no wheel; with none left, delete them",
         )
         if wheelless:
-            (python,) = re.findall(r"--python-version (\S+)", constraints.read_text())
+            (python,) = re.findall(r"--python-version=(\S+)", constraints.read_text())
             self.assertEqual(f"=={python}.*", self.lock.requires_python, "compiled for the Python the image runs")
 
     def test_a_module_the_image_suite_loads_imports_only_the_runtime_as_it_loads(self):

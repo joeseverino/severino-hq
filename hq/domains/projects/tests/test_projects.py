@@ -207,10 +207,10 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
         named = render_to_string("page.html", {"page": Page("Alpha"), "built_from": built_from("example.alpha")})
         unnamed = render_to_string("page.html", {"page": Page("Alpha"), "built_from": built_from("example.missing")})
 
-        (line,) = with_class(named, "page-foot")
+        (line,) = with_class(named, "section-foot")
         self.assertTrue(line.words.startswith("Built from"))
         self.assertIn(("Example Alpha", built.get_absolute_url()), links(named))
-        self.assertEqual(with_class(unnamed, "page-foot"), [])
+        self.assertEqual(with_class(unnamed, "section-foot"), [])
         self.assertNotIn("Built from", text(unnamed))
 
 

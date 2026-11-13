@@ -24,6 +24,10 @@ on:
         description: The host image CI built in this run, by digest.
         type: string
         required: true
+      runner-image:
+        description: The automation worker's image CI built beside it, by digest.
+        type: string
+        required: true
     secrets:
       HQ_APP_CLIENT_ID:
         required: true
@@ -256,10 +260,12 @@ jobs:
           # interpolated into the script.
           HOST_REF: ${{ inputs.commit || github.event.pull_request.head.sha || github.sha }}
           GIVEN: ${{ inputs.host-image }}
+          GIVEN_RUNNER: ${{ inputs.runner-image }}
           REPOSITORY: ${{ github.repository }}
         # Derived from the commit being composed, so there is no pin to bump by
-        # hand and no way for the composition to be built on a stale host.
-        run: tools/pipeline/host-image.sh "$REPOSITORY" "$HOST_REF" "$GIVEN"
+        # hand and no way for the composition to be built on a stale host. The
+        # automation worker's image is the one CI built beside it.
+        run: tools/pipeline/host-image.sh "$REPOSITORY" "$HOST_REF" "$GIVEN" "$GIVEN_RUNNER"
 
       # Installed once for the whole job: the host image is verified with it
       # below, every extension admission is verified with it before install,
@@ -274,15 +280,17 @@ jobs:
           install_args: cosign
           cache: false
 
-      - name: Verify the host image was built by this repository
+      - name: Verify the host and worker images were built by this repository
         # Every extension wheel is verified against a declared signer before it
-        # is installed, and so is the image it is installed into. An image CI
-        # handed over by digest was built by this same run.
+        # is installed, and so is the image it is installed into, and the
+        # worker image the composition pins. Images CI handed over by digest
+        # were built by this same run.
         if: inputs.host-image == ''
         env:
           HOST_IMAGE: ${{ steps.host.outputs.image }}
+          RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
           REPOSITORY: ${{ github.repository }}
-        run: tools/pipeline/host-signature.sh "$REPOSITORY" "$HOST_IMAGE"
+        run: tools/pipeline/host-signature.sh "$REPOSITORY" "$HOST_IMAGE" "$RUNNER_IMAGE"
 
       # HQ's app, asked for read access only: a token minted per run
       # for the extensions' admissions and branches, that lapses within the
@@ -351,10 +359,11 @@ jobs:
         env:
           FORCE: ${{ github.event_name != 'workflow_dispatch' || inputs.force }}
           HOST_IMAGE: ${{ steps.host.outputs.image }}
+          RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
         # Only an admission's dispatch asks not to rebuild what is already
         # published: a second admission of the same commit is not news. The
         # host build, a pull request and a hand-run rebuild always build.
-        run: tools/pipeline/composition-fingerprint.sh "$HOST_IMAGE" admissions.txt policy/plugin-admission-v1.json
+        run: tools/pipeline/composition-fingerprint.sh "$HOST_IMAGE" "$RUNNER_IMAGE" admissions.txt policy/plugin-admission-v1.json
 
       - name: Nothing to do
         # Only an admission's dispatch stops here. Every other trigger rebuilds
@@ -456,11 +465,13 @@ jobs:
           (steps.fingerprint.outputs.build == 'true')
         env:
           HQ_IMAGE: ${{ steps.host.outputs.image }}
+          RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
           HOST_SHA: ${{ steps.host.outputs.sha }}
         run: |
           staged=build/composition
           docker build -f composition/Dockerfile \
             --build-arg HQ_IMAGE="$HQ_IMAGE" \
+            --build-arg RUNNER_IMAGE="$RUNNER_IMAGE" \
             --build-arg PLUGIN_POLICY_SHA256="$(cat "$staged/policy-sha256")" \
             --build-arg SEVERINO_HQ_PLUGIN_REFERENCES="$(cat "$staged/references")" \
             --build-arg HQ_REVISION="$HOST_SHA" \
@@ -568,6 +579,17 @@ jobs:
           MISE_TASK_RUN_AUTO_INSTALL: "false"
         run: mise run image:trivy "$IMAGE" --sbom sbom.cdx.json
 
+      - name: Scan the worker image
+        # The image the composition pins as its automation worker, by the same
+        # gate, its SBOM and reports in a directory of their own.
+        if: >-
+          steps.fingerprint.outputs.build == 'true'
+        env:
+          RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
+          TRIVY_CACHE_DIR: ${{ github.workspace }}/.cache/trivy
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
+        run: mise run image:trivy "$RUNNER_IMAGE" --sbom runner/sbom.cdx.json
+
       - name: Save the vulnerability database
         if: >-
           steps.fingerprint.outputs.build == 'true' && github.ref_name == github.event.repository.default_branch &&
@@ -599,32 +621,43 @@ jobs:
           digest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')
           echo "image=${image%:*}@$digest" >> "$GITHUB_OUTPUT"
 
-      # The artifact production actually runs. Every input to it is now signed
-      # and verified (the host image by the step near the top of this job,
-      # each extension wheel by its admission bundle) and this is the output
-      # those checks were for. Deploy verifies this signature before it
-      # recreates the container, so an image pushed to this name by anything
-      # other than this workflow cannot become production.
-      - name: Sign the published composition
+      # The artifacts production actually runs: the composition, and the
+      # automation worker's image it pins. Every input to them is now signed
+      # and verified (the host and worker images by the step near the top of
+      # this job, each extension wheel by its admission bundle) and these are
+      # the outputs those checks were for. Deploy verifies the composition's
+      # signature before it recreates the container, and the release verifies
+      # the worker image's before it pulls it, so an image pushed to either
+      # name by anything other than this workflow cannot become production.
+      - name: Sign the published composition and its worker image
         if: >-
           env.IS_RELEASE == 'true' &&
           (steps.fingerprint.outputs.build == 'true')
         env:
           IMAGE: ${{ steps.publish.outputs.image }}
-        run: cosign sign --yes "$IMAGE"
-      # What the composition holds, as the scan above read it (Debian
-      # packages, Python distributions, extensions included, each Go binary's
-      # modules), in CycloneDX, signed by the same workflow identity as the
-      # image and stored beside it in the registry: the list attested is the
-      # list scanned. Its subject is the published digest; the list itself
-      # names the image by the local tag it was scanned under.
-      - name: Attest the SBOM
+          RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
+        # The worker image first, so a signed composition never pins an
+        # unsigned one.
+        run: |
+          set -euo pipefail
+          for image in "$RUNNER_IMAGE" "$IMAGE"; do cosign sign --yes "$image"; done
+      # What each holds, as the scans above read it (Debian packages, Python
+      # distributions, extensions included, each Go binary's modules), in
+      # CycloneDX, signed by the same workflow identity as the image and
+      # stored beside it in the registry: the list attested is the list
+      # scanned. Its subject is the published digest; the list itself names
+      # the image by the tag it was scanned under.
+      - name: Attest the SBOMs
         if: >-
           env.IS_RELEASE == 'true' &&
           (steps.fingerprint.outputs.build == 'true')
         env:
           IMAGE: ${{ steps.publish.outputs.image }}
-        run: cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMAGE"
+          RUNNER_IMAGE: ${{ steps.host.outputs.runner }}
+        run: |
+          set -euo pipefail
+          cosign attest --yes --type cyclonedx --predicate runner/sbom.cdx.json "$RUNNER_IMAGE"
+          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$IMAGE"
 
       # Deploy is started by the composition it deploys, and by nothing else
       # but a person: it is handed the commit, and a link back to this run.

@@ -153,7 +153,7 @@
           {% endif %}
         {% endfact %}
         {% fact "Traffic" %}{{ machine.presence.rx_bytes|bytes }} in{% dot %}{{ machine.presence.tx_bytes|bytes }} out{% endfact %}
-        {% fact "Node key" %}<code class="node-key">{{ machine.presence.public_key|breakable }}</code>{% endfact %}
+        {% fact "Node key" %}<code>{{ machine.presence.public_key|breakable }}</code>{% endfact %}
       {% endfacts %}
     {% endsection %}
   {% endif %}

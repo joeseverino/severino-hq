@@ -1,7 +1,7 @@
 #!/bin/sh
 # Prove image:build builds the automation worker's image beside the host's only
-# when asked, labeled as the host image is and reading the layer cache without
-# writing it; that build hands the checks each image it built, or each one
+# when asked, labeled as the host image is, with a layer cache of its own that
+# reads the host's and is written only when the host's is; that build hands the checks each image it built, or each one
 # handed to it; and that the worker's check refuses a host image handed over
 # without its worker image.
 set -eu
@@ -79,22 +79,43 @@ run mise-tasks/image/build usage_tag=example-host:test
 [ "$(builds)" = 1 ] || fail "image:build without --runner-tag ran $(builds) builds, not one"
 build_call 1 | grep -qx -- '--target' && fail "image:build without --runner-tag built a target"
 
-# 2. With it, the runner stage after the host image, labeled the same, reading
-#    the cache and never writing it.
+# 2. With it, the runner stage after the host image, labeled the same. It
+#    reads the host's cache and its own, and writes only its own, so neither
+#    export replaces the other.
 run mise-tasks/image/build usage_tag=example-host:test usage_runner_tag=example-runner:test \
     usage_cache=registry.example.com/cache:main usage_cache_write=true
 [ "$(cat "${work}/status")" = 0 ] || fail "image:build --runner-tag failed: $(cat "${work}/out")"
 [ "$(builds)" = 2 ] || fail "image:build --runner-tag ran $(builds) builds, not two"
+build_call 1 >"${work}/host"
 build_call 2 >"${work}/runner"
 grep -A1 -x -- '--target' "${work}/runner" | grep -qx runner ||
     fail "the second build is not the runner stage"
 grep -A1 -x -- '-t' "${work}/runner" | grep -qx example-runner:test || fail "the runner stage is not tagged as --runner-tag"
-grep -qx 'type=registry,ref=registry.example.com/cache:main' "${work}/runner" || fail "the runner stage does not read the cache"
-grep -qx -- '--cache-to' "${work}/runner" && fail "the runner stage writes the cache, replacing the host image's"
-build_call 1 | grep -qx -- '--cache-to' || fail "the host image no longer writes the cache it was asked to"
+grep -A1 -x -- '--cache-from' "${work}/runner" | grep -qx 'type=registry,ref=registry.example.com/cache:main' ||
+    fail "the runner stage does not read the host image's cache"
+grep -A1 -x -- '--cache-from' "${work}/runner" | grep -qx 'type=registry,ref=registry.example.com/cache:main-runner' ||
+    fail "the runner stage does not read its own cache"
+grep -A1 -x -- '--cache-to' "${work}/runner" | grep -vx -- '--cache-to' >"${work}/runner-writes" || true
+if [ "$(grep -c . "${work}/runner-writes")" != 1 ] ||
+    ! grep -qx 'type=registry,ref=registry.example.com/cache:main-runner,mode=max' "${work}/runner-writes"; then
+    fail "the runner stage does not write every layer to its own cache alone: $(cat "${work}/runner-writes")"
+fi
+grep -A1 -x -- '--cache-to' "${work}/host" | grep -vx -- '--cache-to' >"${work}/host-writes" || true
+if [ "$(grep -c . "${work}/host-writes")" != 1 ] ||
+    ! grep -qx 'type=registry,ref=registry.example.com/cache:main,mode=max' "${work}/host-writes"; then
+    fail "the host image does not write its own cache alone: $(cat "${work}/host-writes")"
+fi
 [ -n "$(labels 1)" ] && [ "$(labels 1)" = "$(labels 2)" ] || fail "the runner image's labels differ from the host image's"
 labels 2 | grep -qx 'org.opencontainers.image.source=https://example.com/example/hq' ||
     fail "the runner image does not name its source as the host image does"
+
+# 2b. Reading without --cache-write, neither build writes a cache.
+run mise-tasks/image/build usage_tag=example-host:test usage_runner_tag=example-runner:test \
+    usage_cache=registry.example.com/cache:main
+[ "$(cat "${work}/status")" = 0 ] || fail "image:build --cache failed: $(cat "${work}/out")"
+grep -qx -- '--cache-to' "${work}/calls" && fail "a build without --cache-write writes a cache"
+build_call 2 | grep -qx 'type=registry,ref=registry.example.com/cache:main-runner' ||
+    fail "the runner stage does not read its own cache without --cache-write"
 
 # 3. A host image handed over: nothing is built.
 run mise-tasks/image/build IMAGE=example-host:given usage_tag=example-host:test usage_runner_tag=example-runner:test

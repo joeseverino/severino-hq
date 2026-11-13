@@ -81,7 +81,7 @@ write as they measure, so they run outside it. A `.venv` out of sync with
 | `audit:ast [globs]...` | per file, the docstrings over 8 lines and the `getattr` calls of a literal name with a default (`tools/audit/ast-grep.yml`) | `mise run audit:ast 'hq/**'` |
 | `audit:dead` | the names `hq/` and `hq_sdk/` define that nothing outside tests reads (a test-support module's, `testing.py` or `*_testing.py`, that nothing reads at all), as vulture finds them, with what it cannot see handed to it as uses (`[tool.vulture]`, `tools/lint/vulture-whitelist.py`) | `mise run audit:dead --fields` |
 | `audit:layers [importer] [imported]` | the imports between core, application and domains, counted per pair both ways, or one pair's listed by module (grimp) | `mise run audit:layers core domains` |
-| `audit:hand-rolled` | the page-class check's count: the classes host templates hand-roll instead of drawing a shared part, as totals, per template, and any difference from `HAND_ROLLED`; the number a UI report gives before and after (`test_host_templates_draw_only_the_shared_parts_classes` reads the same) | `mise run audit:hand-rolled` |
+| `audit:hand-rolled` | the page-class check's count: the classes host templates hand-roll instead of drawing a shared part, as totals, per template, and any difference from its baseline, `tools/lint/hand-rolled.txt`; the number a UI report gives before and after (`test_host_templates_draw_only_the_shared_parts_classes` reads the same) | `mise run audit:hand-rolled` |
 | `audit:imports <path>` | the files that import one, string imports included | `mise run audit:imports hq/platform/core/static.py` |
 | `audit:churn <since>` | each tracked source file's commits since a date, most first, generated and vendored files left out (`.gitattributes`); reach for it before a refactor or split | `mise run audit:churn 2026-10-01` |
 | `audit:go [linters]` | golangci-lint's findings, counted per linter | `mise run audit:go nilerr,gocritic` |
@@ -263,9 +263,22 @@ The tests it selects are:
   URL namespace or app label);
 - every test that reads the tasks, when a task definition or a file a task's
   run names changed;
+- every module whose source names a changed file, and every test that
+  imports one: a file that is not Python by its path or a directory above
+  it, as one string (`".github/workflows"`) or as segments (`ROOT /
+  ".github" / "workflows"`), from the root or from a directory above the
+  module (`Path(__file__).parent / "report.jq"`), a directory of one part
+  only joined to a path (`BASE_DIR / "templates"`), and a file under a
+  `templates` or `static` directory by the name Django loads it by
+  (`"partials/table.html"`) too; a Python module by its
+  whole path, and a test alone by a directory of two parts or more above it.
+  A test that reads a workflow through a helper naming the workflows'
+  directory is one. `test_fast.py` holds this to every path each test module
+  builds, read from its code (`Named` in
+  `hq/platform/application/tests/tree.py`);
 - the architecture tests;
-- every test tagged `tree`, when a module under `hq/`, `hq_sdk/`, `tools/` or
-  `tests/` changed, the packages the suite lives in. Such a test finds its files by walking this checkout, which no import shows
+- every test tagged `tree`, on any change. Such a test finds its files (a
+  module, a template, a doc) by walking this checkout, which no import or name shows
   (`test_tree_tag.py` holds the tag to the walks; a test that patches the
   `ROOT` of the code it drives walks a fixture and carries none);
 - the extensions' suites, composed, when `mise.local.toml` names a set and the
@@ -427,6 +440,12 @@ It then lowers each count in `tools/lint/stylelint-suppressions.json` and
 count right. A count that rose is a new problem: `fix` leaves it, and
 `lint:css` or `lint:js` refuses it.
 
+The same way, it drops from `tools/lint/hand-rolled.txt` each template and
+class the page-class check no longer finds (`fix:hand-rolled`), so a page
+moved onto the shared parts leaves no line to delete by hand. A pair the check
+finds and the file lacks is a new hand-rolled class: `fix` never adds it, and
+`test_host_templates_draw_only_the_shared_parts_classes` refuses it.
+
 Each `lint:drift-*` gate checks one against its source without writing. Its
 failure names the command that rewrites that file alone, in seconds; `fast`
 runs the ones a change reaches. A rebase conflict in one is settled by
@@ -479,6 +498,19 @@ That copy is read from the two files by `tools/lib/image-tree.sh`.
 `image:verify:tree`, one of the checks `mise run build` runs, holds it to the
 built image's `/app`, so a form the reading misses fails the build naming each
 path.
+
+`mise run build` also builds the automation worker's image, the Dockerfile's
+`runner` stage (`--runner-tag`, `severino-hq-runner:ci-local` by default), and
+`image:verify:runner` checks it: the account it runs as, the programs a run
+reaches, its entry point, and `mise run smoke:runner --image <tag>`, the real
+playbook run inside it under the worker's confinement. The checks read the
+host image from `IMAGE` and the worker's from `RUNNER_IMAGE`; a host image
+handed over needs its worker image handed over beside it.
+
+`--cache <ref>` reads a registry layer cache, and the worker's build reads its
+own beside it at `<ref>-runner` as well as the host's. `--cache-write` writes
+both, the worker's to its own ref, since an export replaces what its ref held.
+Only main's Build cache job passes it.
 
 The same file holds this machine's other values, each written with
 `mise set --file mise.local.toml NAME=value`:

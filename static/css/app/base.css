@@ -128,8 +128,6 @@ pre { max-width: 100%; background: var(--code-bg); color: var(--code-ink); paddi
 ::selection { background: var(--selection); color: var(--ink); }
 pre ::selection { color: var(--code-ink); }
 
-.node-key { font-size: var(--text-xs); overflow-wrap: anywhere; word-break: break-all; }
-
 /* A mark, not an alarm. It has to be visible while the mode is on (an
    operator who forgets can screenshot fiction and file it as fact) and it
    sits beside the profile control rather than shouting over the header. */

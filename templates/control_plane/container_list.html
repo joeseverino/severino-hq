@@ -49,15 +49,15 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
                   <p>{% if plan %}Upgrade risk {% if plan.risk_reason %}{{ plan.risk|breakable:"," }} because {{ plan.risk_reason|breakable:"." }}{% else %}{{ plan.risk|breakable:"." }}{% endif %}{% if plan.stateful %} Snapshot {{ plan.data|length|counted:"mount,mounts" }} first.{% endif %}{% if plan.verified_by %} Checked afterwards by {{ plan.verified_by.0|breakable:"." }}{% endif %}{% else %}{{ standing.summary|capfirst|breakable:"," }} and no newer release yet.{% endif %}{% if standing.release.published %} Released {{ standing.release.published|ago_short }}.{% endif %}</p>
                   {% if standing.moved_to %}<p class="github-gap">Its tag <code>{{ standing.tag|breakable }}</code> now names a newer build than the one running.</p>{% endif %}
                   {% if standing.advisories or standing.urgent %}
-                    <ul class="container-advisories">
+                    {% stack_list %}
                       {% for advisory in standing.advisories %}
-                        <li>{% status advisory.severity tone=advisory.severity|severity_tone %} {% entity advisory.url|outside label=advisory.id %} {{ advisory.summary|breakable }}</li>
+                        <li{% if advisory.summary %} class="prose"{% endif %}>{% status advisory.severity tone=advisory.severity|severity_tone %} {% entity advisory.url|outside label=advisory.id %} {{ advisory.summary|breakable }}</li>
                       {% endfor %}
                       {% for finding in standing.urgent|slice:":3" %}
                         <li>{% status finding.severity tone="serious" %} {% entity finding.url|outside label=finding.id %} <code>{{ finding.package|breakable }}</code> {% include "partials/_change.html" with from=finding.installed to=finding.fixed|join:", " %}</li>
                       {% endfor %}
                       {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3"|measured:"more" }} on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
-                    </ul>
+                    {% endstack_list %}
                   {% endif %}
                 </div>
               </td>

@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="When a lint gate fails, a derived file is behind its source, or a rebase conflicts in one: rewrite every derived file, lower each fallen lint suppression count, then Ruff's fixes and format and mise fmt's"
+#MISE description="When a lint gate fails, a derived file is behind its source, or a rebase conflicts in one: rewrite every derived file, lower each fallen lint suppression count and the page-class check's baseline, then Ruff's fixes and format and mise fmt's"
 
 # The same file set the format gates read, so a fix run leaves them nothing
 # to report. The derived files load Django, so fix:derived writes them on an
@@ -10,6 +10,7 @@ set -eu
 
 mise run fix:derived
 mise run fix:suppressions
+mise run fix:hand-rolled
 uv run ruff check --fix .
 uv run ruff format .
 files="$(mktemp)"

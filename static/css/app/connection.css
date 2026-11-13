@@ -91,8 +91,6 @@
 .mail-stage-head strong { font-size: var(--text-lg); overflow-wrap: anywhere; }
 .mail-stage-question { margin: var(--space-3) 0 var(--space-1); font-size: var(--text-sm); font-weight: 500; }
 .mail-stage-warning { margin: var(--space-4) 0 0; font-size: var(--text-sm); color: var(--warn); }
-.mail-records { list-style: none; margin: var(--space-5) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
-.mail-records li { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3); font-size: var(--text-sm); }
 .mail-record-value { color: var(--muted); overflow-wrap: anywhere; }
 
 /* ── Reachability answer ───────────────────────────────────────── */

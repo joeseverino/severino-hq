@@ -17,8 +17,8 @@ waits on a schedule.
 
 | Workflow | Started by | Does |
 | :--- | :--- | :--- |
-| **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image, and attest its SBOM), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
-| **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application; on `main`, published and signed, and its SBOM attested |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image and the automation worker's image built beside it, and attest their SBOMs), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
+| **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application, pinning the worker image CI built beside the host image; on `main`, published and signed with that worker image, and both SBOMs attested |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
 Each CI job is named for the `mise` task it runs, so the gates are declared
@@ -29,6 +29,17 @@ never the host image alone. How Compose admits, fingerprints and assembles
 the extensions is in [Plugins](Plugins.md#composition). It stamps the released
 commit into the image (`SEVERINO_HQ_REVISION`), so production reports the
 commit it runs.
+
+Each release also pins the automation worker's image, the Dockerfile's
+`runner` stage, which CI builds, publishes and signs beside the host image
+(`ghcr.io/joeseverino/severino-hq/runner`). Compose writes its digest to
+`/app/deploy/automation/image` and refuses to build a release without one.
+Before it composes, it checks that CI signed both images. It scans the
+worker's image with `mise run image:trivy`, and on `main` signs it and
+attests its SBOM under the composition's identity, the worker image first. The
+release's `hq-host release` checks that signature before it pulls the worker
+image, and refuses a pin that is not the source's signed runner image by
+digest (`release IMAGE`, below).
 
 Each image CI or Compose signs also carries a signed CycloneDX SBOM, Trivy's
 list of its Debian packages, Python distributions (the composition's include
@@ -76,9 +87,10 @@ release that cannot serve and proves the previous one comes back on its schema.
 
 When a pull request merges, the push to `main` asks
 `tools/pipeline/proven-on-pr.sh` whether the pull request already proved it:
-its last CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
-pushed commit's tree, and it is signed by that run. With all three, Build
-promotes that image by digest to the commit's tag, and Lint, Test and Browser
+its last CI run passed, its host image and its worker image each carry a
+`dev.severino.hq.tree` label equal to the pushed commit's tree, and each is
+signed by that run. With all three, Build promotes both images by digest to
+the commit's tag, and Lint, Test and Browser
 are skipped when that run left none of them out
 ([What a pull request runs](Development.md#what-a-pull-request-runs)). Short
 of all three, every gate runs again.

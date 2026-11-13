@@ -446,6 +446,11 @@ end within a step of each other. Each step is `{% step icon=... %}`: its icon,
 then what it says; `tone` colors the icon by how a check stands, `done`
 draws a finished step quiet, and `title` is its tooltip.
 
+A plain list read down (a row's notes, a record's statuses, a section's
+records) is `{% stack_list %}`, its `<li>`s each running their parts inline a
+small gap apart, an item that reads as a sentence marked `.prose`;
+`below="Label"` makes it a block the open row shows under that label.
+
 A row of readings beside a page's title is `{% readings %}`, each
 `{% reading icon=... %}`: its mark, its figure, its quiet lines
 (`{% lines %}`, a `<strong>` part in the attention tone) and a note on how it
@@ -454,6 +459,10 @@ its `url`, or opens a `{% panel %}` in place under its `id`; `tone` takes the
 status vocabulary, and each `data_*` option is its attribute, so a fragment
 region in the row holds readings refreshed in place as the row's own. The row
 is one line when each has room and a list when not.
+
+The facts a page states on its title's line (a record's state, a machine's
+addresses) are `{% title_meta %}`, written by the template its view names as
+`page_aside`; `element="ul"` takes `<li>` parts that each wrap whole.
 
 **A route reads in one direction.** A path from one thing to another
 (`control_plane/_path_hops.html`) is one surface, each hop a stop on one

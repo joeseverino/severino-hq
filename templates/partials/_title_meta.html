@@ -1,0 +1,12 @@
+{% comment %}
+The line of facts on a page's title line, drawn by {% title_meta %} from the
+template a view names as its page_aside:
+{% title_meta %}{% status "Online" tone="good" %}{% dot %}<code>example-host</code>{% endtitle_meta %}.
+Its parts run as one line of muted words that wraps under the title where it
+must; element="ul" takes <li> parts, a dot between each and each wrapping
+whole. Each data_* option is a data- attribute (True draws it bare).
+<!-- ast-grep-ignore: hand-drawn-title-meta --> the part itself
+{% endcomment %}{% if listed %}<ul class="page-title-meta dot-list"{{ data }}>{{ content|safe }}</ul>{% else %}
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-title-meta --> the part itself
+{% endcomment %}<p class="page-title-meta"{{ data }}>{{ content|safe }}</p>{% endif %}

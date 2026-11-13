@@ -19,12 +19,10 @@ from typing import Any
 class Check:
     """A survey check and where it runs: ``palette`` when its verdict depends
     on the palette the page is drawn in, ``table`` when the sweep of every
-    width reads it too, ``only_on`` the one path it runs on, and ``findings``
-    what turns its probe's value into findings when that is not the value
-    itself."""
+    width reads it too, and ``findings`` what turns its probe's value into
+    findings when that is not the value itself."""
 
     probe: Any
     palette: bool = False
     table: bool = False
-    only_on: str | None = None
     findings: Callable[[Any], list] | None = None

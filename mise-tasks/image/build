@@ -6,9 +6,9 @@
 #MISE depends_post=["image:docker stop"]
 #USAGE flag "--tag <tag>" default="severino-hq:ci-local" help="The name to build it as"
 #USAGE flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
-#USAGE flag "--cache <ref>" help="A registry layer cache to read, ghcr.io/OWNER/REPO/build-cache:main in CI; a missing or unreadable one warns and builds cold"
-#USAGE flag "--cache-write" help="Also write every stage's layers to --cache, as only main's Build cache job does"
-#USAGE flag "--runner-tag <tag>" help="Also build the automation worker's image (the Dockerfile's runner stage) as this name, from the same tree and labeled the same; it reads --cache but never writes it"
+#USAGE flag "--cache <ref>" help="A registry layer cache to read, ghcr.io/OWNER/REPO/build-cache:main in CI, with the worker's beside it as <ref>-runner; a missing or unreadable one warns and builds cold"
+#USAGE flag "--cache-write" help="Also write every stage's layers to --cache, and the worker's to <ref>-runner, as only main's Build cache job does"
+#USAGE flag "--runner-tag <tag>" help="Also build the automation worker's image (the Dockerfile's runner stage) as this name, from the same tree and labeled the same"
 
 # IMAGE names the image under test; the pipeline passes the one it built.
 set -eu
@@ -61,12 +61,17 @@ docker buildx build --load "$@" \
 [ -n "${usage_runner_tag:-}" ] || exit 0
 
 # The worker's image carries the same labels, so GHCR links it to this
-# repository and a push to main promotes it by the same tree. A registry cache
-# holds one build's layers, and a second --cache-to would replace the web
-# image's with these, so it only reads; the stages the two share (the lock,
-# the base) come from the build above.
+# repository and a push to main promotes it by the same tree. An export
+# replaces whatever its ref held, so the worker's layers go to a ref of their
+# own, a tag beside the host's in the same package, written on the same terms.
+# It reads both: the stages the two share (the lock, the base) are the host
+# cache's.
 set --
-[ -z "${usage_cache:-}" ] || set -- --cache-from "type=registry,ref=${usage_cache}"
+if [ -n "${usage_cache:-}" ]; then
+    runner_cache="${usage_cache}-runner"
+    set -- --cache-from "type=registry,ref=${usage_cache}" --cache-from "type=registry,ref=${runner_cache}"
+    [ "${usage_cache_write:-}" != true ] || set -- "$@" --cache-to "type=registry,ref=${runner_cache},mode=max"
+fi
 docker buildx build --load "$@" --target runner \
     --label "org.opencontainers.image.source=$source" \
     --label "org.opencontainers.image.revision=$revision" \

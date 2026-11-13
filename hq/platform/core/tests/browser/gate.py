@@ -678,7 +678,7 @@ class BrowserGate(SimpleTestCase):
         """What the layout invariants find on the page as loaded, by check:
         every one the gates hold on a page as a reader has it."""
 
-        return self.checked(geometry_probes(path, width))
+        return self.checked(geometry_probes())
 
     def table_defects_at_every_width(self):
         """What the table checks (`Check(table=True)`) find on the loaded page
@@ -800,7 +800,7 @@ class BrowserGate(SimpleTestCase):
         found = self.checked(
             {
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
-                **geometry_probes(path, width),
+                **geometry_probes(),
                 **palette_probes(),
                 "put back": (PUT_BACK, None),
             }

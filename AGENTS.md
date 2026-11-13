@@ -23,8 +23,9 @@ mise prints the tasks live, so this file does not list them:
 
 What the listing does not say:
 
-- `fast` selects through Python imports and app names, so a rule held only by
-  a string or a template needs `check`.
+- `fast` selects through Python imports, app names and the paths a module
+  names, and runs every walk of the tree on any change, so only a test that
+  finds a file by a name computed as it runs needs `check`.
 - A new test is proven to fail without the fix by `mise run test --at <base>
   <labels>`, never by a base worktree, snapshot or checkout made by hand.
 - An agent runs `dev:scratch` in its own worktree, never `dev`.

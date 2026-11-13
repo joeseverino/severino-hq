@@ -502,9 +502,9 @@ td > .subtle-link:not(:only-child) { display: table; }
 /* The line under a section's body that says how to read it ({% foot %}), and
    the page's own last line (what it is built from): quieter than the body,
    one step after it. */
-:is(.section-foot, .page-foot) { margin: var(--space-6) 0 0; color: var(--muted); font-size: var(--text-sm); }
-:is(.section-foot, .page-foot) a { color: var(--muted); font-weight: 500; }
-:is(.section-foot, .page-foot) a:hover { color: var(--accent); }
+.section-foot { margin: var(--space-6) 0 0; color: var(--muted); font-size: var(--text-sm); }
+.section-foot a { color: var(--muted); font-weight: 500; }
+.section-foot a:hover { color: var(--accent); }
 
 /* Empty state (partials/_empty_state.html): a card of one regular-weight line,
    what is missing and then what would fill it. Inside another frame the

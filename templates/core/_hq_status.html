@@ -1,4 +1,4 @@
 {% comment %}HQ's status, release and machine, on its title's line (`page_aside`).{% endcomment %}
-<p class="page-title-meta">
+{% title_meta %}
   {% if hq.parts %}{% if hq.status.0 == "serious" %}{% status hq.status.1 tone=hq.status.0 href="#problems-here" %}{% else %}{% status hq.status.1 tone=hq.status.0 href="#hq-"|add:hq.parts.0|add:"-heading" %}{% endif %}{% else %}{% status hq.status.1 tone=hq.status.0 %}{% endif %}{% if hq.release.revision %}{% dot %}<code>{{ hq.release.short|breakable }}</code>{% endif %}{% if hq.machine %}{% dot %}on {% entity hq.machine.link %}{% endif %}{% if hq.container.uptime %}{% dot %}{{ hq.container.uptime|breakable }}{% endif %}
-</p>
+{% endtitle_meta %}

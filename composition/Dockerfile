@@ -102,10 +102,11 @@ RUN test -s /opt/severino/plugin-lock.json \
 # the one CI built for the same commit, once it has verified CI signed it, and
 # signs it beside this composition. It lands in the root-owned tree a release
 # installs (AutomationImage, controller/host/layout.go), and the release's
-# deploy verifies and pulls it.
+# deploy verifies and pulls it. Required, so every release pins one.
 ARG RUNNER_IMAGE
-RUN [ -z "${RUNNER_IMAGE}" ] || { mkdir -p /app/deploy/automation \
-    && printf "%s\n" "${RUNNER_IMAGE}" > /app/deploy/automation/image; }
+RUN [ -n "${RUNNER_IMAGE}" ] || { echo "RUNNER_IMAGE names the automation worker's image this release pins" >&2; exit 1; } \
+    && mkdir -p /app/deploy/automation \
+    && printf "%s\n" "${RUNNER_IMAGE}" > /app/deploy/automation/image
 
 ENV SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=1 \
     SEVERINO_HQ_PLUGIN_LOCK=/opt/severino/plugin-lock.json \

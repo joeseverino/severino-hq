@@ -39,11 +39,12 @@ run = [
 
 # The runner image's build constraints are a lock of the index's newest
 # releases, so compiling them reaches PyPI and is no step of fix. Renovate runs
-# the same command, from the header it writes, to move them.
+# the same command, from the header it writes, to move them; its parser takes
+# an option's argument only after `=`.
 ["fix:runner-constraints"]
 description = "When hq_runner/build-constraints.in changes: compile it, hashed, into the build-constraints.txt the runner image builds PyYAML against"
 hide = true
-run = "uv pip compile --quiet --universal --generate-hashes --python-version 3.15 hq_runner/build-constraints.in --output-file hq_runner/build-constraints.txt"
+run = "uv pip compile --quiet --universal --generate-hashes --python-version=3.15 hq_runner/build-constraints.in --output-file hq_runner/build-constraints.txt"
 
 # A linter's suppressions file holds a count per file and rule that only
 # falls: a rise is a new problem, which lint:css and lint:js refuse. ESLint's
@@ -59,6 +60,16 @@ run = [
   "if stylelint --config tools/lint/stylelint.config.mjs --suppress-location=tools/lint/stylelint-suppressions.json 'static/css/**/*.css' >/dev/null 2>&1; then stylelint --config tools/lint/stylelint.config.mjs --suppress --suppress-location=tools/lint/stylelint-suppressions.json 'static/css/**/*.css'; else echo 'fix:suppressions: lint:css finds a problem, so the stylesheets keep their counts until mise run lint:css passes'; fi",
   "eslint --config tools/lint/eslint.config.mjs --suppressions-location tools/lint/eslint-suppressions.json --prune-suppressions 'static/js/**/*.js' >/dev/null || echo 'fix:suppressions: lint:js finds a problem; mise run lint:js names it'",
 ]
+
+# The page-class check's baseline (tools/lint/hand-rolled.txt) only falls the
+# same way: a pair found and not held is a new hand-rolled class, which the
+# check refuses, so this step only drops. It is a task apart from the linters'
+# since its reader is HQ's own, on Django's env, where theirs are Node's.
+["fix:hand-rolled"]
+description = "Drop from the page-class check's baseline each template and class it no longer finds; a new one is left for the check to refuse"
+hide = true
+extends = "django"
+run = "uv run python -m tools.audit_hand_rolled --lower"
 
 # A docs figure is drawn from its source beside it by brand, the renderer its
 # source line names. brand lives on an operator's machine only, so this is no

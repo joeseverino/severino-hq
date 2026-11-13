@@ -392,8 +392,9 @@ merge a plugin → its CI admits the wheel and publishes the bundle
                → HQ marks the plugin's commit live and comments on its pull request
 ```
 
-What a composition is made of (the host image digest, the plugin wheel digests
-and the admission policy) is hashed into a fingerprint, published as a
+What a composition is made of (the host image digest, the automation worker's
+image digest it pins, the plugin wheel digests and the admission policy) is
+hashed into a fingerprint, published as a
 `composition:fp-…` tag beside the image. An admission's dispatch whose
 fingerprint is already published (the same commit admitted twice) stops before
 building. Every other trigger rebuilds: a host build, a pull request, and a

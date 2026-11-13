@@ -1,8 +1,7 @@
 """A source test that reads a whole tree carries the ``tree`` tag, and only one.
 
 No import leads from a changed module to a test that finds it by walking a
-directory, so ``mise run fast`` runs every ``tree`` test on any change to a
-module of a package the suite lives in (``tree.SUITE``). A walk is ``rglob``, ``os.walk``, ``git
+directory, so ``mise run fast`` runs every ``tree`` test on any change. A walk is ``rglob``, ``os.walk``, ``git
 ls-files`` or an ``ast-grep`` command line that does not read ``--stdin``, in the test, its class's setup, or any function or value of this
 checkout it reaches by name. A test that patches the ROOT of the code it drives,
 itself or in its class's setup, walks a fixture rather than this checkout, so it
@@ -148,7 +147,7 @@ class TreeTagTests(SimpleTestCase):
         cls.untagged, cls.idle = misplaced(ROOT)
 
     def test_a_source_test_that_walks_a_tree_carries_the_tree_tag(self):
-        self.assertEqual(self.untagged, [], "add tag 'tree': `mise run fast` runs these on every module change")
+        self.assertEqual(self.untagged, [], "add tag 'tree': `mise run fast` runs these on every change")
 
     def test_a_tree_tag_marks_a_test_that_walks(self):
         self.assertEqual(self.idle, [], "drop tag 'tree': nothing here walks a tree")

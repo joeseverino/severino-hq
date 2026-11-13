@@ -64,13 +64,11 @@ def palette_probes():
     return Probes({name: _read(check) for name, check in CHECKS.items() if check.palette})
 
 
-def geometry_probes(path, width):
-    """The geometry's probes on ``path`` at ``width``, as ``(source, arg)``
-    by check: a check declared for one path only on that path."""
+def geometry_probes():
+    """The geometry's probes, as ``(source, arg)`` by check: every check whose
+    verdict does not depend on the palette."""
 
-    return Probes(
-        {name: _read(check) for name, check in CHECKS.items() if not check.palette and check.only_on in {None, path}}
-    )
+    return Probes({name: _read(check) for name, check in CHECKS.items() if not check.palette})
 
 
 def table_probes():
@@ -84,7 +82,7 @@ def survey_checks(path, width):
     """The checks the survey runs on ``path`` at ``width``, by name: the
     probes' and the fills, which the gate reads in both palettes at once."""
 
-    return [*geometry_probes(path, width), *palette_probes(), "fills"]
+    return [*geometry_probes(), *palette_probes(), "fills"]
 
 
 def _as_is(value):

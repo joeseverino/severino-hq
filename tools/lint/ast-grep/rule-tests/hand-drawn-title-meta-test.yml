@@ -1,0 +1,7 @@
+id: hand-drawn-title-meta
+valid:
+  - '{% title_meta %}A{% endtitle_meta %}'
+  - '<p class="page-title-meta-wide"></p>'
+invalid:
+  - '<p class="page-title-meta">A</p>'
+  - '<ul class="page-title-meta dot-list"></ul>'

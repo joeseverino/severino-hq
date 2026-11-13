@@ -271,21 +271,21 @@ above it found is not a row.
       {% for operation in operations %}
         <tr>
           <td>{{ operation.action_label|breakable }}</td>
-          <td class="operation-result">
-            {% status operation.state_label tone=operation.tone %}
-            <strong class="cell-data">{{ operation.headline|breakable }}</strong>
+          <td class="cell-data">
+            {% status operation.state_label tone=operation.tone %}<br>
+            <strong>{{ operation.headline|breakable }}</strong>
             {% if operation.affected %}
               <span class="muted">{{ operation.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}</span>
-              <ul class="operation-evidence row-below" data-label="Affected">
+              {% stack_list below="Affected" %}
                 {% for item in operation.affected %}
                   <li><strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12"|breakable }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12"|breakable }}…</code></span></li>
                 {% endfor %}
-              </ul>
+              {% endstack_list %}
             {% elif operation.matched %}
               <p class="muted">{{ operation.matched|counted:"name serves,names serve" }} this certificate<span title="{{ operation.expected_fingerprint_sha256 }}"> ({{ operation.expected_fingerprint_sha256|slice:":8"|breakable }}…)</span>.</p>
             {% endif %}
             {% if operation.raw_result %}
-              <div class="operation-evidence row-below" data-label="Raw result"><pre tabindex="0">{{ operation.raw_result|breakable }}</pre></div>
+              <div class="row-below" data-label="Raw result"><pre tabindex="0">{{ operation.raw_result|breakable }}</pre></div>
             {% endif %}
           </td>
           <td>{{ operation.by|or_empty }}{% if operation.attempt_count > 1 %}<br><span class="muted">Attempt {{ operation.attempt_count|breakable }}</span>{% endif %}</td>

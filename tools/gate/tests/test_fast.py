@@ -19,7 +19,7 @@ from django.test.utils import iter_test_cases
 from hq.config.sandbox import RUN
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.test_runner import excluded_tags
-from hq.platform.core.tests.task import RefError, Usage, trusted_mise
+from hq.platform.core.tests.task import RefError, Usage, names, trusted_mise
 from tests.mise_tasks import HEAVY_LOCK, locks, mise_tasks, takes_the_turn
 from tools.gate import fast as fast_gate, verdict as gate_verdict
 from tools.gate.tests.base import UNITTEST, GateTestCase, fixture_git
@@ -113,21 +113,167 @@ class FastGateMappingTests(GateTestCase):
                 chosen, _ = fast_gate.test_labels(files, set(), {"projects"})
             self.assertEqual(chosen, ["test_model", "test_namespace"])
 
-    def test_a_changed_file_selects_the_tests_that_name_its_path_or_directory(self):
+    def reading(self, modules: dict[str, str], *changed: str) -> set[str]:
+        """The modules of a fixture tree holding ``modules`` that ``changed`` reaches through what they read."""
+
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name, text in {
-                "string": 'read(".github/actions/example/action.yml")',
-                "segments": 'root / ".github" / "actions" / "example" / "action.yml"',
-                "arguments": 'Path(".github", "actions", "example")',
-                "longer": 'read(".github/actions/example-other/action.yml")',
-                "other": 'read(".github/actions/elsewhere/action.yml")',
-            }.items():
-                (root / f"test_{name}.py").write_text(text)
-            files = sorted(Path(p.name) for p in root.iterdir())
+            for path, text in {"example/__init__.py": "", "example/tests/__init__.py": "", **modules}.items():
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text)
             with patch.object(fast_gate, "ROOT", root):
-                chosen, _ = fast_gate.test_labels(files, set(), set(), [".github/actions/example/action.yml"])
-            self.assertEqual(chosen, ["test_arguments", "test_segments", "test_string"])
+                return fast_gate.reading(list(changed), sorted(p.relative_to(root) for p in root.rglob("*.py")))
+
+    def test_a_changed_file_selects_the_tests_that_name_its_path_or_directory(self):
+        tests = "example/tests/test_{}.py"
+        found = self.reading(
+            {
+                tests.format("string"): 'read(".github/actions/example/action.yml")',
+                tests.format("segments"): 'root / ".github" / "actions" / "example" / "action.yml"',
+                tests.format("arguments"): 'Path(".github", "actions", "example")',
+                tests.format("joined"): 'ACTIONS = root / ".github" / "actions"\nACTIONS / name / "action.yml"',
+                tests.format("longer"): 'read(".github/actions/example-other/action.yml")',
+                tests.format("other"): 'read(".github/actions/elsewhere/action.yml")',
+                tests.format("sibling"): 'read(".github/actions/example/other.yml")',
+                tests.format("named_further"): 'root / ".github" / "actions" / "other"',
+            },
+            ".github/actions/example/action.yml",
+        )
+        tested = {name.rpartition(".test_")[2] for name in found}
+        self.assertEqual(tested, {"string", "segments", "arguments", "joined"})
+
+    def test_a_file_is_named_from_beside_a_module_a_top_level_directory_or_where_django_loads_it(self):
+        found = self.reading(
+            {
+                "example/tests/test_beside.py": 'REPORT = Path(__file__).parent / "report.jq"',
+                "example/test_above.py": 'Path(__file__).parent / "tests" / "report.jq"',
+                "other/tests/test_elsewhere.py": 'Path(__file__).parent / "report.jq"',
+                "example/tests/test_templates.py": 'TEMPLATES = BASE_DIR / "templates"',
+                "example/routes.py": 'Mount("templates/", "example.urls")',
+                "example/tests/test_render.py": 'render_to_string("partials/example.html")',
+                "example/tests/test_static.py": 'static("css/example.css")',
+            },
+            "example/tests/report.jq",
+            "templates/partials/example.html",
+            "example/static/css/example.css",
+        )
+        self.assertEqual(
+            found,
+            {
+                "example.tests.test_beside",
+                "example.test_above",
+                "example.tests.test_templates",
+                "example.tests.test_render",
+                "example.tests.test_static",
+            },
+        )
+
+    def test_a_test_reaches_a_file_through_the_helper_that_names_it_and_no_further(self):
+        found = self.reading(
+            {
+                "example/tests/pipeline.py": 'WORKFLOWS = ROOT / ".github" / "workflows"\n'
+                "def workflow(name):\n    return load(WORKFLOWS / name)\n",
+                "example/tests/test_scanner.py": 'from example.tests.pipeline import workflow\nworkflow("compose.yml")\n',
+                "example/provider.py": 'COMPOSE = ".github/workflows/compose.yml"\n',
+                "example/adapter.py": "from example.provider import COMPOSE\n",
+                "example/tests/test_adapter.py": "from example.adapter import COMPOSE\n",
+            },
+            ".github/workflows/compose.yml",
+        )
+        self.assertLessEqual({"example.tests.test_scanner", "example.adapter"}, found)
+        self.assertNotIn("example.tests.test_adapter", found)
+
+    def test_a_module_is_named_whole_and_a_tests_directory_above_it_selects_that_test_alone(self):
+        found = self.reading(
+            {
+                "example/tests/test_whole.py": 'read("example/config/settings.py")',
+                "example/tests/test_folder.py": 'root = BASE_DIR / "example/config"\n(root / "settings.py").read_text()',
+                "example/tests/test_through.py": "from example.tests.test_folder import root\n",
+                "example/tests/test_package.py": 'ROOT / "example"',
+            },
+            "example/config/settings.py",
+        )
+        self.assertLessEqual({"example.tests.test_whole", "example.tests.test_folder"}, found)
+        self.assertFalse({"example.tests.test_through", "example.tests.test_package"} & found)
+
+    def test_a_change_of_each_kind_selects_the_test_that_reads_it(self):
+        """The change that showed the class, a workflow read through a helper, and one of each other kind."""
+        for changed, reader in {
+            ".github/workflows/compose.yml": "hq.platform.application.tests.test_scanners",
+            "mise-tasks/image/verify/tree": "hq.platform.application.tests.test_image_tree",
+            "templates/partials/_reading_age.html": "hq.platform.application.tests.test_reading_age",
+            "static/css/app/tokens.css": "hq.platform.core.tests.test_browser_gate_tasks",
+            "static/js/tables.js": "hq.platform.core.tests.test_table_contract",
+            "docs/Deployment.md": "hq.platform.core.tests.test_settings_env",
+            "tools/pipeline/codeql_report.jq": "tools.pipeline.tests.test_codeql_report",
+            "hq/config/settings.py": "hq.platform.application.tests.test_domains",
+        }.items():
+            with self.subTest(changed=changed):
+                self.assertIn(reader, self.labels(changed))
+
+    def test_the_paths_a_test_builds_are_those_it_reads_and_not_those_it_walks_or_compares(self):
+        from hq.platform.application.tests.tree import named_paths
+
+        helper = (
+            "from pathlib import Path\n"
+            "ROOT = Path(__file__).resolve().parents[3]\n"
+            'WORKFLOWS = ROOT / ".github" / "workflows"\n'
+            "def workflow(name):\n    return load(WORKFLOWS / name)\n"
+            "def load(path):\n    return path.read_text()\n"
+        )
+        reads = (
+            "from pathlib import Path\n"
+            "from tools.example.tests.pipeline import ROOT, workflow\n"
+            'REPORT = Path(__file__).parent / "report.jq"\n'
+            "def test():\n"
+            '    workflow("compose.yml")\n'
+            '    docs = ROOT / "docs"\n'
+            '    (docs / "Guide.md").read_text()\n'
+            '    for path in (ROOT / "templates").rglob("*.html"):\n'
+            '        path.relative_to(ROOT / "static")\n'
+            "    return f\"{ROOT / 'other'}\", REPORT.read_text()\n"
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for path, text in {
+                "tools/__init__.py": "",
+                "tools/example/__init__.py": "",
+                "tools/example/tests/__init__.py": "",
+                "tools/example/tests/pipeline.py": helper,
+                "tools/example/tests/test_reads.py": reads,
+                "tools/example/tests/report.jq": "",
+                ".github/workflows/compose.yml": "",
+                "docs/Guide.md": "",
+                "templates/page.html": "",
+                "static/app.css": "",
+                "other/file": "",
+            }.items():
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text)
+            built = named_paths(root)["tools.example.tests.test_reads"]
+        self.assertEqual(built, [".github/workflows/compose.yml", "docs/Guide.md", "tools/example/tests/report.jq"])
+
+    def test_a_change_to_any_file_a_test_builds_selects_that_test(self):
+        """Every path a test module builds, read by tree.Named: a file, or for a directory a file under it
+        that is not Python, since a package is the tree tag's. A miss is a way of naming a file that
+        fast.reading does not read."""
+        from hq.platform.application.tests.tree import named_paths
+
+        tracked = names("ls-files", root=ROOT)
+        built = named_paths(ROOT)
+        self.assertIn(".github/workflows/compose.yml", built["hq.platform.application.tests.test_scanners"])
+        selected: dict[str, tuple[set[str], set[str]]] = {}
+        missed = []
+        for module, paths in built.items():
+            for path in paths:
+                under = (f for f in tracked if f.startswith(f"{path}/") and not f.endswith(".py"))
+                sample = path if (ROOT / path).is_file() else next(under, None)
+                if sample and sample not in selected:
+                    selected[sample] = fast_gate.affected([sample], [], self.files)
+                # A test the change reaches is selected; one that is not may yet be, by an app it names.
+                if sample and module not in selected[sample][0] and module not in self.labels(sample):
+                    missed.append(f"{module} builds {path}")
+        self.assertEqual(missed, [], "fast does not select these tests for a change to a file they read")
 
     def test_a_task_definition_change_selects_the_tests_that_read_the_tasks(self):
         """A task moved between mise.toml and mise-tasks/ is read through tests.mise_tasks, by no path."""
@@ -164,26 +310,19 @@ class FastGateMappingTests(GateTestCase):
 
 @tag("source")
 class FastGateTreeTests(GateTestCase):
-    def test_a_module_of_any_package_the_suite_lives_in_reaches_the_tree_tests(self):
-        # A new test file is one the walks read and no import reaches: the
-        # source scans read it, and the tree tag's guard reads its tests.
-        # A package of the checkout is one by its __init__.py, never by a list written down.
-        modules = [
-            "hq/domains/example/models.py",
-            "hq_sdk/ui.py",
-            "hq/platform/core/tests/task.py",
-            "hq_runner/worker.py",
-        ]
-        modules += [f"{package}/example/tests/test_example.py" for package in SUITE]
-        for path in modules:
-            with self.subTest(path=path):
-                self.assertTrue(fast_gate.reaches_tree(["docs/Example.md", path]))
-        for path in ("static/css/app.css", "templates/base.html", "docs/Example.md"):
-            with self.subTest(path=path):
-                self.assertFalse(fast_gate.reaches_tree([path]))
+    @tag("tree")
+    def test_a_change_of_any_kind_reaches_the_tree_tests_and_none_does_not(self):
+        """A walk reads a new test module, a template and a doc alike, by no import and no name."""
+        modules = [f"{package}/example/tests/test_example.py" for package in SUITE]
+        others = ["static/css/app.css", "templates/base.html", "docs/Example.md", ".github/workflows/ci.yml"]
+        with patch.object(fast_gate, "tagged", return_value=["hq.a.tests.test_tree.Walks"]):
+            for path in [*modules, *others]:
+                with self.subTest(path=path):
+                    self.assertIn("hq.a.tests.test_tree.Walks", fast_gate.with_tree([], [path]))
+            self.assertEqual(fast_gate.with_tree([], []), [])
 
     @tag("tree")
-    def test_a_module_change_adds_every_tree_test_to_the_one_run(self):
+    def test_a_change_adds_every_tree_test_to_the_one_run(self):
         tree = tagged(ROOT, "tree")
         self.assertIn("hq.platform.application.tests.test_tree_tag.TreeTagTests", tree)
         # The walk above is this checkout's; with_tree asks for it once and adds what it answers.
@@ -191,7 +330,6 @@ class FastGateTreeTests(GateTestCase):
             labels = fast_gate.with_tree(["hq.a.tests.test_b"], ["hq/domains/example/models.py"])
         walked.assert_called_once_with(fast_gate.ROOT, "tree")
         self.assertEqual(set(labels), {"hq.a.tests.test_b", *tree})
-        self.assertEqual(fast_gate.with_tree(["hq.a.tests.test_b"], ["docs/Example.md"]), ["hq.a.tests.test_b"])
         command = fast_gate.run_command((), [], labels, "2")
         self.assertLessEqual(set(labels), set(command))
         self.assertNotIn("--tag", command)

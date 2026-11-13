@@ -1,6 +1,6 @@
 {% extends "page.html" %}
 {% block page %}
-<div class="quick-actions">
+<div class="form-actions">
   {% if gap %}<p class="muted">{{ gap.reason|breakable }} {% include "partials/_write_gap.html" %}</p>{% else %}
   {% url 'contacts:set_status' submission.id as status_url %}
   {% if submission.status != "read" %}{% post_button "Mark read" status_url name="status" value="read" %}{% endif %}

@@ -5,8 +5,8 @@
 #MISE depends_post=["image:docker stop"]
 #USAGE flag "--tag <tag>" help="The name to build it as; severino-hq:ci-local by default"
 #USAGE flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
-#USAGE flag "--cache <ref>" help="A registry layer cache to read (image:build)"
-#USAGE flag "--cache-write" help="Also write the layer cache (image:build)"
+#USAGE flag "--cache <ref>" help="A registry layer cache to read, the worker's beside it (image:build)"
+#USAGE flag "--cache-write" help="Also write the layer caches (image:build)"
 #USAGE flag "--runner-tag <tag>" default="severino-hq-runner:ci-local" help="The name to build the automation worker's image as"
 #USAGE flag "--no-verify" help="Build only, as CI does before it publishes a pull request's image"
 

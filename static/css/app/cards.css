@@ -38,8 +38,6 @@
 /* A control that posts a form of its own (`post_form`) stands where a button would. */
 .post-form { display: inline-block; margin: 0; }
 .icon-link.danger-link { color: var(--danger); }
-.quick-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0 0 var(--space-10); }
-.quick-actions form { margin: 0; }
 
 /* A record list row's category as its color (`ListRow.category`), before
    its title; the row says the category in words too. */
@@ -287,10 +285,6 @@ a.kpi:hover { background: var(--surface-2); }
 .step-list li:is(.tone-good, .tone-attention, .tone-serious) .band-icon { background: var(--tone-bg); color: var(--tone-ink); }
 .step-list a { font-weight: 600; }
 .step-list .muted { display: block; margin-top: var(--space-1); }
-/* HQ's standard: its checks read as a list in two columns at most (4 and 3),
-   never a row of five with two under it. */
-/* stylelint-disable-next-line hq/flow-grid -- HQ's standard: its checks as a list in two columns at most */
-.posture-checks { grid-template-columns: repeat(auto-fit, minmax(min(100%, max(20rem, 40%)), 1fr)); }
 
 /* A card's steps (partials/_resolution_workflow.html): one stands alone,
    several are numbered, and long ones fold under "Steps". */
@@ -315,8 +309,6 @@ a.kpi:hover { background: var(--surface-2); }
 ol.resolution-workflow > li > strong::before { content: counter(step) ". "; }
 .resolution-workflow li > strong { color: var(--ink); font-weight: 650; }
 .resolution-workflow li > p { margin: 0; line-height: 1.65; overflow-wrap: anywhere; }
-
-.quick-actions.vertical { display: grid; grid-template-columns: 1fr; }
 
 /* A card that folds hangs its disclosure mark (surfaces.css) in its padding,
    so its title starts at the edge every other card's heading starts at. The

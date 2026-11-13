@@ -158,7 +158,7 @@ row in the flow.
           <tr>
             <td>
               {{ row.label|breakable }}
-              {% if row.reasons %}<ul class="cell-notes">{% for reason in row.reasons %}<li class="muted">{{ reason|breakable }}</li>{% endfor %}</ul>{% elif row.remedy %}<br><span class="muted">{{ row.remedy|breakable }}</span>{% elif row.error and not row.read %}<br><span class="muted">{{ row.error|breakable }}</span>{% endif %}
+              {% if row.reasons %}{% stack_list %}{% for reason in row.reasons %}<li class="muted">{{ reason|breakable }}</li>{% endfor %}{% endstack_list %}{% elif row.remedy %}<br><span class="muted">{{ row.remedy|breakable }}</span>{% elif row.error and not row.read %}<br><span class="muted">{{ row.error|breakable }}</span>{% endif %}
             </td>
             <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label|breakable }}{% else %}<strong>{{ row.state_label|breakable }}</strong>{% endif %}</td>
             <td>{% if row.read %}{{ row.records|breakable }}{% else %}{% empty_value %}{% endif %}</td>

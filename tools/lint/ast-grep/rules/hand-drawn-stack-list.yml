@@ -1,0 +1,19 @@
+# A plain list read down is the stack list part, so every such list keeps one
+# gap and one way of waiting for an open row. No fix: the part takes its items
+# as the page writes them.
+id: hand-drawn-stack-list
+language: html
+severity: error
+message: A stack list drawn by hand, where the stack list part draws it.
+note: Write {% stack_list %}<li>...</li>{% endstack_list %}, with below="Label" for a list the open row shows.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?stack-list(?:[^\w-]|$)'

@@ -404,8 +404,7 @@ a.discovery-link:hover strong { color: var(--accent); }
 .connection-more-scope { margin-top: var(--space-2); }
 /* Styled by their own class: opened, they move to the line beneath the row,
    out of the cell they were written in. */
-.connection-sight-list,
-.cell-notes { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
+.connection-sight-list { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; padding: 0; list-style: none; }
 .connection-sight-list > li { font-size: var(--text-xs); }
 .connection-credential-steps { font-size: var(--text-xs); }
 /* Opened beneath the row, what it reads and what it would also see fill the

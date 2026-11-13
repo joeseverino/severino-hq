@@ -1,0 +1,12 @@
+{% comment %}
+A stack list, drawn by {% stack_list %}: {% stack_list %}<li>A note</li>{% endstack_list %}.
+Its items are the page's <li>s, read down with a small gap between them, each
+running its parts inline (a status, a link, its words). below names the open
+row's label for a list that waits for it; each data_* option is a data-
+attribute (True draws it bare). A note in it is a <li class="muted">, and an
+item that reads as a sentence, a link among its words, a <li class="prose">.
+<!-- ast-grep-ignore: hand-drawn-stack-list --> the part itself
+{% endcomment %}{% if below %}<ul class="stack-list row-below" data-label="{{ below }}"{{ data }}>{{ content|safe }}</ul>{% else %}
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-stack-list --> the part itself
+{% endcomment %}<ul class="stack-list"{{ data }}>{{ content|safe }}</ul>{% endif %}
