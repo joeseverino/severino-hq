@@ -1,13 +1,14 @@
 {% comment %}
 One month of every checked source: the calendar page's grid, and the
 dashboard's. `calendar` is application.calendar.CalendarMonth; `selected` the
-open day, if any. Its links open the calendar, wherever the grid is shown.
+open day, if any; `compact` draws where things are rather than what, as the
+dashboard shows it. Its links open the calendar, wherever the grid is shown.
 The open day is a class: today's date link holds the grid's one aria-current,
 and a table cell outside a grid takes no aria-selected.
 {% endcomment %}
 {% comment %}
 <!-- ast-grep-ignore: hand-drawn-table --> a month drawn as a grid of days, not a data table
-{% endcomment %}<table class="month-grid">
+{% endcomment %}<table class="month-grid{% if compact %} is-compact{% endif %}">
   <caption class="visually-hidden">{{ calendar.month|when:"month" }}</caption>
   <thead>
     <tr>

@@ -470,23 +470,61 @@ VERDICT_IN = (
 
 @tag("source", "tree")
 class GateVerdictTests(GateTestCase):
-    def gate(self, *cmd: str) -> subprocess.CompletedProcess[str]:
+    def gate(self, *cmd: str, output: str = "short") -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, "-c", VERDICT_IN, str(gate_verdict.VERDICTS), "check", *cmd],
             cwd=ROOT,
+            env=os.environ | {"HQ_GATE_OUTPUT": output},
             capture_output=True,
             text=True,
             check=False,
         )
 
-    def test_the_last_line_names_the_tasks_mise_says_failed_after_the_output_unchanged(self):
-        result = self.gate(sys.executable, "-c", FAILING)
-        self.assertEqual(result.returncode, 1)
-        *output, last = result.stdout.splitlines()
-        self.assertIn("..F", output)
-        self.assertIn("[lint:ruff] exited with status 1", output)
-        self.assertTrue(last.startswith("[check] FAILED"), last)
-        self.assertIn("checks; lint:ruff", last)
+    def test_the_last_line_names_the_tasks_mise_says_failed_and_the_log_keeps_the_output_unchanged(self):
+        for output in ("short", "all"):
+            with self.subTest(output=output):
+                result = self.gate(sys.executable, "-c", FAILING, output=output)
+                self.assertEqual(result.returncode, 1)
+                *printed, last = result.stdout.splitlines()
+                self.assertTrue(last.startswith("[check] FAILED"), last)
+                self.assertIn("checks; lint:ruff", last)
+                log = Path(gate_verdict.VERDICTS, "check.log").read_text().splitlines()
+                for line in ("..F", "[lint:ruff] exited with status 1", *printed, last):
+                    self.assertIn(line, log)
+                # The progress dots are the command's own output, shown only when asked for all of it.
+                self.assertEqual("..F" in printed, output == "all", printed)
+
+    def test_a_short_pass_prints_where_the_run_is_kept_and_its_verdict_alone(self):
+        result = self.gate(sys.executable, "-c", "for n in range(3000): print(f'line {n}')")
+        self.assertEqual(result.returncode, 0)
+        first, kept, last = result.stdout.splitlines()
+        log = Path(gate_verdict.VERDICTS, "check.log")
+        self.assertIn(str(log), first)
+        self.assertIn(str(log), kept)
+        self.assertTrue(last.startswith("[check] passed in"), last)
+        lines = log.read_text().splitlines()
+        self.assertEqual(lines[1:-2], [f"line {n}" for n in range(3000)])
+
+    def test_a_short_failure_shows_each_failed_test_s_last_frame_and_the_rerun(self):
+        with tempfile.TemporaryDirectory() as folder:
+            Path(folder, "test_example.py").write_text(RUNNER_FAILURES)
+            result = self.gate(sys.executable, "-c", UNITTEST, "discover", "-s", folder, "-t", folder)
+        printed = result.stdout.splitlines()
+        self.assertTrue(
+            printed[-1].endswith(
+                "; rerun: mise run test test_example.Case.test_compares test_example.Case.test_raises"
+            ),
+            printed[-1],
+        )
+        raised = printed[printed.index("[check] test_example.Case.test_raises ended on:") :]
+        self.assertTrue(any(line.endswith(", in missing") for line in raised), raised)
+        self.assertTrue(any("LookupError: no example.invalid record" in line for line in raised), raised)
+        compared = printed[printed.index("[check] test_example.Case.test_compares ended on:") :]
+        # The frame shown is the test's own line, not unittest's assert.
+        self.assertTrue(any('self.assertEqual("expected", "found")' in line for line in compared[:3]), compared)
+        # The runner's own lines (its dots, its summary) are in the log alone.
+        self.assertNotIn("FAILED (failures=1, errors=1)", result.stdout)
+        self.assertIn("FAILED (failures=1, errors=1)", Path(gate_verdict.VERDICTS, "check.log").read_text())
 
     def test_the_verdict_is_kept_whole_in_the_file_it_names(self):
         tests = [f"hq.x.tests.test_y.Case.test_{n}" for n in range(gate_verdict.SHOWN + 2)]
@@ -594,37 +632,25 @@ class GateVerdictTests(GateTestCase):
 
 @tag("source", "tree")
 class FastGateTurnTests(GateTestCase):
-    """fast holds the machine's heavy turn for its test run alone, which runs in one run of mise with the quick
-    gates it selected. A gate that takes the heavy lock itself runs after, once that run has passed: mise
-    stops no task still waiting for a lock when another fails."""
+    """fast holds the machine's heavy turn for its test run alone, which runs in one run of mise with every quick
+    gate it selected, those that take the heavy lock themselves among them: the run goes on past a failure, so
+    one waiting for its turn is waited for rather than left behind."""
 
-    def run_fast(self, *, ok: bool = True) -> list[tuple[str, list[str]]]:
+    def test_every_gate_runs_beside_the_tests_those_that_take_the_lock_included(self):
+        quick = fast_gate.quick_gates()
+        self.assertTrue({task for task in quick if HEAVY_LOCK in locks(task)})
         calls: list[tuple[str, list[str]]] = []
 
         def step(label: str, cmd: list[str]) -> gate_verdict.Step:
             calls.append((label, cmd))
-            return gate_verdict.Step(label, ok=ok or fast_gate.TESTS not in cmd)
+            return gate_verdict.Step(label)
 
-        quick = fast_gate.quick_gates()
         run_main(("hq/example.py",), quick, step, affected=(set(), set()), test_labels=([], 0))
-        return calls
-
-    def test_the_gates_run_beside_the_tests_and_those_that_take_the_lock_after(self):
-        quick = fast_gate.quick_gates()
-        locking = {task for task in quick if HEAVY_LOCK in locks(task)}
-        self.assertTrue(locking)
-        calls = self.run_fast()
-        (run,) = [cmd for _, cmd in calls if fast_gate.TESTS in cmd]
-        later = {word for _, cmd in calls[[cmd for _, cmd in calls].index(run) + 1 :] for word in cmd}
-        self.assertLessEqual(set(quick) - locking, set(run))
-        self.assertFalse(set(run) & locking)
-        self.assertLessEqual(locking, later)
+        (run,) = [cmd for _, cmd in calls if set(quick) & set(cmd)]
+        self.assertIn(fast_gate.TESTS, run)
+        self.assertLessEqual(set(quick), set(run))
         self.assertTrue(takes_the_turn(mise_tasks()[fast_gate.TESTS]))
         self.assertFalse(takes_the_turn(mise_tasks()["fast"]))
-
-    def test_after_a_failure_the_gates_that_take_the_lock_do_not_run(self):
-        words = {word for _, cmd in self.run_fast(ok=False) for word in cmd}
-        self.assertFalse(words & {task for task in fast_gate.quick_gates() if HEAVY_LOCK in locks(task)})
 
 
 TREE = "1" * 40

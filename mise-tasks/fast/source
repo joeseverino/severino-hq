@@ -5,8 +5,8 @@
 #MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
 #USAGE arg "[labels]..." var=#true help="The source checks fast selected"
 
-# They start no browser and finish in seconds, so a refusal stops fast's run
-# before its tests take the heavy turn (tools/gate/fast.py, source_first).
+# They start no browser and finish in seconds, so a refusal is printed before
+# fast's tests take the heavy turn (tools/gate/fast.py, source_first).
 set -eu
 # mise hands the words over shell-quoted, one word each.
 eval "set -- ${usage_labels:-}"

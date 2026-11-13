@@ -61,3 +61,12 @@ class GateTestCase(SimpleTestCase):
         cls.enterClassContext(patch.dict(os.environ))
         os.environ[gate_verdict.VERDICTS_FOLDER] = kept
         os.environ.pop(gate_verdict.REPORTS, None)
+        # What a gate shows is the same on a terminal, in CI and in an agent's shell.
+        os.environ[gate_verdict.OUTPUT] = "short"
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        # A gate a test opens in this process is that test's alone.
+        self.enterContext(patch.object(gate_verdict, "OPENED", None))
+        self.addCleanup(lambda: gate_verdict.OPENED and gate_verdict.OPENED.shut())

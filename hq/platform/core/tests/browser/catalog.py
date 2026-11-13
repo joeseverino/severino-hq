@@ -108,6 +108,58 @@ class _Asked(Context):
 
 HEAD = "partials/_page_head.html"
 
+
+class _Drawn:
+    """A template from its source, compiled when it is drawn, which a page
+    head's ``page_aside`` includes as it would a template's name."""
+
+    def __init__(self, source):
+        self.source = source
+
+    def render(self, context):
+        return Template(self.source).render(context)
+
+
+# A row of readings in each form a reading takes.
+_READINGS = (
+    "{% readings %}"
+    '{% reading icon="network" url="/example/" modal="example" note_tone="attention" %}'
+    '{% status "Example" tone="good" dot=True ink="context" %}'
+    "{% lines %}<span>Example TLS 1.3</span>{% note %}An example check failed{% endreading %}"
+    '{% reading icon="activity" url="/example/controller/" %}'
+    '{% status "Examples" tone="attention" dot=True ink="context" %}'
+    "{% lines %}<strong>Last read an example day ago</strong>{% endreading %}"
+    "<div data-example-region>"
+    '{% reading icon="server" id="example-host" tone="attention" title="Example containers" unit="containers" '
+    'data_fragment_part="example-host" %}12'
+    "{% lines %}<span>example-host-01</span><strong>2 example alerts</strong><span>CPU 4%</span>"
+    "{% heading %}<strong>Example host</strong><span>An example summary</span>"
+    '{% panel %}{% facts %}{% fact "Example CPU" value="4%" %}{% fact "Example memory" value="583 MB" %}{% endfacts %}'
+    '{% foot %}<a href="/example/">Example containers</a><span><button type="button">Refresh</button>'
+    '<a href="/example/settings/">Settings</a></span>{% endreading %}'
+    '{% reading icon="cloud" id="example-weather" note_tone="stale" data_fragment_part="example-weather" %}71°'
+    "{% lines %}<span>Example Mostly Cloudy</span><span>71–86°</span>"
+    "{% note %}Last read an example 3 days ago · out of date"
+    "{% heading %}<strong>Example weather</strong>"
+    "{% panel %}<p>The last reading failed (ExampleError). This is the one before it.</p>"
+    '{% foot %}<span><a href="/example/settings/">Settings</a></span>{% endreading %}'
+    "</div>{% endreadings %}"
+)
+_READINGS_EMPTY = (
+    "{% readings %}"
+    '{% reading icon="activity" url="/example/controller/" %}'
+    '{% status "Examples" dot=True ink="context" %}{% lines %}<span>Not configured</span>{% endreading %}'
+    "<div data-example-region>"
+    '{% reading icon="server" id="example-empty" data_fragment_part="example-empty" %}Example host'
+    "{% lines %}<span>No reading yet</span>"
+    "{% heading %}<strong>Example host</strong>{% panel %}<p>An example host has not been read yet.</p>{% endreading %}"
+    '{% reading icon="cloud" id="example-long" data_fragment_part="example-long" %}71°'
+    "{% lines %}<span>Example Mostly Cloudy with an example chance of showers later</span><span>71–86°</span>"
+    "<span>Example wind 12 mph</span>"
+    "{% heading %}<strong>Example weather</strong>{% panel %}<p>An example forecast.</p>{% endreading %}"
+    "</div>{% endreadings %}"
+)
+
 # Each value that fits on one line of its own.
 _ONE_LINE = """(values) => [...document.querySelectorAll(values)]
   .filter((value) => Math.round(value.getBoundingClientRect().height / parseFloat(getComputedStyle(value).lineHeight)) < 2)
@@ -771,7 +823,7 @@ CATALOG = {
     # A domain's overview as the dashboard draws it, its lead figure with the
     # line of its recent readings beside it.
     "part/figure-trend": Entry(
-        '<div class="dashboard-highlights">{% section "Example overview" css="highlight-card" %}'
+        '<div class="section-flow">{% section "Example overview" %}'
         '{% include "partials/_kpi_grid.html" with featured=True %}{% endsection %}</div>',
         {
             "items": [
@@ -932,17 +984,25 @@ CATALOG = {
     ),
     # Steps and checks side by side: met, unmet, done and plain.
     "part/steps": Entry(
-        '{% section "Example standard" %}<ol class="step-list">'
+        '{% section "Example standard" %}{% steps %}'
         '{% step icon="check-circle" tone="good" title="An example check holds." %}<strong>Example met</strong> <span class="muted">Stops an example.</span>{% endstep %}'
         '{% step icon="shield" tone="attention" %}<strong>Example unmet</strong> <span class="muted">An example is open: <a href="/example/">close it.</a> Stops an example.</span>{% endstep %}'
         '{% step icon="check-circle" done=True %}<strong>Example done</strong> <span class="muted">Done.</span>{% endstep %}'
         '{% step icon="card" %}<strong>Example step</strong> <span class="muted">An example sentence that says what the step is for.</span>{% endstep %}'
-        "</ol>{% endsection %}"
+        "{% endsteps %}{% endsection %}"
     ),
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
     "part/month-gone-by": Entry(
-        '{% card css="calendar-month" %}{% include "calendars/_month_grid.html" %}{% endcard %}',
+        '{% section "Example month" %}{% include "calendars/_month_grid.html" %}{% endsection %}',
+        {"calendar": _month_gone_by()},
+    ),
+    # The same month compact, as the dashboard draws it beside other sections:
+    # where things are, each a dot or a sliver, the day opening the rest.
+    "part/month-compact": Entry(
+        '<div class="section-flow">{% section "Example month" %}'
+        '{% include "calendars/_month_grid.html" with compact=True %}{% endsection %}'
+        '{% section "Example notes" %}<p>An example line of prose in the frame.</p>{% endsection %}</div>',
         {"calendar": _month_gone_by()},
     ),
     # What the table region derives from its headings, each in a table of its
@@ -1030,8 +1090,8 @@ CATALOG = {
         '{% section "Example states" %}<p>{% status "Allowed" tone="good" dot=True %}'
         ' {% status "Paused" tone="attention" dot=True %} {% status "Refused" tone="serious" dot=True %}'
         ' {% status "Not tested" tone="neutral" dot=True %}</p>'
-        '<p><strong>{% status "Example network" tone="good" dot=True ink="context" %}</strong>'
-        ' {% status "Example controller" tone="attention" dot=True ink="context" %}</p>{% endsection %}'
+        '<p><strong>{% status "Example" tone="good" dot=True ink="context" %}</strong>'
+        ' {% status "Examples" tone="attention" dot=True ink="context" %}</p>{% endsection %}'
     ),
     # The names a record carries, as chips beside its name: each as written.
     "status/chip": Entry(
@@ -1682,6 +1742,27 @@ CATALOG = {
             "stale": Freshness(STALE, _NOW - timedelta(days=3), timedelta(hours=1)),
             "at": _NOW - timedelta(hours=2),
         },
+    ),
+    # A row of readings beside a page's title, as the dashboard draws it: one
+    # that leads to a dialog with a note of a problem, one whose line needs
+    # attention, and a region holding readings that open a panel, one
+    # needing attention and one past its time.
+    "part/readings": Entry(
+        '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
+        {"page": Page(title="Example readings"), "page_aside": _Drawn(_READINGS)},
+        heads_the_page=True,
+    ),
+    # The same row on its own line, as a narrower head draws it: a reading
+    # with nothing read yet, a long line that wraps inside its reading, and
+    # one of its own, outside any region.
+    "part/readings-under-the-title": Entry(
+        '{% include "partials/_page_head.html" %}{% section "Example section" %}<p>An example line.</p>{% endsection %}',
+        {
+            "page": Page(title="Example readings", lede="An example lede long enough to take the head's line."),
+            "page_facts": "An example fact · another example fact",
+            "page_aside": _Drawn(_READINGS_EMPTY),
+        },
+        heads_the_page=True,
     ),
     # How old each provider's last reading is: folded as a grid, one of them
     # out of date and one unreachable; one provider's as a sentence; and its

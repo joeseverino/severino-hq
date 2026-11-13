@@ -5,6 +5,7 @@ what a change drew and never for which run drew it."""
 import math
 import re
 from collections import Counter
+from collections.abc import Callable
 from itertools import groupby, zip_longest
 
 # What a look found, by page and width, each finding a line.
@@ -38,12 +39,26 @@ def failed_pages(found: Found) -> list[str]:
 
 
 def verdict_line(rule: str, found: Found) -> str:
+    """What a run of ``rule`` came to, with how many pages and widths it judged."""
+
     pages = list(dict.fromkeys(name for name, _ in found))
-    widths = ", ".join(map(str, dict.fromkeys(width for _, width in found)))
+    widths = list(dict.fromkeys(width for _, width in found))
+    at = f"{len(widths)} width{'s' * (len(widths) != 1)} ({', '.join(map(str, widths))})"
     failed = failed_pages(found)
     if not failed:
-        return f"{rule} holds on every page at {widths}"
-    return f"{rule} fails on {len(failed)} of {len(pages)} pages: {', '.join(failed)}"
+        return f"{rule} holds on all {len(pages)} page{'s' * (len(pages) != 1)} at {at}"
+    return f"{rule} fails on {len(failed)} of {len(pages)} pages at {at}: {', '.join(failed)}"
+
+
+def found_lines(found: Found, report: Callable[[str, int], str]) -> list[str]:
+    """A line for each page and width that has a finding: how many, and the
+    file ``report`` names that holds them."""
+
+    return [
+        f"{name} at {width}: {len(said)} found, in {report(name, width)}"
+        for (name, width), said in found.items()
+        if said
+    ]
 
 
 # What a finding names that is drawn anew on every run, so no fact of the

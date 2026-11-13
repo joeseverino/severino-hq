@@ -92,7 +92,6 @@ UNDRAWN = frozenset(
     {
         "chart-card",
         "danger-link",
-        "domain-charts",
         "domain-head",
         "domain-head-copy",
         "domain-stack",

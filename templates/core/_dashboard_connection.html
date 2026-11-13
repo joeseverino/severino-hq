@@ -6,14 +6,11 @@ reading to confirm yet is not a problem, and not green either: the dot takes
 the network's color only once every check is confirmed. The panel behind the
 link has the rest, and works without script.
 {% endcomment %}
-<a class="glance-panel-head dash-reading"
-   href="{% url 'connection' %}"
-   data-modal-open="connection">
-  <span class="glance-symbol">{% include "partials/_icon.html" with name="network" %}</span>
-  <span class="glance-lead"><strong>{% status connection.channel.label tone=connection.tone dot=True ink="context" %}</strong></span>
-  <span class="glance-caption">
-    <span>{{ connection.transport|breakable }}</span>
-    {% include "partials/_example_connection.html" %}
-  </span>
-  {% if not connection.holds %}<span class="dash-connection-checks{% if connection.failing %} is-attention{% endif %}">{{ connection.summary|breakable }}</span>{% endif %}
-</a>
+{% url 'connection' as address %}
+{% reading icon="network" url=address modal="connection" note_tone=connection.failing|yesno:"attention," %}
+  {% status connection.channel.label tone=connection.tone dot=True ink="context" %}
+{% lines %}
+  <span>{{ connection.transport|breakable }}</span>
+  {% include "partials/_example_connection.html" %}
+{% note %}{% if not connection.holds %}{{ connection.summary|breakable }}{% endif %}
+{% endreading %}

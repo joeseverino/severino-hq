@@ -23,6 +23,7 @@ from django.test import SimpleTestCase, tag
 from hq.platform.application.tests.facts import Import, imports, package_of
 from hq.platform.application.tests.source import source_files
 from hq.platform.application.tests.test_mise_config import context_admits
+from hq.platform.application.tests.tree import image_excludes
 from tests.mise_tasks import body, mise_tasks
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -40,8 +41,6 @@ GROUP_PACKAGES = {
 RUNS = re.compile(
     r"uv run --group (?P<group>\S+) python (?:(?:-m unittest|manage\.py test) (?P<labels>[^\n]*)|-m (?P<module>\S+))"
 )
-# The image's copy of the checkout leaves these out, another stage's input only.
-IMAGE_COPY = re.compile(r"^COPY ((?:--exclude=\S+ )+)\. /app$", re.MULTILINE)
 # What the image's suite collects: Django's discovery pattern, in packages only.
 TEST_MODULE = "test*.py"
 
@@ -59,12 +58,19 @@ class Lock:
         self.runtime = root["dependencies"]
         self.groups: dict[str, list[dict]] = root["dev-dependencies"]
         self.default_groups: list[str] = root["default-groups"]
+        self.requires_python: str = lock["requires-python"]
 
     def installs(self, groups: list[str]) -> set[str]:
         """The distributions the runtime dependencies and ``groups`` bring, each name normalized."""
 
-        reached: set[str] = set()
         pending = self.runtime + [dependency for group in groups for dependency in self.groups[group]]
+        return {normalized(name) for name in self.reached(pending)}
+
+    def reached(self, pending: list[dict]) -> set[str]:
+        """The lock's names of the distributions ``pending`` brings, with all they depend on."""
+
+        reached: set[str] = set()
+        pending = list(pending)
         while pending:
             dependency = pending.pop()
             package = self.packages[dependency["name"]]
@@ -73,7 +79,7 @@ class Lock:
                 continue
             reached.add(dependency["name"])
             pending.extend(package.get("dependencies", []) + extras)
-        return {normalized(name) for name in reached}
+        return reached
 
 
 def import_names(distributions: set[str]) -> set[str]:
@@ -165,8 +171,7 @@ def collected() -> list[Path]:
     discovery reaches, through packages only."""
 
     ignore = (ROOT / "Dockerfile.dockerignore").read_text().splitlines()
-    copy = IMAGE_COPY.search((ROOT / "Dockerfile").read_text())
-    excluded = re.findall(r"--exclude=(\S+)", copy[1]) if copy else []
+    excluded = image_excludes(ROOT)
 
     def reached(path: Path) -> bool:
         parts = path.relative_to(ROOT).parts
@@ -234,6 +239,26 @@ class GroupImportTests(SimpleTestCase):
                 self.assertEqual(
                     offenders, [], f"only the {group} group installs these; a module its tasks run may import them"
                 )
+
+    def test_the_runner_image_builds_from_source_only_what_publishes_no_wheel(self):
+        # The runner stage installs from wheels alone but the packages its
+        # --no-binary names, whose build hq_runner/build-constraints.txt pins:
+        # once each publishes a wheel the lock holds, both go.
+        wheelless = {
+            name for name in self.lock.reached(self.lock.groups["runner"]) if not self.lock.packages[name].get("wheels")
+        }
+        built = set(re.findall(r"--no-binary (\S+)", (ROOT / "Dockerfile").read_text()))
+        constraints = ROOT / "hq_runner" / "build-constraints.txt"
+
+        self.assertEqual(built, wheelless, "the runner stage's --no-binary is what the lock holds no wheel of")
+        self.assertEqual(
+            constraints.is_file(),
+            bool(wheelless),
+            "hq_runner/build-constraints.{in,txt} pin the build of a package with no wheel; with none left, delete them",
+        )
+        if wheelless:
+            (python,) = re.findall(r"--python-version (\S+)", constraints.read_text())
+            self.assertEqual(f"=={python}.*", self.lock.requires_python, "compiled for the Python the image runs")
 
     def test_a_module_the_image_suite_loads_imports_only_the_runtime_as_it_loads(self):
         forbidden = import_names(self.lock.installs(list(self.lock.groups)) - self.lock.installs([]))

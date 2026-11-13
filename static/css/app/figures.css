@@ -347,16 +347,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .control-origin { margin: calc(var(--space-3) * -1) 0 22px; color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
 .control-origin strong { color: var(--ink); font-weight: 600; }
 
-/* The links chooser opens as a dialog; "Edit" is its trigger. */
-/* One row per choice: the tick, the label whole while it fits, then its subtitle wrapping in the room the label leaves. */
-.ext-choices { list-style: none; margin: 0 0 var(--space-6); padding: 0; display: grid; gap: var(--space-1); max-height: 15rem; overflow-y: auto; }
-.ext-choices label {
-  display: grid; grid-template-columns: auto auto 1fr; align-items: center;
-  gap: var(--space-4); font-size: var(--text-sm); padding: var(--space-2) var(--space-3); border-radius: 6px; cursor: pointer;
-}
-.ext-choices label:hover { background: var(--bg-tint); }
-.ext-choice-label { overflow-wrap: anywhere; }
-.ext-choice-sub { font-size: var(--text-xs); text-align: end; }
 .icon { width: 1em; height: 1em; flex: none; }
 /* An icon a cell's kept line opens with (tables.css) hangs in the line's padding, a float of no width there, so the value's lines start clear of it and a name the line cuts fills what the line holds out for, beside the icon on its first line. An indent would not do: a cut name is as wide as the line's box, which leaves out the indent its first line gets back. The hang is past the line's hold, so the value holds out for what it would with no icon. In a narrow box the line is no block, and the icon sits in it as in any line. */
 @container style(--box: whole) {

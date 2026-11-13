@@ -36,7 +36,7 @@ from hq.platform.application.money import money as _money
 from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
 from hq.platform.application.timestamps import moment
-from hq.platform.application.ui import MISSING, counted as _counted
+from hq.platform.application.ui import MISSING, STATUS_VALUES, counted as _counted
 from hq.platform.core.templatetags.line_breaks import breakable, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
@@ -709,7 +709,9 @@ slotted(
     ("content",),
     frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
 )
-# One step or check of a `.step-list`: its icon, toned by how it stands, then what it says.
+# A list of short steps or checks, read down its columns, and one step of it:
+# its icon, toned by how it stands, then what it says.
+slotted("steps", "partials/_steps.html", ("content",), frozenset())
 slotted("step", "partials/_step.html", ("content",), frozenset(("icon", "tone", "done", "title")))
 slotted(
     "card",
@@ -717,4 +719,37 @@ slotted(
     ("content",),
     frozenset(("element", "id", "css", "heading", "label", "busy", "open", "alone")),
     shape=card_frame,
+)
+
+
+# How a reading's note stands: said plainly, a problem, or past its time.
+NOTE_TONES = frozenset(("", "attention", "stale"))
+
+
+def reading_frame(name: str, given: dict) -> dict:
+    """A reading's options as its partial draws them: its tone as the shared
+    tone class, and each ``data_*`` option as an attribute of the reading."""
+
+    tone, note_tone = given.get("tone") or "", given.get("note_tone") or ""
+    if tone and tone not in STATUS_VALUES:
+        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(sorted(STATUS_VALUES))}")
+    if note_tone not in NOTE_TONES:
+        raise template.TemplateSyntaxError(f"{name} note_tone= is one of {', '.join(sorted(filter(None, NOTE_TONES)))}")
+    data = {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
+    return {
+        **{option: value for option, value in given.items() if not option.startswith("data_")},
+        "tone_class": f" tone-{tone}" if tone not in ("", "neutral") else "",
+        "attributes": html_attributes(data),
+    }
+
+
+# A row of readings and one reading of it: its mark, its figure, its quiet
+# lines and a note on how it stands, leading to a page or opening a panel.
+slotted("readings", "partials/_readings.html", ("content",), frozenset())
+slotted(
+    "reading",
+    "partials/_reading.html",
+    ("lead", "lines", "note", "heading", "panel", "foot"),
+    frozenset(("icon", "url", "modal", "id", "title", "unit", "tone", "note_tone")),
+    shape=reading_frame,
 )

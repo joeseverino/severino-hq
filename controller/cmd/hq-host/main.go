@@ -305,6 +305,7 @@ func automation(stdout, stderr io.Writer) *host.Automation {
 	id, _ := os.Hostname()
 	return &host.Automation{
 		Machine:     machine(stdout),
+		Source:      host.Source(host.BuildSource),
 		SecretDir:   hostcore.SecretDir,
 		Journal:     host.AutomationState,
 		Project:     config.Automation,

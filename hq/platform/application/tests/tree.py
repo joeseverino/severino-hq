@@ -312,11 +312,24 @@ def _misplaced(root: str) -> tuple[list[str], list[str]]:
     return untagged, idle
 
 
+# The image's copy of the checkout into /app, with what it leaves out.
+IMAGE_COPY = re.compile(r"^COPY ((?:--exclude=\S+ )+)\. /app$", re.MULTILINE)
+
+
+def image_excludes(root: Path) -> tuple[str, ...]:
+    """What the image's copy of the checkout leaves out of /app: another stage's input only."""
+
+    dockerfile = root / "Dockerfile"
+    copy = IMAGE_COPY.search(dockerfile.read_text(encoding="utf-8")) if dockerfile.is_file() else None
+    return tuple(re.findall(r"--exclude=(\S+)", copy[1])) if copy else ()
+
+
 def shipped(root: Path) -> tuple[str, ...]:
-    """The packages of SUITE the image is built from: those Dockerfile.dockerignore admits."""
+    """The packages of SUITE the image's /app holds: those Dockerfile.dockerignore
+    admits that its copy of the checkout does not leave out."""
 
     ignore = (root / "Dockerfile.dockerignore").read_text(encoding="utf-8")
-    admitted = set(re.findall(r"^!([^*/\s]+)/?$", ignore, re.MULTILINE))
+    admitted = set(re.findall(r"^!([^*/\s]+)/?$", ignore, re.MULTILINE)) - set(image_excludes(root))
     return tuple(package for package in SUITE if package in admitted)
 
 

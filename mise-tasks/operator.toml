@@ -37,6 +37,14 @@ run = [
   "uv run python -m tools.fonts.subset",
 ]
 
+# The runner image's build constraints are a lock of the index's newest
+# releases, so compiling them reaches PyPI and is no step of fix. Renovate runs
+# the same command, from the header it writes, to move them.
+["fix:runner-constraints"]
+description = "When hq_runner/build-constraints.in changes: compile it, hashed, into the build-constraints.txt the runner image builds PyYAML against"
+hide = true
+run = "uv pip compile --quiet --universal --generate-hashes --python-version 3.15 hq_runner/build-constraints.in --output-file hq_runner/build-constraints.txt"
+
 # A linter's suppressions file holds a count per file and rule that only
 # falls: a rise is a new problem, which lint:css and lint:js refuse. ESLint's
 # --prune-suppressions only lowers a count. Stylelint has no such flag, and its

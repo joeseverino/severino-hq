@@ -152,6 +152,88 @@ func TestAFullDiskStopsADeployBeforeThePull(t *testing.T) {
 	}
 }
 
+const runnerImage = "ghcr.io/joeseverino/severino-hq/runner@sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+
+// pinsRunner makes the image being deployed pin ref as its worker.
+func (f *fakeHost) pinsRunner(ref string) {
+	path := filepath.Join(f.image, AutomationImage)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		f.t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(ref+"\n"), 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+func TestOnlyTheSourcesRunnerByDigestIsAWorker(t *testing.T) {
+	if source.Runner() != "ghcr.io/joeseverino/severino-hq/runner" {
+		t.Errorf("runner %s", source.Runner())
+	}
+	if _, err := source.RunnerImage(runnerImage); err != nil {
+		t.Errorf("refused %s: %v", runnerImage, err)
+	}
+	for _, image := range []string{
+		"ghcr.io/joeseverino/severino-hq/runner:latest",
+		next,
+		"ghcr.io/someone-else/severino-hq/runner@sha256:" + strings.Repeat("a", 64),
+		runnerImage + "\n--privileged",
+	} {
+		if _, err := source.RunnerImage(image); err == nil {
+			t.Errorf("accepted %q", image)
+		}
+	}
+}
+
+// The release verifies its worker's image against the compose workflow's
+// identity, and pulls it only then, before anything live is held, since
+// `hq-host automation` never pulls.
+func TestAReleaseVerifiesThenPullsItsWorkersImage(t *testing.T) {
+	f := newFakeHost(t)
+	f.pinsRunner(runnerImage)
+	if err := f.machine.Record(running); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := newDeployer(f)
+
+	if err := d.Release(context.Background(), next); err != nil {
+		t.Fatalf("%v\n%s", err, f.out.String())
+	}
+
+	verify := "/verifier/cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp " + source.Signer() + " " + runnerImage
+	f.before(t, verify, "docker pull "+runnerImage)
+	f.before(t, "docker pull "+runnerImage, "docker run")
+}
+
+// A worker's image that is not signed, or not the source's, is refused with
+// the release, which leaves production as it was.
+func TestAReleaseWhoseWorkerIsNotTheSourcesSignedImageIsRefused(t *testing.T) {
+	for name, setup := range map[string]func(f *fakeHost){
+		"unsigned":           func(f *fakeHost) { f.pinsRunner(runnerImage); f.fail = []string{"/verifier/cosign verify"} },
+		"another repository": func(f *fakeHost) { f.pinsRunner(strings.Replace(runnerImage, "joeseverino", "someone-else", 1)) },
+		"by tag":             func(f *fakeHost) { f.pinsRunner(source.Runner() + ":latest") },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newFakeHost(t)
+			setup(f)
+			if err := f.machine.Record(running); err != nil {
+				t.Fatal(err)
+			}
+			d, _ := newDeployer(f)
+
+			if err := d.Release(context.Background(), next); err == nil {
+				t.Fatal("released with a worker image nobody verified")
+			}
+
+			if f.called("docker pull") || f.called("systemctl stop") || f.called("docker run") {
+				t.Errorf("the release went further than its worker's check: %q", f.calls())
+			}
+			if data, _ := os.ReadFile(f.machine.ReleasePath()); strings.TrimSpace(string(data)) != running {
+				t.Errorf("the recorded release is %q", data)
+			}
+		})
+	}
+}
+
 func TestAHealthyReleaseIsSyncedInstalledAndReleasesTheHold(t *testing.T) {
 	f := newFakeHost(t)
 	f.active = []string{"severino-hq-secrets.timer", "severino-hq-controller.path"}

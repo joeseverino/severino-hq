@@ -323,7 +323,7 @@ class DemoSiteTests(unittest.TestCase):
             self.assertIn("demo", note.inner_text())
             self.assertEqual(page.locator("#content > .messages").count(), 0, "said once, in the row")
             page.goto(self.origin + "/", wait_until="networkidle")
-            refresh = page.locator(".glance-refresh").first
+            refresh = page.locator("button[form=glance-refresh]").first
             panel = refresh.locator("xpath=ancestor::*[@popover][1]")
             page.locator(f'[popovertarget="{panel.get_attribute("id")}"]').click()
             refresh.click()
@@ -613,12 +613,12 @@ class DemoSiteTests(unittest.TestCase):
             browser = playwright.webkit.launch()
             page = browser.new_page()
             page.goto(self.origin + "/", wait_until="networkidle")
-            homelab = page.locator('.glance-panel[data-fragment-part^="machine-"]')
+            homelab = page.locator('.reading[data-fragment-part^="machine-"]')
             self.assertTrue(homelab.first.is_visible(), "the homelab's reading is on the dashboard")
             self.assertTrue(homelab.first.locator('a[href="/infrastructure/containers/"]').count())
-            weather = page.locator('.glance-panel[data-fragment-part="weather"]')
+            weather = page.locator('.reading[data-fragment-part="weather"]')
             self.assertTrue(weather.is_visible(), "the forecast is on the dashboard")
-            self.assertIn("°", weather.locator(".glance-lead").inner_text())
+            self.assertIn("°", weather.locator(".reading-lead").inner_text())
             self.assertTrue(weather.locator(".glance-hours li").count())
             for width in (402, 1360):
                 page.set_viewport_size({"width": width, "height": 900})
@@ -630,9 +630,9 @@ class DemoSiteTests(unittest.TestCase):
     def _lines_past_their_reading(page) -> list[str]:
         """Each reading's quiet line that runs past the reading it is under."""
 
-        return page.locator(".dash-readings .glance-caption").evaluate_all(
+        return page.locator(".readings .reading-lines").evaluate_all(
             """lines => lines.filter(line => {
-                const own = line.closest('.glance-panel, .dash-reading').getBoundingClientRect();
+                const own = line.closest('.reading').getBoundingClientRect();
                 return line.getBoundingClientRect().right > own.right + 1;
             }).map(line => line.textContent.trim())"""
         )

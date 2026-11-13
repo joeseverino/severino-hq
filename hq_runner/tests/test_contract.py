@@ -5,7 +5,8 @@ The worker ships without HQ, so it cannot read either contract at run time;
 each bound it holds a report or a call to is held here to the declaration in
 ``bridge_base.json``, and each key of the connections document it reads to
 the schema HQ's registry emits (``hq-connections.openapi.json``) and the
-version and bound the controller reads it at, so a change there that the
+version and bound the controller reads it at and the role it lends a runner
+connection under, so a change there that the
 worker misses fails here.
 """
 
@@ -69,3 +70,10 @@ class ConnectionsDocumentTests(unittest.TestCase):
         self.assertIsNotNone(bound)
         self.assertEqual(connections.SCHEMA_VERSION, int(version.group(1)))
         self.assertEqual(connections.MAX_BYTES, 1 << int(bound.group(1)))
+
+    def test_the_worker_reads_the_role_the_controller_lends(self):
+        from hq_runner import connections
+
+        role = re.search(r'^const RunnerRole = "([^"]*)"$', DOCUMENT_GO.read_text(encoding="utf-8"), re.MULTILINE)
+        self.assertIsNotNone(role)
+        self.assertEqual(connections.ROLE, role.group(1))

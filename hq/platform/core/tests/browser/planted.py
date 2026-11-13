@@ -323,10 +323,10 @@ PLANTS = {
         scripted=True,
     ),
     "axe": Plant('<button type="button"></button>'),
-    # A reading's line drawn under its mark, on the one page the survey reads them.
+    # A reading's line drawn under its mark.
     "readings": Plant(
-        '<div class="dash-readings"><div class="glance-panel-head" style="display: block">'
-        '<span class="glance-symbol">x</span><span style="display: block">Example reading</span></div></div>',
+        '<div class="readings"><div class="reading-head" style="display: block">'
+        '<span class="reading-mark">x</span><span style="display: block">Example reading</span></div></div>',
         path="/",
     ),
     "contrast": Plant('<p style="color: #c8c8c8; background: #fff">Example words too faint to read</p>'),

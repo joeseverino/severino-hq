@@ -762,33 +762,20 @@ HAND_ROLLED: dict[str, str] = {
         "conn-more conn-note conn-path conn-peer conn-peer-name conn-peer-role conn-peering conn-row-note "
         "conn-rules conn-sub conn-tick conn-verdict-*"
     ),
-    "core/_dashboard_connection.html": "dash-reading glance-caption glance-lead glance-panel-head glance-symbol",
-    "core/_dashboard_controller.html": "dash-reading glance-caption glance-lead glance-panel-head glance-symbol",
-    "core/_dashboard_glance.html": (
-        "dashboard-glance glance-alert glance-caption glance-expanded glance-expanded-foot glance-expanded-head "
-        "glance-freshness glance-hours glance-lead glance-lead-empty glance-note glance-panel glance-panel-head "
-        "glance-panels glance-refresh glance-symbol is-wet status-*"
-    ),
-    "core/_dashboard_highlights.html": "dashboard-highlights highlight-card",
-    "core/_dashboard_links_fields.html": "ext-choice-label ext-choice-sub ext-choices",
-    "core/_dashboard_readings.html": "dash-readings",
+    "core/_dashboard_glance.html": "glance-hours is-wet",
     "core/_hq_status.html": "page-title-meta",
     "core/_policy_setting.html": "policy-select policy-unavailable rule-*",
     "core/_policy_table.html": "effect-* policy-default policy-effect policy-table",
-    "core/agent_policy.html": "agent-events mcp-endpoint step-list",
+    "core/agent_policy.html": "agent-events mcp-endpoint",
     "core/auditlog_detail.html": "compare-table",
     "core/hq.html": "cell-notes",
-    "dashboard.html": (
-        "calendar-month dash-needs dash-start dashboard-patterns ext-arrow ext-links is-compact step-list"
-    ),
     "hq_api/reference.html": "api-reference api-reference-failed api-reference-loading api-reference-status",
     "list_page.html": "select-column",
     "page.html": "page-foot",
-    "partials/_demo_about.html": "demo-about-foot ext-arrow ext-links",
     "partials/_discovery_catalog.html": "discovery-link discovery-list discovery-main discovery-meta",
     "partials/_linked_text.html": "linked-text",
     "partials/_operator_step.html": "operator-step",
-    "partials/_posture.html": "posture-checks step-list",
+    "partials/_posture.html": "posture-checks",
     "partials/_queue_groups.html": "queue-table",
     "partials/approval_card.html": "approval-actions approval-card approval-reason",
     "projects/posture.html": (

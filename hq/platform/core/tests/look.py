@@ -70,6 +70,7 @@ from hq.platform.core.tests.look_report import (
     closing,
     drawn_only_here,
     failed_pages,
+    found_lines,
     looked,
     unmatched,
 )
@@ -1162,7 +1163,10 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             printed = [f"Page by page: {_shown(kept)}", *said, *printed]
             if self.base is not None and (alone := drawn_only_here(self.base, found)):
                 printed.append(f"{', '.join(alone)}: {DRAWN_ONLY_HERE.format(ref)}")
-            failed = [said[-1]] * rule_failed + failed
+            # A line for each page with something new or found, then the
+            # verdict: what the look's failure says, which a gate shows.
+            pages = said[:-1] or found_lines(found, lambda name, width: _shown(_shot(name, width).with_suffix(".txt")))
+            failed = [*pages, said[-1]] * rule_failed + failed
             if not self.judged_at:
                 failed.append(nothing := JUDGED_NOTHING.format(rule))
                 printed.append(nothing)

@@ -98,6 +98,14 @@ COPY --chown=severino:severino build/composition/plugin-lock.json /opt/severino/
 COPY build/composition/plugin-retired.json /opt/severino/plugin-retired.json
 RUN test -s /opt/severino/plugin-lock.json \
     && test -s /opt/severino/plugin-retired.json
+# The automation worker's image this release runs, by digest: Compose passes
+# the one CI built for the same commit, once it has verified CI signed it, and
+# signs it beside this composition. It lands in the root-owned tree a release
+# installs (AutomationImage, controller/host/layout.go), and the release's
+# deploy verifies and pulls it.
+ARG RUNNER_IMAGE
+RUN [ -z "${RUNNER_IMAGE}" ] || { mkdir -p /app/deploy/automation \
+    && printf "%s\n" "${RUNNER_IMAGE}" > /app/deploy/automation/image; }
 
 ENV SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=1 \
     SEVERINO_HQ_PLUGIN_LOCK=/opt/severino/plugin-lock.json \

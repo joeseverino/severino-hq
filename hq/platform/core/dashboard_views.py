@@ -37,7 +37,7 @@ from hq.platform.application.visit_refresh import worth_asking
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
 
-from .forms import DashboardSettingsForm
+from .forms import DashboardLinksForm, DashboardSettingsForm
 
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page.
@@ -57,7 +57,7 @@ class DashboardLinkChoiceView(View):
             request,
             "core/dashboard_links.html",
             {
-                "external_choices": link_choices(request.user),
+                "links_form": DashboardLinksForm(link_choices(request.user)),
                 **page_context(
                     "Dashboard links",
                     "Tick the links to show. With none ticked, all of them show.",
@@ -111,7 +111,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         external_links, _ = outward_links(self.request.user)
         return {
             "external_links": external_links,
-            "external_choices": link_choices(self.request.user),
+            "links_form": DashboardLinksForm(link_choices(self.request.user)),
         }
 
     PARTS: ClassVar[dict[str, Callable[..., Any]]] = {"calendar": _calendar, "links": _links}

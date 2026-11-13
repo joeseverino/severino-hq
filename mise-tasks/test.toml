@@ -48,8 +48,8 @@ run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties --noi
 description = "The Go controller's tests under the race detector"
 hide = true
 extends = "heavy"
-# A quick gate too: fast runs it when its sources moved, after the rest, since
-# it takes the heavy turn itself (tools/gate/fast.py, lock_takers).
+# A quick gate too: fast runs it when its sources moved, in its one run, where
+# it takes the heavy turn itself (tools/gate/fast.py, run_command).
 tags = ["fast"]
 # What the Go tests read, which tools/pipeline/legs.py and fast match a change
 # against, so the Test job and fast leave them out when none moved: the

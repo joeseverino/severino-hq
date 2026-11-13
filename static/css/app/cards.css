@@ -273,12 +273,10 @@ a.kpi:hover { background: var(--surface-2); }
 .card.problems { padding-inline: 0; }
 /* The urgent ones: their box above the page. */
 .problems-here { padding-block: var(--space-5); margin-bottom: var(--space-6); border-left: 3px solid var(--tone-ink); }
-/* The short queue on the dashboard, under the greeting. */
-.dash-needs { margin-bottom: var(--stack-gap); }
-/* Steps or checks side by side, each an icon, a title and a sentence. Read
-   down each column, as a list is, so however many there are the columns end
-   within a step of each other: never a row of five and a row of two. */
-.dash-start { margin-bottom: var(--stack-gap); }
+/* Steps or checks side by side ({% steps %}), each an icon, a title and a
+   sentence. Read down each column, as a list is, so however many there are
+   the columns end within a step of each other: never a row of five and a row
+   of two. */
 .step-list {
   columns: 14rem 4; column-gap: var(--space-9);
   margin: 0; padding: 0; list-style: none; font-size: var(--text-sm);

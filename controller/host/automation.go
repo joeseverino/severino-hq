@@ -89,6 +89,8 @@ func checkAutomation(automation *AutomationConfig, grants []Grant) error {
 // addresses alone.
 type Automation struct {
 	*Machine
+	// Source is the repository whose runner image a release may pin.
+	Source Source
 	// SecretDir is the renderer's tmpfs (SecretDir on a host).
 	SecretDir string
 	// Journal is the worker's journal directory (AutomationState).
@@ -124,9 +126,15 @@ func (a *Automation) Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	image, err := Pinned(strings.TrimSpace(string(pin)))
+	image, err := a.Source.RunnerImage(strings.TrimSpace(string(pin)))
 	if err != nil {
 		return err
+	}
+	// The deploy that installed this tree verified the image's signature and
+	// pulled it, and the container runs it with --pull never, so nothing a
+	// registry answers now can take its place.
+	if a.Command(ctx, "docker", "image", "inspect", "--format", "{{.Id}}", image).Run() != nil {
+		return fmt.Errorf("the automation worker's image %s is not on this host: `hq-host deploy` verifies and pulls it", image)
 	}
 	if info, err := os.Lstat(a.Journal); err != nil || !info.IsDir() {
 		return fmt.Errorf("the worker's journal directory %s is not there: systemd-tmpfiles --create makes it", a.Journal)
@@ -323,7 +331,7 @@ func (a *Automation) pruneRuns() {
 // bridge.
 func AutomationArgs(name, image, run, journal, id string, project AutomationConfig) []string {
 	args := []string{
-		"run", "--rm", "--name", name,
+		"run", "--rm", "--pull", "never", "--name", name,
 		"--user", fmt.Sprintf("%d:%d", hostcore.WebUID, hostcore.WebGID),
 		"--cap-drop", "ALL",
 		"--security-opt", "no-new-privileges:true",

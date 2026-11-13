@@ -217,6 +217,61 @@ class OutsideLinkTests(SimpleTestCase):
                 self.assertIn("abc", html)
 
 
+class ReadingTests(SimpleTestCase):
+    PARTIALS = ("partials/_reading.html", "partials/_readings.html")
+
+    def test_a_reading_leads_to_its_page_marked_as_its_part_of_a_region(self):
+        html = _render(
+            '{% readings %}{% reading icon="network" url="/example/" modal="example" tone="attention" '
+            'note_tone="attention" data_fragment_part="example" %}Loopback{% lines %}<span>TLS 1.3</span>'
+            "{% note %}A check failed{% endreading %}{% endreadings %}"
+        )
+
+        (row,) = with_class(html, "readings")
+        (reading,) = with_class(html, "reading")
+        (note,) = with_class(html, "reading-standing")
+        self.assertIn(row, reading.ancestors)
+        self.assertEqual(reading.tag, "a")
+        self.assertEqual(reading.attrs["href"], "/example/")
+        self.assertEqual(reading.attrs["data-modal-open"], "example")
+        self.assertEqual(reading.attrs["data-fragment-part"], "example")
+        self.assertIn("tone-attention", reading.classes)
+        self.assertIn("is-attention", note.classes)
+        self.assertEqual(texts(html, "strong"), ["Loopback"])
+
+    def test_a_reading_with_a_panel_opens_it_in_place_by_its_id(self):
+        html = _render(
+            '{% reading icon="cloud" id="example-weather" data_refreshing=refreshing %}71°'
+            '{% heading %}<strong>Weather</strong>{% panel %}<p>Mostly cloudy</p>{% foot %}<a href="/s/">Settings</a>'
+            "{% endreading %}",
+            refreshing=True,
+        )
+
+        (reading,) = with_class(html, "reading")
+        (head,) = elements(html, "button")
+        (panel,) = with_class(html, "reading-panel")
+        self.assertIn("data-menu", reading.attrs)
+        self.assertEqual(reading.attrs["data-refreshing"], "")
+        self.assertEqual(head.attrs["popovertarget"], "example-weather")
+        self.assertEqual(panel.attrs["id"], "example-weather")
+        self.assertIn("popover", panel.attrs)
+        self.assertEqual(with_class(html, "reading-panel-foot")[0].tag, "footer")
+
+    def test_a_neutral_reading_takes_no_tone(self):
+        html = _render('{% reading icon="cloud" url="/" tone="neutral" %}1{% endreading %}')
+
+        (reading,) = with_class(html, "reading")
+        self.assertFalse({word for word in reading.classes if word.startswith("tone-")})
+
+    def test_a_reading_s_tone_is_one_the_status_vocabulary_names(self):
+        for source in (
+            '{% reading icon="cloud" url="/" tone="green" %}1{% endreading %}',
+            '{% reading icon="cloud" url="/" note_tone="good" %}1{% endreading %}',
+        ):
+            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
+                _render(source)
+
+
 @tag("source", "tree")
 class SharedMarkupTemplateTests(SimpleTestCase):
     """No template writes by hand what a shared partial or tag draws."""
@@ -232,6 +287,13 @@ class SharedMarkupTemplateTests(SimpleTestCase):
     def test_only_the_tag_draws_a_card(self):
         found = _written_by_hand(r'\bclass="(?:[^"]*[\s}])?card[\s"{]', CardTests.PARTIAL)
         self.assertEqual(found, [], "write {% card %} instead")
+
+    def test_only_the_tags_draw_a_reading(self):
+        # A reading's classes are a shared part's, so the page-class check
+        # lets a page write them; this is what keeps them the tags' own.
+        reading = r'\bclass="(?:[^"]*[\s}])?reading(?:s|-head|-mark|-lead|-lines|-standing|-panel[a-z-]*)?[\s"{]'
+        found = [name for name, text in _templates() if name not in ReadingTests.PARTIALS and re.search(reading, text)]
+        self.assertEqual(found, [], "write {% readings %} and {% reading %} instead")
 
     def test_no_template_decides_a_fact_s_tone(self):
         # The tag refuses the part when a page renders; this reads every

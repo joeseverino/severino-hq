@@ -1399,6 +1399,17 @@ controller pass is launched, in a short-lived container of its own image
 the host's `automation` entry, never a claim
 ([Tokens on the host](Deployment.md#tokens-on-the-host)).
 
+Its image is verified at deploy, as the controller's is: the controller
+runs the composition `hq-host deploy` verified and pulled, and the release's
+own `hq-host release` verifies the worker image its tree pins against the
+same compose workflow identity (`Source.Signer()`), checks that it names the
+source's runner image by digest (`Source.RunnerImage`), and pulls it before
+anything live is held. A worker image that fails either check refuses the
+release. `hq-host automation` then runs that digest with `--pull never`, and
+refuses, naming `hq-host deploy`, when the host does not hold it. A digest
+names its content, so every run gets the bytes the deploy verified, and the
+unit needs no network, registry credential or Sigstore trust root of its own.
+
 It runs on a network of its own, `severino-hq-automation`, confined by an
 nftables table as the Renovate run is, rather than on the host's network as
 the controller is: that is the least it can reach. Docker masquerades a

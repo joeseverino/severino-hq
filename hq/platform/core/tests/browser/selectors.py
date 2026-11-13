@@ -108,10 +108,11 @@ SELECTORS = {
     "nav_menu_panel": ".primary-nav [data-menu] > [popover]",
     "nav_drawer": ".primary-nav",
     "nav_toggle": "[popovertarget=primary-navigation]",
-    "highlights": ".dashboard-highlights > section",
+    # The dashboard's domain overviews, and the row its calendar leads.
+    "highlights": ".section-flow > .section:has(> .section-body > .kpi-grid.is-featured)",
+    "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
     # Each reading in the dashboard's row: a mark, then its lines.
-    "readings": ".dash-readings .glance-panel-head",
-    "patterns": ".dashboard-patterns > .section",
+    "readings": ".readings .reading-head",
     # The dashboard's strip of counts across HQ, by the name it gives a reader.
     "dashboard_counts": "main dl[aria-label='Across HQ']",
     # A control a reader fills in or picks from, whose edge is what shows it.

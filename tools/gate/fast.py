@@ -21,7 +21,7 @@ from typing import Any
 
 from hq.platform.application.tests.tree import SUITE, tagged
 from hq.platform.core.tests.task import RefError, Usage, changed_paths, git, names, usage
-from tests.mise_tasks import HEAVY_LOCK, ROOT as TASKS_ROOT, body, locks, mise_tasks, run_files, runs
+from tests.mise_tasks import ROOT as TASKS_ROOT, body, mise_tasks, run_files, runs
 from tools.gate.verdict import Gate, Step, run
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -447,9 +447,9 @@ def with_tree(labels: list[str], paths: list[str]) -> list[str]:
 # The module every test that reads each of the browser gate's modules goes
 # through. Such a test is a source check that starts no browser (the selector
 # guard among them), so those selected run ahead of the rest, in fast:source,
-# and a refusal there ends the run before the suite starts.
+# and a refusal there is printed before the suite starts.
 BROWSER_MODULES = "hq.platform.core.tests.browser_modules"
-# fast's test run, the task that runs it once fast:source passes
+# fast's test run, the task that runs it after fast:source
 # (mise-tasks/fast/), and the config environment of the one run of mise it shares
 # with the quick gates (mise.fast.toml), whose output is mise's summary.
 TESTS = "fast:tests"
@@ -467,9 +467,12 @@ def source_first(labels: list[str], files: list[Path]) -> tuple[list[str], list[
 
 
 def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], parallel: str) -> list[str]:
-    """One run of mise for the quick gates and the tests, side by side, which mise
-    stops at the first failure. A test both selected and tagged tree runs once,
-    since Django's runner drops a repeated test.
+    """One run of mise for the quick gates and the tests, side by side, which
+    runs every task to its end when one fails, so one run names every failure
+    it reaches. A gate that takes the heavy lock itself (the shell gate) runs in
+    it too, holding the run open until it has had its turn. A test both
+    selected and tagged tree runs once, since Django's runner drops a repeated
+    test.
 
     A task's own output setting outranks the config's but not ``--output``, so
     the summary is the environment's: the tests' task prints as it runs, its
@@ -478,20 +481,22 @@ def run_command(tasks: tuple[str, ...], source: list[str], labels: list[str], pa
     jobs = ["--jobs", "1"] if parallel == "1" else []
     gates = [word for task in tasks for word in (task, ":::")]
     tests = [TESTS, "--parallel", parallel, *labels]
-    return ["env", f"{SOURCE}={' '.join(source)}", "mise", "--env", ENVIRONMENT, "run", *jobs, *gates, *tests]
-
-
-def lock_takers(tasks: tuple[str, ...]) -> tuple[str, ...]:
-    """Those of the quick gates that take the heavy lock themselves (the shell
-    gate). mise stops no task still waiting for a lock when another fails, so
-    one beside the others would hold the run open until it got the turn and
-    ran; they run after, in a run of their own, once the rest has passed."""
-
-    return tuple(task for task in tasks if HEAVY_LOCK in locks(task))
+    return [
+        "env",
+        f"{SOURCE}={' '.join(source)}",
+        "mise",
+        "--env",
+        ENVIRONMENT,
+        "run",
+        "--continue-on-error",
+        *jobs,
+        *gates,
+        *tests,
+    ]
 
 
 def gates_and_tests(tasks: tuple[str, ...], labels: list[str], files: list[Path], parallel: str) -> list[Step]:
-    """The run of the quick gates and the tests, then the gates that take the heavy lock once it passed."""
+    """The one run of the quick gates and the tests."""
 
     if tasks:
         print(f"[fast] the quick gates that read what changed: {' '.join(tasks)}")
@@ -500,14 +505,7 @@ def gates_and_tests(tasks: tuple[str, ...], labels: list[str], files: list[Path]
     source, rest = source_first(labels, files)
     if source:
         print(f"[fast] first, the source checks that read the browser gate's modules: {' '.join(source)}")
-    after = lock_takers(tasks)
-    beside = tuple(task for task in tasks if task not in after)
-    steps = [step("quick gates and tests", run_command(beside, source, rest, parallel))]
-    if after and steps[0].ok:
-        jobs = ["--jobs", "1"] if parallel == "1" else []
-        separated = [word for task in after for word in (":::", task)][1:]
-        steps.append(step("quick gates that take the heavy turn", ["mise", "run", *jobs, *separated]))
-    return steps
+    return [step("quick gates and tests", run_command(tasks, source, rest, parallel))]
 
 
 def step(label: str, cmd: list[str]) -> Step:

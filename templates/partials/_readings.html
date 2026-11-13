@@ -1,0 +1,6 @@
+{% comment %}
+A row of readings, drawn by {% readings %}, each a {% reading %}: one row of
+equals, the same mark, lead and quiet lines, spaced rather than ruled apart.
+A region in the row (`data-fragment`) lays its readings out as the row's own,
+so readings refreshed in place stand beside the ones drawn with the page.
+{% endcomment %}<div class="readings">{{ content|safe }}</div>

@@ -42,15 +42,26 @@ func (s Source) Signer() string {
 	return `^https://github\.com/` + regexp.QuoteMeta(string(s)) + `/\.github/workflows/compose\.yml@refs/heads/main$`
 }
 
+// Runner is the source's automation worker image. CI builds it beside the
+// host image, and the compose workflow signs it with the composition that
+// pins it (AutomationImage).
+func (s Source) Runner() string { return "ghcr.io/" + strings.ToLower(string(s)) + "/runner" }
+
 // Deployable returns image when it is a digest-pinned reference to the
 // source's composition. The sudoers rule lets the caller choose this
 // argument, and it decides what root runs as a container.
-func (s Source) Deployable(image string) (string, error) {
+func (s Source) Deployable(image string) (string, error) { return s.pinnedTo(s.Composition(), image) }
+
+// RunnerImage returns image when it is a digest-pinned reference to the
+// source's runner image: what a release may pin as its worker.
+func (s Source) RunnerImage(image string) (string, error) { return s.pinnedTo(s.Runner(), image) }
+
+func (s Source) pinnedTo(name, image string) (string, error) {
 	if !sourceNamed.MatchString(string(s)) {
 		return "", errors.New("this build names no source repository, so it deploys nothing")
 	}
-	if !regexp.MustCompile(`^` + regexp.QuoteMeta(s.Composition()) + `@sha256:[0-9a-f]{64}$`).MatchString(image) {
-		return "", fmt.Errorf("refusing to deploy %q: not a digest-pinned reference to %s", image, s.Composition())
+	if !regexp.MustCompile(`^` + regexp.QuoteMeta(name) + `@sha256:[0-9a-f]{64}$`).MatchString(image) {
+		return "", fmt.Errorf("refusing %q: not a digest-pinned reference to %s", image, name)
 	}
 	return image, nil
 }
@@ -75,6 +86,18 @@ type Deployer struct {
 	Free func(path string) (uint64, error)
 	// Rehearsal is where a release rehearses itself before it is installed.
 	Rehearsal Rehearsal
+}
+
+// verified refuses image unless root's cosign finds it signed by the
+// source's compose workflow. image is pinned by digest, so what is verified
+// is what is pulled and run.
+func (d *Deployer) verified(ctx context.Context, image, what string) error {
+	if err := d.run(ctx, d.Cosign, "verify",
+		"--certificate-oidc-issuer", signerIssuer,
+		"--certificate-identity-regexp", d.Source.Signer(), image); err != nil {
+		return fmt.Errorf("refusing to deploy %s: %s is not signed by this repository's compose workflow", image, what)
+	}
+	return nil
 }
 
 // Deploy is the first half, run by the release already on the host: it
@@ -106,13 +129,10 @@ func (d *Deployer) Deploy(ctx context.Context, image string, credentials io.Read
 	// The signature is checked here, by root, and nowhere before it: the
 	// runner that asked for this deploy is the party the sudoers rule
 	// distrusts, and the shape above is exactly what a stolen registry token
-	// could also push. The reference is pinned by digest, so what is verified
-	// is what is pulled and run.
-	if err := d.run(ctx, d.Cosign, "verify",
-		"--certificate-oidc-issuer", signerIssuer,
-		"--certificate-identity-regexp", d.Source.Signer(), image); err != nil {
+	// could also push.
+	if err := d.verified(ctx, image, "it"); err != nil {
 		cleanup()
-		return fmt.Errorf("refusing to deploy %s: not signed by this repository's compose workflow", image)
+		return err
 	}
 	fmt.Fprintln(d.Out, "Signature verified.")
 	// Read before the prune below, which can remove the running image when
@@ -166,6 +186,9 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	}
 	// Before anything live is held: a release refused here leaves production
 	// exactly as it was.
+	if err := d.pullRunner(ctx, image); err != nil {
+		return err
+	}
 	if err := d.rehearse(ctx, image); err != nil {
 		return err
 	}
@@ -239,6 +262,43 @@ func (d *Deployer) Release(ctx context.Context, image string) (err error) {
 	fmt.Fprintf(d.Out, "Deployed %s.\n", image)
 	stands = true
 	return d.verifyRelease(ctx)
+}
+
+// pullRunner verifies and pulls the automation worker's image the release
+// pins (AutomationImage), so the worker only ever runs what a deploy
+// verified: `hq-host automation` runs that digest from the host, never
+// pulling it. It runs in the release's own hq-host, so the release that first
+// pins an image is the one that pulls it. A release that pins none has no
+// worker to pull.
+func (d *Deployer) pullRunner(ctx context.Context, image string) error {
+	dir, err := os.MkdirTemp(d.Runtime, "severino-hq-runner.")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	pin := filepath.Join(dir, "image")
+	if err := d.copyOut(ctx, image, "/app/"+AutomationImage, pin); err != nil {
+		if errors.As(err, new(notShipped)) {
+			fmt.Fprintln(d.Out, "This release pins no automation worker image.")
+			return nil
+		}
+		return err
+	}
+	data, err := os.ReadFile(pin)
+	if err != nil {
+		return err
+	}
+	runner, err := d.Source.RunnerImage(strings.TrimSpace(string(data)))
+	if err != nil {
+		return fmt.Errorf("refusing to deploy %s: its automation worker image: %w", image, err)
+	}
+	if err := d.verified(ctx, runner, "its automation worker image "+runner); err != nil {
+		return err
+	}
+	if err := d.private(ctx, "Automation worker image pull", "pull-runner", "docker", "pull", runner); err != nil {
+		return fmt.Errorf("refusing to deploy %s: %w", image, err)
+	}
+	return nil
 }
 
 // verifyRelease runs the drift unit on the release just installed, so a check
@@ -387,10 +447,19 @@ func (d *Deployer) copyOut(ctx context.Context, image, from, to string) error {
 	container := strings.TrimSpace(string(out))
 	defer func() { _ = d.run(context.WithoutCancel(ctx), "docker", "rm", "--force", container) }()
 	if err := d.run(ctx, "docker", "cp", container+":"+from, to); err != nil {
-		return fmt.Errorf("the image ships no %s: %w", from, err)
+		return notShipped{from, err}
 	}
 	return os.Chmod(to, 0o700)
 }
+
+// notShipped is a file an image that opened does not hold.
+type notShipped struct {
+	path string
+	err  error
+}
+
+func (e notShipped) Error() string { return "the image ships no " + e.path + ": " + e.err.Error() }
+func (e notShipped) Unwrap() error { return e.err }
 
 // registryConfig writes the registry credential, if one was given, to a
 // private directory for this deploy alone. It arrives on stdin, never as an

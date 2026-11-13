@@ -65,7 +65,9 @@ class NestedVerdictTests(GateTestCase):
                 check=False,
             )
         self.assertEqual(result.returncode, 1, result.stdout)
-        inner_line, outer_line = (line for line in result.stdout.splitlines() if " FAILED in " in line)
+        # The inner gate printed into the outer one's log, which keeps the outer verdict too.
+        printed = Path(kept, "outer.log").read_text().splitlines()
+        inner_line, outer_line = (line for line in printed if " FAILED in " in line)
         for line in (inner_line, outer_line):
             with self.subTest(line=line):
                 self.assertIn("tests: test_example.Case.test_compares, test_example.Case.test_raises", line)
@@ -199,7 +201,7 @@ class RerunTests(GateTestCase):
         line = result.stdout.splitlines()[-1]
         self.assertTrue(line.endswith(": deploy host; rerun: uv run python -c 'raise SystemExit(3)'"), line)
 
-    def test_each_failed_leaf_s_last_lines_are_kept_and_its_last_few_shown_above_the_verdict(self):
+    def test_each_failed_leaf_s_last_lines_are_kept_and_shown_above_the_verdict(self):
         """A failed test's traceback says why it failed, so its task's lines are not kept."""
 
         test = "example.tests.test_a.Case.test_x"
@@ -215,7 +217,7 @@ class RerunTests(GateTestCase):
         result = self.gate("tails", sys.executable, "-c", SAYS, json.dumps(lines), test)
         printed = result.stdout.splitlines()
         self.assertTrue(printed[-1].endswith(f"; rerun: mise run -c lint:shell ::: test {test}"), printed[-1])
-        shown = [f"example.sh: finding {n}" for n in range(len(said) - gate_verdict.TAIL_SHOWN, len(said))]
+        shown = [f"example.sh: finding {n}" for n in range(len(said) - gate_verdict.TAIL_KEPT, len(said))]
         heading = printed.index("[tails] lint:shell ended on:")
         self.assertEqual([line.split("   ", 1)[1] for line in printed[heading + 1 : -2]], shown)
         kept = Path(gate_verdict.VERDICTS, "tails.txt").read_text().splitlines()
@@ -239,13 +241,14 @@ class RerunTests(GateTestCase):
         " Path(os.environ['HQ_GATE_DETAIL']).write_text('judged: example/one\\nat: 402\\n'); sys.exit(int(sys.argv[1]))"
     )
 
-    def test_what_a_command_says_it_judged_is_kept_under_the_verdict_line_whichever_way_it_ends(self):
+    def test_what_a_command_says_it_judged_ends_the_verdict_line_and_is_kept_under_it_whichever_way_it_ends(self):
         for code, outcome in ((1, "FAILED"), (0, "passed")):
             with self.subTest(outcome=outcome):
-                self.gate("judging", sys.executable, "-c", self.SAYS_JUDGED, str(code))
+                result = self.gate("judging", sys.executable, "-c", self.SAYS_JUDGED, str(code))
                 kept = Path(gate_verdict.VERDICTS, "judging.txt").read_text().splitlines()
                 self.assertTrue(kept[0].startswith("tree "), kept)
-                self.assertTrue(kept[1].startswith(f"[judging] {outcome} in"), kept)
+                self.assertRegex(kept[1], rf"^\[judging\] {outcome} in [\d.]+s: judged: example/one")
+                self.assertEqual(result.stdout.splitlines()[-1], kept[1])
                 self.assertEqual(kept[2:4], ["judged: example/one", "at: 402"])
 
     def test_a_command_that_says_what_reruns_it_is_rerun_so_and_not_by_its_test_labels(self):
@@ -299,9 +302,12 @@ def step_said(label: str, cmd: list[str], *args: object, **kwargs: object) -> ga
 @tag("source", "tree")
 class GateOpeningLineTests(OpeningLineCase):
     def test_a_long_failing_command_under_the_verdict_opens_on_its_file(self):
+        """As a terminal or a CI job is shown it, all the command printed."""
+
         result = subprocess.run(
             [sys.executable, "-c", VERDICT_IN, str(gate_verdict.VERDICTS), "example", sys.executable, "-c", LONG],
             cwd=ROOT,
+            env=os.environ | {gate_verdict.OUTPUT: "all"},
             capture_output=True,
             text=True,
             check=False,

@@ -230,19 +230,6 @@ span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-
 .card[data-alone] > p > .btn:only-child { display: block; margin-top: var(--space-2); }
 .card[data-alone] > p:last-child { margin-top: var(--space-8); }
 
-/* ── Dashboard: external links ─────────────────────────────────── */
-
-.ext-links { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-.ext-links a {
-  display: inline-flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-6);
-  border: 1px solid var(--line); border-radius: 999px;
-  background: var(--surface); color: var(--ink-2); font-size: var(--text-sm); font-weight: 500;
-}
-.ext-links a:hover { border-color: var(--line-strong); color: var(--ink); text-decoration: none; }
-.ext-arrow { color: var(--muted-2); font-size: var(--text-xs); }
-.ext-links a:hover .ext-arrow { color: var(--accent-2); }
-
 /* ── Responsive ─────────────────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {

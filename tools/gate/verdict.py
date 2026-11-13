@@ -1,11 +1,12 @@
 """A gate's last lines name what failed and the command that reruns just that,
 so nobody reads back through its output, and above them each failed task's
-last lines.
+last lines and each failed test's last frame.
 
 Each failed task is named as mise names it and each failed test as the test
 runner records it, and `var/gate/<name>.txt` keeps the lines whole, beside the
 run before it in `<name>.prev.txt`, under a first line naming the tree the gate
-judged (docs/Development.md, The gates).
+judged; `var/gate/<name>.log` keeps all the run printed (docs/Development.md,
+The gates).
 `python -m tools.gate.verdict <name> <command...>` runs one command so, and
 `--step <label> <command...>...` several.
 """
@@ -16,17 +17,16 @@ import contextlib
 import json
 import os
 import re
-import select
 import shlex
 import subprocess
 import sys
 import tempfile
 import time
 from collections import deque
-from collections.abc import Callable, Collection
+from collections.abc import Collection
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO, TextIO
 
 from tools.gate.tree import working_tree
 
@@ -37,8 +37,9 @@ ROOT = Path(__file__).resolve().parents[2]
 # runs that runner's record under a gate, which holds the two to one shape.
 REPORTS = "HQ_TEST_REPORTS"
 # A file each command is handed, where it may say what it judged, for a gate
-# whose name alone does not (the pages and widths a survey drew): its lines
-# are kept under the verdict line.
+# whose name alone does not (the pages and widths a survey drew): its first
+# line, what the judging came to, ends the verdict line, and every line is
+# kept under it.
 DETAIL = "HQ_GATE_DETAIL"
 # A file each command is handed for the one command that runs again what it
 # failed, for a command whose failures no task or test label reruns (a look
@@ -87,14 +88,18 @@ ESCAPE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 UNIMPORTED = re.compile(r"^ImportError: Failed to import test module: (\S+)")
 # A traceback kept in the file stops here.
 KEPT_LINES = 60
-# How long a command's output stays quiet before it counts as paused, for a
-# reader told of each pause: mise writes a failed task's held output a line at
-# a time, so a shorter quiet can fall between two of its lines.
-PAUSE = 0.2
+# A traceback's frame in code of the test's own, not of unittest's asserts.
+OWN_FRAME = re.compile(r'^  File "(?![^"]*/unittest/)')
 # A failed task's last lines kept in the file, and shown above the verdict, so
 # why it failed is read there rather than by running it again.
 TAIL_KEPT = 20
-TAIL_SHOWN = 5
+# Whether a command's output is shown as it runs: "all" shows it, "short"
+# keeps it to the gate's log. Unset, a terminal and a CI job are shown it all,
+# since a CI job's own log is the one kept there; anything else reading the
+# output (an agent's shell, which keeps the head of a long one) is shown the
+# gate's own lines and, on a failure, each failed task's last lines and each
+# failed test's last frame, the log named for the rest.
+OUTPUT = "HQ_GATE_OUTPUT"
 # Each task's name a line is printed under, outermost first.
 PREFIX = re.compile(r"\[([^\]\s]+)\] ?")
 # Past this many failing tests the line names the first few and counts the rest,
@@ -260,9 +265,27 @@ class Step:
         lines = []
         for failed in self.tests:
             if report := failed.traceback.splitlines():
-                cut = ["..."] if len(report) > KEPT_LINES else []
-                lines += ["", f"{failed.test}:", *report[:KEPT_LINES], *cut]
+                lines += ["", f"{failed.test}:", *cut(report)]
         return lines
+
+    def last_frames(self) -> dict[str, list[str]]:
+        """The first SHOWN failed tests' tracebacks from their last frame of the
+        test's own code on, where the failing line and what it raised are, cut
+        at KEPT_LINES."""
+
+        if self.ok:
+            return {}
+        frames = {}
+        for failed in self.tests[:SHOWN]:
+            report = failed.traceback.rstrip("\n").splitlines()
+            starts = [at for at, line in enumerate(report) if OWN_FRAME.match(line)]
+            if shown := cut(report[starts[-1] :] if starts else report) or [failed.exception] * bool(failed.exception):
+                frames[failed.test] = shown
+        return frames
+
+
+def cut(lines: list[str]) -> list[str]:
+    return [*lines[:KEPT_LINES], *(["..."] if len(lines) > KEPT_LINES else [])]
 
 
 def hand_on(tests: list[FailedTest]) -> None:
@@ -279,32 +302,32 @@ def hand_on(tests: list[FailedTest]) -> None:
             json.dump([asdict(failed) for failed in tests], record)
 
 
-def pass_through(output: int, step: Step, to: BinaryIO | None = None, paused: Callable[[], None] | None = None) -> None:
-    """Copy the command's output to ``to``, ours by default, byte for byte, each line read on the way past,
-    and call ``paused`` each time the output pauses for PAUSE and once it ends."""
+def pass_through(output: int, step: Step, *to: BinaryIO) -> None:
+    """Copy the command's output to each of ``to``, byte for byte, each line read on the way past."""
 
-    to = to or sys.stdout.buffer
     pending = b""
     # Chunks, not lines: the runner's progress dots arrive without a newline.
     while chunk := os.read(output, 65536):
-        to.write(chunk)
-        to.flush()
+        for sink in to:
+            sink.write(chunk)
+            sink.flush()
         *lines, pending = (pending + chunk).split(b"\n")
         for line in lines:
             step.read(line.decode(errors="replace"))
-        if paused and not select.select([output], [], [], PAUSE)[0]:
-            paused()
     step.read(pending.decode(errors="replace"))
-    if paused:
-        paused()
 
 
-def run(
-    label: str, cmd: list[str], cwd: Path = ROOT, to: BinaryIO | None = None, paused: Callable[[], None] | None = None
-) -> Step:
-    """Run a command, its output passed through to ``to`` (ours by default), and gather what failed in it.
+def outlets() -> list[BinaryIO]:
+    """Where a command's output goes: the open gate's log, and the screen when
+    it shows all; ours alone outside a gate."""
 
-    ``paused`` is called whenever the output pauses, and once it ends (``pass_through``)."""
+    if OPENED is None:
+        return [sys.stdout.buffer]
+    return [OPENED.log, *([OPENED.screen.buffer] if OPENED.shows_all else [])]
+
+
+def run(label: str, cmd: list[str], cwd: Path = ROOT) -> Step:
+    """Run a command, its output passed to the open gate's log (``outlets``), and gather what failed in it."""
 
     step = Step(label, command=cmd)
     started = time.monotonic()
@@ -318,7 +341,7 @@ def run(
             if proc.stdout is None:
                 raise RuntimeError("the gate was started without a pipe from its output")
             try:
-                pass_through(proc.stdout.fileno(), step, to, paused)
+                pass_through(proc.stdout.fileno(), step, *outlets())
             except KeyboardInterrupt:
                 # The terminal's interrupt reached the command too.
                 proc.wait()
@@ -343,9 +366,10 @@ def verdict(name: str, started: float, steps: list[Step], passed: str = "", outc
         elapsed += f", {waited:.0f}s of it waiting for the turn"
     aggregates = leaves(steps)
     failed = [failure for step in steps for failure in step.failures(aggregates)]
+    said = [step.detail[0] for step in steps if step.detail]
     if failed:
-        return f"[{name}] {outcome} in {elapsed}: {'; '.join(failed)}"
-    return f"[{name}] passed in {elapsed}{passed}"
+        return f"[{name}] {outcome} in {elapsed}: {'; '.join([*said, *failed])}"
+    return f"[{name}] passed in {elapsed}" + (f": {'; '.join(said)}" if said else "") + passed
 
 
 def test_reruns(name: str, steps: list[Step], tests: str) -> dict[str, list[str]]:
@@ -395,12 +419,43 @@ def timings(steps: list[Step]) -> list[str]:
     return ["", "Slowest first:", *(f"{seconds:8.1f}s  {task}" for task, seconds in ranked)] if ranked else []
 
 
+def shows_all(screen: TextIO) -> bool:
+    """Whether the gate shows its commands' output as they run (OUTPUT)."""
+
+    if asked := os.environ.get(OUTPUT):
+        return asked == "all"
+    return bool(os.environ.get("CI")) or screen.isatty()
+
+
+class Kept:
+    """The gate's process's own output: shown on the screen, and copied into its log."""
+
+    def __init__(self, screen: TextIO, log: BinaryIO) -> None:
+        self.screen = screen
+        self.log = log
+
+    def write(self, text: str) -> int:
+        self.screen.write(text)
+        self.log.write(text.encode(errors="replace"))
+        return len(text)
+
+    def flush(self) -> None:
+        self.screen.flush()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self.screen, name)
+
+
+# The gate this process opened, whose log its commands' output goes to.
+OPENED: Gate | None = None
+
+
 class Gate:
     """One gate's run, opened before anything it prints and closed on its verdict.
 
-    Its first line names the file the verdict is kept in: a failed command's
-    output read back through a tool that keeps only its head and tail, cut
-    from its first part, loses the last line, and the head is the one part
+    Its first line names the file the verdict is kept in and the log that
+    keeps all the run printed: a long output read back through a tool that
+    keeps only its head loses the last line, and the head is the one part
     every cut copy shows. `close` is reached only through an opened gate, so
     no gate ends on a verdict without having said where it is kept.
 
@@ -418,7 +473,21 @@ class Gate:
         self.ended: str | None = None
         self.stem = re.sub(r"[^\w.-]+", "-", name).strip("-")
         self.path = VERDICTS / f"{self.stem}.txt"
-        print(f"[{name}] verdict: the last line, kept whole in {self.path}", flush=True)
+        self.log_path = VERDICTS / f"{self.stem}.log"
+        global OPENED  # noqa: PLW0603 - a process runs one gate, whose commands' output goes to its log
+        if OPENED is not None:
+            OPENED.shut()
+        self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        with contextlib.suppress(FileNotFoundError):
+            self.log_path.replace(self.log_path.with_name(f"{self.stem}.prev.log"))
+        # Unbuffered, so the log keeps the order things were said in, and a reader following it sees each as said.
+        self.log = self.log_path.open("wb", buffering=0)
+        self.screen = sys.stdout
+        self.shows_all = shows_all(self.screen)
+        sys.stdout = Kept(self.screen, self.log)
+        OPENED = self
+        print(f"[{name}] all the run printed: {self.log_path}; verdict: the last line, kept whole in {self.path}")
+        sys.stdout.flush()
 
     def judged(self) -> str | None:
         """The tree the gate judged: the checkout's when it opened, if the
@@ -464,10 +533,23 @@ class Gate:
             whole.write("\n".join([judged, line, *detail, *named, *ended, *timings(steps), *kept]) + "\n")
         Path(whole.name).replace(path)
         for task, said in tails.items():
-            shown = (f"[{name}]   {said_line}" for said_line in said[-TAIL_SHOWN:])
-            print(f"[{name}] {task} ended on:", *shown, sep="\n", flush=True)
-        print(f"[{name}] verdict kept in {path}", flush=True)
+            print(f"[{name}] {task} ended on:", *(f"[{name}]   {said_line}" for said_line in said), sep="\n")
+        if not self.shows_all:
+            for test, frame in (frame for step in steps for frame in step.last_frames().items()):
+                print(f"[{name}] {test} ended on:", *(f"[{name}]   {frame_line}" for frame_line in frame), sep="\n")
+        print(f"[{name}] all the run printed in {self.log_path}; verdict kept in {path}")
         print(line, flush=True)
+        self.shut()
+
+    def shut(self) -> None:
+        """Give the process its own output back and close the log."""
+
+        global OPENED  # noqa: PLW0603 - see Gate.__init__
+        if isinstance(sys.stdout, Kept) and sys.stdout.log is self.log:
+            sys.stdout.flush()
+            sys.stdout = self.screen
+        self.log.close()
+        OPENED = None if OPENED is self else OPENED
 
 
 def tree_now(root: Path) -> str | None:

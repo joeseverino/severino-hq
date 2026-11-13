@@ -47,7 +47,7 @@
   }
   /* Stats inside a card are the card's content: an even grid with real gaps,
      no tile padding doubling the card's own. */
-  :is(.card, .highlight-card > .section-body) > .kpi-grid {
+  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) {
     display: grid;
     /* Exactly the card's --kpi-columns, which the card sets from how many
        stats it holds and how wide it is (4 or 2+2, 6 or 3+3, never 3+1). A
@@ -62,7 +62,7 @@
   /* A row of stats shares its lines. Each stat takes the row's three tracks
      (label, value, note), so the labels start level and the values stand
      level, however many lines one label wraps to. */
-  :is(.card, .highlight-card > .section-body) > .kpi-grid > .kpi {
+  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) > .kpi {
     padding: 0;
     background: none;
     display: grid;

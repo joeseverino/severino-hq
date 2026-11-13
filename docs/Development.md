@@ -199,12 +199,20 @@ command that reruns just those. A gate whose steps queued for the
 (`passed in 664.5s, 410s of it waiting for the turn`), so the rest reads as
 working time.
 
-The whole verdict is kept in `var/gate/` beside the run before it, with each
-failed test's exception and traceback and each failed task's last lines
-(`HQ_GATE_VERDICTS` names another folder, as a gate tool's test does for
-every process it starts). A
-gate's first line names that file, since the head of a long output is the
-part a reader shown only an excerpt of it always sees.
+The whole verdict is kept in `var/gate/<name>.txt` beside the run before it,
+with each failed test's exception and traceback and each failed task's last
+lines, and all the run printed in `var/gate/<name>.log` (`HQ_GATE_VERDICTS`
+names another folder, as a gate tool's test does for every process it
+starts). A gate's first line names both files, since the head of a long
+output is the part a reader shown only an excerpt of it always sees.
+
+What a gate prints is short enough to read whole. Its commands' output goes
+to the log; the screen gets the gate's own lines and, on a failure, each
+failed task's last lines and each failed test's traceback from its last frame
+in the test's own code, then the verdict line, which names the rerun. A
+terminal and a CI job (`CI` set), whose job log is the only one kept there,
+are shown all of it as it runs too; `HQ_GATE_OUTPUT=all` or `short` says
+which anywhere. Follow a run in progress with `tail -f` on its log.
 
 The file opens on `tree <hash>`, the tree a commit of the checkout's files
 would hold (staged or not, tracked or not, as both the repository's and the
@@ -289,7 +297,8 @@ environment (`uv run --group fuzz`), which the tests' environment lacks, is
 never a label. When the selection above would reach it, its task runs as a
 quick gate instead, read from the task's own `run`.
 
-The quick gates and the tests run in one `mise run`, in the config
+The quick gates and the tests run in one `mise run`, whose output
+`var/gate/fast.log` keeps ([The gates](#the-gates)), in the config
 environment `mise.fast.toml` sets: mise's summary output, where a gate that
 passed prints its `passed in` line as it ends and one that failed prints
 whole as it ends. The tests run as `fast:tests` (`mise-tasks/fast/`), whose
@@ -297,13 +306,14 @@ own output setting outranks the environment's, so they print as they run,
 their wait for the heavy turn included; `--output` or `MISE_TASK_OUTPUT`
 would outrank both.
 
-mise stops the run at the first failure, and the verdict's last line names
-the rerun. mise stops no task still waiting for a lock, so a quick gate that
-takes the heavy lock itself (the shell gate, for its suites) runs after, in a
-run of its own, once the first has passed. The selected tests that read every
-browser gate module (each imports `browser_modules`: the selector guard among
-them) start no browser, and run first as `fast:source`; the tests start only
-once they pass, so a refusal there ends the run in seconds.
+The run goes on past a failure (`--continue-on-error`) until every task it
+holds has ended, so one run names every gate and test that failed, and the
+verdict's last line names the rerun of each. A quick gate that takes the
+heavy lock itself (the shell gate, for its suites) runs in it too, once it
+has the turn. The selected tests that read every browser gate module (each
+imports `browser_modules`: the selector guard among them) start no browser,
+and run first as `fast:source`, ahead of the tests, which run after them
+whether or not they passed.
 
 A test run prints its failures, each with what the test printed, and nothing
 of a passing test or of its own progress: the runner sets Django's `--buffer`

@@ -103,7 +103,7 @@ class DashboardGlanceTests(TestCase):
 
         for machine, name in ((self.machine, "app"), (other, "db")):
             (part,) = select(html, "data-fragment-part", f"machine-{machine.pk}")
-            (head,) = (element for element in with_class(html, "glance-caption") if part in element.ancestors)
+            (head,) = (element for element in with_class(html, "reading-lines") if part in element.ancestors)
             self.assertIn(name, head.text)
 
     def test_compact_summary_preserves_full_readings_in_the_menu_it_opens(self):

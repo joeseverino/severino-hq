@@ -243,11 +243,14 @@ def main() -> int:
     else:
         label = f"deploy host {destination}, read-only"
         print(f"[{summary.name}] {label}", flush=True)
-        status = run(label, HOST).code
-        if status == UNVERIFIED:
-            summary.add("UNKNOWN", Step(f"{label}: the release it runs is unverified"))
+        # The step as it ran, whose last lines say what the host found.
+        step = run(label, HOST)
+        if step.code == UNVERIFIED:
+            # Named by what it found rather than by its task, which only exited as told.
+            step.label, step.tasks = f"{label}: the release it runs is unverified", []
+            summary.add("UNKNOWN", step)
         else:
-            summary.add("passed" if status == 0 else "FAILED", Step(label, command=HOST))
+            summary.add("passed" if step.ok else "FAILED", step)
     return report(summary, gate, passed=": READY", failed=": NOT READY")
 
 

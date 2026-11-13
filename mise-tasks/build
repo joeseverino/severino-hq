@@ -1,5 +1,5 @@
 #!/bin/sh
-#MISE description="To check the production image: build it as CI builds it, then every image:verify:* check; with IMAGE set, check that image without a build"
+#MISE description="To check the production images: build the host's and the automation worker's as CI builds them, then every image:verify:* check; with IMAGE set (and RUNNER_IMAGE, the worker's), check those images without a build"
 #MISE lock=["gate", "heavy"]
 #MISE timeout="1h"
 #MISE depends_post=["image:docker stop"]
@@ -7,11 +7,12 @@
 #USAGE flag "--revision <commit>" help="The commit it is built for, HEAD by default; a pull request builds its head, not the merge it checks out"
 #USAGE flag "--cache <ref>" help="A registry layer cache to read (image:build)"
 #USAGE flag "--cache-write" help="Also write the layer cache (image:build)"
+#USAGE flag "--runner-tag <tag>" default="severino-hq-runner:ci-local" help="The name to build the automation worker's image as"
 #USAGE flag "--no-verify" help="Build only, as CI does before it publishes a pull request's image"
 
-# IMAGE names an image already built, which image:build then leaves alone and
-# the checks read. Each check runs to the end, and the last lines name every
-# one that failed.
+# IMAGE names a host image already built, which image:build then leaves alone
+# and the checks read, and RUNNER_IMAGE the worker's image built beside it.
+# Each check runs to the end, and the last lines name every one that failed.
 set -eu
 # shellcheck source=tools/lib/heavy-turn.sh
 . ./tools/lib/heavy-turn.sh
@@ -21,8 +22,12 @@ mise run image:docker start
 set --
 [ "${usage_cache_write:-}" != true ] || set -- --cache-write
 mise run image:build ${usage_tag:+--tag "${usage_tag}"} ${usage_revision:+--revision "${usage_revision}"} \
-    ${usage_cache:+--cache "${usage_cache}"} "$@"
+    ${usage_cache:+--cache "${usage_cache}"} --runner-tag "${usage_runner_tag:?}" "$@"
 [ "${usage_no_verify:-}" != true ] || exit 0
+if [ -z "${IMAGE:-}" ]; then
+    RUNNER_IMAGE="${usage_runner_tag}"
+    export RUNNER_IMAGE
+fi
 if [ -n "${IMAGE:-${usage_tag:-}}" ]; then
     IMAGE="${IMAGE:-${usage_tag}}"
     export IMAGE

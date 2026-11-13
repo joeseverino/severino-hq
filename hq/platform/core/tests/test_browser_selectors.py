@@ -196,7 +196,7 @@ class SelectorExtractionTests(SimpleTestCase):
 
     def test_a_removed_class_is_reported(self):
         self.assertFalse(rendered("class", "dashboard-board"))
-        self.assertTrue(rendered("class", "dashboard-highlights"))
+        self.assertTrue(rendered("class", "section-flow"))
         self.assertTrue(rendered("attribute", "data-chart"))
 
     def test_a_section_heading_id_the_part_draws_is_rendered(self):

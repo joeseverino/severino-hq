@@ -410,6 +410,5 @@ CHECKS = {
     ),
     "lists of facts": (WRAPPED_BESIDE_A_PAIR, [SELECTORS["fact_list"], SELECTORS["band_fact_cell"]]),
     "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
-    # The dashboard's readings, which no other page draws.
-    "readings": Check((_READINGS_OF, SELECTORS["readings"]), only_on="/", findings=reading_problems),
+    "readings": Check((_READINGS_OF, SELECTORS["readings"]), findings=reading_problems),
 }

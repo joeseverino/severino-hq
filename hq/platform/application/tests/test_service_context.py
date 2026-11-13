@@ -553,5 +553,7 @@ class SpansRowSourceTests(SimpleTestCase):
         from ..service_context import ROW_COLUMNS
 
         css = (STATIC / "css" / "app" / "layout.css").read_text(encoding="utf-8")
-        wide = re.findall(r"\.section-flow > section:has\(table > thead > tr > :nth-child\((\d+)\)\)", css)
+        wide = re.findall(
+            r"\.section-flow > section:has\(table(?::not\([^)]*\))? > thead > tr > :nth-child\((\d+)\)\)", css
+        )
         self.assertEqual(wide, [str(ROW_COLUMNS)])

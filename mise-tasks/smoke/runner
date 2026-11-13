@@ -1,8 +1,27 @@
 #!/bin/sh
-#MISE description="To see the automation worker run a real playbook: one run through its entry point, fetched at its commit from a local git repository and run by ansible-runner and ansible-playbook on this machine alone (connection local), over a fake bridge, with the runner group installed; outside check, since no gate installs that group"
+#MISE description="To see the automation worker run a real playbook: one run through its entry point, fetched at its commit from a local git repository and run by ansible-runner and ansible-playbook on this machine alone (connection local), over a fake bridge, with the runner group installed, or with --image in the worker's image; outside check, since no gate installs that group"
 #MISE hide=true
+#MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
+#MISE depends_post=["image:docker stop"]
+#USAGE flag "--image <image>" help="Run it in this worker image (image:build --runner-tag), confined as hq-host confines the worker's container, instead of in an environment of the runner group here"
 set -eu
-# Its own environment under var/, so the checkout's .venv keeps the default
-# groups CI tests with. uv run puts that environment's bin, where
-# ansible-runner finds ansible-playbook, first on PATH.
-UV_PROJECT_ENVIRONMENT=var/runner/venv uv run --group runner python -m hq_runner.tests.smoke
+if [ -z "${usage_image:-}" ]; then
+    # Its own environment under var/, so the checkout's .venv keeps the default
+    # groups CI tests with. uv run puts that environment's bin, where
+    # ansible-runner finds ansible-playbook, first on PATH.
+    UV_PROJECT_ENVIRONMENT=var/runner/venv uv run --group runner python -m hq_runner.tests.smoke
+    exit
+fi
+
+turn_bound=30m
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+mise run image:docker start
+# The confinement AutomationArgs (controller/host/automation.go) gives the
+# worker, less what reaches the host: a read-only root as the web account, no
+# capability, and a noexec tmpfs for its scratch, where the smoke's repository
+# and run directory live. It needs no network, so it has none.
+exec docker run --rm --pull never --network none \
+    --cap-drop ALL --security-opt no-new-privileges:true --read-only \
+    --tmpfs /tmp:size=256m,noexec,nosuid,nodev \
+    --entrypoint python "${usage_image}" -m hq_runner.tests.smoke

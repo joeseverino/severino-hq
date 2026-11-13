@@ -19,7 +19,10 @@ import (
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 )
 
-const automationImageRef = "ghcr.io/example/automation@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+// automationSource is the repository whose runner image the fixture pins.
+const automationSource Source = "example/hq"
+
+const automationImageRef = "ghcr.io/example/hq/runner@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 const automationNetworkJSON = `{"Name":"severino-hq-automation","Id":"4567cdef","Scope":"local","Driver":"bridge","EnableIPv4":true,"EnableIPv6":false,` +
 	`"IPAM":{"Driver":"default","Options":null,"Config":[{"Subnet":"10.231.1.0/24","Gateway":"10.231.1.1"}]},"Internal":false,"Attachable":false,` +
@@ -39,12 +42,14 @@ type worker struct {
 	owned   []string
 	stderr  bytes.Buffer
 	running func(args []string)
+	// pulled is whether the host holds the pinned image, as a deploy leaves it.
+	pulled bool
 }
 
 func newWorker(t *testing.T) *worker {
 	t.Helper()
 	root := t.TempDir()
-	w := &worker{root: root, docker: "exit 0", lent: map[string][]byte{}}
+	w := &worker{root: root, docker: "exit 0", lent: map[string][]byte{}, pulled: true}
 	secrets := filepath.Join(root, "secrets")
 	for _, dir := range []string{filepath.Join(secrets, "ssh"), filepath.Join(root, "journal"), filepath.Join(root, "lib", "deploy", "automation"), filepath.Join(root, "grant")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -90,6 +95,7 @@ func newWorker(t *testing.T) *worker {
 	machine.Command = w.command
 	w.a = &Automation{
 		Machine:     machine,
+		Source:      automationSource,
 		SecretDir:   secrets,
 		Journal:     filepath.Join(root, "journal"),
 		Project:     &AutomationConfig{Repository: "example/playbooks", Directory: "ansible", Grant: w.grant.Name},
@@ -118,6 +124,11 @@ func (w *worker) command(ctx context.Context, name string, args ...string) *exec
 			w.running(args)
 		}
 		return exec.CommandContext(ctx, "/bin/sh", "-c", w.docker)
+	case name == "docker" && slices.Equal(args[:2], []string{"image", "inspect"}):
+		if !w.pulled {
+			return answer("", 1)
+		}
+		return answer("sha256:4567cdef\n", 0)
 	case name == "docker" && slices.Equal(args[:2], []string{"network", "inspect"}):
 		return answer(automationNetworkJSON, 0)
 	case name == "nft":
@@ -217,7 +228,7 @@ func TestTheWorkerReachesOnlyItsConnectionsBeyondPublicAddresses(t *testing.T) {
 	for _, call := range w.calls {
 		order = append(order, call[0]+" "+call[1])
 	}
-	if !slices.Equal(order, []string{"docker network", "nft -f", "docker run"}) {
+	if !slices.Equal(order, []string{"docker image", "docker network", "nft -f", "docker run"}) {
 		t.Fatalf("ran %q", w.calls)
 	}
 	loaded, err := os.ReadFile(filepath.Join(w.root, "loaded.nft"))
@@ -275,7 +286,8 @@ func TestTheWorkersTableIsTheRenderedOne(t *testing.T) {
 
 // The container: the web account the bridge admits, no capability, a
 // read-only root, the lent files read-only, the journal the one host path
-// it writes, and the worker's own program.
+// it writes, and the worker's own program, as the image the deploy verified:
+// never one a registry answers at launch.
 func TestTheWorkersContainerIsConfined(t *testing.T) {
 	w := newWorker(t)
 
@@ -286,6 +298,7 @@ func TestTheWorkersContainerIsConfined(t *testing.T) {
 		{"--cap-drop", "ALL"},
 		{"--security-opt", "no-new-privileges:true"},
 		{"--entrypoint", "python"},
+		{"--pull", "never"},
 	} {
 		if i := slices.Index(args, want[0]); i < 0 || args[i+1] != want[1] {
 			t.Errorf("the container is not run with %v: %v", want, args)
@@ -412,9 +425,15 @@ func TestNoWorkerStartsWithoutWhatItNeeds(t *testing.T) {
 		"no journal":          func(w *worker) bool { _ = os.Remove(w.a.Journal); return true },
 		"an unpinned image": func(w *worker) bool {
 			_ = os.Remove(filepath.Join(w.a.Lib, AutomationImage))
-			_ = os.WriteFile(filepath.Join(w.a.Lib, AutomationImage), []byte("ghcr.io/example/automation:latest\n"), 0o400)
+			_ = os.WriteFile(filepath.Join(w.a.Lib, AutomationImage), []byte("ghcr.io/example/hq/runner:latest\n"), 0o400)
 			return true
 		},
+		"another repository's image": func(w *worker) bool {
+			_ = os.Remove(filepath.Join(w.a.Lib, AutomationImage))
+			_ = os.WriteFile(filepath.Join(w.a.Lib, AutomationImage), []byte(strings.Replace(automationImageRef, "example/hq", "example/other", 1)+"\n"), 0o400)
+			return true
+		},
+		"an image no deploy pulled": func(w *worker) bool { w.pulled = false; return true },
 	} {
 		t.Run(name, func(t *testing.T) {
 			w := newWorker(t)

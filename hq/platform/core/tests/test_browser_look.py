@@ -568,6 +568,20 @@ class ReportTests(SimpleTestCase):
         self.assertNotIn("example/two", verdict)
         self.assertIn("holds", look_report.verdict_line("survey", {("example/two", 402): []}))
 
+    def test_the_verdict_counts_the_pages_and_widths_judged(self):
+        held = {key: [] for key in self.FOUND}
+        for found in (held, self.FOUND):
+            with self.subTest(failed=found is self.FOUND):
+                verdict = look_report.verdict_line("survey", found)
+                self.assertIn(" 3 pages at 2 widths (402, 1360)", verdict)
+
+    def test_a_line_names_each_page_and_width_with_a_finding_and_where_they_are_kept(self):
+        lines = look_report.found_lines(self.FOUND, lambda name, width: f"var/look/{name}-{width}.txt")
+        self.assertEqual(len(lines), 2)
+        self.assertTrue(lines[0].startswith("example/one at 402: 1 found"), lines)
+        self.assertTrue(lines[0].endswith("var/look/example/one-402.txt"), lines)
+        self.assertTrue(lines[1].startswith("example/three at 402: 2 found"), lines)
+
     def test_against_a_base_only_new_findings_fail_and_fixed_ones_are_named(self):
         base = {
             ("example/one", 402): ["overflow: a box past the edge", "overlap: gone now"],

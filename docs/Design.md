@@ -441,11 +441,19 @@ in the muted voice. Capitals are for a kicker over a group (`.eyebrow`), never
 a value's name, a state or a tag; `lint:css` refuses a change of case
 anywhere but a kicker, whose rule says what it heads in its disable comment.
 
-A list of short steps (`.step-list`) is read down its columns, so its columns
+A list of short steps (`{% steps %}`) is read down its columns, so its columns
 end within a step of each other. Each step is `{% step icon=... %}`: its icon,
 then what it says; `tone` colors the icon by how a check stands, `done`
-draws a finished step quiet, and `title` is its tooltip. The
-dashboard's readings are one row when each has room and a list when not.
+draws a finished step quiet, and `title` is its tooltip.
+
+A row of readings beside a page's title is `{% readings %}`, each
+`{% reading icon=... %}`: its mark, its figure, its quiet lines
+(`{% lines %}`, a `<strong>` part in the attention tone) and a note on how it
+stands (`{% note %}`, `note_tone` "attention" or "stale"). A reading leads to
+its `url`, or opens a `{% panel %}` in place under its `id`; `tone` takes the
+status vocabulary, and each `data_*` option is its attribute, so a fragment
+region in the row holds readings refreshed in place as the row's own. The row
+is one line when each has room and a list when not.
 
 **A route reads in one direction.** A path from one thing to another
 (`control_plane/_path_hops.html`) is one surface, each hop a stop on one

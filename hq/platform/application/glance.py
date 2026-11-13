@@ -26,6 +26,7 @@ from .cadence import ring_glance_doorbell
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
 from .freshness import DASHBOARD_GLANCE, freshness
+from .labels import dotted
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
 from .timestamps import moment
@@ -489,6 +490,10 @@ def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[st
         **metric,
         "label": label,
         "short_label": short_label,
+        # What pointing at the reading says: its name, and its detail when it has one.
+        "tip": dotted(label, metric.get("detail")),
+        # The words drawn after its value, for a panel that names its readings.
+        "unit": short_label if spec.head_labels else "",
         "alert": bool(spec.alert_metric) and reported == spec.alert_metric,
     }
 

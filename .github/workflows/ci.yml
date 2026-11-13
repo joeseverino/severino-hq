@@ -187,6 +187,11 @@ jobs:
           go: true
           # `mise run test` installs the lint tools a test label can reach.
           npm: true
+      - name: Install nft
+        # test:controller loads every egress table in `nft -c`, through the
+        # runner's passwordless sudo, and the runner image ships no nft.
+        if: needs.legs.outputs.controller != 'false'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends nftables
       - name: Test
         # Every gate named test:* (mise-tasks/test.toml, mise-tasks/test/).
         run: mise run test

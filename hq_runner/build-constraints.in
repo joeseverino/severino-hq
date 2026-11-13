@@ -1,0 +1,7 @@
+# PyYAML 6.0.3, which ansible-core needs, publishes no wheel for Python 3.15,
+# so the runner image builds it from the sdist uv.lock hashes. This pins and
+# hashes what that build runs, its build-system requires, so nothing the build
+# fetches is unverified. It goes once PyYAML ships a cp315 wheel, which a
+# source test names (test_group_imports.py). Renovate compiles it again.
+setuptools
+Cython>=3.0

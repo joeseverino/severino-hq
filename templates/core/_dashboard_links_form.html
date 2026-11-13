@@ -1,2 +1,2 @@
 {% url 'dashboard_links' as action %}{% url 'dashboard' as dashboard %}
-{% include "partials/_form.html" with form=None action=action next=dashboard fields="core/_dashboard_links_fields.html" verb="Save" cancel_url=dashboard in_place="dashboard-links" %}
+{% include "partials/_form.html" with form=links_form action=action next=dashboard verb="Save" cancel_url=dashboard in_place="dashboard-links" %}
