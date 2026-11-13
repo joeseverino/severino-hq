@@ -675,72 +675,45 @@ const extent = (found) => found.length && {
 """
 
 
-# The facts of a band sit together at its start however wide the band is, as
-# a stat group does in Primer's Stack or Atlassian's Inline: no two facts of a
-# row move apart as the band widens. A track's floor (`--fact-min`) sets a
-# short fact's neighbor a fixed distance off, which a wider band keeps; a
-# track that takes a share of the band (`1fr`, a spread `justify-content`)
-# gives away its width. A fact narrower than its own natural width (what it
-# says, up to `--fact-max`) is skipped: the band lets a track narrow toward
-# `--fact-min` when a row's facts want more than it holds, and such a fact
-# rightly takes back its width as the band widens. Read from what each fact
-# draws, with the band set wider for the length of one layout and put back
-# before it paints.
-FACTS_SPREAD_APART = (
-    "([band, fact, unseen]) => {"
+# The facts of a band share its width: its tracks take the whole band, so a
+# few facts spread across a wide card rather than collecting at its start
+# beside an empty end. Read from each fact's cell, which is its track, at the
+# band's width and with the band set wider for the length of one layout and
+# put back before it paints: a track sized to what its fact says (a
+# `max-content` bound, a cap on the fact) stops short of the band's end once
+# the band is wider than its facts, whatever width the survey reads it at.
+FACTS_SHORT_OF_THEIR_BAND = (
+    "([band, fact]) => {"
     + DESCRIBE
-    + BASELINES
-    + _FACT_DRAWN
     + r"""
   const WIDER = 240;
-  const gaps = (each) => {
-    const rows = new Map();
-    for (const cell of each.querySelectorAll(`:scope > ${fact}`)) {
-      const at = extent(factRects(cell));
-      if (!at) continue;
-      const top = Math.round(cell.getBoundingClientRect().top);
-      if (!rows.has(top)) rows.set(top, []);
-      rows.get(top).push([cell, at]);
-    }
-    const apart = new Map();
-    for (const row of rows.values()) {
-      row.sort(([, a], [, b]) => a.left - b.left);
-      for (let i = 1; i < row.length; i++) {
-        if (!apart.has(row[i - 1][0])) apart.set(row[i - 1][0], new Map());
-        apart.get(row[i - 1][0]).set(row[i][0], row[i][1].left - row[i - 1][1].right);
-      }
-    }
-    return apart;
-  };
-  const squeezed = (cell) => {
-    const width = cell.getBoundingClientRect().width;
-    const style = cell.getAttribute('style');
-    cell.style.setProperty('inline-size', 'max-content', 'important');
-    const natural = cell.getBoundingClientRect().width;
-    if (style === null) cell.removeAttribute('style');
-    else cell.setAttribute('style', style);
-    return width < natural - 0.5;
+  const short = (each) => {
+    const style = getComputedStyle(each);
+    const rtl = style.direction === 'rtl';
+    const r = each.getBoundingClientRect();
+    const end = rtl
+      ? r.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft)
+      : r.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    const cells = [...each.querySelectorAll(`:scope > ${fact}`)].filter((cell) => cell.checkVisibility());
+    if (!cells.length) return null;
+    const reach = rtl
+      ? Math.min(...cells.map((cell) => cell.getBoundingClientRect().left))
+      : Math.max(...cells.map((cell) => cell.getBoundingClientRect().right));
+    const left = rtl ? reach - end : end - reach;
+    return left > 1 ? left : null;
   };
   const found = [];
   for (const each of document.querySelectorAll(band)) {
     if (!each.checkVisibility()) continue;
-    const before = gaps(each);
-    if (!before.size) continue;
-    const narrowed = new Set([...each.querySelectorAll(`:scope > ${fact}`)].filter(squeezed));
+    const now = short(each);
     const style = each.getAttribute('style');
     each.style.setProperty('inline-size', `${each.getBoundingClientRect().width + WIDER}px`, 'important');
     each.style.setProperty('max-inline-size', 'none', 'important');
-    const after = gaps(each);
+    const wider = short(each);
     if (style === null) each.removeAttribute('style');
     else each.setAttribute('style', style);
-    for (const [left, next] of before) {
-      if (narrowed.has(left)) continue;
-      for (const [right, gap] of next) {
-        if (narrowed.has(right)) continue;
-        const wider = after.get(left)?.get(right);
-        if (wider !== undefined && wider > gap + 0.5) found.push(`${describe(each)} sets two facts ${Math.round(gap)}px apart, ${Math.round(wider - gap)}px further as it widens by ${WIDER}px`);
-      }
-    }
+    if (now !== null) found.push(`${describe(each)} ends its facts ${Math.round(now)}px short of its end`);
+    else if (wider !== null) found.push(`${describe(each)} ends its facts ${Math.round(wider)}px short of its end once ${WIDER}px wider`);
   }
   return [...new Set(found)];
 }"""
@@ -921,7 +894,7 @@ CHECKS = {
     "changes": CHANGES_READ,
     "chips": CHIPS_READ,
     "fact rows": FACT_ROWS_READ,
-    "facts together": (FACTS_SPREAD_APART, [SELECTORS["fact_band"], SELECTORS["band_fact_cell"], SELECTORS["unseen"]]),
+    "facts across their band": (FACTS_SHORT_OF_THEIR_BAND, [SELECTORS["fact_band"], SELECTORS["band_fact_cell"]]),
     "fact details in words": (DETAIL_WORDS_IN_ROWS, [_FACT_DETAIL, SELECTORS["unseen"]]),
     # A link in a fact's detail, or a word there that opens its tip, sits on
     # the line of the words beside it, as a chip does.

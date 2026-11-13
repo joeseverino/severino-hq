@@ -5,12 +5,19 @@ import subprocess
 from pathlib import Path
 
 from django.test import SimpleTestCase, tag
+from django.test.signals import template_rendered
 
 from hq.platform.core.interface_text import TEMPLATE_COMMENT
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
 from hq.platform.core.table_cells import ROLE_CLASSES
+from hq_sdk.template_contract import CLASSES
+lazy from hq.platform.core.tests.browser.catalog import CATALOG
 
 from .source import template_files
+from .test_style_usage import TEMPLATE_PREFIX
+
+# The host's own templates, which no extension's check reads.
+TEMPLATES = STATIC.parent / "templates"
 
 
 def _is_address(text: str, found: re.Match[str]) -> bool:
@@ -544,12 +551,6 @@ class StyleContractTests(SimpleTestCase):
             )
 
 
-# A class a script or a test finds an element by, which no rule styles. Each
-# says who reads it; a class that styles nothing and nothing reads is deleted.
-HOOK_CLASSES: dict[str, str] = {
-    "form-card": "the frame's card (form_page.html), by which test_form_page tells a card drawn by hand from it",
-}
-
 # Decided at render time, so a word joined to one is not a literal class.
 _INTERPOLATED = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
 
@@ -562,6 +563,69 @@ def literal_classes(text: str) -> set[str]:
     options = [css for tag in _INTERPOLATED.findall(text) for css in re.findall(r'\bcss="([^"]*)"', tag)]
     attributes = re.findall(r'\bclass="([^"]*)"', _INTERPOLATED.sub("\0", text))
     return {word for value in (*options, *attributes) for word in value.split() if "\0" not in word}
+
+
+def built_prefixes(text: str) -> set[str]:
+    """Each class a template builds at render time, as its prefix and ``*``:
+    ``is-{{ state }}`` is ``is-*``."""
+
+    text = re.sub(r"\{%.*?%\}", " ", re.sub(r"\{\{.*?\}\}", "{{}}", TEMPLATE_COMMENT.sub("", text), flags=re.DOTALL))
+    attributes = re.findall(r'\bclass="([^"]*)"', text, flags=re.DOTALL)
+    return {f"{prefix}*" for value in attributes for prefix in TEMPLATE_PREFIX.findall(value)}
+
+
+def _drawn_by_the_catalog() -> dict[str, set[str]]:
+    """The templates the component catalog draws, each with what of it is
+    drawn: its own name for the whole file, else the ``{% partialdef %}``
+    names drawn on their own."""
+
+    drawn: dict[str, set[str]] = {}
+
+    def record(sender, template, **kwargs):
+        if template.origin and template.origin.template_name:
+            drawn.setdefault(template.origin.template_name, set()).add(template.name)
+
+    template_rendered.connect(record)
+    try:
+        for name, entry in CATALOG.items():
+            entry.drawn(name)
+    finally:
+        template_rendered.disconnect(record)
+    return drawn
+
+
+def _fragment(text: str, name: str) -> re.Match[str] | None:
+    return re.search(rf"\{{%\s*partialdef\s+{re.escape(name)}\b.*?\{{%\s*endpartialdef\b.*?%\}}", text, re.DOTALL)
+
+
+def hand_rolled_classes() -> set[tuple[str, str]]:
+    """Each class a host template draws that no shared part declares, with
+    the template's name.
+
+    A shared class is one ``hq_sdk``'s CLASSES publishes, a table role the
+    region reads, or one a part the component catalog draws writes or builds.
+    A part is declared by its catalog entry, so a page's markup moved into a
+    partial with none is still the page's own: its classes count here."""
+
+    drawn = _drawn_by_the_catalog()
+    shared = set(CLASSES) | set(ROLE_CLASSES)
+    pages = []
+    for path in sorted(TEMPLATES.rglob("*.html")):
+        name, text = path.relative_to(TEMPLATES).as_posix(), path.read_text(encoding="utf-8")
+        whole = name in drawn.get(name, ())
+        fragments = [found.group() for part in drawn.get(name, ()) if (found := _fragment(text, part))]
+        for markup in [text] if whole else fragments:
+            shared |= literal_classes(markup) | built_prefixes(markup)
+        if not whole:
+            for fragment in fragments:
+                text = text.replace(fragment, "")
+            pages.append((name, text))
+    return {
+        (name, word)
+        for name, text in pages
+        for word in literal_classes(text) | built_prefixes(text)
+        if word not in shared
+    }
 
 
 def defined_classes() -> set[str]:
@@ -594,14 +658,30 @@ class TemplateClassStyleTests(SimpleTestCase):
             f"{name}: .{word}"
             for name, path in template_files()
             for word in literal_classes(path.read_text(encoding="utf-8"))
-            if word not in defined and word not in HOOK_CLASSES
+            if word not in defined
         )
         self.assertEqual(offenders, [], "define the class where its part is styled, or delete it")
 
-    def test_a_hook_class_is_one_no_rule_styles(self):
-        """An allowance for a class the stylesheet defines has no job left."""
+    def test_host_templates_draw_only_the_shared_parts_classes(self):
+        """A host page is drawn from the shared parts, so a class of its own is
+        a hand-rolled part the survey never sees and an extension cannot draw.
+        The classes held below are the pages not yet moved onto parts; the
+        list only shrinks."""
 
-        self.assertEqual(sorted(set(HOOK_CLASSES) & defined_classes()), [])
+        found = hand_rolled_classes()
+        held = {(name, word) for name, words in HAND_ROLLED.items() for word in words.split()}
+        self.assertEqual(
+            sorted(f"templates/{name}: .{word}" for name, word in found - held),
+            [],
+            "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a template "
+            "the component catalog draws); a widget with no part becomes one, with its own entry in "
+            "hq/platform/core/tests/browser/catalog.py",
+        )
+        self.assertEqual(
+            sorted(f"templates/{name}: .{word}" for name, word in held - found),
+            [],
+            "no longer hand-rolled: delete it from HAND_ROLLED",
+        )
 
     def test_literal_classes_reads_attributes_and_tag_options(self):
 
@@ -612,3 +692,155 @@ class TemplateClassStyleTests(SimpleTestCase):
             ),
             {"note", "on", "frame", "wide"},
         )
+
+
+# Each host template's classes that no shared part declares yet, by template.
+# An entry leaves as its page moves onto a part, and none is ever added.
+HAND_ROLLED: dict[str, str] = {
+    "403.html": "notice-body notice-code notice-page",
+    "404.html": "notice-body notice-code notice-page notice-search",
+    "500.html": "notice-body notice-code notice-page",
+    "analytics/overview.html": "bar-label bar-list bar-row bar-track bar-value chip reading-note window-switch",
+    "assets/asset_detail.html": "prose",
+    "auth/login.html": "auth-card auth-logo auth-note auth-sso",
+    "base.html": (
+        "action-badge brand conn-badge-* conn-dot content demo-about demo-about-dot demo-flag demo-foot global-search "
+        "menu-identity menu-identity-picture menu-identity-when menu-identity-who menu-item menu-item-note "
+        "menu-item-split menu-item-status menu-places menu-setting menu-settings menu-theme menu-theme-label "
+        "menu-theme-option menu-theme-options messages nav-group nav-group-label nav-group-panel nav-toggle "
+        "primary-nav role-mark search-key search-label site-header skip-link switch-knob switch-track user-avatar "
+        "user-menu user-menu-panel user-name"
+    ),
+    "calendars/_entry_fields.html": "field-range",
+    "calendars/calendar.html": (
+        "calendar-aside calendar-layout calendar-month calendar-source calendar-source-failure calendar-source-note "
+        "calendar-sources calendar-swatch"
+    ),
+    "command.html": "command-result command-result-note command-result-table",
+    "contacts/contact_detail.html": "quick-actions",
+    "contacts/contact_list.html": "msg-preview row-unread status-tab",
+    "control_plane/_connection_ability.html": "connection-evidence-*",
+    "control_plane/_connection_read.html": "connection-evidence-* connection-sight-* connection-sight-state",
+    "control_plane/_container_band.html": "github-gap",
+    "control_plane/_container_detail.html": (
+        "band-note hardening-head hardening-notes hardening-patch prose upgrade-blockers upgrade-reasons upgrade-steps"
+    ),
+    "control_plane/_credential_fix.html": (
+        "connection-credential-fix connection-credential-fix-headline connection-credential-steps"
+    ),
+    "control_plane/_machine_band.html": "band-note",
+    "control_plane/_machine_status.html": "page-title-meta",
+    "control_plane/_path_hops.html": "hop-body hop-icon hop-label hop-proof-key path-proof-note request-path route",
+    "control_plane/_record_status.html": "page-title-meta",
+    "control_plane/_service_parts.html": "prose",
+    "control_plane/_service_rows.html": "exposure exposure-* pin-move pin-toggle pinned service-name",
+    "control_plane/_tool_dns.html": "lookup-grid",
+    "control_plane/_topology_node_body.html": (
+        "topology-hop topology-node-actions topology-relation topology-relation-* topology-relation-arrow "
+        "topology-relation-heading topology-relation-kind topology-relation-link topology-relation-list "
+        "topology-relation-other topology-relation-set topology-relation-source topology-relation-value "
+        "topology-relation-values topology-relation-verb"
+    ),
+    "control_plane/_whatif_form.html": "control-label",
+    "control_plane/_whatif_result.html": "verdict",
+    "control_plane/_zone_records.html": "zone-value",
+    "control_plane/connection_list.html": (
+        "connection-ability-all connection-ability-list connection-ability-more connection-authority "
+        "connection-authority-* connection-depends connection-more-scope connection-next connection-problems "
+        "connection-reach connection-read-list connection-row-meta connection-sight-list connection-sight-refusal "
+        "connection-standing connection-state connection-state-* connection-summary connection-table is-attention "
+        "prose"
+    ),
+    "control_plane/container_list.html": "container-advisories container-reach github-gap prose",
+    "control_plane/machine_detail.html": "node-key prose",
+    "control_plane/resource_detail.html": "operation-evidence operation-result",
+    "control_plane/service_detail.html": "control-origin exposure exposure-* prose",
+    "control_plane/tools.html": "tool-summary tool-tabs",
+    "control_plane/topology.html": (
+        "scope-chip topology-detail topology-hint topology-kind-* topology-kind-filters topology-kind-mark "
+        "topology-lane topology-lens-note topology-map topology-node topology-node-* topology-node-degree "
+        "topology-node-link topology-node-list topology-node-select topology-node-title topology-relations "
+        "topology-search topology-stage topology-toolbar topology-trace-bar topology-trace-controls topology-view "
+        "topology-workspace"
+    ),
+    "control_plane/zone_detail.html": "relation-source zone-switch zone-switch-note",
+    "control_plane/zone_mail.html": (
+        "control-label mail-record-value mail-records mail-stage-head mail-stage-question mail-stage-warning "
+        "mail-stages"
+    ),
+    "core/_command_center_group.html": (
+        "command-center-arrow command-center-copy command-center-destination command-center-evidence "
+        "command-center-group command-center-option command-center-title scope-chip"
+    ),
+    "core/_command_center_modal.html": (
+        "command-center-enter-hint command-center-footer command-center-loading command-center-palette "
+        "command-center-query command-center-results"
+    ),
+    "core/_command_center_results.html": (
+        "command-center-arrow command-center-copy command-center-destination command-center-empty "
+        "command-center-evidence command-center-group command-center-more command-center-option command-center-options "
+        "command-center-results command-center-title"
+    ),
+    "core/_command_fields.html": "command-state command-target field-label",
+    "core/_connection_loading.html": "conn-pending",
+    "core/_connection_panel.html": (
+        "conn conn-* conn-agree conn-agree-no conn-agree-yes conn-aside conn-carriage conn-carriage-* conn-check "
+        "conn-dot conn-headline conn-hop-detail conn-hop-more conn-hop-page conn-kind conn-kind-* conn-kind-hop-* "
+        "conn-kind-read conn-layer conn-layer-* conn-layer-body conn-layer-boundary conn-layer-evidence "
+        "conn-layer-label conn-layers conn-link conn-link-* conn-link-line conn-more conn-note conn-note-after "
+        "conn-path conn-peer conn-peer-name conn-peer-role conn-peering conn-row conn-row-* conn-row-note "
+        "conn-row-used conn-rows conn-rules conn-sub conn-tick conn-verdict-* prose"
+    ),
+    "core/_dashboard_connection.html": (
+        "conn-badge-* conn-dot conn-verdict-* dash-reading glance-caption glance-lead glance-panel-head glance-symbol"
+    ),
+    "core/_dashboard_controller.html": (
+        "conn-dot dash-reading glance-caption glance-lead glance-panel-head glance-symbol"
+    ),
+    "core/_dashboard_glance.html": (
+        "dashboard-glance glance-alert glance-caption glance-expanded glance-expanded-foot glance-expanded-head "
+        "glance-freshness glance-hours glance-lead glance-lead-empty glance-note glance-panel glance-panel-head "
+        "glance-panels glance-refresh glance-symbol is-wet status-*"
+    ),
+    "core/_dashboard_highlights.html": "dashboard-highlights highlight-card",
+    "core/_dashboard_links_fields.html": "ext-choice-label ext-choice-sub ext-choices",
+    "core/_dashboard_readings.html": "dash-readings",
+    "core/_hq_status.html": "page-title-meta",
+    "core/_policy_setting.html": "policy-select policy-unavailable rule-*",
+    "core/_policy_table.html": "effect-* policy-default policy-effect policy-table",
+    "core/_public_address.html": "conn-kind conn-kind-read conn-row conn-row-note conn-rows",
+    "core/agent_policy.html": "agent-events mcp-endpoint prose step-list",
+    "core/auditlog_detail.html": "compare-table",
+    "core/hq.html": "cell-notes prose",
+    "dashboard.html": (
+        "calendar-month dash-needs dash-start dashboard-patterns ext-arrow ext-links is-compact step-list"
+    ),
+    "expenses/expense_detail.html": "prose",
+    "hq_api/reference.html": "api-reference api-reference-failed api-reference-loading api-reference-status",
+    "list_page.html": "select-column",
+    "page.html": "page-foot",
+    "partials/_change.html": "change change-arrow change-to",
+    "partials/_demo_about.html": "demo-about-foot ext-arrow ext-links",
+    "partials/_discovery_catalog.html": "discovery-link discovery-list discovery-main discovery-meta scope-chip",
+    "partials/_linked_text.html": "linked-text",
+    "partials/_operator_step.html": "operator-step",
+    "partials/_page_navigation.html": "page-nav page-nav-list",
+    "partials/_posture.html": "posture-checks prose step-list",
+    "partials/_queue_groups.html": "queue-table",
+    "partials/_relationships.html": "relation-source",
+    "partials/_timeline.html": "timeline-* timeline-copy timeline-item timeline-list",
+    "partials/approval_card.html": "approval-actions approval-card approval-reason",
+    "projects/_github_panel.html": "github-gap github-list github-mark prose workflow-chip workflow-chips",
+    "projects/_project_meta.html": "project-meta prose",
+    "projects/_updates.html": "github-list github-mark",
+    "projects/posture.html": (
+        "is-unmet posture-access posture-meter posture-meter-break posture-repo-name posture-repos posture-score"
+    ),
+    "projects/project_detail.html": "project-tags",
+    "projects/watching.html": "gh-avatar gh-identity gh-name gh-profile gh-verified prose",
+    "receipts/receipt_detail.html": "document-picture prose",
+    "search.html": (
+        "command-hint scope-chip search-badge search-group search-hit search-hit-main search-hit-title search-hits "
+        "search-scopes search-snippet search-summary"
+    ),
+}

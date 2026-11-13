@@ -11,9 +11,18 @@
 
 /* The reference is the page: it runs edge to edge under the header and
    brings its own gutters. It is also its own stacking context, so nothing the
-   viewer pins or floats can be drawn over HQ's header. */
-.content:has(> .api-reference) { max-width: none; padding: 0; overflow-x: visible; isolation: isolate; }
-.content > .api-reference { margin: 0; }
+   viewer pins or floats can be drawn over HQ's header.
+
+   The server's HTML holds the reference's place before the viewer draws: the
+   loading line, the mount and the line said without script share one cell,
+   which takes the window under the header from the first paint. The viewer
+   draws into that cell as the line goes, so nothing of the page moves. */
+.content:has(> .api-reference) {
+  display: grid;
+  grid-template: minmax(calc(100dvh - var(--site-header-height)), auto) / minmax(0, 1fr);
+  max-width: none; padding: 0; overflow-x: visible; isolation: isolate;
+}
+.content > :is(.api-reference-status, .api-reference, noscript) { grid-area: 1 / 1; margin: 0; }
 
 /* The viewer pins its sidebar and section bars this far down, under HQ's
    header, which is one row of one height at every width. */
@@ -35,7 +44,7 @@
 /* Said until the viewer has mounted; one that has not mounted after a while
    is said to have failed, with the document itself. Both lines share one
    cell, and the change is a delayed step of the stylesheet, not a timer. */
-.api-reference-status { display: grid; padding: var(--content-pad); color: var(--muted); }
+.api-reference-status { display: grid; align-content: start; padding: var(--content-pad); color: var(--muted); }
 .api-reference-status > p { grid-area: 1 / 1; margin: 0; }
 .api-reference-status:has(~ .api-reference:not(:empty)) { display: none; }
 .api-reference-loading { animation: api-reference-gone 0s 10s forwards; }

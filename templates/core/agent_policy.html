@@ -14,11 +14,11 @@ the heading, then what the rules below allow and what they held or refused.
   {% endfacts %}
 {% aside %}
   {% url 'agent_access' as agent_access_url %}
-  {% if agents_paused %}{% status "Agents blocked" tone="attention" pill=False %}{% else %}{% status "Agents allowed" tone="good" pill=False %}{% endif %}
+  {% if agents_paused %}{% status "Paused" tone="attention" dot=True %}{% else %}{% status "Allowed" tone="good" dot=True %}{% endif %}
   {% if agents_paused %}
-    {% words "agent.access.set" "off" as allow %}{% post_button allow agent_access_url name="paused" value="0" css="btn primary" %}
+    {% words "agent.access.set" "off" as resume %}{% post_button resume agent_access_url name="paused" value="0" css="btn primary" %}
   {% else %}
-    {% words "agent.access.set" "on" as block %}{% post_button block agent_access_url name="paused" value="1" %}
+    {% words "agent.access.set" "on" as pause %}{% post_button pause agent_access_url name="paused" value="1" %}
   {% endif %}
 {% endsection %}
 

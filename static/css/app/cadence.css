@@ -178,6 +178,10 @@
 .toned-attention { color: var(--warn); }
 .toned-serious { color: var(--danger); }
 .toned-neutral { color: var(--ink-2); }
+/* A standing state (`dot=True`): a dot in the words' own color leads them.
+   It never moves, since a moving dot says a thing is live. */
+.toned-dot { display: inline-flex; align-items: center; gap: var(--space-3); }
+.toned-dot::before { content: "" / ""; inline-size: 8px; block-size: 8px; flex: none; border-radius: 50%; background: currentcolor; }
 
 /* A finding stated once, with its arithmetic underneath. The claim is what
    gets read; the numbers are what make it checkable. */

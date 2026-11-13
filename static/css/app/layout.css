@@ -43,7 +43,10 @@
    across the row, never in a track beside an empty one. The basis is read
    against the box the flow sits in, so the same sections pair in a dialog
    and on a page with no breakpoint. Each on a row is as tall as the tallest,
-   so a short one leaves no hole beside a long one. A run of narrower cards
+   so a short one leaves no hole beside a long one. Every member grows and
+   none caps its width, so each row ends at the flow's end whatever its
+   members hold: a card of a few facts keeps them at its start inside a
+   frame that fills its share. A run of narrower cards
    sets a narrower basis on its flow; `.domain-charts` is the flow at the
    width a chart keeps its scale. */
 .section-flow, .domain-charts { --flow-basis: 22rem; display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
@@ -57,19 +60,6 @@
    drawn: nothing here reorders a member. */
 .section-flow > :not(section, article, figure.section),
 .section-flow > section:has(table > thead > tr > :nth-child(4)) { flex-basis: 100%; }
-/* A card or section of facts grows no wider than what it holds, so standing
-   alone in its flow, or alone on a row the others wrapped off, it keeps its
-   pairs together at the row's start rather than stretching its labels and
-   values across the left of an empty card, as a band's facts sit together at
-   its start (figures.css). Sharing a row, it leaves what it does not need to the others, which grow into it. It is
-   never narrower than a flow member, and takes the whole width once the
-   flow holds one to a row (the Fab Four step: the clamp's middle term is
-   huge below two members' width and negative above it), so on a phone it
-   spans the column as every member does. */
-.section-flow > :is(:has(> .facts-list), :has(> .section-body > .facts-list)) {
-  min-inline-size: clamp(min(100%, var(--flow-basis)), (2 * var(--flow-basis) + var(--layout-gap) - 100%) * 999, 100%);
-  max-inline-size: max-content;
-}
 /* Sections stacked in one column of a pair, at the pair's own gap. */
 .stack { display: grid; gap: var(--layout-gap); align-content: start; min-width: 0; }
 /* Flex rather than a grid of fixed tracks, so a row's last card takes what

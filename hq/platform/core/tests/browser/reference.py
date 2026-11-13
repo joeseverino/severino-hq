@@ -395,6 +395,17 @@ def open_tag(page, opened, step=None):
     return page.evaluate(_UNDRAWN, [SELECTORS["reference"], list(opened.tags), list(opened.parts)])
 
 
+# Where the page and the viewer's mount stand, and the window's foot.
+_LOADING_PLACE = """([root, content]) => {
+  const page = document.querySelector(content).getBoundingClientRect();
+  return {page: page.top, foot: page.bottom, mount: document.querySelector(root).getBoundingClientRect().top,
+          window: innerHeight};
+}"""
+
+# Every stylesheet the page links has arrived: a box read before then is drawn
+# by no rule of the page's yet.
+_STYLED = "() => [...document.querySelectorAll('link[rel=stylesheet]')].every((link) => link.sheet)"
+
 # What stands over HQ's header, what of the viewer's is pinned under it, and
 # any trail the viewer is showing.
 _REFERENCE_FRAME = """(root) => {
@@ -941,6 +952,38 @@ class ReferenceBrowserTests(BrowserGate):
         self.settle()
         self.assert_framed(self.frame())
         self.assertGreater(self.sidebar().get_by_role("link").count(), 1)
+
+    def test_the_loading_line_holds_the_references_place(self):
+        """While the viewer's bundle is on its way, the server's HTML already
+        holds the place the reference takes: the page reaches the window's
+        foot, and the viewer draws where the page and its mount already stand,
+        so nothing of HQ's moves as it does."""
+
+        bundle = f"**{static('vendor/scalar/standalone.js')}"
+        held = []
+
+        # A function of its own: Playwright marks the handler it is given,
+        # which a list's bound append cannot carry.
+        def hold(route):
+            held.append(route)
+
+        self.page.route(bundle, hold)
+        place = [SELECTORS["reference"], SELECTORS["content"]]
+        for width in WIDTHS:
+            with self.subTest(width=width):
+                self.page.set_viewport_size({"width": width, "height": 900})
+                with self.page.expect_request(bundle):
+                    self.page.goto(f"{ORIGIN}/{REFERENCE}/", wait_until="commit")
+                expect(self.page.locator(SELECTORS["content"]).get_by_role("status")).to_be_visible()
+                self.page.wait_for_function(_STYLED)
+                loading = self.page.evaluate(_LOADING_PLACE, place)
+                while held:
+                    held.pop().fallback()
+                wait_for_reference(self.page)
+                drawn = self.page.evaluate(_LOADING_PLACE, place)
+                self.assertGreaterEqual(loading["foot"], loading["window"] - 1)
+                self.assertEqual((drawn["page"], drawn["mount"]), (loading["page"], loading["mount"]))
+        self.page.unroute(bundle)
 
     def assert_painted_as_hq(self, paint, mode):
         self.assertIn(mode, paint["mode"].split())

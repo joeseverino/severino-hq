@@ -23,7 +23,7 @@ connected is in one place.
               <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Setup page" %}{% endif %}</p>
               {% if setup.permissions %}
                 <p>Give it these permissions, and no others:</p>
-                <ul class="setup-permissions">{% for permission in setup.permissions %}<li><code>{{ permission|breakable }}</code></li>{% endfor %}</ul>
+                <p><span class="code-list">{% for permission in setup.permissions %}<code>{{ permission|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></p>
               {% elif setup.credential == "coarse" %}
                 <p class="muted">This is the whole account: {{ setup.label|breakable }} offers nothing narrower, so make it for HQ alone.</p>
               {% endif %}

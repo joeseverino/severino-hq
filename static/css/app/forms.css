@@ -414,8 +414,6 @@ a.discovery-link:hover strong { color: var(--accent); }
    not fit, cut only where it alone is longer than the cell (figures.css);
    with none, the words are one line, cut as any context line's are. */
 .connection-reach { display: flex; flex-wrap: wrap; gap: 0 .3em; contain: inline-size; white-space: nowrap; }
-.setup-permissions { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); margin: var(--space-2) 0; padding: 0; list-style: none; font-size: var(--text-xs); }
-.setup-permissions code { white-space: nowrap; }
 .connection-more-scope { margin-top: var(--space-2); }
 /* Styled by their own class: opened, they move to the line beneath the row,
    out of the cell they were written in. */

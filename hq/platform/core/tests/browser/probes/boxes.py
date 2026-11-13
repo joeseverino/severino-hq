@@ -743,11 +743,13 @@ TITLES_OFF_THEIR_START = (
 # A frame is filled by what it holds, or shares its row (Design, "A frame is
 # filled" and "Sibling sections flow"). A frame holding a list of facts
 # (``lists``, in a frame ``frames`` selects), as wide as two flow members
-# (``least`` rem) and either next to a frame or a run of them or laid out in
-# a row (a flow it stands alone in, or alone on a row of), does not take a row
+# (``least`` rem) and next to a frame or a run of them, does not take a row
 # alone while all it draws below its head (``head``) ends short of half its
-# width. A frame alone in a column that stacks has nothing to share a row
-# with, and spans its column (``frames span their column``).
+# width. A frame with nothing beside it has nothing to share a row with, and
+# spans its column (``frames span their column``). A member of a flow (a row
+# that wraps) is laid out by the flow, whose members each grow into their
+# row and whose own checks say which share one (``flows share their rows``),
+# so one the flow sets on a row alone is across it by design.
 LISTS_ACROSS_AN_EMPTY_FRAME = (
     "([lists, frames, head, least]) => {"
     + DESCRIBE
@@ -778,9 +780,9 @@ LISTS_ACROSS_AN_EMPTY_FRAME = (
     if (r.width < least * rem) continue;
     const siblings = [frame.previousElementSibling, frame.nextElementSibling]
       .filter((el) => el && el.checkVisibility() && (el.matches(frames) || el.querySelector(frames)));
+    if (!siblings.length) continue;
     const flow = getComputedStyle(frame.parentElement);
-    const inRow = flow.display.endsWith('flex') && flow.flexDirection.startsWith('row') && flow.flexWrap !== 'nowrap';
-    if (!siblings.length && !inRow) continue;
+    if (flow.display.endsWith('flex') && flow.flexDirection.startsWith('row') && flow.flexWrap !== 'nowrap') continue;
     const row = [...frame.parentElement.children].filter((el) => el !== frame && el.checkVisibility());
     if (row.some((el) => overlaps(box(el), r))) continue;
     const style = getComputedStyle(inner);
@@ -791,8 +793,7 @@ LISTS_ACROSS_AN_EMPTY_FRAME = (
     if (!drawn.length) continue;
     const reach = Math.max(...drawn.map((w) => w.right)) - start;
     if (reach < room / 2) {
-      const beside = siblings.length ? ` beside ${describe(siblings[0])}` : '';
-      found.push(`${describe(frame)} takes a row of its own${beside}, and what it holds ends ${Math.round(reach)}px into its ${Math.round(room)}px`);
+      found.push(`${describe(frame)} takes a row of its own beside ${describe(siblings[0])}, and what it holds ends ${Math.round(reach)}px into its ${Math.round(room)}px`);
     }
   }
   return [...new Set(found)];

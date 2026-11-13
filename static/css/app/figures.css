@@ -240,9 +240,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .pie-row { display: flex; align-items: center; justify-content: center; gap: var(--space-10); flex-wrap: wrap; margin: var(--space-2) 0 var(--space-4); }
 .pie-row .chart-legend { flex-direction: column; align-items: flex-start; gap: var(--space-3); margin: 0; }
 .pie-chart path, .pie-chart circle { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
-.chart-data { margin-top: var(--space-3); color: var(--muted); font-size: var(--text-xs); }
-/* Its toggle is a line the target size (`--target-min`) tall; opened, the table under it can be a scrolling pane. */
-.chart-data > summary { line-height: var(--target-min); }
 .control-label { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 .compact-table { box-shadow: none; }
 .relation-source { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }
@@ -272,19 +269,17 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .kpi-grid > .kpi { flex-basis: var(--band-cell, 150px); }
 
 /* A band of facts (`{% facts layout="band" %}`): each fact its icon tile, then label over value over detail; a toned fact's tile and value take its tone, so the state reads before the word. */
-/* The facts sit together at the start, a fixed gap apart, each track as wide as what it says between a floor (`--fact-min`) and a bound (`--fact-max`), as Primer's Stack and Atlassian's Inline group what they hold: a few facts never spread across a wide page, and the band draws no rule between them. Each track is at least `--fact-min`, so as many facts share a row as fit; past that they wrap. */
+/* The facts share the band's width in equal tracks, as many to a row as keep each at least `--fact-min` wide, so a few facts spread across a wide card rather than collecting at its start beside an empty end; past that they wrap. The band draws no rule between them. */
 /* Standing alone the band is a surface and keeps an inset of its own; in a frame (a card, a section) the frame's padding is its inset (`--surface-inset`). */
 .facts-band {
   display: grid;
   /* stylelint-disable-next-line hq/flow-grid -- a band's facts, cells of one frame */
-  grid-template-columns: repeat(auto-fit, minmax(var(--fact-min), max-content));
-  justify-content: start;
+  grid-template-columns: repeat(auto-fit, minmax(var(--fact-min), 1fr));
   gap: var(--space-8) var(--space-20);
   margin: 0 0 var(--stack-gap);
   padding: var(--surface-inset, var(--space-8) var(--space-9));
   /* 12rem, about what an icon and a short value take, so a band too narrow for its facts' own widths holds fewer to a row instead of breaking each value a word a line; or the whole band once it is too narrow for two (27.5rem), where it reads as a list (surfaces.css). */
   --fact-min: clamp(12rem, (27.5rem - 100%) * 999, 100%);
-  --fact-max: 22rem;
   /* A container's width is its frame's, never its facts', so in a flex row (a card that lays out its parts in one) it would size to nothing; it takes a line of its own there instead. */
   container: band / inline-size;
   flex: 1 1 100%;
@@ -298,7 +293,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
   align-content: start;
   gap: var(--space-1) var(--space-6);
   min-width: 0;
-  max-inline-size: var(--fact-max);
 }
 .facts-band > .fact:not(:has(.band-icon)) { grid-template-columns: minmax(0, 1fr); }
 .facts-band dt { display: contents; }

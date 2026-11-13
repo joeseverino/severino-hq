@@ -9,12 +9,13 @@ frame and nothing of its own. The host's command page and a resource's form,
 whose fields are derived per command or provider, draw their own `form` in
 the card, and the command page its result `before` it; neither block is
 public. The card alone is `form_page.html#form_card`, as the component
-catalog draws it.
+catalog draws it, marked `data-frame="form"` so a test tells it from a card
+drawn by hand.
 {% endcomment %}
 {% block page %}
 {% block before %}{% endblock %}
 {% partialdef form_card inline %}
-{% card css="form-card" %}
+{% card data_frame="form" %}
 {% block form %}{% include "partials/_form.html" with fields=form_fields verb=form_verb cancel_url=cancel_url note=form_note %}{% endblock %}
 {% endcard %}
 {% endpartialdef %}

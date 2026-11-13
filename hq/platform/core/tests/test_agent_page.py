@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
 from hq.platform.application.tests.markup import elements, select, text, within
 from hq.platform.application.tokens import DEVICE_SCOPE
@@ -56,6 +57,38 @@ def _submit(client, response, attribute: str, value: str, pressing: str = ""):
         and any(ancestor is form for ancestor in element.ancestors)
     }
     return client.post(form.attrs["action"], fields)
+
+
+class AccessTests(TestCase):
+    """Access says whether agents may act as a state led by a steady dot,
+    beside the one button that switches it."""
+
+    def setUp(self):
+        self.person = get_user_model().objects.create_user("op", password="x" * 20)
+        self.client.force_login(self.person)
+
+    def state(self):
+        inside = within(self.client.get(reverse("agent_policy")), "id", "agent-access")
+        (said,) = [element for element in inside if "toned-dot" in element.classes]
+        (button,) = [element for element in inside if element.tag == "button"]
+        return said, button
+
+    def press(self, button):
+        self.client.post(button.attrs["formaction"], form_keyed({button.attrs["name"]: button.attrs["value"]}))
+
+    def test_it_reads_allowed_then_paused_with_the_button_that_switches_it(self):
+        said, button = self.state()
+        self.assertEqual((said.words, "toned-good" in said.classes), ("Allowed", True))
+        self.assertEqual(button.words, "Pause all agents")
+
+        self.press(button)
+        self.assertTrue(agent_access.agents_paused())
+        said, button = self.state()
+        self.assertEqual((said.words, "toned-attention" in said.classes), ("Paused", True))
+        self.assertEqual(button.words, "Resume agents")
+
+        self.press(button)
+        self.assertFalse(agent_access.agents_paused())
 
 
 class AgentRowTests(TestCase):

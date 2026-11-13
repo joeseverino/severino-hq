@@ -4,7 +4,9 @@ The one way a page draws a state (`{% status %}` in a template, `status_pill`
 in Python), so every state reads alike wherever it stands: "Online" and
 "Exited" beside "Running", never one page's "online" beside another's "Done".
 It is a pill, or with ``pill=False`` its words in its tone alone, as a figure
-that says which way it went is drawn among others, or with ``chip=True`` a
+that says which way it went is drawn among others, or with ``dot=True`` those
+words after a steady dot in the same tone, as a standing state reads ("Allowed",
+"Paused"), or with ``chip=True`` a
 neutral chip: one of a record's names (a technology, a domain, a role), said
 as written. A source test in
 `test_status_tags.py` refuses a pill or tone class written by hand in any
@@ -33,6 +35,24 @@ def _tone(tone: str) -> str:
     return RESOURCE_TONES.get(tone, tone)
 
 
+def _form(tone_class: str, *, pill: bool, chip: bool, dot: bool) -> str:
+    """The classes of the form a status takes: a chip, its words in its tone
+    (with a dot before them), or a pill."""
+
+    # Each assigned whole to `classes`, so the stylesheet's usage check and the
+    # browser gate's selector check read the `toned-` and `pill-` families.
+    if chip:
+        classes = "tag"
+    elif dot:
+        classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'} toned-dot"
+    elif not pill:
+        # The status vocabulary's tones are the only ones words alone take.
+        classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'}"
+    else:
+        classes = f"pill pill-{tone_class}" if tone_class else "pill"
+    return classes
+
+
 def status_pill(
     *parts: object,
     tone: str = "",
@@ -42,12 +62,14 @@ def status_pill(
     tip: str = "",
     pill: bool = True,
     chip: bool = False,
+    dot: bool = False,
     **data: object,
 ) -> SafeString:
     """The pill for a state: ``parts`` its words, the first said in sentence
     case and each held as ``breakable`` holds a value; ``tone`` its color.
     ``pill=False`` draws the words in that color with no pill around them,
-    on fixed digit widths. ``chip=True`` draws a name a record carries,
+    on fixed digit widths, and ``dot=True`` those words after a dot in that
+    color, which never moves. ``chip=True`` draws a name a record carries,
     in no tone and in its own case: "django" and "example.com" stay as
     written.
 
@@ -57,22 +79,13 @@ def status_pill(
     attribute, drawn as ``html_attributes`` draws one.
     """
 
-    if chip and (tone or not pill):
-        raise ValueError("A chip is a neutral name, never a state: it takes no tone and no pill=False.")
+    if chip and (tone or not pill or dot):
+        raise ValueError("A chip is a neutral name, never a state: it takes no tone, no pill=False and no dot.")
     words = [str(part) for part in parts if part not in (None, "")]
     if words and not chip:
         words[0] = sentence(words[0])
     label = mark_safe(" ".join(str(breakable(word)) for word in words))  # noqa: S308 - each word is escaped by breakable
-    tone_class = _tone(tone)
-    if chip:
-        classes = "tag"
-    elif not pill:
-        # The status vocabulary's tones are the only ones words alone take.
-        # Written whole, so the stylesheet's usage check reads the `toned-` family.
-        classes = f"toned toned-{tone_class if tone_class in STATUS_VALUES else 'neutral'}"
-    else:
-        # Written whole, so the stylesheet's usage check reads the `pill-` family.
-        classes = f"pill pill-{tone_class}" if tone_class else "pill"
+    classes = _form(_tone(tone), pill=pill, chip=chip, dot=dot)
     if css:
         classes = f"{classes} {css}"
     attributes = [("class", classes)]
@@ -136,9 +149,10 @@ def drift_tip(reading):
 
 
 @register.simple_tag(name="status")
-def status(*parts, tone="", css="", href="", title="", tip="", pill=True, chip=False, **data):
+def status(*parts, tone="", css="", href="", title="", tip="", pill=True, chip=False, dot=False, **data):
     """``{% status row.get_status_display tone=row.status %}``: a state as a pill,
     or with ``pill=False`` as its words in its tone (``{% status change tone="good" pill=False %}``),
+    or with ``dot=True`` as those words after a steady dot (``{% status "Allowed" tone="good" dot=True %}``),
     or with ``chip=True`` as a neutral chip for a name (``{% status domain chip=True %}``).
 
     Several parts are one label ("HQ expects" and the value it expects), only
@@ -154,5 +168,6 @@ def status(*parts, tone="", css="", href="", title="", tip="", pill=True, chip=F
         tip=str(tip or ""),
         pill=bool(pill),
         chip=bool(chip),
+        dot=bool(dot),
         **data,
     )

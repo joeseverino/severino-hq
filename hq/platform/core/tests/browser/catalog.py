@@ -8,24 +8,35 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from typing import Any, override
 from unittest import mock
+from uuid import UUID
 
 from django import forms
+from django.core.paginator import Paginator
 from django.template import Context, Template
 from django.template.loader import render_to_string
+from django.test import RequestFactory, override_settings
 from django.utils.html import escape
 
+from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
 from hq.platform.application.adoption import ONLY_READS, WriteGap
+from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
+from hq.platform.application.cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
 from hq.platform.application.card_items import Insight, Kpi, ListRow
-from hq.platform.application.drawings import AllocationBar, Share, Trend
+from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.forms import ChoiceCards, SuffixedInput
-from hq.platform.application.pages import Page, PageAction
+from hq.platform.application.freshness import CURRENT, STALE, Freshness
+from hq.platform.application.pages import Page, PageAction, PageVisit
+from hq.platform.application.tables import TableSort
 from hq.platform.application.ui import (
     ActivityCalendar,
     CalendarDay,
     ChartSeries,
+    PlannedDay,
+    PlanNote,
+    WeekPlan,
     line_chart,
     stacked_bar_chart,
 )
@@ -50,10 +61,26 @@ class Entry:
     context: dict[str, Any] = field(default_factory=dict)
     premise: tuple[str, Any] | None = None
     heads_the_page: bool = False
+    # The address the part is drawn at, for a part that reads its request: a
+    # page's query, or the row its address opens.
+    address: str = ""
+    # The settings the part is drawn under, for a part only some deployments draw.
+    settings: dict[str, Any] = field(default_factory=dict)
 
     def drawn(self, name):
-        head = "" if self.heads_the_page else render_to_string(HEAD, {"page": Page(title=name)})
-        return head + Template(self.template).render(Context(self.context))
+        with override_settings(**self.settings):
+            head = "" if self.heads_the_page else render_to_string(HEAD, {"page": Page(title=name)})
+            context = _Asked(self.context, self.address) if self.address else Context(self.context)
+            return head + Template(self.template).render(context)
+
+
+class _Asked(Context):
+    """A context drawn for a request at ``address``, which it carries as
+    ``{% querystring %}`` and ``{% row_editor %}`` read it."""
+
+    def __init__(self, values, address):
+        self.request = RequestFactory().get(address)
+        super().__init__({**values, "request": self.request})
 
 
 HEAD = "partials/_page_head.html"
@@ -216,7 +243,7 @@ def _month():
     )
 
 
-def _problems(*titles, family=""):
+def _problems(*titles, family="", status="attention"):
     """The queue's items about a thing, each with its meaning and the check that reads again."""
 
     return [
@@ -224,7 +251,7 @@ def _problems(*titles, family=""):
             "example",
             "Example",
             Insight(
-                status="attention",
+                status=status,
                 eyebrow="",
                 title=title,
                 value="",
@@ -258,6 +285,133 @@ _WIDE = (
     '<th scope="col">Name</th><th scope="col">State</th><th scope="col">Address</th><th scope="col">Seen</th>'
     "</tr></thead><tbody><tr><td>example-01</td><td>Online</td><td>192.0.2.10</td><td>Today</td></tr></tbody>"
     "</table>{% endtable_region %}"
+)
+
+
+# What a part that says how long ago is drawn against.
+_NOW = datetime.now(UTC)
+
+
+def _matrix():
+    """Three things over the same six weeks, one a link with a line about it."""
+
+    def weeks(*marks):
+        return tuple(
+            CadenceWeek(label, hit=mark == "x", no_data=mark == "?", detail=f"Week of {label}")
+            for label, mark in zip(("Jan 5", "Jan 12", "Jan 19", "Jan 26", "Feb 2", "Feb 9"), marks, strict=True)
+        )
+
+    return CadenceMatrix(
+        ("Jan 5", "Jan 12", "Jan 19", "Jan 26", "Feb 2", "Feb 9"),
+        (
+            CadenceRow("Example run", weeks("x", "x", "-", "x", "x", "x"), url="/example/run/", detail="3 a week"),
+            CadenceRow("Example lift", weeks("x", "-", "?", "x", "-", "x")),
+            CadenceRow("An example habit with a name long enough to wrap", weeks("-", "-", "x", "x", "x", "-")),
+        ),
+    )
+
+
+class _ExampleFiles(forms.Form):
+    exports = forms.FileField(label="Example exports", help_text="An example of the files it takes.")
+
+
+def _runs():
+    """The last six runs of a piece of work, oldest first, each leading to its run."""
+
+    return Dots(
+        tuple(
+            Dot(filled=done, tip=f"Example run {index}: {'done' if done else 'failed'}", url=f"/example/runs/{index}/")
+            for index, done in enumerate((True, True, False, True, False, True), 1)
+        ),
+        ordered=True,
+    )
+
+
+def _paged(number):
+    """A list's page ``number`` of three."""
+
+    paginator = Paginator(range(60), 20)
+    return {"is_paginated": True, "paginator": paginator, "page_obj": paginator.page(number)}
+
+
+def _toolbar():
+    """A list's table as its view hands it to the toolbar: words searched for,
+    one filter with an option chosen, a toggle set and a sort."""
+
+    return {
+        "query": "example",
+        "search_placeholder": "Search example hosts…",
+        "filters": [
+            {
+                "name": "kind",
+                "label": "Kind",
+                "selected_count": 1,
+                "options": [
+                    {"value": "machine", "label": "Example machine", "selected": True},
+                    {"value": "container", "label": "Example container", "selected": False},
+                ],
+            }
+        ],
+        "toggles": [{"name": "stale", "label": "Out of date only", "selected": True}],
+        "sorts": (TableSort("name", "Name", "name"), TableSort("-seen", "Last seen", "-seen")),
+        "selected_sort": "_relevance",
+        "active_count": 3,
+    }
+
+
+class _ExampleDistance(forms.Form):
+    distance_miles = forms.DecimalField(label="Example miles", min_value=0)
+
+
+# A table whose rows each open an editor under them (`row_editor`).
+_EDITED_ROWS = (
+    '{% section "Example runs" %}{% table_region "Example runs" %}<table class="data-table"><thead><tr>'
+    '{% table_heading "Run" "identifier" gutter=True %}{% table_heading "Miles" "numeric" %}'
+    '{% table_heading "Distance check" "control" %}</tr></thead><tbody>'
+    '<tr><td>example-01</td><td>3.10</td><td>{% row_editor form "example-01" label="Correct distance" '
+    'action="/example/distance/" verb="Save distance" distance_miles="3.10" %}</td></tr>'
+    '<tr><td>example-02</td><td>5.00</td><td>{% row_editor form "example-02" label="Correct distance" '
+    'action="/example/distance/" verb="Save distance" distance_miles="5.00" %}</td></tr>'
+    "</tbody></table>{% endtable_region %}{% endsection %}"
+)
+
+
+# Each provider's last sweep, as ``inventory.inventory_state`` hands it over:
+# one current, one out of date, one unreachable.
+_INVENTORY = (
+    {
+        "kind": "example.records",
+        "label": "Example records",
+        "count": 12,
+        "reachable": True,
+        "error": "",
+        "observed_at": _NOW - timedelta(minutes=5),
+        "state": "readable",
+        "state_label": "Readable",
+        "refused_parts": (),
+    },
+    {
+        "kind": "example.hosts",
+        "label": "Example hosts",
+        "count": 4,
+        "reachable": True,
+        "error": "",
+        "observed_at": _NOW - timedelta(days=2),
+        "state": "stale",
+        "state_label": "Out of date",
+        "refused_parts": ("Example addresses not read",),
+    },
+    {
+        "kind": "example.zones",
+        "label": "An example provider with a long name",
+        "count": 0,
+        "reachable": False,
+        "error": "The example provider refused the credential.",
+        "observed_at": None,
+        "state": "refused",
+        "state_label": "Refused",
+        "refused_parts": (),
+    },
 )
 
 
@@ -1032,6 +1186,317 @@ CATALOG = {
         '<label class="control-label" for="example-to">To</label>'
         '<select id="example-to" name="to"><option>example-host-02</option></select>'
         "{% endfilter_bar %}"
+    ),
+    # A "do this now" control in a section's body: one never pressed, beside
+    # one whose work ended and says how.
+    "part/ask": Entry(
+        '{% section "Example readings" %}<p>{% include "partials/_ask.html" with ask=idle %}</p>'
+        '<p>{% include "partials/_ask.html" with ask=done %}</p>{% endsection %}',
+        {
+            "idle": Ask("Read example-host-01", "/example/read/", title="Reads example-host-01 again."),
+            "done": Ask(
+                "Read example-host-01",
+                "/example/read/",
+                standing=Standing(DONE, note="Read 12 example records.", since=_NOW - timedelta(minutes=3)),
+            ),
+        },
+    ),
+    # While its work is under way: busy, its elapsed time ticking, followed
+    # at its status resource.
+    "part/ask-running": Entry(
+        '{% section "Example readings" %}{% include "partials/_ask.html" with ask=ask %}{% endsection %}',
+        {
+            "ask": Ask(
+                "Read example-host-01",
+                "/example/read/",
+                standing=Standing(
+                    RUNNING,
+                    note="Reading every example record example-host-01 holds, which takes a minute.",
+                    since=_NOW - timedelta(seconds=40),
+                    percent=40,
+                ),
+                status_url="/example/read/status/",
+                primary=True,
+            )
+        },
+    ),
+    # In a row's cell, where its word alone stands and its sentence opens
+    # under the row: one that failed with a long sentence.
+    "part/ask-in-a-row": Entry(
+        '{% section "Example connections" %}{% table_region "Example connections" %}<table class="data-table">'
+        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "Read" "control" %}</tr></thead>'
+        '<tbody><tr><td>example-main</td><td>{% include "partials/_ask.html" with ask=ask %}</td></tr>'
+        "</tbody></table>{% endtable_region %}{% endsection %}",
+        {
+            "ask": Ask(
+                "Read now",
+                "/example/read/",
+                standing=Standing(
+                    FAILED,
+                    note="The example provider refused the credential, so nothing was read this time.",
+                    since=_NOW - timedelta(minutes=8),
+                ),
+                compact=True,
+            )
+        },
+    ),
+    # As a page's own action, beside a link, in its head.
+    "part/ask-in-the-head": Entry(
+        '{% include "partials/_page_head.html" %}',
+        {
+            "page": Page(
+                title="Example host",
+                actions=(
+                    Ask("Read now", "/example/read/", title="Reads example-host-01 again."),
+                    PageAction("Edit", "/example/edit/"),
+                ),
+            )
+        },
+        heads_the_page=True,
+    ),
+    # A job under way, as far along as it knows; one waiting its turn, which
+    # knows nothing yet; one that failed with a long note.
+    "part/job-progress": Entry(
+        '{% include "partials/_job_progress.html" %}',
+        {
+            "job": Job(
+                id=UUID(int=1),
+                kind="example.import",
+                label="Example import",
+                state=JobState.RUNNING,
+                percent=40,
+                note="Read 40 of 100 example rows.",
+                created_at=_NOW,
+                heartbeat_at=_NOW,
+            )
+        },
+    ),
+    "part/job-progress-waiting": Entry(
+        '{% include "partials/_job_progress.html" %}',
+        {"job": Job(id=UUID(int=2), kind="example.import", label="Example import", created_at=_NOW)},
+    ),
+    "part/job-progress-failed": Entry(
+        '{% include "partials/_job_progress.html" %}',
+        {
+            "job": Job(
+                id=UUID(int=3),
+                kind="example.import",
+                label="Example import of a file with a name long enough to wrap",
+                state=JobState.FAILED,
+                note="The example file has no header row, so none of its rows could be read as example records.",
+                created_at=_NOW,
+            )
+        },
+    ),
+    # Whether a thing happened, week by week: hits, a miss, a week counted
+    # more than once, one nothing is known of, and a run up to now.
+    "chart/cadence": Entry(
+        '{% section "Example habits" %}{% include "partials/_cadence.html" %}{% endsection %}',
+        {
+            "cadence": Cadence(
+                "Example stretching",
+                "Each week it happened at least once.",
+                (
+                    CadenceWeek("Jan 5", hit=True, detail="Week of Jan 5: once"),
+                    CadenceWeek("Jan 12", hit=False, detail="Week of Jan 12: not done"),
+                    CadenceWeek("Jan 19", hit=False, no_data=True),
+                    CadenceWeek("Jan 26", hit=True, count=3, detail="Week of Jan 26: 3 times"),
+                    CadenceWeek("Feb 2", hit=True, detail="Week of Feb 2: once"),
+                    CadenceWeek("Feb 9", hit=True, count=2, detail="Week of Feb 9: twice"),
+                ),
+            )
+        },
+    ),
+    # Several things over the same weeks, one a link with a line about it.
+    "chart/cadence-matrix": Entry(
+        '{% section "Example habits" %}{% include "partials/_cadence_matrix.html" %}{% endsection %}',
+        {"matrix": _matrix()},
+    ),
+    # The same, sharing a row with a chart.
+    "chart/cadence-matrix-compact": Entry(
+        '<div class="two-col">{% section "Example habits" %}'
+        '{% include "partials/_cadence_matrix.html" with compact=True label="Example habit" %}{% endsection %}'
+        '{% include "partials/_line_chart.html" %}</div>',
+        {"matrix": _matrix(), "chart": _readings("Example minutes", "Minutes each day.", "Example run")},
+    ),
+    # The days of a week a thing is planned for: two on one day, a day with
+    # its note, the notes under the week and the link that changes it.
+    "chart/week-plan": Entry(
+        '{% include "partials/_week_plan.html" %}',
+        {
+            "plan": WeekPlan(
+                "Example week",
+                (
+                    PlannedDay("M", "Monday", (1,), detail="Example run"),
+                    PlannedDay("T", "Tuesday"),
+                    PlannedDay("W", "Wednesday", (1, 2), note="Long", detail="Example run and example lift"),
+                    PlannedDay("T", "Thursday"),
+                    PlannedDay("F", "Friday", (2,), detail="Example lift"),
+                    PlannedDay("S", "Saturday", (1,), note="Easy", detail="Example run"),
+                    PlannedDay("S", "Sunday"),
+                ),
+                notes=(PlanNote("Example runs", "3 a week"), PlanNote("Example lifts", "2 a week")),
+                url="/example/plan/",
+            )
+        },
+    ),
+    # Readings that need reading, each tone: one a link, one with its next
+    # step, one with neither a value nor an eyebrow.
+    "part/insight-grid": Entry(
+        '{% section "Example insights" %}{% include "partials/_insight_grid.html" with label="Example insights" %}'
+        "{% endsection %}",
+        {
+            "items": [
+                Insight(
+                    "attention",
+                    "Example readiness",
+                    "Example records missing a category",
+                    "12",
+                    "Uncategorized example records are left out of every example total.",
+                    action="Give each one a category.",
+                    url="/example/records/",
+                ),
+                Insight("good", "Example pace", "Example pace this month", "On track", "Ahead of the example plan."),
+                Insight(
+                    "serious",
+                    "Example spend",
+                    "An example reading with a title long enough to wrap on a phone",
+                    "$1,204.50",
+                    "Spent past the example budget by a margin worth reading about.",
+                ),
+                Insight("neutral", "", "An example reading with nothing to show", "", "An example interpretation."),
+            ]
+        },
+    ),
+    # A file field that takes a drop: as it is first drawn, and sent with
+    # nothing in it.
+    "form/dropzone": Entry(
+        '{% section "Example import" %}{% include "partials/_dropzone.html" with field=form.exports '
+        'title="Drop example exports here" hint="CSV or JSON, several at once" %}{% endsection %}',
+        {"form": _ExampleFiles()},
+    ),
+    "form/dropzone-errors": Entry(
+        '{% section "Example import" %}{% include "partials/_dropzone.html" with field=form.exports %}{% endsection %}',
+        {"form": _ExampleFiles(data={})},
+    ),
+    # A command to paste somewhere else, short and long enough to wrap at its
+    # slashes and spaces.
+    "part/command": Entry(
+        '{% section "Example setup" %}{% include "partials/_command.html" with command="example-cli status" %}'
+        '{% include "partials/_command.html" with command=long %}{% endsection %}',
+        {
+            "long": "example-cli connect --config /etc/example/example-agent/config.toml "
+            "--token-file /run/secrets/example-agent-token --name example-host-01.example.com"
+        },
+    ),
+    # Dots beside a figure, a part of a whole and a history whose dots lead
+    # to each run; and a history in a table's cell.
+    "part/figure-dots": Entry(
+        '{% section "Example hosts" %}{% include "partials/_kpi_grid.html" %}{% endsection %}',
+        {
+            "items": [
+                Kpi("Example hosts online", "3 of 5", "2 example hosts offline", drawing=Dots.of(3, 5)),
+                Kpi("Example runs", "4 of 6", "The last six example runs", drawing=_runs()),
+            ]
+        },
+    ),
+    "part/dots-in-a-row": Entry(
+        '{% section "Example work" %}{% table_region "Example work" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Name" "identifier" %}{% table_heading "Runs" %}</tr></thead><tbody>'
+        '<tr><td>example.sweep</td><td>{% include "partials/_dots.html" with dots=runs only %}</td></tr>'
+        "</tbody></table>{% endtable_region %}{% endsection %}",
+        {"runs": _runs()},
+    ),
+    # On a saved copy of HQ, what a page says of the reader's connection is
+    # said of the example visit: as a panel's notice, and as the short mark.
+    "part/example-connection": Entry(
+        '{% section "Example connection" %}{% include "partials/_example_connection.html" with notice=True %}'
+        '{% facts %}{% fact "Example address" %}192.0.2.10 '
+        '{% include "partials/_example_connection.html" %}{% endfact %}{% endfacts %}{% endsection %}',
+        settings={"SEVERINO_RENDERED_COPY": True},
+    ),
+    # A list's pages, at a middle page, and on the first, which has none before it.
+    "part/pagination": Entry(
+        '{% section "Example events" %}{% table_region "Example events" %}<table class="data-table"><thead><tr>'
+        '{% table_heading "Event" %}</tr></thead><tbody><tr><td>Example event</td></tr></tbody></table>'
+        '{% endtable_region %}{% include "partials/_pagination.html" %}{% endsection %}',
+        _paged(2),
+        address="/example/events/?q=example&page=2",
+    ),
+    "part/pagination-first": Entry(
+        '{% section "Example events" %}{% include "partials/_pagination.html" %}{% endsection %}',
+        _paged(1),
+        address="/example/events/",
+    ),
+    # A list's toolbar over its table: a search with words in it, a filter
+    # with some of its options chosen, a toggle and a sort.
+    "part/table-toolbar": Entry(
+        '{% include "partials/_table_toolbar.html" %}{% table_region "Example hosts" %}<table class="data-table">'
+        '<thead><tr>{% table_heading "Name" "identifier" %}{% table_heading "State" "status" %}</tr></thead>'
+        "<tbody><tr><td>example-01</td><td>Online</td></tr><tr><td>example-02</td><td>Offline</td></tr>"
+        "</tbody></table>{% endtable_region %}",
+        {"table": _toolbar()},
+        address="/example/hosts/?q=example&kind=machine&stale=1",
+    ),
+    # A row's editor: the way in, closed, and the address that opens the
+    # first row's form in the line beneath it.
+    "part/row-editor": Entry(_EDITED_ROWS, {"form": _ExampleDistance()}, address="/example/runs/"),
+    "part/row-editor-open": Entry(_EDITED_ROWS, {"form": _ExampleDistance()}, address="/example/runs/?edit=example-01"),
+    # The open problems about the thing a page shows: an urgent one in its
+    # box above, and the rest in a card of their own.
+    "part/problems": Entry(
+        '{% include "partials/_problems.html" %}',
+        {
+            "problems": [
+                *_problems("example-host-01 is out of disk", status="serious"),
+                *_problems("example-web-01 runs an image by tag alone", "example-worker-02 restarts often"),
+            ]
+        },
+    ),
+    # A reading's age in each of its states: current, out of date, the moment
+    # alone, and none.
+    "part/reading-age": Entry(
+        '{% section "Example readings" %}{% facts %}'
+        '{% fact "Example current" %}{% include "partials/_reading_age.html" with reading=current only %}{% endfact %}'
+        '{% fact "Example stale" %}{% include "partials/_reading_age.html" with reading=stale only %}{% endfact %}'
+        '{% fact "Example moment" %}{% include "partials/_reading_age.html" with at=at only %}{% endfact %}'
+        '{% fact "Example never" %}{% include "partials/_reading_age.html" %}{% endfact %}'
+        "{% endfacts %}{% endsection %}",
+        {
+            "current": Freshness(CURRENT, _NOW - timedelta(minutes=4), timedelta(hours=1)),
+            "stale": Freshness(STALE, _NOW - timedelta(days=3), timedelta(hours=1)),
+            "at": _NOW - timedelta(hours=2),
+        },
+    ),
+    # How old each provider's last reading is: folded as a grid, one of them
+    # out of date and one unreachable; one provider's as a sentence; and its
+    # age alone, in a heading's aside.
+    "part/sweep-freshness": Entry('{% include "partials/_sweep_freshness.html" %}', {"inventory": _INVENTORY}),
+    "part/sweep-freshness-one": Entry(
+        '{% section "Example records" %}{% include "partials/_sweep_freshness.html" with only_kind="example.records" %}'
+        "{% endsection %}",
+        {"inventory": _INVENTORY},
+    ),
+    "part/sweep-freshness-inline": Entry(
+        '{% section "Example records" %}<p>An example line.</p>{% aside %}<span class="count">12 example records'
+        '{% include "partials/_sweep_freshness.html" with only_kind="example.records" inline=True %}</span>'
+        "{% endsection %}",
+        {"inventory": _INVENTORY},
+    ),
+    # A page that asks for its readings when opened: the note that ends its
+    # head's first line, and a region that fills itself holding its own.
+    "part/visit-refresh": Entry(
+        '{% include "partials/_page_head.html" %}{% include "partials/_visit_refresh.html" with visit=page_visit %}'
+        '{% section "Example host" %}<p>An example line.</p>{% endsection %}',
+        {
+            "page": Page(title="Example host", trail=(("Example machines", "/example/"),)),
+            "page_visit": PageVisit("machine", "example-host-01"),
+        },
+        heads_the_page=True,
+    ),
+    "part/visit-refresh-region": Entry(
+        '{% card element="div" data_example_region=True %}{% include "partials/_visit_refresh.html" with '
+        'subject="page" name="example" refresh="[data-example-region]" %}<p>An example line.</p>{% endcard %}'
     ),
 }
 

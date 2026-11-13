@@ -252,7 +252,7 @@
        break (`min-content`, a count bound to its noun), so a long label never
        squeezes its value to a letter a line or parts a number from its unit. */
     /* One fact to a row has no neighbor to share its lines with, so it lays out its own rows: rows the band sized would be asked of the fact before its columns have widths, a letter a line. */
-    .facts-band > .fact { grid-row: auto; grid-template-rows: none; grid-template-columns: auto fit-content(60%) minmax(min-content, 1fr); align-items: baseline; column-gap: var(--space-4); max-inline-size: none; }
+    .facts-band > .fact { grid-row: auto; grid-template-rows: none; grid-template-columns: auto fit-content(60%) minmax(min-content, 1fr); align-items: baseline; column-gap: var(--space-4); }
     .facts-band > .fact:not(:has(.band-icon)) { grid-template-columns: fit-content(60%) minmax(min-content, 1fr); }
     /* The icon stands on the label's row, beside the words it marks; across the fact's rows it would center below them. */
     .facts-band .band-icon { grid-row: 1; align-self: center; width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }

@@ -316,7 +316,15 @@ gives way without hiding any of it.
 Outside a narrow box a status keeps its line and a one-token name is never
 cut. A value told in several parts marks each `cell-part`, and where its line
 is short it wraps only between them. The region wraps what a status or figure
-cell says in one `.kept-line` for the stylesheet to bound.
+cell says in one `.kept-line` for the stylesheet to bound. A description cut
+to a preview is a `.table-clamp`.
+
+A few words that read wrong split (an age, a hyphenated word) are one
+`.whole`, the box `|breakable` gives each part of a name, or a `.nowrap`; a
+line that must stay one line (a commit's message) is a `.one-line`, cut with
+an ellipsis. A key to press is said in a `.keyboard-only`, which a touch screen
+hides; `.visually-hidden` is the other way round, read only by a screen
+reader.
 
 Every such hold, and an identifier's cut, asks for at most its column's even
 share of the region (`--hold`). The share is counted from the columns the box
@@ -392,12 +400,12 @@ A band is listed once, in the band rule in `css/app/figures.css`; its cells
 keep their own padding. Too narrow for two cells, a band reads as a list:
 label left, value right.
 
-A band of facts draws no rule between them and counts nothing. Each fact's
-track is as wide as what it says, at least `--fact-min` and up to
-`--fact-max`. The facts sit together at the start, a fixed gap apart, as
-Primer's Stack and Atlassian's Inline do. A wider band never sets them further
-apart. As many share a row as fit at `--fact-min`. That floor lets a narrow
-band hold fewer facts to a row, and the facts of a row still share their lines. Standing alone the band is a surface with its own inset. In a card or a
+A band of facts draws no rule between them and counts nothing. Its facts
+share its width in equal tracks, as many to a row as keep each at least
+`--fact-min` wide, so a few facts spread across a wide card rather than
+collecting at its start beside an empty end; past that they wrap. That floor
+lets a narrow band hold fewer facts to a row, and the facts of a row still
+share their lines. *Gate:* `facts across their band` in the layout survey. Standing alone the band is a surface with its own inset. In a card or a
 section, the frame's padding is its inset. Under 27.5rem it reads as a list,
 each fact laying out its own rows.
 
@@ -463,7 +471,7 @@ this grid too: `.form` is the one form layout.
 
 **Every form a page is about is drawn one way.** A page that is a record's
 form or a command's is the frame `form_page.html`: one card spanning its
-column (`.form-card`) holding one partial,
+column holding one partial,
 `partials/_form.html` (its token, errors, fields and closing row; `fields`
 names a template for fields beyond the form's own loop, `method="get"` makes
 it a query with no write token, `bar=True` pins the
@@ -1002,11 +1010,9 @@ A list of facts (`{% facts %}`) is as wide as its longest pair, so its card
 shares a row with the sections beside it rather than crossing the page with
 its values ending a third of the way in. A record page's facts are a
 `{% card %}` that opens its `.section-flow`, beside its notes and related
-records. In a flow, a frame of facts grows no wider than what it holds, so
-one alone in its flow, or alone on a row the others wrapped off, keeps its
-pairs together at the start; it is never narrower than a flow member, and
-spans the column once the flow holds one to a row. *Gate:* `lists across an
-empty frame` in the layout survey.
+records. In a flow, a frame of facts grows into its row as every member does;
+inside it the label column is as wide as the longest label and the values take
+the rest. *Gate:* `lists across an empty frame` in the layout survey.
 
 A row of a record list (`.list-rows`) reads as one line: its meta follows its
 name a gap after, never at the row's far side across an empty middle. What can
@@ -1052,7 +1058,8 @@ that close a thing's page, the connection panel's identity, link and route,
 a page's run of cards) is one `.section-flow`: as many to a row as keep each
 at least `--flow-basis` wide (22rem), one to a row where that is the whole
 width, a row's last ones sharing what it leaves and each on a row as tall as
-the tallest. It is measured against the box it sits in, so the same sections
+the tallest. Every member grows into what its row leaves and none caps its
+width, so every row ends at the flow's end. It is measured against the box it sits in, so the same sections
 pair in a dialog and on a page. A part that needs more room before it shares
 a row sets a wider basis on itself (the connection panel's route), and a run
 of narrower cards a narrower one on the flow. A wide one (a table of four
@@ -1427,8 +1434,8 @@ Alignment:
   the dashboard's included. Sections that share a row start their frames
   together too, whatever their heads hold (the survey's `frames in a row`).
 - A band of readings or choices lays out as whole even rows, and each of its
-  cells keeps its padding; so does any filled box. A band of facts packs at
-  its facts' widths.
+  cells keeps its padding; so does any filled box. A band of facts shares
+  its width in equal tracks.
 - A form fills its rows, controls in a row share one height, a wrapped bar of
   controls fills its rows, and a section of queue cards ends its buttons at
   one edge.

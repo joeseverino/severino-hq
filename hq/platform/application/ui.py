@@ -162,9 +162,11 @@ STANDARD_HEIGHT = 260
 # again what "Jul 6" does.
 LABEL_CHAR_PX = 6.0
 LABEL_GAP_PX = 8.0
-# The narrowest card an axis is expected to fill, less the gutter its y-axis
-# labels sit in. The container query that acts on `dense` uses the same figure.
-NARROW_PLOT_PX = 420.0
+# The plot of the narrowest card an axis is expected to fill: `.two-col`'s
+# 320px column less the frame's sides, of which the plot is its share of the
+# drawing. Labels wanting more are `dense`, and the container query that acts
+# on it (figures.css) keeps only the end labels in any narrow card.
+NARROW_PLOT_PX = 284.0 * PLOT_WIDTH / (PLOT_LEFT + PLOT_WIDTH + PLOT_RIGHT)
 
 
 @display

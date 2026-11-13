@@ -2430,6 +2430,7 @@
           "tip=",
           "pill=",
           "chip=",
+          "dot=",
           "**data"
         ]
       },
@@ -2749,14 +2750,17 @@
   "templates": {
     "classes": [
       "actions-col",
+      "address-list",
       "allocation",
       "allocation-legend",
       "btn",
       "cell-data",
+      "cell-part",
+      "cell-whole",
       "chart-axis",
       "chart-card",
-      "chart-data",
       "chart-legend",
+      "code-list",
       "compact",
       "compact-table",
       "count",
@@ -2784,9 +2788,14 @@
       "icon-link",
       "inline",
       "key-col",
+      "keyboard-only",
       "list-rows",
       "muted",
+      "name-line",
       "narrow-more",
+      "narrow-only",
+      "nowrap",
+      "one-line",
       "optional-col",
       "page-lede",
       "pie-chart",
@@ -2823,10 +2832,12 @@
       "stacked",
       "status-tabs",
       "subtle-link",
+      "table-clamp",
       "table-scroll",
       "tight-col",
       "two-col",
-      "visually-hidden"
+      "visually-hidden",
+      "whole"
     ],
     "django": {
       "filters": [
@@ -3465,6 +3476,7 @@
           "tip=",
           "pill=",
           "chip=",
+          "dot=",
           "**data"
         ],
         "parts": []

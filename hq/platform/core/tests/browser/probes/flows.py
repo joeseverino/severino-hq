@@ -38,6 +38,11 @@ FLOWS_IN_READING_ORDER = (
 # on its row while a later one would have fitted beside it sits beside a gap.
 # A wide member goes ahead of the short ones in the markup, which then collect
 # after it. Read from each member's flex basis, the width it asks a row for.
+# Every member grows into what its row leaves, so a row ends at the flow's
+# end: one that caps its width (a max size) or grows by less than its share
+# (a flex-grow under one) leaves the rest of any row it ends empty. Read from
+# its computed style rather than from where its row ends, so a cap is found
+# at any width, not only at one where the row is wide enough to reach it.
 FLOWS_SHARE_THEIR_ROWS = (
     "(flow) => {"
     + DESCRIBE
@@ -53,7 +58,12 @@ FLOWS_SHARE_THEIR_ROWS = (
       if (basis.endsWith('%')) return (parseFloat(basis) / 100) * room;
       return basis.endsWith('px') ? parseFloat(basis) : null;
     };
-    const members = inFlow(el).map(([member, style, r]) => ({member, r, wants: asks(style)}));
+    const members = inFlow(el).map(([member, style, r]) => ({member, style, r, wants: asks(style)}));
+    for (const {member, style} of members) {
+      const cap = [['max-inline-size', style.maxInlineSize], ['max-width', style.maxWidth]].find(([, value]) => value !== 'none');
+      if (cap) found.push(`${describe(member)} caps its width in ${describe(el)} (${cap[0]}: ${cap[1]}), so a row it ends stops short of the flow's end`);
+      else if (parseFloat(style.flexGrow) < 1) found.push(`${describe(member)} grows by ${style.flexGrow} in ${describe(el)}, so a row it ends stops short of the flow's end`);
+    }
     const pair = (a, b) => a.wants !== null && b.wants !== null && a.wants + gap + b.wants <= room + 1;
     const wide = (m) => m.wants !== null && m.wants >= room - 1;
     members.forEach((m, i) => {

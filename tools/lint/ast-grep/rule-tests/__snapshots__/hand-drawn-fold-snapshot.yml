@@ -1,28 +1,28 @@
 id: hand-drawn-fold
 snapshots:
-  "<details class=\"chart-data\"{% if open %} open{% endif %}>\n  <summary>Show the numbers</summary>\n  <p>{{ note }}</p>\n</details>\n":
+  "<details class=\"notes\"{% if open %} open{% endif %}>\n  <summary>Show the numbers</summary>\n  <p>{{ note }}</p>\n</details>\n":
     fixed: |
-      <details class="chart-data"{% if open %} open{% endif %}>
+      <details class="notes"{% if open %} open{% endif %}>
         <summary>Show the numbers</summary>
         <p>{{ note }}</p>
       </details>
     labels:
     - source: |-
-        <details class="chart-data"{% if open %} open{% endif %}>
+        <details class="notes"{% if open %} open{% endif %}>
           <summary>Show the numbers</summary>
           <p>{{ note }}</p>
         </details>
       style: primary
       start: 0
-      end: 126
+      end: 121
     - source: details
       style: secondary
       start: 1
       end: 8
-    - source: <details class="chart-data"{% if open %} open{% endif %}>
+    - source: <details class="notes"{% if open %} open{% endif %}>
       style: secondary
       start: 0
-      end: 57
+      end: 52
   <details open><summary>Notes</summary>B</details>:
     fixed: |-
       {% section "Notes" fold=True open=True %}

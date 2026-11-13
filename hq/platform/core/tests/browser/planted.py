@@ -181,10 +181,11 @@ PLANTS = {
         '{% fact "Example refused" %}<a href="#" style="display: inline-block; vertical-align: baseline; line-height: 3rem">13</a>'
         "{% endfact %}{% endfacts %}"
     ),
-    # Two short facts given half the band each, as the Agents card's were.
-    "facts together": Plant(
+    # Two short facts at the band's start, each track as wide as what it
+    # says, beside an empty end.
+    "facts across their band": Plant(
         '{% facts layout="band" %}{% fact "Example rules" value=0 %}{% fact "Example refused" value=13 %}{% endfacts %}',
-        css=".facts-band { grid-template-columns: repeat(2, minmax(0, 1fr)); }",
+        css=".facts-band { grid-template-columns: repeat(auto-fit, minmax(var(--fact-min), max-content)); justify-content: start; }",
     ),
     # A detail laid out as a grid, which sets each run of its words apart.
     "fact details in words": Plant(
@@ -394,23 +395,36 @@ PASSES = {
             "Example label</span>"
         )
     ),
-    # Three short facts of a band, together at its start however wide it is.
-    "facts together": Plant(
+    # Three short facts across a wide band, and five in a narrower one that
+    # wraps them, its last row short of the tracks its first fills.
+    "facts across their band": Plant(
         '{% facts layout="band" %}{% fact "Example rules" value=0 %}{% fact "Example held" value=2 %}'
-        '{% fact "Example refused" value=13 %}{% endfacts %}'
+        '{% fact "Example refused" value=13 %}{% endfacts %}<div style="inline-size: 40rem">{% facts layout="band" %}'
+        + "".join(f'{{% fact "Example {n}" value={n} %}}' for n in range(5))
+        + "{% endfacts %}</div>"
     ),
     # A wide member ahead of five short ones that wrap onto a second row, and
     # two short ones sharing a row ahead of a wide one, the last short one of
     # each alone with nothing after it to share its row.
     "flows in reading order": Plant(_FLOWS),
-    "flows share their rows": Plant(_FLOWS),
+    # The same, then two cards of a few facts sharing a row, each growing into
+    # what the row leaves, as the connection panel's identity and link do.
+    "flows share their rows": Plant(
+        _FLOWS
+        + '<div class="section-flow">'
+        + "".join(
+            f'{{% card label="Example {n}" %}}{{% facts %}}{{% fact "Example" value="One" %}}{{% endfacts %}}{{% endcard %}}'
+            for n in range(2)
+        )
+        + "</div>"
+    ),
     # A frame across its column, and frames that share a row.
     "frames span their column": Plant(
         '<div class="card">Example</div><div style="display: flex; gap: 1rem">'
         '<div class="card">Example</div><div class="card">Example</div></div>'
     ),
     # The same card and section sharing a row in the flow, then the card
-    # alone in a flow of its own, as narrow as what it holds.
+    # alone in a flow of its own, across it as every member is.
     "lists across an empty frame": Plant(
         '<div class="section-flow">{% card label="Example" %}{% facts %}{% fact "Example" value="One" %}'
         '{% endfacts %}{% endcard %}{% section "Example" %}<p>Example</p>{% endsection %}</div>'
@@ -479,6 +493,10 @@ _OUTRANKED = (
 _LEFT = "planted/left-behind"
 _LEFT_BEHIND = _TABLE.format('on <span style="display: inline-block">example-name-wider-than-its-cell</span>')
 
+# A member of a flow capped at a width, the rest of its row left empty.
+_CAPS = "planted/caps"
+_CAPPED = '<div class="section-flow"><section style="max-inline-size: 12rem"><p>Example</p></section></div>'
+
 
 def _said(finding):
     """A finding as a value a set holds: the audit's are dicts."""
@@ -499,7 +517,14 @@ class PlantedBrowserTests(LayoutBrowserTests):
     def render(cls):
         pages = {page_of(check): probe(plant.markup, **plant.values) for check, plant in PLANTS.items()}
         passes = {page_of(check, "passes"): probe(plant.markup, **plant.values) for check, plant in PASSES.items()}
-        return {**pages, **passes, _BARE: probe(""), _LIFTED: probe(_OUTRANKED), _LEFT: probe(_LEFT_BEHIND)}
+        return {
+            **pages,
+            **passes,
+            _BARE: probe(""),
+            _LIFTED: probe(_OUTRANKED),
+            _LEFT: probe(_LEFT_BEHIND),
+            _CAPS: probe(_CAPPED),
+        }
 
     def found(self, name, plant):
         self.open(name, WIDE)
@@ -536,6 +561,10 @@ class PlantedBrowserTests(LayoutBrowserTests):
     def test_a_word_a_name_leaves_behind_opens_a_line_on_a_stray(self):
         found = self.found(_LEFT, Plant("")).get("lines opening on a stray", [])
         self.assertTrue([said for said in found if 'cuts "on" from "example-name' in said], found)
+
+    def test_a_flow_member_that_caps_its_width_leaves_its_row_short(self):
+        found = self.found(_CAPS, Plant("")).get("flows share their rows", [])
+        self.assertTrue([said for said in found if "caps its width" in said], found)
 
     def records_layout_shifts(self):
         return self.page.evaluate("() => PerformanceObserver.supportedEntryTypes.includes('layout-shift')")

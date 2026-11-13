@@ -584,7 +584,7 @@ CORE_CAPABILITY_SPECS = (
         set_agents_paused,
         execution_notes=("Set the state rather than toggle it, so asking twice changes nothing.",),
         label="Pause or resume agents",
-        variants=(("on", "Block all agents"), ("off", "Allow agents")),
+        variants=(("on", "Pause all agents"), ("off", "Resume agents")),
         state=agents_paused,
     ),
     CapabilitySpec(

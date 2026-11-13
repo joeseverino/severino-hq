@@ -75,12 +75,12 @@
 /* Sticky heading: the region is no scroll container (its table fits, so no `auto`), so the heading pins to the viewport under the chrome; `overflow: hidden` on the table, a transparent sticky cell or collapsed borders would each silently break it, and `overscroll-behavior` would trap the wheel. */
 /* A table fits its box by dropping columns, so the region is no scroll box; only a declared pane (`is-pane`) or a chart's scrolls, and every region with no script. */
 @media (scripting: enabled) {
-  .table-scroll:not([data-chart], .is-pane, .chart-data > *) { overflow: visible; }
+  .table-scroll:not([data-chart], .is-pane) { overflow: visible; }
   /* A table wider than its region once it has given all it can (`data-scrolls`, tables.js) scrolls in it, so it never runs past its card; its heading then sticks to nothing, since inside the region the inset kept for the page's chrome would push it down over the rows. */
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a region scrolls sideways; stated so overflow-y does not compute to auto */
   .table-scroll:has(> .data-table[data-scrolls]) { overflow-x: auto; overflow-y: clip; }
-  .table-scroll:not([data-chart], .is-pane, .chart-data > *) .data-table { overflow: visible; }
-  .table-scroll:not([data-chart], .is-pane, .chart-data > *) .data-table:not([data-scrolls]) thead th {
+  .table-scroll:not([data-chart], .is-pane) .data-table { overflow: visible; }
+  .table-scroll:not([data-chart], .is-pane) .data-table:not([data-scrolls]) thead th {
     position: sticky;
     z-index: 2;
     background: var(--surface-2);
@@ -90,7 +90,7 @@
   /* A row a link lands on, or a control the keyboard reaches, is scrolled to
      below the heading that sticks over the rows, past the chrome the page's
      scroll padding already clears. */
-  .table-scroll:not([data-chart], .is-pane, .chart-data > *) .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
+  .table-scroll:not([data-chart], .is-pane) .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
     scroll-margin-block-start: calc(var(--page-nav-height) + var(--heading-height));
   }
 }
@@ -437,10 +437,12 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .data-table[data-tight] > tbody > tr > :is(td.row-actions, [data-kind="control"]) { white-space: normal; }
 .data-table[data-tight] td > span.row-actions { flex-wrap: wrap; justify-content: end; }
 .data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
-/* Broken, its identifiers break where they must, the last give before it scrolls: a name broken is read where a name past the card is not. */
+/* A button's label wraps in an opened row and the line beneath it (surfaces.css), where its words and an identifier in it are flex items side by side, each squeezed until it breaks inside a word; wrapping, each keeps its own line before it shrinks. One with an icon keeps its label beside it. */
+.data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) td .btn:not(:has(> svg)) { flex-wrap: wrap; }
+/* Broken, its identifiers break where they must, the last give before it scrolls: a name broken is read where a name past the card is not. A word is no identifier (line_breaks.breakable leaves it plain text), so a chip or a link holding only words keeps them whole, and its column is never narrower than its longest word. */
 @container style(--break: given) {
   .data-table :is(td, th) .whole { white-space: normal; }
-  .data-table :is(td, th) :is(code, .token, .whole, [data-entity]) { overflow-wrap: anywhere; }
+  .data-table :is(td, th) :is(.token, .whole, :is(code, [data-entity]):has(.token, .whole)) { overflow-wrap: anywhere; }
 }
 .data-table > * > tr > [data-dropped] { display: none; }
 .data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }

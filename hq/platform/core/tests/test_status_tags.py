@@ -86,8 +86,25 @@ class StatusPillTests(SimpleTestCase):
                 self.assertEqual(chip.attrs["title"], "Example")
                 self.assertFalse({"pill", "toned"} & {word.split("-")[0] for word in chip.classes})
 
+    def test_a_standing_state_is_its_words_in_its_tone_after_a_dot(self):
+        """ "Allowed" or "Paused" reads as its words, no pill, led by a dot the
+        stylesheet draws in the words' own tone."""
+
+        for tone, shown in (("good", "good"), ("attention", "attention"), ("archived", "neutral")):
+            with self.subTest(tone):
+                drawn = elements(_drawn('{% status "allowed" tone=tone dot=True %}', tone=tone), "span")[0]
+                self.assertEqual(drawn.words, "Allowed")
+                self.assertNotIn("pill", drawn.classes)
+                self.assertIn(f"toned-{shown}", drawn.classes)
+                self.assertIn("toned-dot", drawn.classes)
+
+    def test_only_a_dotted_state_carries_the_dot(self):
+        for source in ('{% status "Up" tone="good" %}', '{% status "Up" tone="good" pill=False %}'):
+            with self.subTest(source):
+                self.assertNotIn("toned-dot", elements(_drawn(source), "span")[0].classes)
+
     def test_a_chip_refuses_a_tone(self):
-        for options in ({"tone": "good"}, {"pill": False}):
+        for options in ({"tone": "good"}, {"pill": False}, {"dot": True}):
             with self.subTest(options), self.assertRaises(ValueError):
                 status_pill("django", chip=True, **options)
 

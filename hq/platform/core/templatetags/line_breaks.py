@@ -44,6 +44,10 @@ _WORDS = re.compile(r"(\s+)")
 # a share or a prefix length ("3/4", "10.0.0.0/24").
 # Nothing in one is a place a line breaks.
 _FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*(?:–\d+(?:[.:,]\d+)*)?(?:/(?:[^\W\d_]+|\d+(?:[.:,]\d+)*))?\W*")
+# A quantity, which reads as one figure even as a whole value: a signed
+# amount or count, a percent, a share ("5/5") or a rate ("9:59/mi"). An
+# address of digits or a version is a name standing alone, so it is not one.
+_QUANTITY = re.compile(r"[+−-]?\u2060?\$?\d+(?:,\d{3})*(?:\.\d+)?(?:%|/\d+)?|\d+(?::\d{2})+/[^\W\d_]+")
 # Where a browser may break a hyphenated part: after each inner hyphen.
 _AFTER_HYPHEN = re.compile(r"(?<=[^-\s]-)")
 # A piece of a name shorter than this, alone on a line ("1" under
@@ -150,7 +154,7 @@ def _token(word: str, *, sole: bool) -> str:
     ``data-sole``, so a table cell may cut it rather than break it. A figure
     among words reads as one of them."""
 
-    if not (_INNER_SEAM.search(word) or _kept(word)):
+    if not (_INNER_SEAM.search(word) or _kept(word)) or (sole and _QUANTITY.fullmatch(unescape(word))):
         return word
     if not sole and _figure(word):
         # A browser breaks after a dash, so a range is a part of its own:

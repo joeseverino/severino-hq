@@ -57,6 +57,21 @@ class BreakableTests(SimpleTestCase):
         self.assertNotIn('class="token"', html)
         self.assertEqual(text(html), "faster than 10:36/mi")
 
+    def test_a_quantity_standing_alone_is_one_figure(self):
+        """A quantity is the whole value of a figure cell: drawn as a name, a
+        cell would cut it or break it, and its table holds no line for it."""
+
+        for value in ("$43,708.78", "−\u2060$11,676.82", "5/5", "9:59/mi", "10:10/mi", "−0.73%", "+12.5%", "1,204"):
+            with self.subTest(value=value):
+                html = str(breakable(value))
+                self.assertNotIn('class="token"', html)
+                self.assertEqual(text(html), value)
+
+    def test_an_address_standing_alone_is_still_a_name(self):
+        for value in ("172.18.0.2", "10.0.0.10:8000", "2.39.8", "10.0.0.0/24"):
+            with self.subTest(value=value):
+                self.assertIn("data-sole", breakable(value))
+
     def test_a_word_a_value_ends_on_stays_on_the_last_line_of_the_name_before_it(self):
         """Held in the name's own box, after the parts a cell cuts."""
 

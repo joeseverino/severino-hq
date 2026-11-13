@@ -10,12 +10,14 @@ from django.test import SimpleTestCase, tag
 from django.views.generic.edit import DeletionMixin, ModelFormMixin
 
 from hq.platform.application.routes import routed
-from hq.platform.application.tests.markup import elements, with_class
+from hq.platform.application.tests.markup import elements, select, with_class
 from hq.platform.application.tests.tree import ROOT
 from hq.platform.core.tests.test_part_tags import _catalog_templates
 
 FRAME = "form_page.html"
 CARD = f"{FRAME}#form_card"
+# What the frame's card carries, so a card drawn by hand is told from it.
+HOOK = 'data_frame="form"'
 _COMMENT = re.compile(r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}|{#.*?#}", re.DOTALL)
 
 
@@ -65,7 +67,7 @@ class FormPageTests(SimpleTestCase):
             },
         )
 
-        (card,) = with_class(html, "form-card")
+        (card,) = select(html, "data-frame", "form")
         (drawn,) = elements(html, "form")
         self.assertIn(card, drawn.ancestors)
         self.assertEqual([e.attrs["name"] for e in elements(html, "input") if e.attrs["type"] == "text"], ["name"])
@@ -104,6 +106,6 @@ class FormCardTests(SimpleTestCase):
         drawn = sorted(
             path.relative_to(templates).as_posix()
             for path in templates.rglob("*.html")
-            if "form-card" in _COMMENT.sub("", path.read_text(encoding="utf-8"))
+            if HOOK in _COMMENT.sub("", path.read_text(encoding="utf-8"))
         )
         self.assertEqual(drawn, [FRAME], f'a page that is one form is {{% extends "{FRAME}" %}}')
