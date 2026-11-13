@@ -48,18 +48,21 @@ class Supply:
     """Procedures and machines supplied to one test, changeable mid-test.
 
     The machines replace ``machine_catalog``'s reading of HQ's facts, which a
-    run resolves its hosts through.
+    run resolves its hosts through, and the worker reaches each of them as
+    every profile the manifests name, unless ``reaches`` says otherwise.
     """
 
     def __init__(self, test: TestCase, *manifests: OperationManifest) -> None:
         self.manifests = manifests
         self.machines: tuple[Machine, ...] = (Machine(APP), Machine(DB), Machine(EDGE))
+        self.reaches: frozenset[tuple[str, str]] | None = None
         for patcher in (
             patch("hq.platform.application.automation_adoption.generation", return_value="supplied"),
             patch(
                 "hq.platform.application.automation_adoption.manifests", side_effect=lambda _generation: self.manifests
             ),
             patch("hq.platform.application.automation_runs.machine_catalog", side_effect=lambda: self.machines),
+            patch("hq.platform.application.automation_runs.runner_reaches", side_effect=self._reaches),
         ):
             patcher.start()
             test.addCleanup(patcher.stop)
@@ -72,6 +75,19 @@ class Supply:
 
     def know(self, *machines: Machine) -> None:
         self.machines = machines
+
+    def reach(self, *reaches: tuple[str, str]) -> None:
+        """The worker's logins, each a machine and a profile, and no others."""
+
+        self.reaches = frozenset(reaches)
+
+    def _reaches(self) -> frozenset[tuple[str, str]]:
+        from ..automation_runs import login_profile
+
+        if self.reaches is not None:
+            return self.reaches
+        profiles = {login_profile(manifest) for manifest in self.manifests}
+        return frozenset((machine.name, profile) for machine in self.machines for profile in profiles)
 
 
 def run_payload(*hosts: str, service: str = "web", **fields: Any) -> dict[str, Any]:

@@ -6,8 +6,9 @@ revision it was reviewed at, as this worker resolves it (``procedures``), on
 the machines its runner connections reach (``connections``). The project comes
 from the worker's own configuration, the playbook's path inside it from the
 procedure's record, and the hosts and extra-vars from the run's input as HQ
-validated and approved it; nothing in a claim names a module, a callback, a
-connection setting or an Ansible option.
+validated and approved it, and the login each machine is reached through from
+the privilege its procedure's record names; nothing in a claim names a
+module, a callback, a connection setting or an Ansible option.
 """
 
 import re
@@ -17,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from . import tracing
-from .connections import ConnectionsError, Target
+from .connections import READ_PROFILE, ConnectionsError, Target, profile
 
 RUN_KIND = "automation.operation"
 RUN_ACTION = "run"
@@ -52,9 +53,10 @@ class Procedure:
 # The procedure ``(procedure_id, revision, playbook)`` names, as this worker
 # has it at that revision; None when it has no such procedure. It may refuse.
 Installed = Callable[[str, str, str], Procedure | None]
-# The connection a machine is reached through; None when none reaches it. It
-# may raise ConnectionsError when the connections cannot be read.
-Reach = Callable[[str], Target | None]
+# The connection a machine is reached through as a profile; None when none
+# reaches it. It may raise ConnectionsError when the connections cannot be read.
+Reach = Callable[[str, str], Target | None]
+_PRIVILEGE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,6 +72,14 @@ class Run:
     targets: tuple[Target, ...]
     parameters: Mapping[str, Any]
     timeout_seconds: int
+    # The privilege profile every login of the run is.
+    profile: str = READ_PROFILE
+
+    @property
+    def escalates(self) -> bool:
+        """Whether the run may escalate: never through the read login."""
+
+        return self.profile != READ_PROFILE
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +155,13 @@ def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
     timeout = spec.get("timeout_seconds")
     if not isinstance(timeout, int) or isinstance(timeout, bool) or timeout < 1:
         raise Refused("Unrunnable", "The procedure's record declares no timeout.")
-    targets = tuple(_reached(host, reach) for host in hosts)
+    privilege = spec.get("privilege", "")
+    if not isinstance(privilege, str) or (privilege and not _PRIVILEGE.fullmatch(privilege)):
+        raise Refused("Unrunnable", "The procedure's record names a privilege that is no profile's name.")
+    if spec.get("effect") == "read" and privilege:
+        raise Refused("Unrunnable", "The procedure's record is a read that names a privilege.")
+    login = profile(privilege)
+    targets = tuple(_reached(host, login, reach) for host in hosts)
     with tracing.span("resolve procedure", **{"hq.procedure": procedure_id}):
         procedure = installed(procedure_id, revision, playbook)
     if procedure is None:
@@ -164,14 +180,15 @@ def bind(claim: Claimed, installed: Installed, reach: Reach) -> Run:
         targets=targets,
         parameters=dict(parameters),
         timeout_seconds=timeout,
+        profile=login,
     )
 
 
-def _reached(host: str, reach: Reach) -> Target:
+def _reached(host: str, login: str, reach: Reach) -> Target:
     try:
-        target = reach(host)
+        target = reach(host, login)
     except ConnectionsError as exc:
         raise Refused("NoConnection", f"The worker's connections could not be read: {exc}.") from exc
     if target is None:
-        raise Refused("NoConnection", f"No runner connection reaches {host}.")
+        raise Refused("NoConnection", f"No runner connection reaches {host} as the {login} profile.")
     return target

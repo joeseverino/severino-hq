@@ -125,6 +125,13 @@ SOURCE = ProviderSpec(
     label="Automation source",
     declaration_only=True,
     hostnames=None,
+    # The Procedures page draws everything about the source: its scans, its
+    # proposals and the catalog adopted from it.
+    home=lambda _resource: reverse("control_plane:procedures"),
+    # HQ never reads the host's configuration, only what its record says: a
+    # Refresh writes the one source, named by the host, so no person edits
+    # or removes it by hand.
+    sourced=lambda resource: resource.spec.get("named_by") == "host",
     created_from="automation",
     removal_note=lambda _spec: "HQ forgets what its scans proposed. Refresh records it again.",
     unobserved_reason="Nothing to read on a timer: each Refresh reports what it found.",

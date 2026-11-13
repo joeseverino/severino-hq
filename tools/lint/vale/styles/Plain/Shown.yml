@@ -1,0 +1,10 @@
+# Each line of text the Plain rules read, as they read it, for
+# audit:prose-strings to print. A suggestion, which lint:prose's MinAlertLevel
+# leaves out, so it fails nothing.
+extends: existence
+message: "%s"
+level: suggestion
+nonword: true
+scope: [shown, description, ~comment & ~code]
+raw:
+  - '[^\s][^\n]*'

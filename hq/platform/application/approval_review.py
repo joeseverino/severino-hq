@@ -18,7 +18,7 @@ from .ui import counted
 lazy from . import capabilities
 lazy from .command_forms import switch_field
 lazy from .command_targets import item_name
-lazy from .entity_links import entity_link, record_name
+lazy from .entity_links import entity_link, kind_label, record_name
 lazy from .integration_specs import TARGET, capability_fields
 lazy from .labels import human_label, lower_first
 lazy from .resource_capabilities import LIFECYCLE_VERBS
@@ -33,19 +33,28 @@ class ChangeGroup:
 
     label: str
     rows: tuple[ChangeRow, ...]
+    # What the record is at a glance, from its ``SUMMARY``: its name and what it does.
+    summary: ChangeRow | None = None
 
     @property
     def changed(self) -> bool:
         return any(row.change != "unchanged" for row in self.rows)
 
     @property
+    def whole(self) -> str:
+        """ "added" or "removed" when the record comes or goes as a whole, so
+        its summary says it and its fields fold; "" otherwise."""
+
+        changes = {row.change for row in self.rows}
+        return changes.pop() if len(changes) == 1 and changes <= {"added", "removed"} else ""
+
+    @property
     def said(self) -> str:
         """What happens to the record as a whole, in the words beside its name."""
 
-        changes = {row.change for row in self.rows}
-        if changes == {"added"}:
+        if self.whole == "added":
             return "new"
-        if changes == {"removed"}:
+        if self.whole == "removed":
             return "removed"
         if not self.changed:
             return counted(len(self.rows), "field unchanged", "fields unchanged")
@@ -85,6 +94,16 @@ class ChangePreview:
                 if group.changed
                 for row in group.rows
             ),
+        )
+
+    @property
+    def moves(self) -> int:
+        """How many things a reader sees move: each value apart from any
+        record, each changed field of a record, and a record that comes or goes
+        whole as one."""
+
+        return len(self.rows) + sum(
+            1 if group.whole else sum(row.change != "unchanged" for row in group.rows) for group in self.groups
         )
 
     @property
@@ -148,6 +167,34 @@ def _records(value: Any) -> bool:
     return isinstance(value, Mapping) and bool(value) and all(isinstance(each, Mapping) for each in value.values())
 
 
+# The key a record of a grouped comparison names itself by at a glance: a
+# mapping of ``label`` (its name, which its group is headed by) and ``value``
+# (what it does, in a sentence), the one row a record that comes or goes shows.
+SUMMARY = "_summary"
+
+
+def _summary(record: Mapping[str, Any], change: str) -> ChangeRow | None:
+    said = record.get(SUMMARY)
+    if not isinstance(said, Mapping):
+        return None
+    words = str(said.get("value", ""))
+    return ChangeRow(label=str(said.get("label", "")), before=words, after=words, change=change)
+
+
+def _fields(record: Any) -> dict[str, Any]:
+    return {field: value for field, value in dict(record or {}).items() if field != SUMMARY}
+
+
+def _group(name: Any, was: Any, now: Any) -> ChangeGroup:
+    """One record of a grouped comparison: its fields that move, or every
+    field as it stands, and its summary from the side it is on."""
+
+    rows = changed_words(_fields(was), _fields(now))
+    shown = _summary(now or was or {}, "added" if now is not None else "removed")
+    label = shown.label if shown is not None and shown.label else str(name)
+    return ChangeGroup(label=label, rows=rows or held_words(_fields(now)), summary=shown)
+
+
 def grouped(before: Mapping[str, Any], after: Mapping[str, Any], *, label: str) -> ChangePreview:
     """``compare``, with each record of a field that holds many (a catalog's
     procedures) a group of its own: its fields that move or, when none does,
@@ -163,9 +210,7 @@ def grouped(before: Mapping[str, Any], after: Mapping[str, Any], *, label: str) 
     groups = []
     for key in held:
         was, now = dict(before.get(key) or {}), dict(after.get(key) or {})
-        for name in sorted(set(was) | set(now)):
-            rows = changed_words(was.get(name, {}), now.get(name, {}))
-            groups.append(ChangeGroup(label=str(name), rows=rows or held_words(now.get(name, {}))))
+        groups.extend(_group(name, was.get(name), now.get(name)) for name in sorted(set(was) | set(now)))
     return replace(rest, groups=tuple(groups))
 
 
@@ -343,11 +388,9 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
 
     shown = preview(held)
     sentence = asked(held, shown)
-    record = (
-        entity_link("resource", held.resource_key)
-        if held.resource_kind and ManagedResource.objects.filter(key=held.resource_key).exists()
-        else None
-    )
+    found = ManagedResource.objects.filter(key=held.resource_key).first() if held.resource_kind else None
+    # The card opens the page the record lives on, which its own page would redirect to.
+    record = replace(entity_link("resource", held.resource_key), url=found.get_absolute_url()) if found else None
     return {
         "held": held,
         "tone": "attention" if held.state == ApprovalRequest.State.PENDING else "",
@@ -355,9 +398,17 @@ def review(held: ApprovalRequest) -> dict[str, Any]:
         "preview": shown,
         "warnings": _warnings(held),
         "resource_url": record.url if record else "",
-        # The aside names the record it links, by the sentence's own name for it when it says one.
-        "resource_label": (sentence.target or record.label) if record else "",
+        "resource_label": _resource_label(held, record, sentence),
     }
+
+
+def _resource_label(held: ApprovalRequest, record: Any, sentence: Asked) -> str:
+    """What the aside names the record it links by: the sentence's own name
+    for it, else its name, else (a record filed by its key alone) its kind."""
+
+    if record is None:
+        return ""
+    return sentence.target or (record.label if record.title else kind_label(held.resource_kind))
 
 
 def _warnings(held: ApprovalRequest) -> tuple[str, ...]:

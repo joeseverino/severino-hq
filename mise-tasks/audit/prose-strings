@@ -1,0 +1,11 @@
+#!/bin/sh
+#MISE description="Every line of text lint:prose's wording rules read (a page's words, a template's attributes and tag literals, Python's shown strings, what an agent or a client's author reads), at its file and line, as Vale and plain_words read it; reach for it to count prose before and after a rewrite; read-only"
+#MISE hide=true
+#MISE extends="audit"
+#USAGE flag "--by-file" help="Instead, how many lines each file holds, most first, then the total"
+
+# plain_words reads the tree lint:prose reads, through Vale's own views and
+# its Plain.Shown listing, so the lines are exactly what the rules see.
+set -eu
+
+exec uv run python -m hq.platform.core.plain_words --whole --dump ${usage_by_file:+--by-file}

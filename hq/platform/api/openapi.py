@@ -388,7 +388,7 @@ class _Builder:
         envelope = self.components.schemas["Success"]
         data = self.components.typed({name: kind})[name]
         schema = {**envelope, "properties": {**envelope["properties"], "data": data}}
-        response: dict[str, Any] = {"description": "Accepted: held for a person, and nothing has happened yet."}
+        response: dict[str, Any] = {"description": "Accepted: held for approval in HQ. Nothing has happened yet."}
         if status in recorded:
             example = self.recorded(f"{operation_id}{phrase}", recorded[status])
             return {**response, "content": _json_content(schema, example)}
@@ -446,7 +446,7 @@ class _Builder:
                 name,
                 "Retry-After",
                 {
-                    "description": "Whole seconds until asking again can succeed, as `error.retry_after` says.",
+                    "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
                     "required": waits,
                     "schema": {"type": "integer", "minimum": 1},
                 },
@@ -746,7 +746,7 @@ class _Builder:
                     "read of one record",
                 ),
                 _path_parameter(
-                    "identifier", {"type": "string"}, "The record's value of the field its resource is addressed by."
+                    "identifier", {"type": "string"}, "The record's value of the field its resource is found by."
                 ),
                 _FIELDS,
             ],

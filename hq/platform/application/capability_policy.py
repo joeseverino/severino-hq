@@ -111,11 +111,11 @@ def set_rule(
     if rule is not None and rule not in Rule.values:
         raise ValueError(f"{rule!r} is not a rule.")
     if not agents_may_hold(spec):
-        raise ValueError(f"Only a person in the browser can {spec.title.lower()}, so no agent has a rule for it.")
+        raise ValueError(f"You can only {spec.title.lower()} in the browser, so no agent has a rule for it.")
     if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
         raise ValueError(f"{spec.title} only reads. It can be allowed or blocked, not held for approval.")
     if rule == Rule.ALLOW and no_rule_allows(spec):
-        raise ValueError(f"{spec.title} waits for a person every time an agent asks, so no agent can be allowed it.")
+        raise ValueError(f"{spec.title} always waits for approval when an agent asks, so no agent can be allowed it.")
     if rule is not None:
         identity = identity_of(subject).first()
         if identity is None:
@@ -123,7 +123,9 @@ def set_rule(
         if not _held_by_grant(spec, identity.granted):
             raise ValueError(f"The sign-in service does not allow {subject} to use {spec.title}.")
         if not _usable_by(spec, identity):
-            raise ValueError(f"{subject} signs in as itself, and {spec.title} keeps something of a person's.")
+            raise ValueError(
+                f"{subject} signs in as itself, and {spec.title} needs an agent signed in through a person."
+            )
 
     with transaction.atomic():
         existing = CapabilityRule.objects.select_for_update().filter(subject=subject, capability=spec.name).first()
@@ -371,7 +373,7 @@ def _cell(spec, column: Column, current, grants, group: str) -> PolicyCell:
     if not _held_by_grant(spec, grants[column.subject]):
         return PolicyCell(field, column.label, None, (), "Not granted")
     if not _usable_by(spec, column.identity):
-        return PolicyCell(field, column.label, None, (), "Needs a person")
+        return PolicyCell(field, column.label, None, (), "Person sign-in only")
     options = [("", "Default")]
     if not no_rule_allows(spec):
         options.append((Rule.ALLOW, RULE_LABELS[Rule.ALLOW]))
@@ -412,7 +414,7 @@ class PolicyApplied(TypedDict):
     ok: Literal[True]
     changed: Annotated[int, Describe("How many rules changed.")]
     problems: Annotated[
-        list[str], Describe("Why each rule left as it was could not change, a sentence each; empty when none was.")
+        list[str], Describe("Why each rule that did not change was refused, a sentence each; empty when none was.")
     ]
 
 

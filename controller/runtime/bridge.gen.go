@@ -2378,6 +2378,12 @@ type RunInput struct {
 	Revision string `json:"revision"`
 }
 
+// RunnerReach One login the automation worker has: the machine it reaches, by its name in HQ, and the privilege profile the login is. Never its address, user or key.
+type RunnerReach struct {
+	Machine string `json:"machine"`
+	Profile string `json:"profile"`
+}
+
 // ScannedFile A file of the repository, by its path and the git object id that names its content.
 type ScannedFile struct {
 	Object string `json:"object"`
@@ -2409,6 +2415,7 @@ type SourceCatalog struct {
 	Branch     string             `json:"branch"`
 	Files      []ScannedFile      `json:"files"`
 	Procedures []ScannedProcedure `json:"procedures"`
+	Reaches    []RunnerReach      `json:"reaches"`
 	Revision   string             `json:"revision"`
 	Unpinned   []UnpinnedPath     `json:"unpinned"`
 

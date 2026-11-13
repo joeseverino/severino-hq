@@ -1,7 +1,8 @@
-"""A run's machines are reached only through the runner-role connection named
-for each, as the inventory hands it to Ansible: its address, port and user,
-its own identity alone and its pinned host key, with no agent, password or
-other key, and nothing of any other connection in the document.
+"""A run's machines are reached only through the runner-role connection that
+names each as the run's privilege profile, as the inventory hands it to
+Ansible: its address, port and user, its own identity alone and its pinned
+host key, with no agent, password or other key, and nothing of any other
+connection in the document. A run through the read login never escalates.
 
 The documents are written as the root renderer writes them: the shape
 ``controller/api/hq-connections.openapi.json`` declares, in this account's
@@ -38,13 +39,13 @@ class InventoryTests(DocumentTestCase):
         from hq_runner.ansible import _inventory
 
         self.write(
-            fakes.connection("app.example.com", role="runner", host="192.0.2.10"),
-            fakes.connection("edge.example.com", role="runner", host="198.51.100.7", port="7722", user="example-ops"),
+            fakes.runner("app.example.com", host="192.0.2.10"),
+            fakes.runner("edge.example.com", host="198.51.100.7", port="7722", user="example-ops"),
         )
         targets = self.targets()
 
         hosts = ("app.example.com", "edge.example.com")
-        inventory = _inventory(hosts, tuple(targets[host] for host in hosts))
+        inventory = _inventory(hosts, tuple(targets[host, "read"] for host in hosts))
 
         found = inventory["all"]["hosts"]
         self.assertEqual(set(found), set(hosts))
@@ -53,12 +54,12 @@ class InventoryTests(DocumentTestCase):
         self.assertEqual(edge["ansible_host"], "198.51.100.7")
         self.assertEqual(edge["ansible_port"], 7722)
         self.assertEqual(edge["ansible_user"], "example-ops")
-        self.assertEqual(edge["ansible_ssh_private_key_file"], str(self.ssh_dir / "edge.example.com"))
+        self.assertEqual(edge["ansible_ssh_private_key_file"], str(self.ssh_dir / "edge.example.com-read"))
         self.assertTrue(edge["ansible_host_key_checking"])
         self.assertNotIn("ansible_shell_type", edge)
         self.assertEqual(found["app.example.com"]["ansible_port"], 22)
         self.assertEqual(
-            found["app.example.com"]["ansible_ssh_private_key_file"], str(self.ssh_dir / "app.example.com")
+            found["app.example.com"]["ansible_ssh_private_key_file"], str(self.ssh_dir / "app.example.com-read")
         )
         words = shlex.split(edge["ansible_ssh_common_args"])
         options = dict(
@@ -82,17 +83,17 @@ class InventoryTests(DocumentTestCase):
     def test_a_connection_s_shell_type_is_told_to_ansible_only_when_it_carries_one(self):
         from hq_runner.ansible import _inventory
 
-        self.write(fakes.connection("win.example.com", role="runner", shell_type="powershell"))
+        self.write(fakes.runner("win.example.com", shell_type="powershell"))
         (target,) = self.targets().values()
 
         host = _inventory(("win.example.com",), (target,))["all"]["hosts"]["win.example.com"]
 
         self.assertEqual(host["ansible_shell_type"], "powershell")
 
-    def bound_run(self):
+    def bound_run(self, profile: str = "read", parameters: dict | None = None):
         from hq_runner.claim import Procedure, Run
 
-        self.write(fakes.connection("app.example.com", role="runner"))
+        self.write(fakes.runner("app.example.com", profile))
         targets = tuple(self.targets().values())
         return Run(
             "11111111-2222-4333-8444-555555555555",
@@ -101,9 +102,27 @@ class InventoryTests(DocumentTestCase):
             Procedure("0" * 40, self.root / "project", "playbooks/check.yml"),
             ("app.example.com",),
             targets,
-            {},
+            parameters or {},
             60,
+            profile,
         )
+
+    def test_a_run_through_the_read_login_has_escalation_off_above_all_it_plays(self):
+        from hq_runner.ansible import arguments
+
+        found = arguments(self.bound_run(parameters={"service": "web", "ansible_become": True}), self.root / "run")
+
+        # An extra var, which outranks every keyword and variable a playbook sets.
+        self.assertEqual(found["extravars"], {"service": "web", "ansible_become": False})
+        for host in found["inventory"]["all"]["hosts"].values():
+            self.assertNotIn("ansible_become", host)
+
+    def test_a_run_through_a_privilege_s_login_leaves_escalation_to_its_playbook(self):
+        from hq_runner.ansible import arguments
+
+        found = arguments(self.bound_run("example.service_control", {"service": "web"}), self.root / "run")
+
+        self.assertEqual(found["extravars"], {"service": "web"})
 
     def test_ansible_s_working_files_stay_inside_the_run_s_private_directory(self):
         from hq_runner.ansible import arguments
@@ -141,7 +160,7 @@ class InventoryTests(DocumentTestCase):
 class DocumentTests(DocumentTestCase):
     def test_only_runner_role_connections_reach_a_machine(self):
         self.write(
-            fakes.connection("app.example.com", role="runner"),
+            fakes.runner("app.example.com"),
             fakes.connection("edge.example.com"),
             fakes.connection("caddy.example.com", role="caddy"),
             {
@@ -153,22 +172,47 @@ class DocumentTests(DocumentTestCase):
             },
         )
 
-        self.assertEqual(set(self.targets()), {"app.example.com"})
+        self.assertEqual(set(self.targets()), {("app.example.com", "read")})
 
-    def test_a_ref_two_connections_share_reaches_nothing(self):
+    def test_a_machine_s_read_and_change_logins_are_two_connections(self):
         self.write(
-            fakes.connection("app.example.com", role="runner", host="192.0.2.10"),
-            fakes.connection("app.example.com", role="runner", host="192.0.2.11"),
+            fakes.runner("app.example.com", user="example-read"),
+            fakes.runner("app.example.com", "example.service_control", user="example-change"),
+        )
+        targets = self.targets()
+
+        self.assertEqual(targets["app.example.com", "read"].user, "example-read")
+        self.assertEqual(targets["app.example.com", "example.service_control"].user, "example-change")
+        self.assertNotEqual(
+            targets["app.example.com", "read"].identity, targets["app.example.com", "example.service_control"].identity
+        )
+
+    def test_a_runner_connection_that_names_no_machine_or_profile_reaches_nothing(self):
+        self.write(
+            fakes.connection("app.example.com", role="runner"),
+            fakes.connection("db.example.com", role="runner", machine="db.example.com"),
+            fakes.connection("edge.example.com", role="runner", machine="edge.example.com", profile="Read Only"),
+        )
+
+        self.assertEqual(self.targets(), {})
+
+    def test_a_ref_or_a_machine_and_profile_two_connections_share_reaches_nothing(self):
+        shared_ref = fakes.runner("db.example.com")
+        self.write(
+            fakes.connection("app-a", role="runner", machine="app.example.com", profile="read", host="192.0.2.10"),
+            fakes.connection("app-b", role="runner", machine="app.example.com", profile="read", host="192.0.2.11"),
+            shared_ref,
+            {**shared_ref, "ssh_transport": {**shared_ref["ssh_transport"], "machine": "edge.example.com"}},
         )
 
         self.assertEqual(self.targets(), {})
 
     def test_a_connection_that_is_not_a_usable_destination_reaches_nothing(self):
         self.write(
-            fakes.connection("a.example.com", role="runner", host="-oProxyCommand=true"),
-            fakes.connection("b.example.com", role="runner", port="0"),
-            fakes.connection("c.example.com", role="runner", user="root;true"),
-            fakes.connection("../escape", role="runner"),
+            fakes.runner("a.example.com", host="-oProxyCommand=true"),
+            fakes.runner("b.example.com", port="0"),
+            fakes.runner("c.example.com", user="root;true"),
+            fakes.connection("../escape", role="runner", machine="d.example.com", profile="read"),
         )
 
         self.assertEqual(self.targets(), {})
@@ -178,14 +222,14 @@ class DocumentTests(DocumentTestCase):
 
         for options in ({"mode": 0o644}, {"schema_version": 1}):
             with self.subTest(**options):
-                self.write(fakes.connection("app.example.com", role="runner"), **options)
+                self.write(fakes.runner("app.example.com"), **options)
                 with self.assertRaises(ConnectionsError):
                     self.targets()
 
     def test_a_document_that_is_a_link_is_refused(self):
         from hq_runner.connections import ConnectionsError
 
-        real = self.write(fakes.connection("app.example.com", role="runner"))
+        real = self.write(fakes.runner("app.example.com"))
         linked = self.root / "linked.json"
         linked.symlink_to(real)
 

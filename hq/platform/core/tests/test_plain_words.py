@@ -235,6 +235,71 @@ class ValeRuleTests(SimpleTestCase):
             [("page.html", 2), ("page.html", 5), ("views.py", 1), ("views.py", 5)],
         )
 
+    def test_a_sentence_past_twenty_words_runs_on_through_a_colon_or_a_semicolon(self):
+        twelve = " ".join(["word"] * 12)
+        page = f"<p>{twelve}: {twelve}.</p>\n<p>{twelve}; {twelve}.</p>\n<p>{twelve}. {twelve}.</p>\n"
+
+        self.assertEqual([line for _name, line, rule in vale({"page.html": page}) if rule == "Long"], [1, 2])
+
+    def test_a_sentence_that_stands_back_from_who_acts_is_found(self):
+        found = (
+            "An adoption waits for a person.",
+            "The person it acts for approves it.",
+            "It is the person's own device.",
+            "Someone pressed Refresh.",
+            "Nobody can sign in yet.",
+            "Whoever asked decides it.",
+            "Somebody asked for it.",
+        )
+        kept = ("Through a person's sign-in", "Waiting for your approval.", "An admin approves it.", "Personal token.")
+        page = "".join(f"<p>{text}</p>\n" for text in (*found, *kept))
+
+        self.assertEqual(rules({"page.html": page}), ["Person"] * len(found))
+
+    def test_the_automations_own_parts_are_found_by_their_one_name(self):
+        found = (
+            "Adopted procedures",
+            "One procedure runs.",
+            "Open the proposal.",
+            "Two proposals wait.",
+            "The catalog every run is built from.",
+            "The automation worker reads it.",
+            "Its lease ran out.",
+        )
+        kept = (
+            "Recovery procedure",
+            "The command catalog.",
+            "Its catalogs of commands.",
+            "Two DHCP leases.",
+            "Release.",
+        )
+        page = "".join(f"<p>{text}</p>\n" for text in (*found, *kept))
+
+        self.assertEqual(rules({"page.html": page}), ["Parts"] * len(found))
+
+    def test_what_an_agent_reads_is_held_to_the_rules_for_every_reader_alone(self):
+        """A schema's, an MCP tool's and an API view's docstring is its
+        description; Plain's words stand there as the API's, and any other
+        docstring is for whoever writes the code."""
+
+        source = (
+            "class Answer(TypedDict):\n"
+            '    """A resource held for a person."""\n'
+            '@tool("Read", requires=ANYONE)\n'
+            "def read():\n"
+            '    """Some reads wait for someone."""\n'
+            "def helper():\n"
+            '    """A person writes this resource."""\n'
+            "class Run(StrictCommand):\n"
+            '    """Which procedure to run."""\n'
+            'CapabilitySpec(wants="adopt the procedures of a commit")\n'
+        )
+
+        self.assertEqual(
+            vale({"views.py": source}),
+            [("views.py", 2, "Person"), ("views.py", 5, "Person"), ("views.py", 9, "Parts"), ("views.py", 10, "Parts")],
+        )
+
     def test_a_note_that_narrates_the_page_is_found(self):
         found = (
             "Each connection is a 1Password item the controller is given.",
@@ -398,25 +463,65 @@ class LabelTests(SimpleTestCase):
                 (5, "Link this"),
                 (6, "Download JSON"),
                 (6, "Everything that happened to it"),
+                (7, "the guide for how it works"),
                 (8, "How it is built"),
             ],
         )
 
-    def test_every_label_a_template_writes_is_a_name(self):
-        labels = plain_words.template_labels([Path(settings.BASE_DIR) / "templates"])
+    def test_a_link_in_a_sentence_and_a_notices_title_are_labels(self):
+        template = (
+            '<p>X asked to adopt it. <a href="/a/">Decide it</a> or <a href="/b/">open deploy</a>.</p>\n'
+            '{% notice tone="warning" title="An adoption waits for you" %}{% endnotice %}\n'
+        )
+
+        self.assertEqual(
+            plain_words.labels(template), [(1, "Decide it"), (1, "open deploy"), (2, "An adoption waits for you")]
+        )
+
+    def test_a_link_python_declares_is_a_label_and_a_commands_name_has_no_length(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            module = Path(tmp, "views.py")
+            module.write_text(
+                'Investigation("impact", "See what depends on it", "Everything that stops if this does.")\n'
+                'CapabilitySpec(name="example.approve", label="Approve a held change")\n'
+                'CapabilitySpec(name="example.sign_out", label="Sign it out")\n'
+            )
+            labels = plain_words.python_labels([Path(tmp)])
+            commands = plain_words.python_labels([Path(tmp)], commands=True)
+
+        self.assertEqual([text for _where, text in labels], ["See what depends on it"])
+        self.assertEqual([text for _where, text in commands], ["Approve a held change", "Sign it out"])
+        self.assertEqual(
+            [finding.split(": ")[0] for finding in plain_words.label_findings(commands, most=None)], [f"{module}:3"]
+        )
+
+    def test_every_label_a_template_writes_is_a_name_past_the_baseline(self):
+        base = Path(settings.BASE_DIR)
+        labels = plain_words.template_labels([base / "templates"])
 
         self.assertGreater(len(labels), 300)
-        self.assertEqual(plain_words.label_findings(labels), [])
+        found = plain_words.label_findings((where.removeprefix(f"{base}/"), text) for where, text in labels)
+        self.assertEqual(plain_words.held(found, whole=False), [])
 
-    def test_every_label_python_declares_is_a_name(self):
+    def test_every_label_python_declares_is_a_name_past_the_baseline(self):
         """A page's title, a section's heading, a column, a page's action, a
-        nav entry and a button's verb, wherever HQ's Python writes one."""
+        nav entry, a button's verb and a link, wherever HQ's Python writes
+        one, and a command's name, of any length."""
 
         base = Path(settings.BASE_DIR)
-        labels = plain_words.python_labels([base / "hq", base / "hq_sdk"])
+        roots = [base / "hq", base / "hq_sdk"]
+        labels = plain_words.python_labels(roots)
+        commands = plain_words.python_labels(roots, commands=True)
 
         self.assertGreater(len(labels), 200)
-        self.assertEqual(plain_words.label_findings(labels), [])
+        self.assertGreater(len(commands), 40)
+        found = [
+            *plain_words.label_findings((where.removeprefix(f"{base}/"), text) for where, text in labels),
+            *plain_words.label_findings(
+                ((where.removeprefix(f"{base}/"), text) for where, text in commands), most=None
+            ),
+        ]
+        self.assertEqual(plain_words.held(found, whole=False), [])
 
     def test_a_finding_is_reported_at_its_template_line(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -429,20 +534,91 @@ class LabelTests(SimpleTestCase):
         self.assertEqual(status, 1)
         self.assertEqual([line.split(": ")[0:2] for line in printed.getvalue().splitlines()], [[f"{page}:2", "Label"]])
 
+    def test_a_label_the_baseline_counts_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp, "page.html")
+            page.write_text("<p>Fine</p>\n<h2>Show them</h2>\n")
+            printed = io.StringIO()
+            with (
+                mock.patch.dict(plain_words.BASELINE, {(str(page), "Label"): 1}, clear=True),
+                contextlib.redirect_stdout(printed),
+            ):
+                status = plain_words.main([str(page)])
+
+        self.assertEqual(status, 0, printed.getvalue())
+
+
+@tag("source", "tree")
+class KickerTests(SimpleTestCase):
+    """A kicker over a heading names the group it belongs to, never a word the
+    heading says again."""
+
+    def test_a_kicker_that_repeats_its_heading_is_found_in_python_and_templates(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "views.py").write_text(
+                'Insight(eyebrow="Docs", one="doc is past its review date", many="docs are past it")\n'
+                'Insight(eyebrow="GitHub", title="Failing workflows")\n'
+                'Insight(eyebrow=label, title=f"{label} could not be read")\n'
+                'Insight(eyebrow="Tailnet", title=f"{n} tailnet devices are offline")\n'
+            )
+            Path(tmp, "page.html").write_text(
+                '<p class="eyebrow">Containers</p><h2>Three containers</h2>\n'
+                '<p class="eyebrow">Machines</p><h2>Updates</h2>\n'
+            )
+            found = plain_words.kicker_findings([Path(tmp)])
+
+        self.assertEqual(
+            sorted(finding.split(": ")[0].rsplit("/", 1)[1] for finding in found),
+            ["page.html:1", "views.py:1", "views.py:3", "views.py:4"],
+        )
+        self.assertTrue(all(finding.split(": ")[1] == "Kicker" for finding in found))
+
+    def test_every_kicker_names_its_group_past_the_baseline(self):
+        base = Path(settings.BASE_DIR)
+        found = plain_words.kicker_findings([base / "templates", base / "hq", base / "hq_sdk"])
+
+        self.assertEqual(plain_words.held([finding.removeprefix(f"{base}/") for finding in found], whole=False), [])
+
+
+@tag("source", "tree")
+class DumpTests(SimpleTestCase):
+    def test_the_dump_lists_each_line_of_text_the_rules_read_at_its_place(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp, "page.html")
+            page.write_text('<p>Read the deploy.</p>\n<a title="Opens the log" href="/log/">Log</a>\n{# Hidden #}\n')
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                status = plain_words.main(["--dump", str(page)])
+
+        dumped = dict(line.split(": ", 1) for line in printed.getvalue().splitlines())
+        self.assertEqual(status, 0)
+        self.assertEqual(sorted(dumped), [f"{page}:1", f"{page}:2"])
+        self.assertIn("Read the deploy.", dumped[f"{page}:1"])
+        self.assertIn("Opens the log", dumped[f"{page}:2"])
+
 
 def command_labels() -> list[tuple[str, str]]:
-    """``(capability.field, label)`` for each field a command's form labels,
-    its target included, as every command form and held request shows it."""
+    """``(path:line, label)`` for each field a command's form labels, its
+    target included, as every command form and held request shows it, at the
+    command class it derives from, so the file's baseline entry counts it."""
+
+    import inspect
 
     from django import forms
 
     from hq.platform.application.capabilities import capability_registry
     from hq.platform.application.command_forms import command_form_class
 
+    base = f"{Path(settings.BASE_DIR).resolve()}/"
+
+    def where(spec) -> str:
+        path = Path(inspect.getsourcefile(spec.command_type) or spec.name).resolve()
+        return f"{str(path).removeprefix(base)}:{inspect.getsourcelines(spec.command_type)[1]}"
+
     return [
-        (f"{name}.{field_name}", str(field.label))
-        for name, spec in sorted(capability_registry().items())
-        for field_name, field in command_form_class(spec).base_fields.items()
+        (where(spec), str(field.label))
+        for _name, spec in sorted(capability_registry().items())
+        for field in command_form_class(spec).base_fields.values()
         if field.label and not isinstance(field.widget, forms.HiddenInput)
     ]
 
@@ -456,7 +632,7 @@ class DerivedLabelTests(SimpleTestCase):
         labels = command_labels()
 
         self.assertGreater(len(labels), 100)
-        self.assertEqual(plain_words.refused(labels), [])
+        self.assertEqual(plain_words.held(plain_words.refused(labels), whole=False), [])
 
     def test_every_button_nav_entry_and_tab_hq_registers_is_a_name(self):
         """Read from the registries, so an extension's and a derived one are

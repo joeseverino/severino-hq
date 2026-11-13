@@ -63,7 +63,12 @@ SSH_TRANSPORT: ConnectionShape = ConnectionShape(
         Setting("HOST_KEY", label="host_key"),
         # The name of the identity item, never the key.
         Setting("IDENTITY", label="identity"),
+        # A runner transport's machine, by its name in HQ, and the privilege
+        # profile its login is: ``read``, or a procedure's privilege. Its ref
+        # is the identity's file name, so a machine's logins each have their own.
+        Setting("MACHINE", label="machine", optional=True),
         Setting("PORT", label="port"),
+        Setting("PROFILE", label="profile", optional=True),
         Setting("ROLE", label="role", optional=True),
         Setting("USER", label="user"),
     ),

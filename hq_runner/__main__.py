@@ -94,11 +94,11 @@ def _token(path: Path | None) -> str:
     return token
 
 
-def _reach(config: Config) -> Callable[[str], connections.Target | None]:
+def _reach(config: Config) -> Callable[[str, str], connections.Target | None]:
     """A pass's connections, read once when its first host is looked up."""
 
     read = cache(lambda: connections.runner_targets(config.connections, config.ssh_dir))
-    return lambda host: read().get(host)
+    return lambda host, profile: read().get((host, profile))
 
 
 def _scan(config: Config, scratch: Path, token: str) -> Scan:
@@ -111,7 +111,18 @@ def _scan(config: Config, scratch: Path, token: str) -> Scan:
         token=token,
         role_spec=ansible.role_spec(scratch),
         verify=catalog.github_verify(config.project, token),
+        reaches=lambda: _reaches(config),
     )
+
+
+def _reaches(config: Config) -> list[connections.Reach]:
+    """Each machine and profile the worker has a login for; none while its
+    connections cannot be read, as a run would find them."""
+
+    try:
+        return list(connections.runner_targets(config.connections, config.ssh_dir))
+    except connections.ConnectionsError:
+        return []
 
 
 def drain(

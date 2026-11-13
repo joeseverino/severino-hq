@@ -92,27 +92,25 @@ class AgentRefusal:
         return Refusal(self.code, self.reason)
 
 
-AGENTS_PAUSED = AgentRefusal("agents_paused", "Agents are paused by the operator.")
-AGENT_BLOCKED = AgentRefusal("agent_blocked", "This client is blocked by the operator.")
+AGENTS_PAUSED = AgentRefusal("agents_paused", "An operator paused all agents in HQ. Try again later.")
+AGENT_BLOCKED = AgentRefusal("agent_blocked", "An operator blocked this client in HQ.")
 DEVICE_AWAITING_APPROVAL = AgentRefusal(
     "device_awaiting_approval",
-    "This client has not been approved on this device. The person it acts for approves the device "
-    "on HQ's Agents page, and the next call from it runs.",
+    "This client is not approved on this device yet. Once it is approved on HQ's Agents page, the next call runs.",
 )
 DEVICE_BLOCKED = AgentRefusal(
     "device_blocked",
-    "This client is blocked on this device by the operator. It is allowed again on HQ's Agents page.",
+    "An operator blocked this client on this device. It can be allowed again on HQ's Agents page.",
 )
 DEVICE_UNKNOWN = AgentRefusal(
     Unplaced.NO_DEVICE,
-    "No tailnet device sent this call, so HQ cannot place it on one and nobody can approve it. "
-    "An agent calls HQ over the tailnet from the device it runs on; the first call from a device waits "
-    "for the person it acts for to approve it on HQ's Agents page.",
+    "No tailnet device sent this call, so HQ refused it. Call HQ over the tailnet from the agent's device, "
+    "then approve that device on HQ's Agents page.",
 )
 TAILNET_UNAVAILABLE = AgentRefusal(
     Unplaced.UNANSWERED,
-    "HQ could not ask tailscaled which device sent this call, so the call is refused. "
-    "Retry; if it goes on, the operator checks tailscaled on HQ's host.",
+    "HQ could not ask tailscaled which device sent this call, so HQ refused it. "
+    "Try again. If it keeps failing, check tailscaled on HQ's host.",
 )
 _DEVICE_REFUSALS = {
     DeviceStanding.AWAITING: DEVICE_AWAITING_APPROVAL,
@@ -235,7 +233,7 @@ class AgentBlocked(TypedDict):
 
     ok: Literal[True]
     client_id: Annotated[str, Describe("The client the call blocked or allowed, by its client id.")]
-    subject: Annotated[str, Describe("The agent the call blocked or allowed: its client as the person it acts for.")]
+    subject: Annotated[str, Describe("The agent the call blocked or allowed: its client and the account it acts for.")]
     blocked: Annotated[bool, Describe("Whether the agent is blocked now.")]
 
 
@@ -276,9 +274,9 @@ class AgentRemoved(TypedDict):
 
     ok: Literal[True]
     client_id: Annotated[str, Describe("The client the call removed, by its client id.")]
-    subject: Annotated[str, Describe("The agent the call removed: its client as the person it acts for.")]
-    devices: Annotated[int, Describe("How many records of the tailnet devices it called from went with it.")]
-    rules: Annotated[int, Describe("How many of its own rules went with it.")]
+    subject: Annotated[str, Describe("The agent the call removed: its client and the account it acts for.")]
+    devices: Annotated[int, Describe("How many of its tailnet devices were removed with it.")]
+    rules: Annotated[int, Describe("How many of its own rules were removed with it.")]
 
 
 def remove_agent(_command: AgentRemoveCommand, *, principal: Principal, current_key: str) -> AgentRemoved:
@@ -300,10 +298,7 @@ def remove_agent(_command: AgentRemoveCommand, *, principal: Principal, current_
         if row is None:
             raise RecordNotFound("No agent with that client has called HQ.")
         if row.blocked_at is not None:
-            raise PolicyError(
-                "A blocked agent stays listed so its block holds. Allow it first, then remove it, "
-                "if its client can no longer sign in."
-            )
+            raise PolicyError("Allow this agent before you remove it. A blocked agent stays listed so its block holds.")
         subject = subject_of(row.client_id, row.person_key)
         named = str(row)
         rules, _ = CapabilityRule.objects.filter(subject=subject).delete()

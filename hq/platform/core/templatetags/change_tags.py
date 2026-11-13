@@ -20,13 +20,19 @@ def change_table(preview: Any) -> dict[str, Any]:
     """The table of ``preview``: what belongs to no record, then each record,
     with the id its fold is named by when it starts folded."""
 
-    bodies = [{"label": "", "said": "", "rows": preview.rows, "folds": ""}] if preview.rows else []
+    bodies = [{"label": "", "said": "", "rows": preview.rows, "folds": "", "summary": None, "whole": ""}]
+    bodies = bodies if preview.rows else []
+    # A record that comes or goes whole is said by its summary, its fields folded under it.
     bodies += [
         {
             "label": group.label,
             "said": group.said,
             "rows": group.rows,
-            "folds": "" if group.changed else f"change-{slugify(preview.label)}-{slugify(group.label)}",
+            "folds": (
+                f"change-{slugify(preview.label)}-{slugify(group.label)}" if not group.changed or group.whole else ""
+            ),
+            "summary": group.summary if group.whole else None,
+            "whole": group.whole,
         }
         for group in preview.groups
     ]

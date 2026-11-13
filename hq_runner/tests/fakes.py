@@ -26,12 +26,16 @@ if TYPE_CHECKING:
 REVISION = "0123456789abcdef0123456789abcdef01234567"
 OTHER_REVISION = "89abcdef0123456789abcdef0123456789abcdef"
 PROCEDURE = "example.service_restart"
+# The privilege its sidecar in the example project names.
+PRIVILEGE = "example.service_control"
 OPERATION = "11111111-2222-4333-8444-555555555555"
 APP = "app.example.com"
 WORKER = "example-worker"
 PLAYBOOK = "playbooks/restart.yml"
 PROCEDURES = {PROCEDURE: Procedure(REVISION, Path("/srv/example/project"), PLAYBOOK)}
 SSH_DIR = Path("/run/example/ssh")
+# The logins the worker of a scan has, each a machine and a profile.
+REACHES = ((APP, "read"), (APP, PRIVILEGE))
 
 
 def connection(ref: str, **transport: str) -> dict[str, Any]:
@@ -54,6 +58,12 @@ def connection(ref: str, **transport: str) -> dict[str, Any]:
     }
 
 
+def runner(machine: str, profile: str = "read", **transport: str) -> dict[str, Any]:
+    """The worker's login to ``machine`` as ``profile``, under a ref of its own."""
+
+    return connection(f"{machine}-{profile}", role="runner", machine=machine, profile=profile, **transport)
+
+
 def write_connections(path: Path, *connections: Mapping[str, Any], schema_version: int = 2, mode: int = 0o600) -> Path:
     """A connections document at ``path``, this account's own file, as the renderer leaves it."""
 
@@ -71,14 +81,16 @@ def installed(procedure_id: str, revision: str, playbook: str) -> Procedure | No
     return PROCEDURES.get(procedure_id)
 
 
-def reach(host: str) -> Target | None:
-    """The one machine a test's worker reaches, through its runner connection."""
+def reach(host: str, profile: str) -> Target | None:
+    """The one machine a test's worker reaches, through its login as the
+    example procedure's privilege."""
 
     from hq_runner.connections import Target
 
-    if host != APP:
+    if (host, profile) != (APP, PRIVILEGE):
         return None
-    return Target(APP, "192.0.2.10", 22, "example-read", SSH_DIR / APP, SSH_DIR / "known_hosts")
+    ref = f"{APP}-{profile}"
+    return Target(ref, APP, profile, "192.0.2.10", 22, "example-change", SSH_DIR / ref, SSH_DIR / "known_hosts")
 
 
 # Every event of the recorded run, in order: tasks that were fine, changed
@@ -194,7 +206,12 @@ def scan_pending(*, generation: int = 1) -> dict[str, Any]:
 
 
 def pending(
-    *, revision: str = REVISION, parameters: Mapping[str, Any] | None = None, timeout: int = 300
+    *,
+    revision: str = REVISION,
+    parameters: Mapping[str, Any] | None = None,
+    timeout: int = 300,
+    effect: str = "infrastructure_change",
+    privilege: str = PRIVILEGE,
 ) -> dict[str, Any]:
     """A claimed run as the bridge's claim answers it."""
 
@@ -229,6 +246,8 @@ def pending(
                 "timeout_seconds": timeout,
                 "retry": "never",
                 "hosts": [],
+                "effect": effect,
+                "privilege": privilege,
             },
             "observed": {},
         },

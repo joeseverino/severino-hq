@@ -420,10 +420,14 @@ test carries the `tree` tag (`test_tree_tag.py`).
 The wording rules are Vale's, in `tools/lint/vale`: `.vale.ini` there says
 which files each style reads, `styles` holds the rules, and `lint:prose` runs
 them. `hq/platform/core/plain_words.py` hands Vale the template attributes and
-tag literals it cannot read. `uv run python -m hq.platform.core.plain_words
+tag literals it cannot read, and itself reads every label, link and kicker,
+in a template or in Python. `uv run python -m hq.platform.core.plain_words
 --list <paths>` prints every finding in those paths at its line, Vale's on the
 text and its own on the rest, before the baseline in `prose_baseline.py` holds
-any; `vale --output=line` alone sees only the text.
+any; `vale --output=line` alone sees only the text. `mise run
+audit:prose-strings` prints every line of text the rules read, at its file
+and line (`--by-file` counts them), to measure prose before and after a
+rewrite.
 
 A finding names its rule and what to say instead. A word that must stand in
 one file is turned off for that file in that `.vale.ini`, with the reason
@@ -480,10 +484,10 @@ mise writes the file and keeps every other value in it, and
 `mise doctor project` then checks that the set imports.
 
 A worktree Claude Code makes gets a copy of the file, and of mypy's cache,
-through `.worktreeinclude`, so it composes the extensions' main checkouts. A value of
-either already in the environment wins, so an extension worktree is composed
-by naming its sources on the command line, one `src` per package, joined by
-`:`, and another set by naming its manifests:
+through `.worktreeinclude`, so it composes the extensions' main checkouts.
+A value of either variable already in the environment wins. So an extension
+worktree is composed by naming its sources on the command line, one `src` per
+package, joined by `:`, and another set by naming its manifests:
 
 ```sh
 HQ_LOCAL_PYTHONPATH=<worktree>/packages/<name>/src mise run test --composed
@@ -587,15 +591,15 @@ A task that waits for the turn without holding the lock (each of those, and
 an aggregate whose script runs `mise run` on one that waits) declares
 `SEVERINO_WAITS_FOR_HEAVY_TURN="1"` in its env, the one place
 `mise tasks ls --json` shows it without running anything; mise lists no edge
-for a `mise run` inside a script. The agent hooks read it beside the lock, and
-`TurnMarkTests` (`tools/gate/tests/test_turn_mark.py`) derives the set from
+for a `mise run` inside a script. A tool outside the repository, such as an
+agent's command hook, can read it beside the lock. `TurnMarkTests` (`tools/gate/tests/test_turn_mark.py`) derives the set from
 every task's scripts and holds the marks to it.
 
 A waiting task names the holder, its checkout, how long it has held the turn
 and its pid, again every 30 seconds:
 
 ```text
-[lint:shell] waiting for lock heavy, held by test:suite in ~/Code/Projects/severino-hq (pid 4121, for 3m02s)
+[lint:shell] waiting for lock heavy, held by test:suite in ~/hq (pid 4121, for 3m02s)
 ```
 
 `mise run --lock-timeout 5m` gives up after that long, naming the holder.

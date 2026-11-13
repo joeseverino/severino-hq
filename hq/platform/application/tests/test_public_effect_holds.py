@@ -175,7 +175,7 @@ class FloorTests(TestCase):
                 with self.subTest(kind=kind, interface=interface):
                     key = fresh_key()
 
-                    with self.assertRaisesMessage(PolicyError, "This change needs a person to approve it."):
+                    with self.assertRaisesMessage(PolicyError, "This change needs approval."):
                         save_managed_resource(record(key, kind), principal=agent(interface))
 
                     self.assertFalse(ManagedResource.objects.filter(key=key).exists())

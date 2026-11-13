@@ -51,6 +51,7 @@ class ScanTestCase(unittest.TestCase):
             token="",
             role_spec=fakes.role_spec,
             verify=fakes.verified,
+            reaches=lambda: fakes.REACHES,
         )
 
     def by_sidecar(self, scanned: dict) -> dict[str, dict]:
@@ -143,7 +144,12 @@ class UnreadableTests(ScanTestCase):
         self.remote.commit({"playbooks/odd.yml": play, "playbooks/odd.hq.yml": "id: example.odd\n"})
 
         (odd,) = catalog.scan(
-            self.project, scratch=self.root / "scratch", token="", role_spec=role_spec, verify=fakes.verified
+            self.project,
+            scratch=self.root / "scratch",
+            token="",
+            role_spec=role_spec,
+            verify=fakes.verified,
+            reaches=lambda: fakes.REACHES,
         )["procedures"]
 
         self.assertEqual(asked, ["health"])
@@ -172,6 +178,83 @@ class UnreadableTests(ScanTestCase):
             self.scan()
 
         self.assertEqual(refused.exception.reason, "FetchFailed")
+
+
+READ = "id: example.check\neffect: read\n"
+CHANGE = "id: example.check\neffect: infrastructure_change\nprivilege: example.service_control\n"
+
+
+class EscalationTests(ScanTestCase):
+    """A read whose plays escalate anywhere is a problem of that procedure,
+    naming the file that does; a change may escalate."""
+
+    def problems(self, sidecar: str, files: dict[str, str]) -> list[str]:
+        self.remote.commit({"playbooks/check.hq.yml": sidecar, **files})
+        (found,) = catalog.scan(
+            self.project,
+            scratch=self.root / "scratch",
+            token="",
+            role_spec=lambda role, playbook_dir, project_dir: None,
+            verify=fakes.verified,
+            reaches=lambda: fakes.REACHES,
+        )["procedures"]
+        return found["problems"]
+
+    def test_a_read_that_escalates_anywhere_its_plays_reach_is_a_problem_naming_the_file(self):
+        task = "- name: Look\n  ansible.builtin.command: id -u\n"
+        cases = {
+            "the play": ("playbooks/check.yml", {}, "  become: true\n  tasks: []\n"),
+            "a task's vars": (
+                "playbooks/check.yml",
+                {},
+                "  tasks:\n    - name: Look\n      vars:\n        ansible_become: true\n      ansible.builtin.command: id -u\n",
+            ),
+            "a file it imports": (
+                "playbooks/tasks/look.yml",
+                {"playbooks/tasks/look.yml": f"{task}  become_user: root\n"},
+                "  tasks:\n    - ansible.builtin.import_tasks: tasks/look.yml\n",
+            ),
+            "a role it lists": (
+                "roles/look/tasks/main.yml",
+                {"roles/look/tasks/main.yml": f"{task}  become: yes\n"},
+                "  roles: [look]\n",
+            ),
+            "a role it includes": (
+                "roles/look/tasks/main.yml",
+                {"roles/look/tasks/main.yml": f"{task}  become_method: ansible.builtin.su\n"},
+                "  tasks:\n    - ansible.builtin.include_role:\n        name: look\n",
+            ),
+            "a role a role depends on": (
+                "roles/deep/defaults/main.yml",
+                {
+                    "roles/look/meta/main.yml": "dependencies:\n  - role: deep\n",
+                    "roles/look/tasks/main.yml": task,
+                    "roles/deep/defaults/main.yml": "ansible_become_user: root\n",
+                },
+                "  roles: [look]\n",
+            ),
+        }
+        for name, (escalating, files, body) in cases.items():
+            with self.subTest(name):
+                play = f"- name: Check\n  hosts: all\n{body}"
+                problems = self.problems(READ, {"playbooks/check.yml": play, **files})
+
+                self.assertEqual(len(problems), 1, problems)
+                self.assertIn(escalating, problems[0])
+
+    def test_a_read_that_turns_escalation_off_and_a_change_that_escalates_are_no_problem(self):
+        off = "- name: Check\n  hosts: all\n  become: false\n  vars:\n    ansible_become: false\n  tasks: []\n"
+        on = "- name: Check\n  hosts: all\n  become: true\n  tasks: []\n"
+
+        self.assertEqual(self.problems(READ, {"playbooks/check.yml": off}), [])
+        self.assertEqual(self.problems(CHANGE, {"playbooks/check.yml": on}), [])
+
+    def test_a_scan_says_each_machine_and_profile_the_worker_has_a_login_for(self):
+        self.remote.commit({"playbooks/check.hq.yml": READ, "playbooks/check.yml": "- name: Check\n  hosts: all\n"})
+
+        scanned = self.scan()
+
+        self.assertEqual({(found["machine"], found["profile"]) for found in scanned["reaches"]}, set(fakes.REACHES))
 
 
 class VerificationTests(unittest.TestCase):

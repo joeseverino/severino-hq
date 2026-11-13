@@ -102,7 +102,7 @@ VIEWS = {
         View(
             "approvals",
             "Held requests",
-            "The changes you asked for that wait for a person; a person reads every one.",
+            "The changes you asked for that wait for approval in HQ.",
             held_requests,
             READS,
         ),
@@ -111,7 +111,7 @@ VIEWS = {
             "HQ",
             (
                 "HQ itself: its release, where it runs, its jobs and its open problems. "
-                "`system_health` says whether it answers; the `status-brief` prompt is a brief of both."
+                "`system_health` says whether it answers, and the `status-brief` prompt sums up both."
             ),
             hq_itself,
             READS,

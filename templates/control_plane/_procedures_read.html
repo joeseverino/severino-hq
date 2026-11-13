@@ -1,0 +1,8 @@
+{% comment %}
+The title line of the Playbooks page: why its newest scan failed and what to
+do, then when a read last succeeded, said as such beside a failure so the
+two never read as one event.
+{% endcomment %}{% if read_at or failed_tone %}{% title_meta element="ul" %}
+  {% if failed_tone %}<li data-scan-failed>{% status sources.scanned.note tone=failed_tone pill=False %} Refresh to try again.</li>{% endif %}
+  {% if read_at %}<li>{% include "partials/_reading_age.html" with at=read_at succeeded=failed_tone only %}</li>{% endif %}
+{% endtitle_meta %}{% endif %}

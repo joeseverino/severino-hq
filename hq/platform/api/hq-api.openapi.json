@@ -213,7 +213,7 @@
                 "tool": "describe_capabilities"
               }
             },
-            "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones this caller may run."
+            "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones you may run."
           },
           "ok": false
         },
@@ -2911,7 +2911,7 @@
               "state": "pending",
               "target": ""
             },
-            "message": "This change is waiting for a person to approve it in HQ. Nothing has been written and nothing is queued. Tell whoever asked, with the request id, and stop; approving it is not something a token can do.",
+            "message": "This change waits for approval in HQ. Nothing is written or queued until an operator approves it. Report the request id and stop, since a token cannot approve it.",
             "queued": false,
             "repeated": false,
             "status": "awaiting_approval"
@@ -2927,7 +2927,7 @@
             "details": {
               "field": "payload.idempotency_key"
             },
-            "message": "A retry key is required for capabilities that change state: send a new one as payload.idempotency_key, and the same one again when you retry this change."
+            "message": "A capability that changes something needs an idempotency key. Send a new payload.idempotency_key, and the same one when you retry this change."
           },
           "ok": false
         },
@@ -2947,7 +2947,7 @@
         "dataValue": {
           "error": {
             "code": "agents_paused",
-            "message": "Agents are paused by the operator."
+            "message": "An operator paused all agents in HQ. Try again later."
           },
           "ok": false
         },
@@ -3199,7 +3199,7 @@
         "dataValue": {
           "error": {
             "code": "agents_paused",
-            "message": "Agents are paused by the operator."
+            "message": "An operator paused all agents in HQ. Try again later."
           },
           "ok": false
         },
@@ -3345,7 +3345,7 @@
     },
     "headers": {
       "ChangeTooManyRequestsRetryAfter": {
-        "description": "Whole seconds until asking again can succeed, as `error.retry_after` says.",
+        "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
         "required": false,
         "schema": {
           "minimum": 1,
@@ -3359,7 +3359,7 @@
         }
       },
       "TooManyRequestsRetryAfter": {
-        "description": "Whole seconds until asking again can succeed, as `error.retry_after` says.",
+        "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
         "required": true,
         "schema": {
           "minimum": 1,
@@ -3755,7 +3755,7 @@
             }
           }
         },
-        "description": "Accepted: held for a person, and nothing has happened yet."
+        "description": "Accepted: held for approval in HQ. Nothing has happened yet."
       },
       "ChangeConflict": {
         "content": {
@@ -6284,7 +6284,7 @@
                 "$ref": "#/components/schemas/IdempotencyKey"
               },
               "proposal": {
-                "description": "The proposal a Refresh made, by its id.",
+                "description": "The scan result a Refresh kept, by its ID.",
                 "minimum": 1,
                 "type": "integer"
               },
@@ -6335,11 +6335,11 @@
       },
       "AwaitingApproval": {
         "additionalProperties": false,
-        "description": "A call held for a person, which is no error: nothing is written or queued until one agrees.",
+        "description": "A call held for approval, which is no error: nothing is written or queued until an operator approves.",
         "properties": {
           "applied": {
             "const": false,
-            "description": "Whether anything changed, which nothing has while the call waits.",
+            "description": "Always false: nothing changes while the call waits.",
             "type": "boolean"
           },
           "approval": {
@@ -6351,7 +6351,7 @@
           },
           "queued": {
             "const": false,
-            "description": "Whether any work was queued, which it never is while the call waits.",
+            "description": "Always false: no work is queued while the call waits.",
             "type": "boolean"
           },
           "repeated": {
@@ -6360,7 +6360,7 @@
           },
           "status": {
             "const": "awaiting_approval",
-            "description": "That the call waits for a person.",
+            "description": "That the call waits for approval.",
             "type": "string"
           }
         },
@@ -6785,14 +6785,14 @@
             "type": "string"
           },
           "target_initial_fields": {
-            "description": "The fields of its command filled in from the target's record, to be changed from there.",
+            "description": "The command's fields filled in from the target's record, which you may change.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "target_label": {
-            "description": "What a person calls the record it acts on; empty for none.",
+            "description": "The type of record it acts on, as HQ's pages name it; empty for none.",
             "type": "string"
           },
           "target_query": {
@@ -6819,7 +6819,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "What its button says in each of its modes, by the mode's name, where one button cannot say all.",
+            "description": "What its button says in each mode, by mode name, where one label cannot fit every mode.",
             "type": "object"
           },
           "verb": {
@@ -6858,7 +6858,7 @@
             "$ref": "#/components/schemas/CapabilityDescription/properties/execution_notes"
           },
           "idempotency_key_required": {
-            "description": "Whether this caller must send an idempotency key to run it: any change, from all but the host's shell.",
+            "description": "Whether you must send an idempotency key to run it: true for any change, except from the host's shell.",
             "type": "boolean"
           },
           "input_schema": {
@@ -6874,7 +6874,7 @@
             "$ref": "#/components/schemas/CapabilitySummary/properties/permitted"
           },
           "request_schema": {
-            "description": "The JSON Schema of the body a call to run it sends.",
+            "description": "The JSON Schema of the request body that runs it.",
             "type": "object"
           },
           "required_capabilities": {
@@ -6935,7 +6935,7 @@
         "description": "The capability catalog as the machine API answers it: each entry with the body it is called by.",
         "properties": {
           "capabilities": {
-            "description": "Each capability asked for that this caller's interface can run.",
+            "description": "Each capability asked for that you can run from here.",
             "items": {
               "$ref": "#/components/schemas/CapabilityEntry"
             },
@@ -6954,18 +6954,18 @@
       },
       "CapabilitySummary": {
         "additionalProperties": false,
-        "description": "One registry entry as an index names it: what it is and whether the caller may run it, without its schema.",
+        "description": "One command as the index lists it: what it does and whether you may run it, without its schema.",
         "properties": {
           "effect": {
             "description": "What running it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
             "type": "string"
           },
           "label": {
-            "description": "What a person calls the command.",
+            "description": "The command's name, as HQ's pages show it.",
             "type": "string"
           },
           "name": {
-            "description": "The command's dotted name, which running it takes.",
+            "description": "The command's dotted name, which you run it by.",
             "type": "string"
           },
           "permitted": {
@@ -7229,7 +7229,7 @@
         "type": "object"
       },
       "CommandAnswer": {
-        "description": "What the command answers, in the shape its capability names, which that capability's own route in this document gives.",
+        "description": "What the command answers, in the shape its capability's own route in this document gives.",
         "type": "object"
       },
       "CompletedAt": {
@@ -10673,7 +10673,7 @@
       },
       "HeldRequest": {
         "additionalProperties": false,
-        "description": "A call held for a person: what it asks, who asked, and where it is decided.",
+        "description": "A call held for approval: what it asks, who asked, and where it is decided.",
         "properties": {
           "capability": {
             "description": "The command it would run, by name.",
@@ -10688,7 +10688,7 @@
             "type": "string"
           },
           "id": {
-            "description": "The request's id, which its asker reports to whoever asked.",
+            "description": "The request's id, which the asking agent reports back to its user.",
             "type": "string"
           },
           "reason": {
@@ -10712,11 +10712,11 @@
             "type": "string"
           },
           "resource_kind": {
-            "description": "The type of what it would change, which is why it waits for a person; empty for none.",
+            "description": "The type of what it would change, which is why it needs approval; empty for none.",
             "type": "string"
           },
           "review_url": {
-            "description": "Where a person decides it in HQ's web interface, as an absolute address.",
+            "description": "The absolute address in HQ's web interface where an operator decides it.",
             "type": "string"
           },
           "state": {
@@ -15551,7 +15551,7 @@
         "type": "object"
       },
       "ResourceRecordAnswer": {
-        "description": "One record, in the shape its resource names, which that resource's own route in this document gives.",
+        "description": "One record, in the shape its resource's own route in this document gives.",
         "type": "object"
       },
       "ResourceSaved": {
@@ -15614,7 +15614,7 @@
       },
       "RootData": {
         "additionalProperties": false,
-        "description": "What this API is, and what the presented credential may do.",
+        "description": "What this API is, and what your credential may do.",
         "properties": {
           "actor": {
             "description": "Who the presented credential acts as, by the name HQ records its calls under.",
@@ -15655,18 +15655,18 @@
       },
       "RootLinks": {
         "additionalProperties": false,
-        "description": "Where each of the API's own reads is, every one a path on this host.",
+        "description": "The path of each of the API's reads on this host.",
         "properties": {
           "capabilities": {
-            "description": "Every capability a token could ever hold, flagged by whether this one may run it.",
+            "description": "Every capability, each flagged by whether your token may run it.",
             "type": "string"
           },
           "connections": {
-            "description": "Connection contracts and whether this token is permitted each.",
+            "description": "The connection contracts, and whether your token may use each.",
             "type": "string"
           },
           "findings": {
-            "description": "What HQ currently claims is wrong, with the evidence and a remedy.",
+            "description": "The open problems HQ found, with the evidence and a remedy for each.",
             "type": "string"
           },
           "openapi": {
@@ -15674,11 +15674,11 @@
             "type": "string"
           },
           "resources": {
-            "description": "Every readable resource, including operations this token may use.",
+            "description": "Every readable resource, with the operations your token may use.",
             "type": "string"
           },
           "topology": {
-            "description": "The live permitted infrastructure graph and its canonical actions.",
+            "description": "The live infrastructure graph you may read, with each node's safe actions.",
             "type": "string"
           }
         },
@@ -17843,7 +17843,7 @@
     }
   },
   "info": {
-    "description": "Versioned machine-client transport over the shared capability registry. Derived from HQ's routes and its capability, resource and domain registries.\n\nWhat `x-hq-effect` says running it does:\n\n- `read`: Reads and answers; changes nothing.\n- `remote_write`: Changes a record, in HQ or through a connection HQ holds.\n- `infrastructure_change`: Changes a live system HQ manages, such as a DNS record, a proxy route or a container.\n- `destructive`: Stops or deletes something; running it again does not bring it back.",
+    "description": "HQ's versioned machine API, over the same capabilities the web UI, CLI and MCP run. Derived from HQ's routes and its capability, resource and domain registries.\n\nWhat `x-hq-effect` says running it does:\n\n- `read`: Reads and answers; changes nothing.\n- `remote_write`: Changes a record, in HQ or through a connection HQ holds.\n- `infrastructure_change`: Changes a live system HQ manages, such as a DNS record, a proxy route or a container.\n- `destructive`: Stops or deletes something; running it again does not bring it back.",
     "title": "Severino HQ machine API",
     "version": "2"
   },
@@ -17852,7 +17852,7 @@
   "paths": {
     "/api/v2/": {
       "get": {
-        "description": "What this is, and what the presented credential may actually do.",
+        "description": "What this API is, and what your credential may do.",
         "operationId": "rootV2",
         "responses": {
           "200": {
@@ -17957,7 +17957,7 @@
     },
     "/api/v2/capabilities/": {
       "get": {
-        "description": "Every capability a token could ever hold, flagged by whether this one may run it.",
+        "description": "Every capability, each flagged by whether your token may run it.",
         "operationId": "capabilitiesV2",
         "parameters": [
           {
@@ -18198,7 +18198,7 @@
     },
     "/api/v2/capabilities/appearance.theme.set/": {
       "post": {
-        "description": "Draw the signed-in person's pages in the system's theme, light or dark.",
+        "description": "Choose whether your pages are light, dark, or follow the system.",
         "operationId": "appearanceThemeSetV2",
         "parameters": [
           {
@@ -18584,7 +18584,7 @@
     },
     "/api/v2/capabilities/automation.source.adopt/": {
       "post": {
-        "description": "Make a proposal the catalog of procedures HQ runs, once a person agrees. A commit GitHub did not verify, or one carrying an Ansible configuration or plugins, is refused.",
+        "description": "Adopt a scanned commit as the playbooks HQ runs. A commit GitHub did not verify, or one carrying an ansible.cfg or a plugins directory, is refused.",
         "operationId": "automationSourceAdoptV2",
         "parameters": [
           {
@@ -18642,7 +18642,7 @@
             "$ref": "#/components/responses/ServiceUnavailable"
           }
         },
-        "summary": "Adopt the procedures",
+        "summary": "Adopt the playbooks",
         "tags": [
           "hq.jobs"
         ],
@@ -19649,7 +19649,7 @@
     },
     "/api/v2/capabilities/dashboard.settings.update/": {
       "post": {
-        "description": "Set where the dashboard reads the weather for, and what its panels are called.",
+        "description": "Set the dashboard's weather location and its panel names.",
         "operationId": "dashboardSettingsUpdateV2",
         "parameters": [
           {
@@ -20258,7 +20258,7 @@
     },
     "/api/v2/capabilities/github.profile.read/": {
       "post": {
-        "description": "Ask HQ to read a signed-in person's GitHub profile now.",
+        "description": "Ask HQ to read a user's GitHub profile now.",
         "operationId": "githubProfileReadV2",
         "parameters": [
           {
@@ -21781,7 +21781,7 @@
                 }
               }
             },
-            "description": "Accepted: held for a person, and nothing has happened yet."
+            "description": "Accepted: held for approval in HQ. Nothing has happened yet."
           },
           "400": {
             "content": {
@@ -22055,7 +22055,7 @@
     },
     "/api/v2/capabilities/project.dependency_updates.set/": {
       "post": {
-        "description": "Whether HQ's dependency update run opens pull requests in a project's repository, from its next run.",
+        "description": "Turn HQ's dependency update pull requests on or off for a project's repository, from the next run.",
         "operationId": "projectDependencyUpdatesSetV2",
         "parameters": [
           {
@@ -22861,7 +22861,7 @@
     },
     "/api/v2/capabilities/{name}/": {
       "post": {
-        "description": "Run one HQ capability, replaying machine writes by idempotency key.",
+        "description": "Run one HQ capability. A retry with the same idempotency key returns the first answer.",
         "operationId": "executeV2",
         "parameters": [
           {
@@ -23063,7 +23063,7 @@
     },
     "/api/v2/connections/": {
       "get": {
-        "description": "Connection contracts and whether this token is permitted each.",
+        "description": "The connection contracts, and whether your token may use each.",
         "operationId": "connectionsV2",
         "responses": {
           "200": {
@@ -23122,7 +23122,7 @@
     },
     "/api/v2/findings/": {
       "get": {
-        "description": "What HQ currently claims is wrong, with the evidence and a remedy.",
+        "description": "The open problems HQ found, with the evidence and a remedy for each.",
         "operationId": "findingsV2",
         "parameters": [
           {
@@ -23368,7 +23368,7 @@
     },
     "/api/v2/resources/": {
       "get": {
-        "description": "Every readable resource, including operations this token may use.",
+        "description": "Every readable resource, with the operations your token may use.",
         "operationId": "resourcesV2",
         "parameters": [
           {
@@ -27143,7 +27143,7 @@
     },
     "/api/v2/resources/{name}/": {
       "get": {
-        "description": "List one resource through its declared, schema-validated query.",
+        "description": "One resource's records, narrowed by the query its schema checks.",
         "operationId": "resourceListV2",
         "parameters": [
           {
@@ -27251,7 +27251,7 @@
     },
     "/api/v2/resources/{name}/{identifier}/": {
       "get": {
-        "description": "Get one resource record through its declared identifier contract.",
+        "description": "One record of a resource, by its identifier.",
         "operationId": "resourceDetailV2",
         "parameters": [
           {
@@ -27281,7 +27281,7 @@
             }
           },
           {
-            "description": "The record's value of the field its resource is addressed by.",
+            "description": "The record's value of the field its resource is found by.",
             "in": "path",
             "name": "identifier",
             "required": true,
@@ -27330,7 +27330,7 @@
     },
     "/api/v2/topology/": {
       "get": {
-        "description": "The live permitted infrastructure graph and its canonical actions.",
+        "description": "The live infrastructure graph you may read, with each node's safe actions.",
         "operationId": "topologyV2",
         "parameters": [
           {

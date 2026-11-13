@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 BASE = ROOT / "hq" / "domains" / "control_plane" / "bridge_base.json"
 CONNECTIONS = ROOT / "controller" / "api" / "hq-connections.openapi.json"
 DOCUMENT_GO = ROOT / "controller" / "connections" / "document.go"
+RUNS = ROOT / "hq" / "platform" / "application" / "automation_runs.py"
 
 
 @tag("source")
@@ -49,6 +50,7 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(catalog.MOST_PROCEDURES, source["procedures"]["maxItems"])
         self.assertEqual(catalog.MOST_FILES, source["files"]["maxItems"])
         self.assertLessEqual(catalog.MOST_FILES, source["unpinned"]["maxItems"])
+        self.assertEqual(catalog.MOST_REACHES, source["reaches"]["maxItems"])
         self.assertEqual(catalog.TITLE_LIMIT, procedure["title"]["maxLength"])
         self.assertEqual(catalog.MOST_ROLES, procedure["roles"]["maxItems"])
         self.assertEqual(catalog.MOST_PROBLEMS, procedure["problems"]["maxItems"])
@@ -110,3 +112,14 @@ class ConnectionsDocumentTests(unittest.TestCase):
         role = re.search(r'^const RunnerRole = "([^"]*)"$', DOCUMENT_GO.read_text(encoding="utf-8"), re.MULTILINE)
         self.assertIsNotNone(role)
         self.assertEqual(connections.ROLE, role.group(1))
+
+    def test_the_read_login_s_profile_is_one_word_on_every_side(self):
+        from hq_runner import connections
+
+        profile = re.search(r'^const ReadProfile = "([^"]*)"$', DOCUMENT_GO.read_text(encoding="utf-8"), re.MULTILINE)
+        # Read as source, since the worker imports nothing of HQ.
+        hq = re.search(r'^READ_PROFILE = "([^"]*)"$', RUNS.read_text(encoding="utf-8"), re.MULTILINE)
+        self.assertIsNotNone(profile)
+        self.assertIsNotNone(hq)
+        self.assertEqual(connections.READ_PROFILE, profile.group(1))
+        self.assertEqual(hq.group(1), profile.group(1))

@@ -682,10 +682,10 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     ),
     DomainDescriptor(
         id="hq.procedures",
-        label="Procedures",
+        label="Playbooks",
         description="What the automation worker may run, and the scans of its repository a person adopts.",
         # Beside the jobs that run them: the work a procedure is, before it runs.
-        navigation=(NavigationItem("Procedures", "control_plane:procedures", "control_plane", 132, "Infrastructure"),),
+        navigation=(NavigationItem("Playbooks", "control_plane:procedures", "control_plane", 132, "Infrastructure"),),
     ),
     DomainDescriptor(
         id="hq.audit",

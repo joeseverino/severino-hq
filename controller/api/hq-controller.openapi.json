@@ -2428,6 +2428,13 @@
             "items": {
               "$ref": "#/components/schemas/UnpinnedPath"
             }
+          },
+          "reaches": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/RunnerReach"
+            }
           }
         },
         "additionalProperties": false,
@@ -2437,7 +2444,8 @@
           "verification",
           "procedures",
           "files",
-          "unpinned"
+          "unpinned",
+          "reaches"
         ]
       },
       "CommitVerification": {
@@ -2596,6 +2604,25 @@
         "required": [
           "path",
           "kind"
+        ]
+      },
+      "RunnerReach": {
+        "type": "object",
+        "description": "One login the automation worker has: the machine it reaches, by its name in HQ, and the privilege profile the login is. Never its address, user or key.",
+        "properties": {
+          "machine": {
+            "type": "string",
+            "maxLength": 253
+          },
+          "profile": {
+            "type": "string",
+            "maxLength": 160
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "machine",
+          "profile"
         ]
       },
       "AdGuardClientRecord": {

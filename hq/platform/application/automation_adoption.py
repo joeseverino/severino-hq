@@ -30,6 +30,7 @@ Security properties:
 import hashlib
 import json
 import re
+from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -67,6 +68,10 @@ from .integration_specs import CapabilitySpec
 from .record_errors import PolicyError, RecordNotFound
 from .security import Capability, Principal
 lazy from . import agent_registry
+lazy from .approval_review import SUMMARY
+lazy from .automation_runs import RETRY_WORDS
+lazy from .entity_links import kind_label
+lazy from .labels import effect_label, lower_first, plural
 lazy from .ui import ended
 
 ADOPT = "automation.source.adopt"
@@ -75,8 +80,8 @@ INPUT_NAME = re.compile(r"^[a-z_][a-z0-9_]{0,63}$")
 # The kinds of a path a proposal may carry and still be adopted. A
 # configuration or a plugin directory is code no procedure's review reads.
 REFUSED_KINDS = {
-    "config": "an Ansible configuration, which would change how every run behaves",
-    "plugins": "a directory Ansible loads code from, which would run beside every procedure",
+    "config": "an ansible.cfg, which changes how every playbook runs",
+    "plugins": "a plugins directory, whose code runs with every playbook",
 }
 # Where a role's own files sit, beside a playbook or at the project's root.
 ROLES = "roles"
@@ -309,7 +314,7 @@ def _inputs(found: Mapping[str, Any], bounds: Mapping[str, InputBound], refused:
                 refused.append(f"{name}: two of its roles declare the input {option} differently.")
             options.setdefault(option, terms if isinstance(terms, Mapping) else {})
     refused.extend(
-        f"{name}: its sidecar bounds {unknown}, which no role of it names."
+        f"{name}: its sidecar limits the input {unknown}, which none of its roles takes."
         for unknown in sorted(set(bounds) - set(options))
     )
     inputs: dict[str, AdoptedInput] = {}
@@ -326,7 +331,7 @@ def _input(option: str, terms: Mapping[str, Any], bound: InputBound | None, inpu
 
     kind = terms.get("type", "str")
     if not INPUT_NAME.fullmatch(option):
-        return f"the input {option} is not named as an input may be."
+        return f"the input name {option} isn't allowed; use lowercase letters, digits and underscores."
     if kind not in (*SCALARS, "list") or terms.get("elements") not in (None, *SCALARS):
         return f"the input {option} takes {kind}, a free-form type; name each value it allows."
     try:
@@ -400,23 +405,37 @@ def _shared(files: Mapping[str, str], procedures: Iterable[AdoptedProcedure]) ->
     return {path: name for path, name in files.items() if path not in used}
 
 
-def _gains(before: AdoptedProcedure, after: AdoptedProcedure) -> list[str]:
-    """How ``after`` lets a run of the procedure do more than ``before`` did."""
+def _does(effect: str) -> str:
+    """What a procedure of ``effect`` does, in the words its command's page says it with."""
 
-    named = after.id
+    return lower_first(effect_label(effect))
+
+
+def _names(procedures: Mapping[str, AdoptedProcedure]) -> dict[str, str]:
+    """Each playbook by the title you read it by, with its id beside a title
+    two of them share, so the two stay apart."""
+
+    titles = Counter(procedure.title for procedure in procedures.values())
+    return {
+        key: procedure.title if titles[procedure.title] == 1 else f"{procedure.title} ({key})"
+        for key, procedure in procedures.items()
+    }
+
+
+def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> list[str]:
+    """How ``after``, read as ``named``, lets a run of the playbook do more than ``before`` did."""
+
     gained = []
     if before.hosts and (not after.hosts or set(after.hosts) - set(before.hosts)):
-        gained.append(f"{named} may run on more machines.")
+        gained.append(f"{named} can run on more machines.")
     if set(after.target_kinds) - set(before.target_kinds):
-        gained.append(f"{named} may run on more kinds of record.")
+        gained.append(f"{named} can run on more kinds of record.")
     if EFFECT_RANK[after.effect] > EFFECT_RANK[before.effect]:
-        gained.append(
-            ended(f"{named} would {after.effect.replace('_', ' ')}, where it would {before.effect.replace('_', ' ')}")
-        )
+        gained.append(ended(f"{named} now {_does(after.effect)}, where before it {_does(before.effect)}"))
     if after.privilege and after.privilege != before.privilege:
-        gained.append(ended(f"{named} would escalate through {after.privilege}"))
+        gained.append(ended(f"{named} gains the privilege {after.privilege}"))
     if after.effect != "read" and after.files != before.files:
-        gained.append(f"{named} changes what it runs.")
+        gained.append(f"{named} runs different files.")
     return gained
 
 
@@ -429,29 +448,59 @@ def _widens(
     """Each way adopting ``after`` over ``before`` lets a run do more."""
 
     widens = []
-    for named, procedure in sorted(after.items()):
-        was = before.get(named)
+    called = _names(after)
+    for key, procedure in sorted(after.items()):
+        was = before.get(key)
         if was is None:
             if procedure.effect != "read" or procedure.privilege is not None:
-                widens.append(f"{named} is a new procedure that does more than read.")
+                widens.append(ended(f"{called[key]} is new, and it {_does(procedure.effect)}"))
             continue
-        widens.extend(_gains(was, procedure))
+        widens.extend(_gains(was, procedure, called[key]))
     for path in sorted(set(shared_before) | set(shared_after)):
         if shared_before.get(path) == shared_after.get(path):
             continue
         if PurePosixPath(path).name == REQUIREMENTS:
-            widens.append(f"{path} changes, which names the collections a run may use.")
+            widens.append(f"{path} changed. It sets which Ansible collections playbooks can use.")
         else:
-            widens.append(f"{path} changes, which any procedure may read.")
+            widens.append(f"{path} changed. Every playbook can read it.")
     return widens
 
 
-def _shown(procedure: AdoptedProcedure) -> dict[str, Any]:
-    """A procedure as a person compares it: every field, each file by the start of its object id."""
+def anywhere(procedure: ProcedureTerms) -> str:
+    """Where a playbook that names no machine may run: "Any of your machines"."""
 
-    shown = procedure.model_dump(mode="json", exclude={"files"})
-    shown["files"] = {path: name[:SHOWN_OBJECT] for path, name in procedure.files.items()}
-    return shown
+    kinds = " or ".join(plural(lower_first(kind_label(kind))) for kind in procedure.target_kinds)
+    return f"Any of your {kinds}"
+
+
+def _summary(procedure: AdoptedProcedure) -> str:
+    where = ", ".join(procedure.hosts) if procedure.hosts else lower_first(anywhere(procedure))
+    privilege = f"with the privilege {procedure.privilege}" if procedure.privilege else "with no added privilege"
+    return ended(f"{effect_label(procedure.effect)}, on {where}, {privilege}")
+
+
+def _shown(procedure: AdoptedProcedure, named: str) -> dict[str, Any]:
+    """A playbook as you compare it: ``named``, the name its group is headed
+    by, and what it is at a glance, then each term in the words its command's
+    page uses, each file by the start of its object id. Its playbook is among
+    its files, so it is not said again."""
+
+    return {
+        SUMMARY: {"label": named, "value": _summary(procedure)},
+        "title": procedure.title,
+        "effect": effect_label(procedure.effect),
+        "runs_on": list(procedure.hosts) or anywhere(procedure),
+        "privilege": procedure.privilege or "None",
+        "timeout": f"{procedure.timeout_seconds} seconds",
+        "retry": RETRY_WORDS[procedure.retry],
+        "recovery": list(procedure.recovery),
+        "preconditions": list(procedure.preconditions),
+        "verification": list(procedure.verification),
+        "inputs": {
+            name: spec.model_dump(mode="json", exclude_defaults=True) for name, spec in procedure.inputs.items()
+        },
+        "files": {path: name[:SHOWN_OBJECT] for path, name in procedure.files.items()},
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -482,7 +531,7 @@ def plan(proposal_id: int) -> AdoptionPlan:
 
     proposal = SourceProposal.objects.filter(pk=proposal_id).first()
     if proposal is None:
-        raise RecordNotFound("No proposal has that id. A Refresh makes one.")
+        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
     refused: list[str] = []
     if not proposal.verified or proposal.verification_reason != "valid":
         refused.append(f"GitHub did not verify the commit's signature ({proposal.verification_reason}).")
@@ -494,7 +543,7 @@ def plan(proposal_id: int) -> AdoptionPlan:
     procedures = _procedures(proposal, refused)
     if refused:
         raise PolicyError(
-            "This commit cannot be adopted; details.refused lists why. Fix the repository and Refresh again.",
+            "This commit can't be adopted; details.refused lists why. Fix it in the repository, then Refresh.",
             details={"refused": refused},
         )
     files = {entry["path"]: entry["object"] for entry in proposal.files}
@@ -503,6 +552,7 @@ def plan(proposal_id: int) -> AdoptionPlan:
     files_before = {entry["path"]: entry["object"] for entry in current.files} if current else {}
     shared_before, shared_after = _shared(files_before, before.values()), _shared(files, procedures.values())
     ordered = [procedures[named] for named in sorted(procedures)]
+    called_before, called_after = _names(before), _names(procedures)
     return AdoptionPlan(
         proposal=proposal,
         procedures=procedures,
@@ -512,13 +562,15 @@ def plan(proposal_id: int) -> AdoptionPlan:
         widens=tuple(_widens(before, procedures, shared_before, shared_after)),
         compared={
             "before": {
-                "commit": {"revision": current.revision, "committer": current.committer} if current else {},
-                "procedures": {named: _shown(row) for named, row in sorted(before.items())},
+                "commit": current.revision[:SHOWN_OBJECT] if current else "",
+                "committer": current.committer if current else "",
+                "procedures": {key: _shown(row, called_before[key]) for key, row in sorted(before.items())},
                 "shared files": {path: name[:SHOWN_OBJECT] for path, name in sorted(shared_before.items())},
             },
             "after": {
-                "commit": {"revision": proposal.revision, "committer": proposal.committer},
-                "procedures": {named: _shown(row) for named, row in sorted(procedures.items())},
+                "commit": proposal.revision[:SHOWN_OBJECT],
+                "committer": proposal.committer,
+                "procedures": {key: _shown(row, called_after[key]) for key, row in sorted(procedures.items())},
                 "shared files": {path: name[:SHOWN_OBJECT] for path, name in sorted(shared_after.items())},
             },
         },
@@ -542,7 +594,7 @@ class AdoptProposal(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    proposal: Annotated[StrictInt, Field(ge=1), Describe("The proposal a Refresh made, by its id.")]
+    proposal: Annotated[StrictInt, Field(ge=1), Describe("The scan result a Refresh kept, by its ID.")]
     reason: Annotated[StrictStr, Field(max_length=300), Describe("Why it is adopted, kept with the adoption.")] = ""
 
 
@@ -641,21 +693,21 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
         *automation_sources.capability_specs(),
         CapabilitySpec(
             ADOPT,
-            "Make a proposal the catalog of procedures HQ runs, once a person agrees. A commit GitHub did "
-            "not verify, or one carrying an Ansible configuration or plugins, is refused.",
+            "Adopt a scanned commit as the playbooks HQ runs. A commit GitHub did not verify, or one "
+            "carrying an ansible.cfg or a plugins directory, is refused.",
             "infrastructure_change",
             Capability.MANAGE_INFRASTRUCTURE,
             AdoptProposal,
             adopt,
             execution_notes=(
-                "Refuse a commit GitHub did not verify or one carrying an ansible.cfg or a plugin directory.",
-                "Refuse a commit with a procedure HQ cannot run.",
-                "Compare it, procedure by procedure, with the catalog adopted now.",
-                "Make it the catalog every procedure's command is built from.",
-                "A run waiting on a procedure it changes goes stale.",
+                "Refuse a commit GitHub did not verify or one carrying an ansible.cfg or a plugins directory.",
+                "Refuse a commit with a playbook HQ can't run.",
+                "Compare it, playbook by playbook, with the adopted playbooks.",
+                "Every playbook run from now on uses this commit.",
+                "A run of a changed playbook that waits for approval can no longer be approved.",
             ),
-            label="Adopt the procedures",
+            label="Adopt the playbooks",
             verb="Adopt",
-            wants="adopt the procedures of a commit of the automation repository",
+            wants="adopt the playbooks of a commit from your repository",
         ),
     )

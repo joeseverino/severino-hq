@@ -107,7 +107,7 @@ def documentation() -> tuple[Insight, ...]:
     return _backlog(
         count=sections.documentation_reading()["needing_review"],
         key="docs-review",
-        eyebrow="Docs",
+        eyebrow="Projects",
         one="doc is past its review date",
         many="docs are past their review date",
         action="Review docs",
@@ -121,7 +121,7 @@ def content() -> tuple[Insight, ...]:
         *_backlog(
             count=sections.content_reading()["drafts"],
             key="content-drafts",
-            eyebrow="Content",
+            eyebrow="Web",
             one="draft is not published",
             many="drafts are not published",
             action="Open drafts",
@@ -139,7 +139,7 @@ def content() -> tuple[Insight, ...]:
                 .count()
             ),
             key="content-undocumented",
-            eyebrow="Content",
+            eyebrow="Web",
             one="published piece has no doc linked",
             many="published pieces have no doc linked",
             action="Link a doc",
@@ -169,7 +169,7 @@ def contacts() -> tuple[Insight, ...]:
     return _backlog(
         count=count,
         key="contacts-unread",
-        eyebrow="Contacts",
+        eyebrow="Web",
         one="unread message from the contact form",
         many="unread messages from the contact form",
         action="Read messages",
@@ -188,7 +188,7 @@ def expenses() -> tuple[Insight, ...]:
     backlog = _backlog(
         count=counts["bare"],
         key="expenses-without-receipts",
-        eyebrow="Expenses",
+        eyebrow="Business",
         one="expense has no receipt",
         many="expenses have no receipt",
         action="Attach receipts",
@@ -204,7 +204,7 @@ def receipts() -> tuple[Insight, ...]:
     return _backlog(
         count=Receipt.objects.filter(related_expense__isnull=True, related_asset__isnull=True).count(),
         key="receipts-unlinked",
-        eyebrow="Receipts",
+        eyebrow="Business",
         one="receipt is not attached to an expense or asset",
         many="receipts are not attached to an expense or asset",
         action="Attach receipts",
@@ -234,7 +234,7 @@ def assets() -> tuple[Insight, ...]:
         count=len(missing),
         named=missing,
         key="assets-missing-purchase",
-        eyebrow="Assets",
+        eyebrow="Business",
         one="asset has no purchase date or cost",
         many="assets have no purchase date or cost",
         body="Depreciation cannot be calculated without both.",
@@ -325,7 +325,7 @@ def tailnet() -> tuple[Insight, ...]:
         items.append(
             Insight(
                 status="serious" if days <= KEY_EXPIRY_SERIOUS_DAYS else "attention",
-                eyebrow="Tailnet",
+                eyebrow="Network",
                 family="Tailscale keys expiring",
                 key=key,
                 title=(
@@ -357,7 +357,7 @@ def tailnet() -> tuple[Insight, ...]:
     items.extend(
         Insight(
             status="serious",
-            eyebrow="Tailnet",
+            eyebrow="Network",
             family="Tailnet lock",
             key=f"tailnet-locked-out:{name}",
             title=f"{name} is locked out of the tailnet",
@@ -375,7 +375,7 @@ def tailnet() -> tuple[Insight, ...]:
             items.append(
                 Insight(
                     status="serious",
-                    eyebrow="Tailnet",
+                    eyebrow="Network",
                     family="Devices waiting for approval",
                     key=f"tailnet-unauthorized:{name}",
                     title=f"{name} is waiting for tailnet approval",
@@ -394,7 +394,7 @@ def tailnet() -> tuple[Insight, ...]:
             items.append(
                 Insight(
                     status="serious",
-                    eyebrow="Tailnet",
+                    eyebrow="Network",
                     family="Tailnet lock",
                     key=f"tailnet-lock-unsigned:{name}",
                     title=f"{name} is not signed for tailnet lock",
@@ -413,7 +413,7 @@ def tailnet() -> tuple[Insight, ...]:
             items.append(
                 Insight(
                     status="attention",
-                    eyebrow="Tailnet",
+                    eyebrow="Network",
                     family="Tailscale updates",
                     key=f"tailnet-update:{name}",
                     title=f"Tailscale update available for {name}",
@@ -434,7 +434,7 @@ def tailnet() -> tuple[Insight, ...]:
         items.append(
             Insight(
                 status="attention",
-                eyebrow="Tailnet",
+                eyebrow="Network",
                 family="Tailscale routes",
                 key=f"tailnet-routes:{name}",
                 title=(
@@ -666,7 +666,7 @@ def _apply_help(resource) -> dict:
     return {
         "workflow": instructions(
             f"resource:{resource.key}",
-            "Change it where it lives. HQ is not allowed to change this type.",
+            "HQ does not change this type. Change it at its source.",
         )
     }
 

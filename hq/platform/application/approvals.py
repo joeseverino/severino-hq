@@ -317,8 +317,7 @@ def hold_for_approval(
     subject = approval_subject(spec, command, target)
     if subject is None:
         raise UnreadableSubject(
-            "This needs a person to approve it, but HQ could not read what it "
-            "would change. Check the target and ask again."
+            "This change needs approval, but HQ could not read what it would change. Check the target and ask again."
         )
     digest = fingerprint(spec.name, target, payload, subject.baseline)
     existing = _asked_already(spec.name, target, digest, principal)
@@ -335,8 +334,7 @@ def hold_for_approval(
     if outstanding >= MAX_PENDING_PER_ACTOR:
         raise TooManyPendingApprovals(
             f"This caller already has {counted(outstanding, 'change')} waiting for "
-            "approval. Nothing further is accepted from it until those are "
-            "answered."
+            "approval. HQ takes no more from it until those are decided."
         )
     reason = str(getattr(command, "reason", ""))[:300]
     # The request alone: no declaration and no operation row, so there is
@@ -414,10 +412,9 @@ def _awaiting(held: ApprovalRequest, *, repeated: bool) -> HeldCall:
         "queued": False,
         "applied": False,
         "message": (
-            "This change is waiting for a person to approve it in HQ. Nothing "
-            "has been written and nothing is queued. Tell whoever asked, with "
-            "the request id, and stop; approving it is not something a token "
-            "can do."
+            "This change waits for approval in HQ. Nothing is written or queued "
+            "until an operator approves it. Report the request id and stop, "
+            "since a token cannot approve it."
         ),
         "repeated": repeated,
         "approval": serialize_approval(held),
@@ -446,16 +443,13 @@ def asked_by(approval_id: str, *, principal: Principal) -> ApprovalRequest | Non
 _UNAPPLIED = {
     ApprovalRequest.State.EXPIRED: (
         "expired",
-        (
-            "Nobody decided this change before its request lapsed, so nothing was written. "
-            "Ask again if it is still wanted."
-        ),
+        "This request expired before it was decided, so nothing was written. Ask again if you still need the change.",
     ),
     ApprovalRequest.State.STALE: (
         "stale",
         (
-            "What this change acts on moved after it was asked for, so nothing was written. "
-            "Ask again if it is still wanted."
+            "What this change acts on changed after you asked, so nothing was written. "
+            "Ask again if you still need the change."
         ),
     ),
 }
@@ -479,7 +473,7 @@ def outcome(held: ApprovalRequest) -> dict[str, Any] | None:
         return held.result
     if state == ApprovalRequest.State.REJECTED:
         note = held.decision_note.strip()
-        said = f"A person declined this change in HQ: {note}" if note else "A person declined this change in HQ."
+        said = f"An operator declined this change in HQ: {note}" if note else "An operator declined this change in HQ."
         return refuse("declined", said)
     code, said = _UNAPPLIED[state]
     return refuse(code, said)
@@ -589,7 +583,7 @@ def _decidable(approval_id: str, principal: Principal) -> ApprovalRequest:
         raise ApprovalError(f"That request is already {held.get_state_display().lower()}.")
     if held.expires_at <= timezone.now():
         _settle(held, ApprovalRequest.State.EXPIRED, _LAPSED_NOTE, operation=LAPSE, principal=principal)
-        raise Settled("That request expired before it was answered. Ask for it again if it is still wanted.")
+        raise Settled("That request expired before it was decided, so nothing was written.")
     return held
 
 
@@ -606,7 +600,7 @@ def _require_person(principal: Principal, held: ApprovalRequest) -> None:
     if not is_interactive(principal):
         raise AuthorizationError("Approve this in the browser, signed in. An agent cannot approve a change.")
     if principal.actor == held.requested_actor:
-        raise AuthorizationError("A request cannot be approved by whoever asked for it.")
+        raise AuthorizationError("You cannot approve a request you asked for.")
 
 
 def _require_asker_running(held: ApprovalRequest) -> None:
@@ -627,17 +621,17 @@ _LAPSED_NOTE = "It expired without an answer."
 
 @dataclass(frozen=True, slots=True)
 class ApproveCommand:
-    """The held request to agree to."""
+    """The held request to approve."""
 
-    approval_id: Annotated[str, Describe("The held request to agree to.")]
+    approval_id: Annotated[str, Describe("The held request to approve.")]
 
 
 @dataclass(frozen=True, slots=True)
 class RejectCommand:
-    """The held request to refuse, and what to tell whoever asked."""
+    """The held request to decline, and a note for the agent that asked."""
 
-    approval_id: Annotated[str, Describe("The held request to refuse.")]
-    note: Annotated[str, Describe("What to tell whoever asked.")] = ""
+    approval_id: Annotated[str, Describe("The held request to decline.")]
+    note: Annotated[str, Describe("A note for the agent that asked.")] = ""
 
 
 def approve(command: ApproveCommand, *, principal: Principal) -> ApprovalApplied:

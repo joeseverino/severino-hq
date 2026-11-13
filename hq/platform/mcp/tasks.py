@@ -124,22 +124,22 @@ def _standing(held: Any, settled: dict[str, Any] | None, review_url: str) -> tup
     """The call's answer, None until it is done, and the sentence saying where it stands."""
 
     if settled is None:
-        return None, f"A person decides it in HQ, at {review_url}."
+        return None, f"It waits for approval in HQ, at {review_url}."
     if held.state != ApprovalRequest.State.APPROVED:
         return settled, refusal_of(settled).message
     queued = applying(held)
     if queued is None:
-        return settled, "A person approved it in HQ, and it is done."
+        return settled, "It was approved in HQ, and it is done."
     field, operation = queued
     if operation.state in _UNFINISHED:
-        return None, f"A person approved it in HQ, at {review_url}, and HQ is applying it now."
+        return None, f"It was approved in HQ, at {review_url}, and HQ is applying it now."
     # The call's own answer, carrying its operation as it ended.
     ended = {**settled, field: serialize_operation(operation)}
     if operation.state == OperationRequest.State.SUCCEEDED:
-        return ended, "A person approved it in HQ, and it is applied."
+        return ended, "It was approved in HQ, and it is applied."
     failed = refuse(
         "operation_failed",
-        "A person approved this change in HQ, and applying it did not succeed; details carries the operation.",
+        "This change was approved in HQ, but applying it failed. `details` holds the operation.",
         ended,
     )
-    return failed, "A person approved it in HQ, and applying it did not succeed."
+    return failed, "It was approved in HQ, but applying it failed."

@@ -117,9 +117,10 @@ scopes:
   # or in a place these leave out: an AppConfig's body (an app's label), a
   # renderer entry holding "source" (a vault field's label), a constant named
   # only LABEL or REMEDY (an enumeration's value, where AUDIT_LABEL is words),
-  # and a noun, which names a record's operations. A verb is words only as a
-  # keyword. These read only the strings the scopes above skip for their
-  # letters, since Vale reports a string once for each scope that captures it.
+  # and a noun, which names a record's operations. A verb, and what a command
+  # wants, is words only as a keyword. These read only the strings the scopes
+  # above skip for their letters, since Vale reports a string once for each
+  # scope that captures it.
   - name: shown
     expr: |
       ((call
@@ -130,7 +131,7 @@ scopes:
                    (parenthesized_expression (string (string_content) @prose) @_s)
                    (conditional_expression (string (string_content) @prose) @_s)])))
        (#not-match? @_f "^(debug|info|warning|error|exception|critical|log|getLogger|ImproperlyConfigured|RuntimeError|TypeError|AssertionError|NotImplementedError|KeyError|LookupError|compile|CheckMessage|Error|Warning|add_argument|CommandError|SuspiciousOperation|Http404|SharedValue|Setting)$")
-       (#match? @_k "^_?([a-z0-9]+_)*(label|title|lede|subtitle|eyebrow|heading|headline|summary|detail|remedy|help|help_text|description|verbose_name|verbose_name_plural|empty|placeholder|said|message|question|explanation|caption)$|^_?([A-Z0-9]+_)+(LABEL|TITLE|LEDE|SUBTITLE|EYEBROW|HEADING|HEADLINE|SUMMARY|DETAIL|REMEDY|HELP|HELP_TEXT|DESCRIPTION|VERBOSE_NAME|VERBOSE_NAME_PLURAL|EMPTY|PLACEHOLDER|SAID|MESSAGE|QUESTION|EXPLANATION|CAPTION)$|^(many|one|body|intent|gives|unmet|operator_action|removal_impact|shown_as|verb)$")
+       (#match? @_k "^_?([a-z0-9]+_)*(label|title|lede|subtitle|eyebrow|heading|headline|summary|detail|remedy|help|help_text|description|verbose_name|verbose_name_plural|empty|placeholder|said|message|question|explanation|caption)$|^_?([A-Z0-9]+_)+(LABEL|TITLE|LEDE|SUBTITLE|EYEBROW|HEADING|HEADLINE|SUMMARY|DETAIL|REMEDY|HELP|HELP_TEXT|DESCRIPTION|VERBOSE_NAME|VERBOSE_NAME_PLURAL|EMPTY|PLACEHOLDER|SAID|MESSAGE|QUESTION|EXPLANATION|CAPTION)$|^(many|one|body|intent|gives|unmet|operator_action|removal_impact|shown_as|verb|wants)$")
        (#not-match? @_s "^[rR]?[bB]")
        (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))
 
@@ -209,3 +210,19 @@ scopes:
        (#match? @_b "^(TextChoices|IntegerChoices|Choices)$")
        (#not-match? @_s "^[rR]?[bB]")
        (#match? @prose "^\\s*[^ ]*\\s*$|^\\s*[a-z0-9_.:/#?&=%\\- ]*\\s*$"))
+
+  # What an agent or a client's author reads as a description, under its own
+  # scope, so only the rules for every reader (Plain.Person, Long, Narrate
+  # and Parts) read it and the API keeps its own nouns: the docstring of a
+  # schema the API document and an MCP tool's answer describe (a TypedDict, a
+  # model, a command), and of an MCP tool or an API view, whose first line is
+  # its description.
+  - name: description
+    expr: |
+      ([(class_definition
+          superclasses: (argument_list [(identifier) @_b (attribute attribute: (identifier) @_b)])
+          body: (block . (expression_statement (string (string_content) @prose))))
+        (decorated_definition
+          (decorator [(call function: (identifier) @_b) (identifier) @_b])
+          definition: (function_definition body: (block . (expression_statement (string (string_content) @prose)))))]
+       (#match? @_b "^(TypedDict|BaseModel|StrictCommand|tool|_endpoint)$"))

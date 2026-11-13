@@ -18,7 +18,13 @@ from django.db import transaction
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictStr, create_model
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
-lazy from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, OperationHost, OperationRequest
+lazy from hq.domains.control_plane.models import (
+    ApprovalRequest,
+    ManagedResource,
+    OperationHost,
+    OperationRequest,
+    SourceProposal,
+)
 lazy from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
 lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 lazy from hq.domains.control_plane.providers import validate_spec
@@ -106,7 +112,7 @@ type Correlation = Annotated[
     StrictStr,
     Field(max_length=200, pattern=r"^[!-~]*$"),
     Describe(
-        "An id of your own to find this run by later, such as an investigation's: up to 200 "
+        "Your own id to find this run by later, such as an investigation's. Up to 200 "
         "printable characters, no spaces. Kept with the run."
     ),
 ]
@@ -114,11 +120,11 @@ type Reason = Annotated[StrictStr, Field(max_length=300), Describe("Why it is ru
 
 
 class RunCommand(BaseModel):
-    """What every run takes beside its procedure's own parameters.
+    """What every run takes beside its playbook's own parameters.
 
-    Closed like every command, so a playbook, an inventory, extra-vars or a
-    path sent beside the parameters is refused, and the procedure's input
-    type refuses one sent inside them (``automation_manifest._closed``).
+    Closed like every command, so a playbook path, an inventory, extra-vars or
+    another path sent beside the parameters is refused, and the playbook's
+    input type refuses one sent inside them (``automation_manifest._closed``).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -143,7 +149,7 @@ def command_type(manifest: OperationManifest) -> type[RunCommand]:
         fields["hosts"] = (Annotated[Hosts, Among(admitted)], ...)
     fields |= {
         "parameters": (
-            Annotated[parameters, Describe("The procedure's own inputs, as its manifest lists them.")],
+            Annotated[parameters, Describe("The playbook's own inputs, as its manifest lists them.")],
             Field(default_factory=parameters) if takes_none else ...,
         ),
     }
@@ -205,7 +211,7 @@ def resolved_hosts(manifest: OperationManifest, hosts: tuple[str, ...]) -> tuple
     refused = [host for host in resolved if not manifest.admits(MACHINE_KIND, host)]
     if refused:
         raise PolicyError(
-            "This procedure is not written for a machine this names; details.refused lists them, and "
+            "This playbook is not written for a machine this names; details.refused lists them, and "
             "details.admits what it is written for.",
             details={
                 "refused": refused,
@@ -215,15 +221,54 @@ def resolved_hosts(manifest: OperationManifest, hosts: tuple[str, ...]) -> tuple
     return resolved
 
 
+# The privilege profile of the worker's login that escalates to nothing, as
+# the controller's connections.ReadProfile and hq_runner's READ_PROFILE name it.
+READ_PROFILE = "read"
+
+
+def login_profile(manifest: OperationManifest) -> str:
+    """The profile of the login a run of ``manifest`` goes through: its
+    privilege, or the read login's for one that names none."""
+
+    return manifest.privilege or READ_PROFILE
+
+
+def runner_reaches() -> frozenset[tuple[str, str]]:
+    """Each machine and profile the worker has a login for, as its newest scan said."""
+
+    newest = SourceProposal.objects.values_list("reaches", flat=True).first()
+    return frozenset((normalized_hostname(found["machine"]), found["profile"]) for found in newest or ())
+
+
+def reached(manifest: OperationManifest, hosts: tuple[str, ...]) -> None:
+    """Refuse a run on a machine the worker has no login to as the run's profile.
+
+    The worker's own word, so it can make this check wrong and nothing more:
+    the worker refuses at the claim a machine it cannot reach as the profile.
+    """
+
+    profile = login_profile(manifest)
+    reaches = runner_reaches()
+    missing = [{"machine": host, "profile": profile} for host in hosts if (host, profile) not in reaches]
+    if missing:
+        raise PolicyError(
+            "HQ has no runner connection to a machine this names, as this playbook's profile; "
+            "details.missing lists each. A connection added since the last Refresh shows once you Refresh.",
+            details={"missing": missing},
+        )
+
+
 def _bound(manifest: OperationManifest, command: RunCommand) -> dict[str, Any]:
     """What a run of ``command`` binds to: the procedure, its parameters as
-    validated, and its hosts as resolved."""
+    validated, and its hosts as resolved, each one the worker can reach."""
 
+    hosts = resolved_hosts(manifest, command.hosts)
+    reached(manifest, hosts)
     return {
         "operation": manifest.id,
         "revision": manifest.revision,
         "parameters": command.parameters.model_dump(mode="json"),
-        "hosts": list(resolved_hosts(manifest, command.hosts)),
+        "hosts": list(hosts),
         "correlation": command.correlation,
     }
 
@@ -309,11 +354,11 @@ def request_run(
     with audit_operation(operation="automation.run.request", principal=principal):
         resource = _record(manifest, principal=principal)
         if not resource.enabled:
-            raise PolicyError("This procedure is switched off in HQ.")
+            raise PolicyError("This playbook is switched off in HQ.")
         holder = _holding(resource, bound["hosts"])
         if holder is not None:
             raise PolicyError(
-                "Another run holds this procedure or one of these machines; details.holding is that run. "
+                "Another run holds this playbook or one of these machines; details.holding is that run. "
                 "Ask again once it ends.",
                 details={"holding": serialize_operation(holder)},
             )
@@ -428,14 +473,14 @@ def about(manifest: OperationManifest, generation: str, principal: Principal) ->
         CommandFact("Recovery", _statements(manifest.recovery)),
         CommandFact("Retry", RETRY_WORDS[manifest.retry]),
         CommandFact("Reviewed commit", manifest.revision),
-        CommandFact("Playbook", manifest.playbook),
+        CommandFact("Playbook file", manifest.playbook),
     )
     every = f"{reverse('jobs:list')}?{urlencode({'kind': capability_name(manifest.id)})}"
     sections = (
         recent_work(recent_runs(manifest.id), by_machine=False, more_url=every, principal=principal),
         _inputs(next((row for row in automation_adoption.procedures(generation) if row.id == manifest.id), None)),
     )
-    return CommandAbout(label="Procedure", facts=facts, sections=tuple(section for section in sections if section))
+    return CommandAbout(label="Playbook", facts=facts, sections=tuple(section for section in sections if section))
 
 
 def _capability(manifest: OperationManifest, generation: str) -> CapabilitySpec:
@@ -453,20 +498,20 @@ def _capability(manifest: OperationManifest, generation: str) -> CapabilitySpec:
         run = waits_for_a_person(every_call)(run)
     return CapabilitySpec(
         name,
-        f"Run the reviewed procedure {manifest.id} on the machines named.",
+        f"Run the reviewed playbook {manifest.id} on the machines named.",
         manifest.effect,
         Capability.READ if manifest.effect == "read" else Capability.MANAGE_INFRASTRUCTURE,
         command_type(manifest),
         run,
         execution_notes=(
-            "Find each machine named, and refuse one the procedure is not written for.",
-            "Refuse while another run waits or works on this procedure or on one of those machines.",
-            "Queue it once for the automation worker, which runs it outside this request.",
+            "Find each machine named, and refuse one the playbook is not written for.",
+            "Refuse while another run waits or works on this playbook or on one of those machines.",
+            "Queue it once, and HQ runs it with Ansible outside this request.",
         ),
         label=run_title(manifest.id),
         verb=OperationRequest.Action.RUN.label,
         # Read on a held run's card, where the procedure is what was asked for.
-        wants=f"carry out the procedure {manifest.id}",
+        wants=f"carry out the playbook {manifest.id}",
         about=partial(about, manifest, generation),
     )
 

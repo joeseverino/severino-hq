@@ -212,7 +212,9 @@ Store it as an item of any type:
 | `host` | yours | A field labeled host. |
 | `host_key` | yours | A field labeled host_key. |
 | `identity` | yours | A field labeled identity. |
+| `machine` | yours | A field labeled machine. Optional. |
 | `port` | yours | A field labeled port. |
+| `profile` | yours | A field labeled profile. Optional. |
 | `role` | yours | A field labeled role. Optional. |
 | `user` | yours | A field labeled user. |
 | `manages` | `1` | Optional. Lets HQ make changes through it, not only read. |

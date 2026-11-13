@@ -1,4 +1,4 @@
-"""Versioned machine-client transport over the shared capability registry.
+"""HQ's versioned machine API, over the same capabilities the web UI, CLI and MCP run.
 
 It adds no capability, domain model or business rule, so the web UI, the CLI,
 MCP and a Shortcut cannot drift into four behaviors. The version is in the
@@ -140,12 +140,12 @@ def root_links() -> Any:
             for name, pattern in _linked().items()
         },
     )
-    links.__doc__ = "Where each of the API's own reads is, every one a path on this host."
+    links.__doc__ = "The path of each of the API's reads on this host."
     return links
 
 
 class RootData(TypedDict):
-    """What this API is, and what the presented credential may do."""
+    """What this API is, and what your credential may do."""
 
     service: Annotated[str, Describe("Which service this is: always `severino-hq`.")]
     api_version: Annotated[
@@ -164,19 +164,17 @@ class CapabilityEntry(CapabilityDescription):
     idempotency_key_required: Annotated[
         bool,
         Describe(
-            "Whether this caller must send an idempotency key to run it: any change, from all but the host's shell."
+            "Whether you must send an idempotency key to run it: true for any change, except from the host's shell."
         ),
     ]
-    request_schema: Annotated[dict[str, Any], Describe("The JSON Schema of the body a call to run it sends.")]
+    request_schema: Annotated[dict[str, Any], Describe("The JSON Schema of the request body that runs it.")]
 
 
 class CapabilityRequestCatalog(TypedDict):
     """The capability catalog as the machine API answers it: each entry with the body it is called by."""
 
     schema_version: CapabilitiesVersion
-    capabilities: Annotated[
-        list[CapabilityEntry], Describe("Each capability asked for that this caller's interface can run.")
-    ]
+    capabilities: Annotated[list[CapabilityEntry], Describe("Each capability asked for that you can run from here.")]
 
 
 def _json(payload: Mapping[str, Any], *, status: int = 200) -> HttpResponse:
@@ -434,7 +432,7 @@ def _endpoint(
 
 @_endpoint(("GET",), title="API root", data=RootData)
 def root(request: APIRequest) -> HttpResponse:
-    """What this is, and what the presented credential may actually do."""
+    """What this API is, and what your credential may do."""
 
     # The reads root_links() types, so the document and the answer name the same ones.
     links = {name: reverse(f"hq_api:{name}") for name in _linked()}
@@ -453,10 +451,8 @@ def root(request: APIRequest) -> HttpResponse:
 def openapi(_request: APIRequest) -> HttpResponse:
     """This API as an OpenAPI 3.2 document, derived from its routes and registries.
 
-    Never anonymous: it names every capability, grant and resource kind, which
-    /capabilities/ already keeps from anonymous callers. The signed-in operator
-    reads it too (the reference page at /api/docs/), including where no API
-    resource is configured: it describes the code, not a credential.
+    It needs a credential, since it names every capability, grant and type of
+    resource. A signed-in operator's browser reads it too, at /api/docs/.
     """
 
     return _json(document())
@@ -464,11 +460,10 @@ def openapi(_request: APIRequest) -> HttpResponse:
 
 @_endpoint(("GET",), title="List capabilities", data=CapabilityRequestCatalog, codes=("invalid_input",))
 def capabilities(request: APIRequest) -> HttpResponse:
-    """Every capability a token could ever hold, flagged by whether this one may run it.
+    """Every capability, each flagged by whether your token may run it.
 
-    Not just the permitted slice: being told a capability exists but is not
-    granted is what gets someone to fix a scope, where an empty list looks like
-    a broken server.
+    The list includes the ones your token is not granted, so you can see which
+    scope to add.
     """
 
     # `?name=` narrows to a capability or a dotted prefix of whole segments,
@@ -508,10 +503,10 @@ capabilities.__dict__.update(__hq_query_fields__=CAPABILITY_QUERY)
 
 @_endpoint(("GET",), title="List resources", data=ResourceCatalog, codes=("invalid_input", "unknown_resource"))
 def resources(request: APIRequest) -> HttpResponse:
-    """Every readable resource, including operations this token may use.
+    """Every readable resource, with the operations your token may use.
 
-    Each list is named by the fields it narrows by; `?name=` answers that one
-    resource with its list's whole query schema.
+    Each list names the fields it filters by. `?name=` returns one resource
+    with its list's whole query schema.
     """
 
     return _ok(describe_resources(principal=request.principal, **_narrowing(request, RESOURCE_QUERY)))
@@ -628,11 +623,11 @@ topology: View = _projection(
     "topology",
     "get_topology",
     "Read the topology",
-    """The live permitted infrastructure graph and its canonical actions.
+    """The live infrastructure graph you may read, with each node's safe actions.
 
-    `?lens=` narrows to a standing question. `?focus=`, `direction`, and
-    bounded `depth` trace a dependency neighborhood inside that projection.
-    With neither a lens nor a focus it answers the counts and the lenses.
+    `?lens=` narrows it to one standing question. `?focus=`, with `direction`
+    and a bounded `depth`, traces the dependencies around one node. With
+    neither a lens nor a focus, it returns the counts and the lenses.
     """,
     "control_plane:topology",
 )
@@ -644,13 +639,12 @@ findings: View = _projection(
     "findings",
     "get_findings",
     "List findings",
-    """What HQ currently claims is wrong, with the evidence and a remedy.
+    """The open problems HQ found, with the evidence and a remedy for each.
 
-    Derived from the same projection as the topology and narrowed the same way,
-    so a finding can never name something the token could not already read. A
-    remedy is a reference to an existing capability, never a new route.
-    `?severity=` is a floor and `?limit=` caps how many are returned, most
-    severe first; the summary still counts every finding.
+    A finding names only what your token can already read, and each remedy
+    is an existing capability. `?severity=` is a floor, and `?limit=` caps
+    how many come back, most severe first. The summary still counts every
+    finding.
     """,
     "control_plane:findings",
 )
@@ -658,7 +652,7 @@ findings: View = _projection(
 
 @_endpoint(("GET",), title="List connections", data=ConnectionCatalog, page="control_plane:connections")
 def connections(request: APIRequest) -> HttpResponse:
-    """Connection contracts and whether this token is permitted each.
+    """The connection contracts, and whether your token may use each.
 
     A family's instances are the ``connections`` resource.
     """
@@ -679,7 +673,7 @@ def _selection(raw: str | None) -> list[str] | None:
 
 @_endpoint(("GET",), title="List a resource", data=ResourceCollection, codes=RESOURCE_CODES)
 def resource_list(request: APIRequest, name: str) -> HttpResponse:
-    """List one resource through its declared, schema-validated query."""
+    """One resource's records, narrowed by the query its schema checks."""
 
     filters: dict[str, str] = {}
     for key, values in request.GET.lists():
@@ -696,15 +690,13 @@ def resource_list(request: APIRequest, name: str) -> HttpResponse:
 # What the generic read of one answers; each resource's own route names its record's shape.
 type ResourceRecordAnswer = Annotated[
     dict[str, Any],
-    Field(
-        description="One record, in the shape its resource names, which that resource's own route in this document gives."
-    ),
+    Field(description="One record, in the shape its resource's own route in this document gives."),
 ]
 
 
 @_endpoint(("GET",), title="Get a resource record", data=ResourceRecordAnswer, codes=RESOURCE_CODES)
 def resource_detail(request: APIRequest, name: str, identifier: str) -> HttpResponse:
-    """Get one resource record through its declared identifier contract."""
+    """One record of a resource, by its identifier."""
 
     asked = request.GET.getlist(RESERVED_QUERY_FIELD)
     if len(asked) > 1:
@@ -796,15 +788,13 @@ def _without_outcome(kind: Any) -> Any:
 # names.
 type CommandAnswer = Annotated[
     dict[str, Any],
-    Field(
-        description="What the command answers, in the shape its capability names, which that capability's own route in this document gives."
-    ),
+    Field(description="What the command answers, in the shape its capability's own route in this document gives."),
 ]
 
 
 @_endpoint(("POST",), title="Run a capability", data=CommandAnswer, held=AwaitingApproval, codes=execute_codes(None))
 def execute(request: APIRequest, name: str) -> HttpResponse:
-    """Run one HQ capability, replaying machine writes by idempotency key."""
+    """Run one HQ capability. A retry with the same idempotency key returns the first answer."""
 
     try:
         body = _body_json(request)

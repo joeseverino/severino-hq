@@ -16,7 +16,7 @@ from django.template import Template
 from hq.domains.jobs.models import Job, JobState
 from hq.platform.application import calendar
 from hq.platform.application.appearance import Theme
-from hq.platform.application.approval_review import ChangePreview, compare, grouped
+from hq.platform.application.approval_review import SUMMARY, ChangePreview, compare, grouped
 from hq.platform.application.asks import DONE, FAILED, RUNNING, Ask, Standing
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, SourceView, calendar_month
 from hq.platform.application.capability_policy import RULE_LABELS, Column, Group, PolicyCell, Row
@@ -1494,8 +1494,9 @@ ENTRIES = {
         },
     ),
     # Many records of one kind, as a catalog's procedures: what belongs to
-    # none, one that moves, one that is new, one that stays and so starts
-    # folded, and a document that would not parse, said as a line diff.
+    # none, one that moves, one that is new (said by its summary, its fields
+    # folded), one that stays and so starts folded, and a document that would
+    # not parse, said as a line diff.
     "part/change-table-many": Entry(
         "{% change_table preview %}",
         {
@@ -1507,7 +1508,13 @@ ENTRIES = {
                         "records": {
                             **_RECORDS,
                             "example.first": {**_RECORDS["example.first"], **_CHANGED_AFTER},
-                            "example.third": _CHANGED_AFTER,
+                            "example.third": {
+                                SUMMARY: {
+                                    "label": "An example record",
+                                    "value": "Changes an example thing on any of your example machines.",
+                                },
+                                **_CHANGED_AFTER,
+                            },
                         },
                     },
                     label="Would change",

@@ -108,8 +108,8 @@ changes nothing.
 The permission keys are HQ's capability names on purpose. A mapping table
 between the two systems would be a third home for the authorization model and
 the first thing to go stale when a plugin adds a capability, which is why the
-list is written from the catalog and never typed. HQ keeps no admin key: one
-at Pocket ID v2.19.2 carries no scopes, so it could do anything.
+list is written from the catalog and never typed. HQ keeps no admin key:
+Pocket ID's admin keys carry no scopes, so one could do anything.
 
 Then in **Administration → OIDC Clients**, add a client per automation, with
 the client credentials grant enabled. One client per automation, not one shared
@@ -637,10 +637,9 @@ validated by.
 
 ## Recipe: a narrowly scoped first-party automation
 
-This synthetic example demonstrates the transport contract without placing a
-private plugin's domain vocabulary or workflow in the public host repository.
-The deployed plugin's capability schema is the source of truth for its real
-payload; its private repository owns the corresponding setup guide.
+This synthetic example shows the transport contract. A real extension lives
+in its own repository, with its own setup guide, and its capability schema is
+the source of truth for its payload.
 
 In an automation client:
 
@@ -957,10 +956,10 @@ Security properties:
 
 ### Held changes as MCP tasks
 
-A client that declares the `io.modelcontextprotocol/tasks` extension on a
-request (`_meta["io.modelcontextprotocol/clientCapabilities"].extensions`, on
-the 2026-07-28 wire) and makes a call HQ holds is answered with a task in
-place of the held answer: `resultType: "task"`, whose `taskId` is the hold's
+A client on a protocol version the SDK lists in `MODERN_PROTOCOL_VERSIONS`
+may declare the `io.modelcontextprotocol/tasks` extension on a request
+(`_meta["io.modelcontextprotocol/clientCapabilities"].extensions`). A call of
+its that HQ holds is then answered with a task in place of the held answer: `resultType: "task"`, whose `taskId` is the hold's
 `approval.id`. The SDK ships no tasks implementation, so HQ serves the
 extension's methods over its holds (`hq/platform/mcp/tasks.py`) through the
 low-level server's `add_request_handler`, and advertises the extension in its

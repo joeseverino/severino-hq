@@ -1,10 +1,11 @@
-"""The procedures page: the catalog the automation worker runs from, the
-newest scan of its repository, and a proposal a person reviews and adopts.
+"""The procedures page: the catalog the automation worker runs from, when
+its repository was last read, and the one commit there is to decide on.
 
 Every value is the catalog's or a scan's (``automation_sources.standing``);
 the host names no procedure, machine or repository, and the source's
 repository is the deployment's own configuration, so the page names a
-commit by its branch and id alone.
+commit by its branch and id alone. A held adoption is an approval, drawn by
+the card its audit entry draws.
 """
 
 from dataclasses import dataclass
@@ -18,8 +19,9 @@ from django.shortcuts import redirect
 from django.views import View
 from django.views.generic import TemplateView
 
+from hq.domains.control_plane.models import SourceProposal
 from hq.platform.application.action_links import capability_action_link, command_url
-from hq.platform.application.automation_adoption import ADOPT
+from hq.platform.application.automation_adoption import ADOPT, anywhere
 from hq.platform.application.automation_runs import capability_name
 from hq.platform.application.automation_sources import REFRESH, SourceStanding, scan_standing, standing
 from hq.platform.application.pages import PageMixin
@@ -28,9 +30,11 @@ from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.domains.jobs.models import JobState
+lazy from hq.platform.application.approval_review import review
 lazy from hq.platform.application.approvals import is_held
 lazy from hq.platform.application.asks import FAILED, WATCH_LIMIT, Ask, Standing, answer, watch_token, watched
 lazy from hq.platform.application.labels import effect_label
+lazy from hq.platform.application.moments import ago
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT, refusal_of
 lazy from hq.platform.application.work_runs import TONES
 
@@ -48,14 +52,16 @@ class CatalogRow:
     procedure: Any
     url: str
     effect: str
+    # Where it runs when it names no machine.
+    anywhere: str
 
 
 class ProceduresView(PageMixin, TemplateView):
-    """The adopted catalog, the newest scan and the newest proposal; with a
-    proposal's id, that proposal instead."""
+    """The adopted catalog and the newest commit to decide on; with a
+    proposal's id, that commit instead."""
 
     template_name = "control_plane/procedures.html"
-    page_lede = "What the automation worker may run: the procedures of the commit of its repository a person adopted."
+    page_lede = "Ansible playbooks HQ can run, from the commit you adopted."
 
     @cached_property
     def sources(self) -> SourceStanding:
@@ -72,12 +78,25 @@ class ProceduresView(PageMixin, TemplateView):
     def get_page_title(self) -> str:
         review = self.sources.proposal
         if "pk" in self.kwargs and review is not None:
-            return f"Proposal {review.revision}"
-        return "Procedures"
+            return f"Commit {review.revision}"
+        return "Playbooks"
+
+    @override
+    def get_page_lede(self) -> str:
+        # A commit's own page is about that commit; its title and sections say which.
+        if "pk" not in self.kwargs:
+            return self.page_lede
+        found = self.sources.proposal
+        if found is not None and found.refused:
+            return (
+                "HQ can't adopt this commit, so there is nothing to do here. "
+                "Fix what is listed below in the repository, then Refresh to scan the new commit."
+            )
+        return ""
 
     @override
     def get_page_trail(self):
-        return (("Procedures", reverse("control_plane:procedures")),) if "pk" in self.kwargs else ()
+        return (("Playbooks", reverse("control_plane:procedures")),) if "pk" in self.kwargs else ()
 
     @override
     def get_page_actions(self):
@@ -86,7 +105,7 @@ class ProceduresView(PageMixin, TemplateView):
             return ()
         scanned, scan = self.sources.scanned, self.sources.scan
         # A page loaded while a scan is under way follows it; one that ended
-        # is said in the page's own section on the last scan.
+        # is said on the title's line (``_procedures_read.html``).
         live = scan is not None and scanned.live
         return (
             Ask(
@@ -94,7 +113,7 @@ class ProceduresView(PageMixin, TemplateView):
                 reverse("control_plane:procedures_refresh"),
                 standing=scanned if live else Standing(),
                 status_url=scan_status_url(str(scan.pk)) if live else "",
-                title="Ask the automation worker which procedures its repository holds now.",
+                title="Scan your repository for a new commit.",
             ),
         )
 
@@ -102,25 +121,58 @@ class ProceduresView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         sources = self.sources
-        review = sources.proposal
-        adoptable = review is not None and review.preview is not None
+        # On a commit's own page, only what waits for it.
+        held = [
+            each.approval
+            for each in sources.held
+            if "pk" not in self.kwargs
+            or (sources.proposal is not None and each.proposal == sources.proposal.proposal.pk)
+        ]
+        shown = self._shown(sources, {each.proposal for each in sources.held})
+        catalog = sources.catalog
         context.update(
+            page_aside="control_plane/_procedures_read.html",
+            failed_tone=TONES[JobState(sources.scan.seen)] if sources.scanned.state == FAILED else "",
             sources=sources,
-            review=review,
-            scan_tone=TONES[JobState(sources.scan.seen)] if sources.scan is not None else "",
-            adopt=capability_action_link(ADOPT, principal=self.principal) if adoptable else None,
+            # When HQ last read the repository: a scan result is kept only by a read that succeeded.
+            read_at=SourceProposal.objects.order_by("-pk").values_list("created_at", flat=True).first(),
+            review=shown,
+            held=[review(approval) for approval in held],
+            adopt=capability_action_link(ADOPT, principal=self.principal) if shown and shown.preview else None,
+            review_said=_said(shown.proposal, shown.revision, "read") if shown else "",
+            adopted_said=_said(catalog, sources.revision, "adopted") if catalog else "",
+            own_page="pk" in self.kwargs,
+            # A commit's own page draws the adopted catalog only when it is that commit.
+            shows_adopted="pk" not in self.kwargs or (sources.proposal is not None and sources.proposal.adopted),
             adopted=[
-                CatalogRow(procedure, command_url(capability_name(procedure.id)), effect_label(procedure.effect))
+                CatalogRow(
+                    procedure,
+                    command_url(capability_name(procedure.id)),
+                    effect_label(procedure.effect),
+                    anywhere(procedure),
+                )
                 for procedure in sources.procedures
-            ],
-            # On a proposal's own page, only what waits for it.
-            held=[
-                held
-                for held in sources.held
-                if "pk" not in self.kwargs or (review is not None and held.proposal == review.proposal.pk)
             ],
         )
         return context
+
+    @staticmethod
+    def _shown(sources: SourceStanding, held: set[int]):
+        """The commit the page asks about, apart from what its approval card
+        says: none once it is the commit adopted or an adoption of it is held."""
+
+        found = sources.proposal
+        if found is None or found.adopted or found.proposal.pk in held:
+            return None
+        return found
+
+
+def _said(commit, revision: str, done: str) -> str:
+    """A commit in the one line a section's lede gives it: its id, branch and
+    committer, and when it was read or adopted."""
+
+    by = f", committed by {commit.committer}" if commit.committer else ""
+    return f"Commit {revision} on {commit.branch}{by}, {done} {ago(commit.created_at)}."
 
 
 class RefreshView(View):
@@ -173,9 +225,9 @@ class ProposalAdoptView(View):
         if refused(request, result) is not None:
             return redirect("control_plane:procedures_proposal", pk=pk)
         if is_held(result):
-            messages.info(request, "Adopting it waits for a person to approve it.")
+            messages.info(request, "Adopting this commit needs your approval first.")
         elif result.get("adopted"):
-            messages.success(request, "Adopted. Its procedures run from this commit now.")
+            messages.success(request, "Adopted. HQ now runs this commit's playbooks.")
         else:
-            messages.info(request, "That commit is the catalog adopted now, so nothing changed.")
+            messages.info(request, "That commit is already adopted.")
         return redirect("control_plane:procedures")

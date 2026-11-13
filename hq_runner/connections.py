@@ -1,9 +1,12 @@
-"""How the worker reaches a machine: the runner-role SSH connection named for it
-in the connections document the root renderer writes.
+"""How the worker reaches a machine: the runner-role SSH connection that names
+it, as the privilege profile a run needs, in the connections document the root
+renderer writes.
 
 A run names machines by their name in HQ, and each is reached through the
-``ssh_transport`` connection whose ref is that name and whose role is
-``runner``; any other connection in the document is another process's and
+``ssh_transport`` connection whose role is ``runner`` and whose ``machine`` and
+``profile`` are that machine and the run's profile: ``read`` for a procedure
+that names no privilege, else its privilege. So a read and a change never
+share a login. Any other connection in the document is another process's and
 is never read. The identity and the pinned host key are the files the
 renderer writes beside it (``<ssh dir>/<ref>`` and ``<ssh dir>/known_hosts``).
 The document is read as the controller reads it
@@ -25,13 +28,16 @@ from typing import Any
 SCHEMA_VERSION = 2
 MAX_BYTES = 1 << 20
 ROLE = "runner"
+# The profile of a login that escalates to nothing, as the controller's
+# ReadProfile names it.
+READ_PROFILE = "read"
 KNOWN_HOSTS = "known_hosts"
 
 # The keys of the document this reads; the contract test holds each to the
 # schema HQ's registry emits.
 DOCUMENT_KEYS = ("schema_version", "connections")
 CONNECTION_KEYS = ("ref", "ssh_transport")
-TRANSPORT_KEYS = ("host", "port", "user", "role")
+TRANSPORT_KEYS = ("host", "port", "user", "role", "machine", "profile")
 # Read when a connection carries it: the shell a Windows host's sshd starts
 # (powershell or cmd), which Ansible's ssh connection is told as its shell type.
 SHELL_TYPE = "shell_type"
@@ -44,6 +50,9 @@ _USER = re.compile(r"[A-Za-z_][A-Za-z0-9_.-]{0,31}")
 _REF = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9_.-]*")
 _PORT = re.compile(r"[0-9]{1,5}")
 _SHELL_TYPES = frozenset({"sh", "powershell", "cmd"})
+# A machine and a profile as the controller holds them (document.go).
+_MACHINE = re.compile(r"[a-z0-9][a-z0-9.-]{0,252}")
+_PROFILE = re.compile(r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*")
 
 
 class ConnectionsError(Exception):
@@ -55,6 +64,8 @@ class Target:
     """One machine as the worker reaches it."""
 
     ref: str
+    machine: str
+    profile: str
     host: str
     port: int
     user: str
@@ -88,9 +99,21 @@ def _read(path: Path, uid: int) -> bytes:
     return data
 
 
+def profile(privilege: str) -> str:
+    """The profile of the login a procedure with ``privilege`` runs through:
+    one that names none runs through the read login."""
+
+    return privilege or READ_PROFILE
+
+
 def _target(transport: Mapping[str, Any], ref: str, ssh_dir: Path) -> Target | None:
     host, port, user = transport.get("host"), transport.get("port"), transport.get("user")
+    machine, named = transport.get("machine"), transport.get("profile")
     shell_type = transport.get(SHELL_TYPE, "")
+    if not (isinstance(machine, str) and _MACHINE.fullmatch(machine)):
+        return None
+    if not (isinstance(named, str) and _PROFILE.fullmatch(named)):
+        return None
     if not (isinstance(host, str) and _HOST.fullmatch(host)):
         return None
     if not (isinstance(user, str) and _USER.fullmatch(user)):
@@ -99,15 +122,19 @@ def _target(transport: Mapping[str, Any], ref: str, ssh_dir: Path) -> Target | N
         return None
     if shell_type and shell_type not in _SHELL_TYPES:
         return None
-    return Target(ref, host, int(port), user, ssh_dir / ref, ssh_dir / KNOWN_HOSTS, shell_type)
+    return Target(ref, machine, named, host, int(port), user, ssh_dir / ref, ssh_dir / KNOWN_HOSTS, shell_type)
 
 
-def runner_targets(path: Path, ssh_dir: Path, *, uid: int | None = None) -> dict[str, Target]:
-    """Each machine a runner-role connection reaches, by its name.
+type Reach = tuple[str, str]
 
-    A ref two connections share names neither, as the controller holds it, so
-    which key answers never depends on order; a connection whose settings
-    are not a usable SSH destination reaches nothing.
+
+def runner_targets(path: Path, ssh_dir: Path, *, uid: int | None = None) -> dict[Reach, Target]:
+    """Each login a runner-role connection gives, by its machine and profile.
+
+    A ref, or a machine and profile, two connections share reaches nothing,
+    as the controller holds both, so which key answers never depends on
+    order; a connection whose settings are not a usable SSH destination
+    reaches nothing.
     """
 
     try:
@@ -134,4 +161,10 @@ def runner_targets(path: Path, ssh_dir: Path, *, uid: int | None = None) -> dict
             found[ref] = _target(transport, ref, ssh_dir)
         else:
             found.setdefault(ref, None)
-    return {ref: target for ref, target in found.items() if target is not None and ref not in shared}
+    reached: dict[Reach, Target | None] = {}
+    for ref, target in found.items():
+        if target is None or ref in shared:
+            continue
+        reach = (target.machine, target.profile)
+        reached[reach] = None if reach in reached else target
+    return {reach: target for reach, target in reached.items() if target is not None}

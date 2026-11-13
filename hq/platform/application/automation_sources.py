@@ -154,6 +154,7 @@ def propose(operation: OperationRequest, catalog: dict[str, Any]) -> SourcePropo
         procedures=judged(catalog["procedures"]),
         files=catalog["files"],
         unpinned=catalog["unpinned"],
+        reaches=catalog["reaches"],
     )
 
 
@@ -305,7 +306,7 @@ def standing(proposal: int | None = None) -> SourceStanding:
     proposals = models.SourceProposal.objects.order_by("-pk")
     found = proposals.filter(pk=proposal).first() if proposal is not None else proposals.first()
     if proposal is not None and found is None:
-        raise RecordNotFound("No proposal has that id. A Refresh makes one.")
+        raise RecordNotFound("No scan result has that ID. Refresh to scan again.")
     scan = _scans().order_by("-created_at").first()
     catalog = automation_adoption.adopted()
     return SourceStanding(

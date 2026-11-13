@@ -213,7 +213,7 @@
               "tool": "describe_capabilities"
             }
           },
-          "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones this caller may run."
+          "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones you may run."
         },
         "ok": false
       }
@@ -2933,7 +2933,7 @@
             "state": "pending",
             "target": ""
           },
-          "message": "This change is waiting for a person to approve it in HQ. Nothing has been written and nothing is queued. Tell whoever asked, with the request id, and stop; approving it is not something a token can do.",
+          "message": "This change waits for approval in HQ. Nothing is written or queued until an operator approves it. Report the request id and stop, since a token cannot approve it.",
           "queued": false,
           "repeated": false,
           "status": "awaiting_approval"
@@ -2946,7 +2946,7 @@
           "details": {
             "field": "payload.idempotency_key"
           },
-          "message": "A retry key is required for capabilities that change state: send a new one as payload.idempotency_key, and the same one again when you retry this change."
+          "message": "A capability that changes something needs an idempotency key. Send a new payload.idempotency_key, and the same one when you retry this change."
         },
         "ok": false
       },
@@ -2960,7 +2960,7 @@
       "403": {
         "error": {
           "code": "agents_paused",
-          "message": "Agents are paused by the operator."
+          "message": "An operator paused all agents in HQ. Try again later."
         },
         "ok": false
       },
@@ -3176,7 +3176,7 @@
       "403": {
         "error": {
           "code": "agents_paused",
-          "message": "Agents are paused by the operator."
+          "message": "An operator paused all agents in HQ. Try again later."
         },
         "ok": false
       },

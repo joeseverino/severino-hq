@@ -87,6 +87,10 @@ def catalog(*procedures: dict[str, Any], revision: str = FIRST, changed: str = "
         "procedures": list(procedures),
         "files": [{"path": path, "object": ("b" if path == changed else "a") * 40} for path in paths],
         "unpinned": [],
+        # The worker logs in to the one machine as each profile its procedures run as.
+        "reaches": [
+            {"machine": APP, "profile": (found["declaration"] or {}).get("privilege") or "read"} for found in procedures
+        ],
         **fields,
     }
 
@@ -254,7 +258,10 @@ class HeldAdoptionTests(AdoptionTestCase):
         self.assertEqual(self.adopted(), [])
         self.assertEqual(held.baseline["committer"], "example-maintainer")
         shown = {row.label: row for row in preview(held).changes}
-        self.assertTrue(any("example.check" in label and row.change == "added" for label, row in shown.items()), shown)
+        # Each playbook is read by its title.
+        self.assertTrue(
+            any("The check procedure" in label and row.change == "added" for label, row in shown.items()), shown
+        )
 
         approve(ApproveCommand(str(held.id)), principal=an_operator())
 
@@ -287,6 +294,23 @@ class HeldAdoptionTests(AdoptionTestCase):
 
                 self.assertTrue(review(held)["warnings"], "the person deciding is warned of what it widens")
         self.assertEqual(self.adopted(), [FIRST])
+
+    def test_a_widening_names_each_playbook_by_its_title_and_its_id_only_beside_a_shared_title(self):
+        from ..automation_adoption import plan
+
+        self.adopt(self.proposed(catalog(procedure("check", effect="infrastructure_change"))))
+        twin = procedure("twin", effect="destructive")
+        twin["title"] = "The check procedure"
+        changed = procedure("check", effect="infrastructure_change", privilege="example.root")
+        planned = plan(self.proposed(catalog(changed, twin, revision=SECOND)))
+
+        self.assertEqual(
+            list(planned.widens),
+            [
+                "The check procedure (example.check) gains the privilege example.root.",
+                "The check procedure (example.twin) is new, and it stops or deletes.",
+            ],
+        )
 
     def test_a_held_adoption_goes_stale_when_another_is_adopted_first(self):
         held = self.held(self.proposed(catalog(procedure("check"))))

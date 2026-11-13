@@ -1,0 +1,17 @@
+# A sentence that stands back from whoever acts: "waits for a person",
+# "someone presses Refresh". The reader is "you" when the reader acts; anyone
+# else is named, or named by role ("an admin", "the agent", the user's name).
+# Read in what an agent or a client's author reads too (the description
+# scope), since every word of a public repository is read.
+#
+# The kind of sign-in an agent uses, "Through a person's sign-in" beside "As
+# itself", sets a person against a machine, so it stands.
+extends: existence
+message: "'%s' stands back from who acts; say 'you' when the reader acts, else name them or their role"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, description, ~comment & ~code]
+tokens:
+  - '(?<![\w-])(?<!through )(?:a|the) person(?:[''’]s)?(?![\w-])'
+  - '(?<![\w-])(?:someone|somebody|nobody|whoever)(?![\w-])'

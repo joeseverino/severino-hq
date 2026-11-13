@@ -5,7 +5,7 @@ from django.test import SimpleTestCase
 
 from hq.platform.application.approval_review import ChangePreview, compare
 from hq.platform.application.payload_words import ChangeRow
-from hq.platform.application.tests.markup import elements, select, with_class
+from hq.platform.application.tests.markup import elements, select, with_class, within
 
 
 def _drawn(preview: ChangePreview) -> str:
@@ -54,6 +54,38 @@ class ChangeTableTests(SimpleTestCase):
         folded = groups["example.second"].attrs["id"]
         self.assertTrue(select(html, "data-folded", folded), "the record that stays is still there to open")
         self.assertFalse(select(html, "data-folded", groups["example.first"].attrs.get("id", "")))
+
+    def test_a_record_that_comes_whole_is_headed_by_its_name_with_its_summary_its_one_row(self):
+        from hq.platform.application.approval_review import grouped
+
+        # approval_review.SUMMARY, written out so the test reads at a ref without it.
+        SUMMARY = "_summary"
+        summary = {"label": "An example record", "value": "Changes an example thing."}
+        before = {"commit": "example-old", "records": {"example.first": {"example_effect": "read"}}}
+        after = {
+            "commit": "example-new",
+            "records": {
+                **before["records"],
+                "example.second": {SUMMARY: summary, "example_effect": "change", "example_mode": "fast"},
+            },
+        }
+        html = _drawn(grouped(before, after, label="Would change"))
+
+        (header,) = [group for group in with_class(html, "row-group") if summary["label"] in group.words]
+        self.assertIn("new", header.words)
+        self.assertNotIn("example.second", html, "a record with a name is headed by it, never by its key")
+        folds = header.attrs["id"]
+        self.assertEqual(len(select(html, "data-folded", folds)), 2)
+        cells = [cell for cell in within(html, "data-folded", folds) if cell.tag == "td"]
+        self.assertEqual([cell.attrs.get("colspan") for cell in cells], ["2", "2"], "one value, no empty Before")
+        shown = [row for row in elements(html, "tr") if summary["value"] in row.words]
+        self.assertEqual(len(shown), 1)
+        self.assertNotIn("data-folded", shown[0].attrs, "the summary stays in sight while its fields fold")
+        self.assertNotIn(summary["label"], shown[0].words, "the summary is a sentence, not a field")
+        self.assertNotIn(SUMMARY, html)
+        # The count is what a reader sees move: the commit, and the new record as one.
+        (count,) = [element for element in with_class(html, "count") if element.words.strip().isdigit()]
+        self.assertEqual(count.words.strip(), "2")
 
     def test_a_document_that_will_not_parse_is_a_line_diff(self):
         notes = ("# An example\nfirst", "# An example\nsecond")

@@ -296,8 +296,7 @@ def token_principal(claims: dict[str, Any], interface: str) -> Principal:
     actor = claims.get("client_id") or claims.get("azp") or claims.get("sub")
     if not str(actor or "").strip():
         raise AuthorizationError(
-            "This token names no client. Its `client_id`, `azp` or `sub` claim "
-            "is what HQ records as the actor for everything it does."
+            "This token names no client. HQ needs a `client_id`, `azp` or `sub` claim to record who acted."
         )
     actor = str(actor).strip()
     person_key = _person_key(claims, actor)
@@ -342,9 +341,9 @@ def _require_a_persons_client(claims: dict[str, Any], person_key: str) -> None:
     if not REGISTERED_CLIENT_ID.fullmatch(client):
         raise AuthorizationError(
             f"This token carries {DEVICE_SCOPE!r} but names no registered client in `client_id`. "
-            "Give it only to a person's own device clients on the Pocket ID API resource."
+            "Grant that scope only to your own device clients on the Pocket ID API resource."
         )
     if not person_key:
         raise AuthorizationError(
-            f"This token carries {DEVICE_SCOPE!r} without a person: a device's token is one a person signed in for."
+            f"This token carries {DEVICE_SCOPE!r} without a signed-in account. Sign in on the device to get its token."
         )

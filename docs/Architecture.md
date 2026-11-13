@@ -1412,11 +1412,45 @@ token as an `http.extraHeader`, never on its command line. The playbook is the
 claim's `spec.playbook`, checked again by the worker: a plain relative `.yml`
 path that, once every link is followed, stays inside the checkout.
 
-Each of the run's hosts is reached through the `ssh_transport` connection
-whose ref is the host's name and whose role is `runner`
+Each of the run's hosts is reached through one login, the `ssh_transport`
+connection whose role is `runner`, whose `machine` is the host's name, and
+whose `profile` is the privilege profile the run needs
 (`hq_runner/connections.py`), read from the connections document as the
-controller reads it, and through nothing else; a host no such connection
-reaches is refused before anything runs. Its inventory entry is that
+controller reads it, and through nothing else. A procedure that names a
+privilege runs through that privilege's login, and one that names none, every
+read among them, through the `read` login, so a read and a change never share
+an account, as one account per privilege profile requires: Ansible cannot
+limit escalation to certain commands. A connection's ref is its identity's
+file name, so a machine's logins are connections of their own, and the
+controller refuses a runner connection that names no machine or profile, or
+a machine and profile another one names
+(`controller/connections/document.go`). A host no such login reaches is
+refused before anything runs. HQ refuses it earlier, when the run is asked
+for: each scan reports every machine and profile the worker has a login for,
+never an address, user or key, and a run is held to the newest scan's
+(`automation_runs.reached`), whose refusal lists each missing pair in
+`details.missing` and says that a login added since the last Refresh is seen
+after the next one. That list is the worker's word, so a worker that lies
+can only make the early refusal wrong. The worker's own check at the claim
+still holds.
+
+A run through the `read` login never escalates. The worker sets
+`ansible_become` to false as an extra var, after the run's parameters, so no
+parameter can turn it back on (`ansible.extravars`). An extra var is the one
+place Ansible ranks above everything a project sets. Against ansible-core
+2.22.0, a play's, block's, task's or role's `become: true`, `become_user` and
+`become_method`, and `ansible_become` set in a play's or task's `vars`, by
+`set_fact` or by `include_vars`, each escalate past an inventory
+`ansible_become=false`, and none escalates past the extra var. The smoke
+holds that against the pinned release, with a read that asks to escalate in
+each of those ways. The account has no sudo, which is the boundary beneath it.
+A scan is the second layer. A read whose plays name escalation anywhere they
+reach (the playbook, a file it imports or includes by name, and every file of
+each role it lists, includes or depends on) is a problem of that procedure,
+so it is never adopted. `become: false` and `ansible_become: false` alone
+escalate to nothing.
+
+Its inventory entry is that
 connection's address, port and user, its identity file alone (no agent, no
 password), its pinned `known_hosts` with host key checking on, and its
 `shell_type` when it carries one. The hosts and extra-vars come from the
@@ -1455,8 +1489,9 @@ inputs each listed role's argument spec, read through ansible-runner's
 ([Declaring a procedure](#declaring-a-procedure)). The report
 (`SourceCatalog` in the bridge contract) also lists every file with its git
 object id, each configuration, plugin, collection or variables directory
-Ansible would read past a playbook and its roles, and the commit's signature
-as GitHub verifies it.
+Ansible would read past a playbook and its roles, the commit's signature
+as GitHub verifies it, and each machine and privilege profile the worker has
+a login for ([The automation worker](#the-automation-worker)).
 
 HQ holds each sidecar to `ProcedureDeclaration`
 (`hq/platform/application/automation_sources.py`), adds every way it falls
@@ -1497,14 +1532,20 @@ the proposal and the catalog adopted now, so another adoption while it waits
 makes it stale, and its card lists the widenings above the comparison.
 
 The Procedures page (`control_plane:procedures`) is where a person does all
-of this: Refresh, with the newest scan and how it stands, followed while it
-runs; the newest proposal (or any by its id) with the commit's branch, id,
-committer and signature, the comparison drawn by `{% change_table %}`, the
-widenings and the refusals; Adopt, for a person who may; each adoption an
-agent's ask holds; and the catalog adopted now, each procedure linking its
-command page. Every value is the catalog's or a scan's
+of this. Refresh is followed while its scan runs, and the title's line says
+when a scan last read the repository and why the newest failed. A held
+adoption is drawn by the approval card its audit entry draws
+(`partials/approval_card.html`), with the widenings above the comparison and
+Approve and Reject in place. The newest commit no card holds and no adoption
+made follows: its refusals, or its comparison and widenings with Adopt for a
+person who may; any proposal is reached by its id the same way. The catalog
+adopted now closes the page, its commit in the section's lede and each
+procedure linking its command page. Every value is the catalog's or a scan's
 (`automation_sources.standing`), and the repository the commit belongs to is
-the deployment's configuration, never named on the page.
+the deployment's configuration, never named on the page. The
+`automation.source` record lives on this page, where a held adoption's card
+links it, and offers no hand edit or removal (`ProviderSpec.sourced`), since
+the host's configuration names the source.
 
 ### The automation worker on the host
 

@@ -420,12 +420,13 @@ refused the audit log (`read_audit_log`) and the calendar (`read_calendar`).
   carrying the permission from a client its person registered is
   `device_principal`'s, on the `device` interface. Its other permissions are
   bounded by its person's role, held only where a person may hold them
-  (`HELD_ONLY_AT`), and never stopped by the Agents pause. Its client is the actor, so the audit log names the device, and
-  revoking that client in Pocket ID ends it alone. Its properties:
+  (`HELD_ONLY_AT`), and never stopped by the Agents pause. Its client is the
+  actor, so the audit log names the device, and revoking that client in
+  Pocket ID ends it alone. Its properties:
   - The permission is a standing, not a capability: it grants nothing on its
     own, and a device holds exactly the other permissions its token carries.
-  - Only an administrator gives it. Pocket ID (v2.19.1) issues a scope on an
-    API only from the client's grants on that API, for every grant type
+  - Only an administrator gives it. Pocket ID issues a scope on an API only
+    from the client's grants on that API, for every grant type
     (`resolveResource`), and those grants are written only through its admin
     API, reached by an admin's session or API key and never by an OAuth
     token. Consent only narrows what a client was granted.
@@ -798,8 +799,9 @@ nothing leaked.
   controller like provider work.
 - Read contact submissions from the web process. The controller reads and
   changes them through the Cloudflare API connection.
-- Run a WordPress plugin, customer portal, or public webhooks.
-- Decrypt git-crypted Obsidian content. The vault stays separate.
+- Run a customer portal or public webhooks.
+- Decrypt an encrypted documentation source. HQ indexes documentation, and
+  the source stays separate.
 - Store credentials, API tokens, or secrets in models. The documentation
   index is metadata-only.
 - Expose arbitrary commands, Django shell, raw SQL, SSH, deployments, receipt

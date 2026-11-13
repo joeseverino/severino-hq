@@ -31,11 +31,57 @@ from .remote import REPOSITORY, Remote
 from .test_catalog import project_files
 
 WANTED = [("Say which service", "ok"), ("Change something", "changed")]
+# A read that asks to escalate in every way a play can, beside the example
+# project's procedures: through the read login, each task runs as the login
+# itself, so it ends well only while the worker's extra var outranks them all.
+ESCALATING = "playbooks/escalating_read.yml"
+# Each task checks it ran as the login itself, as the role's does.
+_AS_ITSELF = """\
+- name: Run as whoever the task runs as
+  ansible.builtin.command: id -u
+  become: true
+  become_method: ansible.builtin.su
+  vars:
+    ansible_become: true
+  register: ran
+  changed_when: false
+- name: The read ran as its own login
+  ansible.builtin.assert:
+    that: ran.stdout == lookup('ansible.builtin.pipe', 'id -u')
+"""
+ESCALATING_FILES = {
+    ESCALATING: """\
+- name: Ask to escalate from the read login
+  hosts: all
+  gather_facts: false
+  become: true
+  become_user: root
+  vars:
+    ansible_connection: local
+    ansible_become: true
+  roles:
+    - escalating
+  tasks:
+    - name: Set escalation as a fact
+      ansible.builtin.set_fact:
+        ansible_become: true
+    - name: Read escalation from a file
+      ansible.builtin.include_vars: escalating_vars.yml
+    - name: Escalate a block
+      become: true
+      block:
+        - name: Check from inside it
+          ansible.builtin.include_tasks: escalating_tasks.yml
+""",
+    "playbooks/escalating_vars.yml": "ansible_become: true\n",
+    "playbooks/escalating_tasks.yml": _AS_ITSELF,
+    "roles/escalating/tasks/main.yml": _AS_ITSELF,
+}
 
 
 def _environment(root: Path) -> dict[str, str]:
     connections = root / "connections.json"
-    fakes.write_connections(connections, fakes.connection("localhost", host="127.0.0.1", role="runner"))
+    fakes.write_connections(connections, fakes.runner("localhost", host="127.0.0.1"))
     for directory in ("scratch", "state", "ssh"):
         (root / directory).mkdir()
     return {
@@ -76,11 +122,13 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="hq-runner-") as directory:
         root = Path(directory)
         remote = Remote(root / "remote")
-        revision = remote.commit(project_files())
-        run = fakes.pending(revision=revision)
-        run["resource"]["spec"]["playbook"] = "playbooks/host_health.yml"
-        run["input"]["hosts"] = ["localhost"]
-        bridge = fakes.Bridge(fakes.scan_pending(), run)
+        revision = remote.commit({**project_files(), **ESCALATING_FILES})
+        run, escalating = (fakes.pending(revision=revision, effect="read", privilege="") for _ in range(2))
+        for asked, playbook in ((run, "playbooks/host_health.yml"), (escalating, ESCALATING)):
+            asked["resource"]["spec"]["playbook"] = playbook
+            asked["input"]["hosts"] = ["localhost"]
+        escalating["operation"]["id"] = "33333333-4444-4555-8666-777777777777"
+        bridge = fakes.Bridge(fakes.scan_pending(), run, escalating)
         config = Config.read(_environment(root))
         # The one change from the configuration the environment gives: the
         # repository is this machine's, reached over git's file transport.
@@ -91,7 +139,7 @@ def main() -> int:
         left = sorted(path.name for path in (root / "scratch").iterdir())
         if loaded.exists():
             wrong.append("the project's own ansible.cfg loaded a callback of the project's")
-    scanned, ran = [*bridge.reports, {}, {}][:2]
+    scanned, ran, read = [*bridge.reports, {}, {}, {}][:3]
     specs = {
         found["role"]: found["argument_spec"]
         for procedure in scanned.get("catalog", {}).get("procedures", [])
@@ -100,7 +148,15 @@ def main() -> int:
     recorded = {role: ansible.entry_point(role, {role: spec}) for role, spec in fakes.RECORDED_ROLE_SPECS.items()}
     seen = [(event["task"], event["outcome"]) for event in ran.get("events", [])]
     print(f"smoke:runner: {worked} operations; scan {scanned.get('message')}; run {ran.get('message')}, events {seen}")
-    if worked != 2 or scanned.get("success") is not True:
+    checked = [event["outcome"] for event in read.get("events", []) if event["task"] == "The read ran as its own login"]
+    # One check in the role, one in the escalated block.
+    if read.get("success") is not True or checked != ["ok", "ok"]:
+        wrong.append(f"a read that asks to escalate did not run as its own login: {read.get('message')}, {checked}")
+    if scanned.get("catalog", {}).get("reaches") != [{"machine": "localhost", "profile": "read"}]:
+        wrong.append(
+            f"the scan reported the logins {scanned.get('catalog', {}).get('reaches')}, not the one its connections hold"
+        )
+    if worked != 3 or scanned.get("success") is not True:
         wrong.append(f"wanted a scan that succeeded first, not {scanned}")
     elif specs != recorded:
         wrong.append(f"ansible-doc answered {specs}, not the role specs recorded_role_specs.json holds")

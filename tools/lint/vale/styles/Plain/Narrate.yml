@@ -7,7 +7,7 @@ message: "'%s' narrates the page; say what the reader does not already see, or n
 level: error
 ignorecase: true
 nonword: true
-scope: [shown, ~comment & ~code]
+scope: [shown, description, ~comment & ~code]
 tokens:
   - '\b(?:open|click|tap|press|select|pick)\w*\b[^.!?;:\n]{0,30}\bto (?:see|read|find|learn|view)\b'
   - '(?:^|[.!?]\s+)Each [\w’''-]+(?: [\w’''-]+)? (?:is|are) (?:a|an|one)\b'

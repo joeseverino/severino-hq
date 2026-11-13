@@ -22,12 +22,22 @@ content, and each path Ansible would read beyond a playbook and its roles
 Ansible loads code or variables from wherever they sit. Whether a commit
 carrying one may be adopted is HQ's decision; the worker only says it is
 there. And the commit's verification as GitHub reports it, so HQ can require
-a signed commit of a repository whose plan offers no rule that does.
+a signed commit of a repository whose plan offers no rule that does, and each
+machine and privilege profile the worker has a login for (``reaches``), so HQ
+can refuse a run no login reaches when it is asked.
+
+A procedure whose sidecar declares it a read is a problem when any file its
+plays pull in (the playbook, a file it imports or includes by name, every
+file of each role it lists, includes or depends on) names escalation: a read
+runs through the read login with escalation turned off
+(``ansible.extravars``), so a read that escalates is a declaration that does
+not say what it does.
 """
 
 import http
 import http.client
 import json
+import os
 import re
 from collections.abc import Callable, Iterable, Mapping
 from functools import cache
@@ -37,8 +47,9 @@ from typing import Any
 lazy import yaml
 
 from . import procedures
-from .ansible import RoleSpec
+from .ansible import BECOME, ROLES, RoleSpec
 from .claim import Refused
+from .connections import Reach
 
 SIDECAR = ".hq.yml"
 PLAYBOOK = ".yml"
@@ -60,6 +71,8 @@ MOST_PROBLEMS = 20
 # The longest path a file reported may have: Linux's PATH_MAX, which a path
 # checked out under the scratch directory stays within.
 PATH_LIMIT = 4096
+# The most logins a scan reports.
+MOST_REACHES = 1000
 
 # The directories Ansible adds to its plugin search when one sits beside a
 # playbook or inside a role, by ansible-core 2.22's plugin loaders' subdir
@@ -96,6 +109,26 @@ VARIABLE_DIRECTORIES = frozenset({"group_vars", "host_vars"})
 CONFIG = "ansible.cfg"
 # The action an assertion is, in each spelling Ansible resolves to it.
 ASSERT = frozenset({"assert", "ansible.builtin.assert", "ansible.legacy.assert"})
+# A declaration's effect that runs through the read login.
+READ = "read"
+# The keywords that set a play's, block's or task's escalation (ansible-core
+# 2.22's ``playbook.base.Base``); ``become: false`` alone says it escalates to
+# nothing. Every variable named from ``BECOME`` sets it too.
+BECOME_KEYWORDS = frozenset({"become", "become_user", "become_method", "become_flags", "become_exe"})
+# What names a file a play pulls in, in each spelling Ansible resolves, and
+# what names a role.
+_FILE_ACTIONS = ("import_playbook", "import_tasks", "include_tasks", "include_vars", "include")
+_ROLE_ACTIONS = ("import_role", "include_role")
+FILE_KEYS = frozenset(
+    {
+        "vars_files",
+        *(f"{prefix}{action}" for action in _FILE_ACTIONS for prefix in ("", "ansible.builtin.", "ansible.legacy.")),
+    }
+)
+ROLE_KEYS = frozenset(
+    f"{prefix}{action}" for action in _ROLE_ACTIONS for prefix in ("", "ansible.builtin.", "ansible.legacy.")
+)
+YAML_SUFFIXES = (".yml", ".yaml")
 
 GITHUB_API = "api.github.com"
 # How long GitHub may take to answer, and the most bytes of its answer read.
@@ -191,6 +224,75 @@ def _roles(play: Mapping[str, Any]) -> list[str]:
     return named
 
 
+def _escalation(node: Any) -> str:
+    """The first keyword or variable in ``node`` that sets escalation to
+    anything but off, or ""."""
+
+    if isinstance(node, Mapping):
+        for key, value in node.items():
+            named = isinstance(key, str) and (key in BECOME_KEYWORDS or key.startswith(BECOME))
+            if named and not (key in ("become", BECOME) and value is False):
+                return str(key)
+            found = _escalation(value)
+            if found:
+                return found
+    elif isinstance(node, list):
+        for value in node:
+            found = _escalation(value)
+            if found:
+                return found
+    return ""
+
+
+def _named(node: Any, keys: frozenset[str]) -> list[str]:
+    """Each plain name the values of ``keys`` give anywhere in ``node``: a
+    file or a role, never one a template computes."""
+
+    found: list[str] = []
+    if isinstance(node, Mapping):
+        for key, value in node.items():
+            if key in keys:
+                given = value.get("name", value.get("file")) if isinstance(value, Mapping) else value
+                found.extend(
+                    name
+                    for name in (given if isinstance(given, list) else [given])
+                    if isinstance(name, str) and name and "{" not in name
+                )
+            found.extend(_named(value, keys))
+    elif isinstance(node, list):
+        for value in node:
+            found.extend(_named(value, keys))
+    return found
+
+
+def _dependencies(path: str, node: Any) -> list[str]:
+    """The roles a role's ``meta/main.yml`` at ``path`` depends on, by name."""
+
+    parts = PurePosixPath(path).parts
+    if parts[-2:] not in (("meta", "main.yml"), ("meta", "main.yaml")) or not isinstance(node, Mapping):
+        return []
+    listed = node.get("dependencies")
+    return [
+        name
+        for role in (listed if isinstance(listed, list) else ())
+        for name in [role.get("role", role.get("name")) if isinstance(role, Mapping) else role]
+        if isinstance(name, str) and name and "{" not in name
+    ]
+
+
+def _role_files(role: str, playbook_dir: PurePosixPath, files: frozenset[str]) -> list[str]:
+    """Every YAML file of the role named ``role``, where Ansible finds it for
+    a playbook in ``playbook_dir``: beside it in ``roles/``, in the project's
+    ``roles/``, or beside it."""
+
+    for where in (playbook_dir / ROLES / role, PurePosixPath(ROLES) / role, playbook_dir / role):
+        prefix = f"{where}/"
+        found = sorted(path for path in files if path.startswith(prefix) and path.endswith(YAML_SUFFIXES))
+        if found:
+            return found
+    return []
+
+
 class _Procedure:
     """One procedure as it is read, gathering what could not be."""
 
@@ -205,6 +307,8 @@ class _Procedure:
             "verification": [],
             "problems": [],
         }
+        # The playbook as read, which a read's escalation is looked for in.
+        self.plays: Any = None
 
     def problem(self, said: str) -> None:
         problems = self.found["problems"]
@@ -240,6 +344,7 @@ class _Procedure:
         if not isinstance(plays, list):
             self.problem("Its playbook is not a list of plays.")
             return []
+        self.plays = plays
         plays = [play for play in plays if isinstance(play, Mapping) and "hosts" in play]
         title = next((play["name"] for play in plays if isinstance(play.get("name"), str)), "")
         self.found["title"] = _clip(title, TITLE_LIMIT)
@@ -265,6 +370,45 @@ class _Procedure:
                 spec = None
             self.found["roles"].append({"role": role, "argument_spec": spec})
 
+    @property
+    def reads(self) -> bool:
+        declaration = self.found["declaration"]
+        return isinstance(declaration, Mapping) and declaration.get("effect") == READ
+
+    def refuse_escalation(self, project_dir: Path, roles: list[str], files: frozenset[str]) -> None:
+        """A problem for each file the read's plays pull in that escalates."""
+
+        playbook_dir = PurePosixPath(self.found["playbook"]).parent
+        queue: list[tuple[str, Any]] = [(self.found["playbook"], self.plays)]
+        seen = {self.found["playbook"]}
+        named_roles = list(roles)
+
+        def pull(path: str) -> None:
+            if path in seen or path not in files or len(seen) >= MOST_FILES:
+                return
+            seen.add(path)
+            try:
+                queue.append((path, _yaml(project_dir, path, PLAYBOOK_BYTES)))
+            except Refused as refused:
+                self.problem(refused.message)
+            except (OSError, ValueError, yaml.YAMLError) as exc:
+                self.problem(f"{path}, which it pulls in, could not be read: {exc}")
+
+        while queue:
+            path, node = queue.pop(0)
+            key = _escalation(node)
+            if key:
+                self.problem(f"It is a read, and {path} sets {key}: a read runs with no escalation.")
+            here = PurePosixPath(path).parent
+            for name in _named(node, FILE_KEYS):
+                pull(str(PurePosixPath(os.path.normpath(here / name))))
+            for name in (*_named(node, ROLE_KEYS), *_dependencies(path, node)):
+                if name not in named_roles:
+                    named_roles.append(name)
+            for role in named_roles:
+                for found in _role_files(role, playbook_dir, files):
+                    pull(found)
+
 
 def procedure(project_dir: Path, sidecar: str, files: frozenset[str], role_spec: RoleSpec) -> dict[str, Any]:
     """The procedure the sidecar at ``sidecar`` declares, as the worker reads it."""
@@ -277,11 +421,19 @@ def procedure(project_dir: Path, sidecar: str, files: frozenset[str], role_spec:
         return found.found
     roles = found.read_playbook(project_dir)
     found.read_roles(roles, project_dir, role_spec)
+    if found.reads:
+        found.refuse_escalation(project_dir, roles, files)
     return found.found
 
 
 def scan(
-    project: procedures.Project, *, scratch: Path, token: str, role_spec: RoleSpec, verify: Verify
+    project: procedures.Project,
+    *,
+    scratch: Path,
+    token: str,
+    role_spec: RoleSpec,
+    verify: Verify,
+    reaches: Callable[[], Iterable[Reach]],
 ) -> dict[str, Any]:
     """The catalog of ``project`` at the tip of its default branch, as the
     bridge contract's ``SourceCatalog`` holds it."""
@@ -301,6 +453,7 @@ def scan(
         "procedures": [procedure(tip.project_dir, sidecar, files, role_spec) for sidecar in sidecars],
         "files": [{"path": path, "object": name} for path, name in tip.files],
         "unpinned": unpinned(paths),
+        "reaches": [{"machine": machine, "profile": profile} for machine, profile in sorted(reaches())][:MOST_REACHES],
     }
 
 

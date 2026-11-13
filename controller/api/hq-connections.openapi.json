@@ -269,11 +269,25 @@
               "setting": "IDENTITY"
             }
           },
+          "machine": {
+            "type": "string",
+            "x-go-name": "Machine",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "MACHINE"
+            }
+          },
           "port": {
             "type": "string",
             "x-go-name": "Port",
             "x-oapi-codegen-extra-tags": {
               "setting": "PORT"
+            }
+          },
+          "profile": {
+            "type": "string",
+            "x-go-name": "Profile",
+            "x-oapi-codegen-extra-tags": {
+              "setting": "PROFILE"
             }
           },
           "role": {

@@ -210,9 +210,7 @@ class ExampleEstateTests(TestCase):
         groups = {group.label: group for group in shown["preview"].groups}
 
         self.assertTrue(shown["warnings"], "a widening is said before anything is approved")
-        self.assertEqual(
-            set(groups), {procedure["declaration"]["id"] for procedure in automation.PROCEDURES + automation.WIDENED}
-        )
+        self.assertEqual(set(groups), {procedure["title"] for procedure in automation.PROCEDURES + automation.WIDENED})
         self.assertTrue(any(group.changed for group in groups.values()))
         self.assertTrue(
             any(not group.changed for group in groups.values()), "a procedure that stays is shown as it stands"
@@ -233,6 +231,10 @@ class ExampleEstateTests(TestCase):
                     [link for link in elements(page, "a") if link.attrs.get("href") == record and link.words],
                     "the aside's link says where it goes",
                 )
+
+    def test_the_held_adoption_s_card_links_the_procedures_page(self):
+        (held,) = (held for held in approvals.pending(principal=cli_principal()) if held.capability == ADOPT)
+        self.assertEqual(approval_review.review(held)["resource_url"], reverse("control_plane:procedures"))
 
     def test_the_repository_was_scanned_into_a_proposal_hq_cannot_adopt_and_once_failed(self):
         scans = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN)

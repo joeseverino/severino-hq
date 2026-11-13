@@ -31,6 +31,7 @@ from hq.platform.application.capabilities import run_capability
 from hq.platform.application.controller import ControllerReport, claim_next_operation, renew_operation, report_operation
 from hq.platform.application.infrastructure import ManagedResourceCommand, save_managed_resource
 from hq.platform.application.integration_specs import IDEMPOTENCY_FIELD
+from hq.platform.application.machines import machine_catalog
 from hq.platform.application.security import MCP_INTERFACE, Principal, cli_principal, web_principal
 from hq.platform.application.tokens import token_principal
 from hq.platform.core.audit import stamped
@@ -153,6 +154,17 @@ def _files(procedures: tuple[dict[str, Any], ...] = PROCEDURES) -> list[dict[str
     return [{"path": path, "object": hashlib.sha1(path.encode(), usedforsecurity=False).hexdigest()} for path in paths]
 
 
+# The profiles of the worker's logins: the read account's, and each
+# privilege a commit of the example repository names.
+PROFILES = ("read", "example.cache_admin", "example.package_admin")
+
+
+def _reaches() -> list[dict[str, str]]:
+    """The worker's logins: each machine HQ knows, as each profile."""
+
+    return [{"machine": machine.name, "profile": profile} for machine in machine_catalog() for profile in PROFILES]
+
+
 def catalog(procedures: tuple[dict[str, Any], ...] = PROCEDURES, revision: str = REVISION) -> dict[str, Any]:
     """The example repository as the worker's scan reports it (``SourceCatalog``)."""
 
@@ -163,6 +175,7 @@ def catalog(procedures: tuple[dict[str, Any], ...] = PROCEDURES, revision: str =
         "procedures": [dict(procedure) for procedure in procedures],
         "files": _files(procedures),
         "unpinned": [],
+        "reaches": _reaches(),
     }
 
 
@@ -197,14 +210,30 @@ WIDENED = (
     _renamed(
         _REPORT,
         "disk_cleanup",
-        declared={"effect": "infrastructure_change", "retry": "never"},
-        title="Free a mount's space",
+        declared={
+            "effect": "infrastructure_change",
+            "retry": "never",
+            "timeout_seconds": 600,
+            "recovery": ["Deleted files are gone; restore any still needed from the machine's last backup."],
+        },
+        title="Free space on a mount",
+        preconditions=["The mount point exists on the machine, and its old logs and caches may be deleted."],
+        verification=["The mount has more free space than before the run."],
+        argument_spec={
+            "short_description": "Free space on one mount",
+            "options": {"mount": {"type": "path", "default": "/", "description": "The mount point to free space on."}},
+        },
     ),
     _UPGRADE,
 )
 WIDENED_REVISION = _commit("Escalate the cache flush; add a disk cleanup.")
-# The commit after it, whose upgrade names a role the repository does not hold.
-UNREADY = (_FLUSH, _REPORT, _moved(_UPGRADE, problems=["The playbook names a role the repository does not hold."]))
+# The commit after it, whose upgrade names a role the repository does not
+# hold, said as the worker's scan says it (``hq_runner.ansible.role_spec``).
+UNREADY = (
+    _FLUSH,
+    _REPORT,
+    _moved(_UPGRADE, problems=["No role packages_v2 is in the project's roles/ or beside the playbook."]),
+)
 UNREADY_REVISION = _commit("Move the upgrade onto a new role.")
 
 
@@ -252,7 +281,7 @@ def proposed(person: Principal, agent: Principal) -> None:
     if not is_held(held):
         raise RuntimeError(f"The agent's adoption was not held for a person: {held}")
     _scanned(person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the procedures.")
-    _scanned(person, "example-refresh-failed", None, "The repository could not be fetched: the host did not answer.")
+    _scanned(person, "example-refresh-failed", None, "HQ couldn't reach your repository's host.")
 
 
 def rescanned(owner) -> None:

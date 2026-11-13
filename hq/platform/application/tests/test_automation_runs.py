@@ -231,6 +231,37 @@ class RefusedRunTests(RunTestCase):
 
         self.refused(run_payload(APP), "precondition")
 
+    def test_a_machine_the_worker_has_no_login_to_as_the_run_s_profile_is_refused_when_asked(self):
+        self.supply(
+            manifest(),
+            manifest(id="example.package_upgrade", privilege="example.package_admin"),
+            manifest(id=LOGS, effect="read", retry="safe"),
+        )
+        # The read login to the app, and the change login to the database.
+        self.supply.reach((APP, "read"), (DB, "example.package_admin"))
+
+        unprivileged = self.refused(run_payload(APP, DB), "precondition")
+        privileged = self.refused(
+            run_payload(APP), "precondition", name="automation.example.package_upgrade.run", key="example-run-2"
+        )
+        self.assertEqual(unprivileged["details"]["missing"], [{"machine": DB, "profile": "read"}])
+        self.assertEqual(privileged["details"]["missing"], [{"machine": APP, "profile": "example.package_admin"}])
+        self.assertFalse(OperationRequest.objects.exists())
+
+        # A read, and a change that names no privilege, go through the read login.
+        self.assertTrue(self.ask(run_payload(APP), name=f"automation.{LOGS}.run", key="example-run-3")["queued"])
+        OperationRequest.objects.update(state=OperationRequest.State.SUCCEEDED, completed_at="2026-01-01T00:00:00Z")
+        self.assertTrue(self.ask(run_payload(APP), key="example-run-4")["queued"])
+
+    def test_an_agent_s_change_no_login_reaches_is_refused_before_a_person_is_asked(self):
+        from hq.domains.control_plane.models import ApprovalRequest
+
+        self.supply.reach()
+
+        self.refused(run_payload(APP), "precondition", principal=AGENT)
+
+        self.assertFalse(ApprovalRequest.objects.exists())
+
     def test_a_host_hq_does_not_know_is_refused(self):
         error = self.refused(run_payload("unknown.example.com"), "not_found")
 

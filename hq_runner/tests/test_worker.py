@@ -207,6 +207,65 @@ class InvalidClaimTests(PassTestCase):
         self.assertEqual(self.only_report(bridge)["conditions"][0]["reason"], "NotInstalled")
 
 
+class LoginTests(PassTestCase):
+    """Each machine is reached through the login its procedure's privilege
+    names, a procedure naming none through the read login, which never
+    escalates."""
+
+    def logins(self, **asked) -> tuple[list, list[tuple[str, str]], dict]:
+        looked: list[tuple[str, str]] = []
+
+        def reach(host: str, profile: str):
+            looked.append((host, profile))
+            return fakes.reach(host, fakes.PRIVILEGE)
+
+        bridge = fakes.Bridge(fakes.pending(**asked))
+        runner = fakes.Runner()
+        work_once(
+            bridge,
+            controller_id=fakes.WORKER,
+            installed=fakes.installed,
+            reach=reach,
+            journal=self.journal,
+            runner=runner,
+            scan=fakes.scanned,
+            clock=self.clock,
+        )
+        return runner.runs, looked, self.only_report(bridge)
+
+    def test_a_change_goes_through_its_privilege_s_login_and_may_escalate(self):
+        (run,), looked, _ = self.logins()
+
+        self.assertEqual(looked, [(fakes.APP, fakes.PRIVILEGE)])
+        self.assertTrue(run.escalates)
+
+    def test_a_read_goes_through_the_read_login_and_never_escalates(self):
+        for asked in ({"effect": "read", "privilege": ""}, {"effect": "infrastructure_change", "privilege": ""}):
+            with self.subTest(**asked):
+                self.journal.clear()
+                (run,), looked, _ = self.logins(**asked)
+
+                self.assertEqual(looked, [(fakes.APP, "read")])
+                self.assertFalse(run.escalates)
+
+    def test_a_machine_no_login_reaches_as_the_profile_is_refused_naming_it(self):
+        bridge = fakes.Bridge(fakes.pending(effect="read", privilege=""))
+        runner = fakes.Runner()
+
+        self.work(bridge, runner)
+
+        self.assertEqual(runner.runs, [])
+        report = self.only_report(bridge)
+        self.assertEqual(report["conditions"][0]["reason"], "NoConnection")
+        self.assertIn("read", report["message"])
+
+    def test_a_record_that_is_a_read_naming_a_privilege_is_refused(self):
+        runs, looked, report = self.logins(effect="read")
+
+        self.assertEqual((runs, looked), ([], []))
+        self.assertEqual(report["conditions"][0]["reason"], "Unrunnable")
+
+
 class RedactionTests(PassTestCase):
     def test_a_secret_in_an_event_never_reaches_the_report(self):
         api_key = "example-api-key-0123456789"
@@ -315,6 +374,7 @@ class ScanTests(PassTestCase):
         "procedures": [],
         "files": [],
         "unpinned": [],
+        "reaches": [],
     }
 
     def test_a_claimed_scan_reports_its_catalog_under_its_record_s_generation_and_runs_nothing(self):

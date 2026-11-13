@@ -53,26 +53,26 @@ PROMPTS = {
             "needs-me",
             "What needs me",
             "What HQ's action queue holds for you, most urgent first.",
-            "Tell me what needs me in HQ, most urgent first: for each, what it is and the one thing to do, "
-            "with HQ's page for it. HQ's action queue:",
+            "What needs me in HQ, most urgent first? For each, say what it is, the one thing to do, and "
+            "HQ's page for it. HQ's action queue:",
             action_queue,
             READS,
         ),
         Prompt(
             "status-brief",
             "Status brief",
-            "HQ itself, its health and its open problems, in a few lines.",
-            "Give me a short status brief of HQ: the release it runs, its health, and the open problems "
-            "that matter, most severe first, each with its remedy. What HQ reports:",
+            "HQ's release, health and open problems, in a few lines.",
+            "Give me a short status brief of HQ: its release, its health, and the open problems that matter. "
+            "List the problems most severe first, each with its remedy. What HQ reports:",
             _status,
             READS,
         ),
         Prompt(
             "held-requests",
             "Review held requests",
-            "Each change you asked for that waits for a person to decide.",
-            "Walk me through each change you asked for that waits for my decision in HQ: what it would change "
-            "and what to weigh, with its review page. Only I decide them, in HQ. The held requests:",
+            "The changes you asked for that wait for approval.",
+            "Walk me through each change you asked for that waits for my decision in HQ. For each, say what "
+            "it would change, what to weigh, and its review page. Only I decide them, in HQ. The held requests:",
             held_requests,
             READS,
         ),

@@ -154,6 +154,11 @@
         "source": "field",
         "label": "identity"
       },
+      "MACHINE": {
+        "source": "field",
+        "label": "machine",
+        "optional": true
+      },
       "MANAGES": {
         "source": "field",
         "label": "manages",
@@ -162,6 +167,11 @@
       "PORT": {
         "source": "field",
         "label": "port"
+      },
+      "PROFILE": {
+        "source": "field",
+        "label": "profile",
+        "optional": true
       },
       "PROVIDER": {
         "source": "field",

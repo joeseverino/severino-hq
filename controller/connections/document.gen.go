@@ -114,7 +114,9 @@ type SSHTransport struct {
 	Host     string `json:"host" setting:"HOST"`
 	HostKey  string `json:"host_key" setting:"HOST_KEY"`
 	Identity string `json:"identity" setting:"IDENTITY"`
+	Machine  string `json:"machine,omitempty" setting:"MACHINE"`
 	Port     string `json:"port" setting:"PORT"`
+	Profile  string `json:"profile,omitempty" setting:"PROFILE"`
 	Role     string `json:"role,omitempty" setting:"ROLE"`
 	User     string `json:"user" setting:"USER"`
 }

@@ -377,7 +377,7 @@ class AgentIdentity(models.Model):
             Rule(
                 condition=models.Q(blocked_by__isnull=True) | models.Q(blocked_at__isnull=False),
                 name="agent_identity_block_is_dated",
-                violation_error_message="A block someone set says when they set it.",
+                violation_error_message="A block needs the time it was set.",
                 field="blocked_at",
             ),
             Rule(
@@ -446,13 +446,13 @@ class AgentDevice(models.Model):
             Rule(
                 condition=models.Q(approved_by__isnull=True) | models.Q(approved_at__isnull=False),
                 name="agent_device_approval_is_dated",
-                violation_error_message="An approval someone gave says when they gave it.",
+                violation_error_message="An approval needs the time it was given.",
                 field="approved_at",
             ),
             Rule(
                 condition=models.Q(blocked_by__isnull=True) | models.Q(blocked_at__isnull=False),
                 name="agent_device_block_is_dated",
-                violation_error_message="A block someone set says when they set it.",
+                violation_error_message="A block needs the time it was set.",
                 field="blocked_at",
             ),
         ]

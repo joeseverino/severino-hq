@@ -618,6 +618,9 @@ class SourceProposal(TimestampedModel):
     procedures = models.JSONField(default=list)
     files = models.JSONField(default=list)
     unpinned = models.JSONField(default=list)
+    # Each machine and privilege profile the worker said it has a login for,
+    # which a run is held to when it is asked (``automation_runs.reached``).
+    reaches = models.JSONField(default=list)
 
     class Meta:
         ordering = ("-created_at",)

@@ -304,6 +304,41 @@ func TestTheDocumentIsTheEmittedSchema(t *testing.T) {
 	}
 }
 
+// A runner transport is one login to one machine as one privilege profile, so
+// a machine's read and change logins are two connections, and no two logins
+// answer for the same machine and profile.
+func TestARunnerTransportNamesOneMachineAndProfile(t *testing.T) {
+	runner := func(ref, machine, profile string) Connection {
+		return Connection{Ref: ref, Provider: "ssh", Store: kept, SSHTransport: &SSHTransport{
+			Host: "192.0.2.10", HostKey: "ssh-ed25519 example", Identity: ref, Port: "22", User: "example-read",
+			Role: RunnerRole, Machine: machine, Profile: profile}}
+	}
+	encode := func(connections ...Connection) error {
+		_, err := Document{SchemaVersion: SchemaVersion, Connections: connections}.Encode()
+		return err
+	}
+	if err := encode(runner("app-read", "app.example.com", ReadProfile), runner("app-change", "app.example.com", "example.change")); err != nil {
+		t.Fatalf("a machine's read and change logins were refused: %v", err)
+	}
+	notRunner := runner("edge", "edge.example.com", ReadProfile)
+	notRunner.SSHTransport.Role = ""
+	refused := map[string][]Connection{
+		"no machine":                    {runner("app-read", "", ReadProfile)},
+		"no profile":                    {runner("app-read", "app.example.com", "")},
+		"a profile that is no name":     {runner("app-read", "app.example.com", "Read Only")},
+		"a machine that is no name":     {runner("app-read", "-oProxyCommand=true", ReadProfile)},
+		"one machine and profile twice": {runner("app-a", "app.example.com", ReadProfile), runner("app-b", "app.example.com", ReadProfile)},
+		"a profile on another's login":  {notRunner},
+	}
+	for name, connections := range refused {
+		t.Run(name, func(t *testing.T) {
+			if err := encode(connections...); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("accepted: %v", err)
+			}
+		})
+	}
+}
+
 func TestReadFileRefusesUnsafeFiles(t *testing.T) {
 	dir := t.TempDir()
 	data, err := valid().Encode()

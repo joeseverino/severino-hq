@@ -23,7 +23,8 @@ scan reports each such directory a project holds (``catalog.unpinned``).
 Every host is reached over ssh as its connection says, with its identity
 alone (no agent, no password, no other key), against its host key as the
 renderer pinned it, and nothing else: ansible-runner turns host key checking
-off unless told otherwise, so the inventory turns it on.
+off unless told otherwise, so the inventory turns it on. A run through the
+read login never escalates (``extravars``).
 """
 
 import json
@@ -78,6 +79,8 @@ PLUGIN_PATHS = (
 # Where a project's roles are, by Ansible's directory layout: ``roles/`` at its
 # root, beside ``playbooks/``.
 ROLES = "roles"
+# The variable that says whether a task escalates, above each keyword.
+BECOME = "ansible_become"
 # How long ansible-doc may take to read one role's argument spec.
 DOC_TIMEOUT_SECONDS = 60
 
@@ -129,6 +132,23 @@ def environment(private_data_dir: Path, project_dir: Path) -> dict[str, str]:
     }
 
 
+def extravars(run: Run) -> dict[str, Any]:
+    """The run's parameters, and for a run through the read login, escalation
+    turned off.
+
+    Turned off as an extra var, the one place Ansible ranks above everything
+    a project can set: play, block and task ``become`` keywords, and
+    ``ansible_become`` in a play's or task's vars, ``set_fact`` or
+    ``include_vars``, each of which outranks an inventory variable. Written
+    after the parameters, so none of them can turn it back on.
+    """
+
+    found = dict(run.parameters)
+    if not run.escalates:
+        found[BECOME] = False
+    return found
+
+
 def arguments(run: Run, private_data_dir: Path) -> dict[str, Any]:
     """What ansible-runner is called with for ``run``, callbacks aside."""
 
@@ -139,7 +159,7 @@ def arguments(run: Run, private_data_dir: Path) -> dict[str, Any]:
         "project_dir": str(run.procedure.project_dir),
         "playbook": run.procedure.playbook,
         "inventory": _inventory(run.hosts, run.targets),
-        "extravars": dict(run.parameters),
+        "extravars": extravars(run),
         "envvars": environment(private_data_dir, run.procedure.project_dir),
         # ansible-runner's own job timeout: past it, the run is killed and
         # ends as ``timeout``.

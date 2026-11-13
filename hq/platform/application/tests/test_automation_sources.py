@@ -56,6 +56,7 @@ CATALOG = {
     ],
     "files": [{"path": "playbooks/check.yml", "object": "1" * 40}],
     "unpinned": [],
+    "reaches": [],
 }
 
 
@@ -80,10 +81,10 @@ class RefreshTestCase(TestCase):
             body=json.dumps({"observed_generation": generation, **fields}).encode(),
         )
 
-    def scanned(self, catalog: dict) -> OperationRequest:
+    def scanned(self, catalog: dict, key: str = "example-refresh") -> OperationRequest:
         """A Refresh, its claim, and the worker's report of ``catalog``."""
 
-        self.refresh()
+        self.refresh(key=key)
         claimed = self.claim()
         operation = claimed["operation"]
         answer = self.report(
@@ -150,6 +151,17 @@ class ProposalTests(RefreshTestCase):
         ((check,),) = [proposal.procedures]
         self.assertEqual(check["problems"], [])
         self.assertFalse(ManagedResource.objects.filter(kind="automation.operation").exists())
+
+    def test_the_logins_the_newest_scan_reports_are_the_ones_a_run_is_held_to(self):
+        from ..automation_runs import runner_reaches
+
+        first = {**CATALOG, "reaches": [{"machine": "app.example.com", "profile": "read"}]}
+        self.scanned(first)
+        self.assertEqual(runner_reaches(), {("app.example.com", "read")})
+
+        later = {**CATALOG, "reaches": [{"machine": "DB.example.com", "profile": "example.service_control"}]}
+        self.scanned(later, key="example-refresh-later")
+        self.assertEqual(runner_reaches(), {("db.example.com", "example.service_control")})
 
     def test_the_proposal_is_audited_under_the_source(self):
         operation = self.scanned(CATALOG)

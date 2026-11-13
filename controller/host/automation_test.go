@@ -64,7 +64,11 @@ func newWorker(t *testing.T) *worker {
 	write(filepath.Join(root, "lib", AutomationImage), automationImageRef+"\n")
 	store := connections.Store{Vault: "Example", Item: "example"}
 	transport := func(host, port, role string) *connections.SSHTransport {
-		return &connections.SSHTransport{Host: host, Port: port, User: "example-read", HostKey: "ssh-ed25519 AAAA", Identity: "key", Role: role}
+		found := &connections.SSHTransport{Host: host, Port: port, User: "example-read", HostKey: "ssh-ed25519 AAAA", Identity: "key", Role: role}
+		if role == connections.RunnerRole {
+			found.Machine, found.Profile = host, connections.ReadProfile
+		}
+		return found
 	}
 	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
 		{Ref: "example-server", Provider: "ssh", Store: store, SSHTransport: transport("192.0.2.10", "22", connections.RunnerRole)},

@@ -1,5 +1,6 @@
-"""The procedures page: the adopted catalog, the newest scan and a proposal
-a person reviews and adopts, each drawn from what the estate stored."""
+"""The procedures page: the adopted catalog, when the repository was last
+read, and the one commit to decide on, each drawn from what the estate
+stored; a held adoption as the approval card its audit entry draws."""
 
 import json
 from urllib.parse import urlsplit
@@ -9,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from hq.domains.control_plane.models import AdoptedCatalog, ApprovalRequest, OperationRequest, SourceProposal
-from hq.platform.application.tests.markup import select, within
+from hq.platform.application.tests.markup import select, text, within
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
@@ -26,6 +27,12 @@ def _sent() -> dict[str, str]:
 
 def _words(html: str, section: str) -> str:
     return " ".join(element.words for element in within(html, "id", section))
+
+
+def _card(html: str) -> str:
+    """The words of the approval card a held request is drawn by."""
+
+    return " ".join(element.words for element in within(html, "data-approval", "pending"))
 
 
 def _links(html: str, section: str) -> set[str]:
@@ -74,14 +81,68 @@ class ProceduresPageTests(TestCase):
             with self.subTest(procedure=procedure.id):
                 self.assertIn(command_url(capability_name(procedure.id)), links)
 
-    def test_the_last_scan_says_how_it_ended(self):
-        from hq.domains.jobs.models import JobState
+    def test_the_adopted_table_says_where_each_playbook_runs_and_its_privilege_in_words(self):
+        from hq.platform.application.automation_adoption import procedures
 
+        said = _words(self.page(), "procedures-adopted")
+        for procedure in procedures():
+            with self.subTest(procedure=procedure.id):
+                self.assertNotIn(procedure.id, said, "the title links its page, so its id is not said again")
+                if not procedure.hosts:
+                    self.assertIn("Any of your machines", said)
+        self.assertNotIn("–", said)
+
+    def test_a_commit_s_own_page_carries_no_lede_of_the_whole_page(self):
+        from hq.domains.control_plane.procedure_views import ProceduresView
+
+        pk = self.held().payload["proposal"]
+        self.assertNotIn(ProceduresView.page_lede, text(self.page(self.proposal_url(pk))))
+        self.assertIn(ProceduresView.page_lede, text(self.page()))
+
+    def test_a_commit_s_own_page_draws_only_that_commit(self):
+        held = self.held().payload["proposal"]
+        self.assertTrue(within(self.page(), "id", "procedures-adopted"))
+        self.assertFalse(within(self.page(self.proposal_url(held)), "id", "procedures-adopted"))
+        adopted = AdoptedCatalog.objects.order_by("-pk").first().proposal
+        self.assertTrue(within(self.page(self.proposal_url(adopted.pk)), "id", "procedures-adopted"))
+
+    def test_a_refused_commit_s_own_page_says_in_its_lede_why_nothing_can_be_done(self):
+        refused = SourceProposal.objects.order_by("-pk").first()
+        said = text(self.page(self.proposal_url(refused.pk)))
+        self.assertIn("HQ can't adopt this commit, so there is nothing to do here.", said)
+        self.assertNotIn("Fix it in the repository, then Refresh.", said)
+
+    def test_each_commit_says_who_committed_it(self):
+        adopted = AdoptedCatalog.objects.order_by("-pk").first()
+        self.assertIn(f"committed by {adopted.committer}", _words(self.page(), "procedures-adopted"))
+
+    def decided(self) -> int:
+        """The held adoption's proposal, its request declined, so the page asks about it itself."""
+
+        held = self.held()
+        decision = reverse("control_plane:approval_decision", kwargs={"approval_id": held.id})
+        self.client.post(decision, {"decision": "reject", **_sent()})
+        held.refresh_from_db()
+        self.assertEqual(held.state, ApprovalRequest.State.REJECTED)
+        return held.payload["proposal"]
+
+    def test_the_title_says_when_the_repository_was_last_read_and_why_the_newest_scan_failed(self):
         newest = OperationRequest.objects.filter(action=OperationRequest.Action.SCAN).order_by("-created_at").first()
         self.assertEqual(newest.state, OperationRequest.State.FAILED)
-        said = _words(self.page(), "procedures-scan")
-        self.assertIn(JobState.FAILED.label, said)
-        self.assertIn(newest.result["message"], said)
+        html = self.page()
+        (failed,) = select(html, "data-scan-failed")
+        self.assertIn(newest.result["message"], failed.words)
+        self.assertIn("Refresh to try again.", failed.words)
+        # Beside a failure, the last read is said as the last one that succeeded.
+        (age,) = select(html, "data-reading-age", "read")
+        self.assertIn("Last successful read", age.words)
+        # A scan that read the repository leaves only when it did.
+        from hq.platform.core.example_estate import automation
+
+        automation.rescanned(self.owner)
+        html = self.page()
+        self.assertFalse(select(html, "data-scan-failed"))
+        self.assertEqual(len(select(html, "data-reading-age", "read")), 1)
 
     def test_a_commit_hq_cannot_adopt_lists_every_reason_and_offers_no_adopt(self):
         from hq.platform.application.automation_adoption import plan
@@ -91,40 +152,76 @@ class ProceduresPageTests(TestCase):
         with self.assertRaises(PolicyError) as refusal:
             plan(newest.pk)
         html = self.page()
-        said = _words(html, "procedures-proposal")
+        said = text(html)
         self.assertIn(newest.revision[:12], said)
         for reason in refusal.exception.details["refused"]:
             self.assertIn(reason, said)
         self.assertNotIn(reverse("control_plane:procedures_adopt", kwargs={"pk": newest.pk}), _posts(html))
 
-    def test_a_proposal_that_widens_says_each_widening_beside_its_changes_and_adopt(self):
+    def test_a_held_adoption_is_the_approval_card_its_audit_entry_draws(self):
         from hq.platform.application.automation_adoption import plan
 
-        pk = self.held().payload["proposal"]
+        held = self.held()
+        decision = reverse("control_plane:approval_decision", kwargs={"approval_id": held.id})
+        entry = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
+        widens = plan(held.payload["proposal"]).widens
+        self.assertTrue(widens)
+        for html in (self.page(), self.page(self.proposal_url(held.payload["proposal"])), entry.content.decode()):
+            card = _card(html)
+            self.assertNotIn(held.resource_key, card, "the card names its record, never by its key")
+            for widening in widens:
+                self.assertIn(widening, card)
+            self.assertIn(decision, _posts(html))
+            self.assertNotIn(
+                reverse("control_plane:procedures_adopt", kwargs={"pk": held.payload["proposal"]}), _posts(html)
+            )
+        # The card is the one way to it: no link sends the reader to decide it elsewhere.
+        hrefs = {element.attrs["href"] for element in select(self.page(), "href")}
+        self.assertNotIn(reverse("core:approval_entry", kwargs={"approval_id": held.id}), hrefs)
+        self.assertNotIn(self.proposal_url(held.payload["proposal"]), hrefs)
+
+    def test_a_commit_no_request_holds_says_each_widening_beside_its_changes_and_adopt(self):
+        from hq.platform.application.automation_adoption import plan
+
+        pk = self.decided()
         planned = plan(pk)
         self.assertTrue(planned.widens)
         html = self.page(self.proposal_url(pk))
+        self.assertFalse(_card(html))
         said = _words(html, "procedures-proposal")
         for widening in planned.widens:
             self.assertIn(widening, said)
-        # Each procedure the commit holds is a group of the change table.
-        for named in planned.procedures:
-            self.assertIn(named, said)
+        # Each playbook the commit holds is a group of the change table, by
+        # the title the Adopted table reads it by, never by its id.
+        for named, procedure in planned.procedures.items():
+            self.assertIn(procedure.title, said)
+            self.assertNotIn(named, said)
         self.assertIn(reverse("control_plane:procedures_adopt", kwargs={"pk": pk}), _posts(html))
 
-    def test_an_adoption_waiting_for_a_person_links_its_decision_and_its_proposal(self):
-        held = self.held()
-        links = {element.attrs["href"] for element in select(self.page(), "href")}
-        self.assertIn(reverse("core:approval_entry", kwargs={"approval_id": held.id}), links)
-        self.assertIn(self.proposal_url(held.payload["proposal"]), links)
+    def test_the_source_s_record_lives_on_this_page_and_offers_neither_edit_nor_removal(self):
+        from hq.domains.control_plane.models import ManagedResource
+        from hq.platform.application.automation_sources import SOURCE_KEY
+        from hq.platform.application.resource_capabilities import resource_capabilities
+
+        procedures = reverse("control_plane:procedures")
+        self.assertRedirects(self.client.get(reverse("control_plane:detail", kwargs={"key": SOURCE_KEY})), procedures)
+        self.assertEqual(resource_capabilities(ManagedResource.objects.get(key=SOURCE_KEY)).offered, ("", ""))
+        changes = {reverse(f"control_plane:{route}", kwargs={"key": SOURCE_KEY}) for route in ("edit", "remove")}
+        decision = reverse("core:approval_entry", kwargs={"approval_id": self.held().id})
+        for url in (procedures, decision):
+            with self.subTest(url=url):
+                page = self.client.get(url, follow=True)
+                self.assertEqual(page.status_code, 200)
+                links = {urlsplit(element.attrs["href"]).path for element in select(page.content.decode(), "href")}
+                self.assertFalse(changes & links)
 
     def test_a_viewer_is_offered_neither_refresh_nor_adopt(self):
         from hq.platform.application.roles import Role, assign
 
+        pk = self.decided()
         viewer = get_user_model().objects.create_user(username="example-viewer", password=None)
         assign(viewer, Role.VIEWER)
         self.client.force_login(viewer)
-        pk = self.held().payload["proposal"]
         posts = _posts(self.page(self.proposal_url(pk)))
         self.assertNotIn(reverse("control_plane:procedures_refresh"), posts)
         self.assertNotIn(reverse("control_plane:procedures_adopt", kwargs={"pk": pk}), posts)
@@ -134,7 +231,7 @@ class ProceduresPageTests(TestCase):
         self.assertEqual(self.client.get(self.proposal_url(missing)).status_code, 404)
 
     def test_adopt_makes_the_proposal_the_catalog(self):
-        pk = self.held().payload["proposal"]
+        pk = self.decided()
         response = self.client.post(reverse("control_plane:procedures_adopt", kwargs={"pk": pk}), _sent())
         self.assertRedirects(response, reverse("control_plane:procedures"), fetch_redirect_response=False)
         self.assertEqual(AdoptedCatalog.objects.first().proposal_id, pk)

@@ -11,13 +11,13 @@ from .hq_self import site_url
 
 
 class HeldRequest(TypedDict):
-    """A call held for a person: what it asks, who asked, and where it is decided."""
+    """A call held for approval: what it asks, who asked, and where it is decided."""
 
-    id: Annotated[str, Describe("The request's id, which its asker reports to whoever asked.")]
+    id: Annotated[str, Describe("The request's id, which the asking agent reports back to its user.")]
     capability: Annotated[str, Describe("The command it would run, by name.")]
     target: Annotated[str, Describe("The record the command would act on, as the call named it; empty for none.")]
     resource_kind: Annotated[
-        str, Describe("The type of what it would change, which is why it waits for a person; empty for none.")
+        str, Describe("The type of what it would change, which is why it needs approval; empty for none.")
     ]
     resource_key: Annotated[str, Describe("The key of what it would change; empty for none.")]
     state: Annotated[
@@ -38,15 +38,15 @@ class HeldRequest(TypedDict):
             "A digest of the call and of what it was measured against; an approval holds only while both are unchanged."
         ),
     ]
-    review_url: Annotated[str, Describe("Where a person decides it in HQ's web interface, as an absolute address.")]
+    review_url: Annotated[str, Describe("The absolute address in HQ's web interface where an operator decides it.")]
 
 
 class AwaitingApproval(TypedDict):
-    """A call held for a person, which is no error: nothing is written or queued until one agrees."""
+    """A call held for approval, which is no error: nothing is written or queued until an operator approves."""
 
-    status: Annotated[Literal["awaiting_approval"], Describe("That the call waits for a person.")]
-    queued: Annotated[Literal[False], Describe("Whether any work was queued, which it never is while the call waits.")]
-    applied: Annotated[Literal[False], Describe("Whether anything changed, which nothing has while the call waits.")]
+    status: Annotated[Literal["awaiting_approval"], Describe("That the call waits for approval.")]
+    queued: Annotated[Literal[False], Describe("Always false: no work is queued while the call waits.")]
+    applied: Annotated[Literal[False], Describe("Always false: nothing changes while the call waits.")]
     message: Annotated[str, Describe("HQ's sentence for the caller: that the change waits, and what to do next.")]
     repeated: Annotated[bool, Describe("Whether this call asked for a request already held.")]
     approval: HeldRequest
@@ -59,7 +59,7 @@ class HeldCall(AwaitingApproval):
 
 
 class ApprovalApplied(TypedDict):
-    """A held change a person agreed to, and what it answered when it ran."""
+    """A held change an operator approved, and what it answered when it ran."""
 
     ok: Literal[True]
     approved: Annotated[str, Describe("The id of the request approved.")]
@@ -67,7 +67,7 @@ class ApprovalApplied(TypedDict):
 
 
 class ApprovalRejected(TypedDict):
-    """A held change a person declined, so nothing it asked was done."""
+    """A held change an operator declined, so nothing it asked was done."""
 
     ok: Literal[True]
     rejected: Annotated[str, Describe("The id of the request rejected.")]

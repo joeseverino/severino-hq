@@ -676,7 +676,8 @@ func withRunnerConnection(t *testing.T, secrets string) {
 	}
 	document.Connections = append(document.Connections, connections.Connection{
 		Ref: "example-machine", Provider: "ssh", Store: connections.Store{Vault: "Example", Item: "example-machine"},
-		SSHTransport: &connections.SSHTransport{Host: "192.0.2.20", User: "example-read", HostKey: "key", Identity: "example-machine", Port: "22", Role: "runner"},
+		SSHTransport: &connections.SSHTransport{Host: "192.0.2.20", User: "example-read", HostKey: "key", Identity: "example-machine", Port: "22", Role: "runner",
+			Machine: "example-machine", Profile: connections.ReadProfile},
 	})
 	if data, err = document.Encode(); err != nil {
 		t.Fatal(err)

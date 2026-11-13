@@ -1,73 +1,44 @@
 {% extends "page.html" %}
 {% block page %}
 {% comment %}
-Expects `sources` (automation_sources.SourceStanding), `review`, the proposal
-it reviews, `adopted`, the catalog's rows, `held`, the adoptions waiting for
-a person, and `adopt`, the Adopt command's link for a reader who may adopt.
-Every name on it is the catalog's or a scan's. The commit is said by its
-branch and id: which repository it is belongs to the deployment. The
-sections stack, each the page's width, so the comparison has the room a
-before and an after need.
+Expects `sources` (automation_sources.SourceStanding), `read_at`, when
+HQ last read the repository, `held`, the
+approval cards (approval_review.review) of the adoptions held, `review`, the
+commit to decide on that no card holds, `adopt`, the Adopt command's link for
+a reader who may adopt it, `review_said` and `adopted_said`, each commit in a
+line, and
+`adopted`, the catalog's rows, drawn when `shows_adopted`. On a commit's own page (`own_page`) only that commit is drawn, and its lede says why a refused one has nothing to do. Every name on it is the catalog's or a scan's.
+The commit is said by its branch and id: which repository it is belongs to
+the deployment.
 {% endcomment %}
-{% for waiting in held %}
-  {% url 'core:approval_entry' waiting.approval.id as decision_url %}
-  {% url 'control_plane:procedures_proposal' waiting.proposal as proposal_url %}
-  {% notice tone="info" %}
-    <p>Adopting commit <code>{{ waiting.revision|breakable }}</code> was asked for by {{ waiting.approval.requested_actor|breakable }} {{ waiting.approval.created_at|ago }}. <a href="{{ decision_url }}">Decide it</a>{% if not review or review.proposal.pk != waiting.proposal %} or <a href="{{ proposal_url }}">open the proposal</a>{% endif %}.</p>
-  {% title %}An adoption waits for a person{% endnotice %}
-{% endfor %}
+{% for entry in held %}{% include "partials/approval_card.html" with entry=entry %}{% endfor %}
 
-{% section "Last scan" id="procedures-scan" %}
-  {% if sources.scan %}
-    {% facts layout="band" %}
-      {% fact "State" %}{% status sources.scanned.label tone=scan_tone pill=False %}{% detail %}<small>{{ sources.scanned.note|breakable }}</small>{% endfact %}
-      {% fact "Asked" %}{{ sources.scan.created_at|when }}{% detail %}<small>by {{ sources.scan.requested_actor|breakable }}</small>{% endfact %}
-      {% if sources.scan.completed_at %}{% fact "Ended" %}{{ sources.scan.completed_at|when }}{% endfact %}{% endif %}
-    {% endfacts %}
-  {% endif %}
-{% empty %}No scan yet. Refresh asks the automation worker which procedures its repository holds.
-{% endsection %}
-
-{% comment %}A proposal of the commit adopted now is said in the catalog's own section, never a second copy of its facts.{% endcomment %}
-{% if review and not review.adopted %}
-{% if review.refused %}{% firstof "HQ cannot adopt this commit." as said %}{% elif review.widens %}{% firstof "Adopting it lets a run do more than it may now." as said %}{% else %}{% firstof "What adopting this commit would change." as said %}{% endif %}
-{% section "Proposal" lede=said id="procedures-proposal" edge=review.widens|yesno:"attention," %}
-  {% facts %}
-    {% fact "Commit" %}<code>{{ review.revision|breakable }}</code>{% detail %}<small>on {{ review.proposal.branch|breakable }}</small>{% endfact %}
-    {% fact "Committer" value=review.proposal.committer|default:"Not known" %}
-    {% if review.proposal.verified %}{% fact "Signature" value="Verified by GitHub" %}{% else %}{% fact "Signature" value="Not verified" detail=review.proposal.verification_reason %}{% endif %}
-    {% fact "Scanned" %}{{ review.proposal.created_at|when }}{% endfact %}
-  {% endfacts %}
-  {% if review.refused %}
-    {% notice tone="error" title="Why it cannot be adopted" %}
-      <ul>{% for reason in review.refused %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
-      <p>Fix the repository, then Refresh.</p>
-    {% endnotice %}
-  {% endif %}
+{% if review.refused %}
+  {% notice tone="error" %}
+    <ul>{% for reason in review.refused %}<li>{{ reason|breakable }}</li>{% endfor %}</ul>
+    {% if not own_page %}<p>Fix it in the repository, then Refresh.</p>{% endif %}
+  {% title %}Commit {{ review.revision|breakable }} can't be adopted{% endnotice %}
+{% elif review.preview %}
+{% section "Scan result" lede=review_said id="procedures-proposal" edge=review.widens|yesno:"attention," %}
   {% if review.widens %}
-    {% notice tone="warning" title="What this lets a run do" %}
+    {% notice tone="warning" title="This commit gives its playbooks more access" %}
       <ul>{% for widening in review.widens %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
     {% endnotice %}
   {% endif %}
-  {% if review.preview %}{% change_table review.preview %}{% endif %}
+  {% change_table review.preview %}
 {% aside %}
   {% if adopt %}{% url 'control_plane:procedures_adopt' review.proposal.pk as adopt_url %}{% post_button adopt.label adopt_url css="btn primary" %}{% endif %}
 {% endsection %}
 {% endif %}
 
-{% if review.adopted %}{% firstof "The procedures every run is built from. The proposal is this commit, so there is nothing to adopt." as adopted_said %}{% elif sources.catalog %}{% firstof "The procedures every run is built from." as adopted_said %}{% endif %}
-{% section "Adopted" count=adopted|length|default:"" lede=adopted_said|default:"" id="procedures-adopted" %}
+{% if shows_adopted %}
+{% section "Adopted" count=adopted|length|default:"" lede=adopted_said id="procedures-adopted" %}
   {% if adopted %}
-    {% facts %}
-      {% fact "Commit" %}<code>{{ sources.revision|breakable }}</code>{% detail %}<small>on {{ sources.catalog.branch|breakable }}</small>{% endfact %}
-      {% fact "Committer" value=sources.catalog.committer|default:"Not known" %}
-      {% fact "Adopted" %}{{ sources.catalog.created_at|when }}{% endfact %}
-    {% endfacts %}
-    {% table_region "Adopted procedures" %}
+    {% table_region "Adopted playbooks" %}
       <table class="data-table">
         <thead>
           <tr>
-            {% table_heading "Procedure" "identifier" local_sort=True %}
+            {% table_heading "Playbook" local_sort=True %}
             {% table_heading "Effect" local_sort=True %}
             {% table_heading "Runs on" "identifier" drop=1 local_sort=True %}
             {% table_heading "Privilege" "identifier" drop=2 local_sort=True %}
@@ -76,16 +47,17 @@ before and an after need.
         <tbody>
           {% for row in adopted %}
           <tr>
-            <td><a href="{{ row.url }}">{{ row.procedure.title|breakable }}</a><br><code>{{ row.procedure.id|breakable }}</code></td>
+            <td><a href="{{ row.url }}">{{ row.procedure.title|breakable }}</a></td>
             <td>{{ row.effect|breakable }}</td>
-            <td>{% for host in row.procedure.hosts %}{% entity "machine"|entity_of:host %}{% if not forloop.last %}<br>{% endif %}{% empty %}Any {% for kind in row.procedure.target_kinds %}{{ kind|kind_label|lower|breakable }}{% if not forloop.last %} or {% endif %}{% endfor %}{% endfor %}</td>
-            <td>{% if row.procedure.privilege %}<code>{{ row.procedure.privilege|breakable }}</code>{% else %}{% empty_value %}{% endif %}</td>
+            <td>{% for host in row.procedure.hosts %}{% entity "machine"|entity_of:host %}{% if not forloop.last %}<br>{% endif %}{% empty %}{{ row.anywhere|breakable }}{% endfor %}</td>
+            <td>{% if row.procedure.privilege %}<code>{{ row.procedure.privilege|breakable }}</code>{% else %}None{% endif %}</td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
     {% endtable_region %}
   {% endif %}
-{% empty %}No procedures are adopted yet. Refresh, then adopt what the scan finds.
+{% empty %}No playbooks adopted yet. Refresh to read the repository, then adopt a commit.
 {% endsection %}
+{% endif %}
 {% endblock %}

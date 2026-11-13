@@ -116,7 +116,7 @@ class RemovalTests(TestCase):
         answer = self._remove()
 
         self.assertEqual(answer["error"]["code"], "precondition")
-        self.assertIn("Allow it first", answer["error"]["message"])
+        self.assertIn("Allow this agent", answer["error"]["message"])
         self.assertTrue(AgentIdentity.objects.filter(client_id=AGENT, blocked_at__isnull=False).exists())
         self.assertTrue(AgentDevice.objects.exists())
         self.assertTrue(CapabilityRule.objects.filter(subject=self.subject).exists())

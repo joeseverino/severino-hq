@@ -183,6 +183,16 @@
       "verification": []
     }
   ],
+  "reaches": [
+    {
+      "machine": "app.example.com",
+      "profile": "example.service_control"
+    },
+    {
+      "machine": "app.example.com",
+      "profile": "read"
+    }
+  ],
   "revision": "d32ae975e8ead147ce187ec8108533c144487d3d",
   "unpinned": [
     {

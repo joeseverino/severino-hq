@@ -30,7 +30,7 @@ class DrainTests(unittest.TestCase):
         (self.root / "scratch").mkdir()
         (self.root / "state").mkdir()
         self.connections = self.root / "connections.json"
-        fakes.write_connections(self.connections, fakes.connection(fakes.APP, role="runner"))
+        fakes.write_connections(self.connections, fakes.runner(fakes.APP, fakes.PRIVILEGE))
         self.token = self.root / "token"
         self.token.write_text("ghs_example0123456789token\n", encoding="utf-8")
         self.environ = {
@@ -72,7 +72,7 @@ class DrainTests(unittest.TestCase):
         self.assertEqual(run.procedure.revision, self.revision)
         self.assertTrue(run.procedure.project_dir.is_relative_to((self.root / "scratch").resolve()))
         self.assertEqual(run.procedure.playbook, fakes.PLAYBOOK)
-        self.assertEqual(run.targets[0].identity, self.root / "ssh" / fakes.APP)
+        self.assertEqual(run.targets[0].identity, self.root / "ssh" / f"{fakes.APP}-{fakes.PRIVILEGE}")
         self.assertEqual(list((self.root / "scratch").iterdir()), [])
 
     def test_a_host_without_a_runner_connection_is_refused_before_it_runs(self):
@@ -88,7 +88,7 @@ class DrainTests(unittest.TestCase):
 
     def test_the_token_and_the_key_path_never_reach_a_report(self):
         leaky = fakes.recorded("Fail", "runner_on_failed")
-        key = str(self.root / "ssh" / fakes.APP)
+        key = str(self.root / "ssh" / f"{fakes.APP}-{fakes.PRIVILEGE}")
         leaky["event_data"]["res"]["msg"] = f"ghs_example0123456789token was refused for {key}"
         bridge = fakes.Bridge(fakes.pending(revision=self.revision))
 
