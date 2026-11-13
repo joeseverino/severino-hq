@@ -240,11 +240,19 @@ UNFILED_RECEIPT = len(SPENDING) + 1
 # it and no record beside it, so its page is its facts alone.
 SWITCH_ASSET = "hallway-switch"
 SWITCH = (300, "8-port gigabit switch", "networking")
+# More gear handed down with no cost written, so the queue's item for assets
+# without a cost names three, each a button, and its row holds more buttons
+# than its line shows.
+HANDED_DOWN = (
+    (240, "SSD enclosure", "server_hardware"),
+    (180, "USB microphone", "camera_audio"),
+)
 
 
 def money():
     """The host as an asset, and what running it has cost, every expense with
-    its receipt but this week's, and a switch nothing else is about."""
+    its receipt but this week's, a switch nothing else is about, and more gear
+    handed down."""
 
     machine = f"machine:{MACHINE}"
     today = timezone.localdate()
@@ -270,6 +278,8 @@ def money():
     Asset.objects.create(
         item_name=name, slug=SWITCH_ASSET, category=category, purchase_date=today - timedelta(days=days)
     )
+    for days, name, category in HANDED_DOWN:
+        Asset.objects.create(item_name=name, category=category, purchase_date=today - timedelta(days=days))
 
 
 def _expense(days, vendor, item, category, cost, business_use, *, project=None, asset=None):

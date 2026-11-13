@@ -1213,7 +1213,7 @@
             "duration_seconds": null,
             "events": [],
             "finished_at": null,
-            "headline": "Waiting\u2026",
+            "headline": "Waiting for HQ's runner to start it.",
             "hosts": [
               "macbook-pro-16"
             ],
@@ -1535,7 +1535,7 @@
       "listAssetsV2OK": {
         "dataValue": {
           "data": {
-            "count": 2,
+            "count": 4,
             "items": [
               {
                 "business_use_percentage": 100,
@@ -1570,10 +1570,44 @@
                 "updated_at": "2024-11-11T19:45:00+00:00",
                 "vendor": "eBay",
                 "warranty_date": null
+              },
+              {
+                "business_use_percentage": 100,
+                "category": "server_hardware",
+                "estimated_deductible_amount": "0.00",
+                "infrastructure": "",
+                "item_name": "SSD enclosure",
+                "notes": "",
+                "payment_method": "",
+                "purchase_date": "2025-05-20",
+                "serial_number": "",
+                "slug": "ssd-enclosure",
+                "status": "active",
+                "total_cost": "0.00",
+                "updated_at": "2025-05-20T21:14:00+00:00",
+                "vendor": "",
+                "warranty_date": null
+              },
+              {
+                "business_use_percentage": 100,
+                "category": "camera_audio",
+                "estimated_deductible_amount": "0.00",
+                "infrastructure": "",
+                "item_name": "USB microphone",
+                "notes": "",
+                "payment_method": "",
+                "purchase_date": "2025-07-19",
+                "serial_number": "",
+                "slug": "usb-microphone",
+                "status": "active",
+                "total_cost": "0.00",
+                "updated_at": "2025-07-19T14:01:00+00:00",
+                "vendor": "",
+                "warranty_date": null
               }
             ],
             "next": null,
-            "total": 2,
+            "total": 4,
             "truncated": false
           },
           "ok": true
@@ -2600,21 +2634,21 @@
             "items": [
               {
                 "approved_by": "",
-                "by": "example-agent (agent)",
-                "capability": "automation.example.package_upgrade.run",
+                "by": "joe",
+                "capability": "automation.example.cache_flush.run",
                 "correlation": "",
-                "created_at": "2026-01-15T09:29:00+00:00",
+                "created_at": "2026-01-15T09:27:00+00:00",
                 "duration_seconds": null,
                 "finished_at": null,
-                "headline": "Waiting\u2026",
+                "headline": "Working on it\u2026",
                 "hosts": [
-                  "macbook-pro-16"
+                  "docker-host-01"
                 ],
-                "operation_id": "330b177e-3075-5811-9fba-835493beb091",
-                "playbook": "example.package_upgrade",
-                "started_at": null,
-                "state": "queued",
-                "state_label": "Waiting"
+                "operation_id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+                "playbook": "example.cache_flush",
+                "started_at": "2026-01-15T09:27:20+00:00",
+                "state": "running",
+                "state_label": "Running"
               }
             ],
             "next": null,
@@ -3024,14 +3058,14 @@
               "capability": "project.create",
               "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
               "expires_at": "2026-01-16T09:30:00+00:00",
-              "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
+              "id": "7b4ba536-2791-576a-bd31-b1b2e598a61c",
               "reason": "",
               "requested_actor": "example-automation",
               "requested_at": "2026-01-15T09:30:00+00:00",
               "requested_interface": "api",
               "resource_key": "",
               "resource_kind": "projects",
-              "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
+              "review_url": "https://hq.example.com/audit/approval/7b4ba536-2791-576a-bd31-b1b2e598a61c/",
               "state": "pending",
               "target": ""
             },

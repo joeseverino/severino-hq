@@ -1,0 +1,8 @@
+- name: Read the mount's use
+  ansible.builtin.command:
+    argv: [df, -Pk, "{{ mount }}"]
+  register: used
+  changed_when: false
+- name: Say the mount's use
+  ansible.builtin.debug:
+    msg: "{{ used.stdout_lines[-1] }}"

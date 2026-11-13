@@ -356,6 +356,18 @@ class WalkedStatesTests(TestCase):
         self.assertEqual(page.context["related"], ())
         self.assertFalse(page.context["asset"].notes)
 
+    def test_a_queue_row_holds_buttons_past_the_ones_its_line_shows(self):
+        # The queue's row shows its first two buttons; the rest wait in its
+        # opened line, a part the survey reaches only through a row with more.
+        page = self.walked(reverse("action_items"))
+
+        waiting = [
+            control
+            for control in within(page, "class", "row-later")
+            if control.tag in {"a", "button"} and any("data-attention-item" in row.attrs for row in control.ancestors)
+        ]
+        self.assertTrue(waiting)
+
     def test_the_reports_exports_follow_three_readings(self):
         # Three readings fill a wide row, so the exports wrap onto one of their own.
         page = self.walked(reverse("reports:dashboard"))

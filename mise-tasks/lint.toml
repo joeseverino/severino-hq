@@ -312,7 +312,6 @@ hide = true
 tags = ["fast"]
 sources = [
   "static/css/**",
-  "tools/lint/stylelint-suppressions.json",
   "tools/lint/*.mjs",
   "tools/lint/package*.json",
   "pyproject.toml",
@@ -324,7 +323,7 @@ sources = [
 ]
 outputs = []
 depends = ["setup:lint-tools"]
-run = "stylelint --config tools/lint/stylelint.config.mjs --suppress-location=tools/lint/stylelint-suppressions.json 'static/css/**/*.css'"
+run = "stylelint --config tools/lint/stylelint.config.mjs 'static/css/**/*.css'"
 
 ["lint:js"]
 description = "ESLint holds the browser scripts to its recommended rules and the modern forms (const and let, strict equality), every name they use defined, no unsanitized markup sink, fetching, parsing and polling to fragment.js, and tables.js's layout reads to the places that say why"

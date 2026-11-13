@@ -21,7 +21,7 @@ def _runs(_seeded) -> dict[str, int]:
         "failed": on.filter(state=State.FAILED).count(),
         "called off": on.filter(state=State.CANCELLED).count(),
         "working": on.filter(state=State.CLAIMED, lease_expires_at__gt=now).count(),
-        "worker gone quiet": runs.filter(state=State.CLAIMED, lease_expires_at__lte=now).count(),
+        "read elsewhere": runs.exclude(hosts__host="lab-1").filter(state=State.SUCCEEDED).count(),
         "waiting": runs.filter(state=State.QUEUED).count(),
     }
 

@@ -9,12 +9,15 @@ docs/Architecture.md, "Running a playbook".
 import hashlib
 import json
 import secrets
+from dataclasses import dataclass
 from functools import lru_cache, partial
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
 from django.core.exceptions import ImproperlyConfigured
 from django.db import transaction
+from django.utils import timezone
+from django.utils.text import get_text_list
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, StrictStr, create_model
 
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
@@ -40,16 +43,19 @@ lazy from . import automation_adoption
 lazy from .approvals import ApprovalSubject, every_call, measured_by, waits_for_a_person
 lazy from .automation_adoption import AdoptedInput, AdoptedProcedure
 lazy from .cadence import ring_automation_doorbell
+lazy from .controller import release_lapsed
 lazy from .entity_links import entity_link, kind_label
 lazy from .idempotency import IdempotencyConflict
 lazy from .infrastructure import ManagedResourceCommand, save_managed_resource
 lazy from .json_schemas import json_schema
 lazy from .labels import effect_label, lower_first
 lazy from .machines import machine_catalog
+lazy from .moments import when
 lazy from .payload_words import value_words
 lazy from .resource_operations import OperationQueued, enqueue, serialize_operation
 lazy from .routes import reverse
 lazy from .service_context import Cell, ServiceSection, recent_work
+lazy from .timestamps import moment
 lazy from .ui import counted, ended
 lazy from .work_runs import recent_runs
 
@@ -333,6 +339,58 @@ def _holding(resource: ManagedResource, hosts: list[str]) -> OperationRequest | 
     return active.filter(hosts__host__in=hosts).order_by("created_at").first()
 
 
+def _held_by(holder: OperationRequest, resource: ManagedResource, hosts: list[str]) -> dict[str, Any]:
+    """What a refusal says of the run in the way: the run, the machines it is
+    on, and the asked machines it holds, none when it is this playbook's own
+    run, so a page can say which of the two is held (``held_words``)."""
+
+    machines = sorted(holder.hosts.values_list("host", flat=True))
+    shared = [] if holder.resource_id == resource.pk else sorted(set(machines) & set(hosts))
+    return {
+        "holding": serialize_operation(holder),
+        "playbook": str((holder.input or {}).get("operation", "")),
+        "machines": machines,
+        "shared": shared,
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class HeldWords:
+    """A refused run's reason in a page's words, and where the run in its way is shown."""
+
+    sentence: str
+    href: str
+    link: str = "See that run on Jobs"
+
+
+def held_words(details: object) -> HeldWords | None:
+    """What a page says of the run a refusal names in ``details`` (``_held_by``):
+    which playbook it runs, on which machines, in what state and since when,
+    and whether this playbook or a machine is what it holds. None for a
+    refusal that names no run in the way."""
+
+    if not isinstance(details, dict) or not isinstance(details.get("holding"), dict):
+        return None
+    holding = details["holding"]
+    playbook = str(details.get("playbook") or "")
+    titles = {procedure.id: procedure.title for procedure in automation_adoption.procedures()}
+    title = titles.get(playbook) or run_title(playbook)
+    state = OperationRequest.State(holding["state"])
+    asked_at = moment(holding.get("created_at"))
+    since = f"{lower_first(state.as_job.label)} since {when(asked_at)}" if asked_at else lower_first(state.as_job.label)
+    machines = [str(host) for host in details.get("machines") or ()]
+    shared = [str(host) for host in details.get("shared") or ()]
+    if shared:
+        busy = f"{get_text_list(shared, 'and')} {'is' if len(shared) == 1 else 'are'} busy with a run of “{title}”"
+        sentence = f"{ended(f'{busy}, {since}')} A machine takes one run at a time, so ask again once that run ends."
+    else:
+        held = f"“{title}” already has a run on {get_text_list(machines, 'and')}, {since}"
+        sentence = f"{ended(held)} A playbook runs once at a time, so ask again once that run ends."
+    asked = {"kind": capability_name(playbook), "state": state.as_job.value}
+    href = f"{reverse('jobs:list')}?{urlencode({**asked, **({'host': (shared or machines)[0]} if machines else {})})}"
+    return HeldWords(sentence, href)
+
+
 @transaction.atomic
 def request_run(
     manifest: OperationManifest, command: RunCommand, *, principal: Principal, idempotency_key: str
@@ -358,12 +416,15 @@ def request_run(
         resource = _record(manifest, principal=principal)
         if not resource.enabled:
             raise PolicyError("This playbook is switched off in HQ.")
+        # A claim whose lease ran out is ended or put back first, by the rule
+        # a claim applies too, so a worker that went quiet holds nothing.
+        release_lapsed(timezone.now())
         holder = _holding(resource, bound["hosts"])
         if holder is not None:
             raise PolicyError(
                 "Another run holds this playbook or one of these machines; details.holding is that run. "
                 "Ask again once it ends.",
-                details={"holding": serialize_operation(holder)},
+                details=_held_by(holder, resource, bound["hosts"]),
             )
         # No run of this procedure is active and the key is new, so this
         # queues one.
@@ -395,7 +456,7 @@ def _run(manifest: OperationManifest, command: RunCommand, *, principal: Princip
 # What a manifest's ``retry`` lets a run that stopped without a known
 # outcome do, in the words its command's page says it.
 RETRY_WORDS = {
-    "never": "Never: a run whose outcome is not known is left failed",
+    "never": "Never: a run whose outcome is not known is not run again",
     "observe_first": "Only once the machines are looked at",
     "safe": "Safe to run again",
 }

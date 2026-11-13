@@ -983,10 +983,13 @@ Long work keeps its lease through `renew`, which only the claimant may call and
 only before the lease runs out. It answers `continue: false` once the asker is
 held by the pause or a block (the lease is still extended, so the worker has
 time to stop and report) or the operation was cancelled. A run whose lease
-lapses may have changed machines. So the next claim ends it `failed` with
-`reason: OutcomeUnknown` instead of queuing it again, unless its manifest's
-`retry` is `safe`. `observe_first` fails the same way and says so, and the
-observation is the worker's to make. A run's report writes nothing to its
+lapses may have changed machines. So the next claim, or the next ask for a
+run (`controller.release_lapsed`, the one rule for a lapsed lease), ends it
+`cancelled` with `reason: OutcomeUnknown` instead of queuing it again, unless
+its manifest's `retry` is `safe`. `observe_first` ends the same way and says
+so, and the observation is the worker's to make. A worker that reports
+`OutcomeUnknown` itself ends its run the same way, so a run that stopped
+reporting reads "Stopped early" before HQ ends it and after. A run's report writes nothing to its
 playbook's record: a `status` is refused. Its `events` land on the run's
 result: each task's outcome on one machine, bounded by the contract's
 `RunEvent` and struck of secrets at the bridge's door. Each changed or failed
@@ -1381,7 +1384,13 @@ adopted catalog names the procedure, its record lives on the procedure's
 command page and offers no hand edit or removal (`ProviderSpec.sourced`); once
 the catalog drops it, the record is back on its own page with its removal. One
 run per procedure is active at a time, and two runs never share a machine while
-either waits or works; the refusal's `details.holding` is the run in the way. A
+either waits or works. A run whose lease ran out works no longer: the ask
+first ends it, as the next claim would, or puts it back to wait when its
+playbook is safe to repeat. The refusal's `details.holding`
+is the run in the way, `details.machines` the machines it is on and
+`details.shared` the asked machines it holds, empty when it is the playbook's
+own run; a page words it with the run's playbook, state and age and a link to
+it on Jobs (`automation_runs.held_words`). A
 held run is measured against the manifest as supplied, its parameters as
 validated and its hosts as they resolve then (`approvals.measured_by`). So a
 new revision, a parameter that validates to another value, or a host that now

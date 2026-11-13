@@ -384,8 +384,10 @@ class JobListOrderTests(TestCase):
         order = [row.id for row in page.context["object_list"]]
         self.assertEqual(order[:3], [str(self.failed.pk), str(self.lost.pk), str(self.newest.pk)])
         self.assertGreater(order.index(str(self.recovered.pk)), 2)
-        self.assertIn("2 jobs failed on their last run", plain(page.content))
-        self.assertContains(page, "Index the example, Read the example")
+        # Each is counted under the state it reads in, so the count says what it counts.
+        self.assertIn("1 job failed and 1 stopped early on their last run", plain(page.content))
+        self.assertIn(f"{Job.State.FAILED.label}: Read the example", text(page.content))
+        self.assertIn(f"{Job.State.LOST.label}: Index the example", text(page.content))
 
     def test_newest_first_is_still_one_choice_away(self):
         page = self.client.get(reverse("jobs:list"), {"sort": "-created_at"})

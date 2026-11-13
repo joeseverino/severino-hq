@@ -1,0 +1,10 @@
+argument_specs:
+  main:
+    short_description: Report one mount
+    description:
+      - Reads the size and use of the file system a mount point is on.
+    options:
+      mount:
+        type: path
+        default: /
+        description: The mount point to report on.

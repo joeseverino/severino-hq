@@ -274,6 +274,10 @@ class CapabilitySpec:
     # acts on sends. Search links there instead of to the command's form, and
     # the form says where to start.
     reached_from: str = ""
+    # The route of the page the command belongs to, for one whose records
+    # are no resource of its own (a playbook's run belongs to Playbooks): its
+    # page's trail and Cancel lead there instead of to Search.
+    home: str = ""
     # What asking for the command wants done, read after "example-agent
     # wants to", with ``{target}`` where the record it acts on goes: "keep
     # the live version of {target}". Only for a name that does not read

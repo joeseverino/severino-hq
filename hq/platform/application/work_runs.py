@@ -18,6 +18,7 @@ from typing import Any, Literal
 from django.db.models import Case, CharField, Exists, F, IntegerField, OuterRef, Q, QuerySet, Value, When
 from django.db.models.fields.json import KT
 from django.db.models.functions import Coalesce, Collate, Concat, NullIf
+from django.db.models.lookups import Exact
 from django.utils import timezone
 
 from hq.domains.control_plane.models import OperationHost, OperationRequest, OperationState
@@ -26,6 +27,7 @@ from hq.domains.jobs.models import HEARTBEAT_GRACE, Job, JobState
 from .asks import job_standing
 from .automation_runs import capability_name, resource_key, run_title
 from .resource_operations import operation_summary
+lazy from .automation_adoption import playbook_titles
 lazy from .automation_sources import REFRESH, SOURCE_KEY, capability_specs
 lazy from .scheduled_work import job_names
 
@@ -54,6 +56,9 @@ OUTCOME_TONES = {
 }
 # What a claimed run whose lease ran out says until the next claim ends it.
 LAPSED = "The run stopped reporting, so HQ can't tell whether it finished."
+# What a queued run says: it is past any approval, and waits only for the
+# worker, so it never reads as one waiting for a person.
+QUEUED = "Waiting for HQ's runner to start it."
 # A kind of work whose latest run ended so is one to look at.
 ENDED_BADLY = (JobState.FAILED, JobState.LOST)
 
@@ -192,9 +197,18 @@ def _scanned(then: str, default: Any) -> Case:
 
 
 def _run_title() -> Collate:
-    """``run_title`` of the run's procedure, or Refresh's title for a scan, as SQL."""
+    """The run's playbook by its title, ``run_title`` of a procedure no longer
+    adopted, or Refresh's title for a scan, as SQL. Case-blind, so the list
+    sorts by it as it reads."""
 
-    run = Concat(Value(run_title("")), KT("input__operation"), output_field=CharField())
+    operation = KT("input__operation")
+    titled = (
+        When(Exact(operation, Value(playbook)), then=Value(title))
+        for playbook, title in playbook_titles().items()
+        if title
+    )
+    unadopted = Concat(Value(run_title("")), operation, output_field=CharField())
+    run = Case(*titled, default=unadopted, output_field=CharField())
     return Collate(_scanned(scan_title(), run), "NOCASE")
 
 
@@ -280,7 +294,7 @@ def _runs(now: datetime, asked: _Asked) -> QuerySet:
         runs = runs.filter(pk__in=OperationHost.objects.filter(host__in=asked.host).values("operation"))
     if asked.search:
         runs = runs.annotate(operation=KT("input__operation"), said=KT("result__message")).filter(
-            Q(operation__icontains=asked.search) | Q(said__icontains=asked.search)
+            Q(operation__icontains=asked.search) | Q(title__icontains=asked.search) | Q(said__icontains=asked.search)
         )
     return _rows(runs.annotate(lead=_lead(_runs_latest(), leads=asked.leads)), RUN)
 
@@ -430,7 +444,7 @@ def _run_row(operation: OperationRequest, seen: JobState, title: str, now: datet
         word=seen.label,
         # A run that finished and found a problem says so in its tone.
         tone=summary["tone"] if seen == JobState.SUCCEEDED else TONES[seen],
-        note=LAPSED if lapsed else summary["headline"],
+        note=LAPSED if lapsed else QUEUED if operation.state == OperationState.QUEUED else summary["headline"],
         by=summary["by"],
         created_at=operation.created_at,
         started=started,

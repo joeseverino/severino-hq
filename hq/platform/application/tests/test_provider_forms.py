@@ -282,6 +282,20 @@ class ResourceFormViewTests(TestCase):
                 else:
                     self.assertContains(response, kind)
 
+    def test_every_kind_draws_its_create_form(self):
+        """A create form has no identity form, and a kind with options still draws.
+
+        The registry is the list, so a kind added later is held to it too.
+        """
+
+        for kind, provider in PROVIDERS.items():
+            if provider.withheld:
+                continue
+            with self.subTest(kind=kind):
+                response = self.client.get(reverse("control_plane:create"), {"kind": kind})
+
+                self.assertEqual(response.status_code, 200)
+
     def test_a_hostname_seeds_the_fields_it_decides(self):
         """Onboarding asks for the name once, not once per resource."""
         response = self.client.get(

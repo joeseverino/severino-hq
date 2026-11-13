@@ -106,6 +106,7 @@ database it opens; `tools/dev/dev.sh` refuses what env cannot express.
 | --- | --- |
 | `dev:scratch` | a throwaway server on this checkout's scratch database, loopback only |
 | `dev:scratch --no-reload` | one that only needs to answer: one process instead of three |
+| `dev:scratch --runner` | one with the automation worker beside it, to walk Playbooks end to end ([The worker beside a scratch server](#the-worker-beside-a-scratch-server)) |
 | `dev` | the long-lived server behind a TLS proxy, configured by the gitignored `dev.local.toml` (copy `tools/dev/dev.local.example.toml`) |
 
 Every one collects versioned assets and runs Uvicorn with reload on the
@@ -130,6 +131,43 @@ loopback and the tailnet range; scratch refuses anything but loopback.
 Every loopback server shares the browser's cookies for `127.0.0.1` whatever the
 port, so signing in to a second one signs the first out: open the second as
 `http://localhost:<port>`.
+
+### The worker beside a scratch server
+
+`mise run dev:scratch --seed showcase --runner` serves the bridge and runs the
+real automation worker (`hq_runner`), so a Refresh on Playbooks is scanned, its
+commit can be adopted, and a run is claimed, run by ansible-playbook and
+reported with each task's outcome, on the machine page and in Jobs. Reach for
+it to walk that loop; without the flag a Refresh or a run stays queued.
+
+The server serves the bridge as the image does (`SEVERINO_BRIDGE_SOCKET`), on
+a socket in a private directory under `$TMPDIR`, since the checkout's path is
+too long for one. `tools/dev/scratch_automation.py` stands where the host's
+automation units stand: on each automation doorbell, or 15 minutes after the
+last worker ended, it writes a connections document from the scratch
+database's machines and starts the worker from the runner group's environment
+(`var/runner/venv`, which `smoke:runner` shares). It stops with the server and
+removes the socket's directory.
+
+What it holds to:
+
+- The bridge is a Unix socket only this account reaches; the web server stays
+  on loopback.
+- The worker gets its `HQ_AUTOMATION_*` variables and nothing of HQ's
+  environment, and no token or credential.
+- Its repository is `tools/dev/scratch_playbooks/`, committed to a repository
+  under `var/dev/scratch/automation/` at each start and fetched over git's file
+  transport.
+- Every login reaches 127.0.0.1, and every scratch play sets its connection to
+  local, so a run acts on this Mac alone.
+
+What it cannot show: GitHub's word on a commit's signature, so the scratch
+worker reports each commit it scans as verified; the renderer's real runner
+connections and identities; and the egress table and container confinement the
+host gives the worker. The showcase's runs name a commit the scratch
+repository does not hold, so the first pass ends any it finds waiting as
+failed to fetch. Adopting the scratch commit makes `example.disk_report` its
+one playbook.
 
 Python dependencies come from `uv.lock`. `mise.toml` sets `UV_LOCKED`, so
 every task's `uv run` refuses a lock that `pyproject.toml` has moved past, and
@@ -447,11 +485,10 @@ reads the last, then formats as the lint gates read:
    with ([Declaring a playbook](Architecture.md#declaring-a-playbook));
 6. the served font, cut to the characters HQ prints.
 
-It then lowers each count in `tools/lint/stylelint-suppressions.json` and
-`tools/lint/eslint-suppressions.json` that has fallen to what the linter finds
-(`fix:suppressions`), so a change that removes a suppressed problem leaves its
-count right. A count that rose is a new problem: `fix` leaves it, and
-`lint:css` or `lint:js` refuses it.
+It then lowers each count in `tools/lint/eslint-suppressions.json` that has
+fallen to what ESLint finds (`fix:suppressions`), so a change that removes a
+suppressed problem leaves its count right. A count that rose is a new problem:
+`fix` leaves it, and `lint:js` refuses it.
 
 Each `lint:drift-*` gate checks one against its source without writing. Its
 failure names the command that rewrites that file alone, in seconds; `fast`

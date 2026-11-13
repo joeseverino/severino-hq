@@ -583,6 +583,9 @@ Fields that shape the Command Center form:
   token HQ gave a live record). Search links there instead of to the form,
   and the form says where to start. `ON_ITS_PAGE` marks one that the page of
   whatever it acts on sends, which search does not offer.
+- `home` is the route of the page a command belongs to when its records are
+  no `ResourceSpec` of its own. Its page's trail and Cancel lead there,
+  called what the navigation calls that page, instead of to Search.
 - `about` is what the command's page says of it under the form: a callable,
   read each time the page is drawn and given its reader's `Principal`, so it
   says only what they may read, that returns a `CommandAbout(label,

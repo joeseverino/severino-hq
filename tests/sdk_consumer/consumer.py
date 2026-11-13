@@ -330,6 +330,11 @@ def a_command_that_starts_somewhere() -> None:
         "example.note", "Write a note.", "local_write", "example.write", Noting, noting, reached_from="example:notes"
     )
     assert_type(started.reached_from, str)
+    # A command whose records are no resource of its own names the page it belongs to.
+    homed = capabilities.CapabilitySpec(
+        "example.sweep", "Sweep notes.", "local_write", "example.write", Noting, noting, home="example:notes"
+    )
+    assert_type(homed.home, str)
     assert_type(capabilities.ON_ITS_PAGE, str)
     # A switch whose state no record holds declares where it stands.
     capabilities.CapabilitySpec(

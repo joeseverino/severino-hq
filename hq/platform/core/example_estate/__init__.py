@@ -88,5 +88,5 @@ def seed(owner=None):
         agents.seen(owner)
     history.settle()
     agents.lately(owner)
-    # Last, so no later step's claim ends the run whose worker went quiet.
+    # Last, so no later step's claim takes the run left waiting.
     automation.runs(owner)

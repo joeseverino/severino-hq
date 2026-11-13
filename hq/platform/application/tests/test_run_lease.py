@@ -228,20 +228,44 @@ class HeldApprovalTests(TestCase):
 
 
 class LapsedRunTests(LeasedRunTestCase):
-    def test_a_lapsed_run_is_failed_as_its_outcome_unknown(self):
+    def word(self) -> str:
+        from ..work_runs import recent_runs
+
+        (run,) = recent_runs(manifest().id)
+        return run.word
+
+    def test_a_lapsed_run_is_ended_as_its_outcome_unknown(self):
         self.claim()
         self.lapse()
 
         self.assertIsNone(self.claim())
 
         operation = self.operation()
-        self.assertEqual(operation.state, OperationRequest.State.FAILED)
+        self.assertEqual(operation.state, OperationRequest.State.CANCELLED)
         self.assertEqual(operation.result["reason"], "OutcomeUnknown")
         self.assertEqual(operation.attempt_count, 1)
         ended = AuditLog.objects.filter(
             object_type=audited_labels()[OperationRequest], object_id=self.operation_id, operation_id=self.operation_id
         ).latest("pk")
         self.assertIn("unknown", ended.message)
+
+    def test_it_reads_stopped_early_before_and_after_the_next_claim_ends_it(self):
+        self.claim()
+        self.lapse()
+        lapsed = self.word()
+
+        self.claim()
+
+        self.assertEqual((lapsed, self.word()), ("Stopped early", "Stopped early"))
+
+    def test_a_worker_that_reports_its_outcome_unknown_ends_it_as_a_lapse_does(self):
+        self.claim()
+        unknown = {"type": "Degraded", "status": True, "reason": "OutcomeUnknown", "message": "It stopped."}
+
+        self.report(success=False, message="It stopped.", conditions=[unknown])
+
+        self.assertEqual(self.operation().state, OperationRequest.State.CANCELLED)
+        self.assertEqual(self.word(), "Stopped early")
 
 
 class ObserveFirstLapsedRunTests(LeasedRunTestCase):
@@ -255,7 +279,7 @@ class ObserveFirstLapsedRunTests(LeasedRunTestCase):
 
         operation = self.operation()
         self.assertEqual(
-            (operation.state, operation.result["reason"]), (OperationRequest.State.FAILED, "OutcomeUnknown")
+            (operation.state, operation.result["reason"]), (OperationRequest.State.CANCELLED, "OutcomeUnknown")
         )
         self.assertEqual(operation.result["retry"], "observe_first")
         self.assertIn("checks the machines", operation.result["message"])

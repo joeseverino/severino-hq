@@ -22,6 +22,9 @@ from typing import Any
 from django.contrib import messages
 from django.http import HttpRequest, HttpResponse
 lazy from django.forms import BaseForm
+lazy from django.utils.html import format_html
+
+lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .capabilities import Ran, run_capability
 from .idempotency import (
@@ -34,6 +37,7 @@ from .idempotency import (
 )
 from .refusal_status import Refusal, refusal_of, refuse
 from .security import web_principal
+lazy from .automation_runs import held_words
 
 # The hidden field the key travels in: a name no command declares, like the
 # command form's other fields of its own.
@@ -91,11 +95,23 @@ def refused(request: HttpRequest, answer: dict[str, Any], *, form: BaseForm | No
     if answer.get("ok"):
         return None
     refusal = refusal_of(answer)
+    said = _said(refusal)
     if form is None:
-        messages.error(request, refusal.message)
+        messages.error(request, said)
     elif not _placed(form, refusal.details):
-        form.add_error(None, refusal.message)
+        form.add_error(None, said)
     return refusal
+
+
+def _said(refusal: Refusal) -> str:
+    """The refusal's sentence as a page says it: a run refused for another in
+    its way names that run and links to it, where the machine API's sentence
+    points at ``details.holding``."""
+
+    held = held_words(refusal.details)
+    if held is None:
+        return refusal.message
+    return format_html('{} <a href="{}">{}</a>', breakable(held.sentence), held.href, breakable(held.link))
 
 
 def refusal_response(answer: dict[str, Any]) -> HttpResponse:

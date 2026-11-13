@@ -314,6 +314,7 @@
           "verb=",
           "variants=",
           "reached_from=",
+          "home=",
           "wants=",
           "state=",
           "about="

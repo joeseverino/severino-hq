@@ -21,6 +21,7 @@ from hq.platform.application.command_forms import command_form_class, own_fields
 from hq.platform.application.command_targets import (
     capability_target_initial,
     capability_target_options,
+    page_named,
     record_options,
     starting_page,
     with_requested_target,
@@ -144,9 +145,14 @@ class CommandView(View):
         schema = capability_schema(self.spec)
         facts, table = _result_projection(result["payload"]) if result else ((), None)
         resource_url = route_url(resource.web_route) if resource else ""
-        # The trail names where the form lives: the records it writes, or
-        # Search for a command that belongs to none.
-        trail = ((resource.label, resource_url),) if resource_url else (("Search", reverse("search")),)
+        # The trail names where the form lives: the records it writes, the
+        # page it declares as its home, or Search for a command that has neither.
+        if resource_url:
+            trail = ((resource.label, resource_url),)
+        elif self.spec.home:
+            trail = (page_named(self.spec.home),)
+        else:
+            trail = (("Search", reverse("search")),)
         return {
             **page_context(
                 self.spec.title,

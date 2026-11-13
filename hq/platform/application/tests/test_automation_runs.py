@@ -4,6 +4,8 @@ synthetic ``example.*`` one, supplied as an extension supplies it."""
 
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
+from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -15,6 +17,7 @@ from ..capabilities import capability_registry, run_capability
 from ..capability_policy import Rule, matrix, set_rule
 from ..controller import claim_next_operation
 from ..security import Capability, Principal, cli_principal
+from .markup import links, text
 from .procedures import APP, DB, EDGE, RESTART, RESTART_KEY, RESTART_RUN, REVISION, Supply, manifest, run_payload
 
 # A person's own click in the browser, which is their consent.
@@ -299,6 +302,85 @@ class OneWriterTests(RunTestCase):
         OperationRequest.objects.update(state=OperationRequest.State.FAILED, completed_at="2026-01-01T00:00:00Z")
 
         self.assertTrue(self.ask(run_payload(DB), name=f"automation.{LOGS}.run", key="example-run-2")["queued"])
+
+    def test_the_refusal_says_whether_the_playbook_or_a_machine_is_held(self):
+        machine = self.refused(run_payload(DB), "precondition", name=f"automation.{LOGS}.run", key="example-run-2")
+        playbook = self.refused(run_payload(EDGE), "precondition", key="example-run-3")
+
+        self.assertEqual((machine["details"]["shared"], machine["details"]["machines"]), ([DB], sorted((APP, DB))))
+        self.assertEqual(playbook["details"]["shared"], [])
+
+
+class LapsedHoldTests(RunTestCase):
+    """A run whose worker stopped renewing holds neither its playbook nor its
+    machines, as the next claim would end it."""
+
+    def setUp(self):
+        super().setUp()
+        self.supply(manifest(), manifest(id=LOGS))
+        self.first = self.ask(run_payload(APP, DB))["operation"]
+        claim_next_operation("example-worker", capabilities=((KIND, "run"),))
+        OperationRequest.objects.filter(pk=self.first["id"]).update(lease_expires_at="2026-01-01T00:00:00Z")
+
+    def test_its_machine_takes_another_playbook_s_run(self):
+        self.assertTrue(self.ask(run_payload(DB), name=f"automation.{LOGS}.run", key="example-run-2")["queued"])
+
+    def test_its_playbook_runs_again(self):
+        self.assertTrue(self.ask(run_payload(EDGE), key="example-run-2")["queued"])
+
+    def test_it_ends_as_stopped_early_with_its_outcome_unknown(self):
+        self.ask(run_payload(EDGE), key="example-run-2")
+
+        lapsed = OperationRequest.objects.get(pk=self.first["id"])
+        self.assertEqual(lapsed.get_state_display(), "Stopped early")
+        self.assertEqual(lapsed.result["reason"], "OutcomeUnknown")
+
+    def test_a_live_lease_still_holds(self):
+        OperationRequest.objects.filter(pk=self.first["id"]).update(lease_expires_at="2999-01-01T00:00:00Z")
+
+        self.refused(run_payload(DB), "precondition", name=f"automation.{LOGS}.run", key="example-run-2")
+
+
+class HeldRunPageTests(RunTestCase):
+    """The Run page says which run is in the way, in words, and links to it."""
+
+    def setUp(self):
+        super().setUp()
+        self.supply(manifest(), manifest(id=LOGS))
+        self.first = self.ask(run_payload(APP, DB))["operation"]
+        self.client.force_login(get_user_model().objects.create_superuser("owner", "owner@example.test", "pw"))
+        machines = patch(
+            "hq.platform.application.machines.machine_catalog", side_effect=lambda **_: self.supply.machines
+        )
+        machines.start()
+        self.addCleanup(machines.stop)
+
+    def post(self, name, *hosts):
+        from django.urls import reverse
+
+        return self.client.post(
+            reverse("command", args=[name]),
+            {"hosts": list(hosts), "parameters.service": "web", "__confirm_effect": "on", "__retry_key": name},
+        )
+
+    def test_a_held_machine_names_it_and_the_run_on_it_with_a_link(self):
+        page = self.post(f"automation.{LOGS}.run", DB)
+
+        said = text(page)
+        self.assertEqual(page.status_code, 409)
+        self.assertNotIn("details.holding", said)
+        self.assertIn(f"{DB} is busy with a run of", said)
+        self.assertIn("waiting since", said)
+        (jobs,) = [href for words, href in links(page.content) if words == "See that run on Jobs"]
+        self.assertEqual(
+            parse_qs(urlsplit(jobs).query),
+            {"kind": [RESTART_RUN], "state": ["queued"], "host": [DB]},
+        )
+
+    def test_a_held_playbook_names_its_run_s_machines(self):
+        said = text(self.post(RESTART_RUN, EDGE))
+
+        self.assertIn(f"already has a run on {APP} and {DB}, waiting since", said)
 
 
 class InvalidRunTests(RunTestCase):

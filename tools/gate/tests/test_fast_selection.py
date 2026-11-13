@@ -155,7 +155,6 @@ class FastGateTaskSelectionTests(GateTestCase):
         self.assertNotIn("lint:drift-font", picked)
 
     def test_a_change_to_a_linters_suppressions_runs_that_linter(self):
-        self.assertIn("lint:css", selected("tools/lint/stylelint-suppressions.json"))
         self.assertIn("lint:js", selected("tools/lint/eslint-suppressions.json"))
 
     def test_a_deleted_file_is_a_change_to_the_gates_that_read_it(self):

@@ -114,6 +114,9 @@ def _as_its_own(operation: OperationRequest) -> AbstractContextManager[None]:
     )
 
 
+# The reason a run ended without a known outcome carries: its lease lapsed,
+# or its worker stopped before it reported (``hq_runner``).
+OUTCOME_UNKNOWN = "OutcomeUnknown"
 # Why a run whose lease lapsed is ended rather than queued again, by the
 # retry its manifest declares (``OperationManifest.retry``), pinned in its
 # record's spec when it was asked for. ``safe`` alone queues it again.
@@ -130,7 +133,10 @@ def _fail_lapsed_runs(now) -> None:
     """End each lapsed run its manifest does not call safe to repeat.
 
     A run may have changed machines before its worker stopped renewing, and
-    HQ cannot tell, so running it again could act twice. Saved one by one
+    HQ cannot tell, so running it again could act twice. It ends cancelled,
+    the state that reads "Stopped early", as a run still claimed with its
+    lease run out already reads, so the one cause reads one way before and
+    after this ends it. Saved one by one
     under the run's own id, so each ending is an audited row that leads back
     to the ask. At most one run per procedure is active, so these are few.
     """
@@ -144,11 +150,11 @@ def _fail_lapsed_runs(now) -> None:
     for operation in lapsed:
         retry = str(operation.resource.spec.get("retry") or "never")
         message = _UNKNOWN_OUTCOME.get(retry, _UNKNOWN_OUTCOME["never"])
-        operation.state = OperationRequest.State.FAILED
+        operation.state = OperationRequest.State.CANCELLED
         operation.completed_at = now
         operation.lease_expires_at = None
         operation.claim_attempt = ""
-        operation.result = {"ok": False, "message": message, "reason": "OutcomeUnknown", "retry": retry}
+        operation.result = {"ok": False, "message": message, "reason": OUTCOME_UNKNOWN, "retry": retry}
         operation.audit_said = message
         with _as_its_own(operation):
             operation.save(
@@ -156,8 +162,12 @@ def _fail_lapsed_runs(now) -> None:
             )
 
 
-def _release_lapsed(now) -> None:
+def release_lapsed(now) -> None:
     """Put back the work whose lease ran out, or end it if its record is off.
+
+    The one rule for a lease that ran out: a claim asks it before it leases,
+    and a run's ask before it looks for the run in its way, so work nobody
+    is doing never holds a playbook or a machine.
 
     Switching a record off cancels its queued work (``save_managed_resource``)
     and leaves claimed work to finish. Claimed work whose lease lapses would
@@ -432,7 +442,7 @@ def claim_next_operation(
     if len(attempt) > _ATTEMPT_LENGTH:
         raise ValueError(f"A claim attempt is at most {_ATTEMPT_LENGTH} characters.")
     now = timezone.now()
-    _release_lapsed(now)
+    release_lapsed(now)
     if attempt:
         held = (
             OperationRequest.objects.select_related("resource")
@@ -615,12 +625,21 @@ def report_operation(
         return _settle_report(operation, report)
 
 
-def _finish(operation: OperationRequest, report: ControllerReport, result: dict[str, Any]) -> None:
+def _finish(
+    operation: OperationRequest, report: ControllerReport, result: dict[str, Any], *, unknown: bool = False
+) -> None:
     operation.result = result
     operation.completed_at = timezone.now()
     operation.lease_expires_at = None
     operation.claim_attempt = ""
-    operation.state = OperationRequest.State.SUCCEEDED if report.success else OperationRequest.State.FAILED
+    operation.state = (
+        OperationRequest.State.SUCCEEDED
+        if report.success
+        # Stopped early, as a run whose lease lapsed ends (``_fail_lapsed_runs``).
+        else OperationRequest.State.CANCELLED
+        if unknown
+        else OperationRequest.State.FAILED
+    )
     # The finishing row says what the controller said.
     operation.audit_said = report.message
     operation.save(
@@ -658,6 +677,7 @@ def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[s
         operation,
         report,
         {"message": report.message, "conditions": report.conditions, "events": events},
+        unknown=any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions),
     )
     for event in events:
         action = _AUDITED_OUTCOMES.get(event["outcome"])

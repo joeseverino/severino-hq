@@ -333,6 +333,10 @@ class FigureWordTests(SimpleTestCase):
             ('{{ n|measured:"more" }}', {"n": 4}, "4\xa0more"),
             ("{{ n|bytes }}", {"n": 3 * 1024**3}, "3.0\xa0GB"),
             ("{{ n|seconds }}", {"n": 273}, "4\xa0min 33\xa0s"),
+            ("{{ n|seconds }}", {"n": 1800}, "30\xa0min"),
+            ("{{ n|seconds }}", {"n": 7200}, "2\xa0h"),
+            ("{{ n|seconds }}", {"n": 3720}, "1\xa0h 2\xa0min"),
+            ("{{ n|seconds }}", {"n": 0}, "0\xa0s"),
         ):
             with self.subTest(source=source):
                 drawn = self.render(source, **context)

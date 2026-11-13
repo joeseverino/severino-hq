@@ -61,6 +61,8 @@ if TYPE_CHECKING:
     from .asks import Standing
 
 REFRESH = "automation.source.refresh"
+# The page the source's and its playbooks' commands belong to.
+PLAYBOOKS = "control_plane:procedures"
 # The one source's record: the repository is the host's configuration, so
 # HQ knows of one source and never which repository it is.
 SOURCE_KEY = "automation-source"
@@ -336,5 +338,6 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             label="Refresh playbooks",
             verb=models.OperationRequest.Action.SCAN.label,
             wants="scan your repository for playbooks",
+            home=PLAYBOOKS,
         ),
     )

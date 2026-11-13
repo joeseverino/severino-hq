@@ -77,6 +77,13 @@ def starting_page(spec: CapabilitySpec) -> tuple[str, str] | None:
     route = spec.reached_from
     if not route or route == ON_ITS_PAGE:
         return None
+    return page_named(route)
+
+
+def page_named(route: str) -> tuple[str, str]:
+    """``(label, url)`` of the page at ``route``, called what the navigation
+    or its records call it."""
+
     named = (
         *(item.label for item in domain_navigation() if item.route == route),
         *(resource.label for resource in integration_graph().resources.values() if resource.web_route == route),

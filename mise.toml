@@ -311,6 +311,7 @@ flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds
 }
 flag "--port <port>" help="A fixed port instead of a free one"
 flag "--reload" negate="--no-reload" help="Restart on each change to Python or a template, as it does by default; --no-reload serves the code it started with, without the reloader's supervising process and its memory"
+flag "--runner" help="To walk Playbooks end to end: serve the bridge and start the real automation worker on each Refresh or run, scanning tools/dev/scratch_playbooks and running each play on this machine alone"
 flag "--plan" help="Print what it would run under and exit"
 '''
 run = "tools/dev/dev.sh"

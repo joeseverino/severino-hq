@@ -274,7 +274,8 @@ def span(days):
 @register.filter
 def seconds(value):
     """``{{ job.duration_seconds|seconds }}``: a run time as a person reads
-    one: "45 s", "4 min 33 s", "1 h 2 min". Never a bare count of seconds."""
+    one: "45 s", "4 min 33 s", "1 h 2 min", "30 min". Never a bare count of
+    seconds, and never a part that is zero after a larger one."""
 
     try:
         whole = max(0, round(float(value)))
@@ -282,9 +283,10 @@ def seconds(value):
         return or_empty(None)
     hours, rest = divmod(whole, 3600)
     minutes, left = divmod(rest, 60)
-    if hours:
-        return held(f"{hours} h {minutes} min")
-    return held(f"{minutes} min {left} s" if minutes else f"{left} s")
+    larger, unit, smaller, small_unit = (hours, "h", minutes, "min") if hours else (minutes, "min", left, "s")
+    if not larger:
+        return held(f"{left} s")
+    return held(f"{larger} {unit} {smaller} {small_unit}" if smaller else f"{larger} {unit}")
 
 
 @register.filter

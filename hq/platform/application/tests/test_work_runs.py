@@ -3,6 +3,7 @@ in the database, each row said in the words and tones a job is. Every
 procedure here is a synthetic ``example.*`` one."""
 
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest import mock
 
 from django.db import connection
@@ -165,6 +166,17 @@ class SameWordsTests(WorkRunsTestCase):
         self.assertEqual(operation_summary(run)["tone"], TONES[JobState.SUCCEEDED])
         failed = self.reported(self.run_of(DB, name=f"automation.{LOGS}.run"), success=False)
         self.assertEqual(operation_summary(failed)["tone"], TONES[JobState.FAILED])
+
+    def test_a_queued_run_says_it_waits_for_the_runner(self):
+        """Past any approval, a queued run waits only for the worker, and says
+        so, so it never reads as one waiting for a person."""
+
+        run = self.run_of(APP)
+
+        (row,) = self.listed()
+
+        self.assertEqual((row.id, row.word), (str(run.pk), JobState.QUEUED.label))
+        self.assertEqual(row.note, "Waiting for HQ's runner to start it.")
 
     def test_a_cancelled_run_stopped_early(self):
         run = self.run_of(APP)
@@ -333,6 +345,22 @@ class OrderTests(WorkRunsTestCase):
         titles = {row.id: row.title for row in self.listed()}
 
         self.assertEqual(titles, {str(declared.pk): named("sessions.clear").label, str(gone.pk): "example.gone"})
+
+    def test_a_run_is_called_by_its_playbook_s_title_and_found_by_it(self):
+        """The title the playbook was adopted with, on every list of work; a
+        run of a playbook no longer adopted keeps its id."""
+
+        restarted = self.run_of(APP)
+        adopted = (SimpleNamespace(id=RESTART, title="Restart a service"),)
+        with mock.patch("hq.platform.application.automation_adoption.procedures", return_value=adopted):
+            (row,) = self.listed()
+            (found,) = self.listed(search="restart a serv")
+            (machine_row,) = runs_on(APP)
+        self.assertEqual((row.id, row.title, found.id), (str(restarted.pk), "Restart a service", str(restarted.pk)))
+        self.assertEqual(machine_row.title, "Restart a service")
+        with mock.patch("hq.platform.application.automation_adoption.procedures", return_value=()):
+            (row,) = self.listed()
+        self.assertIn(RESTART, row.title)
 
 
 class WorkKindsTests(WorkRunsTestCase):

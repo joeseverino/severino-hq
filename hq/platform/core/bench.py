@@ -674,7 +674,7 @@ def _runs(scale: float, user) -> None:
     """Automation runs on ``lab-1`` in each state, as the example estate's server has
     (``example_estate.automation``), of the example procedures it adopts."""
 
-    automation.runs(user, server="lab-1", stopped_on="lab-2", waiting_on="lab-3", past=_count(scale, 120))
+    automation.runs(user, server="lab-1", read_on="lab-2", waiting_on="lab-3", past=_count(scale, 120))
 
 
 def seed(scale: float = 1.0, owner: Any = None) -> Seeded:

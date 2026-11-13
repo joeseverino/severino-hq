@@ -20,7 +20,8 @@ lazy from hq.domains.projects.models import Project
 lazy from hq.platform.application.capability_policy import field_name
 lazy from hq.platform.application.plugin_testing import form_keyed
 lazy from hq.platform.core.example_estate import REQUEST
-lazy from hq.platform.core.example_estate.names import ZONE
+lazy from hq.platform.core.example_estate.automation import DISK_REPORT
+lazy from hq.platform.core.example_estate.names import MACHINE, ZONE
 
 if TYPE_CHECKING:
     from django.test.client import _MonkeyPatchedWSGIResponse
@@ -82,6 +83,11 @@ POSTS = {
     # rule could not change, said over the tables.
     "agent-policy-retired-action": Posted(
         "agent_policy", (), lambda: {field_name("example-agent", "example.retired"): "deny"}
+    ),
+    # The read run on the machine the estate's working run holds: the run in
+    # the way said in words, with a link to it on Jobs.
+    "run-held-machine": Posted(
+        "command", (f"automation.{DISK_REPORT}.run",), lambda: {"hosts": [MACHINE], "parameters.mount": "/"}, status=409
     ),
 }
 

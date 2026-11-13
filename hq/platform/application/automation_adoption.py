@@ -411,15 +411,22 @@ def _does(effect: str) -> str:
     return lower_first(effect_label(effect))
 
 
-def _names(procedures: Mapping[str, AdoptedProcedure]) -> dict[str, str]:
+def titles(procedures: Mapping[str, AdoptedProcedure]) -> dict[str, str]:
     """Each playbook by the title you read it by, with its id beside a title
     two of them share, so the two stay apart."""
 
-    titles = Counter(procedure.title for procedure in procedures.values())
+    shared = Counter(procedure.title for procedure in procedures.values())
     return {
-        key: procedure.title if titles[procedure.title] == 1 else f"{procedure.title} ({key})"
+        key: procedure.title if shared[procedure.title] == 1 else f"{procedure.title} ({key})"
         for key, procedure in procedures.items()
     }
+
+
+def playbook_titles(digest: str | None = None) -> dict[str, str]:
+    """Each adopted playbook's title by its id, the name a person reads it and
+    its runs by, at ``digest`` (this process's generation when not given)."""
+
+    return titles({procedure.id: procedure for procedure in procedures(digest)})
 
 
 def _gains(before: AdoptedProcedure, after: AdoptedProcedure, named: str) -> list[str]:
@@ -448,7 +455,7 @@ def _widens(
     """Each way adopting ``after`` over ``before`` lets a run do more."""
 
     widens = []
-    called = _names(after)
+    called = titles(after)
     for key, procedure in sorted(after.items()):
         was = before.get(key)
         if was is None:
@@ -552,7 +559,7 @@ def plan(proposal_id: int) -> AdoptionPlan:
     files_before = {entry["path"]: entry["object"] for entry in current.files} if current else {}
     shared_before, shared_after = _shared(files_before, before.values()), _shared(files, procedures.values())
     ordered = [procedures[named] for named in sorted(procedures)]
-    called_before, called_after = _names(before), _names(procedures)
+    called_before, called_after = titles(before), titles(procedures)
     return AdoptionPlan(
         proposal=proposal,
         procedures=procedures,
@@ -709,5 +716,6 @@ def capability_specs() -> tuple[CapabilitySpec, ...]:
             label="Adopt the playbooks",
             verb="Adopt",
             wants="adopt the playbooks of a commit from your repository",
+            home=automation_sources.PLAYBOOKS,
         ),
     )

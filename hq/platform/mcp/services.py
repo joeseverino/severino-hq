@@ -291,7 +291,7 @@ def system_health() -> SystemHealth:
     return read_models.system_health(principal=current_principal())
 
 
-@tool("HQ at a glance", requires=holding(Capability.READ), budget=Budget(7_400))
+@tool("HQ at a glance", requires=holding(Capability.READ), budget=Budget(7_600))
 def dashboard_snapshot() -> AgentSnapshot:
     """What needs doing in HQ: its figures, the most urgent items in the queue and the docs due a review.
 

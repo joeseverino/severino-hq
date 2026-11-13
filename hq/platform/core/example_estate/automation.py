@@ -1,14 +1,16 @@
 """The estate's automation: the example repository's procedures adopted, then
-weeks of one procedure's runs on the server and a run in each state a run can
-be in now, each asked for and carried out through the paths a real one takes
-(a Refresh, the worker's scan, Adopt; then ``automation_runs.request_run``,
-the worker's claim, renewal and report, or its lease running out).
+weeks of one procedure's runs on the server, each way a run ends, and a run
+working and one waiting now, each asked for and carried out through the paths
+a real one takes (a Refresh, the worker's scan, Adopt; then
+``automation_runs.request_run``, the worker's claim, renewal and report, or
+its lease running out).
 
 The repository is synthetic, as a scan of it would report it: three
 ``example.*`` procedures, each with a default for every input, so a seed can
 ask for a run of one it knows only by its id. A procedure has one active run,
-and a machine one active run, at a time, so the run that waits and the run
-whose worker stopped are each another procedure's on another machine.
+and a machine one active run, at a time, so the run that waits is another
+procedure's on another machine, and the read and the machines neither holds
+are free to run.
 """
 
 import hashlib
@@ -20,7 +22,7 @@ from typing import Any
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest
+from hq.domains.control_plane.models import CapabilityRule, ManagedResource, OperationRequest, SourceProposal
 from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND, SOURCE_KIND
 from hq.platform.application.approvals import is_held
 from hq.platform.application.automation_adoption import ADOPT, AdoptProposal, adopt, catch_up
@@ -237,22 +239,32 @@ UNREADY = (
 UNREADY_REVISION = _commit("Move the upgrade onto a new role.")
 
 
-def _scanned(person: Principal, key: str, found: dict[str, Any] | None, message: str) -> OperationRequest:
+def _scanned(
+    person: Principal, key: str, found: dict[str, Any] | None, message: str, ago: timedelta | None = None
+) -> OperationRequest:
     """A Refresh asked by ``person``, claimed by its worker and reported:
-    reading ``found``, or failing with ``message`` when it found nothing."""
+    reading ``found``, or failing with ``message`` when it found nothing.
+    Asked ``ago``, with every row it writes dated so, or now when not given,
+    so the estate's scans read on Jobs in the order they tell."""
 
-    with doors.page("command", name="automation.source.refresh"):
-        queued = refresh(RefreshCommand(idempotency_key=key), principal=person)["operation"]
-    with doors.controller("claim"):
-        claimed = claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)["operation"]
-    if claimed is None or claimed["id"] != queued["id"]:
-        raise RuntimeError("The estate's scan was not the one its worker claimed.")
-    scan = OperationRequest.objects.get(pk=queued["id"])
-    report = ControllerReport(
-        success=found is not None, observed_generation=scan.input["generation"], message=message, catalog=found
-    )
-    with doors.controller("report"):
-        report_operation(queued["id"], report, controller_id=WORKER)
+    at = timezone.now() - ago if ago is not None else None
+    with stamped(lambda *_: {"created_at": at} if at is not None else None):
+        with doors.page("command", name="automation.source.refresh"):
+            queued = refresh(RefreshCommand(idempotency_key=key), principal=person)["operation"]
+        with doors.controller("claim"):
+            claimed = claim_next_operation(WORKER, capabilities=CLAIMS_SCANS)["operation"]
+        if claimed is None or claimed["id"] != queued["id"]:
+            raise RuntimeError("The estate's scan was not the one its worker claimed.")
+        scan = OperationRequest.objects.get(pk=queued["id"])
+        report = ControllerReport(
+            success=found is not None, observed_generation=scan.input["generation"], message=message, catalog=found
+        )
+        with doors.controller("report"):
+            report_operation(queued["id"], report, controller_id=WORKER)
+    if at is not None:
+        OperationRequest.objects.filter(pk=scan.pk).update(created_at=at, updated_at=at)
+        _dated(scan.pk, at)
+        SourceProposal.objects.filter(operation=scan).update(created_at=at, updated_at=at)
     scan.refresh_from_db()
     return scan
 
@@ -261,7 +273,7 @@ def adopted(person: Principal) -> None:
     """The example repository refreshed by ``person``, scanned by its worker,
     and what it found adopted by ``person``."""
 
-    scan = _scanned(person, "example-refresh", catalog(), "Read the playbooks.")
+    scan = _scanned(person, "example-refresh", catalog(), "Read the playbooks.", timedelta(days=20))
     with doors.page("command", name="automation.source.adopt"):
         adopt(AdoptProposal(proposal=scan.result["proposal"]), principal=person)
     # A seed's transaction has not committed, so this process reads what it adopted now.
@@ -273,15 +285,19 @@ def proposed(person: Principal, agent: Principal) -> None:
     that widens what a run may do, which ``agent`` asks to adopt and so waits
     for a person; one whose procedures HQ cannot adopt; and a scan that failed."""
 
-    widened = _scanned(person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the playbooks.")
+    widened = _scanned(
+        person, "example-refresh-widened", catalog(WIDENED, WIDENED_REVISION), "Read the playbooks.", timedelta(days=1)
+    )
     with doors.mcp():
         held = run_capability(
             ADOPT, {"proposal": widened.result["proposal"]}, principal=agent, idempotency_key="example-agent-adopt"
         ).answer
     if not is_held(held):
         raise RuntimeError(f"The agent's adoption was not held for a person: {held}")
-    _scanned(person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the playbooks.")
-    _scanned(person, "example-refresh-failed", None, "HQ couldn't reach your repository's host.")
+    _scanned(
+        person, "example-refresh-unready", catalog(UNREADY, UNREADY_REVISION), "Read the playbooks.", timedelta(hours=3)
+    )
+    _scanned(person, "example-refresh-failed", None, "HQ couldn't reach your repository's host.", timedelta(minutes=25))
 
 
 def rescanned(owner) -> None:
@@ -303,8 +319,11 @@ def scanning(owner) -> None:
 
 # The id the agent's runs are found by, as an investigation's would be.
 CORRELATION = "example-investigation-7"
-# Where the run that waits and the run whose worker stopped act.
-WAITING_ON, STOPPED_ON = LAPTOP_NAME, PHONE_NAME
+# Where the run that waits acts, and where the read last ran, which a person can run it on again.
+WAITING_ON, READ_ON = LAPTOP_NAME, PHONE_NAME
+# How long the working run's worker holds it from the moment the estate is
+# built: as long as anyone browses it, so the run reads as working throughout.
+WORKING_LEASE = timedelta(hours=8)
 
 
 @dataclass(frozen=True, slots=True)
@@ -331,6 +350,8 @@ FAILED = Ended(
     message="A task failed; nothing after it ran.",
     events=(("Read what it holds", "ok", ""), ("Empty it", "failed", "The service did not answer.")),
 )
+# How the read ended on the machine it last ran on.
+REPORTED = Ended(success=True, message="Reported the mount's use.", events=(("Read the mount's use", "ok", ""),))
 
 
 def procedures() -> list[OperationManifest]:
@@ -348,13 +369,20 @@ def runs(
     owner=None,
     *,
     server: str = MACHINE,
-    stopped_on: str = STOPPED_ON,
+    read_on: str = READ_ON,
     waiting_on: str = WAITING_ON,
     past: int | None = None,
 ) -> None:
     """The example procedures adopted, then past runs of the first on
     ``server``, ``past`` of them (one of each ending by default) three days
-    apart, then the three a run can be in now."""
+    apart, a finished run of the second on ``read_on``, then one run working
+    and one waiting now.
+
+    Every machine but the two those hold is free, and so is the second
+    procedure, a read: a person can run it at once. A claim whose lease ran
+    out is ended by the next ask, so none is seeded; how such a run ends is
+    the past run whose worker stopped renewing (``_outlived``).
+    """
 
     owner = owner or get_user_model().objects.order_by("pk").first()
     person = web_principal(owner) if owner is not None else cli_principal()
@@ -377,10 +405,10 @@ def runs(
         asker, carried_out, correlation = endings[index % len(endings)]
         ago = timedelta(days=2 + 3 * (count - 1 - index))
         _asked(first, server, asker, ago, carried_out, correlation=correlation)
-    # Now: one run working on the server, one whose worker went quiet, one waiting.
-    _asked(first, server, person, timedelta(minutes=3), _working)
     if others:
-        _asked(others[0], stopped_on, person, timedelta(minutes=40), _went_quiet)
+        _asked(others[0], read_on, person, timedelta(hours=5), _reported(REPORTED))
+    # Now: one run working on the server, one waiting.
+    _asked(first, server, person, timedelta(minutes=3), _working)
     if len(others) > 1:
         _asked(others[1], waiting_on, agent, timedelta(minutes=1), lambda _run: None)
     changes = [manifest for manifest in supplied if manifest.effect != "read"]
@@ -482,13 +510,7 @@ def _working(run: OperationRequest) -> None:
     _claimed(run)
     with doors.controller("renew"):
         renew_operation(str(run.pk), controller_id=WORKER)
-
-
-def _went_quiet(run: OperationRequest) -> None:
-    """Claimed, and its lease ran out with no claim since to end it."""
-
-    _claimed(run)
-    _lapse(run)
+    OperationRequest.objects.filter(pk=run.pk).update(lease_expires_at=timezone.now() + WORKING_LEASE)
 
 
 def _lapse(run: OperationRequest) -> None:
@@ -503,7 +525,4 @@ def _dated(pk, at) -> None:
     dates: dict[str, Any] = {"claimed_at": claimed}
     if run.completed_at:
         dates["completed_at"] = (claimed or at) + timedelta(seconds=95)
-    if run.state == OperationRequest.State.CLAIMED and run.lease_expires_at and run.lease_expires_at < timezone.now():
-        # A worker that went quiet was last heard from a few minutes after it began.
-        dates["lease_expires_at"] = claimed + timedelta(minutes=5)
     OperationRequest.objects.filter(pk=pk).update(updated_at=dates.get("completed_at") or claimed or at, **dates)

@@ -196,6 +196,9 @@ def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
     if operation.state == OperationRequest.State.FAILED:
         headline = (active[0].get("message") if active else "") or said or "It failed."
         return "serious", state, headline
+    if operation.state == OperationRequest.State.CANCELLED:
+        # Stopped early: something to look at, never a success.
+        return "attention", state, said or ended(state)
     problem = _problem(result)
     if problem is not None:
         return "attention", "Problem found", problem.get("message") or said or "It found a problem."

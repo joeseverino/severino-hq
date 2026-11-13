@@ -40,7 +40,9 @@ and a switch to pause something that does not exist yet, are not questions
 worth interrupting for.
 {% endcomment %}
 {% if spec.advanced or resource %}
-  {% section "Options" fold=True open=spec.errors|default:identity.errors %}
+  {% comment %}A create has no identity form, and a filter's argument that names a missing value stops the page, so firstof reads both.{% endcomment %}
+  {% firstof spec.errors identity.errors as options_wrong %}
+  {% section "Options" fold=True open=options_wrong %}
     {% for field in spec.advanced %}{{ field.as_field_group }}{% endfor %}
     {% if resource %}
       {{ identity }}

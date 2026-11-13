@@ -15,6 +15,7 @@ lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT
+lazy from hq.platform.application.ui import counted
 
 from .models import Job, JobState
 
@@ -86,8 +87,20 @@ class JobListView(PageMixin, TableListMixin, ListView):
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # What failed or stopped on its last run, which a later run of the same work has not got past.
-        context["failed_last"] = [found.title for found in self.kinds if found.state in work_runs.ENDED_BADLY]
+        # What failed or stopped on its last run, which a later run of the same work has not got past,
+        # each state's work under its own word, so the count says what it counts.
+        ended = {
+            state: [found.title for found in self.kinds if found.state == state] for state in work_runs.ENDED_BADLY
+        }
+        failed, stopped = len(ended[JobState.FAILED]), len(ended[JobState.LOST])
+        context["ended_badly"] = [(JobState(state).label, titles) for state, titles in ended.items() if titles]
+        context["ended_badly_title"] = (
+            f"{counted(failed, 'job failed', 'jobs failed')} and {stopped:,} stopped early on their last run"
+            if failed and stopped
+            else counted(failed, "job failed on its last run", "jobs failed on their last run")
+            if failed
+            else counted(stopped, "job stopped early on its last run", "jobs stopped early on their last run")
+        )
         return context
 
 
