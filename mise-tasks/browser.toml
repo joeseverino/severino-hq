@@ -10,6 +10,16 @@ depends = [{ task = "setup:browser", args = ["webkit"] }, "demo:build"]
 extends = "heavy"
 run = "uv run --group browser python -m unittest demo.check -v"
 
+# The public demo in Chromium, the engine most of its visitors read it in. A
+# CI leg, which mise run browser leaves out, as the Chromium layout legs.
+["browser:demo-chromium"]
+description = "browser:demo in Chromium: a CI leg, which mise run browser leaves out"
+hide = true
+env = { HQ_BROWSER_ENGINE = "chromium" }
+depends = [{ task = "setup:browser", args = ["chromium"] }, "demo:build"]
+extends = "heavy"
+run = "uv run --group browser python -m unittest demo.check -v"
+
 # The layout invariants over the stress estate, in two legs that CI runs side
 # by side, the classes split so each leg holds about half their time in CI,
 # in WebKit and in Chromium.
@@ -21,6 +31,7 @@ vars.classes = """\
   hq.platform.core.tests.browser.sweeps.ScriptedSparseLayoutTests \
   hq.platform.core.tests.browser.components.ComponentLayoutTests \
   hq.platform.core.tests.browser.folds.FoldBrowserTests \
+  hq.platform.core.tests.browser.page_navigation.PageNavigationBrowserTests \
   hq.platform.core.tests.browser.catalog.CatalogLayoutTests \
   hq.platform.core.tests.browser.accessibility.AccessibilityBrowserTests \
   hq.platform.core.tests.browser.sweeps.UnscriptedDenseLayoutTests"""
@@ -35,6 +46,7 @@ vars.classes = """\
   hq.platform.core.tests.browser.sweeps.UnscriptedSparseLayoutTests \
   hq.platform.core.tests.browser.sweeps.LongestValueLayoutTests \
   hq.platform.core.tests.browser.page_errors.PageErrorBrowserTests \
+  hq.platform.core.tests.browser.head_strip.HeadAndStripBrowserTests \
   hq.platform.core.tests.browser.planted.PlantedBrowserTests"""
 
 # The layout legs in Chromium, so a break WebKit happens not to show still
@@ -87,6 +99,8 @@ vars.classes = """\
   hq.platform.core.tests.browser.reports.WebKitSelectCanaryTests \
   hq.platform.core.tests.browser.reference.ReferenceBrowserTests \
   hq.platform.core.tests.browser.fragments.FragmentBrowserTests \
+  hq.platform.core.tests.browser.refresh.RefreshLandingBrowserTests \
+  hq.platform.core.tests.browser.refresh.PressedRefreshBrowserTests \
   hq.platform.core.tests.browser.current_state.CurrentStateBrowserTests \
   hq.platform.core.tests.browser.command_forms.CommandFormBrowserTests \
   hq.platform.core.tests.browser.agent_devices.AgentDeviceBrowserTests"""

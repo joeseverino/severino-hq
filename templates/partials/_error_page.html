@@ -1,0 +1,29 @@
+{% comment %}
+An error page: the whole of a page HQ answers when it fails or refuses, which
+stands outside the page frame and so titles itself.
+
+  {% include "partials/_error_page.html" with code="404" title="Page not found" body="The link may be old." search=user.is_authenticated %}
+
+`code` is the HTTP status, said over the title; `body` is what happened and
+what to do, in words; `request_id`, where the page has one, is the id the log
+line for this failure carries; `search` offers the search field. Every error
+page ends with the one way out, back to the dashboard. Deliberately plain: the
+reader is here by accident, so the page orients and offers a way on rather
+than decorating the mistake.
+{% endcomment %}
+<div class="error-page">
+  <p class="error-page-code">{{ code|breakable }}</p>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-heading --> an error page stands outside the page frame, so it titles itself
+  {% endcomment %}<h1>{{ title|breakable }}</h1>
+  <p class="error-page-body">{{ body|breakable }}{% if request_id %} Its request id is <code>{{ request_id|breakable:"." }}</code>{% endif %}</p>
+  {% if search %}
+  {% url 'search' as search_url %}
+  {% filter_bar verb="Search" action=search_url %}
+    <input type="search" name="q" placeholder="Find anything" aria-label="Find anything">
+  {% endfilter_bar %}
+  {% endif %}
+  <p class="page-actions">
+    <a class="btn primary" href="{% url 'dashboard' %}">Back to dashboard</a>
+  </p>
+</div>

@@ -1,0 +1,19 @@
+# The facts on a page's title line are the title meta part, so every head
+# sets them in one voice and one wrap. No fix: the part takes its parts as the
+# page writes them.
+id: hand-drawn-title-meta
+language: html
+severity: error
+message: A title's line of facts drawn by hand, where the title meta part draws it.
+note: Write {% title_meta %}parts{% endtitle_meta %}, with element="ul" for <li> parts.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?page-title-meta(?:[^\w-]|$)'

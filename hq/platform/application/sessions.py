@@ -24,11 +24,11 @@ SIGN_OUT = "session.sign_out"
 
 @dataclass(frozen=True, slots=True)
 class SignOutCommand:
-    subject: Annotated[str, Describe("Pocket ID's subject for the person it signed out.")]
+    subject: Annotated[str, Describe("Pocket ID's subject for the account it signed out.")]
 
 
 class SessionsEnded(TypedDict):
-    """The sessions ended for the person the identity provider signed out."""
+    """The sessions ended for the account the identity provider signed out."""
 
     ok: Literal[True]
     sessions: Annotated[int, Describe("How many sessions the call ended.")]

@@ -4,55 +4,56 @@ from functools import cached_property
 from typing import override
 
 from django.core.exceptions import PermissionDenied
-from django.db.models import Case, IntegerField, Value, When
 from django.http import Http404, JsonResponse
-from django.urls import reverse
-from django.views.generic import DetailView, ListView, View
+from django.urls import reverse, reverse_lazy
+from django.views.generic import DetailView, ListView, TemplateView, View
 
-from hq.platform.application.pages import PageAction, PageMixin
-from hq.platform.application.tables import TableColumn, TableFilter, TableListMixin, TableSort
+from hq.platform.application.pages import PageAction, PageBadge, PageMixin
+from hq.platform.application.security import web_principal
+from hq.platform.application.tables import Projected, TableColumn, TableFilter, TableListMixin, TableQuery, TableSort
 from hq.platform.application.web_writes import execute_posted
-lazy from hq.platform.application import outbound_work
+lazy from hq.platform.application import outbound_work, work_runs
 lazy from hq.platform.application.asks import FAILED, Standing, answer, job_standing
+lazy from hq.platform.application.automation_runs import cancel_action, listed_with_actions, run_here_url
+lazy from hq.platform.application.capabilities import capability_registry
+lazy from hq.platform.application.labels import lower_first
 lazy from hq.platform.application.outbound_work import SUBJECT_FIELD
 lazy from hq.platform.application.refusal_status import WANTS_A_GRANT
-lazy from hq.platform.application.scheduled_work import job_names
+lazy from hq.platform.application.run_pages import run_context
 
-from .models import Job
-
-FAILED_FIRST = "failed"
-ENDED_BADLY = (Job.State.FAILED, Job.State.LOST)
+from .models import Job, JobState
 
 
 class JobListView(PageMixin, TableListMixin, ListView):
-    """Every job, newest first, through the host's own table contract."""
+    """All the work HQ started, its own jobs and the automation runs it
+    queued, as one list through the host's table contract (``work_runs``)."""
 
     table_empty = "No jobs yet."
 
+    # The rows are the projection's; a job is what an estate fills it with.
     model = Job
     template_name = "jobs/job_list.html"
     paginate_by = 40
     page_title = "Background jobs"
-    table_search_fields = ("label", "note")
     table_search_placeholder = "Search jobs and results…"
-    page_lede = "Work HQ does on a schedule or that you started, and how each run went."
     table_columns = (
-        TableColumn("Job"),
+        TableColumn("Job", kind="prose"),
         TableColumn("State", css="key-col", kind="status"),
-        TableColumn("Started", "created_at", css="date-col"),
+        TableColumn("Started", css="date-col"),
         TableColumn("Duration", kind="numeric"),
-        TableColumn("Result"),
-        TableColumn("Requested by"),
+        TableColumn("Result", kind="prose"),
+        TableColumn("Requested by", kind="prose"),
+        TableColumn("", css="actions-col"),
     )
+    # Each sort's value is the projection's order, which reads it.
     table_sorts = (
-        # The order ``get_queryset`` gives it: what failed on its last run, then newest.
-        TableSort(FAILED_FIRST, "Failed first", "-created_at"),
-        TableSort("-created_at", "Newest first", "-created_at"),
-        TableSort("created_at", "Oldest first", "created_at"),
-        TableSort("kind", "Job A–Z", ("label", "-created_at")),
-        TableSort("state", "State", ("state", "-created_at")),
+        TableSort(work_runs.FAILED_FIRST, "Failed first", work_runs.FAILED_FIRST),
+        TableSort(work_runs.NEWEST, "Newest first", work_runs.NEWEST),
+        TableSort(work_runs.OLDEST, "Oldest first", work_runs.OLDEST),
+        TableSort(work_runs.BY_TITLE, "Job A–Z", work_runs.BY_TITLE),
+        TableSort(work_runs.BY_STATE, "State", work_runs.BY_STATE),
     )
-    table_default_sort = FAILED_FIRST
+    table_default_sort = work_runs.FAILED_FIRST
 
     @override
     def get_page_actions(self):
@@ -60,66 +61,90 @@ class JobListView(PageMixin, TableListMixin, ListView):
         return (PageAction("Audit log", reverse("core:audit_list")),)
 
     @cached_property
-    def names(self) -> dict[str, str]:
-        """A job's name in words is its declaration's; what a run stored is the
-        fallback for work no longer declared."""
+    def kinds(self) -> list[work_runs.WorkKind]:
+        """Each kind of work by its latest run: the Job filter's options and what failed last."""
 
-        return job_names()
-
-    @cached_property
-    def latest_runs(self) -> dict[str, tuple[object, str, str]]:
-        """Each kind's latest run as ``(id, state, label)``, from one read.
-
-        The filter's options and what failed last both come from it.
-        """
-
-        latest: dict[str, tuple[object, str, str]] = {}
-        runs = Job.objects.order_by("kind", "-created_at").only("kind", "state", "label", "created_at", "heartbeat_at")
-        for job in runs:
-            latest.setdefault(job.kind, (job.pk, job.seen_state, self.names.get(job.kind) or job.label or job.kind))
-        return latest
-
-    @property
-    def failed_last(self) -> list[tuple[object, str]]:
-        """``(id, label)`` of each job whose latest run failed or was interrupted.
-
-        A failure a later run of the same job got past is history, and is not here.
-        """
-
-        return sorted(
-            ((pk, label) for pk, state, label in self.latest_runs.values() if state in ENDED_BADLY),
-            key=lambda found: found[1].casefold(),
-        )
+        return work_runs.work_kinds()
 
     @override
     def get_table_filters(self):
-        # Kinds are strings extensions choose, so the options are whatever
-        # has actually run rather than a list this app maintains. Each is
-        # offered by the name its rows carry: its latest run's label.
-        named = {kind: label for kind, (_pk, _state, label) in self.latest_runs.items()}
+        # Kinds are strings extensions and procedures choose, so the options
+        # are whatever has actually run rather than a list this app keeps.
+        # A machine is offered by its name where a run acted on it, and a
+        # machine page links here with it chosen.
         return (
-            TableFilter("state", "State", "state", Job.State.choices),
-            TableFilter("kind", "Job", "kind", sorted(named.items(), key=lambda item: item[1].casefold())),
+            TableFilter("state", "State", "state", JobState.choices),
+            TableFilter("kind", "Job", "kind", [(found.kind, found.title) for found in self.kinds]),
+            TableFilter("host", "Host", "host", [(host, host) for host in work_runs.run_hosts()]),
         )
 
     @override
-    def get_queryset(self):
-        rows = self.apply_table_query(super().get_queryset().select_related("requested_by"))
-        failed = [pk for pk, _label in self.failed_last]
-        if failed and self.request.GET.get("sort", FAILED_FIRST) == FAILED_FIRST:
-            rows = rows.order_by(
-                Case(When(pk__in=failed, then=Value(0)), default=Value(1), output_field=IntegerField()),
-                "-created_at",
-                "pk",
-            )
-        return rows
+    def get_table_rows(self, query: TableQuery) -> Projected:
+        rows = work_runs.work_rows(
+            state=query.chosen("state"),
+            kind=query.chosen("kind"),
+            host=query.chosen("host"),
+            search=query.search,
+            order=query.sort,
+        )
+        principal = web_principal(self.request.user)
+        return Projected(rows, lambda page: listed_with_actions(work_runs.hydrated(page), principal))
 
     @override
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["failed_last"] = [label for _pk, label in self.failed_last]
-        for job in context["object_list"]:
-            job.title = self.names.get(job.kind) or job.label or job.kind
+        # What failed or stopped on its last run, which a later run of the same work has not got past,
+        # each state's work under its own word when both are there.
+        ended = {
+            state: [found.title for found in self.kinds if found.state == state] for state in work_runs.ENDED_BADLY
+        }
+        context["ended_badly"] = [(JobState(state).label, titles) for state, titles in ended.items() if titles]
+        if context["ended_badly"]:
+            (first, _), *rest = context["ended_badly"]
+            said = " or ".join((first, *(lower_first(label) for label, _ in rest)))
+            many = sum(len(titles) for _, titles in context["ended_badly"]) > 1
+            context["ended_badly_title"] = f"{said} on {'their' if many else 'its'} last run"
+        return context
+
+
+class RunView(PageMixin, TemplateView):
+    """One run of a playbook, or one scan of its source: who asked, its
+    approval, its lease, how it ended and each task's outcome
+    (``application.run_pages``). Jobs' own page for a row, read as Jobs is."""
+
+    template_name = "jobs/run_detail.html"
+    page_trail = (("Background jobs", reverse_lazy("jobs:list")),)
+
+    @override
+    def get(self, request, *args, **kwargs):
+        found = work_runs.run_of(str(kwargs["pk"]))
+        if found is None:
+            raise Http404("No run has that id.")
+        self.run, self.operation = found
+        return super().get(request, *args, **kwargs)
+
+    @override
+    def get_page_title(self):
+        return self.run.title
+
+    @override
+    def get_page_actions(self):
+        cancel = cancel_action(self.run, web_principal(self.request.user))
+        playbook = work_runs.operation_of(self.run.kind)
+        # Its playbook again on the same machines, once it has ended, while that playbook is adopted.
+        ended = self.run.state not in {JobState.QUEUED, JobState.RUNNING}
+        again = (
+            (PageAction("Run again", run_here_url(playbook, self.run.evidence.hosts)),)
+            if ended and playbook and capability_registry().get(self.run.kind)
+            else ()
+        )
+        return (*again, *((cancel,) if cancel is not None else ()))
+
+    @override
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["page_badges"] = (PageBadge(self.run.word, self.run.tone),)
+        context.update(run_context(self.run, self.operation, user=self.request.user))
         return context
 
 

@@ -1,0 +1,30 @@
+id: hand-drawn-filter-bar
+snapshots:
+  <div class="toolbar filter-bar"></div>:
+    labels:
+    - source: <div class="toolbar filter-bar"></div>
+      style: primary
+      start: 0
+      end: 38
+    - source: class="toolbar filter-bar"
+      style: secondary
+      start: 5
+      end: 31
+    - source: <div class="toolbar filter-bar">
+      style: secondary
+      start: 0
+      end: 32
+  <form class="filter-bar"></form>:
+    labels:
+    - source: <form class="filter-bar"></form>
+      style: primary
+      start: 0
+      end: 32
+    - source: class="filter-bar"
+      style: secondary
+      start: 6
+      end: 24
+    - source: <form class="filter-bar">
+      style: secondary
+      start: 0
+      end: 25

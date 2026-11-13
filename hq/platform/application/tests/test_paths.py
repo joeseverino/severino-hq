@@ -165,7 +165,7 @@ class PathTests(TestCase):
             [
                 ("dns", "198.51.100.20"),
                 ("edge", "Cloudflare DNS"),
-                ("network", ""),
+                ("network", "198.51.100.20"),
                 ("machine", "edge-1"),
                 ("ingress", "example-edge"),
                 ("upstream", "shop:8080"),
@@ -188,7 +188,7 @@ class PathTests(TestCase):
             steps(path),
             [
                 ("dns", "100.64.0.10"),
-                ("network", ""),
+                ("network", "100.64.0.10"),
                 ("machine", "lab-1"),
                 ("ingress", "example-npm"),
                 ("upstream", "127.0.0.1:8000"),
@@ -201,6 +201,13 @@ class PathTests(TestCase):
         certificate = path.certificate
         self.assertEqual((certificate.role, certificate.name), ("Served", "example wildcard"))
         self.assertEqual(certificate.issuer, "Let's Encrypt")
+
+    def test_a_certificate_uploaded_to_the_proxy_is_said_to_be_uploaded(self):
+        # NPM's code for an uploaded certificate is no authority's name.
+        (host,) = ProviderInventory.objects.get(kind="npm.proxy_host").records
+        store("npm.proxy_host", {**host, "certificate": {**host["certificate"], "provider": "other"}})
+
+        self.assertEqual(self.walk("app.example.com").certificate.issuer, "uploaded")
 
     def test_a_declared_certificate_is_shown_as_hq_knows_it_and_attested(self):
         # NPM names HQ's upload by its own label with no authority; HQ knows better.
@@ -286,6 +293,28 @@ class PathTests(TestCase):
         )
 
         self.assertEqual(certificates_serving("app.example.com"), ("example-other",))
+
+    def test_a_name_served_elsewhere_is_not_served_with_a_certificate_of_hq_s(self):
+        """A CNAME to a hosted page is served with that host's certificate,
+        though HQ's wildcard covers the name."""
+
+        from ..services import certificate_use, certificates_serving, find_service
+
+        declare_certificate()
+        ManagedResource.objects.create(
+            key="status-record",
+            kind="cloudflare.dns_record",
+            spec={**record("status.example.com", "CNAME", "example-status.pages.example.net", proxied=False)},
+        )
+
+        with projection_scope():
+            service = find_service("status.example.com")
+            (certificate,) = [facet for facet in service.facets if facet.id == "certificate"]
+
+            self.assertTrue(service.origin.external)
+            self.assertEqual(certificate.claims, ())
+            self.assertEqual(certificates_serving("status.example.com"), ())
+            self.assertNotIn("status.example.com", certificate_use("example-wildcard", ("*.example.com",)).used_by)
 
     def test_a_pages_site_ends_at_its_project(self):
         path = self.walk("example.com")
@@ -504,6 +533,39 @@ class ServicePageTests(TestCase):
         self.assertIn('data-tip-host="app.example.com"', page)
         self.assertIn("example-wildcard\xa0· Example CA", page)
 
+    def test_a_home_network_step_names_its_address_and_claims_no_reading(self):
+        """The address is the step's value; the machine's tailnet device says
+        nothing of its home-network link, so no state is read from it."""
+
+        ManagedResource.objects.create(key="home-1", kind="machine", spec={"name": "home-1", "addresses": ["10.0.0.5"]})
+        store(
+            "adguard.rewrite",
+            {"domain": "app.example.com", "answer": "100.64.0.10", "connection_ref": "example-adguard"},
+            {"domain": "home.example.com", "answer": "10.0.0.5", "connection_ref": "example-adguard"},
+        )
+        store("tailscale.device", {"name": "home-1", "addresses": ["100.64.0.30"], "online": True})
+
+        response = self.client.get(reverse("control_plane:service", args=["home.example.com"]))
+
+        ((_route, parts),) = response.context["route_parts"]
+        (network,) = [part for part in parts if part.hop is not None and part.hop.step == "network"]
+        self.assertEqual(network.hop.name, "10.0.0.5")
+        self.assertIsNone(network.health)
+        self.assertIsNone(network.read_from)
+
+    def test_a_name_served_elsewhere_is_not_offered_a_certificate(self):
+        """Nothing HQ could add would be what the hosted page serves it with."""
+
+        ManagedResource.objects.create(
+            key="status-record",
+            kind="cloudflare.dns_record",
+            spec={**record("status.example.com", "CNAME", "example-status.pages.example.net", proxied=False)},
+        )
+
+        response = self.client.get(reverse("control_plane:service", args=["status.example.com"]))
+
+        self.assertNotIn("certificate", [facet.id for facet in response.context["missing_facets"]])
+
     def test_a_redirect_links_both_ends(self):
         self.assertIn(reverse("control_plane:service", args=["example.com"]), self.page("example.net"))
         self.assertIn(reverse("control_plane:service", args=["example.net"]), self.page("example.com"))
@@ -559,7 +621,7 @@ class ObservedNameTests(TestCase):
         path = self.walk("admin.example.com")
 
         self.assertEqual(summary["Health"].tone, "unknown")
-        self.assertIn(path.observed_line, summary["Health"].detail)
+        self.assertIn(path.observed_line, " ".join(summary["Health"].detail))
         self.assertIn("Admin", summary["What it is"].value)
         section = page[page.index('id="path"') : page.index('id="parts"')]
         missing, unread = path.gaps
@@ -618,7 +680,8 @@ class HqHealthTests(TestCase):
             health = self.summary()["Health"]
 
         self.assertEqual(health.tone, "attention")
-        self.assertIn("1 open problem", health.detail)
+        # The word drawn in that tone is the problem, never the calm word ("Up").
+        self.assertEqual(health.value, "1 open problem")
 
     def test_only_findings_about_hq_count(self):
         from ..finding_model import Finding

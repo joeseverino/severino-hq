@@ -4,6 +4,14 @@ HQ has one application core and several delivery adapters over it: the web UI,
 the `/api/v2/` machine API, MCP, the CLI and the extension SDK. Another
 interface adds an adapter, never a second implementation.
 
+This page is for anyone changing HQ's code. Read
+[The boundary](#the-boundary) and
+[One operation, end to end](#one-operation-end-to-end) first: together they
+are the shape of the whole. Each later section is a reference for one part,
+from what a request costs to the
+[infrastructure control plane](#infrastructure-control-plane), its controller
+and its automation worker.
+
 ![Web, MCP, and CLI converging on one application core and the domain-specific sources of truth](diagrams/application-core.png)
 
 <sup>Source: [`docs/diagrams/application-core.mmd`](diagrams/application-core.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
@@ -283,8 +291,8 @@ Three rules keep a page from waiting on a writer:
   once the writer commits.
 - SQLite keeps no queue for its write lock. A waiting connection retries every
   100 ms, and a job that begins its next transaction within a millisecond of
-  the last would win every time, so a job lets go after each second of
-  writing (`database.gives_way`, applied by the runner to every job).
+  the last would win every time. So a job lets go after each second of writing
+  (`database.gives_way`, applied by the runner to every job).
 - A request never waits on the derive-ahead pass: it derives what it does not
   find stored, and the pass then finds it stored. While writes keep landing
   during passes, the pass waits longer for them to settle
@@ -412,7 +420,7 @@ stands until what it asked of the helpers changes, at most one minute
 and nothing HQ words is finer than a minute. So that bound keeps every
 statement within one unit of the truth. Whatever asks an unseen derivation
 stands no longer than it does. The rules an extension keeps are in
-[Plugins](Plugins.md#derived-reads).
+[Extensions](Plugins.md#derived-reads).
 
 **Asked again when the change lands.** The controller reports every few
 minutes while HQ is in use, and every report moves a revision the estate reads.
@@ -508,20 +516,19 @@ for.
 
 ### An agent's call
 
-Each MCP request runs its synchronous work on a thread of its own, as
-Django's handler gives each web request, so one slow call never queues
-another agent's. The door enters `thread_of_its_own`
-(`hq/platform/core/outside_requests.py`), the one way HQ's work outside
-Django's request cycle gets that thread and its connections checked before
-and closed after; `lint:ast-grep` holds that nothing else does it. A listen
-stream gives its request's thread and connections back once admitted, so an
-open stream holds neither; its brakes each borrow a thread for the moment
-they are asked. The agent limits' counts are kept in the serving process's
-memory, and the listen bus (`hq/platform/mcp/listen.py`) reaches every stream
-from there, which is right only while the image serves from one process
-(`test_one_serving_process.py`); an agent not calling holds nothing there.
-The Agents page reads each agent's open streams from those counts, and says
-when it holds all of them, since its next is refused `too_many_calls`.
+Each MCP request runs its synchronous work on a thread of its own, as Django's
+handler gives each web request, so one slow call never queues another agent's.
+The door enters `thread_of_its_own` (`hq/platform/core/outside_requests.py`),
+the one way HQ's work outside Django's request cycle gets that thread and its
+connections checked before and closed after; `lint:ast-grep` holds that nothing
+else does it. A listen stream gives its request's thread and connections back
+once admitted, so an open stream holds neither; its brakes each borrow a thread
+for the moment they are asked. The agent limits' counts are kept in the serving
+process's memory, and the listen bus (`hq/platform/mcp/listen.py`) reaches
+every stream from there. That is right only while the image serves from one
+process (`test_one_serving_process.py`). An agent not calling holds nothing
+there. The Agents page reads each agent's open streams from those counts, and
+says when it holds all of them, since its next is refused `too_many_calls`.
 
 ## Search
 
@@ -576,7 +583,8 @@ mise run manage --scratch -- rebuild_search_index
 
 `hq.platform.application.tables.TableListMixin` composes indexed search with
 multi-value filters, workflow toggles, allowlisted ordering and database
-pagination. The browser enhances that GET contract with debounced, cancelable
+pagination, over a model's queryset or a projection's rows
+(`get_table_rows`, as Jobs lists HQ's jobs and automation runs as one). The browser enhances that GET contract with debounced, cancelable
 requests; plain links and forms remain the complete fallback.
 
 ## Emit once, derive everywhere
@@ -586,7 +594,7 @@ requests; plain links and forms remain the complete fallback.
 <sup>Source: [`docs/diagrams/emit-once-capabilities.mmd`](diagrams/emit-once-capabilities.mmd), pre-rendered with [`diagram`](https://github.com/joeseverino/tools/tree/main/lib/diagram).</sup>
 
 Three registries declare everything an adapter offers. What an extension
-declares in each, and the fields it sets, is in [Plugins](Plugins.md#contract-boundary).
+declares in each, and the fields it sets, is in [Extensions](Plugins.md#contract-boundary).
 
 **Capabilities.** The allowlisted registry binds each typed command to one
 operation name, effect, required permissions and handler. From it:
@@ -648,10 +656,10 @@ repair list. A direct compiler caller gets the same guarantees as runtime
 composition.
 
 The graph is memoized for the process, since composition is fixed at boot. The
-one plugin-composition reset clears both plugin identity and the graph. The
-test runner applies it between fixtures, and isolated composition proofs use an
-explicit graph override. Reversible web routes remain a Django startup check,
-because URL resolution belongs to that adapter.
+one reset of the extension composition clears both extension identity and the
+graph. The test runner applies it between fixtures, and isolated composition
+proofs use an explicit graph override. Reversible web routes remain a Django
+startup check, because URL resolution belongs to that adapter.
 
 The Command Center is a projection of that graph:
 
@@ -871,17 +879,17 @@ follow, each held by `controller/providers/github_spend_test.go`:
   until 18:06 UTC, the last reading stands"), never as a permission to grant.
 
 Each sweep reports the hour it spent from as the `github.allowance` reading,
-one record per installation, from the fuse's own count: the limit, used and
-remaining before the sweep's first request (GitHub's first free `/rate_limit`
-answer, less what the sweep had spent before asking), the reset, and what the
-sweep spent. A reading read from what the others did is a tally
-(`Registry.tally`), read after every other kind of its provider and with any
-of them. HQ derives, as it stores the reading
+one record per installation, from the fuse's own count. A record holds the
+limit, used and remaining before the sweep's first request, the reset, and what
+the sweep spent. The first three are GitHub's first free `/rate_limit` answer,
+less what the sweep had spent before asking. A reading read from what the
+others did is a tally (`Registry.tally`), read after every other kind of its
+provider and with any of them. HQ derives, as it stores the reading
 (`observations.github.with_others_spent`), what everything else spent between
 two sweeps of the same hour: used at the second's start, less used at the
 first's and the first's own spend. A pair across a reset is not judged.
-`controller/providers/github_allowance_test.go` holds the controller's half
-to GitHub's own count, and the finding that reads it is
+`controller/providers/github_allowance_test.go` holds the controller's half to
+GitHub's own count, and the finding that reads it is
 [Security](Security.md#a-leaked-github-app-credential).
 
 **One address-to-machine resolver**, `hq/platform/application/locate.py`.
@@ -959,8 +967,33 @@ connection no controller has, or whose domain HQ neither expects nor has read.
 Controllers claim operations with an expiring lease and receive a minimal,
 versioned, desired-only JSON contract. A controller resolves connection
 references, runs provider adapters, verifies each declared consumer, and
-reports only public status and conditions. Expired claims return to the queue;
-only one queued or claimed operation may exist per resource and action.
+reports only public status and conditions. Expired claims return to the queue,
+all but a run's (below); only one queued or claimed operation may exist per
+resource and action.
+
+A claim names the `kind:action` pairs its claimant has a handler for, and one
+naming none is offered nothing, so no worker takes work only another has a
+handler for. A claim may carry an `attempt` name: retried under the same
+name, as Amazon SQS's receive attempt id is, it is answered the operation it
+already leased rather than a second one. A claimed run's answer carries its
+`input` (`RunInput`), what it was asked and approved to run; a peek, and a
+claim of other work, carry none.
+
+Long work keeps its lease through `renew`, which only the claimant may call and
+only before the lease runs out. It answers `continue: false` once the asker is
+held by the pause or a block (the lease is still extended, so the worker has
+time to stop and report) or the operation was cancelled. A run whose lease
+lapses may have changed machines. So the next claim, or the next ask for a
+run (`controller.release_lapsed`, the one rule for a lapsed lease), ends it
+`cancelled` with `reason: OutcomeUnknown` instead of queuing it again, unless
+its manifest's `retry` is `safe`. `observe_first` ends the same way and says
+so, and the observation is the worker's to make. A worker that reports
+`OutcomeUnknown` itself ends its run the same way, so a run that stopped
+reporting reads "Stopped early" before HQ ends it and after. A run's report writes nothing to its
+playbook's record: a `status` is refused. Its `events` land on the run's
+result: each task's outcome on one machine, bounded by the contract's
+`RunEvent` and struck of secrets at the bridge's door. Each changed or failed
+one is an audit row under the run's own id that leads back to the ask.
 
 A provider's declaration is Django's. Its controller half is Go, in
 `controller/providers/`: one file set per integration, each registering its
@@ -1033,14 +1066,14 @@ has to be worded around a credential:
   setting redacted (`String`, `Format`, `LogValue`). The generator emits these
   methods from the `secret` tag, so a new secret setting gets them too.
 - Each binary learns every secret value where it enters the process
-  (`controller/internal/mask`): a connection's secret settings, a sealed value
-  opened, a token minted or sent in a request header, the Connect token, a
-  concealed field and each application variable the renderer reads, a
-  hand-off's token. Every form of a
-  learned value (plain, quoted, JSON, URL and base64 encoded) is then struck
-  from each log line (`mask.Logger`, the only logger a binary builds), from
-  clipped text such as a report's failure (`runtime.Clip`), and from every
-  payload the bridge sends HQ.
+  (`controller/internal/mask`). Those are a connection's secret settings, a
+  sealed value opened, a token minted or sent in a request header, and the
+  Connect token. So are a concealed field, each application variable the
+  renderer reads, and a hand-off's token. Every form of a learned value (plain,
+  quoted, JSON, URL and base64 encoded) is then struck from each log line
+  (`mask.Logger`, the only logger a binary builds). It is struck from clipped
+  text such as a report's failure (`runtime.Clip`), and from every payload the
+  bridge sends HQ.
 
 **The run.** `hq-host controller` (the units are in
 [Deployment](Deployment.md#units)) starts a disposable container from the image
@@ -1094,24 +1127,25 @@ each fails if a call comes to cost a process again.
   the member and keyword, never the value.
 - **A refusal is kept until the call is accepted.** A refused call runs nothing
   of its action, so the bridge keeps it apart, in one `RefusedReport` row per
-  action and controller (`hq/platform/application/refused_reports.py`), which
-  the `report-refused` finding says, and a reading too old to judge names as
-  the reason it was not replaced. The row holds what the controller was
-  already answered: the action, the controller its query named once the query
-  passed the contract and held no secret, and the problem's detail, struck of
-  secrets and cut to its length. Never the payload. A repeated refusal
-  replaces its row, the next accepted call of that action by that controller
-  deletes it, and the controller is answered whether or not it is kept.
+  action and controller (`hq/platform/application/refused_reports.py`). The
+  `report-refused` finding says so, and a reading too old to judge names it as
+  the reason it was not replaced. The row holds what the controller was already
+  answered: the action, the controller its query named once the query passed
+  the contract and held no secret, and the problem's detail, struck of secrets
+  and cut to its length. Never the payload. A repeated refusal replaces its
+  row, the next accepted call of that action by that controller deletes it, and
+  the controller is answered whether or not it is kept.
 - **Calls may run together.** Each runs on a thread with its own database
   connection; transactions begin `IMMEDIATE` and a writer waits up to the busy
   timeout for the one ahead.
 - **No bridge, no pass.** While the web container restarts there is no socket,
   or nothing listening. The pass fails with that reason and the next one runs;
   nothing weaker is tried.
-- **Scheduled work is one more action.** What the host asks HQ for by name
-  (prune routine audit events, delete expired sessions, read the contact inbox,
-  pull the content index, read the public registries, read unit state after a
-  failure) is declared once, in `hq/platform/application/scheduled_work.py`.
+- **Scheduled work is one more action.** What the host asks HQ for by name is
+  declared once, in `hq/platform/application/scheduled_work.py`. That is
+  pruning routine audit events, deleting expired sessions, reading the contact
+  inbox, pulling the content index, reading the public registries, and reading
+  unit state after a failure.
 - **A unit runs it as a job.** A unit runs `hq-controller job NAME` inside the
   web container. The running process does the work as a job and answers how it
   ended, so a failed job is a failed unit and every run has a row. No unit
@@ -1150,12 +1184,12 @@ against its names and key. `fullchain.pem` and `privkey.pem` are written beside
 `config/live/<name>/` and exchanged with it in one rename, so a reader sees the
 old pair or the new one.
 
-Public DNS records reconcile and delete; their zone is declaration-only, because
-changing a zone's settings needs a credential the controller does not hold.
-Short-lived NPM tokens stay in memory. Before an action reads a payload, the
-bridge strikes every secret in it to `[redacted]` and logs where: a string
-shaped like a credential the controller handles, or the value of a member
-named as one where the contract leaves the shape open
+Public DNS records reconcile and delete; their zone is declaration-only,
+because changing a zone's settings needs a credential the controller does not
+hold. Short-lived NPM tokens stay in memory. Before an action reads a payload,
+the bridge strikes every secret in it to `[redacted]` and logs where. A secret
+is a string shaped like a credential the controller handles, or the value of a
+member named as one where the contract leaves the shape open
 (`hq/domains/control_plane/secret_shapes.py`). It strikes rather than refuses
 because an outsider writes some of those strings, such as a contact form's
 message. A query holding one is refused, since only the controller writes it.
@@ -1172,7 +1206,7 @@ DNS-01 uses its own least-privilege connection.
 | Part | What it does | Grant |
 |---|---|---|
 | The `cloudflare.contact_submission` reading | reads every database holding the table | D1 Read |
-| The `cloudflare.contact_inbox` declaration | carries HQ's reviews and deletions for the controller to apply | D1 Write, and the connection must manage |
+| The `cloudflare.contact_inbox` declaration | carries HQ's reviews and deletions for the controller to apply | D1 Edit (D1 Write in the API), and the connection must manage |
 
 The records are people's names, addresses and messages, so the reading is
 `withheld`. The generic readings resource counts them and lists none, and only
@@ -1236,3 +1270,421 @@ units that already run a labeled container on that machine, which its
 Portainer token can already do to those containers through Docker. Planting a
 labeled container can only block a real unit from being acted on: a refusal,
 never an action.
+
+### Operation manifests
+
+An automation procedure (an Ansible playbook a worker runs against a host) is
+declared beside its playbook, in the repository the worker reads
+([Declaring a playbook](#declaring-a-playbook)). HQ learns a repository's
+procedures by a Refresh, which proposes them as that repository's tip declares
+them, and runs one only once a person has adopted the proposal. Each procedure of the adopted commit is then an `OperationManifest`
+(`hq/platform/application/automation_manifest.py`), and an
+`OperationRegistry` is built from them. No extension supplies a manifest, and
+the host's source names no procedure. The registry refuses two manifests with
+one id and answers an unknown id with `UnknownOperation`.
+
+A manifest is frozen and strict: an unknown field, a value of the wrong type
+or one out of range is refused when it is built. What it holds, and why:
+
+| Field | What it holds | Why |
+| --- | --- | --- |
+| `id` | A dotted name, `example.service_logs` | A run, an approval and a grant name the procedure by it. |
+| `revision` | The adopted commit, 40 lowercase hex | What was reviewed is what runs. A new commit is a new procedure, and an approval of the old one no longer holds. |
+| `playbook` | The playbook's path inside the project at that commit, `playbooks/service_logs.yml`: relative, each part starting with a letter, digit or underscore, ending `.yml` | The manifest names what runs, and only one spelling of it, so an approval pins it. The repository and the project's directory come from the host's root configuration, never from a manifest or a claim. |
+| `input_type` | A `StrictCommand` subclass | A run's parameters are validated the way every capability's are. |
+| `target_kinds` | The resource kinds it may act on, at least one | A run's target is held to what the procedure was written for. |
+| `hosts` | The hosts it may act on, empty for any of those kinds | A procedure written for one machine says so. |
+| `privilege` | `None`, or the reviewed profile it escalates through | Escalation is reviewed per procedure, since Ansible's `become` bounds nothing. |
+| `effect` | `read`, `infrastructure_change` or `destructive` | The capability effects, so approval and grants treat a run as they treat any command. |
+| `timeout_seconds` | 1 to 3600 | A stalled run holds what it acts on for a bounded time. |
+| `preconditions` | What must hold before it runs | A run that cannot start safely stops before it changes anything. |
+| `verification` | What shows it did what it says | Success is the intended postcondition, observed. |
+| `recovery` | How to recover from a partial run | A cancel or a failure cannot undo what was applied. |
+| `retry` | `never`, `observe_first` or `safe` | After an uncertain failure, whether the run may repeat, or must be observed first. |
+| `fixes` | The finding rules a run of it fixes, `filesystem-nearly-full`; empty by default | A finding of one about a machine it may run on offers its Run page, the machine chosen, as a remedy. It grants nothing: the run is authorized, approved and held as any other, and it is left out of what a run binds to. |
+
+`admits(kind, host)` says whether a target is one the manifest names.
+
+Two declarations are refused as over-privileged. A read names no privilege
+profile, since check mode is no sandbox and a read that escalates is not a
+read. And the input type is closed: it and every model inside it forbid
+undeclared fields and take no free-form mapping or `Any`. None names Ansible
+Runner's or Ansible's own execution settings, however the name is spelled: a
+playbook, an inventory, extra-vars, a limit, tags, a module, SSH options,
+`become`. A run's playbook, inventory and connection come from its manifest and
+HQ's facts, never from the caller.
+
+### Declaring a playbook
+
+A procedure is a playbook, `<name>.yml`, with a sidecar beside it,
+`<name>.hq.yml`, anywhere in the repository. The sidecar says what HQ needs to
+know that Ansible has no word for. That is the manifest's `id`, `target_kinds`,
+`hosts`, `privilege`, `effect`, `timeout_seconds`, `recovery`, `retry` and
+`fixes`, as the table above has them. It also holds `inputs`, which gives each text input
+its roles' argument specs declare a `pattern` and a `max_length`. The rest is
+Ansible's own, read from the playbook and its roles at the commit ([Refreshing
+the playbooks](#refreshing-the-playbooks)), and a sidecar names no playbook,
+revision or repository.
+
+The sidecar's format is published as a JSON Schema,
+`hq/platform/application/hq-procedure.schema.json`, written from
+`ProcedureDeclaration` (`hq/platform/application/automation_sources.py`), the
+model HQ holds a sidecar to, by the generator every schema HQ publishes comes
+from (`hq/platform/application/json_schemas.py`, Pydantic's own beneath). `mise run fix` rewrites it,
+and `lint:drift-procedure-schema` fails while it is behind the model. A
+repository of procedures lints its sidecars against the file at the HQ commit
+it targets, with [check-jsonschema](https://check-jsonschema.readthedocs.io/):
+
+```sh
+check-jsonschema --schemafile hq-procedure.schema.json playbooks/*.hq.yml
+```
+
+check-jsonschema reads YAML as it reads JSON, takes a schema by path or URL,
+and ships as a pre-commit hook and as a Python tool (`pipx:check-jsonschema`
+in mise). It validates with python-jsonschema, the library HQ's own test of
+the schema judges a sidecar with.
+
+The schema holds a sidecar's shape: every key, its type and range, the dotted
+names, the enumerations, and the inputs' names. What it cannot say HQ still
+refuses at a Refresh, naming each in the proposal. That is a read that names a
+privilege, a host not in HQ's spelling, a statement that is only whitespace, an
+input `pattern` Python cannot compile, a finding in `fixes` HQ raises none of,
+and two sidecars with one id.
+
+### Running a playbook
+
+Each supplied manifest is run through a command of its own,
+`automation.<id>.run` (`hq/platform/application/automation_runs.py`), so a
+grant or a rule names the procedures it allows one by one. Its effect is the
+manifest's: a read runs under `read`, and a change or a destructive one needs
+`manage_infrastructure` and waits for a person's approval every time an agent
+asks. No agent rule allows such a run (`waits_for_a_person(every_call)`), so
+the Agents page offers none, while a person's own Run in the browser is their
+consent and queues at once. A run passes the
+one capability checkpoint like any command (authority, retry key, validation,
+pause, approval) and queues an operation for the automation worker; nothing
+runs in the request, and the controller never claims one. How the worker
+holds its lease and reports: [The controller](#the-controller).
+
+The command takes `hosts` (machines by their name in HQ), `parameters` (the
+manifest's input type), an optional `correlation` (up to 200 printable
+characters, kept with the run so an investigation can find it) and `reason`.
+Anything else is refused, inside the parameters too. Each host resolves to a
+machine `machine_catalog()` knows, by its name or an alias, and is held to
+`admits`. The operation's `input` carries `operation`, `revision`,
+`parameters` as validated, `hosts` as resolved and `correlation`; the web
+process holds no SSH user, key or host key, which stay in the connections
+document the worker reads. Each resolved host is also an `OperationHost` row
+written in the same transaction, so a machine's runs, and the one-writer check
+below, are one indexed query.
+
+Each procedure has one record, of kind `automation.operation`, written when a
+run is first asked for and pinned to the manifest at every ask. Its spec is the
+manifest as data, the input type standing as its schema's digest. While the
+adopted catalog names the procedure, its record lives on the procedure's
+command page and offers no hand edit or removal (`ProviderSpec.sourced`); once
+the catalog drops it, the record is back on its own page with its removal. One
+run per procedure is active at a time, and two runs never share a machine while
+either waits or works. A run whose lease ran out works no longer: the ask
+first ends it, as the next claim would, or puts it back to wait when its
+playbook is safe to repeat. The refusal's `details.holding`
+is the run in the way, `details.machines` the machines it is on and
+`details.shared` the asked machines it holds, empty when it is the playbook's
+own run; a page words it with the run's playbook, state and age and a link to
+it on Jobs (`automation_runs.held_words`), with the button that cancels it
+where the reader may. A run nothing has claimed is cancelled through
+`automation.run.cancel`, by its `operation.id`: a person cancels any run
+they have the authority to ask for, from its row on Jobs, on its machine's
+or playbook's page, or from that refusal, and an agent only a run it asked
+for, another's reading as no run at all. A claimed run is left to its
+worker, and to its lease. A
+held run is measured against the manifest as supplied, its parameters as
+validated and its hosts as they resolve then (`approvals.measured_by`). So a
+new revision, a parameter that validates to another value, or a host that now
+resolves elsewhere stales the approval. Its card reads that baseline back
+(`automation_runs.run_preview`, declared as `measured_by`'s `shown`): the
+machines, the inputs by their form's labels, what it does, its access and the
+adopted commit, so a person approves what applying it runs.
+
+A queued run is stored, then announced: once its transaction commits, HQ
+rings the automation worker's doorbell (`cadence.ring_automation_doorbell`),
+a file named `automation-doorbell` beside the controller's, which starts the
+worker on the host. It says only that a run waits; the worker claims it over
+the bridge, so a forged or replayed ring starts a worker that finds nothing.
+A refused run, or a retry answered with the run already queued, rings nothing.
+
+### The automation worker
+
+`hq_runner/` is the worker that claims a run (`automation.operation:run`) and
+runs it. It imports nothing of HQ, ships in an image of its own (the web image
+holds neither it nor ansible-runner, its `runner` dependency group), and talks
+to HQ only over the bridge socket, trusted as the controller trusts it. `python
+-m hq_runner` claims runs one pass at a time until none is left, then exits.
+Its environment names everything it reads, each as an `HQ_AUTOMATION_*`
+variable (`hq_runner/__main__.py`), since on the host "runner" is the Actions
+runner's word. Those are the bridge socket, the journal, the connections
+document, the ssh directory, and the scratch space each pass works in. They
+also name the repository its playbooks come from, whose root is an Ansible
+project, and the file holding the token that repository is fetched with.
+Nothing in a claim names any of them.
+
+What runs is the procedure its claim names, at the claim's reviewed revision
+(`hq_runner/procedures.py`). Each pass fetches that one commit into a fresh
+directory of its scratch space (`git fetch --depth 1` by the commit's id, then
+a detached checkout). It runs only once the checkout's `HEAD` is that commit,
+so an id that names a tag or any other object is refused. Git reads no
+configuration but the worker's own, set through its environment: no system or
+global file, no hooks, https alone, every received object checked, and the
+token as an `http.extraHeader`, never on its command line. The playbook is the
+claim's `spec.playbook`, checked again by the worker: a plain relative `.yml`
+path that, once every link is followed, stays inside the checkout.
+
+Each of the run's hosts is reached through one login and nothing else
+(`hq_runner/connections.py`). It is the `ssh_transport` connection whose role
+is `runner`, whose `machine` is the host's name, and whose `profile` is the
+privilege profile the run needs, read from the connections document as the
+controller reads it. A playbook that names a privilege runs through that
+privilege's login, and one that names none, every read among them, through the
+`read` login. So a read and a change never share an account. One account per
+privilege profile requires that, since Ansible cannot limit escalation to
+certain commands. A connection's ref is its identity's file name, so a
+machine's logins are connections of their own, and the controller refuses a
+runner connection that names no machine or profile, or a machine and profile
+another one names (`controller/connections/document.go`). A host no such login
+reaches is refused before anything runs. HQ refuses it earlier, when the run is
+asked for. Each scan reports every machine and profile the worker has a login
+for, never an address, user or key, and a run is held to the newest scan's
+(`automation_runs.reached`). The refusal lists each missing pair in
+`details.missing`, and says that a login added since the last Refresh is seen
+after the next one. That list is the worker's word, so a worker that lies can
+only make the early refusal wrong. The worker's own check at the claim still
+holds.
+
+A run through the `read` login never escalates. The worker sets
+`ansible_become` to false as an extra var, after the run's parameters, so no
+parameter can turn it back on (`ansible.extravars`). An extra var is the one
+place Ansible ranks above everything a project sets. Against ansible-core
+2.22.0, a play's, block's, task's or role's `become: true`, `become_user` and
+`become_method`, and `ansible_become` set in a play's or task's `vars`, by
+`set_fact` or by `include_vars`, each escalate past an inventory
+`ansible_become=false`, and none escalates past the extra var. The smoke holds
+that against the pinned release, with a read that asks to escalate in each of
+those ways. The account has no sudo, which is the boundary beneath it. A scan
+is the second layer. A read whose plays name escalation anywhere they reach is
+a problem of that playbook, so it is never adopted. They reach the playbook, a
+file it imports or includes by name, and every file of each role it lists,
+includes or depends on. `become: false` and `ansible_become: false` alone
+escalate to nothing.
+
+Its inventory entry is that
+connection's address, port and user, its identity file alone (no agent, no
+password), its pinned `known_hosts` with host key checking on, since
+ansible-runner turns it off unless told otherwise, and its `shell_type` when
+it carries one. The hosts and extra-vars come from the claim's `input`, and
+every ansible-runner argument is fixed in `hq_runner/ansible.py`. Each run's
+private data directory is new and empty, and nothing is read from or written
+to its `env/` (`suppress_env_files`), so no file there adds an option, a
+variable or a callback. Its artifacts keep no stdout and no event the handler
+did not keep, and they, Ansible's own working files and ssh's control sockets
+sit in a private directory of the scratch space, removed when the run ends.
+Ansible reads the worker's own empty configuration through `ANSIBLE_CONFIG`,
+never a project's `ansible.cfg`, and every plugin and module path is pinned
+to a directory that does not exist; roles come from the project's `roles/`.
+What Ansible loads from beside a playbook or inside a role, no setting turns
+off, so a scan reports each such directory. While it runs the worker renews
+the lease and stops when HQ answers stop or a renewal fails, and
+ansible-runner's own job timeout ends it at the manifest's `timeout_seconds`. Its report carries one event
+per task and machine, built from Ansible's message alone and struck of
+secrets: the run's secret parameters, the token and each identity's path.
+A run that succeeded says what its playbook found or did: the `result` it
+set with `ansible.builtin.set_stats` (`per_host: false`), which ansible-runner
+hands over as the `artifact_data` of the `playbook_on_stats` event, each machine
+by name when it is keyed by machine. A playbook that sets none is said by
+its verification, which its checks have just held (`hq_runner/events.py`). A
+journal names each claim before it is sent and records a run once it starts,
+so a claim retried after a crash is answered the same run, which is reported
+as unknown and never run again. `mise run smoke:runner` runs a real playbook
+on the local machine through its entry point, fetched from a repository on
+the same machine.
+
+### Refreshing the playbooks
+
+HQ learns which playbooks the worker's repository offers only when a person
+asks: `automation.source.refresh` (Refresh) queues one scan of the
+`automation.source` record and rings the doorbell, with no timer and no
+webhook. A Refresh while one waits is answered that one. The worker claims it
+as `automation.source:scan`, asks the repository which commit its default
+branch points at, fetches that commit as it fetches a run's, and runs nothing
+of it (`hq_runner/catalog.py`). A playbook HQ may run has a sidecar,
+`<name>.hq.yml`, beside it as `<name>.yml`, anywhere in the tree. Its
+title is the first play's name, and its preconditions and verification the
+names of the `ansible.builtin.assert` tasks in `pre_tasks` and `post_tasks`.
+Its inputs are each listed role's argument spec, read through ansible-runner's
+`get_role_argspec` with the pinned configuration ([Declaring a
+playbook](#declaring-a-playbook)). The report (`SourceCatalog` in the bridge
+contract) also lists every file with its git object id, and each configuration,
+plugin, collection or variables directory Ansible would read past a playbook
+and its roles. It lists the commit's signature as GitHub verifies it, and each
+machine and privilege profile the worker has a login for ([The automation
+worker](#the-automation-worker)). The worker reads and HQ judges: a sidecar is
+reported as parsed, and what the worker cannot read (a file that is not YAML,
+a role `ansible-doc` cannot find) is a problem of that playbook, while the rest
+of the report still arrives.
+
+HQ holds each sidecar to `ProcedureDeclaration`
+(`hq/platform/application/automation_sources.py`), adds every way it falls
+short, and a second sidecar with the same id, to that playbook's problems,
+and stores the whole as a `SourceProposal` of the scan. A proposal runs
+nothing: its playbooks become manifests only when a person adopts it
+([Adopting the playbooks](#adopting-the-playbooks)).
+
+### Adopting the playbooks
+
+`automation.source.adopt` (Adopt) takes what one proposal changes into the
+catalog HQ runs from (`hq/platform/application/automation_adoption.py`): the
+change to one playbook it names, or every change that waits. It writes an
+`AdoptedCatalog` row, and the newest row is the one declaration every
+playbook's command, its input type and the spec a held run is measured
+against are built from. Its digest names it, so each process builds its
+commands anew at its next request once another process adopts, with no
+restart.
+
+Each playbook of a catalog pins its own commit (`AdoptedProcedure.revision`),
+with the files it runs and the files of that commit no playbook runs, each by
+its object id. A run is handed its playbook's commit, and the worker checks
+out that commit alone (`hq_runner.claim.bind`), so a file a newer commit
+changes, a role two playbooks share included, reaches only a playbook adopted
+from that commit. Adopting one playbook leaves every other as it was adopted,
+and a held run of a playbook whose pinned commit and files stay as they were
+stays approvable.
+
+`judged()` compares a proposal with the catalog adopted now, playbook by
+playbook: each one new, changed or no longer in the commit is a change
+(`PlaybookChange`), and one whose terms and files are the same is none,
+whatever its commit. `plan()` refuses with every reason at once, in
+`details.refused`:
+
+- a commit whose signature GitHub did not verify, as the scan recorded it
+  with the worker's token (the web process holds none);
+- an `ansible.cfg` or a directory Ansible loads code from, which a run would
+  load beside every playbook;
+- a playbook with a problem the scan or HQ found, or an input no closed type
+  can take: that playbook's change alone, and every change at once while it
+  waits.
+
+Each change is compared file by file, and each way it lets a run do more is
+a widening. A widening is a playbook that may run on more machines or kinds
+of record, a raised effect, a new privilege, or a playbook whose files
+change, a changed file every playbook may read or one that names the
+collections a run may use among them. So is a new playbook that does more
+than read. A playbook HQ can't adopt is a row of the comparison of its own,
+its problems in it, lined up by its id with the playbook it would replace.
+
+Adopting is a person's act. Adopt and `automation.source.reject` (Reject)
+take `adopt_playbooks`, which `security.HELD_ONLY_AT` keeps at the operator's
+own interfaces: an agent may refresh, and its adoption or rejection is refused
+before anything is held, whatever its grant or rules say. Reject sets aside
+the change to one playbook it names (`SourceProposal.rejected_playbooks`),
+which stays as adopted, or the whole proposal (`SourceProposal.rejected_at`,
+by whom). Each is audited under the person who pressed it. The newest
+proposal waits for a person while a change of it is neither adopted nor
+rejected (`Reviewed.pending`).
+
+The Playbooks page (`control_plane:playbooks`) is the catalog adopted now,
+each playbook linking its command page, with the commit last adopted at on
+the title's line. Refresh is followed while its scan runs, and the same line
+says why the newest scan failed. While a commit waits, the table holds a row
+for every playbook, adopted or brought by the commit, its last column the
+change table's Status, and each changed row its own Adopt and Reject
+(`automation_sources.playbook_rows`); the head carries View diff, Adopt all
+(when HQ can adopt every change that waits) and Reject all, then Refresh
+(`automation_sources.decisions`). View diff opens the audit entry that records
+the scan's read (`automation_sources.entry_url`): who refreshed and when, the
+commit read and the commit adopted, the commit's own refusals, each changed
+playbook with its Adopt and Reject, and the comparison as the change table,
+with Adopt all and Reject all while it waits. Every value is the
+catalog's or a scan's (`automation_sources.standing`), and the repository the
+commit belongs to is the deployment's configuration, never named on the page.
+The `automation.source` record lives on this page and offers no hand edit or
+removal (`ProviderSpec.sourced`), since the host's configuration names the
+source.
+
+### The automation worker on the host
+
+On a host the worker runs as the glance does, a oneshot unit a path starts.
+HQ's doorbell, `severino-hq-automation.path`, starts
+`severino-hq-automation.service`, and a 15-minute timer is its floor. Root's
+`hq-host automation` (`controller/host/automation.go`) launches it as a
+controller pass is launched, in a short-lived container of its own image
+(`AutomationImage`, pinned in the tree). Where the procedures come from is the
+host's `automation` entry, never a claim ([Tokens on the
+host](Deployment.md#tokens-on-the-host)).
+
+Its image is verified at deploy, as the controller's is: the controller runs
+the composition `hq-host deploy` verified and pulled. The release's own
+`hq-host release` verifies the worker image its tree pins against the same
+compose workflow identity (`Source.Signer()`). It checks that the pin names the
+source's runner image by digest (`Source.RunnerImage`), and pulls it before
+anything live is held. A worker image that fails either check refuses the
+release. `hq-host automation` then runs that digest with `--pull never`, and
+refuses, naming `hq-host deploy`, when the host does not hold it. A digest
+names its content, so every run gets the bytes the deploy verified, and the
+unit needs no network, registry credential or Sigstore trust root of its own.
+
+It runs on a network of its own, `severino-hq-automation`, confined by an
+nftables table as the Renovate run is, rather than on the host's network as the
+controller is: that is the least it can reach. Docker masquerades a container's
+packet as it leaves the host, changing its source "to an address on the host
+interface the packet is sent on" (Docker, [Port publishing and
+mapping](https://docs.docker.com/engine/network/port-publishing/), "Masquerade
+or SNAT for outgoing packets"). So a machine the worker reaches over the
+tailnet sees the host's tailnet address, which the login its runner connection
+names allows. A packet to the host itself is delivered locally, through the
+prerouting and input hooks alone (nftables, [Netfilter
+hooks](https://wiki.nftables.org/wiki-nftables/index.php/Netfilter_hooks)). So
+no masquerade applies, and it would arrive from the network's own subnet
+(`AutomationSubnet`, its one declaration), which the host's runner login
+refuses. sshd's `from=` and `AllowUsers` and the PAM check of the source's
+tailnet node all know the host by its own address. So the table's nat chain on
+the input hook, at srcnat, after every filter has seen the subnet, gives each
+such connection the address it was sent to as its source. That is one of the
+host's own (nft(8), "NAT STATEMENTS": snat is valid in the input chain). The
+login then sees the host, which is what the connection is. Nothing new is
+granted, since any process on the host can already connect from that address.
+The subnet stays HQ's alone, and the login's gates are not widened for it. Only
+a packet delivered locally reaches the input hook, so the chain rewrites no
+connection the host forwards.
+
+What it is given, and what that means:
+
+- **Account.** The unit runs as root under the shared sandbox, widened by
+  netlink in the host's network namespace to load the table
+  (`CAP_NET_ADMIN`) and the web account's files (`CAP_CHOWN`,
+  `CAP_DAC_OVERRIDE`). The container runs as the web account, which the
+  bridge's peer check requires, with no capability, no way to gain one, a
+  read-only root, a `noexec` scratch tmpfs, and caps on its memory and
+  processes.
+- **Custody.** It holds the runner-role connections and their identities alone,
+  the pinned host keys and the grant's token. They are copied under the
+  renderer's lock into a directory of its own on the renderer's tmpfs and lent
+  read-only. Its journal directory is the one host path it writes. No
+  controller or glance pass holds a runner connection or its key
+  (`lendConnections`), and the controller never dials one (`SSHRefs`). It is
+  given no other credential, no web volume, no seal key, certificate state,
+  unit socket or docker socket.
+- **Reach.** The table lets its network reach each lent connection's address
+  and port, and public IPv4 addresses (GitHub, the public resolvers). It drops
+  everything else: the LAN, the tailnet, the host's other services, other
+  containers, IPv6 and a forged source. A runner connection whose host is not
+  an IPv4 address cannot be named by the table, so it is not lent.
+- **A compromised worker** reaches the runner login on each machine lent to it,
+  with the rights that machine gives the login. It gets an hour's read of the
+  playbooks' repository, and the whole bridge as the web account, as the
+  controller does, since the socket authorizes by account.
+- **A reviewed playbook's local tasks** run as the worker's account, and can
+  read the token file and the identity files, as any Ansible controller's
+  can.
+- **Bounds.** A run ends at its manifest's `timeout_seconds` and its lease;
+  root removes the container at `AutomationBound`, and the unit's
+  start timeout outlasts that. A run in flight then is reported unknown and
+  never run again; one queued behind it waits for the next start.

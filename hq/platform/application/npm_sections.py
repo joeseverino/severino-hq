@@ -46,7 +46,7 @@ def access(service, project) -> ServiceSection | None:
         return None
     return ServiceSection(
         id="access",
-        label="Who is allowed",
+        label="Access",
         columns=("Access list", "Admits by", "Addresses", "Logins"),
         records=tuple(rows),
     )

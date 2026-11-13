@@ -19,6 +19,7 @@ from hq.platform.core.tests.browser.probes.boxes import (
     SIDEWAYS,
 )
 from hq.platform.core.tests.browser.probes.palette import PAINT
+from hq.platform.core.tests.browser.probes.parts import EVIDENCE_READ, SUMMARIES_READ
 from hq.platform.core.tests.browser.probes.settle import FINISH_TRANSITIONS, SETTLE, STYLESHEETS
 from hq.platform.core.tests.browser.probes.tables import (
     CELLS,
@@ -29,23 +30,16 @@ from hq.platform.core.tests.browser.probes.tables import (
 )
 from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS,
+    CHANGES_READ,
+    CHIPS_READ,
     CUT_DECISIONS,
+    FACT_ROWS_READ,
     PAST_THE_CLAMP,
 )
 from hq.platform.core.tests.browser.reading import reads, taken
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.stress import stress_estate
-from hq.platform.core.tests.browser.survey import (
-    _AUDIT,
-    _SIDEWAYS_READ,
-    _SPILLED_CELLS,
-    _SPILLED_CONTROLS,
-    AS_FINDINGS,
-    CHANGES_READ,
-    CHIPS_READ,
-    EVIDENCE_READ,
-    SUMMARIES_READ,
-)
+from hq.platform.core.tests.browser.survey import AS_FINDINGS, CHECKS
 from hq.platform.core.tests.browser.widths import SPARSE_WIDTHS, WIDTHS
 from hq.platform.core.tests.test_browser_dense_fixtures import DENSE_PAGES
 from hq.platform.core.tests.test_browser_fixtures import PAGES
@@ -61,28 +55,34 @@ _ESCAPES_READ = (SIDEWAYS, ANY_SCROLLER)
 # says (a failure that names what it could not read), against the band
 # between the bar and the page: where it stands, how far its end is from the
 # end of the person's control, and where each part of the page is with it
-# silent, saying that, and gone. The note is left saying what it said.
-_PAGE_NOTE = """([noteSelector, barSelector, accountSelector]) => [...document.querySelectorAll(noteSelector)].map((note) => {
-  const bar = document.querySelector(barSelector).getBoundingClientRect();
-  const account = document.querySelector(accountSelector).getBoundingClientRect();
-  const parent = note.parentElement;
-  const parts = () => [...parent.children].filter((part) => part !== note && part.getClientRects().length)
+# silent, saying that, and gone; and whether each sentence its slot keeps room
+# for (its struts) is drawn whole. The note is left saying what it said.
+_PAGE_NOTE = """([noteSelector, lineSelector, contentSelector]) => [...document.querySelectorAll(noteSelector)].map((note) => {
+  const content = document.querySelector(contentSelector);
+  const line = note.closest(lineSelector);
+  // Every part of the page but the note, where it lands.
+  const parts = () => [...line.children, ...content.querySelectorAll(':scope > *, :scope > * > *')]
+    .filter((part) => part !== note && part !== line && part.getClientRects().length)
     .map((part) => { const r = part.getBoundingClientRect(); return [r.top, r.left, r.width, r.height].map(Math.round).join(' '); });
   const said = note.textContent;
+  const cut = [...note.parentElement.children].filter((strut) => strut.dataset.strut).map((strut) => {
+    note.textContent = strut.dataset.strut;
+    return note.scrollWidth > note.clientWidth + 0.5 ? strut.dataset.strut : null;
+  }).filter(Boolean);
   note.textContent = '';
   const silent = parts();
   note.textContent = 'Cannot refresh: ' + Array.from({length: 24}, (_, at) => `example reading ${at}`).join(', ') + '.';
   const saying = parts();
   const r = note.getBoundingClientRect();
-  const first = [...parent.children].find((part) => part !== note && part.getClientRects().length);
-  const placed = {top: r.top - bar.bottom, bottom: (first ? first.getBoundingClientRect().top : Infinity) - r.bottom,
-    start: r.left, end: account.right - r.right, lines: note.scrollHeight > note.clientHeight + 0.5};
-  const sibling = note.nextSibling;
+  const box = line.getBoundingClientRect();
+  const placed = {top: r.top - box.top, bottom: box.bottom - r.bottom, start: r.left - box.left, end: box.right - r.right,
+    lines: note.scrollHeight > note.clientHeight + 0.5};
+  const [slot, sibling] = [note.parentElement, note.nextSibling];
   note.remove();
   const gone = parts();
-  parent.insertBefore(note, sibling);
+  slot.insertBefore(note, sibling);
   note.textContent = said;
-  return {silent, saying, gone, placed};
+  return {silent, saying, gone, placed, cut};
 })"""
 
 
@@ -177,6 +177,7 @@ class LayoutBrowserTests(BrowserGate):
             self.an_items_words_run_to_its_buttons,
             self.a_change_reads_on_one_line_and_baseline,
             self.a_chip_sits_on_the_baseline_of_its_line,
+            self.a_bands_values_share_their_rows_baseline,
             self.code_and_cards_keep_inside_the_gutter,
             self.nothing_is_drawn_into_its_neighbor,
             self.the_chrome_is_as_tall_as_its_insets_say,
@@ -249,12 +250,14 @@ class LayoutBrowserTests(BrowserGate):
         self.assertEqual(found, [])
 
     def a_heads_note_costs_its_head_no_room(self, name):
-        """A page's note on its readings stands in the band between the bar
-        and the page, its end under the end of the person's control, on one
-        line however long what it says: the page is laid out as it is with no
-        note at all, and saying something moves nothing."""
+        """A page's note on its readings ends the head's first line, inside
+        it and on one line however long what it says: the page is laid out as
+        it is with no note at all, saying something moves nothing, and each
+        sentence HQ writes for it word for word is drawn whole."""
 
-        notes = self.page.evaluate(_PAGE_NOTE, [SELECTORS["page_note"], SELECTORS["bar"], SELECTORS["account"]])
+        notes = self.page.evaluate(
+            _PAGE_NOTE, [SELECTORS["page_note"], SELECTORS["page_trail_row"], SELECTORS["content"]]
+        )
         if 'form="page-visit"' in self.pages[name]:
             self.assertGreater(len(notes), 0, "the probe measured nothing")
         for note in notes:
@@ -264,26 +267,27 @@ class LayoutBrowserTests(BrowserGate):
             self.assertGreaterEqual(placed["top"], -0.5)
             self.assertGreaterEqual(placed["bottom"], -0.5)
             self.assertGreaterEqual(placed["start"], -0.5)
-            self.assertAlmostEqual(placed["end"], 0, delta=0.5)
+            self.assertGreaterEqual(placed["end"], -0.5)
             self.assertFalse(placed["lines"])
+            self.assertEqual(note["cut"], [])
 
     def no_block_breaks_a_paragraph(self, _name):
         # A block written inside a <p> closes it early and leaves an empty <p>
         # where its end tag was: the rest of the line falls out of it.
         self.assertEqual(self.page.locator(SELECTORS["broken_paragraph"]).count(), 0)
 
-    @reads(_SPILLED_CONTROLS, _SPILLED_CELLS)
+    @reads(CHECKS["control labels"].probe, CHECKS["cell labels"].probe)
     def words_stay_inside_the_box_that_holds_them(self, _name, controls, cells):
         self.assertEqual(controls, [])
         self.assertEqual(cells, [])
 
-    @reads(_SIDEWAYS_READ)
+    @reads(CHECKS["sideways"].probe)
     def only_a_table_scrolls_sideways(self, _name, found):
         """At a phone, tablet and laptop width; again with every disclosure open."""
 
         self.assertEqual(found, [])
 
-    @reads(_SIDEWAYS_READ)
+    @reads(CHECKS["sideways"].probe)
     def only_a_table_scrolls_sideways_with_every_disclosure_open(self, _name, found):
         self.assertEqual(found, [])
 
@@ -316,7 +320,7 @@ class LayoutBrowserTests(BrowserGate):
 
         self.assertEqual(found, [])
 
-    @reads(_AUDIT)
+    @reads(CHECKS["audit"].probe)
     def layout_audit_structural_rules(self, _name, report):
         self.assertEqual(AS_FINDINGS["audit"](report), [])
 
@@ -427,6 +431,13 @@ class LayoutBrowserTests(BrowserGate):
         """A chip (an identifier, a tag) set in a line sits on the baseline
         of the words, pills and links around it, on the line it starts on and
         the line it ends on."""
+
+        self.assertEqual(found, [])
+
+    @reads(FACT_ROWS_READ)
+    def a_bands_values_share_their_rows_baseline(self, _name, found):
+        """The facts of a band that share a row stand on one baseline, a
+        zero beside a linked count alike."""
 
         self.assertEqual(found, [])
 

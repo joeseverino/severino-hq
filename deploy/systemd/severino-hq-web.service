@@ -26,6 +26,14 @@ TimeoutStartSec=6min
 TimeoutStopSec=60s
 Restart=always
 RestartSec=5s
+# Once HQ is ready, hq-host pings the watchdog on every health poll that reads
+# healthy, and fails the unit itself on one that reads unhealthy. The watchdog
+# is for what the poll cannot see: hq-host hung, or a Docker whose health read
+# never answers. Such a hang is tolerated as long as a failing HQ is, the
+# image's health check calling it unhealthy after three failures 30 seconds
+# apart, and then systemd aborts hq-host, whose Go runtime prints every
+# goroutine to the journal, and the restart replaces the container.
+WatchdogSec=90s
 
 [Install]
 WantedBy=multi-user.target

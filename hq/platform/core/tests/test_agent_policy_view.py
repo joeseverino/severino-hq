@@ -83,3 +83,39 @@ class PolicyWriteTests(TestCase):
             submitted_rules(post),
             [{"subject": "example-agent", "capability": "project.delete", "rule": Rule.DENY}],
         )
+
+
+class PolicyRefusalTests(TestCase):
+    """A save that is refused, whole or in part, is said over the rules' tables, on the page it was sent from."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("op", password="x" * 20)
+        self.client.force_login(self.user)
+        AgentIdentity.objects.create(client_id="example-agent", granted=["read", "delete_projects"])
+
+    def save(self, rules):
+        return self.client.post(reverse("agent_policy"), form_keyed(rules))
+
+    def test_a_rule_that_could_not_change_is_said_beside_the_ones_that_did(self):
+        response = self.save(
+            {
+                field_name("example-agent", "project.delete"): Rule.DENY,
+                field_name("example-agent", "example.retired"): Rule.DENY,
+            }
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.context["form"].non_field_errors(), ["example.retired is no longer something HQ can do."]
+        )
+        self.assertIn("Saved 1 change", text(response))
+        self.assertEqual(CapabilityRule.objects.get().rule, Rule.DENY)
+
+    def test_a_save_refused_whole_is_drawn_again_at_its_status(self):
+        lacking = Principal("op", "web", OPERATOR_CAPABILITIES - {Capability.GOVERN_AGENTS})
+        with patch("hq.platform.application.web_writes.web_principal", return_value=lacking):
+            response = self.save({field_name("example-agent", "project.delete"): Rule.DENY})
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(response.context["form"].non_field_errors())
+        self.assertFalse(CapabilityRule.objects.exists())

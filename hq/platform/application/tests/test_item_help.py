@@ -9,10 +9,10 @@ from decimal import Decimal
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
+from ..card_items import Insight
 from ..finding_model import Finding, FindingRemedy, FindingRule, OperatorStep
 from ..findings import RULES, _no_help_reason
 from ..item_help import CANNOT, DO, REMEDY, RUN, cannot_help, commands, finding_plan, instructions
-from ..ui import Insight
 from ..workflow_contracts import ActionLink, WorkflowPlan
 
 # The kinds of help an item can carry, as ``item_help`` names them.

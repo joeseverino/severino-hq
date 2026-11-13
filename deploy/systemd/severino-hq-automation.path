@@ -1,0 +1,16 @@
+[Unit]
+Description=Start the Severino HQ automation worker when HQ queues a run
+# HQ creates the automation doorbell, beside the controller's, when it queues
+# a procedure's run. Like the controller's it carries no authority and no
+# data: the worker claims its run through the bridge.
+#
+# PathExists rather than PathChanged, as the glance's: the worker deletes the
+# doorbell as it starts, so one rung while it works is still there when it
+# ends, and systemd starts it again then.
+
+[Path]
+PathExists=/run/severino-hq/automation-doorbell
+Unit=severino-hq-automation.service
+
+[Install]
+WantedBy=paths.target

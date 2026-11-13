@@ -1,0 +1,10 @@
+{% comment %}
+Demo footer: a saved copy of HQ (the public demo) says what it is from the
+corner of every page (base.html). The control comes after the content in the
+tab order, and its footer is the room the page ends with, so nothing stays
+under it. Without script it is a link to the demo's README, so no page is
+made for the copy alone.
+{% endcomment %}
+<footer class="demo-foot">
+  {% outside_link url="https://github.com/joeseverino/severino-hq/blob/main/demo/README.md" css="demo-about" modal="demo-about" %}<span class="demo-about-dot" aria-hidden="true"></span>About the demo{% endoutside_link %}
+</footer>

@@ -17,6 +17,7 @@ from hq.platform.application.contact_submissions import (
     DELETE,
     MOST_SHOWN,
     REVIEW,
+    change_gap,
     find_submission,
     list_contact_submissions,
 )
@@ -56,6 +57,23 @@ def _waiting_note(current: inbox.Inbox) -> str:
     return ""
 
 
+def _row_actions(submission: dict) -> tuple[PageAction, ...]:
+    """What a message's row offers: the reviews it is not already in, and its
+    deletion, which asks first on a page of its own."""
+
+    status_url = reverse("contacts:set_status", args=[submission["id"]])
+    status = submission.get("status")
+    return (
+        *(
+            [PageAction("Mark read", status_url, method="post", value="read", field="status")]
+            if status == "unread"
+            else []
+        ),
+        *([PageAction("Spam", status_url, method="post", value="spam", field="status")] if status != "spam" else []),
+        PageAction("Delete", reverse("contacts:delete", args=[submission["id"]]), danger=True),
+    )
+
+
 def contact_list(request):
     selected_status = request.GET.get("status", "").strip()
     if selected_status not in STATUS_LABELS:
@@ -63,8 +81,14 @@ def contact_list(request):
     q = request.GET.get("q", "").strip()
     current = inbox.current()
     submissions = list_contact_submissions(status=selected_status, query=q, limit=MOST_SHOWN)["items"]
+    # Everything first, then each status; a value of None is the list with no
+    # status asked, and the one current is the one the page shows.
     status_tabs = [
-        {"value": value, "label": label, "count": current.counts.get(value, 0)} for value, label in STATUS_CHOICES
+        {"value": value, "label": label, "count": count, "current": (value or "") == selected_status}
+        for value, label, count in (
+            (None, "All", sum(current.counts.values())),
+            *((value, label, current.counts.get(value, 0)) for value, label in STATUS_CHOICES),
+        )
     ]
 
     return render(
@@ -72,17 +96,23 @@ def contact_list(request):
         "contacts/contact_list.html",
         {
             "not_read": current.state == inbox.NOT_READ,
-            "submissions": submissions,
+            "submissions": [
+                {**each, "unread": each.get("status") == "unread", "actions": _row_actions(each)}
+                for each in submissions
+            ],
             "status_tabs": status_tabs,
             "selected_status": selected_status,
             "q": q,
+            # The search cleared, on the tab it was asked on.
+            "search_cleared": reverse("contacts:list") + (f"?status={selected_status}" if selected_status else ""),
+            # What the search narrows: the messages of the tab it was asked on.
+            "status_total": next(tab["count"] for tab in status_tabs if tab["current"]),
             "total_count": sum(current.counts.values()),
             "problem": current.problem,
             "observed_at": current.observed_at,
             "waiting_note": _waiting_note(current),
-            **page_context(
-                "Messages", "What people sent through the contact form on the site.", reads=contact_list.page_reads
-            ),
+            "gap": change_gap(current),
+            **page_context("Messages", "From the site's contact form.", reads=contact_list.page_reads),
         },
     )
 
@@ -125,6 +155,7 @@ def contact_detail(request, pk: int):
             "submission": submission,
             "reply_href": reply,
             "form": form,
+            "gap": change_gap(),
             **page_context(
                 f"Message #{pk}",
                 dotted(submission.get("name", ""), _sent(submission)),
@@ -184,6 +215,7 @@ def contact_delete(request, pk: int):
                 "url": reverse("contacts:delete", args=[pk]),
                 "label": f"Delete message #{pk}",
                 "cancel_url": reverse("contacts:detail", args=[pk]),
+                "gap": change_gap(),
             },
             **page_context(
                 f"Delete message #{pk}?",

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -81,7 +82,57 @@ func (m *Machine) UnitState(ctx context.Context, units []string) ([]byte, error)
 	if len(units) == 0 {
 		return nil, errors.New("no units to ask about")
 	}
-	args := append([]string{"show", "--timestamp=unix", "--property=" + strings.Join(UnitProperties, ","), "--"}, units...)
+	return m.show(ctx, UnitProperties, units...)
+}
+
+// Restarting is the state of each service outside the reported set that
+// systemd has restarted on its own, as UnitState answers it, or nothing when
+// no such service is loaded. A unit HQ does not ship can loop for days with
+// nothing else watching it.
+func (m *Machine) Restarting(ctx context.Context, reported []string) ([]byte, error) {
+	// A glob matches only the units systemd holds in memory, so the services
+	// that are loaded (systemctl(1), Parameter Syntax).
+	counts, err := m.show(ctx, []string{"Id", "NRestarts"}, "*.service")
+	if err != nil {
+		return nil, err
+	}
+	restarting := Restarted(counts, reported)
+	if len(restarting) == 0 {
+		return []byte{}, nil
+	}
+	return m.UnitState(ctx, restarting)
+}
+
+// Restarted is each unit `systemctl show --property=Id,NRestarts` printed with
+// a count above zero, outside the reported set. NRestarts counts systemd's
+// own restarts since the unit was last started deliberately, which a start or
+// `systemctl reset-failed` sets back to zero.
+func Restarted(shown []byte, reported []string) []string {
+	restarted := []string{}
+	for block := range strings.SplitSeq(string(shown), "\n\n") {
+		var id string
+		var count int
+		for line := range strings.Lines(block) {
+			property, value, _ := strings.Cut(strings.TrimSpace(line), "=")
+			switch property {
+			case "Id":
+				id = value
+			case "NRestarts":
+				count, _ = strconv.Atoi(value)
+			}
+		}
+		if id != "" && count > 0 && !slices.Contains(reported, id) && !slices.Contains(restarted, id) {
+			restarted = append(restarted, id)
+		}
+	}
+	slices.Sort(restarted)
+	return restarted
+}
+
+// show is `systemctl show` of properties of units, in UTC with instants in
+// seconds.
+func (m *Machine) show(ctx context.Context, properties []string, units ...string) ([]byte, error) {
+	args := append([]string{"show", "--timestamp=unix", "--property=" + strings.Join(properties, ","), "--"}, units...)
 	command := m.Command(ctx, "systemctl", args...)
 	command.Env = append(command.Env, "TZ=UTC")
 	return command.Output()

@@ -30,7 +30,9 @@ CONNECTIONS = "hq.estate.connections"
 def family(status: str = "good"):
     """A family only infrastructure management may read, with one instance in ``status``, and its provider."""
 
-    instance = ConnectionInstance("example-infra", "Example infrastructure", "example", status, status.title())
+    instance = ConnectionInstance(
+        "example-infra", "Example infrastructure", "example", status, status.title(), credential_model="none"
+    )
     provider = mock.Mock(return_value=(instance,))
     spec = ConnectionSpec(
         "example.infrastructure",

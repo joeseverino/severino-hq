@@ -1,5 +1,5 @@
 {
-  "api_version": 10,
+  "api_version": 12,
   "modules": {
     "audit": {
       "AuditAction": {
@@ -286,6 +286,7 @@
           "REQUEST_CERTIFICATE_RENEWAL",
           "UPLOAD_CERTIFICATE",
           "UPLOAD_RECEIPT",
+          "ADOPT_PLAYBOOKS",
           "DECIDE_APPROVALS",
           "GOVERN_AGENTS",
           "SET_PREFERENCES",
@@ -314,8 +315,10 @@
           "verb=",
           "variants=",
           "reached_from=",
+          "home=",
           "wants=",
-          "state="
+          "state=",
+          "about="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -355,6 +358,29 @@
         "bases": [],
         "constructor": [
           "options"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "CommandAbout": {
+        "bases": [],
+        "constructor": [
+          "label=",
+          "facts=",
+          "sections="
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {}
+      },
+      "CommandFact": {
+        "bases": [],
+        "constructor": [
+          "label",
+          "value=",
+          "detail=",
+          "links="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -540,17 +566,22 @@
           "observed_at=",
           "granted_scopes=",
           "scopes_known=",
-          "credential_model=",
           "ability_names=",
           "targets=",
           "dependencies=",
           "facts=",
           "controller_id=",
-          "connection_ref="
+          "connection_ref=",
+          "*",
+          "credential_model"
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "keyless": {
+            "kind": "property"
+          }
+        }
       },
       "ConnectionLink": {
         "bases": [],
@@ -919,7 +950,9 @@
           "modal=",
           "value=",
           "title=",
-          "disabled="
+          "disabled=",
+          "field=",
+          "fields="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -1220,7 +1253,11 @@
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "rows": {
+            "kind": "property"
+          }
+        }
       },
       "Referable": {
         "bases": [],
@@ -1527,6 +1564,23 @@
       }
     },
     "tables": {
+      "Projected": {
+        "bases": [],
+        "constructor": [
+          "rows",
+          "read"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "count": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          }
+        }
+      },
       "Remedy": {
         "bases": [],
         "constructor": [
@@ -1590,6 +1644,12 @@
               "**kwargs"
             ]
           },
+          "get_queryset": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
           "get_table_empty": {
             "kind": "method",
             "parameters": [
@@ -1606,6 +1666,13 @@
             "kind": "method",
             "parameters": [
               "self"
+            ]
+          },
+          "get_table_rows": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "query"
             ]
           },
           "get_table_sorts": {
@@ -1650,6 +1717,12 @@
             "kind": "attribute",
             "type": "tuple"
           },
+          "table_query": {
+            "kind": "method",
+            "parameters": [
+              "self"
+            ]
+          },
           "table_room": {
             "kind": "attribute",
             "type": "str"
@@ -1690,6 +1763,25 @@
             ]
           },
           "table_values": {
+            "kind": "method",
+            "parameters": [
+              "self",
+              "name"
+            ]
+          }
+        }
+      },
+      "TableQuery": {
+        "bases": [],
+        "constructor": [
+          "filters",
+          "search",
+          "sort"
+        ],
+        "fields": [],
+        "kind": "dataclass",
+        "members": {
+          "chosen": {
             "kind": "method",
             "parameters": [
               "self",
@@ -1874,7 +1966,14 @@
           "drawn": {
             "kind": "property"
           },
+          "kind": {
+            "kind": "attribute",
+            "type": "str"
+          },
           "legend": {
+            "kind": "property"
+          },
+          "links": {
             "kind": "property"
           },
           "spoken": {
@@ -2082,11 +2181,18 @@
           "url=",
           "is_zero=",
           "icon=",
-          "drawing="
+          "drawing=",
+          "tone=",
+          "detail_tone=",
+          "detail_url="
         ],
         "fields": [],
         "kind": "dataclass",
-        "members": {}
+        "members": {
+          "holds_links": {
+            "kind": "property"
+          }
+        }
       },
       "LinePoint": {
         "bases": [],
@@ -2104,14 +2210,19 @@
       "ListRow": {
         "bases": [],
         "constructor": [
-          "title",
+          "title=",
           "detail=",
           "meta=",
           "url=",
           "external=",
           "status=",
           "badge=",
-          "at="
+          "at=",
+          "actions=",
+          "link=",
+          "category=",
+          "snippet=",
+          "chips="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2196,7 +2307,8 @@
           "foot=",
           "more_label=",
           "more_url=",
-          "figure="
+          "figure=",
+          "edge="
         ],
         "fields": [],
         "kind": "dataclass",
@@ -2308,6 +2420,10 @@
             "kind": "attribute",
             "type": "str"
           },
+          "links": {
+            "kind": "attribute",
+            "type": "bool"
+          },
           "marks": {
             "kind": "property"
           },
@@ -2397,6 +2513,10 @@
           "title=",
           "tip=",
           "pill=",
+          "chip=",
+          "dot=",
+          "ink=",
+          "icon=",
           "**data"
         ]
       },
@@ -2710,35 +2830,27 @@
   "templates": {
     "classes": [
       "actions-col",
+      "address-list",
       "allocation",
       "allocation-legend",
       "btn",
-      "card-columns",
       "cell-data",
+      "cell-part",
+      "cell-whole",
       "chart-axis",
-      "chart-card",
-      "chart-data",
       "chart-legend",
+      "code-list",
       "compact",
       "compact-table",
       "count",
       "danger",
-      "danger-link",
       "data-table",
       "date-col",
       "domain-charts",
-      "domain-head",
-      "domain-head-copy",
-      "domain-stack",
       "errors",
       "eyebrow",
       "field",
-      "field-row",
-      "figure-hero",
-      "figure-hero-note",
-      "figure-stats",
       "finding",
-      "finding-evidence",
       "form",
       "form-actions",
       "ghost",
@@ -2746,19 +2858,16 @@
       "icon-link",
       "inline",
       "key-col",
-      "kv",
+      "keyboard-only",
       "list-rows",
-      "msg",
-      "msg-error",
-      "msg-warning",
       "muted",
+      "name-line",
       "narrow-more",
-      "notice",
-      "notice-attention",
+      "narrow-only",
+      "nowrap",
+      "one-line",
       "optional-col",
       "page-lede",
-      "pie-chart",
-      "pie-row",
       "primary",
       "print-footer",
       "print-only",
@@ -2784,16 +2893,17 @@
       "row-meta",
       "row-more",
       "save-bar",
+      "section-flow",
       "section-foot",
-      "section-period",
       "split",
       "stacked",
-      "status-tabs",
       "subtle-link",
+      "table-clamp",
       "table-scroll",
       "tight-col",
       "two-col",
-      "visually-hidden"
+      "visually-hidden",
+      "whole"
     ],
     "django": {
       "filters": [
@@ -2901,6 +3011,9 @@
       "day": {
         "argument": "none"
       },
+      "measured": {
+        "argument": "required"
+      },
       "money": {
         "argument": "optional"
       },
@@ -2933,6 +3046,16 @@
         },
         "reads": [
           "confirm"
+        ]
+      },
+      "form_page.html": {
+        "about": "A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and `cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says what saving does, each from the view, so the page fills no block.",
+        "blocks": {},
+        "reads": [
+          "cancel_url",
+          "form_fields",
+          "form_note",
+          "form_verb"
         ]
       },
       "list_page.html": {
@@ -3002,7 +3125,8 @@
       "partials/_ask.html": {
         "about": "A do-this-now control and how its work stands, from `hq_sdk.outbound.ask`.",
         "optional": [
-          "extra"
+          "extra",
+          "heard"
         ],
         "required": [
           "ask"
@@ -3056,6 +3180,7 @@
         "optional": [
           "action_label",
           "action_url",
+          "inline",
           "remedy",
           "why"
         ],
@@ -3068,7 +3193,10 @@
         "optional": [
           "action",
           "fields",
+          "gap",
+          "hooks",
           "in_place",
+          "method",
           "next",
           "table_body"
         ],
@@ -3088,6 +3216,7 @@
           "bar",
           "cancel_url",
           "choices",
+          "gap",
           "in_place",
           "live",
           "note"
@@ -3104,10 +3233,18 @@
         ],
         "required": []
       },
+      "partials/_icon.html": {
+        "about": "One of the host's icons, by `name`, the height of the text beside it.",
+        "optional": [
+          "name"
+        ],
+        "required": []
+      },
       "partials/_insight_grid.html": {
         "about": "Readings that need interpreting, each with its next step.",
         "optional": [
-          "label"
+          "label",
+          "level"
         ],
         "required": [
           "items"
@@ -3141,7 +3278,8 @@
         "about": "A compact list of records, from `hq_sdk.ui.ListRow`.",
         "optional": [
           "empty",
-          "label"
+          "label",
+          "whole_rows"
         ],
         "required": [
           "rows"
@@ -3188,6 +3326,7 @@
         ],
         "parameters": [
           "*",
+          "alone=",
           "busy=",
           "css=",
           "element=",
@@ -3219,6 +3358,67 @@
         ],
         "parts": []
       },
+      "fact": {
+        "bare_with": "value",
+        "classes": [],
+        "parameters": [
+          "label",
+          "*",
+          "detail=",
+          "icon=",
+          "tone=",
+          "url=",
+          "value="
+        ],
+        "parts": [
+          "detail"
+        ]
+      },
+      "facts": {
+        "classes": [],
+        "parameters": [
+          "*",
+          "label=",
+          "layout="
+        ],
+        "parts": []
+      },
+      "filter_bar": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "action=",
+          "clear=",
+          "css=",
+          "filtered=",
+          "held=",
+          "more=",
+          "shown=",
+          "total=",
+          "verb=",
+          "**data"
+        ],
+        "parts": [
+          "summary"
+        ]
+      },
+      "notice": {
+        "classes": [
+          "css"
+        ],
+        "parameters": [
+          "*",
+          "css=",
+          "title=",
+          "tone=",
+          "**data"
+        ],
+        "parts": [
+          "title"
+        ]
+      },
       "outside_link": {
         "classes": [
           "css"
@@ -3248,7 +3448,9 @@
           "value=",
           "css=",
           "title=",
-          "disabled="
+          "disabled=",
+          "pressed=",
+          "hit="
         ],
         "parts": []
       },
@@ -3266,6 +3468,15 @@
           "thing",
           "identity=",
           "cards="
+        ],
+        "parts": []
+      },
+      "row_actions": {
+        "classes": [],
+        "parameters": [
+          "actions=",
+          "*",
+          "gap="
         ],
         "parts": []
       },
@@ -3289,7 +3500,8 @@
           "count=",
           "*",
           "folds=",
-          "href="
+          "href=",
+          "attention="
         ],
         "parts": []
       },
@@ -3319,23 +3531,13 @@
           "moment=",
           "when=",
           "head=",
+          "edge=",
           "**data"
         ],
         "parts": [
           "aside",
           "empty",
           "foot"
-        ]
-      },
-      "section_head": {
-        "classes": [],
-        "parameters": [
-          "*",
-          "id=",
-          "lede="
-        ],
-        "parts": [
-          "aside"
         ]
       },
       "status": {
@@ -3350,6 +3552,10 @@
           "title=",
           "tip=",
           "pill=",
+          "chip=",
+          "dot=",
+          "ink=",
+          "icon=",
           "**data"
         ],
         "parts": []
@@ -3384,7 +3590,14 @@
           "css=",
           "chart=",
           "pane=",
-          "room="
+          "compare=",
+          "room=",
+          "empty=",
+          "remedy=",
+          "action_url=",
+          "action_label=",
+          "filtered=",
+          "clear="
         ],
         "parts": []
       },

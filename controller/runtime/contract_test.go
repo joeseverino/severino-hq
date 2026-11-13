@@ -92,14 +92,19 @@ func TestPendingResponses(t *testing.T) {
 	if strict[Pending](t, none).Operation != nil {
 		t.Fatal("an empty queue must decode to a nil operation")
 	}
-	claimed := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 1, "claimed_by": "controller-1", "completed_at": null, "created_at": "2026-10-03T12:00:00.123456+00:00", "id": "7", "lease_expires_at": "2026-10-03T12:05:00+00:00", "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-a", "result": {}, "state": "claimed"}, "resource": {"enabled": true, "generation": 3, "key": "dns-a", "kind": "adguard.rewrite", "observed": {}, "spec": {"answer": "192.0.2.10", "domain": "a.example"}}, "schema_version": 1}`
+	claimed := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 1, "correlation": "", "claimed_by": "controller-1", "completed_at": null, "created_at": "2026-10-03T12:00:00.123456+00:00", "id": "7", "lease_expires_at": "2026-10-03T12:05:00+00:00", "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-a", "result": {}, "state": "claimed"}, "resource": {"enabled": true, "generation": 3, "key": "dns-a", "kind": "adguard.rewrite", "observed": {}, "spec": {"answer": "192.0.2.10", "domain": "a.example"}}, "schema_version": 1}`
 	conforms(t, "Pending", []byte(claimed))
 	pending := strict[Pending](t, claimed)
 	if pending.Operation == nil || pending.Operation.ID != "7" || pending.Operation.CompletedAt != nil || pending.Resource.Generation != 3 {
 		t.Fatalf("claimed operation decoded wrong: %+v", pending)
 	}
-	unresolvable := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 0, "claimed_by": "", "completed_at": null, "created_at": "2026-10-03T12:00:00+00:00", "id": "8", "lease_expires_at": null, "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-b", "result": null, "state": "queued"}, "unresolvable": "Missing delivery target."}`
+	unresolvable := `{"ok": true, "operation": {"action": "reconcile", "attempt_count": 0, "correlation": "", "claimed_by": "", "completed_at": null, "created_at": "2026-10-03T12:00:00+00:00", "id": "8", "lease_expires_at": null, "reason": "", "requested_actor": "operator", "requested_interface": "web", "resource": "dns-b", "result": null, "state": "queued"}, "unresolvable": "Missing delivery target."}`
 	conforms(t, "Pending", []byte(unresolvable))
+	run := `{"ok": true, "operation": {"action": "run", "attempt_count": 1, "correlation": "example-ask", "claimed_by": "worker-1", "completed_at": null, "created_at": "2026-10-03T12:00:00+00:00", "id": "9", "lease_expires_at": "2026-10-03T12:05:00+00:00", "reason": "", "requested_actor": "example-agent", "requested_interface": "mcp", "resource": "automation-example-restart", "result": null, "state": "claimed"}, "resource": {"enabled": true, "generation": 2, "key": "automation-example-restart", "kind": "automation.operation", "observed": {}, "spec": {}}, "schema_version": 1, "input": {"generation": 2, "operation": "example.restart", "revision": "0123456789abcdef0123456789abcdef01234567", "parameters": {"service": "web"}, "hosts": ["app.example.com"], "correlation": "example-ask", "approved_by": "example-person"}}`
+	conforms(t, "Pending", []byte(run))
+	if input := strict[Pending](t, run).Input; input == nil || input.Hosts[0] != "app.example.com" || input.Generation != 2 {
+		t.Fatalf("a claimed run's input decoded wrong: %+v", input)
+	}
 }
 
 func TestGlancePlanResponse(t *testing.T) {

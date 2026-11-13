@@ -1,0 +1,19 @@
+# A control's name is the control label part, so every label beside a filter
+# or form control is set alike and names its control by id. No fix: the part
+# takes the control's id, which the page holds.
+id: hand-drawn-control-label
+language: html
+severity: error
+message: A control's label drawn by hand, where the control label part draws it.
+note: Write {% control_label "From" control="the-control-id" %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?control-label(?:[^\w-]|$)'

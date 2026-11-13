@@ -59,7 +59,8 @@ lazy from hq.platform.application.github_profile import KIND, READ_NOW, profile,
 lazy from hq.platform.application.linked_accounts import GITHUB, linked_login
 lazy from hq.platform.application.outbound_work import ask
 lazy from hq.platform.application.page_reads import Remedy
-lazy from hq.platform.application.standards import MET, UNMET
+lazy from hq.platform.application.standards import MET, UNMET, gap
+lazy from hq.platform.application.workflow_contracts import ActionLink
 
 from .forms import ProjectForm
 from .models import PROJECT_CATEGORY_CHOICES, Project
@@ -141,6 +142,9 @@ class ProjectListView(PageMixin, TableListMixin, ListView):
             repository = repository_for(project.repository_url)
             project.repository = repository
             project.pushed_at = moment(str(repository.pushed_at or "")) if repository is not None else None
+            project.row_actions = (
+                PageAction(capability_words("project.update"), reverse("projects:edit", args=[project.slug])),
+            )
         return context
 
 
@@ -294,14 +298,12 @@ class ProjectDetailView(PageMixin, DetailView):
 class ProjectCreateView(ProjectPage, RecordFormMixin, CreateView):
     page_title = "New project"
     form_class = ProjectForm
-    template_name = "projects/project_form.html"
 
 
 class ProjectUpdateView(ProjectPage, RecordFormMixin, UpdateView):
     page_title = "Edit project"
     model = Project
     form_class = ProjectForm
-    template_name = "projects/project_form.html"
 
 
 class ProjectDeleteView(ProjectPage, RecordDeleteMixin, DeleteView):
@@ -325,7 +327,7 @@ class WatchingView(PageMixin, TemplateView):
 
     @override
     def get_page_lede(self) -> str:
-        return "What you star on GitHub, with each project's latest release and security advisories."
+        return "Your GitHub stars, with each project's latest release and advisories."
 
     @override
     def get_page_actions(self):
@@ -353,6 +355,14 @@ class WatchingView(PageMixin, TemplateView):
             )
         context["profile"] = profile(self.login)
         context["app_repositories"] = self.app_repositories
+        # Why the account is yours, on hover beside its name: the sign-in
+        # names it, and the App installed on it says so from GitHub's side.
+        context["account_tip"] = "\n".join(
+            (
+                "This is your GitHub account, according to your sign-in.",
+                *(("HQ's GitHub App is installed on it.",) if self.app_repositories else ()),
+            )
+        )
         return context
 
     @property
@@ -422,7 +432,7 @@ class PostureView(PageMixin, TemplateView):
 
     @override
     def get_page_lede(self) -> str:
-        return "Each repository checked against your repository rules. Public ones have extra checks."
+        return "Each repository, checked against your rules."
 
     @override
     def get_context_data(self, **kwargs):
@@ -439,10 +449,20 @@ class PostureView(PageMixin, TemplateView):
             held = [state for _, state in states if state]
             failing = [repo for repo, state in states if state == UNMET]
             if failing:
-                unmet.append({"check": check, "repos": failing, "of": len(held)})
+                unmet.append((check, failing, len(held)))
             elif held and all(state == MET for state in held):
                 everywhere.append(check)
-        unmet.sort(key=lambda item: not item["check"].serious)
-        context["unmet"] = unmet
+        unmet.sort(key=lambda found: not found[0].serious)
+        context["unmet"] = [
+            gap(
+                check,
+                facts=(("Repositories", f"{len(failing)} of {held} {'repository' if held == 1 else 'repositories'}"),),
+                links=tuple(
+                    ActionLink(name="open", label=repo.short, effect="read", url=f"{repo.url}/settings")
+                    for repo in failing
+                ),
+            )
+            for check, failing, held in unmet
+        ]
         context["everywhere"] = everywhere
         return context

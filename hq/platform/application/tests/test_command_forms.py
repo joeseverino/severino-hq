@@ -98,6 +98,71 @@ class CapabilityCommandFormTests(SimpleTestCase):
             "in the field's type.",
         )
 
+    def test_no_form_draws_null_or_a_known_shape_as_json(self):
+        # Every registered command's form, an extension's in the composed suite,
+        # and a procedure's run with inputs of each shape, as an adopted catalog
+        # supplies them.
+        from django import forms
+        from pydantic import BaseModel, ConfigDict
+
+        from hq.platform.application.command_fields import UPLOAD
+        from hq.platform.application.command_forms import _one_type
+        from hq.platform.application.integration_specs import command_schema
+
+        from .procedures import Supply, manifest
+
+        class Nothing(BaseModel):
+            model_config = ConfigDict(extra="forbid")
+
+        class Window(BaseModel):
+            model_config = ConfigDict(extra="forbid")
+
+            start: str
+
+        class Maintenance(BaseModel):
+            model_config = ConfigDict(extra="forbid")
+
+            window: Window
+
+        Supply(
+            self,
+            manifest(),
+            manifest(id="example.nothing", input_type=Nothing),
+            manifest(id="example.maintenance", input_type=Maintenance),
+        )
+
+        def declared(schema, name):
+            """The schema of the field a form field is drawn for, by its name inside any object."""
+
+            definitions = schema.get("$defs", {})
+            for part in name.split("."):
+                schema = _one_type(fields({"properties": schema.get("properties", {}), "$defs": definitions})[part])
+            return schema
+
+        def closed(schema):
+            return (
+                schema.get("type") == "object"
+                and isinstance(schema.get("properties"), dict)
+                and not schema.get("additionalProperties")
+                and not schema.get(UPLOAD)
+            )
+
+        registry = capability_registry()
+        shown, as_json = [], []
+        for name, spec in sorted(registry.items()):
+            schema = command_schema(spec.command_type)
+            for field in command_form_class(spec)():
+                if field.value() == "null":
+                    shown.append(f"{name}: {field.name}")
+                if isinstance(field.field, forms.JSONField) and closed(declared(schema, field.name)):
+                    as_json.append(f"{name}: {field.name}")
+
+        self.assertIn("automation.example.maintenance.run", registry)
+        self.assertEqual(shown, [], "A field holding nothing is drawn blank, never as JSON's null.")
+        self.assertEqual(
+            as_json, [], "An object whose schema names each of its fields is drawn as those fields, never as JSON."
+        )
+
     def test_a_field_of_a_shared_alias_is_labeled_from_its_own_name(self):
         from datetime import date
         from typing import Annotated
@@ -121,6 +186,27 @@ class CapabilityCommandFormTests(SimpleTestCase):
 
         self.assertEqual(form["reviewed_on"].label, "Reviewed on")
         self.assertEqual(form["ttl"].label, "TTL in seconds")
+
+    def test_a_field_for_agents_is_left_off_the_form_and_one_it_must_be_sent_is_refused(self):
+        from typing import Annotated
+
+        from hq.platform.application.command_fields import ForAgents
+        from hq.platform.application.integration_specs import CapabilitySpec
+        from hq_sdk.capabilities import StrictCommand
+
+        class ExampleCommand(StrictCommand):
+            note: str = ""
+            trace: Annotated[str, ForAgents()] = ""
+
+        class ExampleAsked(StrictCommand):
+            trace: Annotated[str, ForAgents()]
+
+        def spec(command):
+            return CapabilitySpec("example.check", "Check it.", "local_write", "example.write", command, dict)
+
+        self.assertEqual(set(command_form_class(spec(ExampleCommand)).payload_names), {"note"})
+        with self.assertRaises(ValueError):
+            command_form_class(spec(ExampleAsked))
 
     def test_a_file_field_is_picked_as_a_file_and_sent_as_the_command_takes_it(self):
         from django.core.files.uploadedfile import SimpleUploadedFile

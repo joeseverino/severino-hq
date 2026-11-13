@@ -52,6 +52,15 @@ type Controller struct {
 	// DependencyRun is the outcome of the last dependency run
 	// (DependencyRunFile), given to the next pass.
 	DependencyRun string
+	// MountTable is the kernel's mount table (hostcore.MountTable), and
+	// Statfs what asks a filesystem its space (hostcore.Statfs).
+	MountTable string
+	Statfs     func(path string) (free, total uint64, err error)
+	// RebootRequired is the flag an update leaves when it waits on a restart
+	// (hostcore.RebootRequired), and Born when a file was created
+	// (born.At).
+	RebootRequired string
+	Born           func(path string) (time.Time, error)
 	// Connections checks the connections document before it is read.
 	Connections func() error
 	// Lock holds the renderer's identity lock shared until the returned
@@ -258,78 +267,98 @@ func (c *Controller) pruneRuns() {
 	}
 }
 
-// copySecrets copies the connections document and the identities into the
-// run under the renderer's lock, held shared, so the run holds one
-// generation if a render replaces them meanwhile. A glance's document holds
-// only the connections it reads.
+// copySecrets lends the run its connections and their identities, the
+// controller's: every connection but the automation worker's, whose key the
+// controller never holds. A glance's are only the connections it reads.
 func (c *Controller) copySecrets(ctx context.Context, run string, glance bool) error {
-	if err := os.Mkdir(filepath.Join(run, "ssh"), 0o700); err != nil {
-		return err
+	keep := func(connection connections.Connection) bool {
+		return !runnerTransport(connection) && (!glance || glanceReads(connection))
 	}
-	unlock, err := c.Lock(ctx)
-	if err != nil {
-		return err
-	}
-	document := filepath.Join(c.SecretDir, "controller-connections.json")
-	err = c.Connections()
-	if err == nil && glance {
-		err = copyGlanceConnections(document, filepath.Join(run, "connections.json"))
-	} else if err == nil {
-		err = copyFile(document, filepath.Join(run, "connections.json"), 0o400)
-	}
-	if err == nil {
-		err = copyTree(filepath.Join(c.SecretDir, "ssh"), filepath.Join(run, "ssh"))
-	}
-	unlock()
-	if err != nil {
+	if _, err := lendConnections(ctx, c.Lock, c.Connections, c.SecretDir, run, keep); err != nil {
 		return err
 	}
 	return c.ownTree(run)
 }
 
-// copyGlanceConnections writes to the connections in from that a glance reads.
-func copyGlanceConnections(from, to string) error {
-	data, err := os.ReadFile(from)
+// runnerTransport is whether a connection is the automation worker's way to
+// a machine.
+func runnerTransport(connection connections.Connection) bool {
+	return connection.SSHTransport != nil && connection.SSHTransport.Role == connections.RunnerRole
+}
+
+// knownHosts is the renderer's file of pinned host keys in its ssh directory
+// (project.KnownHosts, held to it by a test).
+const knownHosts = "known_hosts"
+
+// lendConnections writes into run the rendered document's connections that
+// keep admits, as connections.json, and into run/ssh the identity files of
+// those alone, with the pinned host keys: a run never holds the key of a
+// connection it is not given. It copies under the renderer's lock, held
+// shared, so the run holds one generation if a render replaces them
+// meanwhile, and answers the connections it lent.
+func lendConnections(ctx context.Context, lock func(context.Context) (func(), error), check func() error, secretDir, run string,
+	keep func(connections.Connection) bool) ([]connections.Connection, error) {
+	if err := os.Mkdir(filepath.Join(run, "ssh"), 0o700); err != nil {
+		return nil, err
+	}
+	unlock, err := lock(ctx)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	defer unlock()
+	if err := check(); err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(secretDir, "controller-connections.json"))
+	if err != nil {
+		return nil, err
 	}
 	document, err := connections.Decode(data)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	document.Connections = slices.DeleteFunc(document.Connections, func(connection connections.Connection) bool {
-		return !glanceReads(connection)
+		return !keep(connection)
 	})
 	if data, err = document.Encode(); err != nil {
-		return err
+		return nil, err
 	}
-	return os.WriteFile(to, data, 0o400)
-}
-
-// copyTree copies the regular files and directories under from into to, if
-// from exists. A link is not followed.
-func copyTree(from, to string) error {
-	err := filepath.WalkDir(from, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	if err := os.WriteFile(filepath.Join(run, "connections.json"), data, 0o400); err != nil { //nolint:gosec // G703: a fixed name in the run directory, which MkdirTemp made under the root-only SecretDir
+		return nil, err
+	}
+	lent := map[string]bool{}
+	for _, connection := range document.Connections {
+		lent[connection.Ref] = true
+	}
+	entries, err := os.ReadDir(filepath.Join(secretDir, "ssh"))
+	if errors.Is(err, fs.ErrNotExist) {
+		return document.Connections, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.Type().IsRegular() || name != knownHosts && !lent[identityOf(name)] {
+			continue
 		}
-		target := filepath.Join(to, strings.TrimPrefix(path, from))
 		info, err := entry.Info()
 		if err != nil {
-			return err
+			return nil, err
 		}
-		switch {
-		case entry.IsDir():
-			return os.MkdirAll(target, info.Mode().Perm())
-		case entry.Type().IsRegular():
-			return copyFile(path, target, info.Mode().Perm())
+		if err := copyFile(filepath.Join(secretDir, "ssh", name), filepath.Join(run, "ssh", name), info.Mode().Perm()); err != nil {
+			return nil, err
 		}
-		return nil
-	})
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil
 	}
-	return err
+	return document.Connections, nil
+}
+
+// identityOf is the connection a file of the renderer's ssh directory belongs
+// to: an SSH identity is the ref and ref.pub, a signing key ref.key and
+// ref.key.pub, and no ref ends in either suffix.
+func identityOf(name string) string {
+	name = strings.TrimSuffix(name, ".pub")
+	return strings.TrimSuffix(name, ".key")
 }
 
 var repository = regexp.MustCompile(`^https://github\.com/([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)$`)
@@ -358,7 +387,7 @@ func (c *Controller) image(ctx context.Context) (string, string, error) {
 // read-only at target.
 func (c *Controller) give(run, name string, data []byte, target string) ([]string, error) {
 	path := filepath.Join(run, name)
-	if err := os.WriteFile(path, data, 0o400); err != nil {
+	if err := os.WriteFile(path, data, 0o400); err != nil { //nolint:gosec // G703: run is MkdirTemp's under the root-only SecretDir, and every name given is a literal or a Renderers entry
 		return nil, err
 	}
 	root, err := os.OpenRoot(run)
@@ -469,9 +498,41 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 					return nil, err
 				}
 			}
+			// Empty when nothing restarts; absent when systemd did not say.
+			if state, err := c.Restarting(ctx, units); err == nil {
+				if err := give("units-restarting", state, "/run/severino-hq/units-restarting"); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
-	args = append(args, "--env", "SEVERINO_HOST_UNITS=/run/severino-hq/units")
+	args = append(args, "--env", "SEVERINO_HOST_UNITS=/run/severino-hq/units",
+		"--env", "SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting")
+
+	// Root reads each filesystem's space here, since a statfs in the
+	// container answers for its overlay. Named whether or not it could be
+	// taken, so a table root could not read is a failed read in HQ that keeps
+	// the last one.
+	if table, err := os.ReadFile(c.MountTable); err == nil {
+		if reading, err := hostcore.ReadFilesystems(table, c.Statfs, c.Now()); err == nil {
+			if err := give("filesystems.json", reading, "/run/severino-hq/filesystems.json"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	args = append(args, "--env", "SEVERINO_HOST_FILESYSTEMS=/run/severino-hq/filesystems.json")
+
+	// Root reads the restart flag and asks logind what it has scheduled,
+	// since the container sees neither the host's /run nor its system bus.
+	// Named whether or not it could be taken, as filesystems are.
+	if scheduled, err := c.Command(ctx, hostcore.ScheduledShutdown[0], hostcore.ScheduledShutdown[1:]...).Output(); err == nil {
+		if reading, err := hostcore.ReadReboot(c.RebootRequired, c.Born, scheduled, c.Now()); err == nil {
+			if err := give("reboot.json", reading, "/run/severino-hq/reboot.json"); err != nil {
+				return nil, err
+			}
+		}
+	}
+	args = append(args, "--env", "SEVERINO_HOST_REBOOT=/run/severino-hq/reboot.json")
 
 	// The last dependency run's outcome, once there has been one.
 	if info, err := os.Lstat(c.DependencyRun); err == nil && info.Mode().IsRegular() {

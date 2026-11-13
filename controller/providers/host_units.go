@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"iter"
 	"os"
 	"strconv"
 	"strings"
@@ -13,8 +14,9 @@ import (
 	"github.com/joeseverino/severino-hq/controller/runtime"
 )
 
-// The state of the systemd units this repository ships, on the machine the
-// controller runs on. Root asks systemd (host.UnitProperties) and the
+// The state of the systemd units this repository ships, and of each other
+// service systemd has restarted on its own, on the machine the controller
+// runs on. Root asks systemd (host.UnitProperties) and the
 // launcher mounts the answer; this
 // reads that text and never talks to systemd.
 
@@ -51,6 +53,8 @@ var hostUnitProperties = map[string]func(*runtime.HostUnitRecord, string) bool{
 	"LastTriggerUSec":        func(r *runtime.HostUnitRecord, v string) bool { return unitInstant(&r.LastTriggerAt, v) },
 	"NextElapseUSecRealtime": func(r *runtime.HostUnitRecord, v string) bool { return unitInstant(&r.NextElapseAt, v) },
 	"Unit":                   func(r *runtime.HostUnitRecord, v string) bool { return unitName(&r.Activates, v) },
+	"NRestarts":              func(r *runtime.HostUnitRecord, v string) bool { return unitNumber(&r.Restarts, v) },
+	"ActiveEnterTimestamp":   func(r *runtime.HostUnitRecord, v string) bool { return unitInstant(&r.ActiveAt, v) },
 }
 
 func unitName(field *string, value string) bool {
@@ -112,32 +116,28 @@ func unitInstant(field *string, value string) bool {
 	return true
 }
 
-// hostUnits is one record per unit the launcher asked systemd about. The
-// refusal of a file that is not that answer names no line of it.
+// hostUnits is one record per unit the launcher asked systemd about: the
+// shipped set, then each service outside it that systemd restarted on its
+// own. The refusal of a file that is not that answer names no line of it.
 func (r *Registry) hostUnits(context.Context) ([]any, error) {
-	path := r.Env.HostUnits
-	if path == "" {
+	if r.Env.HostUnits == "" {
 		return nil, &ProviderError{Message: "no unit state was mounted"}
 	}
-	file, err := os.Open(path)
+	text, readAt, err := readHostUnits(r.Env.HostUnits, "the launcher could not ask systemd for the unit state")
 	if err != nil {
-		return nil, &ProviderError{Message: "the launcher could not ask systemd for the unit state"}
+		return nil, err
 	}
-	defer file.Close()
-	info, err := file.Stat()
-	if err != nil {
-		return nil, &ProviderError{Message: "read the unit state", Err: err}
-	}
-	data, err := io.ReadAll(io.LimitReader(file, hostUnitsMaxBytes+1))
-	if err != nil {
-		return nil, &ProviderError{Message: "read the unit state", Err: err}
-	}
-	if len(data) > hostUnitsMaxBytes {
-		return nil, &ProviderError{Message: "the unit state is larger than one can be"}
-	}
-	records, err := parseHostUnits(string(data), info.ModTime().UTC().Format(time.RFC3339))
+	records, err := parseHostUnits(text, readAt)
 	if err != nil {
 		return nil, &ProviderError{Message: err.Error()}
+	}
+	// A launcher that names no such file asks about the shipped set alone.
+	if r.Env.HostRestartingUnits != "" {
+		text, readAt, err := readHostUnits(r.Env.HostRestartingUnits, "the launcher could not ask systemd which services restart")
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, restartingHostUnits(text, readAt, records)...)
 	}
 	found := make([]any, len(records))
 	for i, record := range records {
@@ -146,26 +146,35 @@ func (r *Registry) hostUnits(context.Context) ([]any, error) {
 	return found, nil
 }
 
+// readHostUnits is one mounted answer and when the launcher wrote it.
+func readHostUnits(path, unmounted string) (text, readAt string, err error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", "", &ProviderError{Message: unmounted}
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return "", "", &ProviderError{Message: "read the unit state", Err: err}
+	}
+	data, err := io.ReadAll(io.LimitReader(file, hostUnitsMaxBytes+1))
+	if err != nil {
+		return "", "", &ProviderError{Message: "read the unit state", Err: err}
+	}
+	if len(data) > hostUnitsMaxBytes {
+		return "", "", &ProviderError{Message: "the unit state is larger than one can be"}
+	}
+	return string(data), info.ModTime().UTC().Format(time.RFC3339), nil
+}
+
 // parseHostUnits reads `systemctl show` output for several units: one block of
 // Property=value lines per unit, with an empty line between blocks.
 func parseHostUnits(text, readAt string) ([]runtime.HostUnitRecord, error) {
 	refused := errors.New(hostUnitsRefused)
 	records, seen := []runtime.HostUnitRecord{}, map[string]bool{}
-	for block := range strings.SplitSeq(strings.ReplaceAll(text, "\r\n", "\n"), "\n\n") {
-		if strings.TrimSpace(block) == "" {
-			continue
-		}
-		record := runtime.HostUnitRecord{ReadAt: readAt}
-		for line := range strings.SplitSeq(strings.Trim(block, "\n"), "\n") {
-			property, value, ok := strings.Cut(line, "=")
-			if !ok {
-				return nil, refused
-			}
-			if keep := hostUnitProperties[property]; keep != nil && !keep(&record, value) {
-				return nil, refused
-			}
-		}
-		if record.Unit == "" || record.Load == "" || record.Active == "" || record.Sub == "" || seen[record.Unit] {
+	for block := range hostUnitBlocks(text) {
+		record, ok := parseHostUnit(block, readAt)
+		if !ok || seen[record.Unit] {
 			return nil, refused
 		}
 		seen[record.Unit] = true
@@ -175,4 +184,51 @@ func parseHostUnits(text, readAt string) ([]runtime.HostUnitRecord, error) {
 		return nil, refused
 	}
 	return records, nil
+}
+
+// restartingHostUnits reads the services HQ does not ship, each marked so.
+// Their names and words are another package's, so a unit the contract does
+// not admit is passed over, never a refusal of the units HQ ships.
+func restartingHostUnits(text, readAt string, shipped []runtime.HostUnitRecord) []runtime.HostUnitRecord {
+	seen := map[string]bool{}
+	for _, record := range shipped {
+		seen[record.Unit] = true
+	}
+	records := []runtime.HostUnitRecord{}
+	for block := range hostUnitBlocks(text) {
+		record, ok := parseHostUnit(block, readAt)
+		if !ok || seen[record.Unit] {
+			continue
+		}
+		seen[record.Unit] = true
+		record.Foreign = true
+		records = append(records, record)
+	}
+	return records
+}
+
+func hostUnitBlocks(text string) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for block := range strings.SplitSeq(strings.ReplaceAll(text, "\r\n", "\n"), "\n\n") {
+			if strings.TrimSpace(block) != "" && !yield(strings.Trim(block, "\n")) {
+				return
+			}
+		}
+	}
+}
+
+// parseHostUnit is one block's record, or false for a block that is not what
+// systemctl show prints of a unit.
+func parseHostUnit(block, readAt string) (runtime.HostUnitRecord, bool) {
+	record := runtime.HostUnitRecord{ReadAt: readAt}
+	for line := range strings.SplitSeq(block, "\n") {
+		property, value, ok := strings.Cut(line, "=")
+		if !ok {
+			return record, false
+		}
+		if keep := hostUnitProperties[property]; keep != nil && !keep(&record, value) {
+			return record, false
+		}
+	}
+	return record, record.Unit != "" && record.Load != "" && record.Active != "" && record.Sub != ""
 }

@@ -55,13 +55,14 @@ def connection_action_links(spec: ConnectionLinkSpec) -> tuple[ActionLink, ...]:
     return tuple(actions)
 
 
-def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **query: str) -> str:
+def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **query: str | tuple[str, ...]) -> str:
     """The one way to link to a command's form: its page, its target, encoded.
 
     Every remedy, action item and page action reaches a command through here,
     so a target is always encoded the same way the form reads it back, and a
     command whose route is not mounted yields "" rather than a dead link.
-    ``kinds`` narrows the target choices (``?kind=`` once per kind). An
+    ``kinds`` narrows the target choices (``?kind=`` once per kind), and a
+    tuple in ``query`` is sent once per value (a run's machines). An
     architecture test holds every other module to it.
     """
 
@@ -71,7 +72,12 @@ def command_url(name: str, target: str = "", *, kinds: Iterable[str] = (), **que
         return ""
     params = [("target", target)] if target else []
     params += [("kind", kind) for kind in kinds]
-    params += [(key, value) for key, value in query.items() if value]
+    params += [
+        (key, each)
+        for key, value in query.items()
+        for each in (value if isinstance(value, tuple) else (value,))
+        if each
+    ]
     return f"{url}?{urlencode(params)}" if params else url
 
 
@@ -235,10 +241,10 @@ class Investigation:
 INVESTIGATIONS = {
     investigation.name: investigation
     for investigation in (
-        Investigation("topology", "See it on the map", "What this is connected to."),
+        Investigation("topology", "Map neighborhood", "What this is connected to."),
         Investigation(
             "impact",
-            "See what depends on it",
+            "Impact",
             "Everything that stops working if this does.",
             direction="outbound",
             depth=3,

@@ -4,6 +4,7 @@ import re
 from dataclasses import replace
 from datetime import date
 
+from hq.domains.control_plane.observations.portainer import ENVIRONMENT_KIND
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS
 
@@ -13,6 +14,8 @@ from .credential_findings import UNREPORTED
 from .derivations import since
 from .entity_links import kind_label, node_name
 from .finding_model import (
+    CHECK_AGAIN,
+    THEN_CHECK_AGAIN,
     Finding,
     FindingEstate,
     FindingRemedy,
@@ -35,6 +38,7 @@ from .render_status_findings import RENDERER_UNITS
 from .topology_lenses import _STALE_AFTER
 from .topology_model import TopologyNode
 from .ui import counted, ended
+lazy from .facts import inventory_records
 lazy from .timestamps import moment
 
 # The background job that runs the controller on its machine (deploy/systemd).
@@ -81,14 +85,15 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
     """
 
     found = []
+    # A machine whose whole environment read empty is one claim about the
+    # environment (``_environment_read_empty``), never one per container.
+    emptied = {node.id for nodes in _emptied_machines(estate).values() for node in nodes}
     for node in estate.nodes():
-        moment = estate.observed.get(node.id)
-        newest = estate.latest_by_kind.get(node.kind_key)
-        if moment is None or newest is None or not node.managed or node.on_demand:
+        if node.id in emptied or not _left_behind(estate, node):
             continue
+        moment = estate.observed[node.id]
+        newest = estate.latest_by_kind[node.kind_key]
         behind = newest - moment
-        if behind <= _STALE_AFTER:
-            continue
         siblings = sum(1 for other in estate.nodes() if other.kind_key == node.kind_key and other.id in estate.observed)
         name = node_name(node)
         others = siblings - 1
@@ -109,6 +114,132 @@ def _skipped_by_a_sweep(estate: FindingEstate) -> tuple[Finding, ...]:
                     _when("Others read", newest),
                 ),
                 remedies=_skipped_remedies(node),
+            )
+        )
+    return tuple(found)
+
+
+def _left_behind(estate: FindingEstate, node: TopologyNode) -> bool:
+    """Whether a record HQ watches was last seen materially before its kind's last read."""
+
+    moment = estate.observed.get(node.id)
+    newest = estate.latest_by_kind.get(node.kind_key)
+    if moment is None or newest is None or not node.managed or node.on_demand:
+        return False
+    return newest - moment > _STALE_AFTER
+
+
+def _emptied_machines(estate: FindingEstate) -> dict[str, tuple[TopologyNode, ...]]:
+    """Each machine whose containers a read listed before and the last read
+    listed none of, with those containers, by machine id.
+
+    A machine's containers are read through one Portainer environment, so
+    every one of them left behind at once is that environment answering with
+    nothing, which says nothing about any one container. One still listed
+    means the environment answered, and the others are each their own claim.
+    """
+
+    by_id = {node.id: node for node in estate.nodes()}
+    held: dict[str, list[TopologyNode]] = {}
+    for edge in estate.topology.edges:
+        node = by_id.get(edge.target)
+        if edge.kind != "runs" or node is None or node.kind_key != CONTAINER_KIND:
+            continue
+        if node.id in estate.observed and node.managed and not node.on_demand:
+            held.setdefault(edge.source, []).append(node)
+    return {
+        machine: tuple(sorted(nodes, key=lambda node: node.label))
+        for machine, nodes in held.items()
+        if machine in by_id and all(_left_behind(estate, node) for node in nodes)
+    }
+
+
+# What reaches Docker for an environment, and so what to restart when it
+# answers with nothing: Portainer itself for its local socket, the agent on
+# the machine for an agent environment. Each is found by the label its image
+# carries (Portainer's and the agent's Dockerfiles), so the command names no
+# container the empty read could not.
+_PORTAINER = ("Portainer", "io.portainer.server=true")
+_AGENT = ("the Portainer agent", "io.portainer.agent=true")
+_AGENT_TYPES = frozenset({"agent", "edge agent"})
+
+
+def _environment_on(machine: str) -> dict:
+    """The Portainer environment the last read filed on ``machine``, or none."""
+
+    return next(
+        (dict(record) for _snapshot, record in inventory_records(ENVIRONMENT_KIND) if record.get("host") == machine),
+        {},
+    )
+
+
+def _holder(environment: dict) -> tuple[str, str]:
+    """What reads Docker for this environment, and the label that finds its container."""
+
+    if environment.get("local"):
+        return _PORTAINER
+    return _AGENT if environment.get("type") in _AGENT_TYPES else ("", "")
+
+
+def _environment_read_empty(estate: FindingEstate) -> tuple[Finding, ...]:
+    """An environment whose containers were listed, answering with none.
+
+    Docker restarting under Portainer leaves whatever mounted its socket
+    holding one that no longer answers, and Portainer then lists nothing while
+    every container runs on. Restarting what holds the socket brings it back.
+    """
+
+    by_id = {node.id: node for node in estate.nodes()}
+    newest = estate.latest_by_kind.get(CONTAINER_KIND)
+    found = []
+    for machine_id, containers in sorted(_emptied_machines(estate).items()):
+        machine = by_id[machine_id].label
+        environment = _environment_on(machine)
+        name = str(environment.get("name", "") or "")
+        holder, label = _holder(environment)
+        last = max(estate.observed[node.id] for node in containers)
+        restart = (
+            machine_step(
+                f"Restart {holder} on {machine}, so it opens the Docker socket again",
+                machine,
+                f"sh -c 'docker restart $(docker ps -q --filter label={label})'",
+                (THEN_CHECK_AGAIN,),
+            )
+            if holder
+            else ()
+        )
+        found.append(
+            Finding(
+                rule="environment-read-empty",
+                subject=machine_id,
+                # Check again reads the containers, which is what proves it.
+                scope=CONTAINER_KIND,
+                part=name,
+                title=(
+                    f"Portainer's {name} environment on {machine} lists no containers"
+                    if name and name != machine
+                    else f"Portainer lists no containers on {machine}"
+                ),
+                severity="serious",
+                explanation=(
+                    f"It listed {counted(len(containers), 'container')} until {ago(last, estate.now)} and none in "
+                    "HQ's last read. "
+                    + (
+                        f"Docker probably restarted under {holder}, which still holds the old socket. Restart it."
+                        if holder
+                        else "Restart whatever gives Portainer this machine's Docker socket."
+                    )
+                ),
+                evidence=(
+                    ("Environment", name or machine),
+                    *((("Status", str(environment["status"])),) if environment.get("status") else ()),
+                    ("Listed until", ago(last, estate.now)),
+                    *((_when("Last read", newest),) if newest else ()),
+                    ("Not listed", ", ".join(node.label for node in containers)),
+                ),
+                remedies=(_read_again(),),
+                steps=restart,
+                no_help_reason=cannot_run_commands(machine),
             )
         )
     return tuple(found)
@@ -656,6 +787,17 @@ RULES: tuple[FindingRule, ...] = (
         subsumes=("kind-never-swept",),
     ),
     FindingRule(
+        "environment-read-empty",
+        "A Docker environment lists no containers",
+        "serious",
+        _environment_read_empty,
+        operator_action=(
+            "On the machine, restart Portainer, or its agent where the machine is read through one, "
+            f"then press {CHECK_AGAIN}."
+        ),
+        no_help_reason="HQ restarts containers through Portainer, which cannot reach Docker there now.",
+    ),
+    FindingRule(
         "skipped-by-a-sweep",
         "Missing from HQ's last read",
         "serious",
@@ -672,7 +814,7 @@ RULES: tuple[FindingRule, ...] = (
         no_help_reason="HQ cannot fix a connection that is not answering.",
         # When the sweep itself is the fault, every record of the kind looks
         # skipped. Saying it once about the kind beats saying it about each.
-        subsumes=("skipped-by-a-sweep", "never-observed"),
+        subsumes=("skipped-by-a-sweep", "never-observed", "environment-read-empty"),
     ),
     FindingRule(
         "reporting-a-fault",

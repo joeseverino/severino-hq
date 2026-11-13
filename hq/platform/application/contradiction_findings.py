@@ -312,10 +312,7 @@ def _unfronted_ports() -> tuple[Finding, ...]:
                 f"{'port' if len(open_ports) == 1 else 'ports'} "
                 f"{', '.join(str(port) for port in open_ports)}",
                 severity="serious",
-                explanation=(
-                    "It answered a test from outside your network, and no proxy or DNS "
-                    "name leads to it, so anyone with the address reaches it directly."
-                ),
+                explanation="It answered a test from outside your network, with no proxy in front.",
                 evidence=(
                     ("Container", item.running.name),
                     ("Published", item.running.published),

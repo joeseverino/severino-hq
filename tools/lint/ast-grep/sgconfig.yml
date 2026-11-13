@@ -5,6 +5,19 @@
 # runs reads hq, hq_sdk and tools less their tests/, test_*.py and
 # migrations/; a rule for test code reads tests/, test_*.py, testing.py and
 # *_testing.py; a rule with neither reads every module.
+#
+# The hand-drawn-* rules read Django templates with the HTML grammar
+# (**/templates/**/*.html), each refusing a shape a shared part draws; the
+# plugin check runs them over an extension's src/ too. A template comment is
+# read as markup. An instance that is a part itself, or a page still to move,
+# is marked with an HTML comment alone on its line inside a Django comment,
+# which no page receives, and the shape on the line after:
+#   {% comment %}
+#   <!-- ast-grep-ignore: hand-drawn-fold --> why
+#   {% endcomment %}<details>
+# ast-grep keys a suppression to the line after it unless the node before it
+# ends on its own line, so it is never written on the shape's line. A mark no
+# match needs fails the scan (--error=unused-suppression).
 ruleDirs:
   - rules
 testConfigs:

@@ -18,12 +18,11 @@
 # and in the pipeline with no second list to edit. `-c` keeps going past a
 # failure and names every gate that failed. A task that a job's task, CI or
 # the operator runs is `hide = true`: the job's wildcard and `mise run <name>`,
-# which a verdict names, still reach it. No gate
-# declares `sources`: mise keeps a task's record of its last passing sources
-# per checkout, by content with task.source_freshness_hash_contents, so a new
-# worktree's first run would run every gate where fast's diff runs the few it
-# touched, and a verdict also turns on the environment and on files no list
-# would name. A task whose body is
+# which a verdict names, still reach it. A quick gate is tagged fast and
+# declares the files it reads as its `sources`, which mise's --affected matches
+# against fast's diff, with `outputs = []` so mise keeps no record of a passing
+# run and never skips the gate as up to date (mise-tasks/lint.toml). A task
+# whose body is
 # more than one line is a file under mise-tasks/, declared in its own #MISE
 # header, so lint:shell lints it. This file keeps the tools, the environment,
 # the templates, the development servers and the lint and scan tasks.
@@ -32,7 +31,7 @@
 # command to; nothing here needs a virtualenv made by hand. uv itself is one of
 # the tools below.
 
-min_version = "2026.11.2"
+min_version = "2026.11.6"
 
 [settings]
 # The runners, which build the images, the machines gates run on by hand, and
@@ -90,7 +89,7 @@ vale = "3.26.0"
 # Structural rules over the source, in tools/lint/ast-grep/ (lint:ast-grep), and the
 # counts Ruff has no rule for (audit:ast).
 ast-grep = "0.51.1"
-yq = "4.54.1"
+yq = "4.54.3"
 jq = "1.8.2"
 uv = "0.13.7"
 # The Scorecard the pinned ossf/scorecard-action builds against (its go.mod).
@@ -117,10 +116,26 @@ cosign = { version = "3.1.4", lazy = true }
 # Known advisories in the npm tools' lock and the controller's modules, the
 # Go ones judged by whether the controller calls the vulnerable code
 # (lint:audit). Lazy, as age is.
-osv-scanner = { version = "2.7.0", lazy = true }
+osv-scanner = { version = "2.7.1", lazy = true }
 # Reads the names templates, strings and other languages' files hand to Python,
 # which vulture cannot see (audit:dead). Lazy, as age is.
 ripgrep = { version = "15.2.0", lazy = true }
+
+# The trace viewer spans are sent to while developing (docs/Development.md,
+# "Tracing"), in a terminal on this machine. Not in mise's registry. Lazy, as
+# age is: only a developer looking at a trace runs it.
+[tools."aqua:ymtdzzz/otel-tui"]
+version = "0.7.5"
+lazy = true
+lazy_bins = ["otel-tui"]
+
+# Compares the machine API's document with its base's and names each change
+# that breaks a client (lint:openapi-breaking). Not in mise's registry. Lazy:
+# only that gate runs it.
+[tools."github:oasdiff/oasdiff"]
+version = "1.37.0"
+lazy = true
+lazy_bins = ["oasdiff"]
 
 # Each Go binary's bytes by package and module, read from its own symbol and
 # line tables (audit:dependency-weight). Not in mise's registry, so named by its
@@ -167,10 +182,12 @@ linux-x64 = { asset_pattern = "codeql-bundle-linux64.tar.zst" }
 # locked"). A gate sees no extension set it did not ask for. A task extends one
 # template and a template extends none, so django-browser restates django's env
 # (test_browser_gate_tasks holds it to it). The composed suite extends django
-# and sets what it changes in its own header.
+# and sets what it changes in its own header. A gate keeps each template it
+# has read, as production does: DEBUG alone would read and parse every
+# template again on every render, which is most of what a page costs a test.
 
 [task_templates.django]
-env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ------------------------------------------------------------------ heavy
 # A task that loads the machine takes the heavy turn: mise's task lock
@@ -192,7 +209,7 @@ shell = "tools/lib/measured sh -o errexit -c"
 # (axe-core, which the survey runs) installed first, and the test classes its
 # task names in `vars.classes`, which mise renders from the extending task's own vars.
 [task_templates.django-browser]
-env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 lock = ["gate", "heavy"]
 timeout = "30m"
 shell = "tools/lib/measured sh -o errexit -c"
@@ -204,8 +221,8 @@ run = "HQ_BROWSER_FACE=${usage_fallback_face:+fallback} uv run --group browser p
 # sandbox (Seatbelt, Landlock), so whatever words it is handed, it writes only
 # to /tmp, /dev, the temporary directory and Go's build cache. On macOS the
 # temporary directory is the user's, which mktemp uses whatever TMPDIR says.
-# uv works from a throwaway cache there and never writes .venv, so one out of
-# sync fails the task rather than syncing. django's env is restated so an
+# uv works from a throwaway cache there and never writes .venv, so
+# setup:sandbox syncs it before the sandbox opens. django's env is restated so an
 # audit that boots Django takes this template alone.
 [task_templates.audit]
 deny_write = true
@@ -214,7 +231,7 @@ allow_write = [
   "{% if os() == 'macos' %}{{ env.HOME }}/Library/Caches{% else %}{{ xdg_cache_home }}{% endif %}/go-build",
 ]
 depends = ["setup:sandbox"]
-env = { UV_NO_CACHE = "1", SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
+env = { UV_NO_CACHE = "1", SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1", DJANGO_DEBUG = "1", DJANGO_TEMPLATE_CACHE = "1", DJANGO_SECRET_KEY = "gate-only-key-not-a-real-secret", DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost,testserver", SEVERINO_HQ_PLUGINS = false }
 
 # ---------------------------------------------------------------- servers
 # The development servers. Each profile is a task whose env says where it
@@ -228,7 +245,7 @@ env = { UV_NO_CACHE = "1", SEVERINO_DATABASE_PATH = false, SEVERINO_SANDBOX = "1
 # task reads. The profile's invariants come after the file, so it cannot
 # change them.
 [tasks.dev]
-description = "The operator's long-lived server on real data, behind a TLS proxy with single sign-on and 1Password secrets; an agent runs dev:scratch"
+description = "The operator's long-lived server on real data, behind a TLS proxy with single sign-on and 1Password secrets, with the automation worker beside it; an agent runs dev:scratch"
 raw = true
 usage = '''
 flag "--fresh" help="Delete its database and migrate a new one"
@@ -294,6 +311,7 @@ flag "--seed <seed>" help="Fill it with a named data set (hq/platform/core/seeds
 }
 flag "--port <port>" help="A fixed port instead of a free one"
 flag "--reload" negate="--no-reload" help="Restart on each change to Python or a template, as it does by default; --no-reload serves the code it started with, without the reloader's supervising process and its memory"
+flag "--runner" help="To walk Playbooks end to end, as dev always does: serve the bridge and start the real automation worker on each Refresh or run, scanning tools/dev/scratch_playbooks and running each play on this machine alone"
 flag "--plan" help="Print what it would run under and exit"
 '''
 run = "tools/dev/dev.sh"
@@ -330,8 +348,9 @@ env = { SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 # The lint tools the quick gates and the stylesheet tests run.
 depends = ["setup:lint-tools"]
 usage = '''
-arg "[base]" env="CHECK_BASE" help="The ref to diff against; default origin/main, then main"
+arg "[base]" env="CHECK_BASE" help="The ref to diff against; default the nearest commit whose tree passed, then the branch HEAD lands on"
 flag "--list" help="Print the selected test modules and run nothing"
+flag "--whole" help="Run the whole suite and every quick gate, whatever changed: a pass records the tree and the map of the tests that ran each file"
 flag "--parallel <workers>" env="CHECK_PARALLEL" default="auto" help="Test workers per suite; 1 rules out an order or isolation failure"
 '''
 run = "uv run python -m tools.gate.fast"
@@ -341,6 +360,47 @@ description = "After editing, or when fast is not enough: CI's lint job, every l
 # No turn of its own: the gates whose memory needs one take it.
 env = { SEVERINO_WAITS_FOR_HEAVY_TURN = "1" }
 run = "uv run python -m tools.gate.verdict lint mise run -c 'lint:*'"
+# What a pull request's Lint job reads, which tools/pipeline/legs.py matches
+# its change against (docs/Development.md, What a pull request runs).
+# Lint reads every tracked file: the source tests walk the tree and lint:patch
+# reads the whole change. So these name each top-level path, and a new one no
+# leg names runs every leg until it is placed here and in each leg it reaches.
+sources = [
+  ".github/**/*",
+  "composition/**/*",
+  "controller/**/*",
+  "demo/**/*",
+  "deploy/**/*",
+  "docs/**/*",
+  "examples/**/*",
+  "hq/**/*",
+  "hq_runner/**/*",
+  "hq_sdk/**/*",
+  "mise-tasks/**/*",
+  "policy/**/*",
+  "static/**/*",
+  "templates/**/*",
+  "tests/**/*",
+  "tools/**/*",
+  ".editorconfig",
+  ".gitattributes",
+  ".gitignore",
+  ".worktreeinclude",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "Dockerfile",
+  "Dockerfile.dockerignore",
+  "LICENSE",
+  "README.md",
+  "entrypoint.sh",
+  "manage.py",
+  "mise.fast.toml",
+  "mise.lock",
+  "mise.toml",
+  "pyproject.toml",
+  "uv.lock",
+]
+outputs = []
 
 [tasks.scan]
 description = "To reproduce an alert CI's scan job raised: CodeQL's security-and-quality queries find no alert, and in CI none is open on GitHub for the analyzed ref; slow"

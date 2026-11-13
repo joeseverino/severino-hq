@@ -16,9 +16,13 @@ from hq.domains.content.models import ContentItem
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import EXPENSE_CATEGORY_CHOICES, Expense
 from hq.domains.projects.models import Project
+from hq.platform.application.card_items import Kpi, ListRow
 from hq.platform.application.documentation import document_link
+from hq.platform.application.entity_links import entity_link
+from hq.platform.application.money import money
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import years_of
+from hq.platform.application.ui import counted
 from hq.platform.core.audit import record_event
 from hq.platform.core.models import AuditLog
 
@@ -76,19 +80,32 @@ class ReportsView(PageMixin, TemplateView):
         asset_summary = assets.aggregate(n=Count("id"), total=Sum("total_cost"))
 
         docs_needing_review = DocumentationRecord.objects.needing_review()
+        expenses_count = expense_summary["n"] or 0
+        expenses_url = f"{reverse('expenses:list')}?year={year}"
+        docs_count = docs_needing_review.count()
+        docs_url = f"{reverse('docs_index:list')}?needs_review=1"
 
         ctx.update(
+            figures=(
+                Kpi(
+                    f"Expenses {year}",
+                    money(expense_summary["total"] or zero),
+                    counted(expenses_count, "expense"),
+                    detail_url=expenses_url if expenses_count else "",
+                ),
+                Kpi(f"Deductible (est.) {year}", money(expense_summary["deductible"] or zero)),
+                Kpi(
+                    f"Assets purchased {year}",
+                    asset_summary["n"] or 0,
+                    f"{money(asset_summary['total'] or zero)} total",
+                ),
+                Kpi("Docs due for review", docs_count, url=docs_url if docs_count else "", is_zero=not docs_count),
+            ),
             year=year,
             available_years=sorted(
                 {*years_of(Expense, "date"), *years_of(Asset, "purchase_date"), timezone.localdate().year},
                 reverse=True,
             ),
-            expenses_count=expense_summary["n"] or 0,
-            expenses_total=expense_summary["total"] or zero,
-            expenses_deductible=expense_summary["deductible"] or zero,
-            assets_count=asset_summary["n"] or 0,
-            assets_total=asset_summary["total"] or zero,
-            expenses_url=f"{reverse('expenses:list')}?year={year}",
             expenses_by_category=by_category(
                 expenses.values("category")
                 .annotate(
@@ -100,14 +117,30 @@ class ReportsView(PageMixin, TemplateView):
                 reverse("expenses:list"),
                 f"&year={year}",
             ),
-            largest_expenses=expenses.order_by("-total_cost")[:10],
-            assets_by_category=by_category(
-                Asset.objects.values("category")
-                .annotate(n=Count("id"), total=Sum("total_cost"))
-                .order_by("-total", "category"),
-                ASSET_CATEGORY_CHOICES,
-                reverse("assets:list"),
-            ),
+            largest_expenses=[
+                ListRow(
+                    link=entity_link("expense", str(expense.pk), label=expense.label),
+                    detail=expense.get_category_display(),
+                    meta=money(expense.total_cost),
+                    at=expense.date,
+                )
+                for expense in expenses.order_by("-total_cost")[:10]
+            ],
+            assets_by_category=[
+                ListRow(
+                    title=row["label"],
+                    url=row["url"],
+                    detail=counted(row["n"], "asset"),
+                    meta=money(row["total"]) if row["total"] else "",
+                )
+                for row in by_category(
+                    Asset.objects.values("category")
+                    .annotate(n=Count("id"), total=Sum("total_cost"))
+                    .order_by("-total", "category"),
+                    ASSET_CATEGORY_CHOICES,
+                    reverse("assets:list"),
+                )
+            ],
             status_groups=[
                 group
                 for group in (
@@ -117,11 +150,14 @@ class ReportsView(PageMixin, TemplateView):
                 if group["counts"]
             ],
             docs_needing_review=[
-                (document_link(record), record.last_reviewed)
+                ListRow(
+                    link=document_link(record),
+                    meta="" if record.last_reviewed else "Never reviewed",
+                    at=record.last_reviewed,
+                )
                 for record in docs_needing_review.order_by("last_reviewed")[:25]
             ],
-            docs_needing_review_count=docs_needing_review.count(),
-            docs_needing_review_url=f"{reverse('docs_index:list')}?needs_review=1",
+            docs_needing_review_url=docs_url,
         )
         return ctx
 

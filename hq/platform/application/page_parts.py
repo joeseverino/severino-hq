@@ -20,9 +20,26 @@ lazy from hq.platform.core.templatetags.value_tags import breakable
 
 from .display_words import display
 from .labels import DOT_MARKUP
+lazy from .ui import STATUS_VALUES
 
-# The arrow that ends a link onward, as {% arrow %} draws it.
-ARROW = mark_safe('&nbsp;<span aria-hidden="true">&rarr;</span>')
+# The arrow that ends a link onward, written inside its last word's box as
+# breakable writes a mark, so a wrapped label never leaves it alone on a line.
+ARROW = "\N{NO-BREAK SPACE}\N{RIGHTWARDS ARROW}"
+
+
+def html_attributes(named: Mapping[str, object]) -> SafeString:
+    """A part's attributes as its opening tag writes them, each escaped: True
+    drawn bare, and None, False or "" not at all, so a count of 0 is still
+    drawn. A flag is read by its type, which ``isinstance`` sees through a
+    lazy object for, so a context processor's lazy False draws nothing and
+    never ``="False"``. Every part with ``data_*`` options draws them here."""
+
+    flags = {key: True if value else None for key, value in named.items() if isinstance(value, bool | None)}
+    drawn = [(key, value) for key, value in (named | flags).items() if value is not None and value != ""]
+    valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
+    bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
+    return valued + bare
+
 
 SECTION_PARTIAL = "partials/_part_section.html"
 # Where a section's head may be told to stand; "" leaves it to surfaces.css.
@@ -48,8 +65,10 @@ class SectionPart:
     when there is somewhere to go, so a page passes its address as it has
     one. ``figure``
     draws it as a figure, its head the caption. ``head`` overrides where the stylesheet
-    stands the head, ``"above"`` or ``"inside"`` its frame. ``data`` holds the
-    ``data-`` attributes a script reads.
+    stands the head, ``"above"`` or ``"inside"`` its frame. ``edge`` marks
+    the frame's starting edge in a status tone, for a section that stands out
+    from those beside it while it is in that state (a request waiting for a
+    decision). ``data`` holds the ``data-`` attributes a script reads.
     """
 
     heading: str = ""
@@ -74,6 +93,7 @@ class SectionPart:
     more_label: str = ""
     more_url: str = ""
     figure: bool = False
+    edge: str = ""
 
     def __post_init__(self) -> None:
         if self.head not in HEADS:
@@ -90,6 +110,8 @@ class SectionPart:
             raise ValueError("A figure is drawn open, with its caption as its head; it does not fold.")
         if self.when and self.moment is None:
             raise ValueError("A section's when is the form of the moment it names, and it names none.")
+        if self.edge and self.edge not in STATUS_VALUES:
+            raise ValueError(f"A section's edge is a status tone, one of {', '.join(sorted(STATUS_VALUES))}.")
         if not TOP_LEVEL <= self.level <= LAST_LEVEL:
             raise ValueError(f"A section's heading is h{TOP_LEVEL} to h{LAST_LEVEL}.")
 
@@ -126,17 +148,18 @@ class SectionPart:
 
         if not self.more_url:
             return mark_safe(said)  # noqa: S308 - escaped above or the template's own output
-        link = format_html(
-            '<a class="subtle-link" href="{}">{}{}</a>', self.more_url, breakable(self.more_label), ARROW
-        )
+        # The label is words, also when a template's literal arrives marked
+        # safe: as a plain str, breakable writes the arrow inside its last
+        # word's box.
+        label = breakable(str.__str__(strip_tags(self.more_label)), ARROW)
+        link = format_html('<a class="subtle-link" href="{}">{}</a>', self.more_url, label)
         # said is escaped above or the template's own output; the rest is HQ's own markup.
         return mark_safe(f"{said}{DOT_MARKUP if said else ''}{link}")  # noqa: S308 - see above
 
     def _landmark(self, heading_id: str) -> dict[str, SafeString]:
         """The section's opening and closing tags: the landmark its heading
         names, holding the head on the page and the frame of its body. A
-        ``data`` value of True draws a bare attribute, and None, False or ""
-        none, so a count of 0 is still drawn."""
+        ``data`` value is drawn as ``html_attributes`` draws one."""
 
         element = "details" if self.fold else "figure" if self.figure else "section"
         named = {
@@ -146,23 +169,23 @@ class SectionPart:
                     (
                         "section",
                         "section-fold" if self.fold else "",
+                        f"section-edge toned-{self.edge}" if self.edge else "",
                         self.css,
                     ),
                 )
             ),
             "id": self.id,
             "aria-labelledby": heading_id,
-            "open": self.fold and self.open,
+            # A flag, whatever a template passes for it (a form's errors).
+            "open": bool(self.fold and self.open),
             "data-head": self.head or None,
         }
         named |= {f"data-{name.replace('_', '-')}": value for name, value in self.data.items()}
-        drawn = [
-            (key, value) for key, value in named.items() if value is not None and value is not False and value != ""
-        ]
-        valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
-        bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
-        # The element is one of three tag names, never text; the attributes are escaped above.
-        return {"opening": format_html("<{}{}{}>", element, valued, bare), "closing": format_html("</{}>", element)}
+        # The element is one of three tag names, never text; the attributes are escaped there.
+        return {
+            "opening": format_html("<{}{}>", element, html_attributes(named)),
+            "closing": format_html("</{}>", element),
+        }
 
     def __html__(self) -> SafeString:
         # Rendered by a template, so escaped already.

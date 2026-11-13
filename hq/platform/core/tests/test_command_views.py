@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.projects.models import Project
@@ -38,6 +39,12 @@ def chosen_options(page) -> list[str]:
     """The target's chosen option."""
 
     return [option.attrs["value"] for option in within(page, "name", "__target") if "selected" in option.attrs]
+
+
+def cells(section) -> tuple[tuple[str, ...], ...]:
+    """A result list's rows, each as the words of its cells."""
+
+    return tuple(tuple(cell.text for cell in record) for record in section.records)
 
 
 def result_title(page) -> str | None:
@@ -111,12 +118,15 @@ class CommandViewTests(TestCase):
         for built in ("Handler", "Preview"):
             self.assertNotIn(built, text(response))
 
-    def test_a_lede_says_what_the_title_does_not(self):
-        restated = self.client.get("/commands/project.create/")
-        declared = self.client.get("/commands/certificate.renew/")
+    def test_no_command_page_draws_the_agents_summary(self):
+        """A summary is the agent's description: MCP, the API and the CLI
+        carry it, and the page says the command by its title and fields."""
 
-        self.assertFalse(with_class(restated, "page-lede"))
-        self.assertIn(capability_registry()["certificate.renew"].summary, text(declared))
+        for name in ("project.create", "certificate.renew"):
+            with self.subTest(command=name):
+                page = self.client.get(f"/commands/{name}/")
+                self.assertFalse(with_class(page, "page-lede"))
+                self.assertNotIn(capability_registry()[name].summary, text(page))
 
     def test_the_trail_names_where_the_form_lives(self):
         response = self.client.get("/commands/project.create/")
@@ -125,6 +135,22 @@ class CommandViewTests(TestCase):
             (link.words, link.attrs["href"]) for link in within(response, "class", "page-trail") if link.tag == "a"
         ]
         self.assertEqual(trail, [("Projects", "/projects/")])
+
+    def test_a_command_with_a_home_leads_back_there(self):
+        """A command whose records are no resource of its own (Refresh, of
+        Playbooks) leads back to the page it declares, by its navigation's
+        name, from its trail and its Cancel."""
+
+        spec = capability_registry()["automation.source.refresh"]
+        home = reverse("control_plane:playbooks")
+        response = self.client.get(f"/commands/{spec.name}/")
+
+        trail = [
+            (link.words, link.attrs["href"]) for link in within(response, "class", "page-trail") if link.tag == "a"
+        ]
+        self.assertEqual(trail, [("Playbooks", home)])
+        cancels = [href for words, href in links(response) if words == "Cancel"]
+        self.assertEqual(cancels, [home])
 
     def test_a_field_reads_as_its_model_declares_it(self):
         response = self.client.get("/commands/project.create/")
@@ -385,19 +411,32 @@ class CommandResultProjectionTests(TestCase):
             dict(response.context["result_facts"]),
             {"name": "example.test", "resolver": "Example", "resolves": "yes"},
         )
-        table = response.context["result_table"]
-        self.assertEqual(table["label"], "answers")
-        self.assertEqual(table["columns"], ("name", "type", "value", "ttl"))
-        self.assertEqual(table["rows"][0], ("example.test", "A", "192.0.2.1", MISSING))
+        (table,) = response.context["result_sections"]
+        self.assertEqual(table.label, "answers")
+        self.assertEqual(table.columns, ("name", "type", "value", "ttl"))
+        self.assertEqual(cells(table)[0], ("example.test", "A", "192.0.2.1", MISSING))
         # Each heading is its column's name, then the sort control's mark.
         self.assertIn("type", [heading.split()[0] for heading in texts(response, "th")])
-        self.assertIn("answers · 2", text(response))
+        # The list is a section of the result's own, named for it with its count.
+        (heading,) = select(response, "id", "command-result-list-heading")
+        self.assertEqual(heading.words.split(), ["answers", "2"])
         self.assertEqual(result_title(response), "Done")
         # The JSON is still there for anyone checking HQ against another tool,
         # closed because the answer is already on the page.
-        (raw,) = with_class(response, "command-result-json")
+        (raw,) = select(response, "id", "command-result-json")
         self.assertNotIn("open", raw.attrs)
         self.assertIn('"resolver": "Example"', raw.words)
+
+    def test_a_result_that_only_queued_work_draws_nothing(self):
+        """The work stands in its own row, so the page draws no Done
+        section for a result that says only it was queued."""
+
+        payload = {"ok": True, "queued": True, "operation": {"id": "example", "state": "queued"}}
+
+        response = self._run("lookup.name.read", payload, {"name": "example.test"})
+
+        self.assertIsNone(result_title(response))
+        self.assertFalse(select(response, "id", "command-result-json"))
 
     def test_a_shape_the_rules_do_not_fit_shows_the_json_open(self):
         payload = {"ok": True, "nested": {"deep": [1, 2]}, "mixed": [{"a": 1}, {"b": {"c": 2}}]}
@@ -405,8 +444,8 @@ class CommandResultProjectionTests(TestCase):
         response = self._run("lookup.name.read", payload, {"name": "example.test"})
 
         self.assertEqual(response.context["result_facts"], ())
-        self.assertIsNone(response.context["result_table"])
-        (raw,) = with_class(response, "command-result-json")
+        self.assertEqual(response.context["result_sections"], ())
+        (raw,) = select(response, "id", "command-result-json")
         self.assertIn("open", raw.attrs)
 
     def test_the_projection_is_pure_and_keeps_column_order(self):
@@ -415,8 +454,8 @@ class CommandResultProjectionTests(TestCase):
         facts, table = _result_projection({"ok": True, "count": 2, "note": None, "rows": [{"b": 1, "a": 2}, {"c": 3}]})
 
         self.assertEqual(facts, (("count", "2"), ("note", MISSING)))
-        self.assertEqual(table["columns"], ("b", "a", "c"))
-        self.assertEqual(table["rows"], (("1", "2", MISSING), (MISSING, MISSING, "3")))
+        self.assertEqual(table.columns, ("b", "a", "c"))
+        self.assertEqual(cells(table), (("1", "2", MISSING), (MISSING, MISSING, "3")))
 
     def test_the_table_is_the_first_list_of_flat_records(self):
         """An empty list, an empty or nested record and plain values are no table."""
@@ -434,4 +473,4 @@ class CommandResultProjectionTests(TestCase):
             }
         )
 
-        self.assertEqual((table["label"], table["columns"], table["rows"]), ("first rows", ("a",), (("1",),)))
+        self.assertEqual((table.label, table.columns, cells(table)), ("first rows", ("a",), (("1",),)))

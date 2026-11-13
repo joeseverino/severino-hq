@@ -1,0 +1,19 @@
+# A list of problems is the work queue part, drawn from the queue's items
+# (hq_sdk.ui.Insight). The classes are the lists each page drew its problems
+# in before the queue row. No fix: the part reads the queue's items.
+id: hand-drawn-findings
+language: html
+severity: error
+message: A list of findings drawn by hand, where the work queue part draws it.
+note: Write {% include "partials/_work_queue.html" with items=... %} from the queue's items (hq_sdk.ui.Insight), with dense=True for problems inside a section.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?(?:attention-list|attention-row|attention-body|attention-end|posture-gaps|conn-findings)(?:[^\w-]|$)'

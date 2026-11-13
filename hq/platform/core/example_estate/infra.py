@@ -12,7 +12,6 @@ from hq.domains.control_plane.models import (
     WeatherObservation,
 )
 from hq.platform.application import readings
-from hq.platform.application.inventory_testing import store
 from hq.platform.application.labels import dotted
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
@@ -22,6 +21,7 @@ from .names import (
     ADGUARD,
     CLOUDFLARE,
     CONTAINERS,
+    CONTROLLER,
     DNS,
     GITHUB,
     HQ,
@@ -43,10 +43,17 @@ from .names import (
     now,
     stamp,
 )
+from .sweep import store
 
 CERTIFICATE = "wildcard-example-com"
 # Inside its renewal window, so renewing it is one of the things to do.
 CERTIFICATE_EXPIRES = timedelta(days=24)
+# Left in the proxy from before the wildcard, when the media server answered
+# at this name: one certificate twice, as the proxy issued it and as it was
+# uploaded by hand, lapsed on one day and serving nothing, so deleting them
+# is one of the things to do.
+LEFT_OVER = "media.example.com"
+LEFT_OVER_LAPSED = timedelta(days=12)
 
 
 def declare():
@@ -139,14 +146,21 @@ def connections():
                 answering(DNS, "cloudflare_dns", "https://api.cloudflare.com/client/v4", "1 zone.", [ZONE]),
                 answering(CLOUDFLARE, "cloudflare_api", "https://api.cloudflare.com/client/v4", "1 account.", [ZONE]),
                 answering(PROXY_REF, "npm", f"http://{LAN}:81", f"{len(SERVICES)} proxy hosts."),
-                answering(ADGUARD, "adguard", f"http://{LAN}:3080", f"{len(SERVICES)} rewrites."),
+                answering(ADGUARD, "adguard", f"http://{LAN}:3080", f"{len(SERVICES) + 1} rewrites."),
                 answering(TAILSCALE, "tailscale", "https://api.tailscale.com", "3 devices."),
                 answering(SSH, "ssh", f"{MACHINE}:22", "Host key matches.", [MACHINE]),
-                answering(GITHUB, "github_app", "https://api.github.com", f"{len(work.REPOSITORIES)} repositories."),
+                # The accounts the app is installed on, as the controller's probe reports them.
+                answering(
+                    GITHUB,
+                    "github_app",
+                    "https://api.github.com",
+                    f"{len(work.REPOSITORIES)} repositories.",
+                    ["example"],
+                ),
                 answering("onepassword", "onepassword", "https://my.1password.com", "1 vault."),
             ],
             principal=cli_principal(),
-            controller_id="example-controller",
+            controller_id=CONTROLLER,
         )
 
 
@@ -172,6 +186,18 @@ def proxy():
             "expires_on": (now() + CERTIFICATE_EXPIRES).isoformat(),
             "serves": hosts,
         },
+        *(
+            {
+                "connection_ref": PROXY_REF,
+                "id": number,
+                "name": LEFT_OVER,
+                "provider": provider,
+                "domains": [LEFT_OVER],
+                "expires_on": (now() - LEFT_OVER_LAPSED).isoformat(),
+                "serves": [],
+            }
+            for number, provider in ((2, "letsencrypt"), (3, "other"))
+        ),
     )
     store(
         "npm.access_list",
@@ -191,8 +217,28 @@ def proxy():
 
 
 def host():
-    """What the host reports of itself: its firewall, perimeter and load."""
+    """What the host reports of itself: its firewall, perimeter, disks, restart and load."""
 
+    # A kernel and a library installed two days ago wait on a restart, which is
+    # scheduled for a quiet hour. The controller runs on the edge, so its own
+    # reading and the edge receiver's are of one machine, and say the same.
+    restart = {
+        "pending": True,
+        "since": stamp(timedelta(days=2)),
+        "packages": ["linux-image-generic", "libc6"],
+        "scheduled_action": "reboot",
+        "scheduled_at": stamp(-timedelta(hours=7)),
+        "read_at": stamp(),
+    }
+    store("host.reboot", restart)
+    store("host.edge_reboot", {"connection_ref": SSH, **restart})
+
+    # A root a build has all but filled, beside a roomy boot partition.
+    store(
+        "host.filesystem",
+        {"mount": "/", "free_bytes": 59_000_000, "total_bytes": 29 * 2**30, "read_at": stamp()},
+        {"mount": "/boot", "free_bytes": 760 * 2**20, "total_bytes": 2**30, "read_at": stamp()},
+    )
     store(
         "host.firewall",
         {

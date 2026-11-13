@@ -1,6 +1,8 @@
 """Probes of a page's parts: disclosures, labels, the dashboard's readings and a check's evidence."""
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # Press a heading's sort control and read its column back, top to bottom.
 SPILLED_LABELS = (
@@ -41,7 +43,9 @@ SPILLED_LABELS = (
   for (const el of document.querySelectorAll(selector)) {
     if (!el.checkVisibility() || !el.textContent.trim()) continue;
     const style = getComputedStyle(el);
-    if (style.overflowX !== 'visible' || style.display === 'inline') continue;
+    // A box whose content the browser skips (`hidden="until-found"`) draws
+    // no label until it is found.
+    if (style.overflowX !== 'visible' || style.display === 'inline' || style.contentVisibility === 'hidden') continue;
     const start = el.getBoundingClientRect().left + parseFloat(style.borderLeftWidth);
     const held = Math.round(reach(el) - start + parseFloat(style.paddingRight));
     if (held > el.clientWidth + 1) {
@@ -315,10 +319,9 @@ LINKS_AT_REST = """([links, vendored]) => {
 # A dialog a page declares is one a reader can open: some control on the page
 # names it, so drawing a dialog without its control is a finding.
 DIALOGS_WITHOUT_OPENERS = """([dialogs, openers]) => {
-  const named = new Set([...document.querySelectorAll(openers)].map((opener) =>
-    'modalOpen' in opener.dataset ? `modal-${opener.dataset.modalOpen}` : opener.getAttribute('aria-controls')));
+  const opened = (dialog) => document.querySelector(openers.replaceAll('{id}', dialog.id.slice('modal-'.length)));
   return [...document.querySelectorAll(dialogs)]
-    .filter((dialog) => !named.has(dialog.id))
+    .filter((dialog) => !opened(dialog))
     .map((dialog) => `dialog #${dialog.id} has no control that opens it`);
 }"""
 
@@ -364,7 +367,7 @@ WRAPPED = (
 # A fact whose value is a list of names keeps no other pair on its row while
 # it wraps: beside them it makes their row as tall as itself.
 WRAPPED_BESIDE_A_PAIR = (
-    "(values) => {"
+    "([values, pairs]) => {"
     + DESCRIBE
     + LINE_COUNT
     + """
@@ -373,14 +376,39 @@ WRAPPED_BESIDE_A_PAIR = (
     if (!value.checkVisibility()) continue;
     const {lines, top, bottom} = linesOf(value);
     if (lines < 2) continue;
-    const beside = [...value.parentElement.children].some((other) => {
-      if (other === value || other === value.previousElementSibling || !other.checkVisibility()) return false;
+    const pair = value.closest(pairs);
+    const beside = [...pair.parentElement.children].some((other) => {
+      if (other === pair || !other.checkVisibility()) return false;
       const r = other.getBoundingClientRect();
       return r.top < bottom - 1 && r.bottom > top + 1;
     });
-    const name = value.previousElementSibling?.textContent.trim().replace(/\\s+/g, ' ');
+    const name = pair.querySelector(':scope > dt')?.textContent.trim().replace(/\\s+/g, ' ');
     if (beside) found.push(`${describe(value)} "${name}" wraps to ${lines} lines beside another pair`);
   }
   return found;
 }"""
 )
+
+
+EVIDENCE_READ = (STRANDED_EVIDENCE, [SELECTORS["check_statement"], SELECTORS["check_evidence"]])
+
+SUMMARIES_READ = (HIDDEN_IN_SUMMARIES, SELECTORS["summary_value"])
+
+_READINGS_OF = f"(selector) => ({READINGS})([...document.querySelectorAll(selector)])"
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "control labels": (SPILLED_LABELS, SELECTORS["control"]),
+    "cell labels": Check((SPILLED_LABELS, SELECTORS["cell_content"]), table=True),
+    "dialogs": (DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]]),
+    "select arrows": (SELECT_ARROWS, [SELECTORS["dropdown"], SELECTORS["vendored"]]),
+    "link underlines": (PARTS_NOT_UNDERLINED, [SELECTORS["link"], SELECTORS["vendored"]]),
+    "links at rest": (LINKS_AT_REST, [SELECTORS["link"], SELECTORS["vendored"]]),
+    "lined past the name": (
+        LINED_PAST_THE_NAME,
+        [SELECTORS["link"], SELECTORS["vendored"], SELECTORS["tag"], SELECTORS["mark"]],
+    ),
+    "lists of facts": (WRAPPED_BESIDE_A_PAIR, [SELECTORS["fact_list"], SELECTORS["band_fact_cell"]]),
+    "bare folds": (BARE_FOLDS, [SELECTORS["section_fold"], SELECTORS["drawn_when_opened"]]),
+    "readings": Check((_READINGS_OF, SELECTORS["readings"]), findings=reading_problems),
+}

@@ -47,9 +47,22 @@ case "$profile" in
     *) die "Unknown profile: $profile" ;;
 esac
 
+# The automation worker: always beside the long-lived server, so Playbooks
+# answers there, and beside a scratch server that asks for it with --runner.
+runner=${usage_runner:-false}
+[ "$profile" != secure ] || runner=true
+# The bridge's socket in a private directory outside the checkout, whose path
+# can be longer than a socket's: one per database, which one server serves at
+# a time, so the long-lived server and a scratch one in the same checkout keep
+# apart, and a server that was killed leaves nothing a later start does not
+# reuse.
+tmp=${TMPDIR:-/tmp}
+bridge="${tmp%/}/hq-bridge-$(printf '%s' "$database" | cksum | cut -d ' ' -f 1)"
+
 # The saved demo, a static site: demo:build rebuilds it only when its sources
 # moved, on a database of its own, so the scratch server's env goes first.
 if [ "${usage_demo:-false}" = true ]; then
+    [ "$runner" != true ] || die "--runner works beside the scratch server; the saved demo is a static site."
     seed=${usage_seed:-showcase}
     site=var/demo
     [ "$seed" = showcase ] || site="var/demo-$seed"
@@ -83,6 +96,9 @@ if [ "${usage_plan:-false}" = true ]; then
     # Before any secret is read or any file touched, so the plan holds neither.
     env | grep -E '^(DJANGO_|SEVERINO_|UVICORN_|HQ_DEV_|PYTHONPATH=)' | grep -Ev '^[A-Z_]*(SECRET_KEY|_SECRET)=' | sort
     echo "serve: $host:$port, $serving"
+    if [ "$runner" = true ]; then
+        echo "automation: the bridge at $bridge/bridge.sock, the worker from var/runner/venv on each doorbell, scanning tools/dev/scratch_playbooks"
+    fi
     exit 0
 fi
 
@@ -162,6 +178,20 @@ fi
 # The environment's own interpreter, which uv has synced by now: `uv run`
 # would stay on as a parent process holding memory of its own.
 python=$(uv run python -c 'import sys; print(sys.executable)')
+if [ "$runner" = true ]; then
+    # The server refuses a directory that is not this account's alone. The
+    # watcher outlives every reload, since it watches the reloader's own
+    # process, this one once it execs; it starts the worker on each doorbell
+    # and removes the directory once this server has stopped
+    # (tools/dev/scratch_automation.py).
+    (umask 077 && mkdir -p "$bridge")
+    SEVERINO_BRIDGE_SOCKET="$bridge/bridge.sock"
+    export SEVERINO_BRIDGE_SOCKET
+    # The runner group's environment, which smoke:runner shares, so the
+    # checkout's .venv keeps the default groups.
+    UV_PROJECT_ENVIRONMENT=var/runner/venv uv sync --inexact --group runner --quiet
+    "$python" -m tools.dev.scratch_automation watch "$$" "$root/var/runner/venv/bin/python" &
+fi
 # --no-proxy-headers, as the image's: the application reads its proxy's
 # forwarded headers itself, after recording the peer they replace. The
 # migration above made the database file before any server opens it; the

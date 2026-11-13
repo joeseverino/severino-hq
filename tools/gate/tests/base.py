@@ -10,7 +10,9 @@ otherwise name a fixture's failures.
 """
 
 import os
+import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import override
 from unittest.mock import patch
@@ -36,6 +38,19 @@ sys.exit(not run.result.wasSuccessful())
 """
 
 
+IDENTITY = ["-c", "user.name=Example", "-c", "user.email=dev@example.com", "-c", "commit.gpgsign=false"]
+
+
+def fixture_git(root: Path) -> Callable[..., str]:
+    """git in the fixture repository at ``root``, committing as an example identity."""
+
+    def git(*args: str) -> str:
+        done = subprocess.run(["git", *IDENTITY, *args], cwd=root, check=True, capture_output=True, text=True)
+        return done.stdout.strip()
+
+    return git
+
+
 class GateTestCase(SimpleTestCase):
     @classmethod
     @override
@@ -46,3 +61,12 @@ class GateTestCase(SimpleTestCase):
         cls.enterClassContext(patch.dict(os.environ))
         os.environ[gate_verdict.VERDICTS_FOLDER] = kept
         os.environ.pop(gate_verdict.REPORTS, None)
+        # What a gate shows is the same on a terminal, in CI and in an agent's shell.
+        os.environ[gate_verdict.OUTPUT] = "short"
+
+    @override
+    def setUp(self) -> None:
+        super().setUp()
+        # A gate a test opens in this process is that test's alone.
+        self.enterContext(patch.object(gate_verdict, "OPENED", None))
+        self.addCleanup(lambda: gate_verdict.OPENED and gate_verdict.OPENED.shut())

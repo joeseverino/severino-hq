@@ -7,7 +7,7 @@ plain records, so a declaration costs the declaring module nothing.
 """
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import TYPE_CHECKING
 
@@ -31,8 +31,14 @@ if TYPE_CHECKING:
 GRANT_MODELS = ("scoped", "coarse", "none")
 
 # How an instance's credential was observed, from the same vocabulary, plus
-# ``rejected`` for one the provider refused. Blank means not observed.
+# ``rejected`` for one the provider refused.
 CREDENTIAL_MODELS = (*GRANT_MODELS, "rejected")
+# A credential HQ holds but cannot classify: a controller's report of a
+# provider HQ no longer models. Said rather than left blank, so no reader has
+# to guess what an empty value meant.
+UNKNOWN_CREDENTIAL = "unknown"
+# Every value an instance may say.
+INSTANCE_CREDENTIAL_MODELS = (*CREDENTIAL_MODELS, UNKNOWN_CREDENTIAL)
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,10 +97,6 @@ class ConnectionInstance:
     observed_at: datetime | None = None
     granted_scopes: tuple[str, ...] = ()
     scopes_known: bool = False
-    # One of CREDENTIAL_MODELS, or blank. What kind of credential this is, as
-    # distinct from which grants it carries: a scoped provider's token whose
-    # grants were never enumerated is still a scoped credential.
-    credential_model: str = ""
     ability_names: tuple[str, ...] = ()
     targets: tuple[ConnectionLink, ...] = ()
     dependencies: tuple[ConnectionLink, ...] = ()
@@ -106,6 +108,25 @@ class ConnectionInstance:
     controller_id: str = ""
     # The ref audit events name this connection by, or blank.
     connection_ref: str = ""
+    # One of INSTANCE_CREDENTIAL_MODELS, and required: what kind of credential
+    # this is, as distinct from which grants it carries (a scoped provider's
+    # token whose grants were never enumerated is still a scoped credential).
+    # Every reader trusts it, so a connection that does not say is refused as
+    # it is made, rather than drawn as one with a secret nobody named.
+    credential_model: str = field(kw_only=True)
+
+    @property
+    def keyless(self) -> bool:
+        """Whether it reaches its service with no credential at all."""
+
+        return self.credential_model == "none"
+
+    def __post_init__(self) -> None:
+        if self.credential_model not in INSTANCE_CREDENTIAL_MODELS:
+            raise ValueError(
+                f"Connection {self.id!r} must say its credential_model, one of "
+                f"{', '.join(INSTANCE_CREDENTIAL_MODELS)}; it says {self.credential_model!r}."
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,7 +151,7 @@ class ConnectionSpec:
     # What this family's emptiness means, in its own words. The default suits a
     # family that emits from configuration; one fed by controller reports
     # overrides it to say so.
-    empty_message: str = "Not set up here yet. Its connections appear once a credential is added."
+    empty_message: str = "Not set up here yet."
 
     @property
     def required_capabilities(self) -> tuple[Capability | str, ...]:

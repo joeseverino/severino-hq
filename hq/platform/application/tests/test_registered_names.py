@@ -36,6 +36,7 @@ VERBS = frozenset(
         "adopt",
         "allow",
         "approve",
+        "cancel",
         "choose",
         "close",
         "complete",
@@ -71,6 +72,7 @@ VERBS = frozenset(
         "update",
         "upload",
         "upsert",
+        "withdraw",
     }
 )
 

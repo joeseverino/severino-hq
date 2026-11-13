@@ -1,10 +1,13 @@
 package install
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -618,4 +621,59 @@ func TestMountInfo(t *testing.T) {
 			t.Errorf("%s was accepted", name)
 		}
 	}
+}
+
+// escapeMountPoint writes a path as mountinfo does, in octal for any byte
+// that could split or mark a field.
+func escapeMountPoint(path string) string {
+	var out strings.Builder
+	for _, b := range []byte(path) {
+		if b <= ' ' || b >= 0x7f || b == '\\' || b == '-' {
+			fmt.Fprintf(&out, `\%03o`, b)
+			continue
+		}
+		out.WriteByte(b)
+	}
+	return out.String()
+}
+
+// Whatever the mount table says, a refusal is the host error, a yes needs a
+// noswap tmpfs to have been said, and the mount stacked last at the
+// directory decides: a disk or a swappable tmpfs on top is always refused.
+func FuzzCheckMountInfo(f *testing.F) {
+	const dir = "/run/severino-hq-secrets"
+	root := "22 1 8:1 / / rw,relatime shared:1 - ext4 /dev/sda1 rw,errors=remount-ro\n"
+	own := "90 25 0:50 / /run/severino-hq-secrets rw,nosuid,nodev,noexec,relatime shared:40 - tmpfs tmpfs rw,size=16384k,mode=700,noswap\n"
+	for _, table := range []string{
+		root + own,
+		root + "25 22 0:23 / /run rw - tmpfs tmpfs rw,noswap\n",
+		root + "90 25 0:50 / /run/severino\\055hq\\055secrets rw - tmpfs tmpfs rw,noswap\n",
+		root + "90 25 0:50 / /run/severino-hq-secrets rw shared:1 master:2 propagate_from:3 - tmpfs tmpfs rw,noswap\n",
+		root + own + "91 25 0:51 / /run/severino-hq-secrets-other rw - ext4 /dev/sdb rw\n",
+		root + "90 25 0:50 / /run/severino-hq-secrets rw,nosuid - tmpfs tmpfs rw,noswapfile\n",
+		root + "90 25 8:2 / /run/severino-hq-secrets rw - ext4 /dev/sdb rw\n" + own,
+		"not a mount table\n",
+	} {
+		f.Add([]byte(table), dir)
+		f.Add([]byte(table), dir+"/web")
+	}
+	f.Fuzz(func(t *testing.T, mountinfo []byte, dir string) {
+		err := CheckMountInfo(mountinfo, dir)
+		if err != nil && !errors.Is(err, ErrHost) {
+			t.Fatalf("an untyped refusal: %v", err)
+		}
+		if err == nil && (!bytes.Contains(mountinfo, []byte("noswap")) || !bytes.Contains(mountinfo, []byte("tmpfs"))) {
+			t.Fatal("accepted a table that mounts no noswap tmpfs")
+		}
+		if dir == "" {
+			return
+		}
+		point := escapeMountPoint(dir)
+		for _, top := range []string{"ext4 /dev/sdb rw", "tmpfs tmpfs rw,size=16384k"} {
+			stacked := append(append(bytes.Clone(mountinfo), '\n'), "95 25 0:60 / "+point+" rw - "+top+"\n"...)
+			if err := CheckMountInfo(stacked, dir); !errors.Is(err, ErrHost) {
+				t.Fatalf("accepted %q with %s stacked on top", dir, top)
+			}
+		}
+	})
 }

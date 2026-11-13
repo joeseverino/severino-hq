@@ -65,6 +65,23 @@ class AuditTaskTests(SimpleTestCase):
                 with self.subTest(task=name):
                     self.assertIn("setup:sandbox", task["depends"])
 
+    def test_an_audit_task_runs_before_the_environment_exists(self) -> None:
+        """A fresh worktree has no .venv, which the sandbox refuses uv's write
+        of; one in var/ is as unwritable to it, and as missing."""
+
+        (ROOT / "var").mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=ROOT / "var") as kept:
+            environment = Path(kept) / "venv"
+            run = subprocess.run(
+                ["mise", "run", "audit:layers"],
+                cwd=ROOT,
+                env=os.environ | {"UV_PROJECT_ENVIRONMENT": str(environment)},
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(run.returncode, 0, run.stderr)
+
     def test_the_template_denies_writes_and_restates_django_s_env(self) -> None:
         templates = tomllib.loads((ROOT / "mise.toml").read_text())["task_templates"]
         self.assertTrue(templates["audit"]["deny_write"])

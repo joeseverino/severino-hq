@@ -199,7 +199,7 @@ class MachinePageTests(TestCase):
         said = text(response)
         for words in (
             "Docker environment",
-            "Where data lives",
+            "Storage",
             "/opt/apps/shop/config",
             "Networks",
             "172.18.0.0/16",
@@ -216,7 +216,7 @@ class MachinePageTests(TestCase):
 
         response = self.client.get(reverse("control_plane:machine", args=["lab-1"]))
 
-        self.assertNotContains(response, "Where data lives")
+        self.assertFalse(select(response, "id", "docker-data"))
         self.assertFalse(select(response, "id", "docker-images"))
 
     def refuse_edge(self):

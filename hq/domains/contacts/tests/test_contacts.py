@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.contact_submissions import (
     DELETE,
@@ -24,6 +25,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.record_errors import RecordNotFound
 from hq.platform.application.security import Capability, Principal
 from hq.platform.application.tests.facts import ROOT, STRING, scan, strings
+from hq.platform.application.tests.markup import elements, select, with_class
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 
@@ -81,7 +83,7 @@ class InboxReadingTests(TestCase):
 
         self.assertContains(response, "No messages read yet.")
         self.assertContains(response, "Connect Cloudflare API")
-        self.assertNotContains(response, "msg-error")
+        self.assertEqual(with_class(response, "notice-error"), [])
         self.assertEqual(inbox.unread(), (0, "unknown"))
 
     def test_rows_counts_and_search_come_from_the_stored_reading(self):
@@ -138,13 +140,31 @@ class ContactViewTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_user("joe", password="pw"))
         _read(_row(1))
+        _manages()
 
     def test_list_renders_with_tabs_and_actions(self):
         response = self.client.get(reverse("contacts:list"))
         self.assertContains(response, "Jane Doe")
         self.assertContains(response, "Hello from the contact form.")
-        self.assertContains(response, "status-tab")
         self.assertContains(response, "Mark read")
+
+    def test_a_message_not_read_is_the_emphasized_row(self):
+        _read(_row(1, name="Unread Example"), _row(2, name="Read Example", status="read"))
+        body = self.client.get(reverse("contacts:list")).content.decode()
+        emphasized = [row.words for row in elements(body, "tr") if "data-emphasized" in row.attrs]
+        self.assertEqual(len(emphasized), 1)
+        self.assertIn("Unread Example", emphasized[0])
+
+    def test_the_status_switch_marks_the_status_shown_and_keeps_the_search(self):
+        response = self.client.get(reverse("contacts:list"), {"status": "unread", "q": "Jane"})
+
+        (nav,) = select(response.content.decode(), "aria-label", "Message status")
+        switch = [link for link in elements(response.content.decode(), "a") if nav in link.ancestors]
+        (current,) = [link for link in switch if link.attrs.get("aria-current") == "page"]
+        self.assertTrue(current.words.startswith("Unread"))
+        self.assertIn("q=Jane", current.attrs["href"])
+        self.assertTrue(switch[0].words.startswith("All"))
+        self.assertNotIn("status=", switch[0].attrs["href"])
 
     def test_detail_renders_quick_actions(self):
         response = self.client.get(reverse("contacts:detail", args=[1]))
@@ -240,9 +260,65 @@ class ContactViewTests(TestCase):
             reverse("contacts:set_status", args=[1]), form_keyed({"status": "read"}), follow=True
         )
 
-        self.assertContains(response, "D1 Write (account)")
+        self.assertContains(response, "does not let HQ make changes through it")
         self.assertFalse(ManagedResource.objects.filter(kind=inbox.DECLARATION).exists())
         self.assertFalse(OperationRequest.objects.exists())
+
+
+class ReadOnlyConnectionTests(TestCase):
+    """A page never offers a change the messages' connection cannot make: where
+    each review and delete control would be, it says what the change needs and
+    links the step that sets it up."""
+
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_user("joe", password="pw"))
+        _read(_row(1))
+        self.setup = f"{reverse('control_plane:connections')}?setup=cloudflare_api#setup-cloudflare_api"
+
+    def _pages(self):
+        for url in (
+            reverse("contacts:list"),
+            reverse("contacts:detail", args=[1]),
+            reverse("contacts:delete", args=[1]),
+        ):
+            yield url, self.client.get(url).content.decode()
+
+    def _no_change_offered(self, missing):
+        changes = (reverse("contacts:set_status", args=[1]), reverse("contacts:delete", args=[1]))
+        for url, page in self._pages():
+            with self.subTest(url=url, missing=missing):
+                for change in changes:
+                    self.assertNotIn(f'formaction="{change}"', page)
+                    self.assertNotIn(f'href="{change}"', page)
+                self.assertNotRegex(page, r'<button type="submit" class="primary">Save note')
+                self.assertIn(f'href="{self.setup}"', page)
+                self.assertIn(missing, page)
+
+    def test_a_connection_that_only_reads_offers_no_change_and_names_its_flag(self):
+        _manages(manages=False)
+
+        self._no_change_offered("manages: 1")
+
+    def test_no_connection_at_all_offers_no_change_and_names_the_connection(self):
+        self._no_change_offered("a Cloudflare API connection")
+
+    def test_the_permission_a_change_needs_is_said_beside_what_is_missing(self):
+        _manages(manages=False)
+
+        for url, page in self._pages():
+            with self.subTest(url=url):
+                self.assertIn(Cloudflare.D1_EDIT, page)
+
+    def test_a_managing_connection_offers_every_change(self):
+        _manages()
+
+        for url, page in self._pages():
+            with self.subTest(url=url):
+                self.assertNotIn(f'href="{self.setup}"', page)
+                self.assertTrue(
+                    f'formaction="{reverse("contacts:set_status", args=[1])}"' in page
+                    or f'formaction="{reverse("contacts:delete", args=[1])}"' in page
+                )
 
 
 class QueuedChangeTests(TestCase):

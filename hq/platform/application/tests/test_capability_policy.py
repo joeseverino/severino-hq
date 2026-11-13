@@ -13,6 +13,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.markup import text
 from hq.platform.core.models import AgentIdentity, AuditLog
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
+from hq_sdk.testing import plain
 
 from ..approvals import APPROVE, DELETING_FLAGS, ApproveCommand, approve
 from ..capabilities import capability_registry, execute_capability, validate_command
@@ -409,7 +410,7 @@ class PageTests(PolicyTestCase):
 
         response = self.client.post(reverse("agent_policy"), form_keyed({field: Rule.APPROVE}), follow=True)
 
-        self.assertContains(response, "Saved 1 change")
+        self.assertIn("Saved 1 change", plain(response.content))
         self.assertEqual(CapabilityRule.objects.get().rule, Rule.APPROVE)
         _columns, groups = matrix()
         cell = next(cell for group in groups for row in group.rows for cell in row.cells if cell.field == field)
@@ -578,7 +579,7 @@ class CommandTitleTests(TestCase):
 
         state = _ability_state(
             ability,
-            ConnectionInstance("one", "One", "example", "good", "Healthy"),
+            ConnectionInstance("one", "One", "example", "good", "Healthy", credential_model="none"),
             operator,
         )
 

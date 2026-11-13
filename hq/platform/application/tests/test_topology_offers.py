@@ -9,6 +9,7 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 from django.urls import reverse
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.platform.application.tests.reads import reads
 from hq.platform.core import seeds
 from hq.platform.core.example_estate.testing import throwaway_media
 
@@ -105,7 +106,55 @@ class PageOffersTests(TestCase):
         self.assertGreater(shown, len(self.keys))
 
 
+class SourcedRecordTests(TestCase):
+    """A record HQ derives from a source offers no hand edit or removal while
+    the source names it, and its removal again once the source drops it."""
+
+    @classmethod
+    def setUpTestData(cls):
+        with throwaway_media(), seeds.built("showcase") as owner:
+            cls.owner = owner
+
+    def setUp(self):
+        from hq.platform.application.automation_adoption import catch_up
+
+        # Outside a request, this process reads the catalog seeded for the test.
+        catch_up()
+        self.client.force_login(self.owner)
+
+    def _procedure(self) -> ManagedResource:
+        from hq.domains.control_plane.provider_adapters.automation import OPERATION_KIND
+
+        # A seeded procedure's record, which the adopted catalog names.
+        record = ManagedResource.objects.filter(kind=OPERATION_KIND).order_by("key").first()
+        self.assertIsNotNone(record)
+        return record
+
+    def _routes(self, key: str) -> dict[str, str]:
+        return {reverse(f"control_plane:{route}", kwargs={"key": key}): key for route in ("edit", "remove")}
+
+    def test_a_record_its_source_names_offers_neither_edit_nor_removal(self):
+        from hq.platform.application.resource_capabilities import offered_changes, resource_capabilities
+
+        record = self._procedure()
+        self.assertEqual(offered_changes([record])[record.key], ("", ""))
+        self.assertEqual(resource_capabilities(record).offered, ("", ""))
+        panel = self.client.get(reverse("control_plane:topology_node"), {"node": f"resource:{record.key}"})
+        self.assertEqual(panel.status_code, 200)
+        self.assertEqual(_offers(panel, self._routes(record.key)), {})
+
+    def test_a_record_its_source_has_dropped_offers_removal_again(self):
+        from hq.platform.application.resource_capabilities import offered_changes
+
+        named = self._procedure()
+        dropped = ManagedResource.objects.create(
+            key="automation-example-retired", kind=named.kind, spec={**named.spec, "operation": "example.retired"}
+        )
+        self.assertIn(offered_changes([dropped])[dropped.key].remove_url, self._routes(dropped.key))
+
+
 @tag("source", "tree")
+@reads("**/*.py", "**/templates/**")
 class OfferedLinksTests(SimpleTestCase):
     def test_only_offered_builds_a_declarations_edit_or_removal_link(self):
         files = [*ROOT.joinpath("hq").rglob("*.py"), *ROOT.joinpath("templates").rglob("*.html")]

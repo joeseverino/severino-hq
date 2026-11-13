@@ -39,14 +39,15 @@ OUTSIDE = {
         '{% post_button "Go" url color="red" %}'
     ),
     "templates/example/markup.html": (
-        '<div class="kv invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p></div>\n'
+        '<div class="compact invented {% if on %}pill-good{% endif %} pill-{{ tone }}">\n<p data-secret>x</p></div>\n'
         '<span class="muted" style="--part: {{ width }}">x</span>'
     ),
     "templates/example/parts.html": (
-        "{% card %}{% section_head %}A{% aside %}B{% endsection_head %}{% aside %}C{% endcard %}\n"
+        '{% card %}{% section "A" %}B{% aside %}C{% endsection %}{% aside %}C{% endcard %}\n'
         "{% aside %}D\n"
-        '{% card css="kv invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
-        '{% post_button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}'
+        '{% card css="muted invented-card" %}{% endcard %}{% card css=chosen %}{% endcard %}\n'
+        '{% post_button "Go" url css="invented-button" %}\n{% table_heading "A" css="invented-note" %}\n'
+        '{% facts %}{% fact "A" value=n %}{% detail %}B{% endfacts %}'
     ),
     "templatetags/example_tags.py": (
         "from django import template\n\nregister = template.Library()\n\n\n"
@@ -86,6 +87,7 @@ class TemplateValidationTests(SimpleTestCase):
             "parts.html:3": "invented-card",
             "parts.html:4": "invented-button",
             "parts.html:5": "invented-note",
+            "parts.html:6": "detail",
         }
         for place, name in expected.items():
             with self.subTest(place=place):
@@ -207,7 +209,7 @@ class PageDialogTests(SimpleTestCase):
         self.assertIn('href="/example/import/" data-modal-open="import"', html)
 
     def test_a_dialog_the_host_draws_elsewhere_is_only_opened(self):
-        html = self.render(PageAction("How I am connected", "/connection/", modal="connection"))
+        html = self.render(PageAction("Your connection", "/connection/", modal="connection"))
 
         self.assertIn('data-modal-open="connection"', html)
         self.assertNotIn('id="modal-connection"', html)

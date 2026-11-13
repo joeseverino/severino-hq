@@ -2,7 +2,6 @@ import inspect
 import re
 from collections.abc import Callable
 from datetime import date, datetime
-from html import unescape
 from numbers import Number
 from urllib.parse import parse_qs, unquote, urlsplit
 lazy from dataclasses import replace
@@ -12,11 +11,11 @@ from django.template.base import token_kwargs
 from django.template.context import RequestContext
 from django.template.loader import render_to_string
 from django.utils import dateformat, timezone
-from django.utils.html import conditional_escape, format_html, format_html_join
+from django.utils.html import conditional_escape, format_html
 from django.utils.safestring import mark_safe
 lazy from django.conf import settings
 
-from hq.platform.application.doors import door_words as _door_words, interface_label as _interface_label
+from hq.platform.application.doors import interface_label as _interface_label
 from hq.platform.application.entity_links import (
     connection_anchor as anchor,
     declared_link as declared,
@@ -24,7 +23,7 @@ from hq.platform.application.entity_links import (
     kind_label as label,
     web_url as _web_url,
 )
-from hq.platform.application.labels import DOT, DOT_MARKUP, human_bytes
+from hq.platform.application.labels import DOT_MARKUP, human_bytes
 from hq.platform.application.moments import (
     WHEN_FORMS as _WORDS_FORMS,
     ago as _ago,
@@ -34,9 +33,11 @@ from hq.platform.application.moments import (
     when_exact as _when_exact,
 )
 from hq.platform.application.money import money as _money
+from hq.platform.application.page_parts import html_attributes
 from hq.platform.application.printable import admitted
 from hq.platform.application.timestamps import moment
-from hq.platform.application.ui import MISSING, counted as _counted
+from hq.platform.application.ui import MISSING, STATUS_VALUES, counted as _counted
+from hq.platform.core.templatetags.line_breaks import breakable, code_spans, held, mark_text
 lazy from hq.domains.control_plane.provider_spec import expiry_phrase
 lazy from hq.platform.application import references, request_identity, security
 lazy from hq.platform.application.derivations import this_year
@@ -46,6 +47,8 @@ lazy from hq.platform.application.where_it_runs import named_links as _named_lin
 lazy from hq.platform.core.oidc import SIGNED_IN_SESSION_KEY
 
 register = template.Library()
+register.filter("breakable", breakable, is_safe=True)
+register.filter("code_spans", code_spans, is_safe=True)
 
 # The one form a link to a page outside HQ takes, whichever tag writes it.
 OUTSIDE_LINK = "partials/_outside_link.html"
@@ -57,8 +60,22 @@ def counted(count, phrases):
 
     One word may stand alone (``{{ n|counted:"change" }}``); a phrase gives both
     forms, comma separated, so its verb agrees too. See ``application.ui.counted``.
+    The figure and its first word share a line (``line_breaks.held``).
     """
-    return _counted(int(count or 0), *counted_phrases(phrases))
+    return held(_counted(int(count or 0), *counted_phrases(phrases)))
+
+
+@register.filter
+def measured(value, unit):
+    """``{{ miles|floatformat:2|measured:"mi" }}``: a figure and its unit, or a
+    word the count leaves alone (``measured:"more"``), as one value, so the
+    word never opens a line alone below its number. For a measure no other
+    value tag says (``bytes``, ``seconds``, ``money``) and a word ``counted``
+    would make plural; a missing figure is the missing mark, with no word."""
+
+    if value is None or value == "":
+        return or_empty(value)
+    return held(f"{value} {unit}")
 
 
 def counted_phrases(phrases) -> tuple[str, str | None]:
@@ -97,7 +114,7 @@ def bytes_(value):
     controller's readings already use. Never ``filesizeformat``, which says the
     same count differently."""
 
-    return human_bytes(value)
+    return held(human_bytes(value))
 
 
 @register.filter
@@ -240,8 +257,8 @@ def signed_in(request):
     if hours < 1:
         return "Signed in within the hour"
     if hours < 48:
-        return f"Signed in {_counted(hours, 'hour', 'hours')} ago"
-    return f"Signed in {_counted(hours // 24, 'day', 'days')} ago"
+        return held(f"Signed in {_counted(hours, 'hour', 'hours')} ago")
+    return held(f"Signed in {_counted(hours // 24, 'day', 'days')} ago")
 
 
 @register.filter
@@ -257,7 +274,8 @@ def span(days):
 @register.filter
 def seconds(value):
     """``{{ job.duration_seconds|seconds }}``: a run time as a person reads
-    one: "45 s", "4 min 33 s", "1 h 2 min". Never a bare count of seconds."""
+    one: "45 s", "4 min 33 s", "1 h 2 min", "30 min". Never a bare count of
+    seconds, and never a part that is zero after a larger one."""
 
     try:
         whole = max(0, round(float(value)))
@@ -265,16 +283,17 @@ def seconds(value):
         return or_empty(None)
     hours, rest = divmod(whole, 3600)
     minutes, left = divmod(rest, 60)
-    if hours:
-        return f"{hours} h {minutes} min"
-    return f"{minutes} min {left} s" if minutes else f"{left} s"
+    larger, unit, smaller, small_unit = (hours, "h", minutes, "min") if hours else (minutes, "min", left, "s")
+    if not larger:
+        return held(f"{left} s")
+    return held(f"{larger} {unit} {smaller} {small_unit}" if smaller else f"{larger} {unit}")
 
 
 @register.filter
 def expiry(value):
     """``{{ not_after|expiry }}``: "22 Dec 2026 · 87 days", the one phrasing HQ uses for an end date."""
 
-    return expiry_phrase(str(value or ""))
+    return held(expiry_phrase(str(value or "")))
 
 
 @register.filter
@@ -293,277 +312,6 @@ def readable(value):
     if not isinstance(value, str) or "T" not in value:
         return breakable(value)
     return when(value)
-
-
-# Where an address, a hostname, a path or an image reference may wrap: after a
-# slash, after a colon run (never inside a scheme's "://" or an IPv6 "::"), and
-# after a dot unless digits stand either side of it, so a version ("2.39.8")
-# and an IPv4 address are each one piece. An address's query wraps after its
-# "?" and each "&" (escaped by then), so a word of it stays whole.
-_BREAK_AFTER = re.compile(r"(/|:+|\?|&amp;|(?<!\d)\.|\.(?!\d))(?=[^/:])")
-# A seam as markup: an empty span whose stylesheet text is a zero-width space
-# (base.css). A `<wbr>` would do in WebKit, but Chromium breaks at one even
-# where `white-space: nowrap` holds its line, and a zero-width space in the
-# text itself would be copied with the name.
-_SEAM = '<span class="seam"></span>'
-
-
-# A part with a hyphen inside it ("nginx-proxy-manager") is kept on one line:
-# a browser breaks after a hyphen, and a name split there reads as two. A flag
-# ("-a") has nothing before its hyphen to break from.
-_INNER_HYPHEN = re.compile(r"[^-\s]-")
-# A run longer than any word of a sentence (a digest, a key, a subject) has no
-# seam to wrap at, so it is held on one line as a hyphenated part is: a cell
-# cuts it at its edge rather than widening its column to fit it.
-_UNBROKEN = 24
-# A seam inside a word, between two of its letters or digits: an address, a
-# path, a host name. A dot after a bracket ("(.zip)") is punctuation.
-_INNER_SEAM = re.compile(r"\w(?:/|:+|\.)\w")
-_WORDS = re.compile(r"(\s+)")
-# A figure in a phrase: an amount, a time, an address of digits ("$12.00",
-# "9:29", "172.18.0.2"), or a range of two ("10.5–12.5"). Nothing in one is a
-# place a line breaks.
-_FIGURE = re.compile(r"\W*\d+(?:[.:,]\d+)*(?:–\d+(?:[.:,]\d+)*)?\W*")
-# Where a browser may break a hyphenated part: after each inner hyphen.
-_AFTER_HYPHEN = re.compile(r"(?<=[^-\s]-)")
-# A piece of a name shorter than this, alone on a line ("1" under
-# "portainer-agent-"), reads as a stray mark rather than part of the name.
-_SCRAP = 3
-
-
-def _glued(pieces: list[str]) -> list[list[str]]:
-    """``pieces`` grouped so that no group is a scrap: a short piece goes with
-    the one before it, and a short first piece with the one after."""
-
-    groups: list[list[str]] = []
-    for piece in pieces:
-        if groups and (len(unescape(piece)) < _SCRAP or len(unescape("".join(groups[-1]))) < _SCRAP):
-            groups[-1].append(piece)
-        else:
-            groups.append([piece])
-    return groups
-
-
-# A label of a name, with the seam after it: letters, digits, hyphens. A
-# bracket or a quote ("com']") makes the run a value that holds names, not one.
-_LABEL = re.compile(r"[\w-]+(?:\.|/|:+)?")
-
-
-def _labels_held(pieces: list[str]) -> list[str]:
-    """``pieces`` with each dotted name's end labels held to their neighbors:
-    the last label stays with the one before it ("example.com"), and the
-    first with the next while the name still has a seam left to break at. A
-    label alone on a line ("com") reads as a word rather than part of a name.
-    A hyphenated first label already reads as a name, so it keeps its seam:
-    held to the next label, the pair could break only at a hyphen.
-    Applied to a sole token, a name that is its value whole."""
-
-    out: list[str] = []
-    start = 0
-    while start < len(pieces):
-        end = start
-        while end < len(pieces) - 1 and pieces[end].endswith("."):
-            end += 1
-        run = pieces[start : end + 1]
-        if all(_LABEL.fullmatch(piece) for piece in run) and len(run) > 1:
-            run = [*run[:-2], run[-2] + run[-1]]
-        if len(run) > 2 and not _INNER_HYPHEN.search(run[0]):
-            run = [run[0] + run[1], *run[2:]]
-        out.extend(run)
-        start = end + 1
-    return out
-
-
-def _joined(text: str) -> str:
-    return f'<span class="joined">{text}</span>'
-
-
-def _held(group: list[str], *, first: bool, last: bool) -> str:
-    """A group at an end of its part, held together. The hold's edges sit
-    before a hyphen, where no line may break, never after one: a browser
-    decides a break at an element's edge by the box around both sides, and
-    where the part is text with no box of its own (a name cut in a cell),
-    that box would let the line break there."""
-
-    text = "".join(group)
-    if len(group) == 1:
-        return text
-    if first and last:
-        return _joined(text)
-    if first:
-        return _joined(text[:-1]) + "-"
-    return group[0][:-1] + _joined("-" + "".join(group[1:]))
-
-
-def _kept(part: str) -> bool:
-    """Whether a part is held on one line: a hyphen inside it, or a run too
-    long to be a word."""
-
-    return bool(_INNER_HYPHEN.search(part)) or len(unescape(part)) > _UNBROKEN
-
-
-def _whole(part: str, *, boxed: bool = False) -> str:
-    """A part, kept on one line when it is ``_kept``. Where it must break
-    after a hyphen all the same, a scrap at either end stays with its
-    neighbor; one inside it has words on both sides to share its line.
-
-    ``boxed`` puts its text in a box of its own (``.part``), which a table
-    cell cuts at the cell's edge while the part around it asks for its whole
-    length and holds out for none of it (figures.css)."""
-
-    if not _kept(part):
-        return part
-    groups = _glued(_AFTER_HYPHEN.split(part))
-    last = len(groups) - 1
-    held = "".join(
-        _held(group, first=at == 0, last=at == last) if at in (0, last) else "".join(group)
-        for at, group in enumerate(groups)
-    )
-    inner = f'<span class="part">{held}</span>' if boxed else held
-    return f'<span class="whole">{inner}</span>'
-
-
-def _token(word: str, *, sole: bool) -> str:
-    """A word with a seam or a hyphen inside it, or too long to be a word, as
-    a token. Any other word reads as a word, and stays plain text. A token
-    that is the whole value (a name, never a word of a sentence) is marked
-    ``data-sole``, so a table cell may cut it rather than break it. A figure
-    among words reads as one of them."""
-
-    if not (_INNER_SEAM.search(word) or _kept(word)):
-        return word
-    if not sole and len(unescape(word)) <= _UNBROKEN and _FIGURE.fullmatch(unescape(word)):
-        # A browser breaks after a dash, so a range is a part of its own:
-        # it moves to the next line whole and breaks at its dash only when it
-        # alone is longer than its line.
-        return f'<span class="whole">{word}</span>' if "–" in word else word
-    # A word has no whitespace, so a newline marks where it splits.
-    seams = _BREAK_AFTER.sub("\\1\n", word).split("\n")
-    # Only a name standing alone holds its end labels: a value of several
-    # words (a list, a sentence) shares its line, and a longer piece there
-    # widens the column it sits in.
-    seams = _labels_held(seams) if sole else seams
-    parts = ["".join(group) for group in _glued(seams)]
-    if not sole:
-        # A word of a phrase: each part is cut on its own, at its cell's edge.
-        return f'<span class="token">{_SEAM.join(_whole(part, boxed=True) for part in parts)}</span>'
-    inside = _SEAM.join(_whole(part) for part in parts)
-    # A name a cell cuts inside a part it keeps is cut by a box within the
-    # token, so the token can ask for the name's whole length around it
-    # (figures.css).
-    if any(_kept(part) for part in parts):
-        inside = f'<span class="cut">{inside}</span>'
-    # The name again, unseen and with nothing to copy, broken only where the
-    # name breaks once a row opens it: a table cell that cuts the name sizes
-    # its column by it, so the column already holds the longest piece
-    # (tables.css). First, so a mark after the name lands in the name.
-    strut = f'<span class="strut" data-strut="{"&#8203;".join(parts)}" aria-hidden="true"></span>'
-    return f'{strut}<span class="token" data-sole{_short(word)}>{inside}</span>'
-
-
-# The characters a value a cell cuts holds out for (`--cut-floor`,
-# tables.css) in a narrow box and in any other, counted generously: a
-# proportional face sets most letters narrower than `ch`.
-_FLOORS = (6, 16)
-
-
-def _short(word: str) -> str:
-    """``data-short``, naming the least floor a name is no longer than: such a
-    name holds out for all of it, and no more, since a box padded to the floor
-    leaves a gulf before the words after it on its line."""
-
-    length = len(unescape(word))
-    floor = next((floor for floor in _FLOORS if length <= floor), None)
-    return f' data-short="{floor}"' if floor else ""
-
-
-# The tags that close a word's boxes, after its last letter.
-_CLOSING = re.compile(r"(?:</span>)*$")
-
-
-@register.filter(is_safe=True)
-def breakable(value, mark=""):
-    """``value`` as tokens, one per word: escaped, with a line-break opportunity
-    where an address or a path may wrap, and none inside a hyphenated part.
-
-    The one way a template writes an identifier (``<code>{{ x|breakable }}</code>``,
-    or bare as a link's text). ``mark`` is the punctuation the sentence puts
-    after the value (``{{ x|breakable:"." }}``), or given a list's ``forloop``,
-    the comma between its items.
-    """
-
-    mark = _mark(mark)
-    value = admitted(value)
-    # Markup is whatever renders itself: a form field is not SafeData until
-    # Django renders it. It passes as it is: what built it held the names in
-    # it, and a seam inside a tag would break the tag.
-    if hasattr(value, "__html__"):
-        return conditional_escape(value) + conditional_escape(mark)
-    drawn = _words(value)
-    # The mark goes inside the last word's innermost box: a box as wide as its
-    # line leaves a mark after it no room there, and the mark would start the
-    # next line alone.
-    if mark:
-        last = drawn[-1]
-        at = _CLOSING.search(last).start()
-        # Hidden from the accessibility tree: in a link it would be heard as
-        # part of the link's name. ``data-mark`` is what a link draws in its
-        # place, clear of its underline (base.css).
-        shown = conditional_escape(mark)
-        drawn[-1] = f'{last[:at]}<span class="mark" data-mark="{shown}" aria-hidden="true">{shown}</span>{last[at:]}'
-    # A dot ``labels.dotted`` joined parts with is drawn as {% dot %} draws it,
-    # hidden from a reader.
-    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))  # noqa: S308 - each word is escaped as it is drawn
-
-
-def _words(value, *, sole: bool | None = None) -> list[str]:
-    """``value``'s words as ``breakable`` draws them, a word standing alone as a
-    name unless ``sole`` says otherwise."""
-
-    # Escaped first, so the only markup in the result is what is added here.
-    words = _WORDS.split(str(conditional_escape(value)))
-    # A token that fits on its line moves to the next one whole; one longer than
-    # its line wraps at its seams; a part longer than its line alone breaks
-    # wherever it must.
-    alone = len(words) == 1 if sole is None else sole
-    return [_token(word, sole=alone) for word in words]
-
-
-# A Markdown code span: the text between a pair of backticks.
-_CODE_SPAN = re.compile(r"`([^`]+)`")
-
-
-@register.filter(is_safe=True)
-def code_spans(value):
-    """``value``, prose written as Markdown, as ``breakable`` draws it, with each
-    code span (a name between backticks) drawn as code.
-
-    For a description HQ shows as another program wrote it, as the MCP server
-    lists its tools. Each piece is escaped before it is drawn, so the only markup
-    in the result is the ``<code>`` added here, and a backtick without its pair
-    stays a backtick. The rest of Markdown is shown as written: one card is no
-    reason for a Markdown parser.
-    """
-
-    value = admitted(value)
-    if hasattr(value, "__html__"):
-        return conditional_escape(value)
-    drawn = []
-    # Split at a group, so every second piece is a span's text.
-    for index, piece in enumerate(_CODE_SPAN.split(str(value))):
-        # A word of a sentence, never a name standing alone, inside a span too.
-        words = "".join(_words(piece, sole=False))
-        drawn.append(f"<code>{words}</code>" if index % 2 else words)
-    return mark_safe("".join(drawn).replace(DOT, DOT_MARKUP))  # noqa: S308 - each word is escaped as it is drawn
-
-
-def _mark(mark) -> str:
-    """A mark as ``breakable`` takes it: the text given, or for a list's
-    ``forloop`` a comma after every item but the last."""
-
-    if isinstance(mark, dict):
-        return "" if mark["last"] else ","
-    return str(mark)
 
 
 @register.filter
@@ -618,7 +366,7 @@ def entity(context, link, code=False, label="", mark=""):
     """
     if link is None:
         return format_html('<span class="empty-value" title="None">{}</span>', MISSING) + conditional_escape(
-            _mark(mark)
+            mark_text(mark)
         )
     # A count of nothing is still a name to show.
     if label is not None and label != "":
@@ -645,15 +393,27 @@ def entity(context, link, code=False, label="", mark=""):
 
 
 @register.simple_tag
-def cell_line(text, url=""):
+def cell_line(text, url="", *, lines=2):
     """One fact in a table cell written as a line (``.cell-line``), a link when
     ``url`` is given: its names held as ``breakable`` holds them. The line asks
     for its whole length around the box that cuts it (``.cut``, figures.css),
-    and a cut one reads whole as any cut value does (tables.js, ``markCut``)."""
+    and a cut one reads whole as any cut value does (tables.js, ``markCut``).
+    It takes two lines at most, or one (``lines=1``) for a fact that keeps its
+    row as tall as its neighbors."""
 
+    drawn = breakable(text)
+    # A name brings its own box and strut; words are cut by the line's box.
+    inside = (
+        drawn
+        if drawn.startswith('<span class="token" data-sole')
+        else format_html('<span class="cut">{}</span>', drawn)
+    )
+    if lines not in (1, 2):
+        raise ValueError(f"A cell's line takes 1 or 2 lines, never {lines!r}.")
+    one = format_html(' data-lines="{}"', lines) if lines == 1 else ""
     if url:
-        return format_html('<a class="cell-line" href="{}"><span class="cut">{}</span></a>', url, breakable(text))
-    return format_html('<span class="cell-line"><span class="cut">{}</span></span>', breakable(text))
+        return format_html('<a class="cell-line"{} href="{}">{}</a>', one, url, inside)
+    return format_html('<span class="cell-line"{}>{}</span>', one, inside)
 
 
 def _viewer(context):
@@ -672,7 +432,7 @@ def reference(context, row, field):
 
 
 @register.inclusion_tag("partials/_related.html", takes_context=True)
-def referenced_by(context, thing, identity="", cards=True):  # noqa: ARG001 - hq_sdk's contract, which extensions call with cards
+def referenced_by(context, thing, identity="", cards=True):
     """Everything that names a thing, for that thing's page: a card per kind
     of reference, as every related list is drawn (``partials/_related.html``).
 
@@ -697,13 +457,6 @@ def interface_label(value):
     if isinstance(value, str):
         return _interface_label(value)
     return ", ".join(_interface_label(interface) for interface in value or ())
-
-
-@register.filter
-def door_words(interface):
-    """An interface in a sentence, beside who came through it: ``api`` reads "over the API"."""
-
-    return _door_words(str(interface or ""))
 
 
 @register.filter
@@ -847,6 +600,11 @@ class Takes:
     variables. Its signature and the parts after its first are what the
     template contract records for the tag."""
 
+    # The option that, given, makes the tag stand alone, enclosing nothing.
+    bare_with = ""
+    # What the tag takes in order after its content, each required.
+    ordered: tuple[str, ...] = ()
+
     def __init__(
         self, name: str, partial: str, parts: tuple[str, ...], options: frozenset[str], shape: Shape | None
     ) -> None:
@@ -855,10 +613,11 @@ class Takes:
         self.parts = parts
         self.options = options
         self.shape = shape
-        keyword = inspect.Parameter.KEYWORD_ONLY
+        keyword, ordered = inspect.Parameter.KEYWORD_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD
         self.__signature__ = inspect.Signature(
             [
-                inspect.Parameter("content", inspect.Parameter.POSITIONAL_OR_KEYWORD),
+                inspect.Parameter("content", ordered),
+                *(inspect.Parameter(name, ordered) for name in self.ordered),
                 *(inspect.Parameter(option, keyword, default="") for option in sorted(options)),
                 *([inspect.Parameter("data", inspect.Parameter.VAR_KEYWORD)] if shape else []),
             ]
@@ -878,14 +637,21 @@ type Shape = Callable[[str, dict], dict]
 
 
 def slotted(
-    name: str, partial: str, parts: tuple[str, ...], options: frozenset[str], *, shape: Shape | None = None
+    name: str,
+    partial: str,
+    parts: tuple[str, ...],
+    options: frozenset[str],
+    *,
+    shape: Shape | None = None,
+    library: template.Library = register,
 ) -> None:
     """Register ``{% name option=value %}first{% second %}...{% endname %}``:
     markup a page would otherwise write by hand, drawn by ``partial`` with
     each part as the variable it is named for. The first part follows the
     opening tag; the others may be left out, and come in ``parts``' order.
     A tag with a ``shape`` also takes ``data_*`` options, and its shape turns
-    what a page gave into the partial's variables."""
+    what a page gave into the partial's variables. ``library`` is the one
+    it is registered in."""
 
     end = f"end{name}"
     takes = Takes(name, partial, parts, options, shape)
@@ -907,21 +673,16 @@ def slotted(
 
     # The template contract reads a tag's parameters from what it wraps.
     compile_.__wrapped__ = takes  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
-    register.tag(name, compile_)
+    library.tag(name, compile_)
 
 
 CARD_ELEMENTS = frozenset(("section", "article", "figure", "details", "div"))
 
 
-def _drawn(value) -> bool:
-    # By identity, so a count of 0 is still drawn.
-    return value is not None and value is not False and value != ""
-
-
 def card_frame(name: str, given: dict) -> dict:
     """A card's opening and closing tags. Built here rather than in its
     partial, since the element is a choice and every attribute but the class
-    is drawn only when it has a value: True draws a bare attribute."""
+    is drawn only when it has a value, as ``html_attributes`` draws one."""
 
     element = given.get("element", "section")
     if element not in CARD_ELEMENTS:
@@ -933,15 +694,13 @@ def card_frame(name: str, given: dict) -> dict:
         "aria-label": given.get("label"),
         "aria-busy": "true" if given.get("busy") else None,
         "open": True if given.get("open") else None,
+        "data-alone": True if given.get("alone") else None,
     }
     named |= {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
-    drawn = [(key, value) for key, value in named.items() if _drawn(value)]
-    valued = format_html_join("", ' {}="{}"', ((key, value) for key, value in drawn if value is not True))
-    bare = format_html_join("", " {}", ((key,) for key, value in drawn if value is True))
-    # The element is one of CARD_ELEMENTS, a tag name and never text, and the
-    # attributes are escaped above.
+    # The element is one of CARD_ELEMENTS, a tag name and never text, and
+    # html_attributes escapes the attributes.
     return {
-        "opening": mark_safe(f"<{element}{valued}{bare}>"),  # noqa: S308 - see above
+        "opening": mark_safe(f"<{element}{html_attributes(named)}>"),  # noqa: S308 - see above
         "closing": mark_safe(f"</{element}>"),  # noqa: S308 - see above
     }
 
@@ -953,11 +712,53 @@ slotted(
     ("content",),
     frozenset(("url", "css", "tone", "tip", "title", "label", "modal", "entity")),
 )
-slotted("band_fact", "partials/_band_fact.html", ("value",), frozenset(("icon", "label", "tone")))
+# A list of short steps or checks, read down its columns, or numbered when
+# they are done in order, and one step of it: its icon, toned by how it
+# stands, or its number, then what it says.
+slotted("steps", "partials/_steps.html", ("content",), frozenset(("numbered",)))
+slotted("step", "partials/_step.html", ("content",), frozenset(("icon", "tone", "done", "title")))
+# A row of links, each a chip of its own.
+slotted("link_chips", "partials/_link_chips.html", ("content",), frozenset())
+# The content column of the page frame, which base.html and the component
+# catalog draw in.
+slotted("page_main", "partials/_page_main.html", ("content",), frozenset())
 slotted(
     "card",
     "partials/_card.html",
     ("content",),
-    frozenset(("element", "id", "css", "heading", "label", "busy", "open")),
+    frozenset(("element", "id", "css", "heading", "label", "busy", "open", "alone")),
     shape=card_frame,
+)
+
+
+# How a reading's note stands: said plainly, a problem, or past its time.
+NOTE_TONES = frozenset(("", "attention", "stale"))
+
+
+def reading_frame(name: str, given: dict) -> dict:
+    """A reading's options as its partial draws them: its tone as the shared
+    tone class, and each ``data_*`` option as an attribute of the reading."""
+
+    tone, note_tone = given.get("tone") or "", given.get("note_tone") or ""
+    if tone and tone not in STATUS_VALUES:
+        raise template.TemplateSyntaxError(f"{name} tone= is one of {', '.join(sorted(STATUS_VALUES))}")
+    if note_tone not in NOTE_TONES:
+        raise template.TemplateSyntaxError(f"{name} note_tone= is one of {', '.join(sorted(filter(None, NOTE_TONES)))}")
+    data = {option.replace("_", "-"): value for option, value in given.items() if option.startswith("data_")}
+    return {
+        **{option: value for option, value in given.items() if not option.startswith("data_")},
+        "tone_class": f" tone-{tone}" if tone not in ("", "neutral") else "",
+        "attributes": html_attributes(data),
+    }
+
+
+# A row of readings and one reading of it: its mark, its figure, its quiet
+# lines and a note on how it stands, leading to a page or opening a panel.
+slotted("readings", "partials/_readings.html", ("content",), frozenset())
+slotted(
+    "reading",
+    "partials/_reading.html",
+    ("lead", "lines", "note", "heading", "panel", "foot"),
+    frozenset(("icon", "url", "modal", "id", "title", "unit", "tone", "note_tone")),
+    shape=reading_frame,
 )

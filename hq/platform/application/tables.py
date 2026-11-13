@@ -1,7 +1,7 @@
 """Declarative query engine for searchable, filterable list views."""
 
 import shlex
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, replace
 from typing import Any, Literal, override
 
@@ -14,6 +14,7 @@ lazy from hq.platform.application.search import apply_search
 
 from .page_reads import Remedy
 from .projection import guarded
+from .ui import ended
 lazy from . import security
 
 
@@ -181,8 +182,49 @@ class TableTotal:
     label: str = "Total"
 
 
+@dataclass(frozen=True, slots=True)
+class TableQuery:
+    """What a list's address asks of its rows, handed to the projection that
+    fills it (``TableListMixin.get_table_rows``): each filter's chosen values
+    by the filter's name, the search as typed, and the chosen sort's value
+    (the default where the address names none it declares)."""
+
+    filters: Mapping[str, tuple[str, ...]]
+    search: str
+    sort: str
+
+    def chosen(self, name: str) -> tuple[str, ...]:
+        return self.filters.get(name, ())
+
+
+@dataclass(frozen=True, slots=True)
+class Projected:
+    """A projection's rows as a list pages them: ``rows`` counted and cut in
+    the database, and each page of them read back whole by ``read``, so a page
+    costs the same however many rows match."""
+
+    rows: QuerySet
+    read: Callable[[list[Any]], list[Any]]
+
+    def count(self) -> int:
+        return self.rows.count()
+
+    def __len__(self) -> int:
+        return self.count()
+
+    def __getitem__(self, cut: slice) -> list[Any]:
+        return self.read(list(self.rows[cut]))
+
+    def __iter__(self) -> Iterator[Any]:
+        return iter(self[:])
+
+
 class TableListMixin:
-    """Apply one stable URL/query contract to a Django ``ListView``."""
+    """Apply one stable URL/query contract to a Django ``ListView``.
+
+    Its rows are the model's queryset, which the view passes through
+    ``apply_table_query``, or a projection's (``get_table_rows``).
+    """
 
     table_search_fields: tuple[str, ...] = ()
     table_search_scope = ""
@@ -199,10 +241,10 @@ class TableListMixin:
     table_totals: tuple[TableTotal, ...] = ()
     table_default_sort = ""
     table_search_placeholder = "Search…"
-    # What an empty list means, in one line ("No assets yet."). What would
-    # fill it is derived: the page's lead action, or the connection that reads
-    # what it lists (``Page.remedy``).
-    table_empty = "Nothing here yet."
+    # What an empty list means, in one line ("No assets yet."); left blank, it
+    # is "No" and the model's plural. What would fill it is derived: the page's
+    # lead action, or the connection that reads what it lists (``Page.remedy``).
+    table_empty = ""
     # A sentence that qualifies it, in the same line ("Add one in the vault.").
     table_empty_why = ""
     # False where the lead action is a view of this same list, not a way to fill it.
@@ -213,7 +255,10 @@ class TableListMixin:
     _resolved_table_filters: tuple[TableFilter, ...] | None = None
 
     def get_table_empty(self) -> str:
-        return self.table_empty
+        if self.table_empty:
+            return self.table_empty
+        model = getattr(self, "model", None)
+        return ended(f"No {model._meta.verbose_name_plural}") if model is not None else "No rows."
 
     def get_table_empty_remedy(self) -> Remedy | None:
         """What fills this list when it is empty, where the page's derived remedy
@@ -223,6 +268,37 @@ class TableListMixin:
 
     def get_table_filters(self) -> tuple[TableFilter, ...]:
         return self.table_filters
+
+    def get_table_rows(self, query: TableQuery) -> Projected | None:
+        """The rows of a list a projection fills, for what its address asks;
+        None, the default, lists the model's queryset.
+
+        A projected list hands each filter, the search and the sort to its
+        projection as its parameters, so a ``TableFilter``'s ``lookup`` and a
+        ``TableSort``'s ``ordering`` go unread, its columns declare their kinds
+        with no model to read them from, and it sums no ``table_totals``. A
+        host list still names the model its rows are derived from, which the
+        derived-estate gate reads.
+        """
+
+        return None
+
+    def table_query(self) -> TableQuery:
+        """What the address asks, as a projection reads it."""
+
+        sort = self.request.GET.get("sort", "")
+        return TableQuery(
+            filters={spec.name: tuple(self.table_values(spec.name)) for spec in self.resolved_table_filters()},
+            search=self.request.GET.get("q", "").strip(),
+            sort=sort if any(spec.value == sort for spec in self.get_table_sorts()) else self.table_default_sort,
+        )
+
+    def get_queryset(self) -> Any:
+        rows = self.get_table_rows(self.table_query())
+        if rows is None:
+            # The model's queryset, from the ListView this mixes into, which mypy does not see here.
+            return getattr(super(), "get_queryset")()  # noqa: B009 (no attribute of object's to mypy)
+        return rows
 
     def resolved_table_filters(self) -> tuple[TableFilter, ...]:
         if self._resolved_table_filters is None:

@@ -1,0 +1,7 @@
+id: hand-drawn-filter-bar
+valid:
+  - '{% filter_bar filtered=filtered clear=clear %}A{% endfilter_bar %}'
+  - '<form class="filters"></form>'
+invalid:
+  - '<form class="filter-bar"></form>'
+  - '<div class="toolbar filter-bar"></div>'

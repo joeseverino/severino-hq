@@ -4,7 +4,9 @@ How the identity provider's grant, the default and the rules combine is
 docs/Security.md#what-hq-enforces. For an agent, anything destructive (a
 deletion, a stop) waits for a person by default: a caller that may have read
 untrusted text is the one whose deletes and stops most deserve a second look.
-Operators are never subject to policy.
+A call its handler holds for a person every time (a procedure that changes a
+machine) waits whatever the agent's rule, and no rule may allow it. Operators
+are never subject to policy.
 """
 
 from dataclasses import dataclass
@@ -18,7 +20,7 @@ from hq.platform.core.audit import record_event
 from hq.platform.core.models import AgentIdentity, AuditLog
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
-from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive
+from .approvals import DESTRUCTIVE_EFFECT, READ_EFFECT, is_destructive, no_rule_allows, waits
 from .command_fields import Describe
 from .default_hold import held_by_default, may_be_held_by_default, needs_approval
 from .doors import interface_label
@@ -67,17 +69,20 @@ def decide(spec, principal: Principal, command, target) -> Decision:
         return Decision(Rule.ALLOW, "operator", default)
     if not is_agent(principal.interface):
         return Decision(default, "default", default)
-    if is_destructive(spec, command):
+    wider = waits(spec)
+    if is_destructive(spec, command) or wider is not None:
         default = Rule.APPROVE
 
     # The agent's own rule beats the default outright: it is how one agent is
     # allowed what the rest still wait for, and how one is kept off what its
-    # grant carries.
+    # grant carries. Only a call wider than any standing consent waits past it.
     rule = (
         CapabilityRule.objects.filter(capability=spec.name, subject=agent_subject(principal))
         .values_list("rule", flat=True)
         .first()
     )
+    if rule == Rule.ALLOW and wider is not None and wider(command):
+        return Decision(Rule.APPROVE, "default", default)
     if rule is None:
         return Decision(default, "default", default)
     return Decision(rule, f"{principal.actor} policy", default)
@@ -96,8 +101,9 @@ def set_rule(
 ) -> bool:
     """Set an agent's rule, or clear it with None. Returns whether anything changed.
 
-    Refuses approval on a read, and an agent rule for a capability its grant
-    does not carry or its sign-in could never use. Who may set one at all is
+    Refuses approval on a read, allowing a call that always waits for a
+    person, and an agent rule for a capability its grant does not carry or its
+    sign-in could never use. Who may set one at all is
     ``GOVERN_AGENTS``'s, which ``Principal.require`` holds to a person. The rule
     and its audit row commit together.
     """
@@ -105,9 +111,11 @@ def set_rule(
     if rule is not None and rule not in Rule.values:
         raise ValueError(f"{rule!r} is not a rule.")
     if not agents_may_hold(spec):
-        raise ValueError(f"Only a person in the browser can {spec.title.lower()}, so no agent has a rule for it.")
+        raise ValueError(f"You can only {spec.title.lower()} in the browser, so no agent has a rule for it.")
     if rule == Rule.APPROVE and spec.effect == READ_EFFECT:
         raise ValueError(f"{spec.title} only reads. It can be allowed or blocked, not held for approval.")
+    if rule == Rule.ALLOW and no_rule_allows(spec):
+        raise ValueError(f"{spec.title} always waits for approval when an agent asks, so no agent can be allowed it.")
     if rule is not None:
         identity = identity_of(subject).first()
         if identity is None:
@@ -115,7 +123,9 @@ def set_rule(
         if not _held_by_grant(spec, identity.granted):
             raise ValueError(f"The sign-in service does not allow {subject} to use {spec.title}.")
         if not _usable_by(spec, identity):
-            raise ValueError(f"{subject} signs in as itself, and {spec.title} keeps something of a person's.")
+            raise ValueError(
+                f"{subject} signs in as itself, and {spec.title} needs an agent signed in through a person."
+            )
 
     with transaction.atomic():
         existing = CapabilityRule.objects.select_for_update().filter(subject=subject, capability=spec.name).first()
@@ -172,6 +182,8 @@ def _usable_by(spec, identity: AgentIdentity) -> bool:
 
 # What a rule is called on the page, beside "Default". The stored values keep their names.
 RULE_LABELS = {Rule.ALLOW: "On", Rule.APPROVE: "Ask me first", Rule.DENY: "Off"}
+# The status tone a rule is drawn in; the default is neutral.
+RULE_TONES = {Rule.ALLOW: "good", Rule.APPROVE: "attention", Rule.DENY: "serious"}
 
 
 def _name(rule: str | None) -> str:
@@ -232,6 +244,12 @@ class PolicyCell:
     rule: str | None
     options: tuple[tuple[str, str], ...]
     unavailable: str = ""
+    # What a reader hears the setting named: its action, group and agent.
+    label: str = ""
+
+    @property
+    def tone(self) -> str:
+        return RULE_TONES.get(self.rule, "neutral")
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,7 +324,7 @@ def matrix(current: dict[tuple[str, str], str] | None = None) -> tuple[tuple[Col
                 spec.effect,
                 EFFECTS[spec.effect],
                 _default_label(spec),
-                tuple(_cell(spec, column, current, grants) for column in cols),
+                tuple(_cell(spec, column, current, grants, label) for column in cols),
             )
             for spec in specs
         )
@@ -328,10 +346,11 @@ def _subject_label(subject: str) -> str:
 
 
 def _default_label(spec) -> str:
-    """What happens with no rule set: a destructive call always asks, and a
-    change to a type that needs approval asks for that type."""
+    """What happens with no rule set: a destructive call, or one that waits
+    for a person, always asks, and a change to a type that needs approval
+    asks for that type."""
 
-    if spec.effect == DESTRUCTIVE_EFFECT:
+    if spec.effect == DESTRUCTIVE_EFFECT or waits(spec) is not None:
         return RULE_LABELS[Rule.APPROVE]
     if may_be_held_by_default(spec):
         return f"{RULE_LABELS[Rule.APPROVE]} for {_approved_types(spec)}"
@@ -349,13 +368,15 @@ def _approved_types(spec) -> str:
     return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
 
 
-def _cell(spec, column: Column, current, grants) -> PolicyCell:
+def _cell(spec, column: Column, current, grants, group: str) -> PolicyCell:
     field = field_name(column.subject, spec.name)
     if not _held_by_grant(spec, grants[column.subject]):
         return PolicyCell(field, column.label, None, (), "Not granted")
     if not _usable_by(spec, column.identity):
-        return PolicyCell(field, column.label, None, (), "Needs a person")
-    options = [("", "Default"), (Rule.ALLOW, RULE_LABELS[Rule.ALLOW])]
+        return PolicyCell(field, column.label, None, (), "Person sign-in only")
+    options = [("", "Default")]
+    if not no_rule_allows(spec):
+        options.append((Rule.ALLOW, RULE_LABELS[Rule.ALLOW]))
     if spec.effect != READ_EFFECT:
         options.append((Rule.APPROVE, RULE_LABELS[Rule.APPROVE]))
     options.append((Rule.DENY, RULE_LABELS[Rule.DENY]))
@@ -364,6 +385,7 @@ def _cell(spec, column: Column, current, grants) -> PolicyCell:
         column.label,
         current.get((column.subject, spec.name)),
         tuple(options),
+        label=f"{spec.title}, {group}, for {column.label}",
     )
 
 
@@ -392,7 +414,7 @@ class PolicyApplied(TypedDict):
     ok: Literal[True]
     changed: Annotated[int, Describe("How many rules changed.")]
     problems: Annotated[
-        list[str], Describe("Why each rule left as it was could not change, a sentence each; empty when none was.")
+        list[str], Describe("Why each rule that did not change was refused, a sentence each; empty when none was.")
     ]
 
 

@@ -24,6 +24,10 @@
     "groupName": "security fixes"
   },
   "osvVulnerabilityAlerts": true,
+  "pip-compile": {
+    "description": "The runner image's hashed build constraints, compiled by uv pip compile from the .in beside them; Renovate runs the command their header records.",
+    "managerFilePatterns": ["/^hq_runner/build-constraints\\.txt$/"]
+  },
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {

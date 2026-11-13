@@ -1,4 +1,4 @@
-"""Discoverable read-resource contracts shared by HQ and its plugins."""
+"""For exposing an extension's records to the API, MCP and the CLI as read resources with strict filters."""
 
 from hq.platform.application.resources import (
     ResourceQuery,

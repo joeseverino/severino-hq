@@ -14,6 +14,7 @@ from django.utils import timezone
 from hq.domains.control_plane.credential_reads import MINTERS, observer_permissions
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.permissions import Tailscale
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL, PERMISSION_REFUSAL
 from tests.mise_tasks import body, mise_tasks
 
@@ -269,7 +270,7 @@ class MintCommandTests(TestCase):
 
         fix = credential_fixes()["example-tailnet"]
 
-        self.assertEqual(fix.missing, ("users:read",))
+        self.assertEqual(fix.missing, (Tailscale.USERS_READ,))
         self.assertEqual(
             fix.command,
             "TAILSCALE_BOOTSTRAP_CLIENT_ID='op://Operator Vault/Tailscale bootstrap/username' "
@@ -333,7 +334,7 @@ class CredentialFindingTests(TestCase):
         finding = {f.rule: f for f in self.findings()}["credential-expiring"]
 
         self.assertEqual(finding.severity, "serious")
-        self.assertIn("has expired", finding.title)
+        self.assertIn("expired 1 day ago", finding.title)
 
     def test_expiry_outside_the_window_is_quiet(self):
         ProviderInventory.objects.create(kind=PAGES, records=[{"account_id": ACCOUNT}], observed_at=timezone.now())

@@ -178,13 +178,33 @@ class StoredRowTests(TestCase):
 
 
 class ApprovalTitleTests(TestCase):
-    def test_a_held_change_s_name_never_names_who_asked(self):
+    def test_a_held_change_is_named_by_its_record_s_name_never_its_key_or_who_asked(self):
         held = ApprovalRequest(
             capability="infrastructure.resource.remove",
-            resource_key="example-dns",
+            target="17",
+            resource_key="example-dns-17",
+            baseline={"name": "Example DNS record"},
             requested_actor="example-agent",
             requested_interface="mcp",
         )
 
-        self.assertIn("example-dns", str(held))
+        self.assertIn("Example DNS record", str(held))
+        self.assertNotIn("example-dns-17", str(held))
         self.assertNotIn("example-agent", str(held))
+
+    def test_a_held_run_is_named_by_the_machines_it_runs_on_never_its_record_key(self):
+        held = ApprovalRequest(
+            capability="automation.example.check.run",
+            resource_kind="automation.operation",
+            resource_key="automation-example-check",
+            baseline={"spec": {"operation": "example.check"}, "hosts": ["app.example.com"]},
+        )
+
+        self.assertIn("app.example.com", str(held))
+        self.assertNotIn("automation-example-check", str(held))
+
+    def test_a_held_change_with_no_target_names_no_key(self):
+        held = ApprovalRequest(capability="automation.source.adopt", resource_key="automation-source")
+
+        self.assertTrue(str(held))
+        self.assertNotIn("automation-source", str(held))

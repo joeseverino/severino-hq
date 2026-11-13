@@ -1,0 +1,17 @@
+{% comment %}
+A code patch, drawn by {% patch %}: {% patch id="hardening" %}services: ...{% title %}Add to <code>compose.yaml</code>{% detail %}Then run it.{% notes %}<li>A note</li>{% endpatch %}.
+The title beside the Copy button that copies the code (`data-copy-target`,
+app.js), the code wrapped rather than scrolled so a long path stays on
+screen, the words under it, then the notes, a stack list of <li>s. With no
+code the notes stand alone.
+{% endcomment %}<div id="{{ id }}" class="patch">
+  {% if content %}
+  <div class="patch-head">
+    <strong>{{ title|safe }}</strong>
+    <button class="btn compact ghost" type="button" data-copy-target="{{ code_id }}">Copy</button>
+  </div>
+  <pre tabindex="0" id="{{ code_id }}"><code>{{ content|safe }}</code></pre>
+  {% if detail %}<p class="muted">{{ detail|safe }}</p>{% endif %}
+  {% endif %}
+  {% if notes %}{% stack_list %}{{ notes|safe }}{% endstack_list %}{% endif %}
+</div>

@@ -3,7 +3,18 @@
 #MISE extends="django"
 #MISE env={SEVERINO_WAITS_FOR_HEAVY_TURN="1"}
 #MISE depends=["setup:lint-tools"]
-#USAGE flag "--at <ref>" help="Run this tree's test files, uncommitted work included, on the code at <ref> in a throwaway worktree: the way to prove a new test fails without the fix. A support file (a gate, probe or fixture) is laid over too, and the closing line names what was laid over and kept, each support file that replaced the ref's own copy apart from one the ref lacks. A Python or Go pass with such a file laid over runs again with each kept at <ref>, and the line gives both outcomes, that second run's as the verdict (docs/Development.md)"
+# What a pull request's Test job reads, which tools/pipeline/legs.py matches
+# its change against: everything the image ships and every test and tool
+# beside it. The docs and the editor's and git's own files are read only by
+# source tests, which run in Lint.
+#MISE sources=[
+#MISE   ".github/**/*", "composition/**/*", "controller/**/*", "demo/**/*", "deploy/**/*",
+#MISE   "Dockerfile", "Dockerfile.dockerignore", "entrypoint.sh", "examples/**/*",
+#MISE   "hq/**/*", "hq_sdk/**/*", "hq_runner/**/*", "manage.py", "mise-tasks/**/*", "mise.fast.toml", "mise.lock", "mise.toml",
+#MISE   "policy/**/*", "pyproject.toml", "static/**/*", "templates/**/*", "tests/**/*", "tools/**/*", "uv.lock",
+#MISE ]
+#MISE outputs=[]
+#USAGE flag "--at <ref>" help="Run this tree's test files, uncommitted work included, on the code at <ref> in a throwaway worktree: the way to prove a new test fails without the fix. A support file (a gate, probe or fixture) is laid over too, and the closing line names what was laid over and kept, each support file that replaced the ref's own copy apart from one the ref lacks. A Python or Go pass with such a file laid over runs again with each kept at <ref>, and the line gives both outcomes, that second run's as the verdict; a kept Python file the tests import a name from that <ref>'s copy lacks is a fixture, laid over again and named (docs/Development.md)"
 #USAGE flag "--keep <path>" var=#true help="With --at, keep this changed test file as <ref> has it: a support file that holds the logic being proven, or a test module (test_*.py, _test.go) whose fakes or helpers the fix changed, so a new test in a file of its own runs beside the ref's. A file new in this tree has nothing at <ref> to keep. Repeatable"
 #USAGE flag "--go" help="The controller's Go tests instead, as test:controller runs them: the arguments are go test's, packages from controller/ then its flags (./host -run TestName). With --at, the Go test files laid over are each _test.go, testdata and test-support package file this tree changed, a _test.go file is kept as <ref> has it with --keep, and a package that does not build at <ref> is said so"
 #USAGE flag "--composed" help="When a change reaches the extensions (hq_sdk, shared templates): the suite composed with the set mise.local.toml names, as the image runs it, on this checkout (it takes no --at); labels narrow it"

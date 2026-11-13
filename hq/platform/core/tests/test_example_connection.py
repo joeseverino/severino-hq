@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from hq.platform.application.tests.markup import text, with_class
 
-NOTICE = "This is an example connection, not yours."
+NOTICE = "Not your connection."
 MARK = "example-connection"
 
 

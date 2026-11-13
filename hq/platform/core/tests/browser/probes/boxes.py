@@ -2,6 +2,7 @@
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, PAINTED_PART
 from hq.platform.core.tests.browser.selectors import SELECTORS
+from hq.platform.core.tests.browser.widths import TARGET_MIN
 
 # Nothing moves sideways except inside a box ``allowed`` selects: past the
 # page's edge it is cut off, and a box that clips or scrolls what it holds
@@ -135,6 +136,15 @@ SMALL_TARGETS = (
     const over = top.getBoundingClientRect();
     return over.left <= x && x <= over.right && over.top <= y && y <= over.bottom;
   };
+  const clippedAway = (el, r) => {
+    for (let up = el.parentElement; up; up = up.parentElement) {
+      const style = getComputedStyle(up);
+      if (![style.overflowX, style.overflowY].some((value) => value === 'hidden' || value === 'clip')) continue;
+      const b = up.getBoundingClientRect();
+      if (r.bottom <= b.top || r.top >= b.bottom || r.right <= b.left || r.left >= b.right) return true;
+    }
+    return false;
+  };
   // Inert: marked so, or outside the modal dialog open over the page, which
   // makes the rest of the document inert. No pointer reaches it.
   const modal = document.querySelector('dialog:modal');
@@ -162,6 +172,9 @@ SMALL_TARGETS = (
       const drawn = box(el);
       // Out of sight until focused (a skip link), or drawn by its label.
       if (drawn.width <= 1 || drawn.height <= 1) continue;
+      // Clipped wholly away by a box around it (the parts a `line_list` has
+      // no room for): no pointer reaches it until what holds it shows it.
+      if (clippedAway(el, drawn)) continue;
       if (covered(el, drawn)) beneath.push(el);
       else targets.push({el, drawn, r: area(el), layer: layer(el)});
     }
@@ -479,15 +492,18 @@ INSET_IN_THE_FRAME = (
 # one line, are followed by frames whose tops are on one line too (a pixel
 # apart is the same line in one engine or another). A section whose head stands
 # inside its frame is framed by its landmark, the edge around head and body.
+# A frame broken across columns starts where its first fragment does: its
+# bounding box spans every column it runs into.
 FRAMES_OUT_OF_ROW = (
     "([head, frame]) => {"
     + DESCRIBE
     + """
+  const start = (el) => el.getClientRects()[0] ?? box(el);
   const sections = [...document.querySelectorAll('main ' + head)].flatMap((h) => {
     const body = h.nextElementSibling;
     if (!h.checkVisibility() || !body?.matches(frame) || !body.checkVisibility()) return [];
     const enclosing = parseFloat(getComputedStyle(h.parentElement).borderTopWidth) > 0;
-    return [[h, box(h), box(enclosing ? h.parentElement : body)]];
+    return [[h, box(h), start(enclosing ? h.parentElement : body)]];
   });
   const found = [];
   sections.forEach(([a, ha, fa], at) => {
@@ -557,16 +573,19 @@ HEAD_CONTROLS = (
     const name = describe(actions);
     const menu = actions.querySelector(`:scope > ${menuSelector}`);
     const beside = [...actions.children].filter((el) => el !== menu && seen(el));
-    const listed = menu ? [...menu.querySelectorAll(`${panelSelector} > *`)].filter(shown) : [];
-    if (beside.length > 2) found.push(`${name} draws ${beside.length} controls beside the title`);
+    // The menu's entries, its copies of the controls beside the title among them.
+    const inMenu = menu ? [...menu.querySelectorAll(`${panelSelector} > :not(.overflow-menu-copies), ${panelSelector} > .overflow-menu-copies > *`)] : [];
+    const listed = inMenu.filter((el) => shown(el) && (el.parentElement.matches(panelSelector) || shown(el.parentElement)));
+    // Two beside the title, or as many as a page that names more keeps (``MOST_BESIDE``).
+    const most = actions.hasAttribute('data-many') ? 4 : 2;
+    if (beside.length > most) found.push(`${name} draws ${beside.length} controls beside the title`);
     if (menu && menu.checkVisibility() !== listed.length > 0) found.push(`${name} draws a menu that holds ${listed.length} controls`);
     const besideWords = beside.map(said);
     const listedWords = listed.map(said);
     for (const words of listedWords.filter((words) => besideWords.includes(words))) {
       found.push(`${name} offers "${words}" beside the title and in its menu`);
     }
-    const entries = menu ? [...menu.querySelectorAll(`${panelSelector} > *`)] : [];
-    const offered = new Set([...actions.children].filter((el) => el !== menu).concat(entries).map(said));
+    const offered = new Set([...actions.children].filter((el) => el !== menu).concat(inMenu).map(said));
     for (const words of offered) {
       if (!besideWords.includes(words) && !listedWords.includes(words)) found.push(`${name} hides "${words}" with no way to it`);
     }
@@ -686,7 +705,7 @@ FRAMES_SHORT_OF_THEIR_COLUMN = (
   for (const el of document.querySelectorAll('main ' + frames)) {
     const main = el.closest('main');
     const style = getComputedStyle(el);
-    if (!el.checkVisibility() || style.display === 'contents' || style.display.startsWith('inline')
+    if (!el.checkVisibility() || el.matches(floating) || style.display === 'contents' || style.display.startsWith('inline')
       || ['absolute', 'fixed'].includes(style.position) || style.float !== 'none' || !inPageFlow(el, main)) continue;
     let column = el.parentElement;
     while (column !== main && getComputedStyle(column).display === 'contents') column = column.parentElement;
@@ -734,3 +753,160 @@ TITLES_OFF_THEIR_START = (
   return found;
 }"""
 )
+
+
+# A frame is filled by what it holds, or shares its row (Design, "A frame is
+# filled", "Dense, never empty"), and the probe reads two ways it is not.
+#
+# A frame (``frames``, a card or a section's body) as wide as two flow
+# members (``least`` rem) whose lines, from its first to its last, stack
+# down its start: what it draws below its head (``head``) is grouped into
+# the lines a reader sees, each the words, controls and painted boxes that
+# share it, and a run of lines each ending short of ``part`` of its width
+# that stands ``tall`` px or more is a column of content beside an empty
+# one. A line that reaches across (a table's row, a notice, a chart) ends
+# the run, so a short list above a table counts on its own. What a closed
+# fold holds is laid out but not drawn, so it is no line. A form's fields
+# are no line either: they stand one above another at the width each takes,
+# since a form read down one column is filled faster than one whose fields
+# sit side by side, so a field never asks for the room beside it.
+# ``part`` and ``tall`` come from every frame on every page measured: a fair
+# stack (a sentence-long empty state, a note of two lines) stays under them.
+#
+# And a frame holding a list of facts (``lists``) beside a frame or a run of
+# them does not take a row alone while all it draws ends short of half its
+# width, however short. A frame with nothing beside it spans its column
+# (``frames span their column``); a member of a flow (a row that wraps) is
+# laid out by the flow, whose own checks say which share a row (``flows
+# share their rows``), so one the flow sets on a row alone is across it by
+# design.
+FRAMES_LEFT_EMPTY = (
+    "([lists, frames, head, body, least, part, tall]) => {"
+    + DESCRIBE
+    + """
+  const seen = (color) => color && !/^(transparent|rgba\\(.*,\\s*0\\))$/.test(color);
+  const paints = (style) => seen(style.backgroundColor) || style.backgroundImage !== 'none'
+    || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
+      && style[`border${side}Style`] !== 'none' && seen(style[`border${side}Color`]));
+  const drawn = 'svg, canvas, img, video, iframe, input, select, textarea, button, progress, meter';
+  const away = '[popover], dialog, .visually-hidden';
+  const words = (el, skip = away) => {
+    const found = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      if (!node.data.trim() || node.parentElement.closest(head) || node.parentElement.closest(skip) || !node.parentElement.checkVisibility()) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      found.push(...[...range.getClientRects()].filter((r) => r.width > 1 && r.height > 1));
+    }
+    return found;
+  };
+  const boxes = (el, skip) => [...el.querySelectorAll('*')]
+    .filter((child) => !child.closest(skip) && !child.closest(head) && !child.parentElement.closest('svg')
+      && (child.matches(drawn) || paints(getComputedStyle(child))) && child.checkVisibility())
+    .map((child) => child.getBoundingClientRect())
+    .filter((r) => r.width > 1 && r.height > 1);
+  const inner = (el) => {
+    const style = getComputedStyle(el);
+    const at = box(el);
+    const start = at.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
+    return [start, at.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight) - start];
+  };
+  const overlaps = (a, b) => a.top < b.bottom - 1 && b.top < a.bottom - 1;
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
+  const found = [];
+  for (const frame of document.querySelectorAll(frames)) {
+    if (!frame.checkVisibility() || !frame.closest('main') || frame.closest(away)) continue;
+    if (frame.querySelector(`:scope > ${body}`)) continue;
+    const [start, room] = inner(frame);
+    if (room < least * rem) continue;
+    const lines = [];
+    const fields = `${away}, form`;
+    for (const r of [...words(frame, fields), ...boxes(frame, fields)].sort((a, b) => a.top - b.top)) {
+      const last = lines.at(-1);
+      if (last && r.top < last.bottom - 1) {
+        last.bottom = Math.max(last.bottom, r.bottom);
+        last.right = Math.max(last.right, r.right);
+      } else lines.push({top: r.top, bottom: r.bottom, right: r.right});
+    }
+    let run = null;
+    let worst = null;
+    for (const line of lines) {
+      if (line.right - start >= part * room) { run = null; continue; }
+      run = run ? {...run, bottom: line.bottom, right: Math.max(run.right, line.right)} : {...line};
+      if (run.bottom - run.top >= tall && (!worst || run.bottom - run.top > worst.bottom - worst.top)) worst = run;
+    }
+    if (worst) {
+      const heading = frame.closest('section')?.querySelector('h2, h3')?.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40);
+      found.push(`${describe(frame)}${heading ? ` under "${heading}"` : ''} stacks ${Math.round(worst.bottom - worst.top)}px of lines down its start, each ending within ${Math.round(worst.right - start)}px of its ${Math.round(room)}px`);
+    }
+  }
+  for (const list of document.querySelectorAll(lists)) {
+    if (!list.checkVisibility()) continue;
+    // The frame it is drawn in, and the one that stands in the page's flow:
+    // a section's body is a frame inside its section.
+    const within = list.matches(frames) ? list : list.parentElement.closest(frames);
+    if (!within || !within.closest('main')) continue;
+    let frame = within;
+    while (frame.parentElement?.matches(frames)) frame = frame.parentElement;
+    const r = box(frame);
+    if (r.width < least * rem) continue;
+    const siblings = [frame.previousElementSibling, frame.nextElementSibling]
+      .filter((el) => el && el.checkVisibility() && (el.matches(frames) || el.querySelector(frames)));
+    if (!siblings.length) continue;
+    const flow = getComputedStyle(frame.parentElement);
+    if (flow.display.endsWith('flex') && flow.flexDirection.startsWith('row') && flow.flexWrap !== 'nowrap') continue;
+    const row = [...frame.parentElement.children].filter((el) => el !== frame && el.checkVisibility());
+    if (row.some((el) => overlaps(box(el), r))) continue;
+    const [start, room] = inner(within);
+    const said = words(within);
+    if (!said.length) continue;
+    const reach = Math.max(...said.map((w) => w.right)) - start;
+    if (reach < room / 2) {
+      found.push(`${describe(frame)} takes a row of its own beside ${describe(siblings[0])}, and what it holds ends ${Math.round(reach)}px into its ${Math.round(room)}px`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+# Where a run of lines down a frame's start is a frame left empty beside
+# them: ending short of ``part`` of its width and ``tall`` px high or more.
+STACKED_PART = 0.4
+STACKED_TALL = 120
+
+
+HEADS_READ = (
+    HEAD_CONTROLS,
+    [SELECTORS["head_actions"], SELECTORS["head_menu"], SELECTORS["head_menu_panel"], SELECTORS["ask"]],
+)
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "sideways": (SIDEWAYS, SELECTORS["sideways"]),
+    "overlaps": OVERLAPS,
+    "into a neighbor": INTO_A_NEIGHBOR,
+    "small targets": (SMALL_TARGETS, [SELECTORS["target"], TARGET_MIN, SELECTORS["floating"]]),
+    "cut rings": (CUT_RINGS, SELECTORS["target"]),
+    "short of its buttons": (SHORT_OF_ITS_BUTTONS, [SELECTORS["decision_words"], SELECTORS["decision_buttons"]]),
+    "heads": HEADS_READ,
+    "section heads": (CRAMPED_HEADS, SELECTORS["section_head"]),
+    "section asides": (ASIDES_WRAPPED_WITH_ROOM, SELECTORS["section_head"]),
+    "inset in the frame": (INSET_IN_THE_FRAME, SELECTORS["section_body"]),
+    "frames in a row": (FRAMES_OUT_OF_ROW, [SELECTORS["section_head"], SELECTORS["section_body"]]),
+    # A card drawn alone is a page of its own, sized as a dialog is.
+    "frames span their column": (FRAMES_SHORT_OF_THEIR_COLUMN, [PAGE_FRAMES, f"{SELECTORS['floating']}, [data-alone]"]),
+    "titles at the head's start": (TITLES_OFF_THEIR_START, SELECTORS["section_head"]),
+    "frames filled": (
+        FRAMES_LEFT_EMPTY,
+        [
+            SELECTORS["facts_list"],
+            SELECTORS["list_frame"],
+            SELECTORS["section_head"],
+            SELECTORS["section_body"],
+            44,
+            STACKED_PART,
+            STACKED_TALL,
+        ],
+    ),
+}

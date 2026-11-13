@@ -84,7 +84,4 @@ def consent_gap(kind: str, *, principal: Principal) -> Sentence:
         return ""
     if is_interactive(principal) or principal.approved_by:
         return ""
-    return (
-        "This change needs a person to approve it. Ask for it through the API or "
-        "MCP, which records the request, then approve it in the browser, signed in."
-    )
+    return "This change needs approval. Ask for it through the API or MCP, then approve it in HQ in the browser."

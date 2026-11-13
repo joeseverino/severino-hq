@@ -213,7 +213,7 @@
               "tool": "describe_capabilities"
             }
           },
-          "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones this caller may run."
+          "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones you may run."
         },
         "ok": false
       }
@@ -258,17 +258,17 @@
               "affected_scopes": [],
               "evidence": [
                 {
-                  "label": "Container",
-                  "value": "nginx-proxy-manager"
+                  "label": "Free on /",
+                  "value": "56 MB of 29.0 GB (0.2%)"
                 }
               ],
-              "explanation": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
-              "id": "claim:727c884d159f86c2",
+              "explanation": "The next write that needs more room than is left fails, and says only that the write did.",
+              "id": "claim:e378f3b6e41c6c8c",
               "investigations": [
                 {
                   "capability": "",
                   "effect": "read",
-                  "label": "See it on the map",
+                  "label": "Map neighborhood",
                   "method": "GET",
                   "name": "topology",
                   "reason": "What this is connected to.",
@@ -295,23 +295,23 @@
               ],
               "operator_steps": [
                 {
-                  "command": "docker compose up -d --force-recreate nginx-proxy-manager",
-                  "label": "On docker-host-01, in the compose project that runs nginx-proxy-manager, recreate it",
+                  "command": "ssh docker-host-01 \"sudo df -h /\"",
+                  "label": "See the space on /",
                   "notes": []
                 }
               ],
               "remedies": [],
-              "rule": "container-image-unpinned",
-              "scope": null,
-              "severity": "attention",
+              "rule": "filesystem-nearly-full",
+              "scope": "host.filesystem",
+              "severity": "serious",
               "since": null,
               "subject": "machine:docker-host-01",
-              "title": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
+              "title": "The filesystem at / on docker-host-01 is nearly full",
               "workflow": {
-                "id": "resolve:claim:727c884d159f86c2",
-                "label": "What to do",
+                "id": "resolve:claim:e378f3b6e41c6c8c",
+                "label": "Next steps",
                 "outcome": {
-                  "claim_id": "claim:727c884d159f86c2",
+                  "claim_id": "claim:e378f3b6e41c6c8c",
                   "kind": "claim_absent",
                   "label": ""
                 },
@@ -328,7 +328,7 @@
                         "recommended": false,
                         "refusal": "",
                         "target": "",
-                        "url": "/infrastructure/findings/?rule=container-image-unpinned"
+                        "url": "/infrastructure/findings/?rule=filesystem-nearly-full"
                       }
                     ],
                     "label": "Check again",
@@ -343,11 +343,12 @@
           "rule": null,
           "schema_version": 2,
           "summary": {
-            "findings": 2,
-            "returned": 2,
+            "findings": 6,
+            "returned": 6,
             "severities": {
-              "attention": 1,
-              "neutral": 1
+              "attention": 3,
+              "neutral": 1,
+              "serious": 2
             },
             "truncated": false
           }
@@ -372,38 +373,77 @@
       }
     }
   },
+  "getApprovalsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "answer": {},
+          "asks": "example-automation wants to carry out the playbook example.service_restart",
+          "capability": "automation.example.service_restart.run",
+          "content_fingerprint": "b6a89f32118450a586acc5756910731655bd71fb60990a8193ebb9b5bc27baac",
+          "done": false,
+          "expires_at": "2026-01-16T09:30:00+00:00",
+          "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
+          "operation": "",
+          "reason": "",
+          "requested_actor": "example-automation",
+          "requested_at": "2026-01-15T09:30:00+00:00",
+          "requested_interface": "api",
+          "resource_key": "automation-example-service_restart",
+          "resource_kind": "automation.operation",
+          "review_url": "https://hq.example.com/audit/approval/5da6c038-f78f-583a-b073-5da59683c5b1/",
+          "said": "It waits for approval in HQ, at https://hq.example.com/audit/approval/5da6c038-f78f-583a-b073-5da59683c5b1/.",
+          "state": "pending",
+          "target": ""
+        },
+        "ok": true
+      },
+      "403": {
+        "error": {
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read"
+          },
+          "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+        },
+        "ok": false
+      },
+      "404": {
+        "error": {
+          "code": "not_found",
+          "details": {
+            "identifier": "id"
+          },
+          "message": "No held request of yours has that id."
+        },
+        "ok": false
+      }
+    }
+  },
   "getAssetsV2": {
     "responses": {
       "200": {
         "data": {
-          "business_use_percentage": 80,
-          "category": "server_hardware",
-          "estimated_deductible_amount": "311.20",
-          "infrastructure": "machine:docker-host-01",
-          "item_name": "Small form factor server",
+          "business_use_percentage": 100,
+          "category": "networking",
+          "estimated_deductible_amount": "0.00",
+          "infrastructure": "",
+          "item_name": "8-port gigabit switch",
           "notes": "",
-          "payment_method": "credit",
-          "purchase_date": "2024-11-11",
+          "payment_method": "",
+          "purchase_date": "2025-03-21",
           "relationships": {
             "content": [],
             "documentation": [],
-            "expense_ids": [
-              1
-            ],
-            "projects": [
-              "hq",
-              "media-server",
-              "photo-library",
-              "self-hosted-git",
-              "tailnet-hardening"
-            ]
+            "expense_ids": [],
+            "projects": []
           },
           "serial_number": "",
-          "slug": "sff-server",
+          "slug": "hallway-switch",
           "status": "active",
-          "total_cost": "389.00",
-          "updated_at": "2024-11-11T19:45:00+00:00",
-          "vendor": "eBay",
+          "total_cost": "0.00",
+          "updated_at": "2025-03-21T21:29:00+00:00",
+          "vendor": "",
           "warranty_date": null
         },
         "ok": true
@@ -445,7 +485,7 @@
             }
           ],
           "connection_ref": "adguard",
-          "controller_id": "example-controller",
+          "controller_id": "docker-host-01",
           "credential_fix": null,
           "credential_model": "coarse",
           "dependencies": [
@@ -455,13 +495,13 @@
               "url": "/infrastructure/hq-dns/"
             }
           ],
-          "detail": "5 rewrites.",
+          "detail": "6 rewrites.",
           "endpoint": "http://10.100.200.214:3080",
           "facts": [],
           "family": "infrastructure.controllers",
           "family_label": "Infrastructure",
           "granted_scopes": [],
-          "id": "example-controller:adguard",
+          "id": "docker-host-01:adguard",
           "kind": "adguard",
           "label": "adguard",
           "last_activity": {
@@ -683,8 +723,8 @@
               "by_design": [],
               "checks": [
                 {
-                  "id": "sbom",
-                  "label": "Has a package list (SBOM)",
+                  "id": "pinned",
+                  "label": "Pinned by digest",
                   "state": "met"
                 }
               ],
@@ -735,7 +775,7 @@
           "insights": [
             {
               "concern": false,
-              "detail": "All fully wired.",
+              "detail": "All set up.",
               "label": "Services",
               "notice": false,
               "url": "/infrastructure/services/",
@@ -800,7 +840,10 @@
               "name": "docker-host-01",
               "url": "/infrastructure/machines/docker-host-01/"
             },
-            "provider_machine": null,
+            "provider_machine": {
+              "name": "docker-host-01",
+              "url": "/infrastructure/machines/docker-host-01/"
+            },
             "readout": [
               {
                 "desired": "10.100.200.214",
@@ -841,7 +884,7 @@
               "reason": "Reconciled",
               "state": "healthy"
             },
-            "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
+            "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
             "in_sync": true,
             "key": "forgejo-dns",
             "kind": "adguard.rewrite",
@@ -981,6 +1024,107 @@
           "message": "No machine has that name."
         },
         "ok": false
+      }
+    }
+  },
+  "getPlaybookScansV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "adopted": false,
+          "branch": "main",
+          "changes": [
+            {
+              "change": "changed",
+              "playbook": "example.cache_flush",
+              "refused": [],
+              "title": "Empty a cache"
+            },
+            {
+              "change": "added",
+              "playbook": "example.disk_cleanup",
+              "refused": [],
+              "title": "Free space on a mount"
+            },
+            {
+              "change": "removed",
+              "playbook": "example.package_upgrade",
+              "refused": [],
+              "title": "Upgrade packages"
+            }
+          ],
+          "committer": "example-maintainer",
+          "id": 3,
+          "pending": true,
+          "read_at": "2026-01-15T06:30:00+00:00",
+          "refused": [],
+          "revision": "84a1356b06c87ff497625948f9dba7bed1e4dc1b",
+          "widens": [
+            "Empty a cache gains sudo (example.cache_admin).",
+            "Free space on a mount is new, and it changes a live system."
+          ]
+        },
+        "ok": true
+      }
+    }
+  },
+  "getPlaybooksV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "capability": "automation.example.cache_flush.run",
+          "effect": "infrastructure_change",
+          "facts": [
+            {
+              "label": "Runs on",
+              "value": "Any machine"
+            },
+            {
+              "label": "Effect",
+              "value": "Changes a live system"
+            },
+            {
+              "label": "Access",
+              "value": "No sudo"
+            },
+            {
+              "label": "Timeout",
+              "value": "5\u00a0min"
+            },
+            {
+              "label": "Preconditions",
+              "value": "The cache's service is running on the machine."
+            },
+            {
+              "label": "Verification",
+              "value": "The cache reports no entries."
+            },
+            {
+              "label": "Recovery",
+              "value": "The cache refills on its own as it is read."
+            },
+            {
+              "label": "Retry",
+              "value": "Only once the machines are looked at"
+            },
+            {
+              "label": "Adopted commit",
+              "value": "0123456789ab"
+            },
+            {
+              "label": "Playbook file",
+              "value": "playbooks/cache_flush.yml"
+            }
+          ],
+          "playbook": "example.cache_flush",
+          "reachable": [
+            "docker-host-01",
+            "iphone-16-pro",
+            "macbook-pro-16"
+          ],
+          "title": "Empty a cache"
+        },
+        "ok": true
       }
     }
   },
@@ -1124,6 +1268,44 @@
       }
     }
   },
+  "getRunsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "approved_by": "",
+          "by": "example-agent, over MCP",
+          "capability": "automation.example.package_upgrade.run",
+          "correlation": "",
+          "created_at": "2026-01-15T09:29:00+00:00",
+          "duration_seconds": null,
+          "events": [],
+          "finished_at": null,
+          "headline": "",
+          "hosts": [
+            "macbook-pro-16"
+          ],
+          "lease_until": null,
+          "operation_id": "330b177e-3075-5811-9fba-835493beb091",
+          "playbook": "example.package_upgrade",
+          "started_at": null,
+          "state": "queued",
+          "state_label": "Waiting",
+          "worker": ""
+        },
+        "ok": true
+      },
+      "403": {
+        "error": {
+          "code": "insufficient_scope",
+          "details": {
+            "scope": "read"
+          },
+          "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+        },
+        "ok": false
+      }
+    }
+  },
   "getServicesV2": {
     "responses": {
       "200": {
@@ -1207,11 +1389,9 @@
               {
                 "id": "certificate",
                 "label": "Certificate",
-                "present": true,
-                "resources": [
-                  "wildcard-example-com"
-                ],
-                "state": "good"
+                "present": false,
+                "resources": [],
+                "state": ""
               }
             ],
             "faults": [],
@@ -1239,7 +1419,7 @@
           "blockers": [
             {
               "id": "no-apply-path",
-              "reason": "HQ cannot apply an upgrade on docker-host-01 yet."
+              "reason": "HQ does not send upgrades to docker-host-01."
             }
           ],
           "change": "minor",
@@ -1327,38 +1507,20 @@
     "responses": {
       "200": {
         "data": {
-          "count": 3,
+          "count": 11,
           "items": [
             {
-              "action": "Open containers",
-              "detail": "registry.example.net/example-builds/home-automation-server:2024.11.3-ubu2404-ls45 to 2024.12.1-ubu2404-ls48.",
-              "label": "1 running image has an update",
+              "action": "Review docs",
+              "detail": "",
+              "label": "1 doc is past its review date",
               "since": "",
-              "source": "Containers",
+              "source": "Docs",
               "status": "attention",
-              "url": "/infrastructure/containers/"
-            },
-            {
-              "action": "Open certificate",
-              "detail": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal opens at 30 days; renew it or check why renewal did not run.",
-              "label": "wildcard-example-com expires in 24 days",
-              "since": "",
-              "source": "Estate",
-              "status": "attention",
-              "url": "/infrastructure/wildcard-example-com/"
-            },
-            {
-              "action": "",
-              "detail": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
-              "label": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
-              "since": "",
-              "source": "Infrastructure",
-              "status": "attention",
-              "url": "/infrastructure/findings/?rule=container-image-unpinned"
+              "url": "/docs/?needs_review=1"
             }
           ],
           "next": null,
-          "total": 3,
+          "total": 11,
           "truncated": false
         },
         "ok": true
@@ -1457,8 +1619,25 @@
     "responses": {
       "200": {
         "data": {
-          "count": 1,
+          "count": 4,
           "items": [
+            {
+              "business_use_percentage": 100,
+              "category": "networking",
+              "estimated_deductible_amount": "0.00",
+              "infrastructure": "",
+              "item_name": "8-port gigabit switch",
+              "notes": "",
+              "payment_method": "",
+              "purchase_date": "2025-03-21",
+              "serial_number": "",
+              "slug": "hallway-switch",
+              "status": "active",
+              "total_cost": "0.00",
+              "updated_at": "2025-03-21T21:29:00+00:00",
+              "vendor": "",
+              "warranty_date": null
+            },
             {
               "business_use_percentage": 80,
               "category": "server_hardware",
@@ -1475,10 +1654,44 @@
               "updated_at": "2024-11-11T19:45:00+00:00",
               "vendor": "eBay",
               "warranty_date": null
+            },
+            {
+              "business_use_percentage": 100,
+              "category": "server_hardware",
+              "estimated_deductible_amount": "0.00",
+              "infrastructure": "",
+              "item_name": "SSD enclosure",
+              "notes": "",
+              "payment_method": "",
+              "purchase_date": "2025-05-20",
+              "serial_number": "",
+              "slug": "ssd-enclosure",
+              "status": "active",
+              "total_cost": "0.00",
+              "updated_at": "2025-05-20T21:14:00+00:00",
+              "vendor": "",
+              "warranty_date": null
+            },
+            {
+              "business_use_percentage": 100,
+              "category": "camera_audio",
+              "estimated_deductible_amount": "0.00",
+              "infrastructure": "",
+              "item_name": "USB microphone",
+              "notes": "",
+              "payment_method": "",
+              "purchase_date": "2025-07-19",
+              "serial_number": "",
+              "slug": "usb-microphone",
+              "status": "active",
+              "total_cost": "0.00",
+              "updated_at": "2025-07-19T14:01:00+00:00",
+              "vendor": "",
+              "warranty_date": null
             }
           ],
           "next": null,
-          "total": 1,
+          "total": 4,
           "truncated": false
         },
         "ok": true
@@ -1510,11 +1723,11 @@
               "connection_ref": "npm",
               "detail": "5 proxy hosts.",
               "family": "infrastructure.controllers",
-              "id": "example-controller:npm",
+              "id": "docker-host-01:npm",
               "kind": "npm",
               "label": "npm",
               "observed_at": "2026-01-15T09:30:00+00:00",
-              "open_problems": 0,
+              "open_problems": 1,
               "status": "good",
               "status_label": "Working"
             }
@@ -1530,7 +1743,7 @@
             }
           ],
           "posture": {
-            "abilities": 49,
+            "abilities": 50,
             "controls": [
               {
                 "detail": "HQ has no reading of an access list for this name.",
@@ -1756,7 +1969,7 @@
               "provider": "ssh",
               "tally": [
                 {
-                  "count": 2,
+                  "count": 3,
                   "state": "Readable"
                 }
               ]
@@ -1793,7 +2006,7 @@
               "environment": "homelab",
               "external_url": "",
               "github_path": "",
-              "last_reviewed": "2025-12-16",
+              "last_reviewed": "2025-06-29",
               "notes": "",
               "obsidian_path": "",
               "published_at": null,
@@ -1801,7 +2014,7 @@
               "status": "active",
               "system": "",
               "title": "Publish the public site and answer its contact form",
-              "updated_at": "2025-12-17T02:40:00+00:00"
+              "updated_at": "2025-06-30T01:56:00+00:00"
             },
             {
               "doc_id": "rb-restore-backup",
@@ -1987,17 +2200,17 @@
     "responses": {
       "200": {
         "data": {
-          "count": 9,
+          "count": 10,
           "items": [
             {
               "about": "",
               "business_purpose": "",
-              "business_use_percentage": 100,
-              "category": "domains",
-              "date": "2025-08-03",
-              "estimated_deductible_amount": "10.44",
-              "id": 3,
-              "item": "example.com renewal",
+              "business_use_percentage": 80,
+              "category": "hardware",
+              "date": "2026-01-12",
+              "estimated_deductible_amount": "43.99",
+              "id": 10,
+              "item": "Replacement UPS battery",
               "notes": "",
               "paid_from": "",
               "payment_method": "credit",
@@ -2005,13 +2218,13 @@
               "related_content": null,
               "related_documentation": null,
               "related_project": null,
-              "total_cost": "10.44",
-              "updated_at": "2025-08-03T23:51:00+00:00",
-              "vendor": "Cloudflare"
+              "total_cost": "54.99",
+              "updated_at": "2026-01-12T20:24:00+00:00",
+              "vendor": "APC"
             }
           ],
           "next": null,
-          "total": 9,
+          "total": 10,
           "truncated": false
         },
         "ok": true
@@ -2083,7 +2296,7 @@
             "never_read": 1,
             "not_connected": [],
             "out_of_date": 0,
-            "read": 40,
+            "read": 43,
             "readings": [
               {
                 "error": "",
@@ -2155,25 +2368,25 @@
     "responses": {
       "200": {
         "data": {
-          "count": 42,
+          "count": 46,
           "items": [
             {
               "enabled": true,
               "health": {
-                "label": "Working",
+                "label": "Not checked",
                 "message": "",
-                "reason": "Reconciled",
-                "state": "healthy"
+                "reason": "",
+                "state": "declared"
               },
-              "in_sync": true,
-              "key": "hq-dns",
-              "kind": "adguard.rewrite",
-              "last_observed_at": "2026-01-15T09:30:00+00:00",
+              "in_sync": false,
+              "key": "automation-source",
+              "kind": "automation.source",
+              "last_observed_at": null,
               "public_effect": false
             }
           ],
           "next": null,
-          "total": 42,
+          "total": 46,
           "truncated": false
         },
         "ok": true
@@ -2187,7 +2400,7 @@
                 "loc": [
                   "kind"
                 ],
-                "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone' or 'cloudflare.contact_inbox'",
+                "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone', 'cloudflare.contact_inbox', 'automation.operation' or 'automation.source'",
                 "type": "literal_error"
               }
             ],
@@ -2202,7 +2415,7 @@
               "tool": "describe_resources"
             }
           },
-          "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
+          "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox, automation.operation, automation.source."
         },
         "ok": false
       }
@@ -2265,6 +2478,103 @@
               "runs_hq": false,
               "state": "online",
               "url": "/infrastructure/machines/macbook-pro-16/"
+            }
+          ],
+          "next": null,
+          "total": 3,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listPlaybookScansV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 1,
+          "items": [
+            {
+              "adopted": false,
+              "branch": "main",
+              "changes": [
+                {
+                  "change": "changed",
+                  "playbook": "example.cache_flush",
+                  "refused": [],
+                  "title": "Empty a cache"
+                },
+                {
+                  "change": "added",
+                  "playbook": "example.disk_cleanup",
+                  "refused": [],
+                  "title": "Free space on a mount"
+                },
+                {
+                  "change": "removed",
+                  "playbook": "example.package_upgrade",
+                  "refused": [],
+                  "title": "Upgrade packages"
+                }
+              ],
+              "committer": "example-maintainer",
+              "id": 3,
+              "pending": true,
+              "read_at": "2026-01-15T06:30:00+00:00",
+              "refused": [],
+              "revision": "84a1356b06c87ff497625948f9dba7bed1e4dc1b",
+              "widens": [
+                "Empty a cache gains sudo (example.cache_admin).",
+                "Free space on a mount is new, and it changes a live system."
+              ]
+            }
+          ],
+          "next": null,
+          "total": 1,
+          "truncated": false
+        },
+        "ok": true
+      }
+    }
+  },
+  "listPlaybooksV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 3,
+          "items": [
+            {
+              "capability": "automation.example.cache_flush.run",
+              "effect": "infrastructure_change",
+              "playbook": "example.cache_flush",
+              "reachable": [
+                "docker-host-01",
+                "iphone-16-pro",
+                "macbook-pro-16"
+              ],
+              "title": "Empty a cache"
+            },
+            {
+              "capability": "automation.example.disk_report.run",
+              "effect": "read",
+              "playbook": "example.disk_report",
+              "reachable": [
+                "docker-host-01",
+                "iphone-16-pro",
+                "macbook-pro-16"
+              ],
+              "title": "Report a mount's use"
+            },
+            {
+              "capability": "automation.example.package_upgrade.run",
+              "effect": "infrastructure_change",
+              "playbook": "example.package_upgrade",
+              "reachable": [
+                "docker-host-01",
+                "iphone-16-pro",
+                "macbook-pro-16"
+              ],
+              "title": "Upgrade packages"
             }
           ],
           "next": null,
@@ -2359,7 +2669,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 41,
+          "count": 44,
           "items": [
             {
               "error": "",
@@ -2372,7 +2682,7 @@
             }
           ],
           "next": null,
-          "total": 41,
+          "total": 44,
           "truncated": false
         },
         "ok": true
@@ -2383,25 +2693,25 @@
     "responses": {
       "200": {
         "data": {
-          "count": 9,
+          "count": 10,
           "items": [
             {
-              "amount": "389.00",
-              "content_type": "application/pdf",
-              "date": "2024-11-11",
-              "id": 1,
+              "amount": "54.99",
+              "content_type": "image/png",
+              "date": "2026-01-12",
+              "id": 10,
               "notes": "",
-              "original_filename": "eBay receipt.pdf",
+              "original_filename": "APC receipt.png",
               "related_asset": null,
-              "related_expense": 1,
-              "size_bytes": 0,
-              "updated_at": "2024-11-11T17:33:00+00:00",
+              "related_expense": null,
+              "size_bytes": 121,
+              "updated_at": "2026-01-12T15:34:00+00:00",
               "uploaded_at": "2026-01-15T09:30:00+00:00",
-              "vendor": "eBay"
+              "vendor": "APC"
             }
           ],
           "next": null,
-          "total": 9,
+          "total": 10,
           "truncated": false
         },
         "ok": true
@@ -2416,22 +2726,22 @@
             {
               "kind": "loopback",
               "label": "Loopback",
-              "source": "this request came from it",
+              "source": "This request",
               "value": "127.0.0.1"
             }
           ],
           "connection": {
             "address": "127.0.0.1",
-            "carried_over": "Not known yet",
+            "carried_over": "",
             "channel": "loopback",
             "channel_label": "Loopback",
-            "device": "No tailnet device at this address",
+            "device": "",
             "device_standing": "unplaced",
             "forwarded": false,
             "handshake": "\u2013",
             "identity_agrees": false,
             "measured_by": "Another tailnet machine (docker-host-01)",
-            "path": "Unknown",
+            "path": "",
             "summary": "6 failed\u00a0\u00b7 4 not confirmed",
             "tailnet_observed_at": "2026-01-15T09:30:00+00:00",
             "transport": "Encryption not confirmed",
@@ -2452,38 +2762,38 @@
             {
               "certificate": null,
               "check": {
-                "detail": "This request reached HQ at testserver.",
-                "label": "Confirmed by this request",
-                "state": "proven",
+                "detail": "No reading names the device at 127.0.0.1.",
+                "label": "Not confirmed",
+                "state": "unproven",
                 "step": ""
               },
-              "detail": "",
+              "detail": "127.0.0.1",
               "evidence": [
                 {
-                  "detail": "Whether this request arrived encrypted.",
-                  "label": "Scheme",
-                  "role": "",
-                  "value": "http"
+                  "detail": "Your address, as HQ sees it.",
+                  "label": "Address",
+                  "role": "judged",
+                  "value": "127.0.0.1"
                 }
               ],
-              "label": "HQ",
+              "label": "Device",
               "layers": [
                 {
-                  "boundary": "Network",
-                  "detail": "This request never left the machine HQ runs on.",
-                  "evidence": "127.0.0.1",
-                  "id": "channel",
-                  "label": "The address is on the tailnet",
-                  "mechanism": "The tailnet address range",
+                  "boundary": "Device identity",
+                  "detail": "No device on the tailnet has this address.",
+                  "evidence": "",
+                  "id": "device",
+                  "label": "The tailnet knows this device",
+                  "mechanism": "The tailnet device list",
                   "rules": [],
                   "state": "does-not"
                 }
               ],
               "link": null,
-              "name": "Severino HQ",
+              "name": "",
               "overlays": [],
               "source": null,
-              "step": "hq",
+              "step": "device",
               "unread": ""
             }
           ],
@@ -2492,6 +2802,39 @@
           "total": 2,
           "truncated": false,
           "unread": []
+        },
+        "ok": true
+      }
+    }
+  },
+  "listRunsV2": {
+    "responses": {
+      "200": {
+        "data": {
+          "count": 9,
+          "items": [
+            {
+              "approved_by": "",
+              "by": "example-agent, over MCP",
+              "capability": "automation.example.package_upgrade.run",
+              "correlation": "",
+              "created_at": "2026-01-15T09:29:00+00:00",
+              "duration_seconds": null,
+              "finished_at": null,
+              "headline": "",
+              "hosts": [
+                "macbook-pro-16"
+              ],
+              "operation_id": "330b177e-3075-5811-9fba-835493beb091",
+              "playbook": "example.package_upgrade",
+              "started_at": null,
+              "state": "queued",
+              "state_label": "Waiting"
+            }
+          ],
+          "next": null,
+          "total": 9,
+          "truncated": false
         },
         "ok": true
       }
@@ -2648,19 +2991,19 @@
                     }
                   ],
                   "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
-                  "id": "claim:5bec129f1d278ff4",
+                  "id": "claim:d3cadf1809bee399",
                   "investigations": [
                     {
                       "capability": "",
                       "effect": "read",
-                      "label": "See it on the map",
+                      "label": "Map neighborhood",
                       "method": "GET",
                       "name": "topology",
                       "reason": "What this is connected to.",
                       "recommended": false,
                       "refusal": "",
                       "target": "",
-                      "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Aexample-controller%3Atailscale#trace"
+                      "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Adocker-host-01%3Atailscale#trace"
                     }
                   ],
                   "no_help_reason": null,
@@ -2692,13 +3035,13 @@
                   "scope": null,
                   "severity": "neutral",
                   "since": null,
-                  "subject": "connection:infrastructure.controllers:example-controller:tailscale",
+                  "subject": "connection:infrastructure.controllers:docker-host-01:tailscale",
                   "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
                   "workflow": {
-                    "id": "resolve:claim:5bec129f1d278ff4",
-                    "label": "What to do",
+                    "id": "resolve:claim:d3cadf1809bee399",
+                    "label": "Next steps",
                     "outcome": {
-                      "claim_id": "claim:5bec129f1d278ff4",
+                      "claim_id": "claim:d3cadf1809bee399",
                       "kind": "claim_absent",
                       "label": ""
                     },
@@ -2828,7 +3171,7 @@
               "blockers": [
                 {
                   "id": "no-apply-path",
-                  "reason": "HQ cannot apply an upgrade on docker-host-01 yet."
+                  "reason": "HQ does not send upgrades to docker-host-01."
                 }
               ],
               "change": "minor",
@@ -2929,18 +3272,18 @@
             "capability": "project.create",
             "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
             "expires_at": "2026-01-16T09:30:00+00:00",
-            "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
+            "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
             "reason": "",
             "requested_actor": "example-automation",
             "requested_at": "2026-01-15T09:30:00+00:00",
             "requested_interface": "api",
             "resource_key": "",
             "resource_kind": "projects",
-            "review_url": "https://hq.example.com/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
+            "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
             "state": "pending",
             "target": ""
           },
-          "message": "This change is waiting for a person to approve it in HQ. Nothing has been written and nothing is queued. Tell whoever asked, with the request id, and stop; approving it is not something a token can do.",
+          "message": "This change waits for approval in HQ. Nothing is written or queued until an operator approves it, which a token cannot. Report the request id to your user, and read `approvals` by that id for how it stands.",
           "queued": false,
           "repeated": false,
           "status": "awaiting_approval"
@@ -2953,7 +3296,7 @@
           "details": {
             "field": "payload.idempotency_key"
           },
-          "message": "A retry key is required for capabilities that change state: send a new one as payload.idempotency_key, and the same one again when you retry this change."
+          "message": "A capability that changes something needs an idempotency key. Send a new payload.idempotency_key, and the same one when you retry this change."
         },
         "ok": false
       },
@@ -2967,7 +3310,7 @@
       "403": {
         "error": {
           "code": "agents_paused",
-          "message": "Agents are paused by the operator."
+          "message": "An operator paused all agents in HQ. Try again later."
         },
         "ok": false
       },
@@ -3132,7 +3475,7 @@
             }
           ],
           "schema_version": 3,
-          "schemas": "Each list's query_schema, its filters' types and choices, and its paging, the most limit may ask for, are describe_resources with name set to its resource."
+          "schemas": "Each list's query_schema, filters, paging and largest limit are in describe_resources with name set to its resource."
         },
         "ok": true
       },
@@ -3183,7 +3526,7 @@
       "403": {
         "error": {
           "code": "agents_paused",
-          "message": "Agents are paused by the operator."
+          "message": "An operator paused all agents in HQ. Try again later."
         },
         "ok": false
       },
@@ -3240,19 +3583,18 @@
           ],
           "schema_version": 2,
           "summary": {
-            "edges": 305,
+            "edges": 307,
             "kinds": {
-              "ability": 58,
+              "ability": 61,
               "connection": 10,
-              "controller": 1,
               "machine": 3,
               "registry": 1,
-              "resource": 42,
+              "resource": 46,
               "service": 8,
-              "target": 1,
+              "target": 2,
               "zone": 1
             },
-            "nodes": 125
+            "nodes": 132
           },
           "trace": null
         },

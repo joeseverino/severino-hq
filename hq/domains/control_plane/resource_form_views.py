@@ -2,6 +2,7 @@
 
 import logging
 from typing import get_origin
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.http import Http404
@@ -10,6 +11,7 @@ from django.views import View
 
 from hq.platform.application.adoption import ADOPT, ADOPT_SERVICE
 from hq.platform.application.asks import APPLIES_SHORTLY
+from hq.platform.application.card_items import ListRow
 from hq.platform.application.certificates import UPLOAD
 from hq.platform.application.entity_links import kind_label
 from hq.platform.application.glance import DASHBOARD_MACHINE, dashboard_machine_selected
@@ -81,8 +83,16 @@ class ResourceFormView(View):
                     # Only the kinds that stand on their own. One that declares
                     # a surface of its own is created from there, where the
                     # context it needs is already established.
-                    "providers": [
-                        provider for provider in describe_providers()["providers"] if not provider["created_from"]
+                    "choices": [
+                        ListRow(
+                            title=provider["label"],
+                            detail=provider["summary"],
+                            url=f"{reverse('control_plane:create')}?{urlencode({'kind': provider['kind']})}",
+                            status="attention" if provider["public_effect"] else "",
+                            badge="Visible on the internet" if provider["public_effect"] else "",
+                        )
+                        for provider in describe_providers()["providers"]
+                        if not provider["created_from"]
                     ],
                     **page_context(
                         "What do you want to add?",

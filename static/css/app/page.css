@@ -1,5 +1,6 @@
 /* The tone assignment every component reads, and the page's frame: section
-   rhythm, heads and their actions, buttons, the sections menu and the user menu. */
+   rhythm, heads and their actions, the readings beside a title, buttons, the
+   sections menu and the user menu. */
 
 @layer components {
 
@@ -9,42 +10,33 @@
    `reachable` and `success` cannot become three different greens.
 
    A component decides which fill level it reads (`--tone-bg` for a chip,
-   `--tone-wash` for a banner, `--tone-tint` for a mark carrying strong ink);
+   `--tone-wash` for a banner);
    this section decides only what the tone *is*. Adding a status means adding
    its class to one of these lists. Adding a component means reading the
    contract, not restating the colors. */
 
 .pill-active, .pill-published, .pill-created, .pill-uploaded, .pill-public, .pill-done,
-.pill-replied, .pill-reachable, .pill-good, .msg-success, .conn-kind-tailnet,
-.connection-state-reachable, .connection-state-ready, .connection-state-good, .tone-good {
+.pill-replied, .pill-reachable, .pill-good, .notice-success, .tone-good {
   --tone-bg: var(--tone-positive-bg);
   --tone-wash: var(--tone-positive-wash);
-  --tone-tint: var(--tone-positive-tint);
   --tone-ink: var(--tone-positive-ink);
   --tone-line: var(--tone-positive-line);
 }
-.pill-paused, .pill-editing, .pill-drafting, .pill-researching,
-.pill-internal, .pill-attention, .msg-warning, .notice-attention,
-.conn-kind-declined, .connection-state-attention, .connection-state-stale, .tone-attention {
+.pill-paused, .pill-internal, .pill-attention, .notice-warning, .tone-attention {
   --tone-bg: var(--tone-caution-bg);
   --tone-wash: var(--tone-caution-wash);
-  --tone-tint: var(--tone-caution-tint);
   --tone-ink: var(--tone-caution-ink);
   --tone-line: var(--tone-caution-line);
 }
 .pill-archived, .pill-deprecated, .pill-retired, .pill-sold, .pill-returned,
 .pill-replaced, .pill-deleted, .pill-login_failed, .pill-denied, .pill-spam,
-.pill-unreachable, .msg-error,
-.connection-state-unreachable, .connection-state-revoked, .connection-state-unauthorized,
-.connection-state-unreported,
-.conn-kind-elsewhere, .conn-kind-public, .conn-kind-hop-ignored {
+.pill-unreachable, .notice-error {
   --tone-bg: var(--tone-critical-bg);
   --tone-wash: var(--tone-critical-wash);
-  --tone-tint: var(--tone-critical-tint);
   --tone-ink: var(--tone-critical-ink);
   --tone-line: var(--tone-critical-line);
 }
-.pill-idea, .pill-draft, .pill-viewed, .msg-info {
+.pill-idea, .pill-draft, .pill-viewed, .notice-info {
   --tone-bg: var(--tone-info-bg);
   --tone-wash: var(--tone-info-wash);
   --tone-ink: var(--tone-info-ink);
@@ -55,7 +47,7 @@
   --tone-ink: var(--tone-notable-ink);
   --tone-line: var(--tone-notable-line);
 }
-.pill-sensitive, .pill-restricted, .pill-serious, .connection-state-serious, .tone-serious {
+.pill-sensitive, .pill-restricted, .pill-serious, .tone-serious {
   --tone-bg: var(--tone-severe-bg);
   --tone-ink: var(--tone-severe-ink);
   --tone-line: var(--tone-severe-line);
@@ -69,15 +61,15 @@
    They are still named: a status with no rule and a status deliberately
    neutral look identical and are not the same claim, and the class has to
    exist for the template check to find it. */
-.pill-read, .pill-unprobed, .pill-neutral, .connection-state-unprobed,
-.connection-state-neutral, .connection-state-configured {
+.pill-read, .pill-unprobed, .pill-neutral {
   --tone-bg: var(--tone-neutral-bg);
   --tone-ink: var(--tone-neutral-ink);
   --tone-line: var(--tone-neutral-line);
 }
 
+/* Its top is the gap between stacked sections, never wider than its sides: the head's first line holds the page's note, so the band above it holds nothing. */
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the page clips what bleeds past its edge, which the layout gate holds to nothing */
-.content { max-width: var(--content-max); margin: 0 auto; padding: var(--content-pad); overflow-x: clip; }
+.content { max-width: var(--content-max); margin: 0 auto; padding: min(var(--stack-gap), var(--content-pad)) var(--content-pad) var(--content-pad); overflow-x: clip; }
 /* One rhythm for every stacked page section, set in one place. Adjacent sibling
    margins collapse, so a section that already declares its own bottom margin
    keeps whichever is larger rather than adding to this. `dialog` is excluded:
@@ -85,7 +77,7 @@
    A div with no class of its own is a region (a list's results a script
    swaps, a record a refresh redraws), never a layout, so what it holds
    stacks as the page does. */
-.content > * + *:not(dialog), .content > :is(div:not([class]), .table-results) > * + *:not(dialog) { margin-top: var(--stack-gap); }
+.content > * + *:not(dialog), .content > div:not([class]) > * + *:not(dialog) { margin-top: var(--stack-gap); }
 
 h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.012em; font-weight: 650; }
 /* A section heading reads as a heading: ink, sentence case, a step above body,
@@ -93,7 +85,7 @@ h1 { font-size: var(--font-h1); margin: 0 0 var(--space-2); letter-spacing: -.01
 h2 { font-size: var(--text-xl); margin: 0 0 var(--space-6); color: var(--ink); font-weight: 650; letter-spacing: -.01em; }
 h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-weight: 600; }
 
-.page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); max-width: var(--measure); }
+.page-lede { color: var(--muted); font-size: var(--text-sm); margin: 0 0 var(--space-12); }
 .muted { color: var(--muted); }
 
 /* One head at every width. The copy steps aside (`display: contents`) so its
@@ -104,7 +96,15 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* A container, so its controls fold by the head's width (surfaces.css). */
 .page-head { container: page-head / inline-size; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-5); margin-bottom: var(--stack-gap); }
 .page-head-copy { display: contents; }
-.page-head .page-trail { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
+/* The head's first line: the trail, then at its end the note of a page about
+   one thing (partials/_visit_refresh.html) in the room it keeps (cuts.css).
+   A trail longer than the line wraps between its steps inside it, leaving the
+   note its room, so neither runs past the page's edge; one whose longest word
+   would not fit beside the note puts the note on a line of its own instead of
+   breaking that word. */
+.page-trail-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-6); }
+.page-trail-row > :not(.visit-slot) { flex: 1 1 0; }
+.page-head-copy > .page-trail-row { flex: 1 1 100%; order: 0; margin-bottom: calc(-1 * var(--space-2)); }
 /* The title yields width before the controls do: a long name wraps in its
    own column at its spaces and seams. The controls take a row of their own
    only when the title's widest word or identifier would not fit beside them,
@@ -113,16 +113,20 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 /* Its width is its whole name, so the controls give way rather than split it. */
 .page-head h1 .token { width: max-content; }
 .page-head > .page-actions { order: 2; }
-/* Full width so it always takes its own row; the reading measure is kept by
-   padding rather than a width cap, which would let it fit beside the title. */
-.page-head .page-lede { flex: 1 1 100%; order: 3; max-width: none; margin-bottom: 0; padding-inline-end: max(0px, 100% - var(--measure)); margin-top: calc(-1 * var(--space-1)); }
+/* Full width so it always takes its own row, under the title and controls. */
+.page-head .page-lede { flex: 1 1 100%; order: 3; margin-bottom: 0; margin-top: calc(-1 * var(--space-1)); }
 /* A line of facts is short things side by side, which read best on as few
-   lines as fit, so it takes the head's width where the prose above keeps
-   the measure. */
+   lines as fit, so it takes the head's width. */
 .page-head .page-facts { flex: 1 1 100%; order: 3; color: var(--muted); font-size: var(--text-sm); margin-top: calc(-1 * var(--space-1)); }
 .page-head h1 { margin: 0; }
 .page-head p { margin: 0; }
-.page-trail { margin: 0 0 var(--space-2); color: var(--muted); font-size: var(--text-xs); }
+/* With an aside beside it and a line of facts (partials/_page_head.html), the
+   copy is a column of its own: its lines stacked a small gap apart, as wide
+   as its words, and the aside takes the rest of the head's line beside all of
+   them, wrapping under the column only when it cannot fit. */
+.page-head-copy.is-column { display: grid; align-content: center; gap: var(--space-2); flex: 0 1 auto; min-width: 0; }
+.page-head-copy.is-column > * { margin: 0; }
+.page-trail { margin: 0; color: var(--muted); font-size: var(--text-xs); }
 .page-trail a { color: var(--muted); }
 /* A slash between the steps of a trail, drawn here so the last step ends the
    line rather than a slash pointing at nothing. It stands outside each link,
@@ -138,26 +142,78 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    takes a row of its own under them. */
 .page-head .page-actions { position: relative; margin-left: auto; display: flex; flex-wrap: wrap; gap: var(--space-4); flex: 0 1 auto; justify-content: flex-end; min-width: 0; }
 .page-head .page-actions > * { white-space: nowrap; }
-/* Ambient readings beside the greeting: no frame of their own, each panel a
-   number worth reading at a distance and one quiet line under it. A panel
-   opens in place into a popover; the strip never changes height. */
-/* The strip's own box and its row of panels lay nothing out: each panel is an
-   item of the dashboard's one row of readings (`.dash-readings`), beside the
-   readings about HQ itself, so all of them share a size, a spacing and a line. */
-.dashboard-glance { display: contents; }
-.page-head:has(.dashboard-glance) { align-items: center; }
-.glance-panels { display: contents; }
-.glance-panel { min-width: 0; }
-/* A reading is the button that opens it, drawn as the reading and not as a
-   button: the text's own face and color, the whole width of its place. */
-.glance-panel-head {
+/* A row of readings ({% readings %}), beside a page's title: each a number
+   worth reading at a distance and the quiet lines under it, with no frame of
+   its own. One row of equals: the same mark, the same lead and the same quiet
+   line, spaced rather than ruled apart. A reading opens in place into a
+   popover; the row never changes height.
+
+   Beside the title while every reading fits on one line there; otherwise the
+   row takes its own line under it, still one row; narrower again, whole rows
+   of two; on the narrowest screen, one to a line. Never three over one, and
+   never a reading left out: counted off the row itself, its own readings and
+   those of the region in it, which lays nothing out, so a reading refreshed
+   in place stands beside the ones drawn with the page. */
+.readings {
+  --own: 0;
+  --held: 0;
+  --readings: calc(var(--own) + var(--held));
+  /* The narrowest a reading stands beside another: under it, a phone's half
+     row, a line would wrap past the lines a reading holds. */
+  --reading: 12rem;
+  /* A reading's lead, and one of its quiet lines with the gap it leaves
+     before the next. */
+  --reading-lead: 26px;
+  --quiet-line: calc(1.5 * var(--text-2xs) + var(--space-1));
+  /* Half a row for an even count; an odd one goes from one row to one a line. */
+  --half: calc(50% - var(--space-5) + mod(var(--readings), 2) * (50% + var(--space-5)));
+  display: grid; align-items: start; justify-content: end;
+  /* Asks for a whole row before it settles beside the title. */
+  flex: 1 1 calc(var(--readings) * var(--reading)); min-width: 0;
+  /* Each track is a whole row's share; where that is under a reading's width,
+     half the row; where half is, the whole row. The share alone, never what a
+     reading says: one that lands saying more wraps in its place, and its
+     neighbors stay where they were drawn. */
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a row of readings beside a page's title */
+  grid-template-columns: repeat(auto-fit, max(
+    calc(100% / var(--readings) - var(--space-5)),
+    clamp(0px, (var(--readings) * var(--reading) - 100%) * 999, var(--half)),
+    clamp(0px, (2 * var(--reading) - 100%) * 999, 100%)
+  ));
+  gap: var(--space-4) var(--space-5);
+}
+.readings > :not(.reading) { display: contents; }
+.readings:has(> .reading:nth-child(1 of .reading)) { --own: 1; }
+.readings:has(> .reading:nth-child(2 of .reading)) { --own: 2; }
+.readings:has(> .reading:nth-child(3 of .reading)) { --own: 3; }
+.readings:has(> .reading:nth-child(4 of .reading)) { --own: 4; }
+.readings:has(> :not(.reading) > .reading:nth-child(1 of .reading)) { --held: 1; }
+.readings:has(> :not(.reading) > .reading:nth-child(2 of .reading)) { --held: 2; }
+.readings:has(> :not(.reading) > .reading:nth-child(3 of .reading)) { --held: 3; }
+.readings:has(> :not(.reading) > .reading:nth-child(4 of .reading)) { --held: 4; }
+.readings:has(> :not(.reading) > .reading:nth-child(5 of .reading)) { --held: 5; }
+.readings:has(> :not(.reading) > .reading:nth-child(6 of .reading)) { --held: 6; }
+.page-head:has(.readings) { align-items: center; }
+.reading { min-width: 0; max-width: 100%; }
+a.reading, a.reading:hover { color: inherit; text-decoration: none; }
+/* A reading is the link or the button that opens it, drawn as the reading:
+   the text's own face and color, the whole width of its place. One shape for
+   all of them, so they line up: the lead on a line of one height, with the
+   mark beside that line rather than centered on however many lines the
+   reading happens to have (it keeps its own column for the whole reading, so
+   nothing is ever set under it); then the quiet lines, which start level
+   because the leads do. Each holds the room of its lead and two quiet lines
+   whatever it says now, so a reading that lands with fewer lines leaves the
+   row and the page under it still. */
+.reading-head {
   display: grid;
-  grid-template-columns: 22px minmax(0, auto);
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-content: start;
   align-items: center;
   gap: 0 var(--space-5);
   inline-size: 100%;
-  min-height: 0;
-  padding: var(--space-3) var(--space-7);
+  min-block-size: calc(2 * var(--space-3) + var(--reading-lead) + 2 * var(--quiet-line));
+  padding: var(--space-3);
   border: 0;
   border-radius: var(--radius);
   background: none;
@@ -165,62 +221,60 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   color: inherit;
   font: inherit;
   text-align: start;
+  white-space: normal;
   cursor: pointer;
 }
-.glance-panel-head:hover, .glance-panel-head:has(+ :popover-open) { background: var(--bg-tint); }
-.glance-symbol { grid-row: 1 / span 3; align-self: center; color: var(--muted-2); }
-.glance-symbol .icon { width: 22px; height: 22px; }
-.glance-lead { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
-.glance-lead strong { color: var(--ink); font-size: var(--text-4xl); font-weight: 650; line-height: 1.15; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
-.glance-lead-empty { color: var(--muted); font-size: var(--text-sm); font-weight: 600; }
-/* One line, its parts divided by a middle dot the browser draws, so a part
-   that is absent leaves no stray separator. */
-.glance-caption { display: flex; min-width: 0; gap: var(--space-1) var(--dot-gap); color: var(--muted); font-size: var(--text-2xs); white-space: nowrap; }
+.reading-head:hover, .reading-head:has(+ :popover-open) { background: var(--bg-tint); }
+.reading-head > :not(.reading-mark) { grid-column: 2; }
+.reading-mark { grid-row: 1 / span 3; align-self: start; margin-top: var(--space-1); color: var(--muted-2); }
+.reading-mark .icon { width: 22px; height: 22px; }
+/* A reading that needs attention says so in its mark, in its tone. */
+.reading:is(.tone-attention, .tone-serious) .reading-mark { color: var(--tone-ink); }
+.reading-lead { display: flex; align-items: baseline; gap: var(--space-3); min-height: var(--reading-lead); color: var(--muted); font-size: var(--text-xs); line-height: 1; white-space: nowrap; }
+.reading-lead strong { align-self: center; color: var(--ink); font-size: var(--text-4xl); font-weight: 650; line-height: 1.15; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+/* Its quiet lines, their parts divided by a middle dot the browser draws, so
+   a part that is absent leaves no stray separator. A line longer than its
+   reading takes another, between its parts first, so all of it is read inside
+   the reading and none runs over the one beside it. */
+.reading-lines { display: flex; flex-wrap: wrap; min-width: 0; gap: var(--space-1) var(--dot-gap); color: var(--muted); font-size: var(--text-2xs); }
+.reading-lines strong { color: var(--attn); font-weight: 650; }
+/* How it stands, the one line of a reading that may take two: an age and its
+   verdict are long beside a narrow reading, and the reading stays inside the page. */
+.reading-standing { color: var(--muted-2); font-size: var(--text-3xs); }
+.reading-standing.is-stale { color: var(--warn); }
+.reading-standing.is-attention { color: var(--attn); font-weight: 650; }
+.reading-panel { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.reading-panel > p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
+.reading-panel-head { display: grid; gap: 1px; font-size: var(--text-xs); color: var(--muted); }
+.reading-panel-head strong { color: var(--ink); font-size: var(--text-sm); }
+.reading-panel-head time { color: var(--muted-2); font-size: var(--text-3xs); }
+/* Each link and button in the foot is a flex item a line tall, so a line
+   the target size (`--target-min`) is each one's box. */
+.reading-panel-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); line-height: var(--target-min); }
+.reading-panel-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
+/* A button in the foot is a link in look: the panel's one action besides going somewhere. */
+.reading-panel-foot button { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; cursor: pointer; }
+.reading-panel-foot button:hover { border: 0; background: none; text-decoration: underline; }
+@media (max-width: 640px) {
+  .reading-head { column-gap: var(--space-3); }
+}
 /* A run of short things on one line (links, values, figures): one separator
    for all of them, drawn here, so no list writes its own commas or gaps. */
 .dot-list { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--dot-gap); margin: 0; padding: 0; list-style: none; }
+/* A run of links wraps onto lines a target tall (`--target-min`), so a link is never pressed for the one above it; in a table the row keeps its height, and a cell spaces its own links (figures.css). */
+.dot-list:has(a):not(td *) { line-height: var(--target-min); }
 /* The dot stands in the gap before its part, so where the run wraps, the dot
    that would open a line lies outside the run and is clipped: a line never
    starts with a separator. */
-:is(.dot-list, .glance-caption, .project-meta) {
+:is(.dot-list, .reading-lines) {
   --dot-gap: calc(2 * var(--space-3) + .4em);
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- clips the dot before a part that opens a line, never a part */
   overflow-x: clip;
 }
-:is(.dot-list > li, .glance-caption > span, .project-meta > *) + *::before {
+:is(.dot-list > li, .reading-lines > *) + *::before {
   content: "·" / ""; display: inline-block; inline-size: var(--dot-gap); margin-inline-start: calc(-1 * var(--dot-gap));
   text-align: center; color: var(--muted-2); text-decoration: none;
 }
-.glance-alert { color: var(--attn); font-weight: 650; }
-/* The one line of a reading that may take two: an age and its verdict are
-   long beside a narrow reading, and the reading stays inside the page. */
-.glance-freshness { color: var(--warn); font-size: var(--text-3xs); }
-.glance-freshness .reading-age { white-space: normal; }
-.glance-panel[data-refreshing] .glance-freshness { color: var(--muted-2); }
-.glance-expanded { display: grid; gap: var(--space-6); width: min(340px, calc(100vw - 32px)); padding: var(--space-6) var(--space-7); background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
-.glance-expanded-head { display: grid; gap: 1px; font-size: var(--text-xs); color: var(--muted); }
-.glance-expanded-head strong { color: var(--ink); font-size: var(--text-sm); }
-.glance-expanded-head time { color: var(--muted-2); font-size: var(--text-3xs); }
-.glance-note { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; }
-.glance-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5) var(--space-7); margin: 0; }
-.glance-metrics > div { display: grid; gap: 1px; min-width: 0; }
-.glance-metrics dt { color: var(--muted); font-size: var(--text-3xs); font-weight: 500; white-space: nowrap; }
-.glance-metrics dd.glance-metric-detail { color: var(--muted); font-size: var(--text-3xs); font-weight: 400; }
-/* The hours ahead, one column each, scrolling sideways in the popover. */
-/* Every hour in view: as many to a row as the popover holds, the rest on the
-   rows under them. */
-.glance-hours { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: var(--space-4) 0; margin: 0; padding: var(--space-4) 0 0; list-style: none; border-top: 1px solid var(--line-2); }
-.glance-hours li { display: grid; justify-items: center; gap: 1px; font-size: var(--text-3xs); color: var(--muted); }
-.glance-hours strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
-.glance-hours small { color: var(--muted-2); }
-.glance-hours small.is-wet { color: var(--accent); font-weight: 600; }
-/* Each link and button in the foot is a flex item a line tall, so a line
-   the target size (`--target-min`) is each one's box. */
-.glance-expanded-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-3) var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line-2); font-size: var(--text-xs); line-height: var(--target-min); }
-.glance-expanded-foot > span { display: flex; gap: var(--space-5); margin-left: auto; }
-/* A link in look: the panel's one action besides going somewhere. */
-.glance-refresh { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; color: var(--accent); font: inherit; cursor: pointer; }
-.glance-refresh:hover { border: 0; background: none; text-decoration: underline; }
 
 /* A page declares its sections; the shell owns how they are traversed. Like
    the global navigation this is one row at every width, horizontally
@@ -285,6 +339,14 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    margin on the next. */
 .page-head > .btn, .page-head > form { margin-left: auto; }
 .page-head > .btn + .btn, .page-head > form + form { margin-left: 0; }
+/* A head's control in its overflow menu (connection.css draws the panel): a
+   row like the others, whatever kind of button it was beside the title.
+   Destructive keeps only its color. */
+.overflow-menu-panel :is(a, button, span).btn {
+  display: flex; width: 100%; justify-content: flex-start; min-height: 0;
+  border: 0; background: none; box-shadow: none;
+}
+.overflow-menu-panel .btn.danger { color: var(--danger); }
 
 /* ── Sections menu ──────────────────────────────────────────────── */
 /* The button belongs to the narrow layout only; a wide screen sets the
@@ -324,28 +386,41 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .btn.primary, button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); box-shadow: none; }
 .btn.primary:hover, button.primary:hover { background: var(--accent-2); border-color: var(--accent-2); }
 .btn.danger, button.danger { background: var(--danger); color: var(--accent-ink); border-color: var(--danger); }
+/* A quiet control: words only until hovered. */
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); box-shadow: none; }
+.btn.ghost:hover { color: var(--ink); background: var(--bg-tint); border-color: transparent; }
+/* A destructive action that should not be the loudest thing in its row: the
+   same surface and lift as its neighbors, in red. */
+.btn.ghost.danger { background: var(--surface); border-color: color-mix(in srgb, var(--danger) 35%, var(--line)); color: var(--danger); box-shadow: var(--shadow-sm); }
+.btn.ghost.danger:hover { background: color-mix(in srgb, var(--danger) 8%, var(--surface)); color: var(--danger); }
+/* A control in a row or a head among words, a line's height rather than a
+   form's. */
+.btn.compact { min-height: var(--control-compact); padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
 /* A control that would be refused stands as a span, focusable for its reason
    (partials/_page_action.html), and looks as a disabled button does. */
 .btn:disabled, button:disabled, span.btn[aria-disabled="true"] { cursor: not-allowed; opacity: .52; }
 
 /* ── Hit areas ──────────────────────────────────────────────────── */
 
-/* A control drawn smaller than 24px square (a sort heading, a "view all"
-   link, a day of the month, the favorite star, a dot that leads to a record)
-   is hit through an area at least that size (WCAG 2.5.8) without moving
-   anything: the area is the control's own, hung over the space beside it,
-   where no other control is. The browser gate measures every control
-   (docs/Design.md, "A control is big enough to hit"). A finger is not a cursor: where
-   the pointer is coarse the area grows, and a calendar's marks and bars,
-   packed too close for one under a mouse, are given one too. */
-:is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, a.kpi-dot, .kpi a.value, .posture-meter) { position: relative; }
-:is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, a.kpi-dot, .kpi a.value, .posture-meter)::after {
+/* A control drawn smaller than 24px square is hit through an area at least
+   that size (WCAG 2.5.8) without moving anything: the area is the control's
+   own, hung over the space beside it, where no other control is. A control
+   asks for one in its own partial with `data-hit`; the quiet link
+   (`.subtle-link`) is small wherever it is written, so it always has one. The
+   browser gate measures every control (docs/Design.md, "A control is big
+   enough to hit"). A finger is not a cursor: where the pointer is coarse the
+   area grows, and a control packed too close to its neighbors for one under
+   a mouse (a calendar's marks and bars) asks for one there only, with
+   `data-hit="coarse"`. A control positioned in its own sheet keeps that
+   position, which holds its area as well. */
+:is([data-hit]:not([data-hit=coarse]), .subtle-link) { position: relative; }
+:is([data-hit]:not([data-hit=coarse]), .subtle-link)::after {
   content: ""; position: absolute; inset: min(0px, calc(50% - var(--target-min) / 2));
 }
 @media (pointer: coarse) {
-  :is(.month-mark, .month-span),
+  [data-hit=coarse],
   main summary { position: relative; }
-  :is(.table-sort-link, .subtle-link, .pagination a, .month-date, .pin-toggle, a.kpi-dot, .kpi a.value, .posture-meter, .month-mark, .month-span)::after {
+  :is([data-hit], .subtle-link)::after {
     content: ""; position: absolute;
     inset: min(calc(-1 * var(--space-5)), calc(50% - var(--target-min) / 2)) min(calc(-1 * var(--space-3)), calc(50% - var(--target-min) / 2));
   }
@@ -392,7 +467,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
   transition: background .12s ease, color .12s ease;
 }
 .nav-group > button:is(:hover, [aria-current], :has(+ :popover-open)) { color: var(--ink); background: var(--bg-tint); }
-.nav-group > button:has(+ :popover-open) .nav-caret { transform: rotate(180deg); }
 .nav-group > .nav-group-panel {
   position-area: block-end span-inline-end;
   min-width: 176px; display: flex; flex-direction: column; gap: 1px;
@@ -412,7 +486,7 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
    on none that does not, all of it or none of it, without a width being named. */
 /* Its track is as wide as the bar allows: a short name keeps the control to
    its own width at the bar's end, and a long one is cut to the track. */
-.user-menu { position: relative; grid-area: user; justify-self: stretch; max-width: 100%; anchor-name: --account; }
+.user-menu { position: relative; grid-area: user; justify-self: stretch; max-width: 100%; }
 /* The badge is one size whatever it counts, so the count arriving after the
    page (a fragment on every page but the two that count it) moves nothing in
    the bar: it is pinned to the corner, outside the flow. */
@@ -439,15 +513,6 @@ h3 { font-size: var(--text-md); margin: var(--space-8) 0 var(--space-3); font-we
 .user-menu .user-avatar { width: 22px; height: 22px; margin-block: calc((var(--control-size) - 2px - 22px) / 2); border-radius: 50%; object-fit: cover; background: var(--bg-tint); }
 .user-menu > button:hover,
 .user-menu > button:has(+ :popover-open) { border-color: var(--bar-control-line); background: var(--bar-control-bg-hover); color: var(--ink); }
-.user-menu .user-icon {
-  fill: none;
-  stroke: var(--muted);
-  stroke-linecap: round;
-  stroke-width: 1.8;
-  transition: stroke .12s ease;
-}
-.user-menu > button:hover .user-icon,
-.user-menu > button:has(+ :popover-open) .user-icon { stroke: var(--ink); }
 .user-menu-panel {
   display: flex;
   /* As wide as what it holds, up to a width that still fits beside the

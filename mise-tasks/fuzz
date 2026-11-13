@@ -1,0 +1,57 @@
+#!/bin/sh
+#MISE description="To fuzz the controller's parsers of untrusted input: each Go fuzz target for a bounded time, one after another, as CI's weekly Fuzz job runs them; a failing input is written to its package's testdata/fuzz, where it stays as a regression test"
+#MISE lock=["gate", "heavy"]
+#MISE timeout="2h"
+#USAGE flag "--time <duration>" default="60s" help="How long each target runs, as go test's -fuzztime takes it: a duration (60s, 5m) or a count of inputs (100000x)"
+#USAGE arg "[targets]..." var=#true help="Only these targets, by name (FuzzReadBundle); every target without one"
+
+# The targets are what `go test -list` finds, so a new Fuzz function in any
+# package runs here with nothing to add. Go fuzzes one target per run, so each
+# gets a go test of its own; every target runs, and the closing lines name
+# each one's inputs tried and outcome. What a run learns stays in Go's build
+# cache (GOCACHE/fuzz), which the next run starts from.
+set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+time="${usage_time:?}"
+work="$(mktemp -d)"
+trap 'rm -rf "${work}"' EXIT
+
+# `go test -list` prints a package's matching names, then its `ok` line.
+go -C controller test -list '^Fuzz' ./... >"${work}/list"
+awk '/^Fuzz/ { names[++n] = $1; next }
+     /^ok/ { for (i = 1; i <= n; i++) print $2, names[i]; n = 0 }' "${work}/list" >"${work}/targets"
+
+if [ -n "${usage_targets:-}" ]; then
+    # mise hands the arguments over shell-quoted, one word each.
+    eval "set -- ${usage_targets}"
+    for wanted in "$@"; do
+        awk -v name="${wanted}" '$2 == name { found = 1 } END { exit !found }' "${work}/targets" ||
+            { echo "fuzz: no target is named ${wanted}" >&2; exit 2; }
+    done
+    awk -v names=" $* " 'index(names, " " $2 " ")' "${work}/targets" >"${work}/chosen"
+    mv "${work}/chosen" "${work}/targets"
+fi
+
+failed=0
+: >"${work}/summary"
+while read -r package name; do
+    echo "${name} in ${package#*/controller/}, for ${time}:"
+    # A pipeline's status is its last command's: the run's own goes in a file.
+    { status=0
+      go -C controller test -run '^$' -fuzz "^${name}\$" -fuzztime "${time}" "${package}" 2>&1 || status=$?
+      echo "${status}" >"${work}/status"; } | tee "${work}/log"
+    execs="$(sed -n 's/.*execs: \([0-9]*\).*/\1/p' "${work}/log" | tail -n 1)"
+    if [ "$(cat "${work}/status")" -eq 0 ]; then
+        outcome=passed
+    else
+        outcome=failed
+        failed=1
+    fi
+    printf '%-24s %12s inputs  %s\n' "${name}" "${execs:-0}" "${outcome}" >>"${work}/summary"
+done <"${work}/targets"
+
+echo "The inputs each target tried in ${time}:"
+cat "${work}/summary"
+exit "${failed}"

@@ -21,7 +21,7 @@ from ..github_posture import (
     postures,
 )
 from ..standards import INTENDED, MET, UNAVAILABLE, UNMET
-from .markup import hrefs, within
+from .markup import hrefs, with_class
 from .test_github_estate import store
 from .test_item_help import COMMAND, item_help
 
@@ -193,14 +193,15 @@ class PostureViewTests(TestCase):
 
         response = self.client.get(reverse("posture"))
 
-        gaps = [gap["check"].id for gap in response.context["unmet"]]
-        self.assertEqual(gaps, ["token-read-only", "no-variables"])
+        checks = {check.id: check for check in STANDARD}
+        gaps = [gap["label"] for gap in response.context["unmet"]]
+        self.assertEqual(gaps, [checks["token-read-only"].unmet, checks["no-variables"].unmet])
         self.assertIn("only-you", [check.id for check in response.context["everywhere"]])
         self.assertContains(response, "6 of 8")
         self.assertContains(response, "HQ_IMAGE")
         # A failing check is titled by what is wrong, never by what passing is.
-        titles = [element.words for element in within(response, "class", "posture-gaps") if element.tag == "strong"]
-        self.assertEqual(titles, [gap["check"].unmet for gap in response.context["unmet"]])
+        titles = [element.words for element in with_class(response, "attention-title")]
+        self.assertEqual(titles, gaps)
         self.assertFalse(set(titles) & {check.label for check in STANDARD})
 
     def test_a_repository_joins_its_project(self):

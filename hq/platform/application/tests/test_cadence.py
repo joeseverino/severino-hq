@@ -491,6 +491,21 @@ class ControllerStandingTests(TestCase):
 
         self.assertFalse(standing.known)
         self.assertFalse(standing.silent)
+        self.assertEqual(standing.tone, "neutral")
+
+    def test_a_reported_read_that_failed_is_an_arrival(self):
+        """A failed first read stores no moment it was read, and only a
+        controller reports one, so it says a controller has run."""
+
+        from ..sweep import record_sweep
+
+        record_sweep(
+            {"tailscale.policy": {"ok": False, "records": [], "error": "Tailscale refused the token."}},
+            principal=cli_principal(),
+            controller_id="example-controller",
+        )
+
+        self.assertTrue(cadence.controller_standing().known)
 
     def test_a_controller_that_just_arrived_is_not_silent(self):
         cadence.note_controller()
@@ -498,12 +513,14 @@ class ControllerStandingTests(TestCase):
 
         self.assertTrue(standing.known)
         self.assertFalse(standing.silent)
+        self.assertEqual(standing.tone, "good")
 
     def test_one_that_stopped_arriving_is_silent(self):
         cadence.note_controller()
         later = timezone.now() + cadence.CONTROLLER_SILENT_AFTER + timedelta(minutes=1)
 
         self.assertTrue(cadence.controller_standing(later).silent)
+        self.assertEqual(cadence.controller_standing(later).tone, "attention")
 
     def test_the_arrival_is_noted_on_the_claim_every_applying_run_makes(self):
         """An idle pass claims too, so a healthy controller with nothing to do
@@ -602,7 +619,8 @@ class ControllerTimerTests(SimpleTestCase):
 
     def test_each_doorbell_is_the_one_its_path_unit_waits_on(self):
         """HQ is told only where the controller's doorbell is, and rings the
-        glance's beside it: each must be the file its unit on the host watches."""
+        glance's and the automation worker's beside it: each must be the file
+        its unit on the host watches."""
 
         units = Path(settings.BASE_DIR) / "deploy/systemd"
 
@@ -618,6 +636,7 @@ class ControllerTimerTests(SimpleTestCase):
         for ring, unit, key in (
             (cadence.ring_doorbell, "severino-hq-controller.path", "PathChanged"),
             (cadence.ring_glance_doorbell, "severino-hq-glance.path", "PathExists"),
+            (cadence.ring_automation_doorbell, "severino-hq-automation.path", "PathExists"),
         ):
             with self.subTest(unit=unit), tempfile.TemporaryDirectory() as directory:
                 with override_settings(SEVERINO_CONTROLLER_DOORBELL=str(Path(directory) / controller.name)):

@@ -116,10 +116,11 @@ class HostRenderStatusRecord(ObservationRecord):
 
 
 # A unit's name, one of systemd's state words, an instant in UTC and the
-# title its unit file gives it. A title is the one field of words, and the
-# repository writes each one, since only the units it ships are asked about:
-# printable ASCII on one line, without a slash or an equals sign, so no path or
-# assignment can stand in it, nor the bar HQ's fact rows keep between fields. The
+# title its unit file gives it. A title is the one field of words, written by
+# the repository for a unit it ships and by another package for a service read
+# because it restarts, so it is admitted only as printable ASCII on one line,
+# without a slash or an equals sign, so no path or assignment can stand in it,
+# nor the bar HQ's fact rows keep between fields. The
 # controller reads each pattern from this record's schema in the bridge
 # contract and checks it first. A name may carry systemd's \xNN escape, which
 # a unit named for a path uses for a dash in it (run-a\x2db.mount).
@@ -160,8 +161,8 @@ OptionalUnitText = Annotated[str, Field(pattern=_or_blank(UNIT_TEXT), max_length
 class HostUnitRecord(ObservationRecord):
     """One systemd unit on the controller's machine, as `systemctl show` states
     it: the host.unit reading's record. The launcher asks systemd for exactly
-    these properties of the units the repository ships, and the controller
-    reports no other. Each string is a unit name, one of systemd's state words,
+    these properties of the units the repository ships and of each other
+    service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words,
     an instant in UTC or the unit file's own title for a person to read; none
     is a path, a command line or an environment.
     """
@@ -194,12 +195,12 @@ class HostUnitRecord(ObservationRecord):
     main_code: int = Field(
         default=0,
         ge=0,
-        description="ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
+        description="ExecMainCode: how the last run's main process ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
     )
     main_status: int = Field(
         default=0,
         ge=0,
-        description="ExecMainStatus: the exit status or signal number of the main process of the last run.",
+        description="ExecMainStatus: the exit status or signal of the last run's main process.",
     )
     started_at: OptionalUnitInstant = Field(
         default="", description="InactiveExitTimestamp: when the last start began, on this boot."
@@ -221,7 +222,92 @@ class HostUnitRecord(ObservationRecord):
         default="", description="NextElapseUSecRealtime: when a timer with a calendar schedule next elapses."
     )
     activates: OptionalUnitName = Field(default="", description="Unit: the unit a timer or path starts.")
+    restarts: int = Field(
+        default=0,
+        ge=0,
+        description="NRestarts: how often systemd restarted the service on its own since it was last started deliberately or reset.",
+    )
+    active_at: OptionalUnitInstant = Field(
+        default="", description="ActiveEnterTimestamp: when the unit last became active, on this boot."
+    )
+    foreign: bool = Field(
+        default=False,
+        description="A service the repository does not ship, read because systemd has restarted it on its own.",
+    )
     read_at: UnitInstant = Field(description="When the launcher asked systemd.")
+
+
+# A mount point as the kernel's mount table spells it, its escapes undone:
+# printable ASCII from a slash, without the bar HQ's fact rows keep between
+# fields. The controller reads the pattern from this record's schema in the
+# bridge contract and passes over a mount it does not admit.
+FILESYSTEM_MOUNT = r"^/[ -{}~]*$"
+FILESYSTEM_MOUNT_LENGTH = 255
+
+
+class HostFilesystemRecord(ObservationRecord):
+    """One real filesystem on the controller's machine, as statfs(2) states
+    it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs
+    or zfs mount the machine shows, one per device, and sends where it is
+    mounted and its space; no device, option or file name.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
+
+    mount: str = Field(
+        pattern=FILESYSTEM_MOUNT,
+        max_length=FILESYSTEM_MOUNT_LENGTH,
+        description="Where the filesystem is mounted, the name you find it by.",
+    )
+    free_bytes: int = Field(ge=0, description="f_bavail: the bytes a process that is not root can still write.")
+    total_bytes: int = Field(ge=0, description="f_blocks: the filesystem's size in bytes.")
+    read_at: UnitInstant = Field(description="When root asked the kernel.")
+
+
+# A package as dpkg names one (Debian Policy 5.6.1): lowercase letters,
+# digits, plus, minus and dots, two or more, from a letter or digit. The
+# controller reads the pattern and the count from this record's schema in the
+# bridge contract and passes over a name it does not admit.
+REBOOT_PACKAGE = r"^[a-z0-9][a-z0-9+.-]{1,99}$"
+REBOOT_PACKAGES = 64
+
+
+class HostRebootRecord(ObservationRecord):
+    """Whether the controller's machine waits on a restart: the
+    host.reboot reading's one record. Root reads the flag the packaging
+    system leaves in /run/reboot-required and the packages it lists beside it,
+    and asks logind for the shutdown scheduled, if one is; no other file or
+    property.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True, json_schema_extra={"additionalProperties": False})
+
+    pending: bool = Field(description="Whether /run/reboot-required is there: an update waits on a restart.")
+    since: OptionalUnitInstant = Field(
+        default="", description="When the flag was first written, when one is there; empty when none is."
+    )
+    packages: tuple[Annotated[str, Field(pattern=REBOOT_PACKAGE)], ...] = Field(
+        default=(),
+        max_length=REBOOT_PACKAGES,
+        description="The packages /run/reboot-required.pkgs names as waiting on it, each once.",
+    )
+    scheduled_action: OptionalUnitWord = Field(
+        default="",
+        description="What logind's ScheduledShutdown will do (reboot, poweroff, halt); empty when nothing is scheduled.",
+    )
+    scheduled_at: OptionalUnitInstant = Field(
+        default="", description="When logind will do it; empty when nothing is scheduled."
+    )
+    read_at: UnitInstant = Field(description="When root read the flag and asked logind.")
+
+
+class HostEdgeRebootRecord(HostRebootRecord):
+    """Whether an edge waits on a restart: the host.edge_reboot reading's
+    record for each edge, read the same way by its receiver's reboot
+    operation and handed over its SSH transport.
+    """
+
+    connection_ref: str = Field(description="The edge's SSH transport, which names the machine it reads.")
 
 
 FIREWALL_KIND = "host.firewall"
@@ -229,6 +315,9 @@ PERIMETER_KIND = "host.perimeter"
 RENDER_STATUS_KIND = "host.render_status"
 UNIT_KIND = "host.unit"
 TAILNET_LOCK_KIND = "host.tailnet_lock"
+FILESYSTEM_KIND = "host.filesystem"
+REBOOT_KIND = "host.reboot"
+EDGE_REBOOT_KIND = "host.edge_reboot"
 
 OBSERVATIONS: tuple[ObservationSpec, ...] = (
     ObservationSpec(
@@ -271,5 +360,29 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         HostTailnetLockRecord,
         title=lambda record: "On" if record.get("enabled") else "Off",
         relation="Tailnet lock seen from",
+    ),
+    ObservationSpec(
+        FILESYSTEM_KIND,
+        "host",
+        "Disk space",
+        HostFilesystemRecord,
+        title=lambda record: str(record.get("mount", "")),
+        relation="Disk space on",
+    ),
+    ObservationSpec(
+        REBOOT_KIND,
+        "host",
+        "Pending restart",
+        HostRebootRecord,
+        title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
+        relation="Restart state of",
+    ),
+    ObservationSpec(
+        EDGE_REBOOT_KIND,
+        "ssh",
+        "Pending restart on an edge",
+        HostEdgeRebootRecord,
+        title=lambda record: "Waiting on a restart" if record.get("pending") else "No restart waiting",
+        relation="Restart state of",
     ),
 )

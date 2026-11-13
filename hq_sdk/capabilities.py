@@ -1,4 +1,4 @@
-"""Command, identity, and capability primitives shared by every adapter."""
+"""For what an extension can do: declare its capabilities and strict commands, and run a write."""
 
 from pydantic import BaseModel, ConfigDict
 
@@ -9,7 +9,7 @@ from hq.platform.application.capabilities import (
     execute_capability,
 )
 from hq.platform.application.command_fields import Choices, Describe, Names, Refers
-from hq.platform.application.integration_specs import ON_ITS_PAGE
+from hq.platform.application.integration_specs import ON_ITS_PAGE, CommandAbout, CommandFact
 from hq.platform.application.security import (
     AuthorizationError,
     Capability,
@@ -33,6 +33,8 @@ __all__ = [
     "Capability",
     "CapabilitySpec",
     "Choices",
+    "CommandAbout",
+    "CommandFact",
     "Describe",
     "Names",
     "Principal",

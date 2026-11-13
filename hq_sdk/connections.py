@@ -1,4 +1,4 @@
-"""Safe, discoverable connection contracts shared by HQ and plugins."""
+"""For a credential an extension holds: declare the connection and what it may see and do."""
 
 from hq.platform.application.connections import (
     ConnectionAbility,

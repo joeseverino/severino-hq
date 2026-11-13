@@ -113,13 +113,14 @@ class ChangeRow:
     """One value that moves, named and valued in words.
 
     ``change`` is "added" when there was nothing before, "removed" when there
-    is nothing after, and "changed" otherwise.
+    is nothing after, and "changed" otherwise. A ``redacted`` value is said only to have changed.
     """
 
     label: str
     before: str
     after: str
     change: str
+    redacted: bool = False
 
 
 # Between the names of a value inside a document, outermost first.

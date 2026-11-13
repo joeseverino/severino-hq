@@ -39,6 +39,7 @@ from hq.platform.core.test_runner import (
     drives_a_browser,
     excluded_tags,
     report_class_times,
+    tests_in,
 )
 
 
@@ -826,6 +827,22 @@ class BrowserTestTests(SimpleTestCase):
 
         self.assertTrue(drives_a_browser(Drawn("test_it")))
 
+    def test_the_whole_suite_leaves_out_every_browser_gate_it_discovers(self):
+        gate = type("Gate", (SimpleTestCase,), {"__module__": f"{BROWSER_TESTS}.catalog", "test_it": lambda self: None})
+
+        class Plain(SimpleTestCase):
+            def test_it(self):
+                pass
+
+        found = unittest.TestSuite([gate("test_it"), Plain("test_it")])
+        with (
+            unittest.mock.patch.object(DiscoverRunner, "build_suite", return_value=found),
+            unittest.mock.patch("hq.platform.core.test_runner.plugin_test_modules", return_value=[]),
+        ):
+            suite = SeverinoTestRunner(verbosity=0).build_suite([])
+
+        self.assertEqual([type(test) for test in tests_in(suite)], [Plain])
+
 
 class BrowserFailureShotTests(SimpleTestCase):
     def built(self, *tests):
@@ -908,3 +925,59 @@ class AgentLimitsIsolationTests(SimpleTestCase):
         self.assertEqual((first, second_class), (1, 1), "the class's stream reaches each of its tests")
         self.assertEqual(second_test, 0, "a stream one test opened is gone from the next")
         self.assertEqual(after, 0, "the next class sets up on a new set")
+
+
+class MarkerIsolationTests(SimpleTestCase):
+    """A test finds the controller's markers as its class's setup left them,
+    whatever a test before it wrote, in this process or another."""
+
+    def test_what_a_class_writes_reaches_each_of_its_tests_and_no_test_reaches_the_next(self):
+        from hq.platform.application import cadence
+
+        heartbeat, doorbell = Path(settings.SEVERINO_CONTROLLER_HEARTBEAT), Path(settings.SEVERINO_CONTROLLER_DOORBELL)
+        seen = []
+
+        class SettingUp(unittest.TestCase):
+            @classmethod
+            def setUpClass(cls):
+                cadence.note_controller()
+
+            def test_first(self):
+                seen.append(heartbeat.exists())
+                heartbeat.unlink()
+                cadence.ring_doorbell()
+
+            def test_second(self):
+                seen.append(heartbeat.exists())
+                seen.append(doorbell.exists())
+
+        class After(unittest.TestCase):
+            def test_it(self):
+                seen.append(heartbeat.exists() or doorbell.exists())
+
+        result = CompositionTextResult(io.StringIO(), descriptions=True, verbosity=0)
+        loader = unittest.TestLoader()
+        unittest.TestSuite([loader.loadTestsFromTestCase(SettingUp), loader.loadTestsFromTestCase(After)]).run(result)
+
+        self.assertTrue(result.wasSuccessful(), result.failures + result.errors)
+        first, second, rung, after = seen
+        self.assertEqual((first, second), (True, True), "the class's heartbeat reaches each of its tests")
+        self.assertFalse(rung, "a doorbell one test rang is gone from the next")
+        self.assertFalse(after, "the next class sets up with no markers")
+
+    def test_each_process_keeps_its_markers_apart(self):
+        from hq.platform.core import isolation_testing as isolation
+
+        here = isolation.own_markers()
+        kept = {setting: getattr(settings, setting) for setting, _ in isolation.MARKERS}
+        try:
+            with unittest.mock.patch("hq.platform.core.isolation_testing.os.getpid", lambda: -1):
+                other = isolation.own_markers()
+                heartbeat = settings.SEVERINO_CONTROLLER_HEARTBEAT
+        finally:
+            isolation._markers = (os.getpid(), here)
+            for setting, value in kept.items():
+                setattr(settings, setting, value)
+
+        self.assertNotEqual(other, here)
+        self.assertEqual(Path(heartbeat).parent, other)

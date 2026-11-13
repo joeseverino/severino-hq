@@ -23,8 +23,9 @@ import (
 
 // Readings of the host the controller runs on: its firewall, its perimeter,
 // what its secret renderers say about their own runs, in host_tailnet_lock.go
-// its daemon's tailnet lock status and, in host_units.go,
-// the state of its systemd units.
+// its daemon's tailnet lock status, in host_units.go the state of its systemd
+// units, in host_filesystem.go the space on its filesystems and, in
+// host_reboot.go, whether it and each edge wait on a restart.
 
 // PublishedContainer is a container the sweep found and the ports it publishes.
 // Host is the environment's connection ref, HostAddress its address.
@@ -59,9 +60,16 @@ func (r *Registry) admitHostReadings() {
 	r.reader(runtime.ResourceKindHostRenderStatus, r.hostRenderStatus)
 	r.readsHeld(runtime.ResourceKindHostRenderStatus, func() bool { return r.Env.RenderStatus != "" })
 	r.reader(runtime.ResourceKindHostUnit, r.hostUnits)
-	r.readsHeld(runtime.ResourceKindHostUnit, func() bool { return r.Env.HostUnits != "" })
+	// Both answers are one reading: the shipped units and the services
+	// systemd keeps restarting.
+	r.readsHeld(runtime.ResourceKindHostUnit, func() bool { return r.Env.HostUnits != "" || r.Env.HostRestartingUnits != "" })
 	r.reader(runtime.ResourceKindHostTailnetLock, r.hostTailnetLock)
 	r.readsHeld(runtime.ResourceKindHostTailnetLock, func() bool { return r.Env.TailnetLock != "" })
+	r.reader(runtime.ResourceKindHostFilesystem, r.hostFilesystems)
+	r.readsHeld(runtime.ResourceKindHostFilesystem, func() bool { return r.Env.HostFilesystems != "" })
+	r.reader(runtime.ResourceKindHostReboot, r.hostReboot)
+	r.readsHeld(runtime.ResourceKindHostReboot, func() bool { return r.Env.HostReboot != "" })
+	r.reader(runtime.ResourceKindHostEdgeReboot, r.hostEdgeReboot)
 }
 
 // What a status document's record says of the read itself.

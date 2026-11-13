@@ -1,13 +1,14 @@
-{% load nav_tags %}
 {% comment %}
 A zone's DNS records as one table: the records that send traffic somewhere,
 then the policy and verification records folded away under their own group,
 so both halves share one set of columns and sort alike.
 
-Expects `routing`, `policy`, `zone` and `public_dns_enabled`; with public DNS
+Expects `routing` and `policy`, each record with its actions (zone_views'
+`_record_rows`), `zone` and `public_dns_enabled`; with public DNS
 changes off, a record offers no Edit or Remove it would refuse. A state is said
 only where it is not healthy, and a TTL only where it is not automatic:
-seventeen rows that each say "Healthy" and "Auto" say nothing. Where the Value
+seventeen rows that each say "Healthy" and "Auto" say nothing, and a zone
+whose every record is automatic has no TTL column (`zone.ttl_set`). Where the Value
 column has left, a record that shares its name and type with another says its
 value under its name (`record.summary`), so the two still read as two.
 {% endcomment %}
@@ -23,10 +24,10 @@ value under its name (`record.summary`), so the two still read as two.
           </td>
           <td><code>{{ record.record_type|breakable }}</code></td>
           <td>
-            <span class="zone-value">{{ record.value|breakable }}</span>
+            <code>{{ record.value|breakable }}</code>
             {% if record.proxied %}{% status "Proxied" tone="neutral" %}{% endif %}
           </td>
-          <td>{% if record.ttl != 1 %}{{ record.ttl|breakable }}&nbsp;s{% endif %}</td>
+          {% if zone.ttl_set %}<td>{% if record.ttl != 1 %}{{ record.ttl|measured:"s" }}{% endif %}</td>{% endif %}
           {% if zone.managed %}
             <td>
               {% comment %}
@@ -44,14 +45,7 @@ value under its name (`record.summary`), so the two still read as two.
                 {% status "New" tone="attention" %}
               {% endif %}
             </td>
-            <td class="actions-col">
-              {% if record.edit_url or record.remove_url %}
-                <span class="row-actions">
-                  {% if record.edit_url %}<a class="subtle-link" href="{{ record.edit_url|returning_to:request.get_full_path }}">{% words "infrastructure.resource.update" %}</a>{% endif %}
-                  {% if record.remove_url %}<a class="subtle-link" href="{{ record.remove_url }}">{% words "infrastructure.resource.remove" %}</a>{% endif %}
-                </span>
-              {% endif %}
-            </td>
+            {% row_actions actions %}
           {% endif %}
         </tr>
 {% endpartialdef %}
@@ -62,24 +56,24 @@ value under its name (`record.summary`), so the two still read as two.
         {% table_heading "Name" "identifier" gutter=True local_sort=True %}
         {% table_heading "Type" "identifier" css="key-col" local_sort=True %}
         {% table_heading "Value" "identifier" drop=4 local_sort=True %}
-        {% table_heading "TTL" "status" drop=3 local_sort=True %}
+        {% if zone.ttl_set %}{% table_heading "TTL" "status" drop=3 local_sort=True %}{% endif %}
         {% if zone.managed %}{% table_heading "State" "status" drop=2 local_sort=True %}{% table_heading "Actions" css="actions-col" drop=1 hidden=True %}{% endif %}
       </tr>
     </thead>
     <tbody>
-      {% if policy %}{% row_group "Records that send traffic" routing|length %}{% endif %}
-      {% for record in routing %}
+      {% if policy %}{% row_group "Routing records" routing|length %}{% endif %}
+      {% for record, actions in routing %}
         {% partial record_row %}
       {% empty %}
         <tr><td colspan="6">
-          {% if policy %}{% include "partials/_empty_state.html" with message="None of this domain's records sends traffic anywhere. They are all below." %}{% else %}{% include "partials/_empty_state.html" with message="No records." %}{% endif %}
+          {% if policy %}{% include "partials/_empty_state.html" with message="No routing records." %}{% else %}{% include "partials/_empty_state.html" with message="No records." %}{% endif %}
         </td></tr>
       {% endfor %}
     </tbody>
     {% if policy %}
       <tbody>
-        {% row_group "Policy and verification records" policy|length folds="zone-policy-records" %}
-        {% for record in policy %}
+        {% row_group "Policy records" policy|length folds="zone-policy-records" %}
+        {% for record, actions in policy %}
           {% with folded="zone-policy-records" %}{% partial record_row %}{% endwith %}
         {% endfor %}
       </tbody>

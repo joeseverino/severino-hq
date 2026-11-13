@@ -1,6 +1,8 @@
 """Probes of running text: broken words, text that overlaps and text past its clamp."""
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, LINES, PAINTED_PART, TEXT_SHOWN
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # A plain word split across lines inside a table cell: its column was given
 # less than the word, because another column's content took the width. A word
@@ -126,6 +128,152 @@ BROKEN_WORDS_IN_TEXT = (
 }"""
 )
 
+# A line of running text that opens on a stray: a separator (a dot written in
+# the text, or one a part of a run draws before itself and nothing clips), a
+# line that holds only marks (an icon, an asterisk) apart from the words they
+# belong to, or one word alone that the line before cut from its number ("12"
+# above "days") or, in a cell, that a box set whole after it left behind
+# ("on" above a name), where the break between them is a wrap and not a `br`:
+# a cell cuts a name, so one never needs a line of its own. A value of a list
+# (a user's code before the next) is no running word, so a list wrapping
+# between its values leaves none behind. Each block's
+# lines are read from what it lays out in them: its own text, and each box set
+# in its line whole (a link drawn as a block, an icon) as one piece. A wrapping flex box's items are its lines, and an
+# item opening a row opens a line. Text kept from sight (`unseen`) is
+# not drawn.
+STRAYS_OPENING_A_LINE = (
+    "([unseen, identifier]) => {"
+    + DESCRIBE
+    + PAINTED_PART
+    + TEXT_SHOWN
+    + r"""
+  // A middle dot, a bullet, a bar, a slash, an en or an em dash.
+  const SEPARATOR = /^[·•|\/\u2013\u2014]/;
+  const MARKS_ONLY = /^[^\p{L}\p{N}]*$/u;
+  const TYPED = 'textarea, input:not([type=checkbox], [type=radio], [type=image], [type=range], [type=color], [type=file])';
+  const range = document.createRange();
+  const inlineDisplay = (el) => ['inline', 'contents'].includes(getComputedStyle(el).display);
+  const blockOf = (el) => { while (el.parentElement && inlineDisplay(el)) el = el.parentElement; return el; };
+  const drawnRect = (el, rect) => rect && rect.width > 0.5 && painted(el, rect);
+  // A box set in its block's line whole: an inline block, an inline flex or
+  // grid box, a clamped one (`-webkit-inline-box`), or a replaced element (an
+  // icon, an image).
+  const atomic = (el) => {
+    const display = getComputedStyle(el).display;
+    return /^(-webkit-)?inline-/.test(display) || (display === 'inline' && el instanceof SVGSVGElement) || el.matches('img, svg, input, select, button');
+  };
+  // The separator a part draws before itself (`::before`), where its box
+  // lands: its own size from its margin before the part's first line.
+  const drawnSeparator = (el) => {
+    const style = getComputedStyle(el, '::before');
+    const content = style.content.match(/^"((?:[^"\\]|\\.)*)"/);
+    if (!content || !SEPARATOR.test(content[1].trim())) return null;
+    const first = [...el.getClientRects()].find((r) => r.width) || el.getBoundingClientRect();
+    const left = first.left + (parseFloat(style.marginLeft) || 0);
+    const width = parseFloat(style.width) || parseFloat(style.fontSize) / 2;
+    // Only its middle, the glyph a centered mark draws, counts as drawn.
+    const middle = left + width / 2;
+    const rect = {left: middle - 1, right: middle + 1, top: first.top, bottom: first.bottom, width: 2, height: first.height};
+    return painted(el, rect) ? content[1].trim() : null;
+  };
+  const pieces = new Map();
+  const add = (block, piece) => { if (!pieces.has(block)) pieces.set(block, []); pieces.get(block).push(piece); };
+  const main = document.querySelector('main');
+  const walk = (el) => {
+    for (const child of el.childNodes) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        if (!child.data.trim() || !textShown(child)) continue;
+        const block = blockOf(child.parentElement);
+        for (let at = 0; at < child.length; at++) {
+          if (!child.data[at].trim()) { add(block, {ch: ' '}); continue; }
+          range.setStart(child, at);
+          range.setEnd(child, at + 1);
+          const rect = [...range.getClientRects()].find((r) => drawnRect(child.parentElement, r));
+          if (rect) add(block, {ch: child.data[at], rect, el: child.parentElement});
+        }
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        if (child.matches(`${unseen}, script, style, template, pre`) || !child.checkVisibility({visibilityProperty: true})) continue;
+        if (child.matches('br')) { add(blockOf(child.parentElement), {br: true}); continue; }
+        const separator = drawnSeparator(child);
+        if (separator) add(blockOf(child), {ch: separator, rect: [...child.getClientRects()].find((r) => r.width), el: child});
+        if (!atomic(child)) { walk(child); continue; }
+        // Set in its parent's line whole: one piece, its words as its text,
+        // a field for words as what it shows (what is typed, else its
+        // placeholder), and a box with none (an icon, an image, a box to
+        // tick) as a mark.
+        const rect = child.getBoundingClientRect();
+        const words = child.matches(TYPED) ? child.value || child.placeholder || 'field' : child.textContent;
+        // Its opening character is drawn by what holds its first text (a
+        // path's code), which says whether that character is a separator.
+        const texts = document.createTreeWalker(child, NodeFilter.SHOW_TEXT);
+        let first = texts.nextNode();
+        while (first && !first.data.trim()) first = texts.nextNode();
+        if (drawnRect(child, rect)) add(blockOf(child.parentElement), {ch: words.trim() || '▪', rect, el: child, opens: first?.parentElement ?? child, whole: true});
+        if (!child.matches('svg, img')) walk(child);
+      }
+    }
+  };
+  walk(main);
+  const found = [];
+  for (const [block, list] of pieces) {
+    // Lines in reading order: a piece that starts below the line so far
+    // starts the next one.
+    const lines = [];
+    let gap = false;
+    let forced = false;
+    for (const piece of list) {
+      if (piece.br) { forced = true; continue; }
+      if (!piece.rect) { gap = true; continue; }
+      const line = lines.at(-1);
+      if (!line || piece.rect.top >= line.bottom - Math.min(piece.rect.height, line.bottom - line.top) / 2) {
+        lines.push({top: piece.rect.top, bottom: piece.rect.bottom, pieces: [piece], text: piece.ch, forced});
+        forced = false;
+      } else {
+        line.bottom = Math.max(line.bottom, piece.rect.bottom);
+        line.text += (gap ? ' ' : '') + piece.ch;
+        line.pieces.push(piece);
+      }
+      gap = false;
+    }
+    if (lines.length < 2) continue;
+    const name = describe(block);
+    const inCell = Boolean(block.closest('td, th'));
+    lines.forEach((line, index) => {
+      const text = line.text.trim();
+      const opening = line.pieces.find((piece) => piece.ch.trim());
+      if (index && SEPARATOR.test(text) && !(opening.opens ?? opening.el).closest(identifier)) found.push(`${name} opens a line with "${text[0]}": "${text.slice(0, 30)}"`);
+      else if (MARKS_ONLY.test(text)) found.push(`${name} holds "${text.slice(0, 30)}" on a line of its own (▪ is an icon or an image)`);
+      else if (index && !line.forced && /^\p{L}+[.,;:]?$/u.test(text) && /\p{N}%?$/u.test(lines[index - 1].text.trim())) {
+        found.push(`${name} cuts "${text}" from its number "${lines[index - 1].text.trim().split(/\s/).at(-1).slice(-30)}"`);
+      } else if (inCell && (!index || line.forced) && !line.pieces.some((piece) => piece.whole || piece.el?.closest(identifier)) && /^\p{L}+$/u.test(text) && lines[index + 1] && !lines[index + 1].forced && lines[index + 1].pieces[0].whole) {
+        found.push(`${name} cuts "${text}" from "${lines[index + 1].text.trim().slice(0, 30)}" after it`);
+      }
+    });
+  }
+  // A wrapping flex box's rows: the item that opens one opens a line.
+  for (const box of main.querySelectorAll('*')) {
+    const style = getComputedStyle(box);
+    if (!/flex/.test(style.display) || style.flexWrap === 'nowrap' || style.flexDirection.startsWith('column') || !box.checkVisibility()) continue;
+    const items = [...box.children].filter((item) => item.checkVisibility() && !['absolute', 'fixed'].includes(getComputedStyle(item).position))
+      .map((item) => [item, item.getBoundingClientRect()]).filter(([, r]) => r.width && r.height);
+    const rows = [];
+    for (const [item, r] of items) {
+      const row = rows.find((one) => r.top < one.bottom && r.bottom > one.top);
+      if (row) { row.items.push([item, r]); row.bottom = Math.max(row.bottom, r.bottom); } else rows.push({top: r.top, bottom: r.bottom, items: [[item, r]]});
+    }
+    if (rows.length < 2) continue;
+    const start = style.direction === 'rtl' ? (r) => -r.right : (r) => r.left;
+    for (const row of rows.slice(1)) {
+      const [opening] = row.items.reduce((first, one) => (start(one[1]) < start(first[1]) ? one : first));
+      const first = (pieces.get(opening) || []).find((piece) => piece.rect);
+      const mark = drawnSeparator(opening) || (first && SEPARATOR.test(first.ch) && !first.el.closest(identifier) ? first.ch : null);
+      if (mark) found.push(`${describe(box)} opens a row with "${mark[0]}": "${opening.textContent.trim().slice(0, 30)}"`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
 # Two lines of text drawn over each other, each as much of it as is painted.
 # A layer that floats over the page (`floating`: an open menu, a dialog) covers
 # the page's text on purpose, so a line is held only against lines in its own
@@ -168,8 +316,10 @@ OVERLAPPING_TEXT = (
 # them and less than a space's width between their glyphs, each as much of it
 # as is painted: a heading and the status beside it in a flex row, where the
 # space between them in the markup is dropped, read as one word. Runs in one
-# block's line with nothing between their glyphs are one word the markup wrote
-# across elements, as is a name `breakable` split at its seams (`identifier`);
+# block's line with nothing between their glyphs, or set a fraction of a
+# pixel into each other (a search match marked inside its word), are one word
+# the markup wrote across elements, as is a name `breakable` split at its
+# seams (`identifier`);
 # a run that ends opening, or starts closing, a phrase or a figure (a bracket,
 # a comma, a dash) is set against its neighbor on purpose. A line is held only
 # against lines in its own layer, as overlapping text holds it.
@@ -255,7 +405,7 @@ TOUCHING_TEXT = (
       if (shared <= Math.min(a.rect.height, b.rect.height) / 2) continue;
       const gap = b.rect.left - a.rect.right;
       if (gap <= -2 || gap >= Math.min(space(a.el), space(b.el)) - 0.5) continue;
-      if (a.block === b.block && Math.abs(gap) <= 0.5) continue;
+      if (a.block === b.block && gap <= 0.5) continue;
       if (spacedBetween(a, b)) continue;
       found.push(`"${a.node.data.trim().slice(-30)}" (${describe(a.el)}) touches "${b.node.data.trim().slice(0, 30)}" (${describe(b.el)}), ${gap.toFixed(1)}px apart`);
     }
@@ -370,11 +520,19 @@ CUT_DECISIONS = (
 BASELINES = r"""
 const range = document.createRange();
 const rects = (node) => { range.selectNodeContents(node); return [...range.getClientRects()].filter((r) => r.width); };
+// Text in content the browser skips (a closed fold, `hidden="until-found"`)
+// is not drawn, though WebKit gives it rects once any read lays it out; it is
+// judged by the box that holds it, since a box of `display: contents` has
+// none to judge.
+const skipped = (el) => {
+  while (el && getComputedStyle(el).display === 'contents') el = el.parentElement;
+  return !!el && !el.checkVisibility();
+};
 const drawn = (root) => {
   const found = [];
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (node.data.trim() && !node.parentElement.closest(unseen) && rects(node).length) found.push(node);
+    if (node.data.trim() && !node.parentElement.closest(unseen) && !skipped(node.parentElement) && rects(node).length) found.push(node);
   }
   return found;
 };
@@ -471,6 +629,174 @@ CHIPS_OFF_THEIR_LINE = (
 )
 
 
+# The facts of a band that share a row share a baseline: each value's first
+# line has its baseline where the first value of its row has it, a zero beside a linked
+# count alike. A row is the facts whose cells start level.
+VALUES_OFF_THEIR_ROW = (
+    "([band, fact, value, unseen]) => {"
+    + DESCRIBE
+    + BASELINES
+    + r"""
+  const found = [];
+  for (const each of document.querySelectorAll(band)) {
+    if (!each.checkVisibility()) continue;
+    const rows = new Map();
+    for (const cell of each.querySelectorAll(`:scope > ${fact}`)) {
+      const held = cell.querySelector(value);
+      if (!held || !drawn(held).length) continue;
+      const top = Math.round(cell.getBoundingClientRect().top);
+      if (!rows.has(top)) rows.set(top, []);
+      // The baseline of the value's own first line, where a box of no size
+      // lands first in it: a chip in that line is the chips check's.
+      rows.get(top).push([held, baseline(held.firstChild, false)]);
+    }
+    for (const row of rows.values()) {
+      const [[first, at]] = row;
+      for (const [held, its] of row.slice(1)) {
+        if (Math.abs(its - at) > 0.5) {
+          found.push(`${describe(each)} "${held.textContent.trim().slice(0, 40)}" sits ${(its - at).toFixed(1)}px off the baseline of "${first.textContent.trim().slice(0, 40)}"`);
+        }
+      }
+    }
+  }
+  return found;
+}"""
+)
+
+
+# What a fact draws: its words and its icon's mark, as the rects a reader sees.
+_FACT_DRAWN = r"""
+const factRects = (cell) => [
+  ...drawn(cell).flatMap(rects),
+  ...[...cell.querySelectorAll('svg')].filter((mark) => mark.checkVisibility()).map((mark) => mark.getBoundingClientRect()),
+].filter((r) => r.width && r.height);
+const extent = (found) => found.length && {
+  top: Math.min(...found.map((r) => r.top)), bottom: Math.max(...found.map((r) => r.bottom)),
+  left: Math.min(...found.map((r) => r.left)), right: Math.max(...found.map((r) => r.right)),
+};
+"""
+
+
+# The facts of a band share its width: its tracks take the whole band, so a
+# few facts spread across a wide card rather than collecting at its start
+# beside an empty end. Read from each fact's cell, which is its track, at the
+# band's width and with the band set wider for the length of one layout and
+# put back before it paints: a track sized to what its fact says (a
+# `max-content` bound, a cap on the fact) stops short of the band's end once
+# the band is wider than its facts, whatever width the survey reads it at.
+FACTS_SHORT_OF_THEIR_BAND = (
+    "([band, fact]) => {"
+    + DESCRIBE
+    + r"""
+  const WIDER = 240;
+  const short = (each) => {
+    const style = getComputedStyle(each);
+    const rtl = style.direction === 'rtl';
+    const r = each.getBoundingClientRect();
+    const end = rtl
+      ? r.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft)
+      : r.right - parseFloat(style.borderRightWidth) - parseFloat(style.paddingRight);
+    const cells = [...each.querySelectorAll(`:scope > ${fact}`)].filter((cell) => cell.checkVisibility());
+    if (!cells.length) return null;
+    const reach = rtl
+      ? Math.min(...cells.map((cell) => cell.getBoundingClientRect().left))
+      : Math.max(...cells.map((cell) => cell.getBoundingClientRect().right));
+    const left = rtl ? reach - end : end - reach;
+    return left > 1 ? left : null;
+  };
+  const found = [];
+  for (const each of document.querySelectorAll(band)) {
+    if (!each.checkVisibility()) continue;
+    const now = short(each);
+    const style = each.getAttribute('style');
+    each.style.setProperty('inline-size', `${each.getBoundingClientRect().width + WIDER}px`, 'important');
+    each.style.setProperty('max-inline-size', 'none', 'important');
+    const wider = short(each);
+    if (style === null) each.removeAttribute('style');
+    else each.setAttribute('style', style);
+    if (now !== null) found.push(`${describe(each)} ends its facts ${Math.round(now)}px short of its end`);
+    else if (wider !== null) found.push(`${describe(each)} ends its facts ${Math.round(wider)}px short of its end once ${WIDER}px wider`);
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A fact's detail is running words: its lines are the ones its markup
+# declares (a `<small>` each), so no word of it is laid out as a row of its
+# own by a flex or grid box, which makes each run of text between two
+# elements an item, a dot or a link on a line alone.
+DETAIL_WORDS_IN_ROWS = (
+    "([detail, unseen]) => {"
+    + DESCRIBE
+    + BASELINES
+    + r"""
+  const found = [];
+  for (const each of document.querySelectorAll(detail)) {
+    if (!each.checkVisibility()) continue;
+    for (const box of [each, ...each.querySelectorAll('*')]) {
+      if (!/flex|grid/.test(getComputedStyle(box).display)) continue;
+      const loose = [...box.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && node.data.trim()
+        && !box.closest(unseen) && rects(node).length);
+      if (loose) found.push(`${describe(box)} lays out "${loose.data.trim().slice(0, 30)}" as a row of its own`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
+# A fact keeps its frame's inset: what it draws stands at least `least`
+# pixels inside the sides of the frame that holds it (the nearest box that
+# draws an edge all round) and below any rule drawn above it there, a
+# section head's or its own line's among them.
+FACTS_AGAINST_THEIR_FRAME = (
+    "([fact, unseen, least]) => {"
+    + DESCRIBE
+    + BASELINES
+    + _FACT_DRAWN
+    + r"""
+  const seen = (color) => color && !/^(transparent|rgba\(.*,\s*0\))$/.test(color);
+  const edge = (style, side) => parseFloat(style[`border${side}Width`]) > 0 && style[`border${side}Style`] !== 'none'
+    && seen(style[`border${side}Color`]);
+  const framed = (style) => ['Top', 'Right', 'Bottom', 'Left'].every((side) => edge(style, side));
+  const found = [];
+  for (const cell of document.querySelectorAll(`main ${fact}`)) {
+    if (!cell.checkVisibility()) continue;
+    const at = extent(factRects(cell));
+    if (!at) continue;
+    let frame = cell.parentElement;
+    while (frame && frame !== document.body && !framed(getComputedStyle(frame))) frame = frame.parentElement;
+    if (!frame || frame === document.body) continue;
+    const style = getComputedStyle(frame);
+    const f = frame.getBoundingClientRect();
+    const sides = {
+      left: at.left - (f.left + parseFloat(style.borderLeftWidth)),
+      right: f.right - parseFloat(style.borderRightWidth) - at.right,
+      top: at.top - (f.top + parseFloat(style.borderTopWidth)),
+    };
+    // A rule above the fact inside its frame: a bottom edge some box draws
+    // across the fact's columns, ending above what the fact draws.
+    for (const ruled of frame.querySelectorAll('*')) {
+      if (ruled.contains(cell) || !edge(getComputedStyle(ruled), 'Bottom')) continue;
+      const r = ruled.getBoundingClientRect();
+      if (r.bottom > at.top + 0.5 || r.right <= at.left || r.left >= at.right) continue;
+      sides.top = Math.min(sides.top, at.top - r.bottom);
+    }
+    for (let up = cell.parentElement; up !== frame; up = up.parentElement) {
+      const its = getComputedStyle(up);
+      if (edge(its, 'Top')) sides.top = Math.min(sides.top, at.top - up.getBoundingClientRect().top - parseFloat(its.borderTopWidth));
+    }
+    const near = Object.entries(sides).filter(([, gap]) => gap < least - 0.5);
+    if (near.length) {
+      found.push(`${describe(cell)} "${cell.textContent.trim().slice(0, 30)}" stands ${near.map(([side, gap]) => `${Math.round(gap)}px from its frame's ${side}`).join(', ')}`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+
 # A block box set in a line that clips what it holds takes its bottom margin
 # edge as its baseline (CSS 2.1 §10.8.1), so on the line's baseline its text
 # rides a descent above the words beside it. That is an inline block (and
@@ -531,3 +857,56 @@ BROKEN_TOKENS = (
   return [...new Set(found)];
 }"""
 )
+
+
+# What is an identifier rather than a word, which the broken-word rule leaves
+# to break where it must.
+IDENTIFIER = "code, kbd, samp, time, .token, [data-entity]"
+
+CHANGES_READ = (
+    CHANGES_OFF_THEIR_LINE,
+    [SELECTORS["change"], SELECTORS["change_arrow"], SELECTORS["change_to"], SELECTORS["unseen"]],
+)
+
+CHIPS_READ = (CHIPS_OFF_THEIR_LINE, [SELECTORS["chip"], SELECTORS["unseen"]])
+
+FACT_ROWS_READ = (
+    VALUES_OFF_THEIR_ROW,
+    [SELECTORS["fact_band"], SELECTORS["band_fact_cell"], SELECTORS["fact_value"], SELECTORS["unseen"]],
+)
+
+# A fact's detail: every part of a fact after its value.
+_FACT_DETAIL = f"{SELECTORS['band_fact_cell']} > dd:not({SELECTORS['fact_value']})"
+
+# How far inside its frame a fact's words and mark stand at the least.
+FACT_INSET = 8
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "broken words": Check((BROKEN_WORDS, SELECTORS["identifier"]), table=True),
+    "words broken in text": (BROKEN_WORDS_IN_TEXT, IDENTIFIER),
+    "lines opening on a stray": (STRAYS_OPENING_A_LINE, [SELECTORS["unseen"], IDENTIFIER]),
+    "broken identifiers": Check((BROKEN_TOKENS, [SELECTORS["cell_token"], SELECTORS["wraps_in_a_cell"]]), table=True),
+    "overlapping text": (OVERLAPPING_TEXT, SELECTORS["floating"]),
+    "touching text": (TOUCHING_TEXT, [SELECTORS["floating"], SELECTORS["identifier"]]),
+    "chips off their paint": (CHIPS_PAST_THEIR_PAINT, [SELECTORS["chip"], SELECTORS["unseen"]]),
+    "past the clamp": PAST_THE_CLAMP,
+    "cut decisions": (CUT_DECISIONS, [SELECTORS["decision_detail"], "*", SELECTORS["unseen"]]),
+    "cut code in text": (CUT_DECISIONS, [SELECTORS["running_text"], SELECTORS["code"], SELECTORS["unseen"]]),
+    "changes": CHANGES_READ,
+    "chips": CHIPS_READ,
+    "fact rows": FACT_ROWS_READ,
+    "facts across their band": (FACTS_SHORT_OF_THEIR_BAND, [SELECTORS["fact_band"], SELECTORS["band_fact_cell"]]),
+    "fact details in words": (DETAIL_WORDS_IN_ROWS, [_FACT_DETAIL, SELECTORS["unseen"]]),
+    # A link in a fact's detail, or a word there that opens its tip, sits on
+    # the line of the words beside it, as a chip does.
+    "links in a fact's detail": (
+        CHIPS_OFF_THEIR_LINE,
+        [f"{_FACT_DETAIL} :is({SELECTORS['link']}, [tabindex])", SELECTORS["unseen"]],
+    ),
+    "facts inside their frame": (
+        FACTS_AGAINST_THEIR_FRAME,
+        [SELECTORS["band_fact_cell"], SELECTORS["unseen"], FACT_INSET],
+    ),
+    "raised text": (RAISED_TEXT, SELECTORS["unseen"]),
+}

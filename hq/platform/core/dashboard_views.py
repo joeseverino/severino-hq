@@ -6,18 +6,22 @@ from typing import Any, ClassVar, override
 
 from django.contrib import messages
 from django.shortcuts import redirect, render
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
 from hq.platform.application import action_items as queue_state, fragments, getting_started
+from hq.platform.application.attention import APPROVAL_KEY
 from hq.platform.application.cadence import controller_standing
 from hq.platform.application.calendar import calendar_month, month_of
 from hq.platform.application.calendar_entries import calendar_choices
+from hq.platform.application.card_items import ListRow
 from hq.platform.application.connection_setup import docs_url
 from hq.platform.application.dashboard import dashboard_highlights, operating_snapshot
 from hq.platform.application.derivations import every_revision
+from hq.platform.application.entity_links import entity_link
 from hq.platform.application.glance import (
     DASHBOARD_REFRESH,
     DASHBOARD_REFRESH_STALE,
@@ -30,10 +34,11 @@ from hq.platform.application.pages import PageVisit, page_context
 from hq.platform.application.request_path import request_path
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
-from hq.platform.application.ui import ListRow
 from hq.platform.application.visit_refresh import worth_asking
 from hq.platform.application.web_writes import execute_posted, refused
 lazy from hq.platform.application.pins import CHOOSE, DASHBOARD_LINK
+
+from .forms import DashboardLinksForm, DashboardSettingsForm
 
 # A queue of this many or fewer is read on the dashboard itself, each card
 # with its button; a longer one is a count and a link to its page.
@@ -53,7 +58,7 @@ class DashboardLinkChoiceView(View):
             request,
             "core/dashboard_links.html",
             {
-                "external_choices": link_choices(request.user),
+                "links_form": DashboardLinksForm(link_choices(request.user)),
                 **page_context(
                     "Dashboard links",
                     "Tick the links to show. With none ticked, all of them show.",
@@ -107,7 +112,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         external_links, _ = outward_links(self.request.user)
         return {
             "external_links": external_links,
-            "external_choices": link_choices(self.request.user),
+            "links_form": DashboardLinksForm(link_choices(self.request.user)),
         }
 
     PARTS: ClassVar[dict[str, Callable[..., Any]]] = {"calendar": _calendar, "links": _links}
@@ -135,10 +140,14 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
         queue = queue_state.with_aside_state(snapshot["priority"], self.request.user)
         doing, told = queue_state.split_waiting(queue)
         action_queue_count = len(doing)
-        # Only what is serious is shown in place, and only while it is short
-        # enough to read there. Everything else is the count above it and in
-        # the header.
-        serious = [item for item in doing if item["status"] == "serious"]
+        # Only what is serious, and what an agent waits on this person to
+        # decide, is shown in place, and only while it is short enough to read
+        # there. Everything else is the count above it and in the header.
+        serious = [
+            item
+            for item in doing
+            if item["status"] == "serious" or item["key"].partition(":")[2].startswith(APPROVAL_KEY)
+        ]
         hour = timezone.localtime().hour
         greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 18 else "Good evening"
         if name := self.request.user.first_name:
@@ -154,6 +163,15 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
                 url=reverse("content:detail", args=[item["slug"]]),
             )
             for item in snapshot["draft_content"]
+        ]
+        project_rows = [
+            ListRow(
+                link=entity_link("project", project["slug"], label=project["name"]),
+                detail=project["category_label"],
+                category=project["category"],
+                at=project["updated_at"],
+            )
+            for project in snapshot["active_projects"]
         ]
         published_rows = [
             ListRow(
@@ -191,7 +209,7 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
             unread_contacts_count=inbox.unread()[0],
             content_rows=content_rows,
             published_rows=published_rows,
-            active_projects=snapshot["active_projects"],
+            project_rows=project_rows,
             active_project_count=snapshot["kpis"]["active_projects"],
             projects_needing_output=snapshot["kpis"]["projects_needing_output"],
             draft_content_count=snapshot["kpis"]["draft_content"],
@@ -217,7 +235,11 @@ class DashboardView(fragments.FragmentMixin, TemplateView):
                 for chart in section["overview"].charts[:1]
             ],
             **glance,
+            **page_context(greeting),
+            page_dateline=timezone.localdate(),
+            page_aside="core/_dashboard_readings.html",
         )
+        ctx["page_facts"] = render_to_string("dashboard.html#status", ctx)
         return ctx
 
 
@@ -245,6 +267,10 @@ class DashboardGlanceView(View):
         return render(request, self.template_name, glance_context(), status=status)
 
 
+def _settings_of(configuration) -> dict[str, str]:
+    return {name: getattr(configuration, name) for name in DashboardSettingsForm.base_fields}
+
+
 class DashboardGlanceSettingsView(View):
     def get(self, request):
         return render(
@@ -252,7 +278,7 @@ class DashboardGlanceSettingsView(View):
             "core/dashboard_glance_settings.html",
             {
                 **page_context("Dashboard settings", trail=(("Dashboard", reverse("dashboard")),)),
-                "settings": dashboard_configuration(),
+                "form": DashboardSettingsForm(initial=_settings_of(dashboard_configuration())),
             },
         )
 
@@ -260,10 +286,7 @@ class DashboardGlanceSettingsView(View):
         result = execute_posted(
             request,
             DASHBOARD_SETTINGS,
-            {
-                field: request.POST.get(field, "")
-                for field in ("weather_point", "weather_label", "infrastructure_label")
-            },
+            {field: request.POST.get(field, "") for field in DashboardSettingsForm.base_fields},
         )
         if not refused(request, result):
             messages.success(request, "Dashboard settings saved.")

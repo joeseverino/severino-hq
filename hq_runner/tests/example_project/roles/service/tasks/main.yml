@@ -1,0 +1,5 @@
+- name: Restart the unit
+  ansible.builtin.systemd_service:
+    name: "{{ unit }}"
+    state: restarted
+  register: restarted

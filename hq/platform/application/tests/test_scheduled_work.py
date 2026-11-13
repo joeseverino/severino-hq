@@ -13,6 +13,7 @@ from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.domains.jobs import runner
 from hq.domains.jobs.models import HEARTBEAT_GRACE, Job
 from hq.domains.jobs.runner import Failed
+from hq.platform.application.tests.reads import reads
 
 from .. import scheduled_work
 from ..scheduled_work import SCHEDULED, ScheduledWork
@@ -76,6 +77,7 @@ class StartTests(TransactionTestCase):
 
 
 @tag("source", "tree")
+@reads("deploy/systemd/**")
 class ShippedUnitTests(TestCase):
     """The shipped units and the declarations name the same work: a timer
     starts it on a schedule, or a failed unit starts it through OnFailure."""

@@ -20,6 +20,17 @@ run = "tools/pipeline/check-plugin.sh --plugin-root examples/extension"
 ["test:migrations"]
 description = "No model change without its migration"
 hide = true
+tags = ["fast"]
+sources = [
+  "hq/**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
 run = "uv run python manage.py makemigrations --check --dry-run"
 
@@ -37,4 +48,28 @@ run = "uv run --group fuzz python manage.py test tests.fuzz.api_properties --noi
 description = "The Go controller's tests under the race detector"
 hide = true
 extends = "heavy"
+# A quick gate too: fast runs it when its sources moved, in its one run, where
+# it takes the heavy turn itself (tools/gate/fast.py, run_command).
+tags = ["fast"]
+# What the Go tests read, which tools/pipeline/legs.py and fast match a change
+# against, so the Test job and fast leave them out when none moved: the
+# controller, the units and host files under deploy/ its host checks hold to,
+# the three files of elsewhere its tests open, and the bridge's hand-written
+# messages, from which its contract and Go types are generated.
+sources = [
+  "controller/**/*",
+  "hq/domains/control_plane/bridge_base.json",
+  "deploy/**/*",
+  "hq/config/controller-connections.json",
+  "Dockerfile",
+  ".github/renovate.json",
+  ".github/workflows/ci.yml",
+  ".github/actions/toolchain/**/*",
+  "tools/lib/**/*",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "gotestsum --format standard-quiet --raw-command -- go -C controller test -json -race ./..."

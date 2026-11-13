@@ -1,0 +1,6 @@
+{% comment %}
+A row of links, each a chip of its own, drawn by {% link_chips %}, each item
+an <li> holding one link: {% link_chips %}<li>{% entity url|outside label=name %}</li>{% endlink_chips %}.
+A list of places to go (the dashboard's links, a saved copy's own pages), so
+each reads as a target to press; a run of names in a line is a `.dot-list`.
+{% endcomment %}<ul class="link-chips">{{ content|safe }}</ul>

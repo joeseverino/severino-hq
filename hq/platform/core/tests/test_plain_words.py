@@ -94,54 +94,44 @@ class ValeRuleTests(SimpleTestCase):
 
         template = (
             '<div class="note" {% if open %}role="status"{% endif %}>Read.</div>\n'
-            "{% comment %}A resource, after a start tag that holds a tag.{% endcomment %}\n"
-            '<p><a href="/example/">Open {% comment %}the resource{% endcomment %}</a></p>\n'
-            "{% comment %}\nA managed resource across lines.\n{% endcomment %}\n"
-            "<p>A resource on the page.</p>\n"
+            "{% comment %}A sweep, after a start tag that holds a tag.{% endcomment %}\n"
+            '<p><a href="/example/">Open {% comment %}the sweep{% endcomment %}</a></p>\n'
+            "{% comment %}\nA sweep across lines.\n{% endcomment %}\n"
+            "<p>A sweep on the page.</p>\n"
         )
 
-        self.assertEqual(vale({"page.html": template}), [("page.html", 7, "Resource")])
+        self.assertEqual(vale({"page.html": template}), [("page.html", 7, "Sweep")])
 
     def test_every_form_of_every_word_is_found_in_a_sentence(self):
         sentences = (
-            ("Kind", "Pick a kind"),
+            ("Sweep", "One sweep"),
+            ("Sweep", "Two sweeps"),
             ("Sweep", "Swept today"),
-            ("Reconcile", "Reconciling now"),
-            ("Reconcile", "It converged"),
-            ("Declared", "The desired state"),
+            ("Sweep", "Sweeping now"),
+            ("Spec", "Its spec"),
             ("Spec", "Its specs"),
-            ("Observed", "An observation"),
-            ("Generation", "Each revision"),
-            ("Drift", "It drifted"),
-            ("Provider", "Two providers"),
-            ("Resource", "A managed resource"),
-            ("Finding", "Each finding"),
-            ("Finding", "Two findings"),
-            ("Claim", "It raised one"),
-            ("Internal", "Its standing"),
-            ("Capability", "One capability"),
-            ("Consumer", "Every consumer"),
-            ("Render", "It rendered"),
+            ("Mint", "Mint one"),
+            ("Mint", "It mints one"),
             ("Mint", "Minted today"),
+            ("Mint", "Minting now"),
+            ("Expiry", "It expires in 3 days"),
+            ("Expiry", "It expired 4 days ago"),
         )
         page = "".join(f"<p>{sentence}.</p>\n" for _rule, sentence in sentences)
 
         self.assertEqual(sorted(rules({"page.html": page})), sorted(rule for rule, _sentence in sentences))
-        self.assertEqual(rules({"page.html": "<p>Findings</p><p>A kind-hearted reader.</p>"}), [])
+        self.assertEqual(rules({"page.html": "<p>A sweeper.</p><p>Spectacle.</p><p>Spearmint.</p>"}), [])
+
+    def test_an_expiry_a_template_words_around_a_value_is_found(self):
+        page = '<dd>Expires in {{ days|counted:"day" }}</dd>\n<dd>{{ key.expiry|capfirst }}</dd>\n'
+
+        self.assertEqual(vale({"page.html": page}), [("page.html", 1, "Expiry")])
 
     def test_a_retired_name_is_found_as_written(self):
         page = "".join(f"<p>{name}</p>\n" for name in RETIRED)
 
         self.assertEqual(rules({"page.html": page}).count("Retired"), len(RETIRED))
         self.assertEqual(rules({"page.html": "<p>3 things need you. Refresh all.</p>"}), [])
-
-    def test_a_setting_name_or_a_field_value_is_found_even_in_code(self):
-        page = (
-            "<p>Set <code>SEVERINO_EXAMPLE_SWITCH</code> to allow it.</p>\n"
-            "<p>Set manages to 1 on its item.</p><code>example.rewrite</code>\n"
-        )
-
-        self.assertEqual(rules({"page.html": page}), ["Asked", "Asked"])
 
     def test_python_is_read_for_sentences_and_not_for_names(self):
         source = (
@@ -153,10 +143,10 @@ class ValeRuleTests(SimpleTestCase):
             'raise ImproperlyConfigured("The sweep " "reached every provider.")\n'
             'PDF = b"/Resources<</Font 1>>"\n'
             'title = "Was not in the last sweep"\n'
-            'help = ("Write it. " "--check exits 1 on drift.")\n'
+            'help = ("Write it. " "--check exits 1 on its spec.")\n'
         )
 
-        self.assertEqual(vale({"views.py": source}), [("views.py", 8, "Sweep"), ("views.py", 9, "Drift")])
+        self.assertEqual(vale({"views.py": source}), [("views.py", 8, "Sweep"), ("views.py", 9, "Spec")])
 
     def test_the_hosts_go_is_read_for_the_messages_a_page_shows(self):
         """A ProviderError's message and decodeAs's reach a finding; a log, a
@@ -167,41 +157,74 @@ class ValeRuleTests(SimpleTestCase):
             "// A sweep of every provider.\n"
             "func f() error {\n"
             '\tlog.Printf("the sweep reached every provider")\n'
-            '\tif a { return &ProviderError{Message: "the provider said no", Reason: "a provider reason"} }\n'
-            '\tif b { return &runtime.ProviderError{Message: fmt.Sprintf("the kind %s", x), Err: err} }\n'
+            '\tif a { return &ProviderError{Message: "the spec said no", Reason: "a spec reason"} }\n'
+            '\tif b { return &runtime.ProviderError{Message: fmt.Sprintf("the sweep %s", x), Err: err} }\n'
             '\tif c { return &ProviderError{Message: "read " + x + " in this sweep", Err: err} }\n'
-            '\treturn decodeAs[T](raw, "the resource "+what+" did not decode")\n'
+            '\treturn decodeAs[T](raw, "the spec "+what+" did not decode")\n'
             "}\n"
         )
 
         self.assertEqual(
             vale({"controller/providers/example.go": source, "controller/providers/example_test.go": source}),
             [
-                ("example.go", 5, "Provider"),
-                ("example.go", 6, "Kind"),
+                ("example.go", 5, "Spec"),
+                ("example.go", 6, "Sweep"),
                 ("example.go", 7, "Sweep"),
-                ("example.go", 8, "Resource"),
+                ("example.go", 8, "Spec"),
             ],
         )
 
-    def test_narration_is_found_in_any_file(self):
-        files = {
-            "views.py": "x = 1  # This turned out to be wrong.\n",
-            "page.js": "// The first version read it twice.\n",
-            "page.html": "{% comment %}We tried a timer.{% endcomment %}\n",
-            "notes.md": "# Notes\n\nIt used to be a list.\n",
-        }
-
-        self.assertEqual(rules(files), ["History"] * 4)
-
-    def test_an_em_dash_and_a_hedged_plural_are_found(self):
+    def test_an_em_dash_is_found_in_any_file(self):
         dash = chr(0x2014)
         files = {
-            "page.html": f"<p>one {dash} two</p>\n<p>{{{{ n }}}} account(s), over http(s)</p>\n",
-            "views.py": f'LABEL = "one {dash} two"\nROWS = f"{{n}} row(s)"\n',
+            "page.html": f"<p>one {dash} two</p>\n",
+            "views.py": f'LABEL = "one {dash} two"\n',
+            "notes.md": f"# Notes\n\nOne {dash} two.\n",
         }
 
-        self.assertEqual(sorted(rules(files)), ["Dash", "Dash", "Hedge", "Hedge"])
+        self.assertEqual(rules(files), ["Dash"] * 3)
+
+    def test_the_automations_own_parts_are_found_by_their_one_name(self):
+        found = (
+            "Adopted procedures",
+            "One procedure runs.",
+            "Open the proposal.",
+            "Two proposals wait.",
+            "The catalog every run is built from.",
+        )
+        kept = (
+            "Recovery procedure",
+            "The command catalog.",
+            "Its catalogs of commands.",
+            "Two DHCP leases.",
+            "Release.",
+        )
+        page = "".join(f"<p>{text}</p>\n" for text in (*found, *kept))
+
+        self.assertEqual(rules({"page.html": page}), ["Parts"] * len(found))
+
+    def test_what_an_agent_reads_is_held_to_the_automations_names(self):
+        """A schema's, an MCP tool's and an API view's docstring is its
+        description, where the automation's parts take their one name; any
+        other docstring is for whoever writes the code."""
+
+        source = (
+            "class Answer(TypedDict):\n"
+            '    """A procedure held for review."""\n'
+            '@tool("Read", requires=ANYONE)\n'
+            "def read():\n"
+            '    """Some reads wait for a procedure."""\n'
+            "def helper():\n"
+            '    """A helper writes this procedure."""\n'
+            "class Run(StrictCommand):\n"
+            '    """Which procedure to run."""\n'
+            'CapabilitySpec(wants="adopt the procedures of a commit")\n'
+        )
+
+        self.assertEqual(
+            vale({"views.py": source}),
+            [("views.py", 2, "Parts"), ("views.py", 5, "Parts"), ("views.py", 9, "Parts"), ("views.py", 10, "Parts")],
+        )
 
 
 @tag("source", "tree")
@@ -223,34 +246,65 @@ class TemplatePieceTests(SimpleTestCase):
     def test_a_finding_is_reported_at_its_template_line(self):
         with tempfile.TemporaryDirectory() as tmp:
             page = Path(tmp, "page.html")
-            page.write_text('<p>Fine</p>\n\n<a title="Read the deploy">x</a>\n<a title="Reconcile it">y</a>\n')
+            page.write_text('<p>Fine</p>\n\n<a title="Read the deploy">x</a>\n<a title="Start the sweep">y</a>\n')
             printed = io.StringIO()
             with contextlib.redirect_stdout(printed):
                 status = plain_words.main([str(page)])
 
         self.assertEqual(status, 1)
         self.assertEqual(
-            [line.split(": ")[0:2] for line in printed.getvalue().splitlines()], [[f"{page}:4", "Plain.Reconcile"]]
+            [line.split(": ")[0:2] for line in printed.getvalue().splitlines()], [[f"{page}:4", "Plain.Sweep"]]
         )
+
+    def test_each_branch_of_an_attribute_is_read_alone(self):
+        template = '<button aria-label="{% if open %}Show less of this row{% else %}Show all of this row{% endif %}">\n'
+
+        self.assertEqual(plain_words.shown(template), [(1, "Show all of this row"), (1, "Show less of this row")])
 
     def test_a_path_that_is_gone_fails_rather_than_passing(self):
         with self.assertRaises(FileNotFoundError):
             plain_words.document([Path("templates/no-such-page.html")])
 
 
+@tag("source", "tree")
+class DumpTests(SimpleTestCase):
+    def test_the_dump_lists_each_line_of_text_the_rules_read_at_its_place(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            page = Path(tmp, "page.html")
+            page.write_text('<p>Read the deploy.</p>\n<a title="Opens the log" href="/log/">Log</a>\n{# Hidden #}\n')
+            printed = io.StringIO()
+            with contextlib.redirect_stdout(printed):
+                status = plain_words.main(["--dump", str(page)])
+
+        dumped = dict(line.split(": ", 1) for line in printed.getvalue().splitlines())
+        self.assertEqual(status, 0)
+        self.assertEqual(sorted(dumped), [f"{page}:1", f"{page}:2"])
+        self.assertIn("Read the deploy.", dumped[f"{page}:1"])
+        self.assertIn("Opens the log", dumped[f"{page}:2"])
+
+
 def command_labels() -> list[tuple[str, str]]:
-    """``(capability.field, label)`` for each field a command's form labels,
-    its target included, as every command form and held request shows it."""
+    """``(path:line, label)`` for each field a command's form labels, its
+    target included, as every command form and held request shows it, at the
+    command class it derives from."""
+
+    import inspect
 
     from django import forms
 
     from hq.platform.application.capabilities import capability_registry
     from hq.platform.application.command_forms import command_form_class
 
+    base = f"{Path(settings.BASE_DIR).resolve()}/"
+
+    def where(spec) -> str:
+        path = Path(inspect.getsourcefile(spec.command_type) or spec.name).resolve()
+        return f"{str(path).removeprefix(base)}:{inspect.getsourcelines(spec.command_type)[1]}"
+
     return [
-        (f"{name}.{field_name}", str(field.label))
-        for name, spec in sorted(capability_registry().items())
-        for field_name, field in command_form_class(spec).base_fields.items()
+        (where(spec), str(field.label))
+        for _name, spec in sorted(capability_registry().items())
+        for field in command_form_class(spec).base_fields.values()
         if field.label and not isinstance(field.widget, forms.HiddenInput)
     ]
 
@@ -269,9 +323,9 @@ class DerivedLabelTests(SimpleTestCase):
     def test_a_label_derived_from_a_name_plain_refuses_is_found(self):
         from hq.platform.application.labels import field_label
 
-        found = plain_words.refused([("example.create.kind", field_label("kind")), ("example.create.note", "Note")])
+        found = plain_words.refused([("example.create.spec", field_label("spec")), ("example.create.note", "Note")])
 
-        self.assertEqual([line.split(": ")[:2] for line in found], [["example.create.kind", "Plain.Kind"]])
+        self.assertEqual([line.split(": ")[:2] for line in found], [["example.create.spec", "Plain.Spec"]])
 
 
 RETIRED = (

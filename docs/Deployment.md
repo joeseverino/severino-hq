@@ -17,18 +17,29 @@ waits on a schedule.
 
 | Workflow | Started by | Does |
 | :--- | :--- | :--- |
-| **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image, and attest its SBOM), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
-| **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application; on `main`, published and signed, and its SBOM attested |
+| **CI** (`ci.yml`) | every pull request and push to `main` | Lint, Test, Browser, Scan and Build (build, boot healthy, publish and sign the host image and the automation worker's image built beside it, and attest their SBOMs), each running the task of its name. On a pull request, Build verify and the composition run beside them, then **Ready**, which passes only when every job did. On `main`, **Release**, which starts Compose |
+| **Compose** (`compose.yml`) | CI on a pull request (verify only); CI's Release on `main`; an extension's admission; a person | the host image plus every admitted extension, verified as one application, pinning the worker image CI built beside the host image; on `main`, published and signed with that worker image, and both SBOMs attested |
 | **Deploy** (`deploy.yml`) | Compose, once it has published; a person, to redeploy or roll back | waits for approval in the `production` environment, then deploys on the self-hosted runner |
 
 Each CI job is named for the `mise` task it runs, so the gates are declared
 once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
 
-Production runs the composed image (`ghcr.io/joeseverino/severino-hq/composition`),
-never the host image alone. How Compose admits, fingerprints and assembles
-the extensions is in [Plugins](Plugins.md#composition). It stamps the released
-commit into the image (`SEVERINO_HQ_REVISION`), so production reports the
-commit it runs.
+Production runs the composed image (`ghcr.io/OWNER/REPO/composition`, with your
+repository's owner and name in lowercase), never the host image alone. How
+Compose admits, fingerprints and assembles the extensions is in
+[Extensions](Plugins.md#composition). It stamps the released commit into the image
+(`SEVERINO_HQ_REVISION`), so production reports the commit it runs.
+
+Each release also pins the automation worker's image, the Dockerfile's
+`runner` stage, which CI builds, publishes and signs beside the host image
+(`ghcr.io/OWNER/REPO/runner`). Compose writes its digest to
+`/app/deploy/automation/image` and refuses to build a release without one.
+Before it composes, it checks that CI signed both images. It scans the
+worker's image with `mise run image:trivy`, and on `main` signs it and
+attests its SBOM under the composition's identity, the worker image first. The
+release's `hq-host release` checks that signature before it pulls the worker
+image, and refuses a pin that is not the source's signed runner image by
+digest (`release IMAGE`, below).
 
 Each image CI or Compose signs also carries a signed CycloneDX SBOM, Trivy's
 list of its Debian packages, Python distributions (the composition's include
@@ -40,8 +51,8 @@ is the list checked. To read the host image's:
 ```sh
 cosign verify-attestation --type cyclonedx \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github.com/joeseverino/severino-hq/\.github/workflows/ci\.yml@' \
-  ghcr.io/joeseverino/severino-hq@sha256:... | jq -r .payload | base64 -d | jq .predicate
+  --certificate-identity-regexp '^https://github.com/OWNER/REPO/\.github/workflows/ci\.yml@' \
+  ghcr.io/OWNER/REPO@sha256:... | jq -r .payload | base64 -d | jq .predicate
 ```
 
 The composition's, by its own workflow:
@@ -49,8 +60,8 @@ The composition's, by its own workflow:
 ```sh
 cosign verify-attestation --type cyclonedx \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github.com/joeseverino/severino-hq/\.github/workflows/compose\.yml@' \
-  ghcr.io/joeseverino/severino-hq/composition@sha256:... | jq -r .payload | base64 -d | jq .predicate
+  --certificate-identity-regexp '^https://github.com/OWNER/REPO/\.github/workflows/compose\.yml@' \
+  ghcr.io/OWNER/REPO/composition@sha256:... | jq -r .payload | base64 -d | jq .predicate
 ```
 
 A pull request never starts Deploy, so no pull request's code reaches the
@@ -75,11 +86,14 @@ release that cannot serve and proves the previous one comes back on its schema.
 ### Checked once
 
 When a pull request merges, the push to `main` asks
-`tools/pipeline/proven-on-pr.sh` whether the pull request already proved it:
-its last CI run passed, its image carries a `dev.severino.hq.tree` label equal to the
-pushed commit's tree, and it is signed by that run. With all three, Lint,
-Test and Browser are skipped and Build promotes that image by digest to the
-commit's tag. Short of all three, every gate runs again.
+`tools/pipeline/proven-on-pr.sh` whether the pull request already proved it.
+That takes three things: its last CI run passed, its host image and worker
+image each carry a `dev.severino.hq.tree` label equal to the pushed commit's
+tree, and each is signed by that run. With all three, Build promotes both
+images by digest to the commit's tag, and Lint, Test and Browser are skipped
+when that run left none of them out ([What a pull request
+runs](Development.md#what-a-pull-request-runs)). Short of all three, every gate
+runs again.
 
 ### Where a change stands
 
@@ -178,9 +192,9 @@ secrets on this repository and each extension's `admission` environment,
 through standard input. The client ID is a secret too: a variable is state
 outside the repository that changes what a build does.
 
-For the controller, keep the key as an SSH Key item beside a connection item
-with `connection_ref`, `projection: github_app`, `env_prefix: GITHUB`,
-`app_id` and `signing_key` (the SSH Key item's title). Leave `manages` off
+For the controller, keep the key as an SSH Key item beside the connection
+item [Connections](Connections.md#github-app) lays out, whose `signing_key`
+names the SSH Key item. Leave `manages` off
 until the sweep's view of each extension's admitted and running commit
 matches GitHub, then set it and adopt the `github.delivery` record.
 
@@ -201,6 +215,16 @@ hand-off for `severino-hq-renovate.service`. A host adds its own grants to
 
 ```json
 "grants": [{"name": "example-pull", "repositories": ["example/notes"], "permissions": {"contents": "read", "metadata": "read"}, "path": "/run/example-pull/github_token"}]
+```
+
+The automation worker's procedures come from the repository the host's
+`automation` entry names, an Ansible project at its root, and, for a
+private one, the grant whose token fetches it, which must read that
+repository's contents:
+
+```json
+"grants": [{"name": "automation-projects", "repositories": ["example/playbooks"], "permissions": {"contents": "read", "metadata": "read"}, "path": "/run/severino-hq-automation/github_token"}],
+"automation": {"repository": "example/playbooks", "grant": "automation-projects"}
 ```
 
 `hq-host controller` reads the grants on every pass, so a grant added there
@@ -257,10 +281,12 @@ The security properties:
 | `/etc/credstore.encrypted/` | the Connect token, as an encrypted systemd credential | the operator ([Secrets](Secrets.md)) |
 | `/var/lib/severino-hq/release` | the digest-pinned image the web unit runs | a deploy |
 | `/run/severino-hq-secrets/` | rendered credentials, on a root-only `noswap` tmpfs (`run-severino\x2dhq\x2dsecrets.mount`) | `hq-secrets` |
-| `/run/severino-hq/` | the doorbells HQ rings: `controller-doorbell` when it queues controller work, `glance-doorbell` when someone asks for a dashboard reading | `deploy/tmpfiles/severino-hq.conf` |
+| `/run/severino-hq/` | the doorbells HQ rings: `controller-doorbell` when it queues controller work, `glance-doorbell` when someone asks for a dashboard reading, `automation-doorbell` when it queues a procedure's run | `deploy/tmpfiles/severino-hq.conf` |
 | `/run/severino-hq-unit/` | the unit socket, in a directory only the controller's account and root may enter, mounted into the controller's container alone | `deploy/tmpfiles/severino-hq.conf`, `severino-hq-unit.socket` |
 | each grant's `path` under `/run` | a host grant's installation token, root's, mode 0400 ([Tokens on the host](#tokens-on-the-host)) | `hq-host controller` |
 | `/run/severino-hq-renovate/` | root-only: a validated dependency handoff waiting to run, and each run's environment files, removed when it ends | `hq-host controller`, `hq-host renovate` |
+| `/run/severino-hq-secrets/automation.*/` | one automation worker's lent connections, identities and token, the web account's, removed when it ends | `hq-host automation` |
+| `/var/lib/severino-hq/automation/` | the automation worker's journal, the web account's alone, mode 0700 | `deploy/tmpfiles/severino-hq.conf`, the worker |
 | `/var/lib/severino-hq/renovate/dependency-run.json` | the last dependency run's outcome, given read-only to the next controller pass | `hq-host renovate` |
 | `/opt/apps/severino-hq/secrets/` | the renderer's lock, the controller's ACME state, and in `seal/` the controller's sealing seed, its account's, mode 0400, lent to a pass read-only ([Secrets](Secrets.md#sealing-to-the-controller)) | `hq-secrets`, the controller, `hq-host controller` and `hq-host release` |
 | `/var/lib/severino-hq/seal/public.key` | root's copy of the sealing key's public half, bound read-only into the web container | `hq-host controller` and `hq-host release` |
@@ -277,8 +303,9 @@ from the tree, and every unit and the deploy call it.
 | `run-web` | runs the web container (`severino-hq-web.service`); waits for the rendered environment, notifies systemd once HQ is healthy |
 | `controller [--apply \| --glance]` | one controller pass: plan, claim and apply queued work, or (`--glance`) read only the dashboard panels HQ is waiting on. A glance's container is given the Portainer and SSH connections from the connections document and their identities, the host's roots and the bridge, and nothing else a controller pass is given. It gets no certificate state, unit socket, host reading or out directory. A pass is told which of the host's grants are due, and an applying pass may leave a hand-off for each, and for a due dependency run, in its own out directory. Root opens each one without following links and validates it against its grant (each owner's repositories by GitHub's naming rules, a token that expires within the hour, no other key). It moves a dependency run's hand-off to `/run/severino-hq-renovate/` and writes a host grant's token to the grant's path ([Tokens on the host](#tokens-on-the-host)), or logs and drops the hand-off |
 | `renovate` | runs the spooled handoff: Renovate once per owner, in a container with no capability, a read-only root, no host path but `deploy/renovate/config.json`, and the token in an environment file; records each owner's outcome for the next pass. The container reaches public IPv4 addresses and nothing else: not the host, the LAN, the tailnet, link-local, multicast or another container. It runs on its own bridge, `severino-hq-renovate` (10.231.0.0/24, interface `hq-renovate0`, no IPv6), made if absent and refused unless it is exactly that, with public resolvers. Before each run root loads the nftables table `inet severino_hq_renovate` (`controller/host/egress.go`) in one transaction. The table drops everything the bridge sends to a private, reserved or IPv6 destination and everything it sends to the host itself. A run that cannot load the table never starts |
+| `automation` | runs the automation worker until no run is queued, when `host.json` has an `automation` entry and the release pins the worker's image (`AutomationImage` in `controller/host/layout.go`), and otherwise says which is missing and exits 0. It runs only the image the deploy verified and pulled, with `--pull never`, and refuses when the host does not hold it. It copies into a run directory on the renderer's tmpfs the runner-role SSH connections whose host is an IPv4 address, with their identities and pinned host keys. The grant's token goes beside them, kept current while the worker runs. It names each runner connection it leaves out. Root loads the egress table `inet severino_hq_automation` (`controller/host/egress.go`) before the container starts, and removes the container at `AutomationBound`. What the container is given, and why: [The automation worker on the host](Architecture.md#the-automation-worker-on-the-host) |
 | `deploy IMAGE` | verifies the signature, refuses an image that drops an extension production runs, pulls, and hands over to the image's own `hq-host release` |
-| `release IMAGE` | syncs the tree, installs the web unit, restarts HQ on the image, then `install`; rolls back on any failure, the database with it when the release migrated it. Once the release stands it runs `severino-hq-script-drift.service`, so the release is verified at once. Drift fails the deploy without rolling it back, since what verify finds is the host's, and `journalctl -u severino-hq-script-drift.service` there names it |
+| `release IMAGE` | verifies the worker image the release pins against the compose workflow's identity and pulls it, before anything live is held. A pin that is not the source's signed runner image refuses the release. Then it syncs the tree, installs the web unit, restarts HQ on the image and runs `install`. Any failure rolls back, the database too when the release migrated it. Once the release stands it runs `severino-hq-script-drift.service`, so the release is verified at once. Drift fails the deploy without rolling it back, since what verify finds is the host's, and `journalctl -u severino-hq-script-drift.service` there names it |
 | `install` | installs every shipped unit, renders secrets, preflights the controller and the content index, enables every timer and path |
 | `sync IMAGE` | replaces the tree with the image's, refusing a unit that names a path the tree lacks |
 | `verify` | reports where the host differs from its release: tree, units, anything retired, and the Actions runner's sudo rules. It holds them to one runner unit, not root, with its NOPASSWD rule for `hq-host deploy *`, no unrestricted rule, and no command `sudo -l` lists that HQ does not render. A failure names the command and the grep that finds its file. Root alone can list another account's rules, so the rules are checked here (`severino-hq-script-drift.timer`, daily) |
@@ -298,13 +325,14 @@ host adds beside a shipped one is the host's, and `verify` does not compare it.
 
 | Unit | Runs |
 | :--- | :--- |
-| `severino-hq-web.service` | the web container; the only thing that starts it |
+| `severino-hq-web.service` | the web container; the only thing that starts it. Once HQ is ready, a health poll that reads unhealthy stops it and fails the unit, which restarts it, and a supervisor or health read that hangs for 90 seconds misses the watchdog (`WatchdogSec=`), which does the same |
 | `severino-hq-secrets.service` / `.timer` | `hq-secrets`, hourly ([Secrets](Secrets.md)) |
 | `severino-hq-controller.service` / `.timer` / `.path` | `hq-controller --apply`, when HQ rings the doorbell (work queued or a pass due), else 15 minutes after each run ends |
 | `severino-hq-glance.service` / `.path` | `hq-controller --glance` beside any controller pass, when HQ creates the glance doorbell (a Refresh press, or a page opening on a due reading). The pass removes the doorbell before it reads; one created while it reads still stands when it ends, and the path unit starts it again. It reads while HQ is still waiting on a panel, up to three times, and never counts as the controller arriving |
 | `severino-hq-job@.service` | one scheduled job inside the web container (`hq-controller job NAME`) |
 | `severino-hq-due.timer` | hourly, asks for `due`: every piece of scheduled work, the host's and the extensions', whose cadence (`every=`) has come round |
 | `severino-hq-renovate.service` / `.path` | `hq-host renovate`, when a handoff reaches the spool |
+| `severino-hq-automation.service` / `.timer` / `.path` | `hq-host automation`, when HQ creates the automation doorbell (a run or a Refresh queued), else 15 minutes after each worker ends. The worker removes the doorbell before it claims; one created while it works still stands when it ends, and the path unit starts it again |
 | `severino-hq-backup.service` / `.timer` | `hq-host backup`, nightly ([Backup](Backup.md)) |
 | `severino-hq-script-drift.service` / `.timer` | `hq-host verify`, daily |
 | `severino-hq-unit.socket` / `severino-hq-unit@.service` | `hq-host unit --serve`, one instance per connection from the controller |
@@ -313,14 +341,14 @@ A unit that fails is reported to HQ with no wiring of its own:
 `deploy/systemd/severino-hq-.service.d/10-on-failure.conf` (and the same for
 timers, paths and sockets) sets `OnFailure=severino-hq-job@units.read.service` for
 every unit whose name begins `severino-hq-`. Each unit a path unit starts (the
-controller, the glance and the dependency run) and the `units.read` job carry
+controller, the glance, the dependency run and the automation worker) and the `units.read` job carry
 an empty drop-in of that name, so that no failure can ring the doorbell that
 starts it again. `controller/host/units_rules_test.go`
 holds the shipped units to those rules.
 
 Every service runs in one sandbox,
 `deploy/systemd/severino-hq-.service.d/20-sandbox.conf`, which reaches each by
-the same name rule: root with no capability and no way to gain one, a
+the same name rule. It is root with no capability and no way to gain one, a
 read-only system, a private network namespace, Unix sockets only and a system
 call allow list. A unit that needs more widens it in its own
 `30-sandbox.conf`, which says why:
@@ -330,6 +358,7 @@ call allow list. A unit that needs more widens it in its own
 | controller | host network and netlink for its nftables reading (`CAP_NET_ADMIN`); the web account's files (`CAP_CHOWN`, `CAP_DAC_OVERRIDE`) |
 | glance | the same files, with no network |
 | renovate | host network and netlink to load the egress table (`CAP_NET_ADMIN`) |
+| automation | host network and netlink to load the egress table (`CAP_NET_ADMIN`); the run directory and the doorbell, the web account's (`CAP_CHOWN`, `CAP_DAC_OVERRIDE`) |
 | backup | the volumes (`CAP_DAC_OVERRIDE`) and SQLite's files (`CAP_CHOWN`) |
 | secrets | IPv4 loopback for Connect (`CAP_CHOWN`, `CAP_FOWNER`, `CAP_DAC_OVERRIDE`) |
 | script-drift | sudo-rs, with no-new-privileges off |
@@ -379,7 +408,7 @@ nothing. `hq-host deploy`:
    image (pulled again by digest if the host no longer has it).
 3. Prunes unused images, checks free space, pulls, and refuses the image if it
    drops an extension the running release carries that its composition does
-   not declare retired ([Plugins](Plugins.md#composition)). The public log
+   not declare retired ([Extensions](Plugins.md#composition)). The public log
    says how many; `/var/log/severino-hq/extensions.log` says which.
 4. Copies the image's own `hq-host` out, so every step after the pull is the
    new release's code.
@@ -438,9 +467,8 @@ directory is not its account's alone. The design is in
 
 ## A new host
 
-[Install](Install.md) brings up a new host, step by step: Connect, the
-encrypted credential, the runner, `host.json`, the vault items and the first
-start. `tools/pipeline/host-boot-drill.sh` does the web unit's part of it on every
+[Install](Install.md) brings up a new host, step by step.
+`tools/pipeline/host-boot-drill.sh` does the web unit's part of it on every
 image CI builds.
 
 Every later change arrives through Deploy. Rerun `hq-host bootstrap` when
@@ -516,6 +544,7 @@ that variable names. `test_settings_env.py` holds this table to the code.
 | `DJANGO_WHITENOISE_AUTOREFRESH` | development | serves static files from the source trees, uncached; refused with `DJANGO_DEBUG` off in a deployment check |
 | `SEVERINO_DEBUG_TOOLBAR` | development | `1` with `DJANGO_DEBUG` shows Django Debug Toolbar |
 | `SEVERINO_DEBUG_TOOLBAR_IPS` | development | who sees the toolbar; loopback by default |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | development | the OTLP/HTTP collector spans are sent to ([Tracing](Development.md#tracing)); unset, as in every image, nothing is traced |
 | `SEVERINO_CONTROLLER_HEARTBEAT` | development | where HQ records that the controller reached it; beside the database when unset |
 | `SEVERINO_ACTIVITY_MARKER` | development | where HQ marks itself in use; beside the database when unset |
 | `SEVERINO_TEST_RUN` | development | a test run's own temporary directory, which it names to every process it starts as `TMPDIR` and removes when it ends; set by the process that starts the run, and a process started with it joins that run |
@@ -563,7 +592,9 @@ a deploy cannot rewrite its own remote authorization.
   `/usr/local/sbin/severino-hq-edge-controller`. The edge key is forced to
   [`deploy/targets/severino-hq-edge-dispatch`](../deploy/targets/severino-hq-edge-dispatch),
   also root-owned, and that account may sudo only the receiver. `version`
-  prints the version the controller's messages name (`edge.Version`).
+  prints the version the controller's messages name (`edge.Version`), and
+  `edge.Operations` is every operation it answers. `reboot` says whether the
+  edge waits on a restart; when an edge refuses it, HQ says to redeploy it.
 - A cPanel account runs
   [`deploy/targets/severino-hq-cpanel-controller`](../deploy/targets/severino-hq-cpanel-controller),
   installed as that account, with its key forced to the script.
@@ -576,7 +607,7 @@ to the image, verifies the compose workflow's signature, and stops if the
 image is built for another platform than the edge's:
 
 ```sh
-image=ghcr.io/joeseverino/severino-hq/composition@sha256:DIGEST && cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/joeseverino/severino-hq/\.github/workflows/compose\.yml@refs/heads/main$' "$image" >/dev/null && docker pull -q "$image" >/dev/null && built="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")" && here="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')" && { [ "$built" = "$here" ] || { echo "hq-edge in this release is built for $built; this edge runs $here" >&2; false; }; } && container="$(docker create --pull never "$image")" && docker cp "$container:/app/deploy/bin/hq-edge" ./hq-edge && docker rm "$container" >/dev/null && sudo install -o root -g root -m 0755 ./hq-edge /usr/local/sbin/severino-hq-edge-controller && rm ./hq-edge && sudo /usr/local/sbin/severino-hq-edge-controller version
+image=ghcr.io/OWNER/REPO/composition@sha256:DIGEST && cosign verify --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/OWNER/REPO/\.github/workflows/compose\.yml@refs/heads/main$' "$image" >/dev/null && docker pull -q "$image" >/dev/null && built="$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$image")" && here="$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')" && { [ "$built" = "$here" ] || { echo "hq-edge in this release is built for $built; this edge runs $here" >&2; false; }; } && container="$(docker create --pull never "$image")" && docker cp "$container:/app/deploy/bin/hq-edge" ./hq-edge && docker rm "$container" >/dev/null && sudo install -o root -g root -m 0755 ./hq-edge /usr/local/sbin/severino-hq-edge-controller && rm ./hq-edge && sudo /usr/local/sbin/severino-hq-edge-controller version
 ```
 
 It prints the receiver's version last. The dispatcher and the sudo rule name
@@ -605,20 +636,17 @@ and the data. It is idempotent by operation id and prints one JSON result:
 exit 0 kept, 3 rolled back, 2 refused or unchanged, 1 failed and not put back.
 It needs Docker Compose 2.24.4 or later, `tar`, and Linux.
 
-A machine runs it only through a sudo rule for that one program,
-`hq-host upgrade *`; the plan shows the rule and how to check it. sudo-rs
-matches no pattern inside an argument, so the helper's parser, run as root, is
-the boundary: each flag once, every value whole by its pattern, the stack
-directly under `/opt/apps`. The rule is only worth having if that
-account cannot already reach Docker. HQ's own host has `hq-host` in its tree.
-Any other machine needs its own root-owned copy: the plan's fetch step takes
-it from the composed image HQ runs, by digest, after `cosign` verifies the
-compose workflow's signature, and stops if the image's platform is not the
-machine's. HQ queues no upgrade to another machine, so there the helper is
-run by hand with the plan's values.
+The boundary is one sudo rule, `hq-host upgrade *`, for that one program.
+sudo-rs matches no pattern inside an argument, so the helper's parser, run as
+root, holds the line: each flag once, every value whole by its pattern, the
+stack directly under `/opt/apps`. The rule is only worth having if that
+account cannot already reach Docker.
 
-A machine whose rule names a program other than `hq-host upgrade` admits
-nothing: re-run the plan's allow step there to write the current rule.
+HQ's own host has `hq-host` in its tree. HQ queues no upgrade to another
+machine: there the helper is installed and run by hand, with the plan's
+values. The plan's fetch step takes `hq-host` from the composed image HQ
+runs, by digest, after `cosign` verifies the compose workflow's signature,
+and stops if the image's platform is not the machine's.
 
 ## Verifying
 

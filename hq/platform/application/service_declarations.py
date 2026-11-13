@@ -106,13 +106,11 @@ class _Ledger:
     # Routed wins, resolved fills the gaps, whatever order the rows arrive in.
     routed: dict[str, str] = field(default_factory=dict)
     resolved: dict[str, str] = field(default_factory=dict)
-    # Every address each name resolves to, so reachability is derived.
-    answers: dict[str, list[str]] = field(default_factory=dict)
     # The certificate declarations each name's ingress serves it with.
     served_with: dict[str, set[str]] = field(default_factory=dict)
 
     def file(self, provider, claim: Claim, reading: tuple) -> None:
-        hostnames, origin, resolves_to, certificate = reading
+        hostnames, origin, certificate = reading
         if provider.covers:
             self.covering.append((provider.facet, frozenset(hostnames), claim))
             return
@@ -121,13 +119,12 @@ class _Ledger:
             if origin:
                 rank = self.routed if origin_is_authoritative(provider) else self.resolved
                 rank.setdefault(hostname, origin)
-            self.answers.setdefault(hostname, []).extend(resolves_to)
             if certificate:
                 self.served_with.setdefault(hostname, set()).add(certificate)
 
 
 def _read_declaration(provider, spec) -> tuple | None:
-    """``(hostnames, origin, answers, certificate)``, or None for an unreadable spec.
+    """``(hostnames, origin, certificate)``, or None for an unreadable spec.
 
     An unreadable spec is reported on its own resource's health and must not
     take every other name on the board down with it.
@@ -140,9 +137,8 @@ def _read_declaration(provider, spec) -> tuple | None:
             name for name in (normalized_hostname(n) for n in provider.hostnames(spec)) if names_a_host(name)
         )
         origin = provider.origin(spec) if provider.origin else ""
-        resolves_to = provider.answers(spec) if provider.answers else ()
         certificate = provider.certificate(spec) if provider.certificate else ""
-        return hostnames, origin, resolves_to, certificate
+        return hostnames, origin, certificate
 
     return read_spec(provider.kind, spec, read)
 
@@ -172,7 +168,6 @@ class Declarations(NamedTuple):
     aliases: dict[str, str]
     alias_claims: dict[str, list[tuple[str, Claim]]]
     machines: Any
-    answers: dict[str, list[str]]
     # How a page says it knows: an origin an ingress declared forwards, an
     # origin a record implied simply answers.
     routed: frozenset[str]
@@ -224,7 +219,6 @@ def _read_declarations() -> Declarations:
         aliases,
         alias_claims,
         machines,
-        ledger.answers,
         frozenset(ledger.routed),
         {name: frozenset(keys) for name, keys in ledger.served_with.items()},
     )

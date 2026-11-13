@@ -1,0 +1,39 @@
+{
+  "health": {
+    "collection": null,
+    "entry_points": {
+      "main": {
+        "description": [
+          "Says which service it checks, and records that it checked."
+        ],
+        "options": {
+          "service": {
+            "choices": [
+              "web",
+              "db"
+            ],
+            "description": "The service to check.",
+            "required": true,
+            "type": "str"
+          }
+        },
+        "short_description": "Check one service on a host"
+      }
+    }
+  },
+  "service": {
+    "collection": null,
+    "entry_points": {
+      "main": {
+        "options": {
+          "unit": {
+            "description": "The unit to restart.",
+            "required": true,
+            "type": "str"
+          }
+        },
+        "short_description": "Restart one systemd unit"
+      }
+    }
+  }
+}

@@ -156,33 +156,58 @@ class ControllerStanding:
 
     seen_at: datetime | None
     silent: bool
+    # Seen by its heartbeat, written only as it reaches this HQ, rather than
+    # by readings that may have come with a database copied from elsewhere.
+    here: bool = False
 
     @property
     def known(self) -> bool:
         return self.seen_at is not None
 
+    @property
+    def tone(self) -> str:
+        """Good while it arrives, attention once it has gone quiet, neutral
+        where it has never run, which is known to be neither."""
+
+        if self.silent:
+            return "attention"
+        return "good" if self.known else "neutral"
+
+    @property
+    def takes_reads(self) -> bool:
+        """Whether a read asked for now will be read: a controller reaches
+        this HQ, and has lately. Readings alone never say so, since a copy of
+        another host's database holds them with no controller to drain its
+        requests."""
+
+        return self.here and not self.silent
+
 
 def controller_standing(now: datetime | None = None) -> ControllerStanding:
-    """The controller's last arrival: its heartbeat, else the newest reading,
-    since only a controller writes one (a database copied from another host
-    has readings and no heartbeat here). Never seen is unknown, not silent: an
-    installation with no controller has nothing to be late."""
+    """The controller's last arrival: its heartbeat, else the newest read it
+    reported, answered or failed, since only a controller writes one (a
+    database copied from another host has readings and no heartbeat here).
+    Never seen is unknown, not silent: an installation with no controller has
+    nothing to be late."""
 
     marker = _path("SEVERINO_CONTROLLER_HEARTBEAT", "controller-heartbeat")
     seen_at: datetime | None
     try:
-        seen_at = datetime.fromtimestamp(marker.stat().st_mtime, tz=timezone.get_current_timezone())
+        seen_at, here = datetime.fromtimestamp(marker.stat().st_mtime, tz=timezone.get_current_timezone()), True
     except OSError:
-        seen_at = newest_reading()
+        seen_at, here = newest_reading(), False
     if seen_at is None:
         return ControllerStanding(seen_at=None, silent=False)
-    return ControllerStanding(seen_at=seen_at, silent=(now or timezone.now()) - seen_at > CONTROLLER_SILENT_AFTER)
+    silent = (now or timezone.now()) - seen_at > CONTROLLER_SILENT_AFTER
+    return ControllerStanding(seen_at=seen_at, silent=silent, here=here)
 
 
 def newest_reading() -> datetime | None:
-    """When the newest stored reading was taken, whichever controller took it."""
+    """When a controller last reported a read, whichever controller and
+    whether or not it answered: a failed first read stores no ``observed_at``
+    and is still a report."""
 
-    times = [row.observed_at for rows in stored_snapshots().values() for row in rows if row.observed_at]
+    times = [attempted_at(row.observed_at, row.updated_at) for rows in stored_snapshots().values() for row in rows]
     return max(times, default=None)
 
 
@@ -562,6 +587,22 @@ def ring_glance_doorbell() -> bool:
     """
 
     return _ring(_controller_doorbell().with_name("glance-doorbell"))
+
+
+# The automation worker's doorbell, beside the controller's; the unit that
+# starts the worker waits for a file of this name.
+AUTOMATION_DOORBELL = "automation-doorbell"
+
+
+def ring_automation_doorbell() -> bool:
+    """Tell the host a procedure's run is queued, and nothing else.
+
+    Its own file beside the controller's doorbell starts the automation worker,
+    which claims the run over the bridge. Forged or replayed, it starts a
+    worker that finds nothing to claim.
+    """
+
+    return _ring(_controller_doorbell().with_name(AUTOMATION_DOORBELL))
 
 
 def _controller_doorbell() -> Path:

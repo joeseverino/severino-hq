@@ -85,7 +85,7 @@ class Expense(TimestampedModel):
     paid_from = ReferenceField(
         "paid from",
         role="account",
-        heading="Expenses paid from this account",
+        heading="Expenses paid",
         shows=("vendor", "item", "date", "total_cost"),
         note="paid_note",
     )

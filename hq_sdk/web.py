@@ -1,4 +1,4 @@
-"""Authorization for plugin-owned Django views."""
+"""For an extension's Django views: name the capability a person must hold to open one."""
 
 from collections.abc import Callable
 from typing import Concatenate

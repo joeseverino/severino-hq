@@ -22,7 +22,9 @@ from pydantic import ConfigDict, Field, create_model, with_config
 
 from hq.domains.control_plane.providers import PROVIDERS, enabled_controller_actions
 lazy from hq.domains.control_plane.models import OperationRequest
+lazy from hq.domains.control_plane.names import normalized_hostname
 lazy from hq.domains.control_plane.observations import OBSERVATIONS
+lazy from hq.domains.control_plane.provider_adapters.declarations import MACHINE_KIND
 
 from . import (
     certificate_expiry,
@@ -32,9 +34,11 @@ from . import (
     credential_findings,
     dns_findings,
     docker_estate,
+    filesystem_findings,
     github_findings,
     perimeter_findings,
     posture_findings,
+    reboot_findings,
     reference_findings,
     registration_findings,
     render_status_findings,
@@ -85,6 +89,7 @@ from .workflows import (
     serialize_workflow,
 )
 lazy from . import cadence
+lazy from .automation_runs import playbook_remedies
 lazy from .estate import estate_reading
 lazy from .moments import ago
 lazy from .ui import counted
@@ -175,6 +180,8 @@ RULE_MODULES = (
     github_findings,
     render_status_findings,
     unit_findings,
+    filesystem_findings,
+    reboot_findings,
     certificate_expiry,
     registration_findings,
     reference_findings,
@@ -270,6 +277,14 @@ def _permitted(capability: str, principal: Principal, graph: IntegrationGraph) -
     return False, ""
 
 
+def _playbooks(finding: Finding, subject: TopologyNode | None) -> tuple[FindingRemedy, ...]:
+    """The adopted playbooks that say they fix a finding about a machine, each with that machine chosen."""
+
+    if subject is None or subject.kind != MACHINE_KIND:
+        return ()
+    return playbook_remedies(finding.rule, normalized_hostname(subject.label))
+
+
 def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | None) -> Finding:
     """Drop remedies this principal cannot run, and take effect from the spec.
 
@@ -281,7 +296,7 @@ def _resolved(finding: Finding, principal: Principal, subject: TopologyNode | No
 
     graph = integration_graph()
     kept = []
-    for remedy in finding.remedies:
+    for remedy in (*finding.remedies, *_playbooks(finding, subject)):
         allowed, effect = _permitted(remedy.capability, principal, graph)
         if not allowed or effect == "destructive":
             continue
@@ -645,7 +660,7 @@ class SerializedFinding(TypedDict):
     rule: Annotated[str, Describe("The rule that found it, as the `rule` filter takes it.")]
     subject: Annotated[
         str | None,
-        Describe("The id of the map node it is about; null when it is about a type or a check as a whole."),
+        Describe("The id of the map node it is about. Null when it is about a whole type or check."),
     ]
     scope: Annotated[
         str | None,
@@ -671,7 +686,7 @@ class SerializedFinding(TypedDict):
     ]
     operator_steps: Annotated[
         list[Annotated[dict[str, Any], Written(OperatorStep)]],
-        Describe("What a person does by hand to resolve it, in order. HQ never runs these."),
+        Describe("What you do by hand to resolve it, in order. HQ never runs these."),
     ]
     no_help_reason: Annotated[
         str | None,

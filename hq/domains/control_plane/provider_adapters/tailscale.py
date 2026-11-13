@@ -11,6 +11,7 @@ from hq.platform.application.ui import ended
 from ..connection_shapes import OAUTH_CLIENT
 from ..consoles import tailscale_machine
 from ..observations.contract import ReadingPart
+from ..permissions import Tailscale
 from ..provider_spec import (
     ConnectionKind,
     ControllerVerification,
@@ -248,9 +249,9 @@ POLICY = ProviderSpec(
     ),
     readout=_policy_readout,
     parts=(
-        ReadingPart("settings", "Tailnet settings", ("feature_settings:read",)),
-        ReadingPart("dns", "Tailnet DNS", ("dns:read",)),
-        ReadingPart("services", "Tailnet services", ("services:read",)),
+        ReadingPart("settings", "Tailnet settings", (Tailscale.FEATURE_SETTINGS_READ,)),
+        ReadingPart("dns", "Tailnet DNS", (Tailscale.DNS_READ,)),
+        ReadingPart("services", "Tailnet services", (Tailscale.SERVICES_READ,)),
     ),
 )
 

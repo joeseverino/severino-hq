@@ -16,7 +16,7 @@ from mcp import types
 from mcp.shared.exceptions import MCPError
 from mcp.shared.uri_template import UriTemplate
 
-from hq.platform.application import approvals, resources as registry
+from hq.platform.application import approval_review, approvals, resources as registry
 from hq.platform.application.access import Access, holding
 from hq.platform.application.integration_specs import PAGE_FIELD
 from hq.platform.application.projection import complete
@@ -90,7 +90,7 @@ def held_requests(principal: Principal) -> dict[str, Any]:
 
 
 def serialize_held(held: Any) -> dict[str, Any]:
-    return {"asks": str(approvals.asked(held)), **approvals.serialize_approval(held)}
+    return {"asks": str(approval_review.asked(held)), **approvals.serialize_approval(held)}
 
 
 VIEWS = {
@@ -102,7 +102,7 @@ VIEWS = {
         View(
             "approvals",
             "Held requests",
-            "The changes you asked for that wait for a person; a person reads every one.",
+            "The changes you asked for that wait for approval in HQ.",
             held_requests,
             READS,
         ),
@@ -111,7 +111,7 @@ VIEWS = {
             "HQ",
             (
                 "HQ itself: its release, where it runs, its jobs and its open problems. "
-                "system_health says whether it answers; the status-brief prompt is a brief of both."
+                "`system_health` says whether it answers, and the `status-brief` prompt sums up both."
             ),
             hq_itself,
             READS,

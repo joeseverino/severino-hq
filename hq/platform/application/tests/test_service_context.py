@@ -21,7 +21,7 @@ from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow
 from ..service_context import Cell, ServiceSection, sections_for
 from ..services import prospects
 from ..ui import MISSING
-from .markup import select, with_class
+from .markup import all_elements, select, with_class, within
 
 
 def a_service(hostname="probe.example.com"):
@@ -80,10 +80,42 @@ class ProjectTileTests(TestCase):
         self.assertTrue(tile.link.url)
         self.assertIn("example/a-project", tile.detail)
 
+    def test_each_part_of_its_repository_is_a_line_of_its_own(self):
+        a_project(repository_url="https://github.com/example/a-project")
+        repo = mock.Mock(short="example/a-project", pull_requests=[1, 2], head={}, production={})
+
+        with mock.patch("hq.platform.application.service_context.repository_for", return_value=repo):
+            tile = project_tile(a_service())
+
+        self.assertEqual(tile.detail[:2], ("example/a-project", "2 open pull requests"))
+
     def test_a_project_without_a_repository_names_none(self):
         a_project(repository_url="")
 
-        self.assertEqual(project_tile(a_service()).detail, "")
+        self.assertEqual(project_tile(a_service()).detail, ())
+
+
+class HealthDetailTests(SimpleTestCase):
+    def health(self, check: str, label: str, detail: str):
+        from types import SimpleNamespace
+
+        from ..service_context import _health_detail
+
+        return _health_detail(
+            SimpleNamespace(container=SimpleNamespace(check=check), health=SimpleNamespace(label=label, detail=detail))
+        )
+
+    def test_each_part_is_a_line_of_its_own(self):
+        self.assertEqual(
+            self.health("Restarting", "Down", "Nothing answers at the proxy."),
+            ("Restarting", "Nothing answers at the proxy."),
+        )
+
+    def test_a_check_its_sentence_already_says_is_said_once(self):
+        detail = "Health check passing when last read."
+
+        self.assertEqual(self.health("health check passing", "Healthy", detail), (detail,))
+        self.assertEqual(self.health("Healthy", "Healthy", detail), (detail,))
 
 
 class ActivityTests(TestCase):
@@ -130,7 +162,7 @@ class PageTests(TestCase):
         self.assertFalse(select(response, "id", "delivery"))
         service = response.context["service"]
         # Health once, first in the band, its tile in its tone.
-        facts = with_class(response, "band-fact")
+        facts = with_class(response, "fact")
         self.assertEqual(len([fact for fact in facts if f"tone-{service.status}" in fact.classes]), 1)
         self.assertIn(service.status_label, facts[0].words)
 
@@ -188,7 +220,7 @@ class TrafficSectionTests(TestCase):
     def test_a_measured_host_gets_its_traffic_without_a_foreign_key(self):
         self._measure("probe.example.com")
         found = self.traffic()
-        self.assertEqual((found.value, found.detail), ("120 pageviews", "90 visits\xa0· counted"))
+        self.assertEqual((found.value, found.detail), ("120 pageviews", ("90 visits", "counted")))
 
     def test_a_host_nothing_measures_says_nothing(self):
         # Not "0 pageviews": that would read as a dead site rather than an
@@ -197,7 +229,7 @@ class TrafficSectionTests(TestCase):
 
     def test_sampling_is_carried_rather_than_presented_as_a_count(self):
         self._measure("probe.example.com", sample_interval=10)
-        self.assertEqual(self.traffic().detail, "90 visits\xa0· sampled 1 in 10")
+        self.assertEqual(self.traffic().detail, ("90 visits", "sampled 1 in 10"))
 
     def test_another_hosts_traffic_is_not_borrowed(self):
         self._measure("someone-else.example.com", pageviews=9999)
@@ -296,7 +328,7 @@ class TopologyWindowTests(TestCase):
         with mock.patch("hq.domains.control_plane.topology_views.HOST_TRAFFIC_DAYS", 30):
             body = self.client.get(reverse("control_plane:topology_node"), {"node": node.id})
 
-        self.assertIn("Traffic · 30 days", text(body))
+        self.assertIn("in the last 30 days", text(body))
 
 
 class PartRowTests(TestCase):
@@ -358,7 +390,10 @@ class ObservedHealthTests(SimpleTestCase):
         from ..path_model import Hop, Route
         from ..service_context import part_rows
 
-        hops = tuple(Hop(kind, kind.capitalize(), name) for kind, name in steps)
+        # A network hop carries its address as its detail too, as paths builds it.
+        hops = tuple(
+            Hop(kind, kind.capitalize(), name, detail=name if kind == "network" else "") for kind, name in steps
+        )
         with mock.patch("hq.platform.application.machines.machine", return_value=machine):
             rows = part_rows(SimpleNamespace(claims=()), Route("internal DNS", hops))
         return next(row.observed_health for row in rows if row.hop.step == step)
@@ -445,3 +480,109 @@ class EmptyColumnTests(SimpleTestCase):
         for fields in ({"id": "Not an id!", "label": "Example"}, {"id": "example", "label": "  "}):
             with self.subTest(**fields), self.assertRaises(ValueError):
                 ServiceSection(columns=(), records=(), **fields)
+
+
+def _rows(width, *, folded=False):
+    return ServiceSection(
+        id="example",
+        label="Example",
+        columns=tuple(f"Column {n}" for n in range(width)),
+        records=(tuple(Cell(f"value {n}") for n in range(width)),),
+        folded=folded,
+    )
+
+
+class SpansRowTests(SimpleTestCase):
+    def test_a_fold_and_a_table_of_four_columns_take_the_row(self):
+        for section in (_rows(4), _rows(6), _rows(2, folded=True)):
+            with self.subTest(columns=len(section.columns), folded=section.folded):
+                self.assertTrue(section.spans_row)
+
+    def test_a_table_of_three_columns_shares_a_row(self):
+        self.assertFalse(_rows(3).spans_row)
+
+
+def _drawn(section) -> str:
+    from django.template.loader import render_to_string
+
+    return render_to_string("partials/_page_sections.html", {"sections": (section,), "spans_row": section.spans_row})
+
+
+class SectionPartTests(SimpleTestCase):
+    def test_a_cell_with_a_tone_is_drawn_as_its_state(self):
+        html = _drawn(
+            ServiceSection(
+                id="example",
+                label="Example",
+                columns=("Run", "State"),
+                records=((Cell("Nightly"), Cell("Failed", tone="serious")),),
+            )
+        )
+
+        (state,) = [element for element in within(html, "id", "example") if "pill" in element.classes]
+        self.assertEqual((state.words, "pill-serious" in state.classes), ("Failed", True))
+
+    def test_a_section_of_the_latest_links_to_the_rest_from_its_heading(self):
+        html = _drawn(
+            ServiceSection(
+                id="example",
+                label="Example",
+                columns=("Run",),
+                records=((Cell("Nightly"),),),
+                more_label="All runs",
+                more_url="/example/runs/",
+            )
+        )
+
+        self.assertIn(
+            ("All runs", "/example/runs/"),
+            [(element.words, element.attrs.get("href")) for element in within(html, "id", "example")],
+        )
+
+    def test_what_a_row_holds_below_it_is_in_its_open_line(self):
+        from ..work_runs import RunEvidence
+
+        evidence = RunEvidence(
+            correlation="example-investigation-7",
+            events=({"host": "example-01", "task": "Example task", "outcome": "ok", "message": "", "tone": "good"},),
+        )
+        html = _drawn(
+            ServiceSection(
+                id="example",
+                label="Example",
+                columns=("Run", "State"),
+                records=((Cell("Nightly"), Cell("Done", tone="good")), (Cell("Weekly"), Cell("Done", tone="good"))),
+                below=(evidence, None),
+            )
+        )
+
+        (detail,) = [element for element in all_elements(html) if "data-row-detail" in element.attrs]
+        opened = [element for element in all_elements(html) if detail in element.ancestors]
+        labels = {element.attrs["data-label"]: element.words for element in opened if "row-below" in element.classes}
+        self.assertIn("example-investigation-7", labels["Correlation"])
+        self.assertIn("Example task", labels["Tasks"])
+
+    def test_a_section_holds_one_below_for_each_record(self):
+        with self.assertRaisesRegex(ValueError, "below"):
+            ServiceSection(
+                id="example", label="Example", columns=("Run",), records=((Cell("Nightly"),),), below=(None, None)
+            )
+
+
+@tag("source")
+class SpansRowSourceTests(SimpleTestCase):
+    def test_the_flow_takes_a_whole_row_from_the_columns_the_section_counts(self):
+        """The stylesheet and the page that orders its sections by width read
+        a table as wide from one column count."""
+
+        import re
+
+        from hq.platform.core.stylesheets import STATIC
+
+        from ..service_context import ROW_COLUMNS
+
+        css = (STATIC / "css" / "app" / "layout.css").read_text(encoding="utf-8")
+        wide = re.findall(
+            r"\.section-flow > section:has\(table(?::not\([^)]*\))? > thead > tr > :nth-child\((\d+)\)\)", css
+        )
+        self.assertEqual(wide, [str(ROW_COLUMNS)])

@@ -1,0 +1,15 @@
+# The names HQ's automation has for its own parts, each with the one name a
+# page gives it (docs/Design.md's table of one name per thing). A recovery
+# procedure is a kind of doc, and the command catalog is the API's.
+extends: substitution
+message: "Say '%s' in place of '%s'"
+level: error
+ignorecase: true
+nonword: true
+scope: [shown, description, ~comment & ~code]
+swap:
+  '(?<![\w-])(?<!recovery )procedures(?![\w-])': playbooks
+  '(?<![\w-])(?<!recovery )procedure(?![\w-])': playbook
+  '(?<![\w-])proposals(?![\w-])': scan results
+  '(?<![\w-])proposal(?![\w-])': scan result
+  '(?<![\w-])(?:the|its|a|this|that) catalog(?![\w-])(?! of command)': adopted playbooks

@@ -13,29 +13,25 @@ from django.contrib import messages
 from django.http import Http404
 from django.shortcuts import redirect, render
 from django.utils.html import format_html
-from django.utils.safestring import SafeString
 from django.views import View
 
+from hq.domains.control_plane.forms import MailFailuresForm, MailPolicyForm, MailSendersForm
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.asks import APPLIES_SHORTLY
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.entity_links import entity_link
 from hq.platform.application.inventory import inventory_state
-from hq.platform.application.mail_policy import (
-    DMARC_TAGS,
-    SPF_DEFAULTS,
-    SPF_LOOKUP_LIMIT,
-    SpfTerm,
-    compose_dmarc,
-    compose_spf,
-    mail_overview,
-    parse_spf,
-)
+from hq.platform.application.mail_policy import mail_overview, parse_spf
 from hq.platform.application.pages import PageAction, page_context
 from hq.platform.application.pins import DOMAIN, FAVORITE, FAVORITES, PIN, pinned
 from hq.platform.application.relationships import relationships_for
-from hq.platform.application.resource_capabilities import UPDATE_CAPABILITY, public_dns_enabled, resource_capabilities
+from hq.platform.application.resource_capabilities import (
+    REMOVAL_CAPABILITY,
+    UPDATE_CAPABILITY,
+    public_dns_enabled,
+    resource_capabilities,
+)
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.ui import counted
@@ -47,32 +43,23 @@ from hq.platform.application.zones import (
     find_zone,
     zone_catalog,
 )
-from hq.platform.core.templatetags.value_tags import breakable
+from hq.platform.core.templatetags.nav_tags import returning_to
+from hq.platform.core.templatetags.value_tags import entity
 
 
 def _records_lede(zone) -> str:
     """Where this domain's records stand, as a clause beside the heading.
 
     Unmanaged records are not a backlog: a declared domain takes on its records
-    with it, so anything left is genuinely new, added at the provider since.
-    The count covers the folded policy records too, so it says how many of
-    them are there rather than leaving the table under it a different number.
+    with it, so anything left is new at the provider since, and the next read
+    takes it on.
     """
 
-    return _records_standing(zone) + (
-        f", {len(zone.policy)} of them policy and verification records" if zone.policy else ""
-    )
-
-
-def _records_standing(zone) -> str:
     if not zone.managed:
         return f"{counted(len(zone.records), 'record')}, none managed by HQ"
     if not zone.adoptable:
         return f"{counted(zone.managed_count, 'record')}, all managed by HQ"
-    # Only ever seen in the gap between a record appearing at the provider and
-    # the next sweep taking it on. Phrased as a statement of fact rather than
-    # as a backlog, because it is not work anyone has to do.
-    return f"{counted(zone.managed_count, 'record')} managed by HQ, {len(zone.adoptable)} new, added on the next read"
+    return f"{counted(zone.managed_count, 'record')} managed by HQ, {len(zone.adoptable)} new"
 
 
 def _page_relationships(zone, relationships):
@@ -132,15 +119,6 @@ class ZoneIndexView(View):
         )
 
 
-def _spf_default(value: str) -> str:
-    """The qualifier on the policy's `all` term, which decides everyone unlisted."""
-
-    for term in reversed(parse_spf(value).terms):
-        if term.mechanism == "all":
-            return term.qualifier
-    return "-"
-
-
 def _spf_value(zone) -> str:
     for record in zone.records:
         if record.record_type == "TXT" and "v=spf1" in record.content.lower():
@@ -157,33 +135,63 @@ class ZoneMailView(View):
     """
 
     def get(self, request, zone: str):
+        return self._page(request, self._zone(zone))
+
+    @staticmethod
+    def _zone(zone: str):
         found = find_zone(zone)
         if found is None:
             raise Http404("No such domain.")
+        return found
+
+    def _page(self, request, found, sent: MailPolicyForm | None = None, status: int = 200):
+        """The page, with the form ``sent`` drawn as it was sent over what was wrong with it."""
+
+        overview = mail_overview(found)
+        drawn = {
+            MailSendersForm.SECTION: MailSendersForm(policy=parse_spf(_spf_value(found))),
+            MailFailuresForm.SECTION: MailFailuresForm(tags=overview.dmarc_tags),
+        }
+        if sent is not None:
+            drawn[sent.SECTION] = sent
         return render(
             request,
             "control_plane/zone_mail.html",
             {
                 "zone": found,
-                "mail": mail_overview(found),
-                "policy_tags": DMARC_TAGS,
-                "spf": parse_spf(_spf_value(found)),
-                "spf_defaults": SPF_DEFAULTS,
-                "spf_limit": SPF_LOOKUP_LIMIT,
-                "spf_default": _spf_default(_spf_value(found)),
+                "mail": overview,
+                "senders_form": drawn[MailSendersForm.SECTION],
+                "failures_form": drawn[MailFailuresForm.SECTION],
+                # The form a refusal is answered over.
+                "form": sent,
                 **page_context(
                     f"Email for {found.zone}",
                     trail=((found.zone, found.url),),
                 ),
             },
+            status=status,
         )
 
-    def _publish(self, request, zone, record, value: str, what: str):
-        """Write a composed policy back through the record's own use case."""
+    def post(self, request, zone: str):
+        """Publish a policy composed from the choices, not typed as a string."""
 
+        found = self._zone(zone)
+        overview = mail_overview(found)
+        form: MailPolicyForm
+        if request.POST.get("section") == MailSendersForm.SECTION:
+            form = MailSendersForm(request.POST, policy=parse_spf(_spf_value(found)))
+            record = next(
+                (r for section in overview.sections if section.id == "sending" for r in section.records),
+                None,
+            )
+        else:
+            form = MailFailuresForm(request.POST, tags=overview.dmarc_tags)
+            record = overview.dmarc_record
+        if not form.is_valid():
+            return self._page(request, found, form, status=400)
         if record is None or not record.resource_key:
-            messages.error(request, f"HQ does not manage a {what} record for this domain.")
-            return redirect("zones:mail", zone=zone.zone)
+            form.add_error(None, f"HQ does not manage a {form.record} record for this domain.")
+            return self._page(request, found, form, status=409)
         resource = ManagedResource.objects.get(key=record.resource_key)
         result = execute_posted(
             request,
@@ -191,47 +199,15 @@ class ZoneMailView(View):
             {
                 "key": resource.key,
                 "kind": resource.kind,
-                "spec": {**resource.spec, "content": f'"{value}"'},
+                "spec": {**resource.spec, "content": f'"{form.published()}"'},
                 "enabled": resource.enabled,
             },
             target=resource.key,
         )
-        if refused(request, result):
-            return redirect("zones:mail", zone=zone.zone)
-        messages.success(request, f"{what} saved. {APPLIES_SHORTLY}")
-        return redirect("zones:mail", zone=zone.zone)
-
-    def post(self, request, zone: str):
-        """Publish a policy composed from the choices, not typed as a string."""
-
-        found = find_zone(zone)
-        if found is None:
-            raise Http404("No such domain.")
-        overview = mail_overview(found)
-
-        if request.POST.get("section") == "spf":
-            terms = []
-            for given in request.POST.getlist("rule"):
-                rule = given.strip()
-                if not rule:
-                    continue
-                qualifier = rule[0] if rule[:1] in "+-~?" else "+"
-                body = rule[1:] if rule[:1] in "+-~?" else rule
-                mechanism, _, argument = body.partition(":")
-                terms.append(SpfTerm(qualifier, mechanism.lower(), argument))
-            terms.append(SpfTerm(request.POST.get("default", "-"), "all", ""))
-            spf_record = next(
-                (r for section in overview.sections if section.id == "sending" for r in section.records),
-                None,
-            )
-            return self._publish(request, found, spf_record, compose_spf(tuple(terms)), "SPF")
-
-        # Unknown tags survive: the record belongs to the operator, and an
-        # editor that drops what it does not model deletes policy silently.
-        tags = dict(overview.dmarc_tags)
-        for tag in DMARC_TAGS:
-            tags[tag.id] = request.POST.get(tag.id, "").strip()
-        return self._publish(request, found, overview.dmarc_record, compose_dmarc(tags), "DMARC")
+        if refusal := refused(request, result, form=form):
+            return self._page(request, found, form, status=refusal.status)
+        messages.success(request, f"{form.record} saved. {APPLIES_SHORTLY}")
+        return redirect("zones:mail", zone=found.zone)
 
 
 class ZonePinView(View):
@@ -284,7 +260,16 @@ class ZoneDetailView(View):
                 "zone": found,
                 # Every domain, so the switcher can reach an undeclared one
                 # without going back to a list to find it.
-                "zones": zones,
+                "zones": [
+                    {
+                        "url": each.url,
+                        "zone": each.zone,
+                        "pinned": each.pinned,
+                        "managed": each.managed,
+                        "current": each.zone == found.zone,
+                    }
+                    for each in zones
+                ],
                 "record_kind": RECORD_KIND,
                 "inventory": inventory_state(),
                 # A deployment can have changing public DNS switched off. Where
@@ -293,21 +278,44 @@ class ZoneDetailView(View):
                 # once.
                 "public_dns_enabled": public_dns_enabled(),
                 "records_lede": _records_lede(found),
+                "record_rows": {
+                    "routing": _record_rows(found.routing, request.get_full_path()),
+                    "policy": _record_rows(found.policy, request.get_full_path()),
+                },
                 "relationships": relationships,
                 "read_with": read_with,
                 **page_context(
                     found.zone,
                     (
                         format_html(
-                            "The DNS records of this domain, from {}.", _connection_mention(found.connection_ref)
+                            "Records from {}.",
+                            entity({"request": request}, entity_link("connection", found.connection_ref)),
                         )
                         if found.connection_ref
-                        else "The DNS records of this domain."
+                        else ""
                     ),
                     actions=(_pin_action(found), *_declaration_actions(found)),
                 ),
             },
         )
+
+
+def _record_actions(record, here: str) -> tuple[PageAction, ...]:
+    """What a record's declaration offers from its row: Edit, which comes back
+    to this page, and Remove."""
+
+    actions = []
+    if record.edit_url:
+        actions.append(PageAction(capability_words(UPDATE_CAPABILITY), returning_to(record.edit_url, here)))
+    if record.remove_url:
+        actions.append(PageAction(capability_words(REMOVAL_CAPABILITY), record.remove_url, danger=True))
+    return tuple(actions)
+
+
+def _record_rows(records, here: str) -> list[tuple]:
+    """Each record with its row's actions, as ``_zone_records.html`` draws them."""
+
+    return [(record, _record_actions(record, here)) for record in records]
 
 
 def _declaration_actions(zone) -> tuple[PageAction, ...]:
@@ -355,8 +363,3 @@ class ZoneAdoptView(View):
             f"HQ now manages {zone} and {counted(adopted, 'record')} in it. Nothing changed at Cloudflare.",
         )
         return redirect("zones:detail", zone=zone)
-
-
-def _connection_mention(ref: str) -> SafeString:
-    link = entity_link("connection", ref)
-    return format_html('<a href="{}" data-entity="{}">{}</a>', link.url, link.kind_label, breakable(link.label))

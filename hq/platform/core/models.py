@@ -15,6 +15,7 @@ lazy from django.urls import reverse
 lazy from django.utils.text import slugify
 
 from hq.platform.application.roles import Role
+lazy from hq.platform.application.doors import Attribution
 lazy from hq.platform.application.labels import dotted, plural
 
 from .rules import Rule, one_of, singleton
@@ -243,6 +244,19 @@ class AuditLog(models.Model):
         return "system"
 
     @property
+    def who(self) -> Attribution:
+        """Who did it, through which door, as whom, and who approved it."""
+
+        metadata = self.metadata or {}
+        return Attribution(
+            self.actor_label,
+            # The metadata ``interface`` is generated from, so a row not yet saved says it too.
+            str(metadata.get("interface") or ""),
+            acting_as=str(metadata.get("actor") or ""),
+            approved_by=str(metadata.get("approved_by") or ""),
+        )
+
+    @property
     def summary(self) -> str:
         """What happened, in a few words: the message, else action and object."""
 
@@ -377,7 +391,7 @@ class AgentIdentity(models.Model):
             Rule(
                 condition=models.Q(blocked_by__isnull=True) | models.Q(blocked_at__isnull=False),
                 name="agent_identity_block_is_dated",
-                violation_error_message="A block someone set says when they set it.",
+                violation_error_message="A block needs the time it was set.",
                 field="blocked_at",
             ),
             Rule(
@@ -446,13 +460,13 @@ class AgentDevice(models.Model):
             Rule(
                 condition=models.Q(approved_by__isnull=True) | models.Q(approved_at__isnull=False),
                 name="agent_device_approval_is_dated",
-                violation_error_message="An approval someone gave says when they gave it.",
+                violation_error_message="An approval needs the time it was given.",
                 field="approved_at",
             ),
             Rule(
                 condition=models.Q(blocked_by__isnull=True) | models.Q(blocked_at__isnull=False),
                 name="agent_device_block_is_dated",
-                violation_error_message="A block someone set says when they set it.",
+                violation_error_message="A block needs the time it was set.",
                 field="blocked_at",
             ),
         ]

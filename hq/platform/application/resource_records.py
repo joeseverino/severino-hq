@@ -93,7 +93,7 @@ class OperationSummary(TypedDict):
     automatic: Annotated[bool, Describe("Whether the controller ran it on its own, unasked.")]
     requested_actor: RequestedActor
     requested_interface: RequestedInterface
-    by: Annotated[str, Describe("Who asked for it, as a person reads it: `Automatic` for the controller.")]
+    by: Annotated[str, Describe("Who asked for it, through which door, and who approved it, as HQ's pages name them.")]
     approved_by: Annotated[str, Describe("Who agreed to a change a credential asked for; empty for anything else.")]
     created_at: AskedAt
     completed_at: CompletedAt
@@ -153,7 +153,7 @@ class ManagedResourceItem(ManagedResourceRow):
     observed_generation: Annotated[
         int,
         Describe(
-            "Which version of HQ's copy was last applied and confirmed back; it equals the current "
+            "Which version of HQ's copy was last applied and confirmed back. It equals the current "
             "version when no change waits to apply."
         ),
     ]
@@ -167,9 +167,8 @@ class ManagedResourceRecord(TypedDict):
     derived: Annotated[
         dict[str, Any],
         Describe(
-            "What HQ makes of the record: its health, what may be done to it and why not, its machines and "
-            "services, what HQ expects beside what is live, a certificate's expiry and use, the changes waiting "
-            "for approval, and what uses it."
+            "What HQ derives from the record. It holds health, allowed actions, machines and services, "
+            "expected beside live, certificate expiry, pending approvals and what uses it."
         ),
     ]
     operations: Annotated[list[OperationSummary], Describe("The latest operations that changed it, newest first.")]
@@ -248,7 +247,9 @@ class HopSourcePart(TypedDict):
 class CertificatePart(TypedDict):
     role: Annotated[str, Describe("What the certificate is at the hop, such as the edge's or the origin's.")]
     name: Annotated[str, Describe("The name the certificate is for; empty when not read.")]
-    issuer: Annotated[str, Describe("Who issued it; empty when not read.")]
+    issuer: Annotated[
+        str, Describe("Who issued it, or 'uploaded' for one uploaded to the proxy that serves it; empty when not read.")
+    ]
     expiry: Annotated[str, Describe("When it runs out, as read; empty when not read.")]
     source: Annotated[HopSourcePart | None, Describe("Where HQ read the certificate; null when nothing says.")]
     unread: Annotated[str, Describe("Why HQ cannot say what certificate the hop presents; empty when it can.")]
@@ -263,7 +264,7 @@ class HopCheckPart(TypedDict):
     state: Annotated[str, Describe("Whether the request agrees with the readings at the hop, in one word.")]
     label: Annotated[str, Describe("That, in the words the hop shows.")]
     detail: Annotated[str, Describe("What the request showed beside what was read.")]
-    step: Annotated[str, Describe("What a person does to settle a disagreement; empty for none.")]
+    step: Annotated[str, Describe("What you do to settle a disagreement; empty for none.")]
 
 
 class EvidencePart(TypedDict):
@@ -416,7 +417,7 @@ class MachineRow(TypedDict):
 
 class HeaderAddressPart(TypedDict):
     label: Annotated[str, Describe("Which network the address is on, such as `Tailnet`, `LAN` or `Public`.")]
-    address: Annotated[str, Describe("The address a person reaches the machine at there.")]
+    address: Annotated[str, Describe("The address you reach the machine at there.")]
     holder: Annotated[
         str, Describe("Who holds a public address, such as the company that hosts it; empty for any other.")
     ]
@@ -462,7 +463,7 @@ class MachineRecord(MachineRow):
     declaration: Annotated[str, Describe("The key of HQ's record of the machine; empty when HQ keeps none.")]
     aliases: Annotated[list[str], Describe("Other names the same machine is known by.")]
     header_addresses: Annotated[
-        list[HeaderAddressPart], Describe("The addresses a person reaches it at, tailnet then LAN then public.")
+        list[HeaderAddressPart], Describe("The addresses you reach it at, tailnet then LAN then public.")
     ]
     containers_visible: Annotated[
         bool,
@@ -526,7 +527,7 @@ class UsagePart(TypedDict):
     cpu_percent_of_one_core: Annotated[
         float | None,
         Describe(
-            "The CPU it used since the read before, as a percentage of one core; null until two reads "
+            "The CPU it used since the read before, as a percentage of one core. Null until two reads "
             "have sampled one run of it."
         ),
     ]
@@ -540,15 +541,15 @@ class ContainerRecord(ContainerRow):
     image: Annotated[
         dict[str, Any],
         Describe(
-            "What it runs: the reference, registry, repository, tag, digest and image id, whether it is pinned "
-            "by digest, when it was built, and its source."
+            "What it runs: reference, registry, repository, tag, digest, image id, whether pinned by digest, "
+            "build time and source."
         ),
     ]
     standing: Annotated[
         dict[str, Any],
         Describe(
-            "Whether what it runs is current and safe: a state and summary, newer tags, the latest release, "
-            "advisories, and when the registry and upstream were last read."
+            "Whether what it runs is current and safe: its state and summary, newer tags, the latest release "
+            "and advisories. It also says when the registry and upstream were last read."
         ),
     ]
     project: Annotated[ProjectPart | None, Describe("The project it belongs to; null for none.")]
@@ -565,15 +566,15 @@ class ContainerRecord(ContainerRow):
     posture: Annotated[
         dict[str, Any],
         Describe(
-            "How it measures against the container standard: how many checks it meets of those measured, each "
-            "check's state, why each unmet one matters and its fix, and what is off by design."
+            "How it meets the container standard: the checks met and each check's state. An unmet check "
+            "has its reason and fix; a check off by design says so."
         ),
     ]
     supply_chain: Annotated[
         dict[str, Any],
         Describe(
-            "Where its image comes from: its source, provenance, packages, SBOM, attestations, known "
-            "vulnerabilities and when they were read, and how it measures against the supply chain standard."
+            "Where its image comes from: source, provenance, packages, SBOM, attestations, and known "
+            "vulnerabilities with when they were read. It also says how it meets the supply chain standard."
         ),
     ]
 
@@ -659,7 +660,8 @@ class UpgradeRecord(UpgradeRow):
     not_automatic: Annotated[
         list[BlockerPart],
         Describe(
-            "Why it would not apply on its own, though a person may approve it: every blocker, then the bar a patch must clear."
+            "Why it would not apply on its own, though an operator may approve it. Every blocker comes first, "
+            "then the bar a patch must clear."
         ),
     ]
     steps: Annotated[list[UpgradeStepPart], Describe("The steps an upgrade would take, in order.")]

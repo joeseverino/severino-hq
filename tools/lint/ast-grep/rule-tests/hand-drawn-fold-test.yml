@@ -1,0 +1,14 @@
+id: hand-drawn-fold
+valid:
+  - '{% section "A" fold=True %}B{% endsection %}'
+  - '<div class="notes"><p>A</p></div>'
+invalid:
+  - '<details><summary>Notes</summary><p>B</p></details>'
+  - '<details open><summary>Notes</summary>B</details>'
+  - |
+    <details class="notes"{% if open %} open{% endif %}>
+      <summary>Show the numbers</summary>
+      <p>{{ note }}</p>
+    </details>
+  - '<details><summary>{{ n|counted:"more" }}</summary>B</details>'
+  - '{% if a %}<details>{% endif %}<summary>A</summary></details>'

@@ -1,0 +1,44 @@
+id: hand-drawn-table
+snapshots:
+  <div><table><tr><td>A</td></tr></table></div>:
+    labels:
+    - source: <table><tr><td>A</td></tr></table>
+      style: primary
+      start: 5
+      end: 39
+    - source: table
+      style: secondary
+      start: 6
+      end: 11
+    - source: <table>
+      style: secondary
+      start: 5
+      end: 12
+  <table class="data-table"></table>:
+    labels:
+    - source: <table class="data-table"></table>
+      style: primary
+      start: 0
+      end: 34
+    - source: table
+      style: secondary
+      start: 1
+      end: 6
+    - source: <table class="data-table">
+      style: secondary
+      start: 0
+      end: 26
+  "{% table_region \"A\" %}<table></table>{% endtable_region %}<table></table>":
+    labels:
+    - source: <table></table>
+      style: primary
+      start: 58
+      end: 73
+    - source: table
+      style: secondary
+      start: 59
+      end: 64
+    - source: <table>
+      style: secondary
+      start: 58
+      end: 65

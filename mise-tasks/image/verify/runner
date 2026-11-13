@@ -1,0 +1,53 @@
+#!/bin/sh
+#MISE description="The automation worker's image, RUNNER_IMAGE: it runs as the web account with a passwd entry, carries the ssh, git, ansible-runner and ansible-playbook a run needs and no package manager, its entry point refuses a missing setting by name, and smoke:runner's real playbook runs in it"
+#MISE lock=["gate", "heavy"]
+#MISE timeout="30m"
+#MISE hide=true
+#MISE depends=["image:build --runner-tag severino-hq-runner:ci-local"]
+#MISE depends_post=["image:docker stop"]
+set -eu
+# shellcheck source=tools/lib/heavy-turn.sh
+. ./tools/lib/heavy-turn.sh
+
+# Its own variable, since every image:verify:* check reads IMAGE as the host
+# image. A host image handed over was built elsewhere, so a worker image left
+# under the local name would be another build's.
+if [ -n "${IMAGE:-}" ] && [ -z "${RUNNER_IMAGE:-}" ]; then
+    echo "IMAGE hands over a host image; RUNNER_IMAGE must name the automation worker's image built beside it." >&2
+    exit 2
+fi
+image="${RUNNER_IMAGE:-severino-hq-runner:ci-local}"
+# Each check runs; the last lines name every one that failed.
+failed=""
+
+# hq-host runs it as the web account, which the bridge's peer check admits, and
+# ssh refuses an account with no passwd entry. Each program is the one a run
+# reaches by name: ansible-runner starts ansible-playbook, which opens ssh, and
+# a procedure is fetched with git.
+docker run --rm --network none --entrypoint python "${image}" -c '
+import importlib.util, os, pwd, shutil, sys
+wrong = []
+if (os.getuid(), os.getgid()) != (10001, 10001):
+    wrong.append(f"runs as {os.getuid()}:{os.getgid()}, not the web account 10001:10001")
+try:
+    pwd.getpwuid(os.getuid())
+except KeyError:
+    wrong.append("its account has no passwd entry")
+wrong += [f"has no {name} on PATH" for name in ("ssh", "git", "ansible-runner", "ansible-playbook") if shutil.which(name) is None]
+wrong += [f"carries {name}" for name in ("pip", "uv") if shutil.which(name) or importlib.util.find_spec(name)]
+print("\n".join(wrong))
+sys.exit(1 if wrong else 0)
+' || failed="${failed}
+FAIL its account or programs, named above"
+
+# Run with no environment, its entry point names the first setting it lacks.
+status=0
+said="$(docker run --rm --network none "${image}" 2>&1 >/dev/null)" || status=$?
+[ "${status}" -eq 1 ] && printf '%s\n' "${said}" | grep -Eq 'HQ_AUTOMATION_[A-Z_]+ is not set' ||
+    failed="${failed}
+FAIL its entry point, run with no environment, exited ${status} without naming the setting it lacks: ${said}"
+
+mise run smoke:runner --image "${image}" || failed="${failed}
+FAIL smoke:runner --image ${image}"
+
+[ -z "${failed}" ] || { echo "${image}:${failed}" >&2; exit 1; }

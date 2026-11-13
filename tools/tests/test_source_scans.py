@@ -28,6 +28,7 @@ from typing import NamedTuple
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from tools.tests.test_task_references import tracked_texts
 
 HERE = "tools/tests/test_source_scans.py"
@@ -173,6 +174,7 @@ class SourceScanTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads()
 class SourceScanCaseTests(SimpleTestCase):
     """Each scan finds its form in every way a tool writes it, and passes the right one."""
 

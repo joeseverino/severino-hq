@@ -83,7 +83,7 @@ class ObservingConnectionTests(TestCase):
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
         self.assertContains(response, "cannot change it")
-        self.assertNotContains(response, "Manage this domain")
+        self.assertNotContains(response, "Manage domain")
 
     def test_no_connection_at_all_adopts_nothing(self):
         ProviderConnection.objects.all().delete()

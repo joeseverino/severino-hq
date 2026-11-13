@@ -75,6 +75,16 @@ class EstateTests(TestCase):
         self.assertEqual(items["github-alerts:example/alpha"].title, "1 serious alert in alpha")
         self.assertEqual(items["github-artifact:example/alpha:alpha-admission-abc"].status, "attention")
 
+    def test_an_admission_uploaded_by_two_runs_lapses_with_the_newer(self):
+        # Every admission run uploads under the same name.
+        in_days = [(timezone.now() + timedelta(days=days, hours=1)).isoformat() for days in (2, 6)]
+        store(artifacts=[{"name": "admission-example.alpha", "expires_at": when} for when in in_days])
+
+        (item,) = attention()
+
+        self.assertEqual(item.key, "github-artifact:example/alpha:admission-example.alpha")
+        self.assertEqual(item.value, "6")
+
     def test_a_quiet_repository_asks_for_nothing(self):
         store(checks={"state": "success"}, alerts={"code_scanning": {"low": 2}})
 
@@ -395,17 +405,17 @@ class WorkflowRunTests(SimpleTestCase):
             }
         )
 
-        self.assertEqual((run.state, run.tone), ("Timed out", "serious"))
-        self.assertTrue(run.tip.startswith("Timed out\nmain\xa0· abcdef1\xa0· "))
-        self.assertTrue(run.said.startswith("timed out, main, "))
+        self.assertEqual((run.title, run.badge, run.status), ("CI", "Timed out", "serious"))
+        self.assertTrue(run.external)
+        self.assertTrue(run.meta.startswith("main\xa0· abcdef1\xa0· "))
 
     def test_a_run_still_going_asks_for_attention(self):
         run = workflow_run({"name": "CI", "status": "in_progress"})
 
-        self.assertEqual((run.state, run.tone, run.tip), ("In progress", "attention", "In progress"))
+        self.assertEqual((run.badge, run.status, run.meta), ("In progress", "attention", ""))
 
-    def test_a_finished_run_with_no_verdict_has_no_tone(self):
-        self.assertEqual(workflow_run({"status": "completed", "conclusion": "skipped"}).tone, "")
+    def test_a_finished_run_with_no_verdict_is_neutral(self):
+        self.assertEqual(workflow_run({"status": "completed", "conclusion": "skipped"}).status, "neutral")
 
     def test_a_run_s_address_is_a_web_address_or_nothing(self):
         self.assertEqual(workflow_run({"url": "javascript:alert(1)", "conclusion": "success"}).url, "")

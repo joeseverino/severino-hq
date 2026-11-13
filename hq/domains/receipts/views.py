@@ -28,7 +28,7 @@ from django.views.generic import (
 from hq.domains.expenses.models import Expense
 from hq.platform.application.capabilities import capability_words
 from hq.platform.application.deletion import DeleteCommand
-from hq.platform.application.labels import dotted, dotted_html
+from hq.platform.application.labels import dotted, dotted_html, human_bytes
 from hq.platform.application.moments import when
 from hq.platform.application.money import money
 from hq.platform.application.pages import PageAction, PageMixin
@@ -48,6 +48,7 @@ from .models import Receipt
 from .validation import (
     ALLOWED_RECEIPT_CONTENT_TYPES,
     INLINE_SAFE_CONTENT_TYPES,
+    PICTURE_CONTENT_TYPES,
     is_new_upload,
 )
 
@@ -103,6 +104,10 @@ class ReceiptDetailView(PageMixin, DetailView):
     template_name = "receipts/receipt_detail.html"
     context_object_name = "receipt"
 
+    @cached_property
+    def stored(self) -> Path | None:
+        return stored_file(self.object)
+
     @override
     def get_page_title(self):
         return self.object.label
@@ -125,18 +130,30 @@ class ReceiptDetailView(PageMixin, DetailView):
                 )
             )
         actions += [
-            PageAction("Download file", reverse("receipts:file", args=[receipt.pk])),
+            *([PageAction("Download file", reverse("receipts:file", args=[receipt.pk]))] if self.stored else []),
             PageAction(capability_words("receipt.update"), reverse("receipts:edit", args=[receipt.pk])),
             PageAction("Delete", reverse("receipts:delete", args=[receipt.pk]), danger=True),
         ]
         return tuple(actions)
+
+    @override
+    def get_context_data(self, **kwargs):
+        receipt = self.object
+        stored = self.stored is not None
+        return super().get_context_data(
+            **kwargs,
+            file_stored=stored,
+            file_missing=bool(receipt.file) and not stored,
+            file_picture=stored and served_type(receipt) in PICTURE_CONTENT_TYPES,
+            file_line=dotted(receipt.file_type, human_bytes(receipt.size_bytes) if receipt.size_bytes else ""),
+        )
 
 
 class ReceiptMatchView(ReceiptPage, TemplateView):
     """Suggest potential Expense links for an unlinked receipt."""
 
     template_name = "receipts/receipt_match.html"
-    page_title = "Link receipt to expense"
+    page_title = "Link receipt"
 
     @cached_property
     def receipt(self):
@@ -162,12 +179,11 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
     @override
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        receipt = self.receipt
+        receipt = ctx["receipt"] = self.receipt
 
         # Only suggest if it's currently unlinked.
         if receipt.related_expense or receipt.related_asset:
             ctx["already_linked"] = True
-            ctx["receipt"] = receipt
             return ctx
 
         # With no match, a new expense starts from what the receipt says.
@@ -185,9 +201,24 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         if not matches and receipt.vendor:
             matches = list(potential_expenses.filter(vendor__icontains=receipt.vendor))
 
+        # Each match with its one control, which links it to this receipt.
         ctx.update(
-            receipt=receipt,
-            matches=matches[:10],
+            matches=[
+                (
+                    expense,
+                    (
+                        PageAction(
+                            "Link",
+                            self.request.path,
+                            method="post",
+                            primary=True,
+                            field="expense_id",
+                            value=str(expense.pk),
+                        ),
+                    ),
+                )
+                for expense in matches[:10]
+            ],
         )
         return ctx
 
@@ -210,18 +241,22 @@ class ReceiptMatchView(ReceiptPage, TemplateView):
         return redirect(receipt.get_absolute_url())
 
 
+# The fields its form page draws beyond the form's own loop.
+FORM_PAGE = {"form_fields": "receipts/_receipt_fields.html"}
+
+
 class ReceiptFormPage(CommandFormPage, ReceiptPage):
     """A receipt's form, said as the upload command's page says it."""
 
     creates = UPLOAD
     listed_route = "receipts:list"
+    extra_context = FORM_PAGE
 
 
 class ReceiptCreateView(ReceiptFormPage, CreateView):
     page_title = "New receipt"
     model = Receipt
     form_class = ReceiptUploadForm
-    template_name = "receipts/receipt_form.html"
 
     @override
     def get_initial(self):
@@ -249,7 +284,6 @@ class ReceiptUpdateView(ReceiptFormPage, UpdateView):
     page_title = "Edit receipt"
     model = Receipt
     form_class = ReceiptUploadForm
-    template_name = "receipts/receipt_form.html"
 
     @override
     def form_valid(self, form):
@@ -287,19 +321,48 @@ class ReceiptDeleteView(ReceiptPage, DeleteView):
         return redirect(self.success_url)
 
 
+def stored_file(receipt: Receipt) -> Path | None:
+    """The receipt's file on this host's disk, or None when it has none, is
+    kept where HQ cannot open it, or is missing."""
+
+    if not receipt.file:
+        return None
+    try:
+        path = Path(receipt.file.path)
+    except ValueError, NotImplementedError:
+        return None
+    return path if path.is_file() else None
+
+
+def served_type(receipt: Receipt) -> str:
+    """The type the file goes out as. Never guessed from the filename, which
+    the uploader chooses: the stored type, only if it is one this app agreed
+    to accept; anything else, including a blank left by an older upload, is
+    an opaque byte stream."""
+
+    stored = (receipt.content_type or "").strip().lower()
+    return stored if stored in ALLOWED_RECEIPT_CONTENT_TYPES else "application/octet-stream"
+
+
+def _file_response(receipt: Receipt, path: Path, content_type: str, *, inline: bool) -> FileResponse:
+    response = FileResponse(
+        path.open("rb"),
+        content_type=content_type,
+        as_attachment=not inline,
+        filename=receipt.original_filename or path.name,
+    )
+    response["X-Content-Type-Options"] = "nosniff"
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
 class ReceiptFileView(View):
     """Auth-protected download of a receipt's underlying file."""
 
     def get(self, _request, pk: int):
         receipt = get_object_or_404(Receipt, pk=pk)
-        if not receipt.file:
-            raise Http404("This receipt has no file.")
-        try:
-            path = Path(receipt.file.path)
-        except (ValueError, NotImplementedError) as exc:
-            raise Http404("This receipt's file cannot be opened from here.") from exc
-        if not path.is_file():
-            raise Http404("This receipt's file is missing.")
+        if (path := stored_file(receipt)) is None:
+            raise Http404("This receipt has no file HQ can open.")
 
         record_event(
             action=AuditLog.Action.VIEWED,
@@ -308,22 +371,25 @@ class ReceiptFileView(View):
             message=f"Receipt file viewed: {receipt.original_filename}",
         )
 
-        # Never guessed from the filename, which the uploader chooses. The
-        # stored type is used only if it is one this app agreed to accept;
-        # anything else, including a blank left by an older upload, is served
-        # as an opaque byte stream.
-        stored = (receipt.content_type or "").strip().lower()
-        allowed = stored in ALLOWED_RECEIPT_CONTENT_TYPES
-        content_type = stored if allowed else "application/octet-stream"
-        response = FileResponse(
-            path.open("rb"),
-            content_type=content_type,
-            # Rendered in place only for the formats meant to be looked at.
-            # Downloading the rest costs a click and removes the question of
-            # what a browser might decide to do with it.
-            as_attachment=content_type not in INLINE_SAFE_CONTENT_TYPES,
-            filename=receipt.original_filename or path.name,
-        )
-        response["X-Content-Type-Options"] = "nosniff"
-        response["Cache-Control"] = "private, no-store"
-        return response
+        content_type = served_type(receipt)
+        # Rendered in place only for the formats meant to be looked at.
+        # Downloading the rest costs a click and removes the question of what
+        # a browser might decide to do with it.
+        return _file_response(receipt, path, content_type, inline=content_type in INLINE_SAFE_CONTENT_TYPES)
+
+
+class ReceiptPictureView(View):
+    """The picture a receipt's page draws of it, for a file that is an image
+    an <img> shows; anything else is not found here.
+
+    Not audited: the browser asks for it on every view of the page, which is
+    the read, and HQ records no read of a record's page. Taking the file away
+    is the download, which is recorded.
+    """
+
+    def get(self, _request, pk: int):
+        receipt = get_object_or_404(Receipt, pk=pk)
+        content_type = served_type(receipt)
+        if content_type not in PICTURE_CONTENT_TYPES or (path := stored_file(receipt)) is None:
+            raise Http404("This receipt has no picture to show.")
+        return _file_response(receipt, path, content_type, inline=True)

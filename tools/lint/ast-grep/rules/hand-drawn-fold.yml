@@ -1,0 +1,54 @@
+# A disclosure is the section part folded, so every fold on every page opens,
+# closes, keeps its state and heads itself alike. One rule for the host and its
+# extensions, like every hand-drawn-* rule: the plugin check
+# (tools/pipeline/check-plugin.sh) runs it over an extension's src/. A fold
+# that is a part itself, or one still to move, is marked on the line above
+# it with an ast-grep-ignore comment and why (sgconfig.yml says how).
+# The fix moves a bare fold whose summary is plain words; any other is moved
+# by hand.
+id: hand-drawn-fold
+language: html
+severity: error
+message: A fold drawn by hand, where the section part draws it.
+note: Write {% section "Heading" fold=True %}body{% endsection %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  pattern: $FOLD
+  has:
+    kind: start_tag
+    has:
+      kind: tag_name
+      regex: ^details$
+rewriters:
+  - id: closed
+    rule:
+      pattern: <details><summary>$HEAD</summary>$$$BODY</details>
+    constraints:
+      HEAD:
+        kind: text
+        not:
+          regex: '[{}"]'
+    fix: |-
+      {% section "$HEAD" fold=True %}
+        $$$BODY
+      {% endsection %}
+  - id: opened
+    rule:
+      pattern: <details open><summary>$HEAD</summary>$$$BODY</details>
+    constraints:
+      HEAD:
+        kind: text
+        not:
+          regex: '[{}"]'
+    fix: |-
+      {% section "$HEAD" fold=True open=True %}
+        $$$BODY
+      {% endsection %}
+transform:
+  MOVED:
+    rewrite:
+      rewriters: [closed, opened]
+      source: $FOLD
+fix: $MOVED

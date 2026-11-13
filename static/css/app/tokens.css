@@ -172,7 +172,6 @@
   --space-16: 32px;
   --space-20: 40px;
   --space-24: 48px;
-  --space-32: 64px;
   --space-40: 80px;
 
   /* Type scale. These are the steps; a size that is not one of them is drift,
@@ -226,7 +225,7 @@
      wash have no large-surface use yet; add one when they do. */
   --tone-positive-wash: light-dark(#e8f5ec, #14261a);
   --tone-caution-wash: light-dark(#fbf1d6, #272110);
-  --tone-critical-wash: light-dark(#fbeaea, #2d1818);
+  --tone-critical-wash: light-dark(#fbeaea, #331a1a);
   --tone-info-wash: light-dark(#f4f7fb, #172030);
 
   /* The third fill, for marks that carry the strong ink rather than the muted
@@ -281,6 +280,9 @@
   /* Every square control in the header bar (the collapsed search button and
      the sections toggle), sized once so the two cannot drift apart. */
   --control-size: 34px;
+  /* A compact control's height (.btn.compact, .icon-link), which a row of a table takes
+     out of its padding so a row holding one is as tall as a row of words. */
+  --control-compact: 30px;
   /* The least a control is hit through, either way (WCAG 2.5.8): a hit area
      and a line of links one above another are sized from it. The browser
      gate holds it to the criterion's 24px. */
@@ -313,11 +315,7 @@
   /* The page uses the window: content runs to the gutters up to this, and only
      a very wide monitor sees margins. */
   --content-max: 1600px;
-  /* A paragraph's measure, whatever the column: past about 80 characters a
-     line is hard to track back to the start of the next. */
-  --measure: 80ch;
   --font-h1: clamp(19px, 0.55vw + 17.2px, 22px);
-  --font-h2: clamp(12px, 0.18vw + 11.4px, 13px);
   /* Two spacing steps, and only two. `--layout-gap` separates siblings inside a
      grid; `--stack-gap` separates stacked page sections. */
   --layout-gap: var(--space-8);

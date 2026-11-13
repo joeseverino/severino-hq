@@ -45,6 +45,10 @@ class Capability(StrEnum):
     # Hands HQ a receipt's file. Held at the operator's own interfaces as a
     # certificate is: a file arrives through a person, never a token.
     UPLOAD_RECEIPT = "upload_receipt"
+    # Makes a scanned commit the playbooks HQ runs, or sets it aside. Held at
+    # the operator's own interfaces: an agent may refresh, and a person decides
+    # what of the repository HQ runs.
+    ADOPT_PLAYBOOKS = "adopt_playbooks"
     # A person's own decisions, held only in the browser (``HELD_ONLY_AT``): no
     # credential approves what a credential asked for, or pauses or grants agents.
     DECIDE_APPROVALS = "decide_approvals"
@@ -75,6 +79,9 @@ CLI_ACTOR = "local-operator"
 # The agent doors: the MCP server and the machine API.
 MCP_INTERFACE = "mcp"
 API_INTERFACE = "api"
+# The URL namespace the machine API's routes resolve under, which tells a
+# request through that door from one through the web.
+API_NAMESPACE = "hq_api"
 # What the MCP mount names each request, until a tool binds an operation of its own.
 MCP_OPERATION = "mcp"
 # Work HQ runs from its job queue, attributed to whoever started it.
@@ -124,13 +131,15 @@ AGENT_SURFACES = frozenset({MCP_INTERFACE, API_INTERFACE})
 
 # Capabilities held only at these interfaces, whatever a grant says: the two
 # that would let an agent lift its own limits, HQ's own back-channel logout,
-# and the uploads, whose bytes this keeps out of a hold, the audit log and an
-# answer. An agent's token that names one is refused it in
-# ``Principal.require``, the first thing the capability runner asks, so
-# nothing it sends is held for approval, stored or logged.
+# the uploads, whose bytes this keeps out of a hold, the audit log and an
+# answer, and adopting playbooks, which decides what code HQ runs. An
+# agent's token that names one is refused it in ``Principal.require``, the
+# first thing the capability runner asks, so nothing it sends is held for
+# approval, stored or logged.
 HELD_ONLY_AT: dict[str, frozenset[str]] = {
     Capability.UPLOAD_CERTIFICATE: OPERATOR_INTERFACES,
     Capability.UPLOAD_RECEIPT: OPERATOR_INTERFACES,
+    Capability.ADOPT_PLAYBOOKS: OPERATOR_INTERFACES,
     Capability.DECIDE_APPROVALS: INTERACTIVE_INTERFACES,
     Capability.GOVERN_AGENTS: INTERACTIVE_INTERFACES,
     Capability.END_SESSIONS: frozenset({INTERNAL_INTERFACE}),
@@ -266,8 +275,8 @@ class Principal:
         # Asked first, since no grant or new sign-in gives a machine a person.
         if name in NEEDS_A_PERSON and not has_a_person(self):
             raise AuthorizationError(
-                f"{name!r} keeps something of a person's, and a {self.interface} principal {self.actor!r} "
-                "is nobody's: a machine's token has no person behind it. Sign the agent in through a person."
+                f"{name!r} needs a signed-in account, and the {self.interface} principal {self.actor!r} "
+                "is a machine token with none. Sign the agent in through a person's account."
             )
         # A Capability is a StrEnum, equal to and hashed as its value, so the
         # held set answers for a name as it stands.
@@ -358,12 +367,11 @@ def person(principal: Principal) -> AbstractBaseUser:
 
     if not has_a_person(principal):
         raise AuthorizationError(
-            f"A {principal.interface} principal is nobody's, so it keeps nothing of a person's: "
-            "a machine's token has no person behind it."
+            f"This needs a signed-in account, and a {principal.interface} principal is a machine token with none."
         )
     found = person_of(principal)
     if found is None:
-        raise RecordNotFound("That person was not found.")
+        raise RecordNotFound("No HQ account matches this sign-in.")
     return found
 
 
@@ -474,8 +482,8 @@ def _held_by_person(person_key: str) -> frozenset[Capability | str]:
     held = roles.held_by(person_key)
     if held is None:
         raise AuthorizationError(
-            "The person who signed this token in holds no role in HQ, so it can act for nobody. "
-            "They sign in to HQ once, as a member of a group HQ gives a role."
+            "The account that signed this token in has no role in HQ. "
+            "Sign in to HQ once with it, as a member of a group HQ gives a role."
         )
     return held
 

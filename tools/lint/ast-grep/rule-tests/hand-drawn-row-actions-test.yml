@@ -1,0 +1,11 @@
+id: hand-drawn-row-actions
+valid:
+  - '<tr><td>{% row_actions actions %}</td></tr>'
+  - '<tr><td>{% post_button "Move up" url css="icon-link" %}</td></tr>'
+  - '<tr><td><a class="subtle-link" href="/a/">A</a></td></tr>'
+  - '<tr><td><a class="btn-like" href="/a/">A</a></td></tr>'
+invalid:
+  - '<tr><td>{% post_button "A" "/a/" %}</td></tr>'
+  - '<tr><td class="row-actions">{% if a %}<a class="btn" href="/">B</a>{% endif %}</td></tr>'
+  - '<tr><td>{% post_button "A" "/a/" css="btn danger" %}</td></tr>'
+  - '<tr><td>{% include "x.html" with class="ghost btn" %}</td></tr>'

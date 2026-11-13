@@ -1,0 +1,74 @@
+id: hand-drawn-row-actions
+snapshots:
+  "<tr><td class=\"row-actions\">{% if a %}<a class=\"btn\" href=\"/\">B</a>{% endif %}</td></tr>":
+    labels:
+    - source: <td class="row-actions">{% if a %}<a class="btn" href="/">B</a>{% endif %}</td>
+      style: primary
+      start: 4
+      end: 83
+    - source: td
+      style: secondary
+      start: 5
+      end: 7
+    - source: <td class="row-actions">
+      style: secondary
+      start: 4
+      end: 28
+    - source: class="btn"
+      style: secondary
+      start: 41
+      end: 52
+  "<tr><td>{% include \"x.html\" with class=\"ghost btn\" %}</td></tr>":
+    labels:
+    - source: <td>{% include "x.html" with class="ghost btn" %}</td>
+      style: primary
+      start: 4
+      end: 58
+    - source: td
+      style: secondary
+      start: 5
+      end: 7
+    - source: <td>
+      style: secondary
+      start: 4
+      end: 8
+    - source: "{% include \"x.html\" with class=\"ghost btn\" %}"
+      style: secondary
+      start: 8
+      end: 53
+  "<tr><td>{% post_button \"A\" \"/a/\" %}</td></tr>":
+    labels:
+    - source: <td>{% post_button "A" "/a/" %}</td>
+      style: primary
+      start: 4
+      end: 40
+    - source: td
+      style: secondary
+      start: 5
+      end: 7
+    - source: <td>
+      style: secondary
+      start: 4
+      end: 8
+    - source: "{% post_button \"A\" \"/a/\" %}"
+      style: secondary
+      start: 8
+      end: 35
+  "<tr><td>{% post_button \"A\" \"/a/\" css=\"btn danger\" %}</td></tr>":
+    labels:
+    - source: <td>{% post_button "A" "/a/" css="btn danger" %}</td>
+      style: primary
+      start: 4
+      end: 57
+    - source: td
+      style: secondary
+      start: 5
+      end: 7
+    - source: <td>
+      style: secondary
+      start: 4
+      end: 8
+    - source: "{% post_button \"A\" \"/a/\" css=\"btn danger\" %}"
+      style: secondary
+      start: 8
+      end: 52

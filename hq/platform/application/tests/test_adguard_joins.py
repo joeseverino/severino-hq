@@ -8,6 +8,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.observations.adguard import CLIENT_KIND, DNS_KIND, QUERY_KIND
+from hq_sdk.testing import plain
 
 from ..facts import Subject, inventory_about
 from ..findings import derive_findings
@@ -144,7 +145,7 @@ class AdGuardJoinTests(TestCase):
 
         page = self.client.get(reverse("control_plane:service", kwargs={"hostname": "app.example.com"}))
 
-        self.assertContains(page, "12 lookups from 1 device in 24 hours: laptop")
+        self.assertIn("12 lookups from 1 device in 24 hours: laptop", plain(page.content))
 
     def test_posture_and_usage_raise_their_findings(self):
         found = derive_findings(derive_topology(principal=READ), principal=READ)

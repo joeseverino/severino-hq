@@ -2,6 +2,8 @@ from django.template import engines
 from django.test import SimpleTestCase, tag
 from django.utils.safestring import mark_safe
 
+from hq.platform.application.tests.reads import reads
+
 from ..labels import dotted, dotted_html, lower_first, plural
 from .markup import elements, links, text
 
@@ -66,6 +68,7 @@ class DottedTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/*.py")
 class LowerFirstSourceTests(SimpleTestCase):
     """One definition of lower_first in the source."""
 
@@ -74,11 +77,13 @@ class LowerFirstSourceTests(SimpleTestCase):
 
         from pathlib import Path
 
-        root = Path(__file__).resolve().parents[4]
-        copies = [
-            str(path.relative_to(root))
-            for folder in ("application", "control_plane", "core")
-            for path in (root / folder).rglob("*.py")
-            if not path.name.startswith("test") and "[:1].lower() + " in path.read_text() and path.name != "labels.py"
+        hq = Path(__file__).resolve().parents[3]
+        sources = [
+            path
+            for path in hq.rglob("*.py")
+            if "tests" not in path.parts and not path.name.startswith("test") and path.name != "labels.py"
         ]
-        self.assertEqual(copies, [])
+        self.assertTrue(sources)
+        copies = [str(path.relative_to(hq)) for path in sources if "[:1].lower()" in path.read_text()]
+        # openapi.py camel-cases an identifier, which is no label.
+        self.assertEqual(copies, ["platform/api/openapi.py"])

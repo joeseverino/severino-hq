@@ -120,6 +120,25 @@ def sentences(registrar: str) -> None:
     # The same state as its words in its tone, with no pill around them.
     assert_type(ui.status_pill("+3 bpm", tone="good", pill=False), SafeString)
     ui.status_pill("+3 bpm", pill="no")  # type: ignore[arg-type]
+    # A standing state, its words after a steady dot in its tone.
+    assert_type(ui.status_pill("Allowed", tone="good", dot=True), SafeString)
+    ui.status_pill("Allowed", dot="yes")  # type: ignore[arg-type]
+    # A heading's own words after the dot, in the ink around them.
+    assert_type(ui.status_pill("Tailnet", tone="good", dot=True, ink="context"), SafeString)
+    ui.status_pill("Tailnet", dot=True, ink="page")  # type: ignore[arg-type]
+    # A cell's state led by its mark, in its tone.
+    assert_type(ui.status_pill("1 serious", tone="serious", pill=False, icon="shield"), SafeString)
+    ui.status_pill("1 serious", pill=False, icon=True)  # type: ignore[arg-type]
+    assert_type(ui.status_pill("django", chip=True), SafeString)
+    ui.status_pill("django", chip="yes")  # type: ignore[arg-type]
+    assert_type(ui.Kpi("Net worth", "$1.00", "+$1.00", tone="good", detail_url="/x/").holds_links, bool)
+    ui.ListRow("Group", actions=("Up",))  # type: ignore[arg-type]
+    # A search hit's snippet is runs of the record's text, each with whether it matched.
+    ui.ListRow("Backup host", snippet=(("nightly ", False), ("backup", True)))
+    ui.ListRow("Backup host", snippet="nightly backup")  # type: ignore[arg-type]
+    # A place's chips are words, one each.
+    ui.ListRow("Backup host", url="/x/", chips=("Running",))
+    ui.ListRow("Backup host", chips="Running")  # type: ignore[arg-type]
     assert_type(validation.sentence_closes("src"), list[str])
 
 
@@ -241,6 +260,15 @@ def catalogs(principal: capabilities.Principal) -> None:
     connections.describe_connections(principal="example")  # type: ignore[arg-type]
 
 
+def a_connection() -> None:
+    # A connection says what kind of credential it holds, a keyless one included.
+    keyless = connections.ConnectionInstance("example", "Example", "example", "good", "Read", credential_model="none")
+    assert_type(keyless.credential_model, str)
+    assert_type(keyless.keyless, bool)
+
+    connections.ConnectionInstance("example", "Example", "example", "good", "Read")  # type: ignore[call-arg]
+
+
 def looking_up(progress: jobs.Progress, *, subject: str, principal: capabilities.Principal) -> dict[str, Any]:
     return {}
 
@@ -301,10 +329,32 @@ def a_command_that_starts_somewhere() -> None:
         "example.note", "Write a note.", "local_write", "example.write", Noting, noting, reached_from="example:notes"
     )
     assert_type(started.reached_from, str)
+    # A command whose records are no resource of its own names the page it belongs to.
+    homed = capabilities.CapabilitySpec(
+        "example.sweep", "Sweep notes.", "local_write", "example.write", Noting, noting, home="example:notes"
+    )
+    assert_type(homed.home, str)
     assert_type(capabilities.ON_ITS_PAGE, str)
     # A switch whose state no record holds declares where it stands.
     capabilities.CapabilitySpec(
         "example.quiet", "Quiet notes.", "local_write", "example.write", Noting, noting, state=lambda: False
+    )
+    # What its page says of it beside its form, read as the page is drawn,
+    # given its reader.
+    about = capabilities.CommandAbout("Notes", (capabilities.CommandFact("Kept for", "A year", ("Then archived.",)),))
+    described = capabilities.CapabilitySpec(
+        "example.tidy", "Tidy notes.", "local_write", "example.write", Noting, noting, about=lambda _principal: about
+    )
+    assert_type(described.about, Callable[[capabilities.Principal], capabilities.CommandAbout] | None)
+    assert_type(about.facts[0].detail, tuple[str, ...])
+    capabilities.CapabilitySpec(
+        "example.tidy",
+        "Tidy notes.",
+        "local_write",
+        "example.write",
+        Noting,
+        noting,
+        about=lambda _principal: "Notes",  # type: ignore[arg-type, return-value]
     )
     capabilities.CapabilitySpec(
         "example.pin",
@@ -342,6 +392,12 @@ def a_page() -> None:
     assert_type(pages.PageAction("Open", "/example/", primary=True).css, str)
 
     pages.PageAction("Open")  # type: ignore[call-arg]
+    # A POST action names the field its value is sent as, for a row's actions.
+    assert_type(pages.PageAction("Mark read", "/example/1/", method="post", value="read", field="status").field, str)
+    pages.PageAction("Mark read", "/example/1/", field=1)  # type: ignore[arg-type]
+    # A POST action may send more than its button's field: what it acts on.
+    pages.PageAction("Block", "/example/block/", method="post", field="blocked", value="1", fields={"client_id": "a"})
+    pages.PageAction("Block", "/example/block/", method="post", fields=["client_id"])  # type: ignore[arg-type]
     pages.page_context("Example", actions=["Open"])  # type: ignore[list-item]
     assert_type(pages.page_context("Example", reads=("example.things",)), dict[str, pages.Page])
     pages.page_context("Example", reads=1)  # type: ignore[arg-type]
@@ -389,6 +445,24 @@ class Things(tables.TableListMixin, pages.PageMixin):
     table_default_sort = "name"
     # An identifier beside a wide prose column takes what it leaves.
     table_room = "shared"
+
+
+class Projections(tables.TableListMixin):
+    table_columns = (tables.TableColumn("Name", kind="identifier"),)
+    notes: models.QuerySet[Note]
+
+    @override
+    def get_table_rows(self, query: tables.TableQuery) -> tables.Projected:
+        rows = self.notes.filter(about_name__in=query.chosen("name")).values_list("pk", flat=True)
+        return tables.Projected(rows, lambda page: [str(pk) for pk in page])
+
+
+def a_projected_list(view: Projections, query: tables.TableQuery) -> None:
+    assert_type(view.get_table_rows(query), tables.Projected)
+    assert_type(query.chosen("state"), tuple[str, ...])
+    assert_type(query.search, str)
+    assert_type(view.get_table_rows(query)[0:40], list[Any])
+    tables.Projected([], lambda page: page)  # type: ignore[arg-type]
 
 
 class Refreshed(pages.PageMixin):

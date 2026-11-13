@@ -15,6 +15,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase as DatabaseTestCase, tag
 from django.utils import timezone
 
+from ..card_items import Insight, Kpi
 from ..domains import domain_navigation
 from ..pages import page_context
 from ..plugin_testing import importable
@@ -32,7 +33,7 @@ from ..plugins import (
     plugin_capabilities,
     plugin_health,
 )
-from ..ui import Insight, Kpi, PageNavigation, PageSection
+from ..ui import PageNavigation, PageSection
 from .markup import hrefs, text, with_class
 
 # What the coupling scan walks past. Generated trees, virtualenvs and vendored
@@ -163,25 +164,17 @@ class PluginContractTests(TestCase):
             self.assertEqual(installed_plugins(), ())
 
     def test_the_host_source_never_names_an_installed_extension(self):
-        """The host must not know which extensions exist.
+        """The host must not know which extensions exist, even by a mention (a
+        docstring, a fixture, a default), since that is the first dependency.
+        Imports are `hq_sdk.validation`'s half; this is the other.
 
-        This proves it does not. Imports are checked by `hq_sdk.validation`;
-        this checks the other half. A host that merely *mentions* an extension
-        (in a docstring, a comment, a fixture, a default) has begun to depend on
-        it, and the properties this architecture exists for start to go:
-        install an extension without touching the host, run the host with none,
-        release the two apart.
-
-        The names are taken from the runtime composition rather than written
-        down here, since a list of them in the host would itself be the
-        coupling being tested for. So this is quiet on a checkout with no
-        extensions and speaks in the composed image, where the real set exists
-        and where `compose.yml` runs the suite.
-
-        The tree is walked rather than asked of git: neither `.git` nor git
-        itself exists in the runtime image, which is where this has to run.
-        Walking also asks about what is installed, which is the better
-        question.
+        The names come from the runtime composition, since a list of them here
+        would be the coupling itself, so this speaks only where a set is
+        composed. The tree is walked, never asked of git, which the image
+        lacks. The composed suite hands it a copy of the whole checkout
+        (`HQ_CHECKOUT_COPY`), since the worker, its procedure fixtures, the
+        controller and the docs are host source the image leaves out; the
+        image's own run reads what it holds.
         """
 
         forbidden = _installed_extension_names()
@@ -193,7 +186,7 @@ class PluginContractTests(TestCase):
         needle = re.compile("|".join(re.escape(word) for word in sorted(forbidden)), re.IGNORECASE)
         kind_of = {word.lower(): kind for word, kind in forbidden.items()}
 
-        root = Path(__file__).resolve().parents[4]
+        root = Path(os.environ.get("HQ_CHECKOUT_COPY") or Path(__file__).resolve().parents[4])
         offences: list[str] = []
         for path, body in _host_texts(root):
             found = needle.search(body)
@@ -636,7 +629,7 @@ class AttentionContractTests(TestCase):
             return plugins.plugin_attention_items()
 
     def test_serious_items_sort_ahead_of_attention_across_extensions(self):
-        from hq.platform.application.ui import Insight
+        from hq.platform.application.card_items import Insight
 
         a = self._manifest(id="example.a", name="Aaa")
         b = self._manifest(id="example.b", name="Bbb")
@@ -651,7 +644,7 @@ class AttentionContractTests(TestCase):
         self.assertEqual([e["item"].title for e in gathered], ["B urgent", "A watch"])
 
     def test_healthy_and_neutral_items_are_not_attention(self):
-        from hq.platform.application.ui import Insight
+        from hq.platform.application.card_items import Insight
 
         manifest = self._manifest()
         gathered = self._gather(
@@ -667,7 +660,7 @@ class AttentionContractTests(TestCase):
         self.assertEqual([e["item"].title for e in gathered], ["Broken"])
 
     def test_items_carry_their_source_for_attribution(self):
-        from hq.platform.application.ui import Insight
+        from hq.platform.application.card_items import Insight
 
         gathered = self._gather(
             (self._manifest(),),
@@ -718,9 +711,10 @@ class ComposedPluginTestKitTests(TestCase):
         self.assertEqual(sections["example.alpha"]["url"], "/alpha/")
 
     def test_a_sibling_contributes_a_typed_domain_overview(self):
+        from ..card_items import Kpi
         from ..plugin_testing import sibling
         from ..plugins import plugin_overviews
-        from ..ui import DomainOverview, Kpi
+        from ..ui import DomainOverview
 
         overview = DomainOverview("Current state.", "/alpha/", (Kpi("Open", 3),))
         self.case(siblings=(sibling(overview=overview),))
@@ -755,9 +749,10 @@ class ComposedPluginTestKitTests(TestCase):
         Overviews are a display surface and truncate, so a `serious` item must
         still reach the queue through the domain's attention items.
         """
+        from ..card_items import Kpi
         from ..plugin_testing import sibling
         from ..plugins import plugin_attention_items
-        from ..ui import DomainOverview, Kpi
+        from ..ui import DomainOverview
 
         item = Insight(
             status="serious",

@@ -333,6 +333,7 @@ MISE_TASK_LOCK_TIMEOUT=1s mise -C "${repo}" run -q test hq.platform.core.tests.t
     >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow test run waited for the turn, or failed"; }
 MISE_TASK_LOCK_TIMEOUT=1s mise -C "${repo}" run -q lint:source tools.gate.tests.test_turn.NarrowRunTests \
     >"${work}/light" 2>&1 || { cat "${work}/light" >&2; fail "a narrow source test run waited for the turn, or failed"; }
+one_line "${work}/light" "a narrow source test run, outside the turn,"
 for task in "test hq.platform.core.tests" lint:source; do
     status=0
     # shellcheck disable=SC2086  # the task and its label, as typed

@@ -15,11 +15,13 @@ class ControlPlaneConfig(AppConfig):
         from hq.platform.core.audit import register_audit
 
         from .models import (
+            AdoptedCatalog,
             ApprovalRequest,
             ManagedResource,
             NotManaged,
             OperationRequest,
             ReadRequest,
+            SourceProposal,
         )
 
         register_audit(
@@ -44,6 +46,17 @@ class ControlPlaneConfig(AppConfig):
         register_audit(ApprovalRequest, APPROVAL_AUDIT_LABEL, subject=lambda held: held.resource_key)
         # Who asked for a connection to be read now, and when.
         register_audit(ReadRequest, "Read request", connection=lambda request: request.connection_ref)
+        # What a Refresh found in the automation source, under the source's key.
+        register_audit(SourceProposal, "Playbook scan result", subject=lambda proposal: proposal.operation.resource.key)
+        # Which commit of it became the catalog HQ runs from, and who adopted it.
+        register_audit(AdoptedCatalog, "Adopted playbooks", subject=_source_key)
+
+
+def _source_key(_catalog) -> str:
+    # Imported once an adoption is audited, so the app's start loads no validation library.
+    from hq.platform.application.automation_sources import SOURCE_KEY
+
+    return SOURCE_KEY
 
 
 def _withheld_fields(resource) -> tuple[str, ...]:

@@ -9,7 +9,8 @@ from django.urls import reverse
 from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule
 from hq.platform.core.models import AuditLog
 
-from ..approvals import AUDIT_LABELS, DECLARATIONS, asked, preview
+from ..approval_review import asked, preview
+from ..approvals import AUDIT_LABELS, DECLARATIONS
 from ..attention import _asked_change, waiting_for_approval
 from ..capabilities import capability_registry, execute_capability
 from ..integration_specs import capability_schema

@@ -14,6 +14,7 @@ from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
 from hq.platform.application.security import cli_principal
 
+from ..card_items import Insight
 from ..dashboard import work_queue
 from ..domains import (
     HOST_DOMAINS,
@@ -27,7 +28,6 @@ from ..domains import (
     host_records,
 )
 from ..plugins import PluginIntegration
-from ..ui import Insight
 
 
 def _pretend_extension_attention() -> tuple[Insight, ...]:

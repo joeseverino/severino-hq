@@ -1,0 +1,3 @@
+{% comment %}The import form's fields (docs_index/import.html): the manifest's dropzone, then the rest of the form.{% endcomment %}
+{% include "partials/_dropzone.html" with field=form.manifest_file title="Drop the manifest here" hint="A JSON list of vault documents" %}
+{% for field in form %}{% if field.name != "manifest_file" %}{{ field.as_field_group }}{% endif %}{% endfor %}

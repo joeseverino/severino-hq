@@ -17,7 +17,9 @@ from hq.domains.control_plane.certificate_authorities import authority_name
 from hq.domains.control_plane.dns_lookup import LookupNotFound, LookupUnavailable
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, DOMAIN_KIND
+from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
+from hq_sdk.testing import plain
 
 from ..facts import Subject, readings
 from ..inventory import inventory_state
@@ -263,7 +265,7 @@ class DomainCardTests(TestCase):
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
         for insight in self.zone.insights:
-            self.assertContains(response, escape(insight.value))
+            self.assertIn(escape(insight.value), plain(response.content))
 
 
 class RegistrationFallbackTests(TestCase):
@@ -287,7 +289,7 @@ class RegistrationFallbackTests(TestCase):
         self.assertIn("80 days", card.value)
         self.assertIn("Example Registrar", card.detail)
         self.assertFalse(card.concern)
-        self.assertIn("Domains Read (account)", card.note)
+        self.assertIn(Cloudflare.REGISTRAR_DOMAINS_READ, card.note)
         self.assertIn("Authentication error", card.note_title)
 
     def test_a_registrar_name_ending_in_a_period_ends_the_sentence(self):
@@ -324,7 +326,7 @@ class RegistrationFallbackTests(TestCase):
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
         card = registration(find_zone("example.com"))
-        self.assertIn("Domains Read (account)", card.note)
+        self.assertIn(Cloudflare.REGISTRAR_DOMAINS_READ, card.note)
         self.assertIn(card.note, text(response))
         self.assertTrue(select(response, "title", "Cloudflare refused the request: Forbidden"))
 
@@ -553,7 +555,7 @@ class TopologyEstateTests(TestCase):
         user = get_user_model().objects.create_user("operator", password="x" * 20)
         self.client.force_login(user)
         with offering(self.finance, alone=True):
-            response = self.client.get(reverse("control_plane:topology"), {"all": 1})
+            response = self.client.get(reverse("control_plane:topology"), {"lens": "everything"})
 
         kinds = [group["kind"] for group in response.context["topology_groups"]]
         self.assertLess(kinds.index("machine"), kinds.index("target"))
@@ -607,6 +609,7 @@ class ConnectionSpecFixture:
                     "good",
                     "Healthy",
                     targets=(ConnectionLink("Example checking"),),
+                    credential_model="none",
                 ),
             ),
         )

@@ -4,55 +4,22 @@
 
 /* ----- Derived topology ------------------------------------------------- */
 
-/* A lens is chosen by following a link, so these are the shared chip primitive,
-   whose current choice is drawn from its aria-current. */
-.topology-lens-note { margin: 0 0 var(--space-5); font-size: var(--text-sm); }
-.topology-trace-bar {
-  display: flex; flex-wrap: wrap; gap: var(--space-5) var(--space-8); align-items: center;
-  margin-bottom: var(--space-6); padding: var(--space-6); border: 1px solid var(--accent);
-  border-radius: var(--radius); background: var(--accent-tint);
-}
-.topology-trace-bar > div { display: grid; gap: 1px; margin-right: auto; }
-.topology-trace-controls { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-.topology-trace-controls .scope-chip { background: var(--surface); }
-.topology-hop { display: flex; align-items: center; gap: var(--space-3); }
-
+/* The map (partials/_topology_map.html) and the selected node's details. The
+   details sit beside the lanes where there is room and below them where
+   there is not; never in a lane. */
 .topology-workspace {
+  display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0;
   background: var(--surface-2);
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the canvas clips the drawing it pans, not text */
   overflow: clip;
 }
-.topology-toolbar {
-  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-8);
-  padding: var(--space-5); border-bottom: 1px solid var(--line); background: var(--surface);
-}
-.topology-search { flex: 1 1 240px; }
-.topology-search input { width: 100%; min-height: 36px; }
-.topology-kind-filters {
-  display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6);
-  min-width: 0; max-width: 100%; margin: 0; padding: 0; border: 0;
-}
-.topology-kind-filters label {
-  display: inline-flex; align-items: center; gap: var(--space-2); color: var(--ink-2);
-  font-size: var(--text-xs); white-space: nowrap;
-}
-.topology-kind-filters input { accent-color: var(--accent); }
-/* A control the script shows only when it has something to act on. */
-.topology-toolbar [hidden] { display: none; }
-.topology-hint { margin: 0; padding: var(--space-4) var(--space-6); border-bottom: 1px solid var(--line-2); font-size: var(--text-xs); }
-/* Lanes wrap into rows, so every lane is on screen at any width. The 1px
-   gap between lanes is drawn by each lane's own ring, which leaves the empty
-   cells of a short last row blank. */
-/* The map and the selected node's details. The details sit beside the lanes
-   where there is room and below them where there is not; never in a lane. */
-.topology-stage { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
 /* A viewport query, not a container one: the workspace holds buttons, and
    inside a size container Chrome restyles them once the container is measured
    and runs their transitions from nothing (docs/Design.md). */
 @media (min-width: 1180px) {
-  .topology-stage:has(> .topology-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
+  .topology-workspace:has(> .topology-detail:not([hidden])) { grid-template-columns: minmax(0, 1fr) minmax(320px, 34%); }
   /* Beside a map the page scrolls, the details stay in view. */
-  .topology-stage > .topology-detail:not([hidden]) {
+  .topology-workspace > .topology-detail:not([hidden]) {
     position: sticky; top: var(--site-header-height); align-self: start;
     max-height: calc(100vh - var(--site-header-height)); overflow-y: auto; border-top: 0; border-left: 1px solid var(--line);
   }
@@ -66,15 +33,9 @@
   padding: var(--space-5) var(--space-6); background: var(--surface-2);
   min-width: 0; max-width: 100%;
 }
-.topology-lane { min-width: 0; padding: 0 0 var(--space-6); }
+.topology-lane { min-width: 0; margin-block-end: var(--space-6); }
 .topology-lane:not(:has(.topology-node:not([hidden]))) { display: none; }
-.topology-lane > header {
-  display: grid; break-inside: avoid; break-after: avoid;
-  grid-template-columns: auto 1fr; align-items: center; gap: var(--space-3);
-  padding: var(--space-1) var(--space-1) var(--space-4);
-}
 .topology-node-list > * { break-inside: avoid; }
-.topology-lane h2 { margin: 0; font-size: var(--text-sm); color: var(--muted); }
 .topology-kind-mark { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .topology-kind-controller { background: var(--topology-controller); }
 .topology-kind-connection { background: var(--accent-2); }
@@ -120,72 +81,14 @@
   min-width: 0; padding: var(--space-6); border-top: 1px solid var(--line); background: var(--surface);
 }
 .topology-detail[aria-busy="true"] { opacity: .6; }
-.topology-detail-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-4); }
-.topology-detail-head h2 {
-  margin: 0; font-size: var(--text-md); letter-spacing: normal; color: var(--ink); overflow-wrap: anywhere;
-}
-.topology-detail-head .muted { font-size: var(--text-xs); }
-.topology-node-body { display: grid; gap: var(--space-5); min-width: 0; }
-.topology-node-body p { margin: 0; font-size: var(--text-xs); }
-.topology-node-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.topology-node-actions form { display: inline-flex; }
 /* A name is read whole: it wraps inside the node rather than being cut. */
 .topology-node-title strong > * { display: block; }
 .topology-node-link { color: inherit; text-decoration: none; }
 .topology-node-link:hover, .topology-node-link:focus-visible { color: var(--accent); text-decoration: underline; }
 
-/* Triage reads as a list of questions with answers, not a paragraph: each row
-   is one fact an operator checks, so the term stays scannable when the answer
-   runs long. */
-.topology-facts { display: grid; gap: var(--space-3); margin: 0; }
-.topology-fact { display: grid; gap: 1px; }
-.topology-fact dt { color: var(--muted); font-size: var(--text-xs); }
-.topology-fact dd { margin: 0; font-size: var(--text-xs); color: var(--ink-2); }
-.topology-fact dd .pill { margin-right: var(--space-2); vertical-align: baseline; }
-.topology-field-list { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-1) 0; padding: 0; list-style: none; }
-.topology-field-list code { font-size: var(--text-2xs); }
-
-/* An edge stated from the node standing at one end of it. The arrow and the
-   heading both carry the direction, because a verb alone reads the same in
-   either, and the whole row is the link, so walking the graph is one click
-   per hop. */
-.topology-relation-set { display: grid; gap: var(--space-1); }
-.topology-relation-heading { margin: var(--space-2) 0 0; }
-.topology-relation-list { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-/* One relationship: the link to the other end on its own line, then each
-   value it carries on a line of its own with its source and age. */
-.topology-relation { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); min-width: 0; }
-.topology-relation-values {
-  display: grid; gap: var(--space-2); flex: 1 1 100%; min-width: 0;
-  margin: 0 0 var(--space-2); padding: 0 0 0 var(--space-7); list-style: none; font-size: var(--text-xs);
-}
-.topology-relation-values li { display: grid; gap: 1px; min-width: 0; }
-.topology-relation-value { overflow-wrap: anywhere; }
-.topology-relation-source { flex: 1 1 100%; margin: 0; font-size: var(--text-2xs); overflow-wrap: anywhere; }
-.topology-relation-link {
-  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 var(--space-3);
-  align-items: center; flex: 1 1 auto; min-width: 0; padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line-2); border-radius: var(--radius-sm);
-  background: var(--surface-2); color: var(--ink-2); text-decoration: none;
-  font-size: var(--text-xs); transition: border-color 100ms ease, background 100ms ease;
-}
-.topology-relation-link:hover, .topology-relation-link:focus-visible {
-  border-color: var(--accent); background: var(--accent-tint); color: var(--ink);
-}
-.topology-relation-arrow { grid-area: 1 / 1 / 3 / 2; color: var(--muted); font-size: var(--text-sm); }
-.topology-relation-out .topology-relation-arrow { color: var(--accent-2); }
-.topology-relation-verb {
-  grid-area: 1 / 2 / 2 / 4; font-size: var(--text-3xs); color: var(--muted);
-}
-.topology-relation .pill { flex: 0 0 auto; }
-.btn.compact { min-height: 30px; padding: var(--space-2) var(--space-4); font-size: var(--text-xs); }
 .topology-node:has(> [aria-current]) { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
 .topology-node.is-related { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
 .topology-node[hidden], .topology-lane[hidden] { display: none; }
-/* A fixed reading height, so the ledger is a pane. Scroll chaining is kept:
-   reaching the last edge hands the wheel back to the page. */
-.topology-relations .table-scroll { max-height: 480px; overflow-y: auto; }
-.topology-relations tr.is-related { background: var(--accent-tint); }
 
 
 @media (prefers-reduced-motion: reduce) {
@@ -193,81 +96,7 @@
   .topology-map { scroll-behavior: auto; }
 }
 
-/* ----- Tools ------------------------------------------------------------ */
-
-/* One nav entry holds every tool, so the tabs are the only thing telling an
-   operator what else is in here. They are links with a real href rather than
-   scripted panels: a tool with a result is a URL worth keeping. */
-.tool-tabs { display: flex; gap: var(--space-2); flex-wrap: wrap; margin: 0 0 var(--space-3); }
-.tool-tab {
-  padding: var(--space-3) var(--space-7); border-radius: 8px; font-size: var(--text-sm); font-weight: 550;
-  color: var(--muted); text-decoration: none; border: 1px solid transparent;
-}
-.tool-tab:hover { background: var(--surface-2); color: var(--ink); }
-.tool-tab-current {
-  background: var(--surface-2); color: var(--ink); border-color: var(--line-2);
-}
-.tool-summary { max-width: 68ch; margin: 0 0 var(--space-9); }
-/* Two tools side by side where there is room, stacked where there is not.
-   Neither is primary, so neither takes the wider column. */
-.lookup-grid { display: grid; gap: var(--space-9); grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-.lookup-form { display: flex; gap: var(--space-5); align-items: flex-end; margin: 0 0 var(--space-8); flex-wrap: wrap; }
-.lookup-form .field { flex: 1 1 200px; }
-/* The input and its button share a line, so the spacing that separates stacked
-   fields would knock them out of alignment: `flex-end` lines up margin boxes,
-   so a margin under the field plus one above the actions drops the button
-   below the box it belongs to. The field takes the existing `.compact`
-   modifier; the actions give up their stack margin here. */
-.lookup-form .form-actions { margin-top: 0; }
-.tool-result > :last-child { margin-bottom: 0; }
-
-/* Side-by-side tools have to agree on where their rows are, and left to
-   themselves they do not: each card is its own grid, so a three-line
-   explanation on one side pushes its input below the input on the other and
-   the two forms sit at different heights.
-
-   Subgrid is what makes the bands shared rather than coincidental: intro,
-   form and result line up across every card in the row no matter how the
-   prose wraps, at any width, without anyone measuring text.
-
-   Stacked in one column it holds as well: each card takes the next three
-   rows, which then belong to it alone, so no width has to be asked. */
-@supports (grid-template-rows: subgrid) {
-  .lookup-grid { grid-template-rows: auto auto auto; }
-  /* No result yet in either card: two rows, not a third holding nothing. */
-  .lookup-grid:not(:has(.tool-result)) { grid-template-rows: auto auto; }
-  .lookup-grid:not(:has(.tool-result)) > .card { grid-row: span 2; }
-  .lookup-grid > .card {
-    display: grid; grid-row: span 3; grid-template-rows: subgrid;
-    align-content: start;
-  }
-}
-
-/* ---- Analytics ---------------------------------------------------------- */
-
-/* The window an operator is reading. Links rather than a control, so the
-   choice is in the URL and a reading can be sent to someone. */
-.window-switch { display: flex; flex-wrap: wrap; gap: var(--space-4); margin: 0 0 var(--stack-gap); }
-.chip {
-  display: inline-block; padding: var(--space-2) var(--space-6); border: 1px solid var(--line);
-  border-radius: 999px; font-size: var(--text-sm); color: var(--muted);
-  text-decoration: none; background: var(--bg);
-}
-.chip:hover { color: var(--accent); border-color: var(--accent); }
-.chip[aria-current] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-
-.reading-note { margin: calc(var(--space-3) * -1) 0 var(--stack-gap); font-size: var(--text-sm); }
-
-/* Six breakdowns, each a card. Two columns where there is room and one where
-   there is not: a bar list is unreadable below about 20rem. */
-.breakdown-grid {
-  display: grid; gap: var(--layout-gap); margin: 0 0 var(--stack-gap);
-  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
-  /* Each card as tall as its own list. Stretched to the row, a breakdown with
-     three entries carries the height of one with twelve, and the page reads as
-     mostly empty boxes. */
-  align-items: start;
-}
+/* ---- Share list (partials/_share_list.html) ----------------------------- */
 
 /* A row is label, bar and number in one line, with the bar behind the text
    rather than beside it: a separate bar column costs the label the width it
@@ -292,67 +121,11 @@
 .bar-track::-moz-meter-bar { min-inline-size: 2px; border-radius: 4px; background: var(--bg-tint); }
 .bar-value { position: relative; flex: none; font-feature-settings: "tnum"; font-weight: 650; }
 
-/* Vitals sit under the breakdowns, not above them: they are the check you run
-   after the question you came to ask. Each takes an equal share of the card,
-   so a wide card is filled rather than gathered at its start. */
-.vitals-strip {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
-  gap: var(--space-6) var(--space-16); margin: 0;
-}
-.vital { display: flex; flex-direction: column; gap: var(--space-1); }
-.vital dt { color: var(--muted); font-size: var(--text-xs); }
-.vital dd { margin: 0; display: flex; align-items: baseline; gap: var(--space-4); font-size: var(--text-lg); }
-.vital-rate { font-weight: 650; font-feature-settings: "tnum"; color: var(--attn); }
-/* 75% of samples good is what passing means; the color says which side of it
-   this metric is on rather than making the reader compare two numbers. */
-.vital-rate.is-passing { color: var(--ok); }
-.vital .unit { font-size: .8em; margin-inline-start: 1px; }
-
-/* A held request: who asks, what would happen, the decision. */
-.approval-card { border-left: 3px solid var(--line); }
-.approval-card[data-state="pending"] { border-left-color: var(--warn); }
-.approval-head h2 { margin: 0; font-size: var(--text-xl); font-weight: 500; line-height: 1.4; letter-spacing: 0; color: var(--ink); }
-.approval-head > p { margin: var(--space-2) 0 0; font-size: var(--text-sm); }
-.approval-reason { margin: var(--space-6) 0 0; padding: var(--space-4) var(--space-6); border-left: 2px solid var(--line-strong); color: var(--ink-2); font-size: var(--text-sm); }
-.approval-label { margin: var(--space-10) 0 var(--space-4); font-size: var(--text-sm); font-weight: 600; color: var(--muted); }
-.approval-actions { display: flex; flex-wrap: wrap; gap: var(--space-4); margin-top: var(--space-10); }
-.approval-actions form { margin: 0; }
-
-/* Agents: the state and its one control, each agent with its own block, then every rule in a table. */
-.agent-state { display: grid; gap: var(--space-6); }
-.agent-state-main { display: flex; align-items: center; gap: var(--space-6); }
-.agent-state-main > .btn { margin: 0 0 0 auto; }
-.agent-state-dot { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 16%, transparent); }
-.agent-state[data-paused] .agent-state-dot { background: var(--warn); box-shadow: 0 0 0 4px color-mix(in srgb, var(--warn) 16%, transparent); }
-.agent-state-copy h2 { margin: 0; color: var(--ink); font-size: var(--text-lg); font-weight: 650; letter-spacing: 0; }
-.agent-state-copy p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-sm); }
-.agent-state-facts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-10); margin: 0; padding-top: var(--space-6); border-top: 1px solid var(--line-2); color: var(--muted); font-size: var(--text-sm); }
-/* Each fact that links is a line a target tall (`--target-min`), since they wrap onto lines of their own on a phone. */
-.agent-state-facts a { color: var(--muted); line-height: var(--target-min); }
-.agent-state-facts a:hover { color: var(--ink); }
-.agent-state-facts strong { color: var(--ink); font-variant-numeric: tabular-nums; }
-/* An agent's latest events, under its row: one line each, newest first. */
-.agent-events { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-/* A person's apps take the row as every card on the page does; the one field
-   under them keeps the measure a line of input is read at. */
-.own-devices > .form { max-inline-size: var(--measure); }
-/* What the MCP server tells an agent first: prose in paragraphs, so it keeps the measure. */
-.mcp-instructions { display: grid; gap: var(--space-4); max-inline-size: var(--measure); }
-.mcp-instructions > p { margin: 0; }
-.mcp-endpoint { display: grid; gap: var(--stack-gap); }
-.policy { display: grid; gap: var(--stack-gap); }
-.policy-table .policy-select { width: 100%; max-width: 11rem; }
-.policy-table thead th:first-child { color: var(--ink-2); font-size: var(--text-xs); }
-.policy-table tbody th { font-weight: 500; color: var(--ink); }
 .policy-effect { margin-left: var(--space-3); font-size: var(--text-3xs); font-weight: 600; color: var(--muted-2); }
 .policy-effect.effect-destructive { color: var(--danger); }
 .policy-effect.effect-infrastructure_change { color: var(--warn); }
 .policy-default { color: var(--muted); }
 .policy-unavailable { font-size: var(--text-xs); white-space: nowrap; }
-.policy-select { --chevron-inset: var(--space-4); min-width: 7.5rem; padding-inline-start: var(--space-4); color: var(--muted); font-size: var(--text-xs); }
-.policy-select.rule-allow { color: var(--ok); border-color: currentColor; }
-.policy-select.rule-approve { color: var(--warn); border-color: currentColor; }
-.policy-select.rule-deny { color: var(--danger); border-color: currentColor; }
 /* A long form's closing row: drawn in its place from the first draw, so
    nothing moves when the form changes and its frame ends with a row that
    holds the verb rather than with room kept for one. Once the form has
@@ -380,13 +153,6 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
 /* ── Dashboard ──────────────────────────────────────────────────────
    A header, then rows. Each row is a grid whose cards share one width and one
    height, so the page stays even whichever domains an installation has. */
-.dash-head { --head-room: calc(var(--stack-gap) + var(--space-4)); align-items: flex-end; margin-bottom: var(--head-room); }
-.dash-hello { display: grid; gap: var(--space-2); min-width: 0; }
-.dash-hello h1 { font-size: clamp(20px, .6vw + 16px, 24px); letter-spacing: -0.02em; line-height: 1.1; }
-.dash-date { margin: 0; color: var(--muted); font-size: var(--text-2xs); font-weight: 650; letter-spacing: .08em; text-transform: uppercase; }
-.dash-status { margin: 0; color: var(--muted); font-size: var(--text-md); }
-.dash-status a { color: var(--ink-2); }
-.dash-status strong { color: var(--accent); font-variant-numeric: tabular-nums; }
 /* What a page says while its own readings are being read, and once they are
    in: one quiet line, never a banner. A region that fills itself (a dialog's
    panel) says it at its top, in room held whether or not it says anything,
@@ -397,13 +163,15 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   min-block-size: var(--head-room);
 }
 .ask.ask-quiet[hidden] { display: none; }
+/* The dot's size, which a page's note keeps room for beside its words (cuts.css). */
+.visit-status, .visit-slot { --visit-dot: 6px; }
 .visit-status { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.4; overflow-wrap: anywhere; }
 /* A dot before what it says, in the tone of how the read stands: moving
    while it is read, the way a live reading does (connection.css). A page's
    note stands apart from its ask, so it reads the state off the form it
    names. */
 .visit-status:not(:empty)::before {
-  content: ""; display: inline-block; inline-size: 6px; block-size: 6px;
+  content: ""; display: inline-block; inline-size: var(--visit-dot); block-size: var(--visit-dot);
   margin-inline-end: var(--space-4); border-radius: 50%; vertical-align: .1em;
   background: var(--muted-2);
 }
@@ -424,98 +192,42 @@ form[data-changed] .save-bar::before { content: ""; position: absolute; z-index:
   contain: inline-size; min-block-size: 1lh;
   color: var(--muted); font-size: var(--text-xs); white-space: normal;
 }
-/* A head is one short line, so what one of its controls says takes a line
-   under them only while there is something to say, as a menu's copy does
-   below: the server draws work it finds under way already saying so, and a
-   press is what makes the line, under the reader's own hand. It ends where
-   the controls end, at the page's edge. */
-.page-head .page-actions > .ask > .ask-said { justify-content: flex-end; text-align: end; }
-.page-head .page-actions > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
-/* The title stands on the controls' labels' baseline, so a line under them
-   moves it nothing. */
-.page-head:has(> .page-actions > .ask) { align-items: first baseline; }
 /* A menu is drawn over the page, so its copy of an ask says something only
    once there is something to say, in the menu's own inset. */
 .overflow-menu-panel .ask-said { padding: 0 var(--space-5); }
 .overflow-menu-panel .ask-said span { padding: 0; white-space: normal; }
-.overflow-menu-panel .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
+:is(.page-head .page-actions, .overflow-menu-panel) > .ask > .ask-said:has(.ask-note:empty):has(.ask-elapsed:empty) { display: none; }
 .ask-note { overflow-wrap: anywhere; }
 /* A note says its state's word and its sentence (_ask.html): the sentence
    where the line is the row's, the word alone in a table's cell, whose line is
    as wide as its button, so the row stays one line tall. There the sentence
    is the button's title, and the clock is left to the open row. */
 .ask-word { display: none; }
-.data-table > tbody > tr:not(.row-detail) > td .ask-note > .ask-word { display: inline; }
-.data-table > tbody > tr:not(.row-detail) > td :is(.ask-note > .ask-sentence, .ask-elapsed) { display: none; }
+@container style(--cell: line) {
+  .ask-note > .ask-word { display: inline; }
+  :is(.ask-note > .ask-sentence, .ask-elapsed) { display: none; }
+}
 .ask-note:empty, .ask-elapsed:empty { display: none; }
 /* The word and the sentence again, for a row's open line alone, since
    everywhere else the note says both. */
 .ask-why { display: none; }
-.row-detail .ask-why { display: inline; overflow-wrap: anywhere; }
+@container style(--cell: open) {
+  .ask-why { display: inline; overflow-wrap: anywhere; }
+}
 .ask-elapsed { font-variant-numeric: tabular-nums; }
 .ask[data-ask-state="failed"] .ask-note { color: var(--danger); }
 /* Busy keeps the button focusable, so it is marked rather than disabled. */
 .ask [aria-disabled="true"],
 form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity: .6; }
-/* The dashboard's readings: how this request arrived, whether the controller
-   still is, and what the estate reports. One row of equals: the same mark, the
-   same lead and the same quiet line under it, spaced rather than ruled apart.
-
-   Beside the greeting while every reading fits on one line there; otherwise
-   the strip takes its own line under it, still one row; narrower again, whole
-   rows of two; on the narrowest screen, one to a line. Never three over one,
-   and never a reading left out: counted off the strip itself.
-
-   It is a layer of its own so that a panel's popover opens over the cards
-   below it; a container is otherwise painted beneath what follows it. */
-.dash-head > .dash-hello { flex: 0 1 auto; }
-.dash-readings {
-  --readings: 2;
-  --reading: 11rem;
-  /* Half a row for an even count; an odd one goes from one row to one a line. */
-  --half: calc(50% - var(--space-5));
-  display: grid; align-items: start; justify-content: end;
-  /* Asks for a whole row before it settles beside the greeting. */
-  flex: 1 1 calc(var(--readings) * var(--reading)); min-width: 0;
-  /* Each track is a whole row's share; where that is under a reading's width,
-     half the row; where half is, the whole row. */
-  grid-template-columns: repeat(auto-fit, minmax(max(
-    calc(100% / var(--readings) - var(--space-5)),
-    clamp(0px, (var(--readings) * var(--reading) - 100%) * 999, var(--half)),
-    clamp(0px, (2 * var(--reading) - 100%) * 999, 100%)
-  ), max-content));
-  gap: var(--space-4) var(--space-5);
-}
-.dash-readings:has(.glance-panel:nth-child(1 of .glance-panel)) { --readings: 3; --half: 100%; }
-.dash-readings:has(.glance-panel:nth-child(2 of .glance-panel)) { --readings: 4; --half: calc(50% - var(--space-5)); }
-.dash-readings:has(.glance-panel:nth-child(3 of .glance-panel)) { --readings: 5; --half: 100%; }
-.dash-readings:has(.glance-panel:nth-child(4 of .glance-panel)) { --readings: 6; --half: calc(50% - var(--space-5)); }
-.dash-readings:has(.glance-panel:nth-child(5 of .glance-panel)) { --readings: 7; --half: 100%; }
-.dash-readings:has(.glance-panel:nth-child(6 of .glance-panel)) { --readings: 8; --half: calc(50% - var(--space-5)); }
-.dash-readings :is(.dash-reading, .glance-panel) { min-width: 0; max-width: 100%; }
-/* One shape for all of them, so they line up: the lead on a line of one
-   height, in one size and one color, with the mark beside that line rather
-   than centered on however many lines the reading happens to have (it keeps
-   its own column for the whole reading, so nothing is ever set under it); then
-   the quiet lines, which start level because the leads do. */
-.dash-readings .glance-panel-head { padding-inline: var(--space-3); grid-template-columns: 22px minmax(0, 1fr); }
-.dash-readings .glance-symbol { align-self: start; margin-top: var(--space-1); }
-.dash-readings .glance-panel-head > :not(.glance-symbol) { grid-column: 2; }
-.dash-readings .glance-lead { display: flex; align-items: baseline; gap: var(--space-3); min-height: 26px; color: var(--muted); line-height: 1; }
-.dash-readings .glance-lead :is(strong, .conn-dot) { align-self: center; }
-.dash-readings .glance-lead strong,
-.dash-readings .glance-lead-empty { color: var(--ink); font-size: var(--text-4xl); font-weight: 650; line-height: 1.15; letter-spacing: -.01em; }
-.dash-reading { color: inherit; }
-.dash-reading:hover { color: inherit; text-decoration: none; }
-/* A quiet line longer than its reading takes another, between its parts first,
-   so all of it is read inside the reading and none runs over the one beside it. */
-.dash-readings .glance-caption { flex-wrap: wrap; white-space: normal; }
-.dash-controller.is-silent .glance-caption { color: var(--attn); font-weight: 650; }
-.dash-controller.is-arriving .conn-dot { background: var(--ok); }
-.dash-controller.is-silent .conn-dot { background: var(--attn); }
-.dash-connection-checks { color: var(--muted-2); font-size: var(--text-3xs); white-space: nowrap; }
-.dash-connection-checks.is-attention { color: var(--attn); font-weight: 650; }
-.section-period { margin-left: var(--space-3); color: var(--muted-2); font-weight: 500; letter-spacing: 0; }
+/* A tile strip (partials/_tile_strip.html): every tile in view, as many to
+   a row as the box holds, the rest on the rows under them. A note is said
+   only when it stands out, so it is marked. */
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- small figures read across, tiles of one strip */
+.tile-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.6rem, 1fr)); gap: var(--space-4) 0; margin: 0; padding: 0; list-style: none; }
+/* Tiles start level, so a figure stands on the same line whether a note is under it or not. */
+.tile-strip li { display: grid; align-content: start; justify-items: center; gap: 1px; font-size: var(--text-3xs); color: var(--muted); }
+.tile-strip strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tile-strip small { color: var(--accent); font-weight: 600; }
 .empty-value { color: var(--muted-2); }
 
 }

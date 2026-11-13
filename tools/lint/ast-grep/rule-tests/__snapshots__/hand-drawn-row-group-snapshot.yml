@@ -1,0 +1,30 @@
+id: hand-drawn-row-group
+snapshots:
+  <tr class="queue row-group"><th>Group</th></tr>:
+    labels:
+    - source: <tr class="queue row-group"><th>Group</th></tr>
+      style: primary
+      start: 0
+      end: 47
+    - source: class="queue row-group"
+      style: secondary
+      start: 4
+      end: 27
+    - source: <tr class="queue row-group">
+      style: secondary
+      start: 0
+      end: 28
+  <tr><th colspan="3" scope="rowgroup">Group</th></tr>:
+    labels:
+    - source: <th colspan="3" scope="rowgroup">Group</th>
+      style: primary
+      start: 4
+      end: 47
+    - source: scope="rowgroup"
+      style: secondary
+      start: 20
+      end: 36
+    - source: <th colspan="3" scope="rowgroup">
+      style: secondary
+      start: 4
+      end: 37

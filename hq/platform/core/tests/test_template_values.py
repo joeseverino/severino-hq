@@ -24,8 +24,10 @@ from django.utils.html import format_html
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.tests.facts import scan
 from hq.platform.application.tests.markup import elements, select
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 from hq.platform.core.templatetags.value_tags import breakable, entity, readable, when
+from hq_sdk.template_contract import WORDED_FIGURES
 
 # Filters whose output holds every name in it: `breakable` itself, and the
 # filters that build on it or print a `<time>`.
@@ -34,19 +36,10 @@ HOLDING = {"breakable", "code_spans", "or_empty", "readout", "when", "readable"}
 # Filters whose output can never hold a hyphen or a seam, so it has nothing
 # to hold.
 WORDS_ONLY = {
-    "counted": "a count and the words for it",
-    "bytes": "a byte count",
-    "money": "an amount",
-    "seconds": "a run time",
-    "span": "a length of time",
-    "ago": "an age in words",
-    "ago_short": "an age in words",
-    "day": "a day in words",
-    "expiry": "a date and a count of days",
+    **WORDED_FIGURES,
     "length": "a number",
     "floatformat": "a number",
     "pluralize": "a suffix",
-    "signed_in": "an age in words",
     "urgency": "one of the words a pill says",
     "json_script": "a script element, read by a script and never shown",
 }
@@ -713,6 +706,7 @@ class HoldingFilterTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class TemplateValueTests(SimpleTestCase):
     def setUp(self):
         self.sources = template_sources()
@@ -773,9 +767,18 @@ class TemplateValueTests(SimpleTestCase):
 
 
 # What a `format_html` builder may print as text: a call that holds its names
-# or composes markup whose own values are read where it was built, and an
-# amount.
-HOLDING_CALLS = HOLDING | {"format_html", "format_html_join", "mark_safe", "money"}
+# or composes markup whose own values are read where it was built (the entity
+# tag holds its name with breakable, and post_button its label), an amount,
+# and a tag's attributes (page_parts.html_attributes), which are never text.
+HOLDING_CALLS = HOLDING | {
+    "entity",
+    "format_html",
+    "format_html_join",
+    "html_attributes",
+    "mark_safe",
+    "money",
+    "post_button",
+}
 _PLACEHOLDER = re.compile(r"\{(\w*)\}")
 # A format string that is attributes to add to a tag (' title="{}"') starts
 # inside that tag.
@@ -957,3 +960,18 @@ class BuilderValueTests(SimpleTestCase):
             found += unheld_builders(path.read_text(encoding="utf-8"), str(path.relative_to(root)))
 
         self.assertEqual([str(site) for site in found], [])
+
+
+@tag("source")
+class WordedFigureRuleTests(SimpleTestCase):
+    """The rule that refuses a figure apart from its word leaves alone every
+    filter that writes a figure with its own words, so a filter added to
+    WORDED_FIGURES is one the rule knows."""
+
+    def test_every_worded_figure_is_left_alone(self):
+        import yaml
+
+        rule = Path(settings.BASE_DIR) / "tools/lint/ast-grep/rules/hand-drawn-split-figure.yml"
+        worded = re.compile(yaml.safe_load(rule.read_text(encoding="utf-8"))["utils"]["worded-value"]["regex"])
+
+        self.assertEqual([name for name in WORDED_FIGURES if not worded.search(f"{{{{ n|{name} }}}} mi")], [])

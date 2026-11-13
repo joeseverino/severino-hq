@@ -3,6 +3,9 @@ public registries say about the images they run."""
 
 from datetime import timedelta
 
+from django.utils import timezone
+
+from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import portainer
 from hq.domains.control_plane.observations.public_registry import (
     DIGEST_KIND,
@@ -11,10 +14,10 @@ from hq.domains.control_plane.observations.public_registry import (
     VULNERABILITY_KIND,
 )
 from hq.platform.application.images import ImageRef
-from hq.platform.application.inventory_testing import store
 from hq.platform.application.services import CONTAINER_KIND
 
 from .names import CONTAINERS, LAN, MACHINE, NEWER, PORTAINER, SOURCES, container_id, digest, hexed, iso, stamp
+from .sweep import store
 
 UP_FOR = timedelta(days=12)
 # How a well-run container is run: a user, no-new-privileges, a limit, a check.
@@ -65,6 +68,28 @@ def containers():
         },
     )
     _registries()
+
+
+# How long before the empty read the containers were last listed.
+LISTED_BEFORE = timedelta(hours=3)
+
+
+def read_empty():
+    """The host's environment answering with no containers, as it does once
+    Docker restarts under Portainer: every read through it lands and lists
+    nothing, while each container HQ watches was last listed a few hours
+    before."""
+
+    for kind in (
+        CONTAINER_KIND,
+        portainer.IMAGE_KIND,
+        portainer.RUNTIME_KIND,
+        portainer.VOLUME_KIND,
+        portainer.STACK_KIND,
+        portainer.NETWORK_KIND,
+    ):
+        store(kind)
+    ManagedResource.objects.filter(kind=CONTAINER_KIND).update(last_observed_at=timezone.now() - LISTED_BEFORE)
 
 
 def _on_machine(**fields):

@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.permissions import NginxProxyManager
 from hq.platform.application.tests.markup import text
 
 from ..derived_reads import get_reading, serialize_path
@@ -229,7 +230,7 @@ class CertificateFindingTests(TestCase):
 
     def test_an_expired_one_says_so_and_a_distant_one_is_not_a_finding(self):
         store("npm.certificate", certificate(in_days(-2)))
-        self.assertEqual(self.found()[0]["title"], "NPM certificate example wildcard has expired")
+        self.assertEqual(self.found()[0]["title"], "NPM certificate example wildcard expired 2 days ago")
 
         store("npm.certificate", certificate(in_days(60)))
         self.assertEqual(self.found(), [])
@@ -277,7 +278,7 @@ class DeliveryTests(TestCase):
 
         response = self.client.get(reverse("control_plane:service", args=["app.example.com"]))
 
-        self.assertContains(response, "Who is allowed")
+        self.assertContains(response, "Access")
         self.assertIn("allow 100.64.0.0/10; deny all", text(response))
         self.assertContains(response, "Address or login")
 
@@ -295,6 +296,6 @@ class DeliveryTests(TestCase):
         found = get_reading("npm.certificate")
 
         self.assertEqual(found["requires"], list(OBSERVATIONS["npm.certificate"].requires))
-        self.assertIn("certificates: view", found["requires"])
+        self.assertIn(NginxProxyManager.CERTIFICATES_VIEW, found["requires"])
         self.assertNotIn("PRIVATE", str(found))
         self.assertEqual(found["items"][0]["name"], "example wildcard")

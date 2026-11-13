@@ -672,8 +672,22 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         label="Jobs",
         description="HQ's background jobs and their runs.",
         navigation=(NavigationItem("Background jobs", "jobs:list", "jobs", 132, "Infrastructure"),),
+        # Refresh queues a scan for HQ's runner, listed with the rest of its
+        # work, and Adopt makes a scan result the adopted playbooks.
+        integration=PluginIntegration(
+            capabilities=_provider("hq.platform.application.automation_adoption:capability_specs"),
+            resources=_provider("hq.platform.application.run_reads:resources"),
+        ),
         apps=("hq.domains.jobs",),
         mounts=(Mount("jobs/", "hq.domains.jobs.urls"),),
+    ),
+    DomainDescriptor(
+        id="hq.procedures",
+        label="Playbooks",
+        description="The playbooks HQ can run, and the scans of your repository you adopt them from.",
+        # Beside the jobs that run them: the work a playbook is, before it runs.
+        navigation=(NavigationItem("Playbooks", "control_plane:playbooks", "control_plane", 132, "Infrastructure"),),
+        integration=PluginIntegration(resources=_provider("hq.platform.application.playbook_reads:resources")),
     ),
     DomainDescriptor(
         id="hq.audit",
@@ -685,13 +699,14 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
     DomainDescriptor(
         id="hq.approvals",
         label="Waiting for approval",
-        description="Changes held until a person approves them.",
+        description="Changes held until an operator approves them.",
         # No page in the navigation: a held change is decided on its
         # approval's page, which each item opens, and all of them in the
         # audit log's approval queue, which the queue's heading opens.
         integration=PluginIntegration(
             attention=_provider("hq.platform.application.attention:waiting_for_approval"),
             attention_url=_provider("hq.platform.application.attention:approval_queue"),
+            resources=_provider("hq.platform.application.held_reads:resources"),
         ),
     ),
     DomainDescriptor(

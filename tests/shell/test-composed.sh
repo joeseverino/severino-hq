@@ -130,4 +130,17 @@ cat >>"${work}/bin/uv" <<'STUB'
 STUB
 [ "$(run 0)" = 0 ] || fail "the copy does not hold exactly what the image admits"
 
+# The coupling scan's copy holds every file git sees, what the image leaves
+# out included, and goes when the suite ends.
+rm -f "${work}/seen"
+{ echo '#!/bin/sh'; cat "${work}/uv-run"; } >"${work}/bin/uv"
+cat >>"${work}/bin/uv" <<'STUB'
+echo "${HQ_CHECKOUT_COPY}" >"${TEST_SEEN}"
+[ -f "${HQ_CHECKOUT_COPY}/notes/private.md" ] && [ -f "${HQ_CHECKOUT_COPY}/built/main.go" ] && [ -f "${HQ_CHECKOUT_COPY}/manage.py" ] && [ ! -e "${HQ_CHECKOUT_COPY}/.git" ]
+STUB
+[ "$(run 0)" = 0 ] || fail "the scan's copy does not hold every file git sees"
+scanned="$(cat "${work}/seen")"
+case "${scanned}" in "${work}/tmp/hq-run-"*) ;; *) fail "the scan's copy is ${scanned}, not a run's copy" ;; esac
+[ ! -e "${scanned}" ] || fail "the scan's copy ${scanned} was left behind"
+
 echo "test:composed tests passed"

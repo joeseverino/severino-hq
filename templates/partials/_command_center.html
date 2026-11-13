@@ -1,0 +1,100 @@
+{% comment %}
+Command Center: the palette the header's search opens, drawn once in its
+dialog (base.html). Its results are the fragment `results`, which the search
+page answers as its `palette` part while a person types (app.js), and which
+the dialog draws first as a loading line; each group of options in them is
+the fragment `group`. Scripts and tests find each piece by its
+`data-command-center-*` hook; the classes are the stylesheet's alone.
+{% endcomment %}
+<form class="command-center-palette" action="{% url 'search' %}" method="get" data-command-center-form>
+  <label class="visually-hidden" for="command-center-query">Find anything</label>
+  <div class="command-center-query">
+    {% include "partials/_icon.html" with name="search" only %}
+    <input id="command-center-query" name="q" type="search"
+           placeholder="Try “deploy”, “certificate”, or “unreachable”"
+           autocomplete="off" spellcheck="false" role="combobox"
+           aria-autocomplete="list" aria-controls="command-center-options"
+           aria-expanded="false" data-command-center-input>
+    <kbd class="keyboard-only">⌘ K</kbd>
+  </div>
+  {% with loading=True %}{% partial results %}{% endwith %}
+  <footer class="command-center-footer keyboard-only">
+    <span><kbd>↑</kbd><kbd>↓</kbd> choose</span>
+    <span><kbd>Enter</kbd> open <span class="command-center-enter-hint">or search everything</span></span>
+    <span><kbd>Esc</kbd> close</span>
+  </footer>
+</form>
+
+{% partialdef results %}
+<div class="command-center-results" data-command-center-results data-fragment="{% url 'search' %}" data-fragment-name="palette" data-fragment-failure="Could not load results. Press Enter to search." aria-live="polite">
+  {% if loading %}
+    <p class="command-center-loading muted">Loading…</p>
+  {% elif palette_estate or palette_groups or palette_search_groups %}
+    <div id="command-center-options" class="command-center-options" role="listbox" aria-label="Results">
+      {% for group in palette_estate %}{% partial group %}{% endfor %}
+      {% for group in palette_search_groups %}
+        {# The palette's search groups, the same listbox group as the group fragment below. #}
+        <div role="group" aria-labelledby="command-center-group-search-{{ group.scope }}">
+          <div class="command-center-group-label" id="command-center-group-search-{{ group.scope }}">{{ group.label|breakable }}</div>
+          {% for item in group.items %}
+            <a id="command-center-option-search-{{ group.scope }}-{{ forloop.counter }}"
+               class="command-center-option" href="{% if item.url %}{{ item.url }}{% else %}{% url 'core:audit_list' %}?q={{ q|urlencode }}{% endif %}"
+               role="option" aria-selected="false" tabindex="-1" data-command-center-option>
+              <span class="command-center-copy">
+                <span class="command-center-title">
+                  <strong>{{ item.title|breakable }}</strong>
+                  {% if item.badge %}<code>{{ item.badge|breakable }}</code>{% endif %}
+                </span>
+                {% if item.snippet %}<span class="muted">{% for text, hit in item.snippet %}{{ text|breakable }}{% endfor %}</span>{% endif %}
+              </span>
+              <span class="command-center-evidence">
+                {% if item.timestamp %}<span class="command-center-destination">{{ item.timestamp|when }}</span>{% endif %}
+              </span>
+              <span class="command-center-arrow" aria-hidden="true">→</span>
+            </a>
+          {% endfor %}
+        </div>
+      {% endfor %}
+      {% for group in palette_groups %}{% partial group %}{% endfor %}
+    </div>
+    {% if palette_total > palette_count %}
+      <p class="command-center-more muted">Showing {{ palette_count|breakable }} of {{ palette_total|counted:"match" }}. Press Enter to search all of HQ.</p>
+    {% endif %}
+  {% elif q %}
+    <div class="command-center-empty">
+      <strong>No page or command called “{{ q|breakable }}”.</strong>
+      <span class="muted">Press Enter to search everything.</span>
+    </div>
+  {% else %}
+    <div class="command-center-empty">
+      <strong>Nothing to show.</strong>
+    </div>
+  {% endif %}
+</div>
+{% endpartialdef %}
+
+{% partialdef group %}
+{% comment %}
+A group of the palette's listbox, which holds only groups and options: its
+label names a run of options inside the one list, so it is the group's
+label and never a heading, which a listbox would not expose.
+{% endcomment %}
+<div role="group" aria-labelledby="command-center-group-{{ group.key }}">
+  <div class="command-center-group-label" id="command-center-group-{{ group.key }}">{{ group.label|breakable }}</div>
+  {% for item in group.items %}
+    <a id="command-center-option-{{ group.key }}-{{ forloop.counter }}"
+       class="command-center-option" href="{{ item.url }}" role="option"
+       aria-selected="false" tabindex="-1" data-command-center-option>
+      <span class="command-center-copy">
+        <span class="command-center-title"><strong>{{ item.label|breakable }}</strong></span>
+        {% if item.summary and group.key != "resources" %}<span class="muted">{{ item.summary|breakable }}</span>{% endif %}
+      </span>
+      <span class="command-center-evidence">
+        {% if item.destination_label %}<span class="command-center-destination">{{ item.destination_label|breakable }}</span>{% endif %}
+        {% for badge in item.badges %}{% if badge %}<span class="scope-chip">{{ badge|breakable }}</span>{% endif %}{% endfor %}
+      </span>
+      <span class="command-center-arrow" aria-hidden="true">→</span>
+    </a>
+  {% endfor %}
+</div>
+{% endpartialdef %}

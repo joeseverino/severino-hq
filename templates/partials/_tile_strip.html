@@ -1,0 +1,17 @@
+{% comment %}
+Tile strip: a row of small figures read across, as many to a line as the box
+holds and the rest on the lines under them, each a `StripTile`
+(application.drawings): what it is of, the figure, and a note marked when
+there is one.
+
+  {% include "partials/_tile_strip.html" with tiles=hours label="The hours ahead" only %}
+{% endcomment %}
+<ol class="tile-strip" aria-label="{{ label }}">
+  {% for tile in tiles %}
+    <li{% if tile.tip %} title="{{ tile.tip }}"{% endif %}>
+      <span>{{ tile.label|breakable }}</span>
+      <strong>{{ tile.value|breakable }}</strong>
+      <small>{{ tile.note|breakable }}</small>
+    </li>
+  {% endfor %}
+</ol>

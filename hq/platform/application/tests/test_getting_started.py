@@ -104,7 +104,7 @@ class ControllerTileTests(TestCase):
         self.client.force_login(get_user_model().objects.create_superuser("tile-reader"))
 
     def test_with_nothing_read_it_is_not_set_up(self):
-        self.assertContains(self.client.get("/"), "Not set up yet")
+        self.assertContains(self.client.get("/"), "Not configured")
 
     def test_readings_without_a_heartbeat_here_count_as_its_arrival(self):
         # A copy of another host's database: readings, and no heartbeat here.
@@ -112,5 +112,5 @@ class ControllerTileTests(TestCase):
 
         response = self.client.get("/")
 
-        self.assertContains(response, "dash-controller is-arriving")
-        self.assertNotContains(response, "Not set up yet")
+        self.assertEqual(response.context["controller"].tone, "good")
+        self.assertNotContains(response, "Not configured")

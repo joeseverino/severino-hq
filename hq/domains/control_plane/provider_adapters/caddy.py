@@ -5,6 +5,7 @@ from typing import Annotated, Any
 
 from pydantic import Field
 
+from ..certificate_authorities import authority_name
 from ..names import normalized_hostname
 from ..provider_spec import ProviderModel, ProviderSpec, SharedValue, applies
 from .contracts import ServedCertificate
@@ -50,7 +51,7 @@ def served_certificate(record: dict[str, Any]) -> ServedCertificate | None:
     domain = normalized_hostname(record.get("domain"))
     certificate = record.get("certificate") or {}
     if isinstance(certificate, dict) and certificate.get("name"):
-        return ServedCertificate((domain,), certificate)
+        return ServedCertificate((domain,), certificate, issuer=authority_name(certificate.get("provider")))
     unread = str(record.get("certificate_unread", "") or "")
     return ServedCertificate((domain,), {}, unread=unread) if unread else None
 

@@ -15,6 +15,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+lazy from hq.platform.application.approval_review import title as approval_title
 lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.security import subject_parts
 
@@ -458,6 +459,13 @@ class OperationState(models.TextChoices):
     FAILED = "failed", JobState.FAILED.label
     CANCELLED = "cancelled", JobState.LOST.label
 
+    @property
+    def as_job(self) -> JobState:
+        """The job state this one reads as on Jobs, found by the word both say,
+        so the label above is the one declaration of the mapping."""
+
+        return next(state for state in JobState if state.label == self.label)
+
 
 class OperationRequest(TimestampedModel):
     class Action(models.TextChoices):
@@ -479,6 +487,14 @@ class OperationRequest(TimestampedModel):
         # that machine to carry that traffic, so it is asked for once, by an
         # operator, about a route the machine is already offering.
         APPROVE_ROUTES = "approve-routes", "Approve routes"
+        # A reviewed automation procedure, run once on the hosts it names. The
+        # automation worker claims it, never the controller, which has no
+        # handler for it (``provider_adapters.automation``).
+        RUN = "run", "Run"
+        # A read of the automation source's repository for the procedures it
+        # declares, claimed by the automation worker. Asked for by a person's
+        # Refresh, never on a timer.
+        SCAN = "scan", "Refresh"
 
     # Declared above the model so a rule in ``Meta`` can name its values.
     State = OperationState
@@ -499,6 +515,9 @@ class OperationRequest(TimestampedModel):
     # The tailnet device the asker called from (``Principal.device``), so a
     # block on that device holds what it asked for (``agent_access.held_askers``).
     requested_device = models.CharField(max_length=64, blank=True)
+    # A machine has no person (""); NULL means a legacy operation whose
+    # person was never recorded, so a block on its client still holds it.
+    requested_person_key = models.CharField(max_length=100, blank=True, null=True)
     reason = models.CharField(max_length=300, blank=True)
     idempotency_key = models.CharField(max_length=200, unique=True)
     input = models.JSONField(default=dict, blank=True)
@@ -506,6 +525,10 @@ class OperationRequest(TimestampedModel):
     claimed_by = models.CharField(max_length=160, blank=True)
     claimed_at = models.DateTimeField(null=True, blank=True)
     lease_expires_at = models.DateTimeField(null=True, blank=True)
+    # The claimant's name for the claim that leased it, so a claim retried
+    # with the same name is answered this operation again
+    # (``controller.claim_next_operation``).
+    claim_attempt = models.CharField(max_length=64, blank=True, default="")
     attempt_count = models.PositiveIntegerField(default=0)
     completed_at = models.DateTimeField(null=True, blank=True)
 
@@ -526,14 +549,14 @@ class OperationRequest(TimestampedModel):
                 condition=~models.Q(state="claimed")
                 | (~models.Q(claimed_by="") & models.Q(lease_expires_at__isnull=False)),
                 name="operation_claimed_names_its_claim",
-                violation_error_message="A claimed operation names its controller and its lease.",
+                violation_error_message="A claimed operation names its controller and when its claim ends.",
                 field="state",
             ),
             Rule(
                 condition=~models.Q(state="queued")
                 | models.Q(claimed_by="", claimed_at__isnull=True, lease_expires_at__isnull=True),
                 name="operation_queued_has_no_claim",
-                violation_error_message="A queued operation is claimed by nobody.",
+                violation_error_message="A queued operation has no claim.",
                 field="state",
             ),
             Rule(
@@ -551,14 +574,111 @@ class OperationRequest(TimestampedModel):
         return f"{self.get_action_display()}: {self.resource.key}"
 
 
+class OperationHost(models.Model):
+    """One machine a run acts on, as a row, so "the runs on this machine" is an
+    indexed query rather than a read of every run's ``input``.
+
+    ``host`` is the machine's canonical name, as ``automation_runs.resolved_hosts``
+    gives it: machines are a projection of many readings rather than rows, so
+    there is no row to point at. Written with the run, in its transaction, by
+    ``automation_runs.request_run``, its one writer.
+    """
+
+    operation = models.ForeignKey(OperationRequest, on_delete=models.CASCADE, related_name="hosts")
+    host = models.CharField(max_length=253)
+
+    class Meta:
+        constraints = [
+            # Leads with the host, so it is also the index a machine's runs are found by.
+            models.UniqueConstraint(fields=("host", "operation"), name="one_row_per_run_and_host"),
+        ]
+
+    @override
+    def __str__(self) -> str:
+        return self.host
+
+
+class SourceProposal(TimestampedModel):
+    """What one scan of the automation source found: the procedures its
+    repository declares at one commit, as HQ judged them.
+
+    A proposal is never adopted and never runnable; it says what adopting
+    that commit would bring. Written by ``automation_sources.propose``, its
+    one writer, which ``controller._settle_scan`` calls as the scan's report
+    is settled.
+    """
+
+    operation = models.OneToOneField(OperationRequest, on_delete=models.CASCADE, related_name="proposal")
+    branch = models.CharField(max_length=200)
+    revision = models.CharField(max_length=40)
+    verified = models.BooleanField()
+    verification_reason = models.CharField(max_length=40)
+    committer = models.CharField(max_length=39, blank=True)
+    # Each procedure as the worker read it with HQ's problems added, every
+    # file with its object id, and each path Ansible reads that no setting pins.
+    procedures = models.JSONField(default=list)
+    files = models.JSONField(default=list)
+    unpinned = models.JSONField(default=list)
+    # Each machine and privilege profile the worker said it has a login for,
+    # which a run is held to when it is asked (``automation_runs.reached``).
+    reaches = models.JSONField(default=list)
+    # Set when a person rejects it (``automation_adoption.reject``), so it no
+    # longer waits to be decided.
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.CharField(max_length=150, blank=True)
+    # Each playbook whose change a person rejected on its own, by the key its
+    # change is named by, so it stays as adopted and waits no more.
+    rejected_playbooks = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.branch} at {self.revision[:12]}"
+
+
+class AdoptedCatalog(TimestampedModel):
+    """The procedures HQ runs, each adopted by a person from what a scan
+    proposed, each at the commit it was adopted from.
+
+    The newest row is the catalog every procedure's command is built from;
+    each earlier one is what was adopted before it. The row names the commit
+    of the scan it was adopted from, and each procedure carries the commit it
+    runs at and every file it pins, so a pruned proposal leaves it whole.
+    Written by ``automation_adoption.adopt``, its one writer.
+    """
+
+    proposal = models.ForeignKey(SourceProposal, on_delete=models.SET_NULL, null=True, related_name="adoptions")
+    branch = models.CharField(max_length=200)
+    revision = models.CharField(max_length=40)
+    committer = models.CharField(max_length=39, blank=True)
+    # Each procedure as adopted: its manifest's fields, its inputs, the
+    # commit it runs at, the files it runs and the files of that commit no
+    # playbook runs, which it may read.
+    procedures = models.JSONField(default=list)
+    # Over the procedures: what every process builds its commands from, and
+    # so how it knows its own are current.
+    digest = models.CharField(max_length=64)
+
+    class Meta:
+        ordering = ("-id",)
+
+    @override
+    def __str__(self) -> str:
+        return f"{self.branch} at {self.revision[:12]}"
+
+
 class ApprovalState(models.TextChoices):
-    PENDING = "pending", "Waiting for a person"
-    APPROVED = "approved", "Approved and applied"
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
-    EXPIRED = "expired", "Lapsed unanswered"
+    EXPIRED = "expired", "Expired"
     # Decided by nobody: the thing it described changed underneath it, so
     # the approval that was asked for no longer covers what would happen.
-    STALE = "stale", "Superseded by a later change"
+    STALE = "stale", "Superseded"
+    # Taken back by whoever asked, before anybody decided it.
+    WITHDRAWN = "withdrawn", "Withdrawn"
 
 
 class ApprovalRequest(TimestampedModel):
@@ -662,9 +782,8 @@ class ApprovalRequest(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        subject = self.target or self.resource_key
         # Who asked and who decided are the row's Who, never its title.
-        return f"{capability_title(self.capability)}{f' on {subject}' if subject else ''}"
+        return approval_title(self)
 
 
 class AddressReading(models.Model):

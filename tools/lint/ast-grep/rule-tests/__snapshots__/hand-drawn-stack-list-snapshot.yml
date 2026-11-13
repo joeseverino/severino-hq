@@ -1,0 +1,30 @@
+id: hand-drawn-stack-list
+snapshots:
+  <ul class="row-below stack-list"></ul>:
+    labels:
+    - source: <ul class="row-below stack-list"></ul>
+      style: primary
+      start: 0
+      end: 38
+    - source: class="row-below stack-list"
+      style: secondary
+      start: 4
+      end: 32
+    - source: <ul class="row-below stack-list">
+      style: secondary
+      start: 0
+      end: 33
+  <ul class="stack-list"><li>A</li></ul>:
+    labels:
+    - source: <ul class="stack-list"><li>A</li></ul>
+      style: primary
+      start: 0
+      end: 38
+    - source: class="stack-list"
+      style: secondary
+      start: 4
+      end: 22
+    - source: <ul class="stack-list">
+      style: secondary
+      start: 0
+      end: 23

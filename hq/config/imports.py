@@ -31,6 +31,9 @@ EAGER = (
     # The test suite's: each strategy registers as its module loads, and the package checks, as it
     # loads, that every one it exports did.
     "hypothesis.strategies",
+    # Each generated _pb2 module adds its file to protobuf's descriptor pool as it loads, after the
+    # files it imports, which must be in the pool first; the span exporter encodes through them.
+    "opentelemetry.proto",
 )
 
 
@@ -48,7 +51,7 @@ def _pulled_in(importer: str) -> bool:
     """
 
     library = importer.partition(".")[0]
-    frame: FrameType | None = sys._getframe(2)  # noqa: SLF001 - the stack, without loading inspect at every start
+    frame: FrameType | None = sys._getframe(2)
     while frame is not None:
         if frame.f_code.co_name == "<module>":
             name = frame.f_globals.get("__name__", "")

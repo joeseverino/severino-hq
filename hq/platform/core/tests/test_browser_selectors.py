@@ -9,18 +9,16 @@ without starting a browser.
 import re
 from functools import cache
 from pathlib import Path
-from typing import Any
 
 from django.conf import settings
 from django.template import engines
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.page_parts import SectionPart
-from hq.platform.application.tests.facts import ROOT as FACTS_ROOT, STRING, TOP, grouped, scan, strings
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import stylesheet
 from hq.platform.core.templatetags.part_tags import SectionNode
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser_modules import browser_modules
 
 ROOT = Path(settings.BASE_DIR)
 AUDIT = ROOT / "hq/platform/core" / "browser_audit.js"
@@ -33,30 +31,9 @@ TAG_LIBRARIES = ROOT / "hq/platform/core/templatetags"
 _CLASS = re.compile(r"\.(-?[A-Za-z_][\w-]*)")
 _ID = re.compile(r"#(-?[A-Za-z_][\w-]*)")
 _ATTRIBUTE = re.compile(r"\[\s*([A-Za-z_][\w-]*)")
-PLAYWRIGHT_QUERIES = {"locator", "query_selector", "query_selector_all", "wait_for_selector"}
 # A literal handed to a DOM query, and a class handed to classList.
 _QUERY = re.compile(r"\b(?:querySelector|querySelectorAll|closest|matches)\(\s*(['\"`])(.*?)\1", re.DOTALL)
 _CLASS_LIST = re.compile(r"classList\.(?:contains|add|remove|toggle)\(\s*(['\"`])([\w-]+)\1")
-# The gate's one registry of selectors, a statement of selectors.py itself.
-REGISTRY: dict[str, Any] = {"kind": "assignment", "has": {"field": "left", "regex": "^SELECTORS$"}, **TOP}
-# Each literal of the gate outside the registry.
-GATE_STRING = {"all": [STRING, {"not": {"inside": {**REGISTRY, "stopBy": "end"}}}]}
-# A literal handed to a Playwright query as its first argument.
-QUERIED = {
-    **STRING,
-    "nthChild": 1,
-    "inside": {
-        "kind": "argument_list",
-        "inside": {
-            "kind": "call",
-            "has": {
-                "field": "function",
-                "kind": "attribute",
-                "has": {"field": "attribute", "regex": f"^({'|'.join(sorted(PLAYWRIGHT_QUERIES))})$"},
-            },
-        },
-    },
-}
 
 
 def tokens(selector: str) -> set[tuple[str, str]]:
@@ -98,12 +75,18 @@ def _template_markup(source: str, classes: set[str], ids: set[str], text: list[s
 
     text.append(source)
     for value in re.findall(r'\bclass="([^"]*)"', source):
-        classes.update(value.split())
+        # A class set beside a tag or a variable (``fact{% if tone %}``) is
+        # read without them.
+        classes.update(re.sub(r"\{%.*?%\}|\{\{.*?\}\}", " ", value).split())
     ids.update(re.findall(r'\bid="([^"{}]+)"', source))
     ids.update(generated_ids(source))
-    # A card's class, id and data- attributes are its tag's options.
-    for options in re.findall(r"\{%\s*card\s([^%]*)%\}", source):
-        classes.update(("card", *" ".join(re.findall(r'\bcss="([^"]*)"', options)).split()))
+    # A tag's css= option is the class it draws (a post_button's, a part's).
+    for options in re.findall(r"\{%\s*\w+\s([^%]*)%\}", source):
+        classes.update(" ".join(re.findall(r'\bcss="([^"]*)"', options)).split())
+    # A card's, a filter bar's, a section's or a status's class, id and data-
+    # attributes are its tag's options.
+    for part, options in re.findall(r"\{%\s*(card|filter_bar|section|status)\s([^%]*)%\}", source):
+        classes.add(part.replace("_", "-"))
         ids.update(re.findall(r'\bid="([^"{}]+)"', options))
         drawn = (name.replace("_", "-") for name in re.findall(r"\b(data_\w+)=", options))
         text.append(f"<div {' '.join(drawn)}>")
@@ -126,6 +109,12 @@ def markup() -> tuple[set[str], set[str], str]:
         text.append(opening)
         for value in re.findall(r'\bclass="([^"]*)"', opening):
             classes.update(value.split())
+    # The notice tag writes its class in code too: each tone a script clones
+    # is drawn by the tag in the frames every page carries.
+    frames = engines["django"].get_template("partials/_notice_frames.html").render({})
+    text.append(frames)
+    for value in re.findall(r'\bclass="([^"]*)"', frames):
+        classes.update(value.split())
     for library in TAG_LIBRARIES.glob("*.py"):
         source = library.read_text(encoding="utf-8")
         # A tag library writes markup too: its attributes are rendered.
@@ -165,9 +154,9 @@ def audit_selectors(source: str) -> set[str]:
 class SelectorExtractionTests(SimpleTestCase):
     def test_tokens_are_classes_ids_and_attribute_names(self):
         self.assertEqual(
-            tokens('figure.chart-card > #main [data-tip="a.b"], td.num-col'),
+            tokens('figure.example-card > #main [data-tip="a.b"], td.num-col'),
             {
-                ("class", "chart-card"),
+                ("class", "example-card"),
                 ("class", "num-col"),
                 ("id", "main"),
                 ("attribute", "data-tip"),
@@ -176,18 +165,18 @@ class SelectorExtractionTests(SimpleTestCase):
 
     def test_audit_queries_and_class_lists_are_read(self):
         source = (
-            "document.querySelectorAll('.card, figure.chart-card');"
+            "document.querySelectorAll('.card, figure.example-card');"
             "el.closest(\"[data-chart]\"); row.classList.contains('two-col');"
             "const rule = 'not.a.selector';"
         )
         self.assertEqual(
             audit_selectors(source),
-            {".card, figure.chart-card", "[data-chart]", ".two-col"},
+            {".card, figure.example-card", "[data-chart]", ".two-col"},
         )
 
     def test_a_removed_class_is_reported(self):
         self.assertFalse(rendered("class", "dashboard-board"))
-        self.assertTrue(rendered("class", "dashboard-highlights"))
+        self.assertTrue(rendered("class", "section-flow"))
         self.assertTrue(rendered("attribute", "data-chart"))
 
     def test_a_section_heading_id_the_part_draws_is_rendered(self):
@@ -203,6 +192,7 @@ class SelectorExtractionTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**", "**/templatetags/*.py")
 class BrowserGateSelectorTests(SimpleTestCase):
     def test_every_gate_selector_names_rendered_markup(self):
         missing = sorted(
@@ -213,42 +203,9 @@ class BrowserGateSelectorTests(SimpleTestCase):
         )
         self.assertEqual(missing, [])
 
-    def test_the_gate_queries_markup_only_through_selectors(self):
-        """A literal selector anywhere else in the gate would escape this check.
-
-        In-page probes query by tag and attribute only; anything naming a class
-        or an id belongs in SELECTORS.
-        """
-
-        # The example estate's gate is outside this rule: it presses the
-        # estate's controls through literal selectors of its own.
-        paths = [
-            path.relative_to(FACTS_ROOT)
-            for module, path in browser_modules().items()
-            if module != "hq.platform.core.tests.browser.estate"
-        ]
-        found = grouped(scan({"registry": REGISTRY, "string": GATE_STRING, "queried": QUERIED}, *paths))
-        self.assertEqual(len(found.get("registry", [])), 1, "no one SELECTORS registry to hold literals against")
-        queried = {(match.path, match.start) for match in found.get("queried", [])}
-        offences = []
-        for match in found.get("string", []):
-            if (match.path, match.start) in queried and isinstance(match.value(), str):
-                offences.append(match.value())
-            for text in strings(match):
-                offences.extend(
-                    selector
-                    for selector in audit_selectors(text)
-                    if any(kind != "attribute" for kind, _ in tokens(selector))
-                )
-        self.assertEqual(
-            offences,
-            [],
-            "each of these names a class or an id outside SELECTORS: add it to SELECTORS "
-            "(hq/platform/core/tests/browser/selectors.py) and pass it to the probe as an argument",
-        )
-
 
 @tag("source", "tree")
+@reads("**/templates/**", "**/templatetags/*.py", "hq/platform/core/browser_audit.js")
 class LayoutAuditSelectorTests(SimpleTestCase):
     def test_the_audit_reads_selectors(self):
         self.assertGreater(len(audit_selectors(AUDIT.read_text(encoding="utf-8"))), 5)

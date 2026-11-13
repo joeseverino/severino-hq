@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 lazy import inspect
 
+# Read only by hand_drawn_rules, which development alone runs: no image installs it.
+lazy import yaml
 lazy from django.template import engines
 lazy from django.template.backends.django import get_installed_libraries
 lazy from django.template.base import FilterExpression, NodeList, Variable
@@ -22,8 +24,8 @@ lazy from django.template.loader_tags import BlockNode, ExtendsNode, IncludeNode
 lazy from django.template.smartif import TokenBase
 
 lazy from hq.platform.core.stylesheets import stylesheet
+lazy from hq.platform.core.table_cells import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.part_tags import SectionTakes
-lazy from hq.platform.core.templatetags.table_tags import ROLE_CLASSES
 lazy from hq.platform.core.templatetags.value_tags import Takes
 
 lazy from .contract import _parameters
@@ -34,6 +36,7 @@ FRAMES: dict[str, tuple[str, ...]] = {
     "page.html": ("page",),
     "list_page.html": ("summary", "row", "foot"),
     "confirm_page.html": ("consequences",),
+    "form_page.html": (),
 }
 
 FRAME_ABOUT = {
@@ -44,6 +47,11 @@ FRAME_ABOUT = {
         "filter changes, `foot` is its `<tfoot>`."
     ),
     "confirm_page.html": "A destructive action's confirmation: `consequences` says what will happen.",
+    "form_page.html": (
+        "A page that is one form, a record's: its card and `partials/_form.html`, closing with `form_verb` and "
+        "`cancel_url`; `form_fields` names a template for fields beyond the form's own loop and `form_note` says "
+        "what saving does, each from the view, so the page fills no block."
+    ),
 }
 
 # The shared partials, each with the one line the docs say about it.
@@ -60,6 +68,7 @@ PARTIALS: dict[str, str] = {
     "partials/_form.html": "A form that writes: its token, its errors, its fields or its table, and its closing row.",
     "partials/_form_actions.html": "A form's closing row: its one verb, Cancel, and what saving does.",
     "partials/_form_errors.html": "What was wrong with a submitted form as a whole, above its fields.",
+    "partials/_icon.html": "One of the host's icons, by `name`, the height of the text beside it.",
     "partials/_insight_grid.html": "Readings that need interpreting, each with its next step.",
     "partials/_job_progress.html": "A running job and what it is doing.",
     "partials/_kpi_grid.html": "Responsive linked or static figures.",
@@ -79,15 +88,19 @@ TAGS = (
     "dot",
     "empty_value",
     "entity",
+    "fact",
+    "facts",
+    "filter_bar",
+    "notice",
     "outside_link",
     "post_button",
     "reference",
     "referenced_by",
+    "row_actions",
     "row_editor",
     "row_group",
     "row_toggle",
     "section",
-    "section_head",
     "status",
     "table_heading",
     "table_region",
@@ -99,6 +112,7 @@ FILTERS = (
     "breakable",
     "counted",
     "day",
+    "measured",
     "money",
     "or_empty",
     "outside",
@@ -115,35 +129,27 @@ LIBRARIES = ("static",)
 # a class missing here is the host's to add, never the extension's to invent.
 CLASSES = (
     "actions-col",
+    "address-list",
     "allocation",
     "allocation-legend",
     "btn",
-    "card-columns",
     "cell-data",
+    "cell-part",
+    "cell-whole",
     "chart-axis",
-    "chart-card",
-    "chart-data",
     "chart-legend",
+    "code-list",
     "compact",
     "compact-table",
     "count",
     "danger",
-    "danger-link",
     "data-table",
     "date-col",
     "domain-charts",
-    "domain-head",
-    "domain-head-copy",
-    "domain-stack",
     "errors",
     "eyebrow",
     "field",
-    "field-row",
-    "figure-hero",
-    "figure-hero-note",
-    "figure-stats",
     "finding",
-    "finding-evidence",
     "form",
     "form-actions",
     "ghost",
@@ -151,19 +157,16 @@ CLASSES = (
     "icon-link",
     "inline",
     "key-col",
-    "kv",
+    "keyboard-only",
     "list-rows",
-    "msg",
-    "msg-error",
-    "msg-warning",
     "muted",
+    "name-line",
     "narrow-more",
-    "notice",
-    "notice-attention",
+    "narrow-only",
+    "nowrap",
+    "one-line",
     "optional-col",
     "page-lede",
-    "pie-chart",
-    "pie-row",
     "primary",
     "print-footer",
     "print-only",
@@ -189,16 +192,17 @@ CLASSES = (
     "row-meta",
     "row-more",
     "save-bar",
+    "section-flow",
     "section-foot",
-    "section-period",
     "split",
     "stacked",
-    "status-tabs",
     "subtle-link",
+    "table-clamp",
     "table-scroll",
     "tight-col",
     "two-col",
     "visually-hidden",
+    "whole",
 )
 
 # ``data-`` attributes the host's scripts act on that an extension may write.
@@ -210,6 +214,24 @@ HOOKS = (
     "data-submit-status",
     "data-tip",
 )
+
+
+# The value tags that write a figure together with its own words, each joined
+# where a line could break inside it (value_tags, through line_breaks.held).
+# The hand-drawn-split-figure rule leaves each alone (test_template_values).
+WORDED_FIGURES = {
+    "ago": "an age in words",
+    "ago_short": "an age in words",
+    "bytes": "a byte count",
+    "counted": "a count and the words for it",
+    "day": "a day in words",
+    "expiry": "a date and a count of days",
+    "measured": "a figure and its unit",
+    "money": "an amount",
+    "seconds": "a run time",
+    "signed_in": "an age in words",
+    "span": "a length of time",
+}
 
 # Read by every template through the host's context processors and Django's
 # own; never a parameter a page passes.
@@ -411,7 +433,10 @@ def _class_options(parameters: list[str]) -> list[str]:
 
 def _tag(compile_function: Any) -> dict[str, Any]:
     parameters = _tag_parameters(compile_function)
-    return {"parameters": parameters, "parts": _tag_parts(compile_function), "classes": _class_options(parameters)}
+    record = {"parameters": parameters, "parts": _tag_parts(compile_function), "classes": _class_options(parameters)}
+    target = getattr(compile_function, "__wrapped__", None)
+    bare_with = target.bare_with if isinstance(target, Takes) else ""
+    return record | ({"bare_with": bare_with} if bare_with else {})
 
 
 def _libraries(engine: Any) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -526,6 +551,23 @@ def _code(names: Iterable[str]) -> str:
     return ", ".join(f"`{name}`" for name in names) or "nothing"
 
 
+def _cell(text: str) -> str:
+    """Text for a Markdown table cell, its markup shown as code."""
+
+    return re.sub(r"(\{%.*?%\}|<[a-z/][^>]*>|partials/\S+\.html)", r"`\1`", text).replace("|", "\\|")
+
+
+def hand_drawn_rules() -> list[dict[str, str]]:
+    """Each rule that refuses a shape a shared part draws, drawn by hand in a
+    template (``tools/lint/ast-grep/rules/hand-drawn-*.yml``), which the host's
+    lint and an extension's ``plugin:check`` both run."""
+
+    return [
+        yaml.safe_load(path.read_text(encoding="utf-8"))
+        for path in sorted((ROOT / "tools/lint/ast-grep/rules").glob("hand-drawn-*.yml"))
+    ]
+
+
 def markdown(templates: dict[str, Any]) -> str:
     """The shared UI contract as docs/Plugins.md states it."""
 
@@ -538,7 +580,7 @@ def markdown(templates: dict[str, Any]) -> str:
             f"`{block}`" + (f" (given {_code(shape['given'])})" if shape["given"] else "")
             for block, shape in frame["blocks"].items()
         )
-        lines.append(f"| `{name}` | {blocks} | {frame['about']} |")
+        lines.append(f"| `{name}` | {blocks or 'nothing'} | {frame['about']} |")
     lines += [
         "",
         "| Partial | Required | Optional | What it is |",
@@ -561,5 +603,9 @@ def markdown(templates: dict[str, Any]) -> str:
         f"Classes: {_code(templates['classes'])}.",
         "",
         f"Script hooks: {_code(templates['hooks'])}.",
+        "",
+        "| Rule | Drawn by hand | Write instead |",
+        "| --- | --- | --- |",
+        *(f"| `{rule['id']}` | {_cell(rule['message'])} | {_cell(rule['note'])} |" for rule in hand_drawn_rules()),
     ]
     return "\n".join(lines) + "\n"

@@ -162,6 +162,8 @@ func strictJSON(data []byte, target any) error {
 
 // exactKeys holds an object to exactly the keys named, as spelled: the
 // decoder alone would take any casing of a known key and ignore a missing one.
+// The refusal names only the keys wanted: the keys sent are the sender's text,
+// which root's log never repeats.
 func exactKeys(object map[string]json.RawMessage, keys ...string) error {
 	got := make([]string, 0, len(object))
 	for key := range object {
@@ -170,7 +172,7 @@ func exactKeys(object map[string]json.RawMessage, keys ...string) error {
 	slices.Sort(got)
 	want := slices.Sorted(slices.Values(keys))
 	if !slices.Equal(got, want) {
-		return fmt.Errorf("keys %v, not %v", got, want)
+		return fmt.Errorf("the keys are not exactly %v", want)
 	}
 	return nil
 }

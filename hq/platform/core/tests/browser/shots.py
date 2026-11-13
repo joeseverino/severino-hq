@@ -17,6 +17,13 @@ TALLEST = 30_000
 _EXTENT = "() => [document.documentElement.scrollWidth, document.documentElement.scrollHeight]"
 
 
+def extent_of(page: Page) -> tuple[int, int]:
+    """``page``'s width and height as a full-page shot takes them."""
+
+    wide, tall = page.evaluate(_EXTENT)
+    return wide, tall
+
+
 def shoot_page(
     page: Page,
     path: str | PathLike[str],
@@ -31,7 +38,7 @@ def shoot_page(
     shot left out, as words a caption takes, or "" when it holds all it was
     asked for."""
 
-    wide, tall = extent or page.evaluate(_EXTENT)
+    wide, tall = extent or extent_of(page)
     top, height = band or (0, tall)
     bottom = min(top + height, TALLEST)
     clip = {"x": 0, "y": top, "width": wide, "height": max(bottom - top, 1)}

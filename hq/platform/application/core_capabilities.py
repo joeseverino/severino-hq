@@ -38,7 +38,19 @@ from .agent_devices import (
     set_device_blocked,
 )
 from .appearance import SET_THEME, ThemeCommand, set_theme
-from .approvals import APPROVE, DESTRUCTIVE_EFFECT, REJECT, ApproveCommand, RejectCommand, answered, approve, reject
+from .approvals import (
+    APPROVE,
+    DESTRUCTIVE_EFFECT,
+    REJECT,
+    WITHDRAW,
+    ApproveCommand,
+    RejectCommand,
+    WithdrawCommand,
+    answered,
+    approve,
+    reject,
+    withdraw,
+)
 from .cadence import ControllerSweepCommand, request_controller_sweep
 from .capability_policy import SET_POLICY, PolicyCommand, apply_changes
 from .certificates import UPLOAD, UploadCertificateCommand, store_certificate
@@ -130,7 +142,7 @@ CONTROLLER_REFRESH = CapabilitySpec(
 )
 
 _RECEIPT_FILE_NOTES = (
-    "Refuse base64 text longer than a file within the limit encodes to, before decoding it.",
+    "Refuse base64 text longer than the size limit allows, before decoding it.",
     "Refuse a file over the limit, or of a type a receipt cannot be.",
     "Record the file's name, size and SHA-256 digest; its bytes are kept only as the receipt's file.",
 )
@@ -167,7 +179,7 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         DEPENDENCY_UPDATES,
-        "Whether HQ's dependency update run opens pull requests in a project's repository, from its next run.",
+        "Turn HQ's dependency update pull requests on or off for a project's repository, from the next run.",
         "remote_write",
         records_of("projects").write,
         DependencyUpdatesCommand,
@@ -269,6 +281,7 @@ CORE_CAPABILITY_SPECS = (
             "Adopt each one through a connection that manages, in one transaction.",
         ),
         label="Manage a service in HQ",
+        verb="Manage in HQ",
     ),
     CapabilitySpec(
         ADOPT_ZONE,
@@ -315,16 +328,16 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         SIGN_OUT,
-        "Sign a person out of every HQ session, when Pocket ID signs them out.",
+        "Sign a user out of every HQ session when Pocket ID signs them out.",
         "remote_write",
         Capability.END_SESSIONS,
         SignOutCommand,
         sign_out,
         execution_notes=(
-            "Find the person Pocket ID's subject signed in as; a subject nobody signed in as is done.",
+            "Find the user who signed in as Pocket ID's subject; if none did, there is nothing to do.",
             "End every live session of theirs, leaving the account and any local password alone.",
         ),
-        label="Sign a person out",
+        label="Sign a user out",
     ),
     CapabilitySpec(
         ACTION_CAPABILITY[OperationRequest.Action.DELETE],
@@ -340,7 +353,7 @@ CORE_CAPABILITY_SPECS = (
         label="Remove a record",
         verb=OperationRequest.Action.DELETE.label,
         # A record HQ only watches is forgotten, and nothing live is touched.
-        variants=(("forget", "Stop tracking in HQ"),),
+        variants=(("forget", "Stop tracking"),),
     ),
     *(
         CapabilitySpec(
@@ -401,7 +414,7 @@ CORE_CAPABILITY_SPECS = (
         execution_notes=(
             "Read what the device currently advertises and what is already approved.",
             "Queue one approval for the controller; the API call runs outside this request.",
-            "Approve exactly the advertised set, so no route this was not about is withdrawn.",
+            "Approve exactly the advertised set, so no other route is withdrawn.",
         ),
         label="Approve subnet routes",
         verb=OperationRequest.Action.APPROVE_ROUTES.label,
@@ -426,10 +439,10 @@ CORE_CAPABILITY_SPECS = (
         execution_notes=(
             "Read the addresses and ports the last reading could not reach.",
             "Ask the policy whether it refuses each one, and keep only those it does.",
-            "Change the Tailscale policy. A person approves the change before anything reaches the tailnet.",
+            "Propose the change to the Tailscale policy. Nothing reaches the tailnet until an operator approves it.",
         ),
         label="Allow a blocked Tailscale connection",
-        verb="Allow in the tailnet policy",
+        verb="Allow in policy",
         wants="allow the connections Tailscale blocks for {target}",
     ),
     CapabilitySpec(
@@ -448,8 +461,8 @@ CORE_CAPABILITY_SPECS = (
             "Read HQ's copy of the policy and find the groups with no members that a rule names.",
             "Refuse when such a group is named anywhere else, since removing it would change what the policy means.",
             (
-                "Strike them from their rules, dropping a rule left admitting nobody, and "
-                "propose the changed policy, which a person approves."
+                "Strike them from their rules, drop any rule left empty, and propose the "
+                "changed policy for an operator to approve."
             ),
         ),
         label="Remove empty groups",
@@ -470,7 +483,7 @@ CORE_CAPABILITY_SPECS = (
         execution_notes=(
             "Read the certificate's settings and check its renewal rules.",
             "Queue one renewal for the controller, which does the work outside this request.",
-            "Return what was queued and why, recorded under whoever asked.",
+            "Return what was queued and why, recorded under the caller's name.",
         ),
         label="Renew a certificate",
         verb=OperationRequest.Action.RENEW.label,
@@ -539,9 +552,9 @@ CORE_CAPABILITY_SPECS = (
         target_query=(("kind", MACHINE_KIND),),
         execution_notes=("Refuse a record that is not an enabled machine.",),
         label="Show a machine on the dashboard",
-        verb="Show on the dashboard",
+        verb="Show on dashboard",
         wants="show {target} on the dashboard",
-        variants=(("on", "Show on the dashboard"), ("off", "Take off the dashboard")),
+        variants=(("on", "Show on dashboard"), ("off", "Remove from dashboard")),
         state=dashboard_machine_selected,
     ),
     # A person's decision on a change a credential asked for. Held only in the
@@ -554,9 +567,9 @@ CORE_CAPABILITY_SPECS = (
         ApproveCommand,
         answered(approve),
         execution_notes=(
-            "Refuse a request that was decided, expired, or asked for by whoever is deciding.",
+            "Refuse a request already decided or expired, and one you asked for yourself.",
             "Refuse when what it changes moved on after it was asked for.",
-            "Run the held call once, recorded under whoever asked and whoever agreed.",
+            "Run the held call once, recorded under both the asker and the approver.",
         ),
         label="Approve a held change",
         reached_from="action_items",
@@ -572,6 +585,25 @@ CORE_CAPABILITY_SPECS = (
         label="Reject a held change",
         reached_from="action_items",
     ),
+    # The asker's own way out of a request it no longer wants. Its own
+    # request only, so any caller that asked may: a person decides nothing here.
+    CapabilitySpec(
+        WITHDRAW,
+        "Take back a change you asked for that still waits for approval, so no operator is asked to decide it. "
+        "Send the `approval.id` its held answer carried.",
+        "remote_write",
+        Capability.READ,
+        WithdrawCommand,
+        answered(withdraw),
+        execution_notes=(
+            "Find the request among the ones you asked for, and refuse any other.",
+            "Refuse a request already decided or expired.",
+            "Mark it withdrawn, apply nothing, and stop counting it against how many you may hold.",
+        ),
+        label="Withdraw a held change",
+        verb="Withdraw",
+        subject_resource="approvals",
+    ),
     # Who may act as an agent, decided by a person (security.HELD_ONLY_AT), so
     # no credential widens or frees itself.
     CapabilitySpec(
@@ -583,7 +615,7 @@ CORE_CAPABILITY_SPECS = (
         set_agents_paused,
         execution_notes=("Set the state rather than toggle it, so asking twice changes nothing.",),
         label="Pause or resume agents",
-        variants=(("on", "Block all agents"), ("off", "Allow agents")),
+        variants=(("on", "Pause all agents"), ("off", "Resume agents")),
         state=agents_paused,
     ),
     CapabilitySpec(
@@ -636,7 +668,7 @@ CORE_CAPABILITY_SPECS = (
         target_help="The record of a device an agent has called HQ from.",
         execution_notes=(
             "Refuse a device no agent has called from.",
-            "Approve a device an agent called from for a person only as that person.",
+            "Only the user an agent acts for approves the device it called from.",
             "Set the state rather than toggle it, so asking twice changes nothing.",
         ),
         label="Approve an agent's device",
@@ -665,7 +697,7 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         SET_OWN_DEVICE,
-        "Register a client as one of your own devices, so its token stands as you, or remove it.",
+        "Register a client as one of your own devices, so its token acts as you, or remove it.",
         "remote_write",
         Capability.GOVERN_AGENTS,
         OwnDeviceCommand,
@@ -674,7 +706,7 @@ CORE_CAPABILITY_SPECS = (
         target_label="Client",
         target_help="The client id Pocket ID registered for your device.",
         execution_notes=(
-            "Register only for the person asking, never for someone else.",
+            "Register the device only as your own, never as another user's.",
             "Refuse a client id Pocket ID could not have registered.",
             "Set the state rather than toggle it, so asking twice changes nothing.",
         ),
@@ -684,15 +716,15 @@ CORE_CAPABILITY_SPECS = (
     ),
     CapabilitySpec(
         SET_POLICY,
-        "Set, for one agent and one action, whether its call runs, waits for a person, or is refused.",
+        "Set whether one agent's call to one action runs, waits for approval, or is refused.",
         "remote_write",
         Capability.GOVERN_AGENTS,
         PolicyCommand,
         apply_changes,
         execution_notes=(
-            "Change only the rules that differ from what holds, each recorded on its own.",
+            "Change only the rules that differ from the current ones, each recorded on its own.",
             "Narrow only what Pocket ID granted: refuse a rule for an action the agent's grant does not carry.",
-            "Refuse a rule for an action only a person in the browser can take, and approval on a read.",
+            "Refuse a rule for an action taken only in the browser, and approval for a read.",
         ),
         label="Set the agent policy",
     ),
@@ -771,7 +803,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         ),
         CapabilitySpec(
             DASHBOARD_SETTINGS,
-            "Set where the dashboard reads the weather for, and what its panels are called.",
+            "Set the dashboard's weather location and its panel names.",
             "remote_write",
             Capability.SET_PREFERENCES,
             DashboardSettingsCommand,
@@ -784,7 +816,7 @@ def dashboard() -> tuple[CapabilitySpec, ...]:
         ),
         CapabilitySpec(
             SET_THEME,
-            "Draw the signed-in person's pages in the system's theme, light or dark.",
+            "Choose whether your pages are light, dark, or follow the system.",
             "remote_write",
             Capability.SET_PREFERENCES,
             ThemeCommand,
@@ -819,7 +851,7 @@ def watching() -> tuple[CapabilitySpec, ...]:
     return (
         CapabilitySpec(
             PROFILE_READ_NOW,
-            "Ask HQ to read a signed-in person's GitHub profile now.",
+            "Ask HQ to read a user's GitHub profile now.",
             "infrastructure_change",
             # A public lookup that spends GitHub's allowance, and a wake of the
             # controller, as Refresh is.
@@ -855,10 +887,7 @@ def tools() -> tuple[CapabilitySpec, ...]:
                     "Ask one resolver outside this network, so internal rewrites cannot "
                     "answer a question about the public internet."
                 ),
-                (
-                    "Return the records as the resolver gave them, with no TTL: this "
-                    "resolver reports a constant, which is not a measurement."
-                ),
+                "Return the records as the resolver gave them, without the TTL, which this resolver fixes.",
             ),
             label="Look up a name",
         ),
@@ -897,7 +926,7 @@ def connections() -> tuple[CapabilitySpec, ...]:
             execution_notes=(
                 "Find what the page is made of from what it is about; the request names no reading or connection.",
                 "Ask only for what is due, read on a schedule, and read without logging in to a machine.",
-                "Ask nothing while no controller is arriving to read it.",
+                "Ask nothing while no controller will come to read it.",
             ),
             label="Read a page again",
             reached_from="control_plane:connections",

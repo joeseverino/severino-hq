@@ -1,4 +1,4 @@
-"""Stable view models and chart builders for host-rendered plugin UI."""
+"""For an extension's pages: the view models and charts the host's shared templates draw."""
 
 from hq.platform.application.cadence_chart import (
     Cadence,
@@ -6,6 +6,7 @@ from hq.platform.application.cadence_chart import (
     CadenceRow,
     CadenceWeek,
 )
+from hq.platform.application.card_items import Insight, Kpi, ListRow, Timeline, TimelineItem
 from hq.platform.application.drawings import AllocationBar, Dot, Dots, Share, Trend
 from hq.platform.application.labels import dotted
 from hq.platform.application.moments import (
@@ -24,17 +25,12 @@ from hq.platform.application.ui import (
     ChartCategory,
     ChartSeries,
     DomainOverview,
-    Insight,
-    Kpi,
     LinePoint,
-    ListRow,
     PageNavigation,
     PageSection,
     PlannedDay,
     PlanNote,
     StackedBarChart,
-    Timeline,
-    TimelineItem,
     WeekPlan,
     counted,
     ended,

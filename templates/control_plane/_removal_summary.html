@@ -15,24 +15,23 @@
 What this one costs, said by the provider. "Are you sure" about a table of
 fields has no honest answer without knowing which record it is.
 {% endcomment %}
-{% if removal_note %}<p class="msg msg-warning">{{ removal_note|breakable }}</p>{% endif %}
+{% if removal_note %}{% notice tone="warning" %}{{ removal_note|breakable }}{% endnotice %}{% endif %}
 {% comment %}
 What this is, then the tuning underneath. At equal weight, defaults nobody
 chose ("Hsts subdomains: No", "Access list: 0") crowd the rows that say what
 is about to be deleted.
 {% endcomment %}
-<dl class="kv compact">
+{% facts %}
   {% for label, value in spec_rows.primary %}
-    <dt>{{ label|breakable }}</dt><dd><code>{{ value|breakable }}</code></dd>
+    {% fact label %}<code>{{ value|breakable }}</code>{% endfact %}
   {% endfor %}
-</dl>
+{% endfacts %}
 {% if spec_rows.advanced %}
-  <details class="control-diagnostics">
-    <summary>Other settings <span class="count">{{ spec_rows.advanced|length }}</span></summary>
-    <dl class="kv compact">
+  {% section "Other settings" count=spec_rows.advanced|length fold=True %}
+    {% facts %}
       {% for label, value in spec_rows.advanced %}
-        <dt>{{ label|breakable }}</dt><dd><code>{{ value|breakable }}</code></dd>
+        {% fact label %}<code>{{ value|breakable }}</code>{% endfact %}
       {% endfor %}
-    </dl>
-  </details>
+    {% endfacts %}
+  {% endsection %}
 {% endif %}

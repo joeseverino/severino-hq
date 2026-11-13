@@ -1,0 +1,47 @@
+id: hand-drawn-notice
+snapshots:
+  <div class="notice notice-attention" role="status">A</div>:
+    fixed: <div class="notice notice-attention" role="status">A</div>
+    labels:
+    - source: <div class="notice notice-attention" role="status">A</div>
+      style: primary
+      start: 0
+      end: 58
+    - source: class="notice notice-attention"
+      style: secondary
+      start: 5
+      end: 36
+    - source: <div class="notice notice-attention" role="status">
+      style: secondary
+      start: 0
+      end: 51
+  <div class="notice"><p>A</p><p>B</p></div>:
+    fixed: "{% notice %}<p>A</p><p>B</p>{% endnotice %}"
+    labels:
+    - source: <div class="notice"><p>A</p><p>B</p></div>
+      style: primary
+      start: 0
+      end: 42
+    - source: class="notice"
+      style: secondary
+      start: 5
+      end: 19
+    - source: <div class="notice">
+      style: secondary
+      start: 0
+      end: 20
+  <p class="notice">Sign in again.</p>:
+    fixed: "{% notice %}Sign in again.{% endnotice %}"
+    labels:
+    - source: <p class="notice">Sign in again.</p>
+      style: primary
+      start: 0
+      end: 36
+    - source: class="notice"
+      style: secondary
+      start: 3
+      end: 17
+    - source: <p class="notice">
+      style: secondary
+      start: 0
+      end: 18

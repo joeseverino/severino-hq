@@ -34,21 +34,19 @@ lazy from .timestamps import moment
 
 @dataclass(frozen=True, slots=True)
 class Peering:
-    """Which network the tailnet link itself is running over.
+    """How the tailnet link is carried, named as Tailscale names a connection
+    type: direct, relayed through DERP, or through a peer relay.
 
-    Being on the tailnet says the traffic is encrypted and the peer enrolled,
-    not where the packets went: a laptop in the same room and one in an airport
-    lounge look the same everywhere else in HQ. Derived from the endpoint the
-    two nodes negotiated, which HQ already stores, so no lookup or DNS stands
-    in the path of rendering the page (``_peering``).
+    A direct link also says whether it stays on the reader's network or
+    crosses the internet, which nothing else on the page shows. Derived from
+    the endpoint the two nodes negotiated, which HQ already stores, so no
+    lookup stands in the path of rendering the page (``_peering``).
     """
 
     id: str
     label: str
-    detail: str
-    # The public address this session is arriving from, where there is one.
-    # Empty for every other state, which is what the surfaces key off: there is
-    # nothing to say about the address of a link that never left the house.
+    # The public address a direct link crosses the internet from; empty for
+    # every other link, which is what the address lookup keys off.
     address: str = ""
 
     @property
@@ -56,58 +54,14 @@ class Peering:
         return self.id == "internet"
 
 
-# Said of what HQ last read, never of now: this request arrived, so a path
-# exists, and a link that has carried nothing lately simply had none to report.
-PEERING_UNKNOWN = Peering(
-    "unknown",
-    "Not known yet",
-    "When HQ last read the tailnet, this device and HQ's machine had no path "
-    "between them, as a link that has carried nothing lately has none. This "
-    "request arrived, so the next read shows which path it took.",
-)
-# The reading has no device at this address: the device may have joined or
-# changed address since, which the next read shows.
-PEERING_UNLISTED = Peering(
-    "unlisted",
-    "Not known yet",
-    "HQ's last reading of the tailnet has no device at this address, so it "
-    "cannot say which network the link runs over.",
-)
-# Not the same statement. "No peering" is a fact about the device; this is a fact about
-# HQ's view of it. Behind a proxy it has not been told to trust, HQ judges the
-# proxy and declines to attribute the request to any device at all, so it has
-# nothing to read a peering from, which is not evidence that none exists.
-PEERING_UNATTRIBUTED = Peering(
-    "unattributed",
-    "Hidden behind a proxy",
-    "This request came through a proxy HQ does not trust, so HQ cannot tell "
-    "which device sent it or how that device is connected.",
-)
-# The sweep is what fills the device inventory, and an instance that has never
-# run one (a fresh development database, a deployment whose Tailscale
-# connection is not configured) resolves nothing. Saying "not established"
-# there would blame the network for an empty table.
-PEERING_UNOBSERVED = Peering(
-    "unobserved",
-    "Tailnet not read",
-    "HQ has no reading of the tailnet, so it cannot match this address to a "
-    "device. Set up the Tailscale connection, or wait for the next read.",
-)
+def _peering(presence) -> Peering | None:
+    """How a tailnet session is carried, from the caller's presence; None when
+    the reading names no path, and the row is left out."""
 
-
-def _peering(presence) -> Peering:
-    """Which network a tailnet session rides over, from the caller's presence."""
-
-    if presence is None or not presence.peer_path or presence.peer_path == "negotiating":
-        return PEERING_UNKNOWN
+    if presence is None or presence.peer_path not in {"direct", "relayed"}:
+        return None
     if presence.peer_path == "relayed":
-        return Peering(
-            "relay",
-            f"Relayed via {presence.relay}" if presence.relay else "Relayed",
-            "The two machines could not connect directly, so Tailscale "
-            "passes the traffic through one of its relays. The relay cannot "
-            "read it.",
-        )
+        return Peering("relay", f"Relayed via DERP {presence.relay}")
     host, _ = split_host_port(presence.direct_endpoint)
     where = network_of(host)
     # A global IPv6 address in one of this host's own prefixes is the same
@@ -115,28 +69,12 @@ def _peering(presence) -> Peering:
     if where == "public" and any(ip_address(host) in net for net in on_link_networks()):
         where = "network"
     if where in {"network", "loopback"}:
-        return Peering(
-            "local",
-            "Direct, on your own network",
-            "The two machines connect directly on the same private network. Nothing crosses the internet.",
-            address=host,
-        )
+        return Peering("local", "Direct, on your network", address=host)
     if where == "public":
-        return Peering(
-            "internet",
-            "Direct, over the internet",
-            "The two machines connect directly across the internet, from the "
-            "address below. WireGuard encrypts every packet.",
-            address=host,
-        )
-    # A tailnet-range endpoint means the peering is itself being carried by
-    # another tailnet hop. Rare, and worth naming rather than guessing at.
-    return Peering(
-        "indirect",
-        "Through another tailnet device",
-        "The other end of this link is itself a tailnet address, so another device on the tailnet is carrying it.",
-        address=host,
-    )
+        return Peering("internet", "Direct, over the internet", address=host)
+    # An endpoint in the tailnet's own range is a peer relay: another node
+    # carries the link.
+    return Peering("indirect", "Peer relay", address=host)
 
 
 @dataclass(frozen=True, slots=True)
@@ -193,12 +131,21 @@ class Connection:
 
     @property
     def verdict(self) -> str:
-        """The dot's tone: "confirmed" only when every check held on evidence,
-        "failing" when one did not, else "unconfirmed"."""
+        """The checks, "confirmed" only when every one held on evidence, "failing" when
+        one did not, else "unconfirmed"."""
 
         if self.failing:
             return "failing"
         return "confirmed" if self.holds else "unconfirmed"
+
+    @property
+    def tone(self) -> str:
+        """The dot's tone: the network's, except that the tailnet's is held
+        back until every check on the way in is confirmed."""
+
+        if self.channel.id != "tailnet" or self.verdict == "confirmed":
+            return self.channel.tone
+        return "attention" if self.verdict == "failing" else "neutral"
 
     @property
     def summary(self) -> str:
@@ -254,17 +201,13 @@ class Connection:
 
     @property
     def peer_label(self) -> str:
-        """Your device's name, or plainly why there is none: HQ cannot see past
-        a proxy, has not read the tailnet, or read it and found no device here."""
+        """Your device's name; behind a proxy, that it hides the device; else
+        empty, and the address stands alone."""
 
         peer = self.caller_device
         if peer:
             return peer.label
-        if self.untrusted_forwarding or self.forwarded:
-            return "Not seen past the proxy"
-        if self.observer is None:
-            return "Tailnet not read yet"
-        return "No tailnet device at this address"
+        return "Behind a proxy" if self.forwarded else ""
 
     @property
     def peer_address(self) -> str:
@@ -280,15 +223,15 @@ class Connection:
 
     @property
     def leg_label(self) -> str:
-        """The tailnet leg in a word or two: direct, or relayed and where, as
-        last read. An idle link is connected: this request arrived over it."""
+        """The tailnet leg in a word or two, as Tailscale names it; empty
+        without a reading. An idle link is connected: this request arrived
+        over it."""
 
         if self.presence is None:
-            return "Unknown"
+            return ""
         if self.path == "idle":
             return "Connected"
-        label = "Direct" if self.path == "direct" else f"Relayed via {self.presence.relay}"
-        return label if self.tailnet_current else f"{label} when last read"
+        return "Direct" if self.path == "direct" else f"Relayed via DERP {self.presence.relay}"
 
     @property
     def path_label(self) -> str:
@@ -324,8 +267,8 @@ class Connection:
             return self.presence.handshake
         age = ago(self.presence.last_handshake, now=self.tailnet_observed_at)
         if age == "just now":
-            return "as HQ read the tailnet"
-        return f"{age.removesuffix(' ago')} before HQ read the tailnet"
+            return "At the read"
+        return f"{age.removesuffix(' ago')} before the read"
 
     @property
     def carried(self) -> str:
@@ -355,26 +298,12 @@ class Connection:
         return tuple(found)
 
     @property
-    def peering(self) -> Peering:
-        """Which network this tailnet session is actually riding over.
-
-        Three ways there is no answer, and they are different sentences. HQ
-        may not be able to see the caller at all (an untrusted proxy in front
-        of it), may have nothing swept to look the caller up in, or may know
-        the device perfectly well and find no path negotiated. Only the last
-        of those is a statement about the tailnet.
-        """
+    def peering(self) -> Peering | None:
+        """How this tailnet session is carried, or None where HQ has no device
+        or no path for it, and the row is left out."""
 
         if self.caller_device is None:
-            if self.untrusted_forwarding or self.forwarded:
-                return PEERING_UNATTRIBUTED
-            # HQ's own node comes from the same sweep as everyone else's. Not
-            # finding itself there means the inventory is empty rather than
-            # that this caller is missing from it: read from a field the
-            # page already holds, so distinguishing the two costs no query.
-            if self.observer is None:
-                return PEERING_UNOBSERVED
-            return PEERING_UNLISTED
+            return None
         return _peering(self.presence)
 
     @property

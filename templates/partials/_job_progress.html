@@ -8,7 +8,8 @@ follows the job's status resource until it stops being live, then loads the
 page once so the surface can render the outcome however it likes. The partial
 deliberately does not try to render the result itself: what a finished import
 has to say is the extension's business, and a shared partial guessing at it
-would be wrong for every extension after the first.
+would be wrong for every extension after the first. A job waiting its turn
+says its state's word alone, which the head already holds.
 {% endcomment %}
 {% partialdef progress %}
   <div class="job-progress-head">
@@ -21,7 +22,7 @@ would be wrong for every extension after the first.
   sits at a number it made up.
   {% endcomment %}
   <progress class="job-bar" aria-label="{{ job.label }}" max="100"{% if job.percent is not None %} value="{{ job.percent }}"{% endif %} data-ask-bar></progress>
-  <p class="job-note" role="status" data-ask-note>{% if job.note %}{{ job.note|breakable }}{% else %}{% waiting %}{% endif %}</p>
+  <p class="job-note" role="status" data-ask-note>{{ job.note|breakable }}</p>
 {% endpartialdef %}
 {% comment %}The status resource is given only while the work is live, which is when ask.js follows it; a job whose process stopped is not.{% endcomment %}
 {% if job.is_live and not job.is_stale %}{% url 'jobs:status' job.pk as status_url %}

@@ -33,6 +33,7 @@ from hq.domains.jobs.models import Job
 from hq.domains.projects.models import Project
 from hq.domains.receipts.models import Receipt
 from hq.platform.application.security import API_INTERFACE, WEB_INTERFACE
+from hq.platform.core.example_estate import automation
 from hq.platform.core.models import AuditLog
 from hq.platform.search_index.services import rebuild_search_index
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
@@ -669,6 +670,13 @@ def _operations(scale: float, user, resources: list[ManagedResource]) -> None:
     )
 
 
+def _runs(scale: float, user) -> None:
+    """Automation runs on ``lab-1`` in each state, as the example estate's server has
+    (``example_estate.automation``), of the example procedures it adopts."""
+
+    automation.runs(user, server="lab-1", read_on="lab-2", waiting_on="lab-3", past=_count(scale, 120))
+
+
 def seed(scale: float = 1.0, owner: Any = None) -> Seeded:
     """Fill the current database; ``scale`` multiplies every count. Its
     operator is ``owner``, or a superuser it signs up when none is given."""
@@ -688,6 +696,8 @@ def seed(scale: float = 1.0, owner: Any = None) -> Seeded:
     _analytics(rng, scale, today)
     resources = _infrastructure(scale)
     _operations(scale, user, resources)
+    # After the operations, whose dates are spread over every operation then written.
+    _runs(scale, user)
     _references(assets, expenses, entries)
     rebuild_search_index()
     return Seeded(

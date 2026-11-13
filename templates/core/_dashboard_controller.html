@@ -5,16 +5,16 @@ looks like a quiet estate. This says so: when it last reached HQ, and in the
 attention color once that is longer ago than a healthy controller ever goes.
 An installation it has never reached says that and nothing more.
 {% endcomment %}
-<a class="glance-panel-head dash-reading dash-controller{% if controller.silent %} is-silent{% elif controller.known %} is-arriving{% endif %}" href="{% url 'control_plane:controller' %}">
-  <span class="glance-symbol">{% include "partials/_icon.html" with name="activity" %}</span>
+{% url 'control_plane:controller' as address %}
+{% reading icon="activity" url=address %}
   {% comment %}
   The same dot the connection carries, and held to the same rule: green only while it is
   arriving, the attention color once it has gone quiet, and gray where it has
   never run, which is not known to be either. The words beside it say which.
   {% endcomment %}
-  <span class="glance-lead"><span class="conn-dot" aria-hidden="true"></span><strong>Controller</strong></span>
-  <span class="glance-caption">
-    {% if not controller.known %}<span>Not set up yet</span>
-    {% else %}{% include "partials/_reading_age.html" with at=controller.seen_at only %}{% endif %}
-  </span>
-</a>
+  {% status "Controller" tone=controller.tone dot=True ink="context" %}
+{% lines %}
+  {% if not controller.known %}<span>Not configured</span>
+  {% elif controller.silent %}<strong>{% include "partials/_reading_age.html" with at=controller.seen_at only %}</strong>
+  {% else %}{% include "partials/_reading_age.html" with at=controller.seen_at only %}{% endif %}
+{% endreading %}

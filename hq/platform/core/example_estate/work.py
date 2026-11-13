@@ -15,10 +15,10 @@ from hq.domains.jobs import runner
 from hq.domains.jobs.models import Job
 from hq.platform.application import scheduled_work
 from hq.platform.application.images import ImageRef
-from hq.platform.application.inventory_testing import store
 from hq.platform.core.audit import stamped
 
 from .names import CONTAINERS, GITHUB, HQ_DIGEST, HQ_REVISION, NEWER, OWNER_NAME, SOURCES, hexed, iso, stamp
+from .sweep import store
 
 # The repositories HQ's GitHub App reads, each kept the way the repo checks ask.
 REPOSITORIES = ("hq", "homelab", "photo-library", "media-server", "git-server", "backups", "dotfiles")
@@ -53,17 +53,15 @@ STARTERS = (
 # What each unit's file under deploy/systemd calls it, as systemd reports it:
 # a template's instance name stands for its %i.
 TITLES = {
-    "run-severino\\x2dhq\\x2dsecrets.mount": "Severino HQ credential tmpfs, kept out of swap",
+    "run-severino\\x2dhq\\x2dsecrets.mount": "Severino HQ credential tmpfs",
     "severino-hq-backup.service": "Create and verify a Severino HQ backup",
     "severino-hq-backup.timer": "Create a nightly verified Severino HQ backup",
     "severino-hq-controller.path": "Start the Severino HQ controller when HQ has queued work",
     "severino-hq-controller.service": "Severino HQ infrastructure controller",
     "severino-hq-controller.timer": "Run Severino HQ infrastructure controller",
-    "severino-hq-due.timer": "Do the scheduled work that is due, the host's and the extensions'",
+    "severino-hq-due.timer": "Run due Severino HQ work",
     "severino-hq-job@due.service": "Severino HQ scheduled work: due",
-    "severino-hq-script-drift.service": (
-        "Check that the host is its release: the root-owned tree, the units, the runner's sudo rules and nothing else"
-    ),
+    "severino-hq-script-drift.service": "Check the host matches its Severino HQ release",
     "severino-hq-script-drift.timer": "Daily check for stale root-owned Severino HQ scripts",
     "severino-hq-secrets.service": "Write Severino HQ secrets from 1Password Connect",
     "severino-hq-secrets.timer": "Periodically refresh Severino HQ secrets from 1Password",
@@ -230,7 +228,50 @@ def _updates(name):
                 "branch": "renovate/example-thumbnailer-3.x",
                 "labels": ["dependencies"],
                 "checks": {"state": "success", "total": 4, "failing": [], "running": 0, "names": ["lint", "test"]},
-            }
+            },
+            {
+                "number": 43,
+                "title": "Read the thumbnail size from the library's settings",
+                "url": f"{url}/pull/43",
+                "author": "example",
+                "draft": True,
+                "created_at": iso(timedelta(days=2)),
+                "updated_at": iso(timedelta(hours=6)),
+                "head": hexed("draft", name, length=40),
+                "branch": "thumbnail-size",
+                "labels": [],
+            },
+        ],
+        # Each workflow's newest run: the default branch's build passing, a
+        # release still going, and a nightly check that failed on an older commit.
+        "runs": [
+            {
+                "name": "CI",
+                "url": f"{url}/actions/runs/101",
+                "status": "completed",
+                "conclusion": "success",
+                "branch": "main",
+                "sha": hexed("head", name, length=40),
+                "created_at": iso(timedelta(days=4)),
+            },
+            {
+                "name": "Release",
+                "url": f"{url}/actions/runs/102",
+                "status": "in_progress",
+                "conclusion": "",
+                "branch": "main",
+                "sha": hexed("head", name, length=40),
+                "created_at": iso(timedelta(minutes=20)),
+            },
+            {
+                "name": "Nightly checks",
+                "url": f"{url}/actions/runs/99",
+                "status": "completed",
+                "conclusion": "failure",
+                "branch": "main",
+                "sha": hexed("older", name, length=40),
+                "created_at": iso(timedelta(days=5)),
+            },
         ],
         "alerts": {"dependabot": {"medium": 1}},
         "dependabot_alerts": [
@@ -298,7 +339,8 @@ def _ran(kind, ago, work):
 
 
 def units():
-    """systemd's word on each unit HQ ships, and the last credentials render."""
+    """systemd's word on each unit HQ ships and on a service it keeps
+    restarting, and the last credentials render."""
 
     found = [
         {
@@ -360,7 +402,25 @@ def units():
         }
         for service, last in started.items()
     )
-    store(UNIT_KIND, *({**unit, "title": TITLES[unit["unit"]]} for unit in found))
+    # A service HQ does not ship that systemd has kept restarting for days,
+    # read beside HQ's own units because it restarts.
+    looping = {
+        "unit": "example-upload.service",
+        "title": "Example log upload",
+        "load": "loaded",
+        "file_state": "enabled",
+        "active": "activating",
+        "sub": "auto-restart",
+        "result": "exit-code",
+        "main_code": 1,
+        "main_status": 1,
+        "restarts": 8641,
+        "active_at": stamp(timedelta(seconds=40)),
+        "ended_at": stamp(timedelta(seconds=10)),
+        "foreign": True,
+        "read_at": stamp(),
+    }
+    store(UNIT_KIND, *({**unit, "title": TITLES[unit["unit"]]} for unit in found), looping)
     store(
         RENDER_STATUS_KIND,
         {

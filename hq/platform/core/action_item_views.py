@@ -10,12 +10,15 @@ from django.views.generic import TemplateView, View
 from hq.platform.application import action_items as queue_state, fragments
 from hq.platform.application.attention import readable_by
 from hq.platform.application.dashboard import waiting, work_queue
+from hq.platform.application.decisions import urgency
 from hq.platform.application.pages import PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.web_writes import execute_posted, refused
 
 ACTION_ITEM_FILTERS = ("q", "status", "source", "about")
+# The urgencies the filter narrows to, in the words every pill says.
+_URGENCIES = tuple((status, urgency(status)) for status in ("serious", "attention"))
 
 
 def _action_items(request, current=None):
@@ -59,6 +62,8 @@ class ActionItemsView(PageMixin, TemplateView):
         source = self.request.GET.get("source", "").strip()
         sources = tuple({item["source_id"]: item["source"] for item in all_items}.items())
         doing, told = queue_state.split_waiting(items)
+        query = self.request.GET.get("q", "").strip()
+        about = self.request.GET.get("about", "").strip()
         context.update(
             aside_all_url=self._aside_all_url("doing"),
             notices_aside_url=self._aside_all_url("told"),
@@ -71,16 +76,20 @@ class ActionItemsView(PageMixin, TemplateView):
             profile_action_count=queue_state.count_waiting(all_items),
             show_action_count=True,
             action_sources=sources,
-            action_query=self.request.GET.get("q", "").strip(),
+            action_urgencies=_URGENCIES,
+            action_shown=len(items),
+            action_total=len(all_items),
+            action_query=query,
             action_status=status,
             action_source=source,
-            action_about=self.request.GET.get("about", "").strip(),
+            action_about=about,
+            action_filtered=bool(query or status or source or about),
         )
         return context
 
 
 class ActionItemCountView(View):
-    """The header's count, the part ``base.html`` draws, fetched after the page rather than during it.
+    """The header's count, the part ``partials/_site_header.html`` draws, fetched after the page rather than during it.
 
     The count is its own revision, so a browser holding the answer is told
     "not modified" for as long as the count is the same, whatever was written
@@ -90,7 +99,7 @@ class ActionItemCountView(View):
     def get(self, request):
         count = int(waiting(web_principal(request.user), request.user.pk))
         context = {"profile_action_count": count, "show_action_count": True}
-        return fragments.render(request, "base.html#action_count", context, revision=count)
+        return fragments.render(request, "partials/_site_header.html#action_count", context, revision=count)
 
 
 class ActionItemAsideView(View):

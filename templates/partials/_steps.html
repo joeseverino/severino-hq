@@ -1,0 +1,7 @@
+{% comment %}
+A list of short steps or checks, drawn by {% steps %}, each a {% step %}:
+{% steps %}{% step icon="card" %}<strong>Public client</strong> <span class="muted">Register one.</span>{% endstep %}{% endsteps %}.
+Read down its columns, so however many there are the columns end within a
+step of each other. `numbered` draws steps done in order: one column, each
+step's number where its icon would be, so its steps take no icon.
+{% endcomment %}<ol class="step-list{% if numbered %} is-numbered{% endif %}">{{ content|safe }}</ol>

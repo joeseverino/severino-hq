@@ -38,7 +38,9 @@ from .topology_model import (
 lazy from . import (
     certificate_expiry,
     docker_estate,
+    filesystem_findings,
     reading_facts,
+    reboot_findings,
     reference_findings,
     render_status_findings,
     tailnet,
@@ -292,12 +294,7 @@ def _fold(nodes, edges, estate: _Estate) -> None:
         if host.kind == "machine":
             fact = (_FOLDS_INTO_MACHINE[node.kind], node.label)
             facts = facts + ((fact,) if fact not in facts else ())
-        nodes[into] = replace(
-            host,
-            facts=facts,
-            actions=host.actions
-            + tuple(action for action in node.actions if all(existing.url != action.url for existing in host.actions)),
-        )
+        nodes[into] = replace(host, facts=facts, actions=host.actions + _carried(node.actions, host.actions))
     if not folded:
         return
     moved: dict[str, TopologyEdge] = {}
@@ -317,6 +314,19 @@ def _fold(nodes, edges, estate: _Estate) -> None:
     edges.update(moved)
     for node_id in folded:
         del nodes[node_id]
+
+
+def _carried(actions, held) -> tuple:
+    """What a folded node's ``actions`` add to the ``held`` actions of the node
+    it folds into. A controller's or target's "open" stands in for a page it
+    lacks, so a host with a page of its own keeps only its own."""
+
+    opens = any(action.name == "open" for action in held)
+    return tuple(
+        action
+        for action in actions
+        if not (opens and action.name == "open") and all(existing.url != action.url for existing in held)
+    )
 
 
 def _named_estate_nodes(nodes, estate: _Estate) -> dict[str, str]:
@@ -487,12 +497,14 @@ def _reader_index(nodes) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
 
 def _derived_from_readings(nodes, resources, estate: _Estate) -> None:
     """What provider-specific joins add: container edges, and image, render
-    status, unit, refused report and certificate facts."""
+    status, unit, filesystem, restart, refused report and certificate facts."""
 
     if estate.machine_ids:
         docker_estate.add(nodes, estate.machine)
     render_status_findings.add(nodes, estate.machine)
     unit_findings.add(nodes, estate.machine)
+    filesystem_findings.add(nodes, estate.machine)
+    reboot_findings.add(nodes, estate.machine)
     reading_facts.add_refusals(nodes, estate.machine)
     reference_findings.add(nodes, resources)
     by_ref, by_provider = _reader_index(nodes)

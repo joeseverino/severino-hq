@@ -1,0 +1,7 @@
+- name: Say which service
+  ansible.builtin.debug:
+    msg: "service {{ service }}"
+- name: Change something
+  ansible.builtin.command: "true"
+  changed_when: true
+  register: checked

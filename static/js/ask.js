@@ -13,16 +13,21 @@
 //                     a page loaded mid-flight resumes following it
 //   data-ask-refresh  a selector for the part of the page the result shows
 //                     in, fetched again when the work ends; without one the
-//                     page is loaded again. A part around the control that
-//                     names its own address (`data-fragment`, a dialog's
-//                     panel) is fetched from there
+//                     page's content, a region of its own (_page_main.html).
+//                     A part around the control that names its own address
+//                     (`data-fragment`, a dialog's panel) is fetched from
+//                     there. Only a part that cannot be had loads the page
 //   [data-ask-button] the button that asks; a form[data-ask-auto] asks when
 //                     the page is showing, with nobody pressing anything
 //   data-ask-outcome  the page draws how the work ended, failure included
 //   [data-ask-note]   the live region: it changes only when the state does.
 //                     One drawn apart from its control is an <output> naming
 //                     the control's form (`form=`), as a page's note does
+//   [data-ask-cut]    a note its line may cut, which holds its whole
+//                     sentence in its title
 //   [data-ask-elapsed] ticks beside it, outside the region
+//   [data-reading-age] a page head's reading line, "Last read …", which a
+//                     control in that head says how its work stands over
 //
 // Polling rather than a socket: one small question every couple of seconds
 // while something is live, asked by the one loop every poll shares (`hqEvery`).
@@ -35,6 +40,8 @@
   // Past this the work's own status has long since said how it ended.
   const FOLLOW_LIMIT_MS = 60 * 60 * 1000;
   const RELOAD_GAP_MS = 120_000;
+  // Where the result shows when the control names no part.
+  const CONTENT = "#content";
   const reloadedKey = `hq.ask.reloaded:${window.location.pathname}`;
   // Status resource -> the controls following it. A control drawn twice (a
   // head's button and its copy in the narrow menu) is one poll.
@@ -84,14 +91,56 @@
       if (title) button.title = title;
       else button.removeAttribute("title");
     });
+    // Work with nothing to say beyond its word says the word alone, wherever
+    // the note stands (asks.restates, _ask.html).
+    const worded = "askWord" in note.dataset;
+    const alone = worded && !text ? word : text;
     // Written only when it changes: a live region reads out every write.
-    const said = "askWord" in note.dataset && text ? `${word}${text}` : text;
+    const said = worded && text && word ? `${word}${text}` : alone;
     if (note.textContent === said) return;
-    if (said === text) note.textContent = text;
+    if (said === alone) note.textContent = alone;
     else note.replaceChildren(part("ask-word", word), part("ask-sentence", text));
+    // A note its line may cut (`data-ask-cut`, a page's) holds the whole
+    // sentence in its title.
+    if ("askCut" in note.dataset) {
+      if (said) note.title = said;
+      else note.removeAttribute("title");
+    }
     // A line of the head's own keeps its room whether or not it says anything.
-    if (control.matches(".ask-quiet") && control.contains(note)) note.hidden = !text;
-    if ("askWord" in note.dataset) sayBelow(control, text && word ? `${word}: ${text}` : text);
+    if (control.matches(".ask-quiet") && control.contains(note)) note.hidden = !said;
+    if (worded) sayBelow(control, text && word ? `${word}: ${text}` : "");
+    echo(control, text, word);
+  };
+
+  // A control in a page's head says how its work stands over the head's
+  // reading line (partials/_reading_age.html), whose own words stay drawn
+  // and keep its room, so nothing in the head grows or moves. Under way it
+  // says one word, the same for every kind of work; a failure says its
+  // sentence, cut to the line, whole in its title. The note stays the live
+  // region, heard rather than seen there (pages.css). Once the result lands
+  // the head is drawn again, its line saying the new reading's age.
+  const echo = (control, text, word) => {
+    const line = control.closest(".page-head")?.querySelector("[data-reading-age]");
+    if (!line) return;
+    const state = control.dataset.askState;
+    const said = state === "failed" ? text || word : state === "idle" ? "" : document.body.dataset.askRefreshing;
+    line.dataset.askState = state;
+    if (said) {
+      line.dataset.askSaid = said;
+      line.title = said;
+    } else {
+      delete line.dataset.askSaid;
+      line.removeAttribute("title");
+    }
+  };
+  // A head the server drew with work under way or failed says so on its line.
+  const echoDrawn = (root) => {
+    root.querySelectorAll(".page-head [data-ask]").forEach((control) => {
+      const note = noteOf(control);
+      if (!note || control.dataset.askState === "idle") return;
+      const word = note.querySelector(".ask-word")?.textContent ?? note.textContent;
+      echo(control, note.querySelector(".ask-sentence")?.textContent ?? "", word);
+    });
   };
 
   // A table's row shows the note's word alone, and a phone has no title to
@@ -196,9 +245,15 @@
       if (!note) return;
       const link = document.createElement("a");
       link.href = window.location.href;
-      link.textContent = "Show it";
-      note.replaceChildren(part("ask-sentence", "A newer reading is in. "), link);
+      // HQ writes the words (asks.NEWER_READING), so a page's note keeps
+      // their room (_visit_refresh.html).
+      const { askNewer, askShow } = document.body.dataset;
+      link.textContent = askShow;
+      note.replaceChildren(part("ask-sentence", `${askNewer} `), link);
       note.hidden = false;
+      note.closest(".visually-hidden")?.classList.remove("visually-hidden");
+      control.dataset.askState = "idle";
+      echo(control, "", "");
     };
     if (touched || !showing() || reloadedRecently()) return offer();
     try {
@@ -222,8 +277,7 @@
     // A failure is said where it was asked. A surface that draws the outcome
     // itself (`data-ask-outcome`) is loaded again however the work ended.
     if (standing.state !== "done" && !("askOutcome" in control.dataset)) return;
-    const selector = control.dataset.askRefresh;
-    if (!selector) return reload(control);
+    const selector = control.dataset.askRefresh || CONTENT;
     try {
       await refresh(control, selector);
     } catch {
@@ -341,12 +395,14 @@
   };
 
   resume(document);
+  echoDrawn(document);
   askAuto();
   document.addEventListener("visibilitychange", () => askAuto());
   // A part of the page drawn again may hold work already under way, or an
   // ask of its own.
   document.addEventListener("hq:fragment", (event) => {
     resume(document);
+    echoDrawn(event.target);
     askAuto(event.target);
   });
   // `toggle` does not bubble.

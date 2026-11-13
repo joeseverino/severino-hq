@@ -31,6 +31,7 @@ from django.test.utils import CaptureQueriesContext, setup_databases, teardown_d
 from django.urls import URLPattern, reverse
 from jwt.algorithms import RSAAlgorithm
 
+from hq.platform.application.automation_runs import capability_name
 from hq.platform.application.derivations import counting, derive_ahead
 from hq.platform.application.outbound_work import SUBJECT_FIELD
 from hq.platform.application.projects import REFRESH
@@ -40,6 +41,8 @@ from hq.platform.application.security import host_capabilities
 from hq.platform.application.tokens import KEYS
 from hq.platform.application.web_writes import RETRY_KEY_FIELD, new_key
 from hq.platform.core.bench import ZONES, Seeded, seed, unchanged_sweep
+from hq.platform.core.example_estate import automation
+lazy from hq.domains.control_plane.models import SourceProposal
 lazy from hq.domains.jobs.testing import held_jobs
 lazy from hq.platform.core.models import LinkedAccount
 
@@ -62,6 +65,7 @@ SKIPPED = {
     "oidc_backchannel_logout": "the identity provider's server posts it",
     "avatar": "image bytes",
     "receipts:file": "file bytes, none are stored by the seed",
+    "receipts:picture": "image bytes, none are stored by the seed",
     "control_plane:certificate_download": "file bytes",
     "control_plane:upload_certificate": "the seed uploads no certificate",
     "contacts:detail": "read from Cloudflare D1, not this database",
@@ -117,6 +121,28 @@ VARIANTS: dict[str, tuple[str, ...]] = {
     "core:audit_list": ("q=expense", "page=50"),
     "control_plane:list": ("q=app1",),
     "control_plane:topology_node": ("id=machine:lab-1",),
+    "jobs:list": ("q=example", "state=failed", "host=lab-1", "sort=-created_at", "page=3"),
+}
+
+
+def _newest_proposal() -> int | None:
+    """The newest scan result, the one the Playbooks page decides on."""
+
+    return SourceProposal.objects.order_by("-pk").values_list("pk", flat=True).first()
+
+
+def _run_command(_seeded: Seeded) -> dict[str, Any] | None:
+    """The command the bench's runs on lab-1 are asked through."""
+
+    supplied = automation.procedures()
+    return {"name": capability_name(supplied[0].id)} if supplied else None
+
+
+# A route asked again of another record, under a name of its own: (route, its
+# arguments, or None where the bench holds no such record).
+ALSO: dict[str, tuple[str, Callable[[Seeded], dict[str, Any] | None]]] = {
+    # A procedure's command, whose page lists its runs.
+    "command:run": ("command", _run_command),
 }
 
 
@@ -142,6 +168,9 @@ ACTIONS: dict[str, PostedAction] = {
     "control_plane:read_now": PostedAction(data=lambda s: {"kind": s.resource.kind}),
     "control_plane:visit": PostedAction(data=lambda _s: {"subject": "machine", "name": "lab-1"}),
     "dashboard_glance": PostedAction(),
+    "control_plane:playbooks_refresh": PostedAction(),
+    "control_plane:playbooks_adopt": PostedAction(kwargs=lambda _s: {"pk": _newest_proposal()}),
+    "control_plane:playbooks_reject": PostedAction(kwargs=lambda _s: {"pk": _newest_proposal()}),
 }
 
 # Actions that cannot be posted against a scratch database, and why.
@@ -212,6 +241,9 @@ def _pages(seeded: Seeded) -> tuple[list[tuple[str, str]], list[tuple[str, str]]
             url = reverse(name, kwargs=SAMPLES[name](seeded) if name in SAMPLES else None)
             pages.append((name, url))
             pages.extend((f"{name}?{query}", f"{url}?{query}") for query in VARIANTS.get(name, ()))
+    for name, (route, sample) in ALSO.items():
+        if (kwargs := sample(seeded)) is not None:
+            pages.append((name, reverse(route, kwargs=kwargs)))
     return pages, left
 
 

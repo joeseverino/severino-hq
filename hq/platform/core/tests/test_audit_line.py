@@ -7,7 +7,7 @@ from django.test import TestCase
 
 from hq.platform.application import denials
 from hq.platform.core.audit import record_event
-from hq.platform.core.logging import JsonFormatter, set_request_id
+from hq.platform.core.logging import JsonFormatter
 from hq.platform.core.models import AuditLog
 
 AUDIT_LOGGER = "severino.audit"
@@ -26,7 +26,9 @@ class AuditLineTests(TestCase):
         return [json.loads(JsonFormatter().format(record)) for record in logs.records]
 
     def test_a_committed_event_writes_one_line_carrying_its_row(self):
-        self.enterContext(set_request_id("example-request"))
+        from hq.platform.core import tracing
+
+        minted = self.enterContext(tracing.trace("POST /example/"))
         (line,) = self.lines(
             lambda: record_event(
                 action=AuditLog.Action.UPDATED,
@@ -44,7 +46,8 @@ class AuditLineTests(TestCase):
         )
         self.assertEqual((audit["actor"], audit["interface"]), ("example-agent", "mcp"))
         self.assertEqual(audit["metadata"], row.metadata)
-        self.assertEqual(audit["request_id"], "example-request")
+        self.assertEqual(line["request_id"], minted)
+        self.assertEqual(audit["operation_id"], row.operation_id)
 
     def test_a_rolled_back_event_writes_no_line(self):
         def rolled_back():

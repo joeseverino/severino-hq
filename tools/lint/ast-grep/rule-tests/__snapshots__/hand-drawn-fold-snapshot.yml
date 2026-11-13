@@ -1,0 +1,91 @@
+id: hand-drawn-fold
+snapshots:
+  "<details class=\"notes\"{% if open %} open{% endif %}>\n  <summary>Show the numbers</summary>\n  <p>{{ note }}</p>\n</details>\n":
+    fixed: |
+      <details class="notes"{% if open %} open{% endif %}>
+        <summary>Show the numbers</summary>
+        <p>{{ note }}</p>
+      </details>
+    labels:
+    - source: |-
+        <details class="notes"{% if open %} open{% endif %}>
+          <summary>Show the numbers</summary>
+          <p>{{ note }}</p>
+        </details>
+      style: primary
+      start: 0
+      end: 121
+    - source: details
+      style: secondary
+      start: 1
+      end: 8
+    - source: <details class="notes"{% if open %} open{% endif %}>
+      style: secondary
+      start: 0
+      end: 52
+  <details open><summary>Notes</summary>B</details>:
+    fixed: |-
+      {% section "Notes" fold=True open=True %}
+        B
+      {% endsection %}
+    labels:
+    - source: <details open><summary>Notes</summary>B</details>
+      style: primary
+      start: 0
+      end: 49
+    - source: details
+      style: secondary
+      start: 1
+      end: 8
+    - source: <details open>
+      style: secondary
+      start: 0
+      end: 14
+  <details><summary>Notes</summary><p>B</p></details>:
+    fixed: |-
+      {% section "Notes" fold=True %}
+        <p>B</p>
+      {% endsection %}
+    labels:
+    - source: <details><summary>Notes</summary><p>B</p></details>
+      style: primary
+      start: 0
+      end: 51
+    - source: details
+      style: secondary
+      start: 1
+      end: 8
+    - source: <details>
+      style: secondary
+      start: 0
+      end: 9
+  "<details><summary>{{ n|counted:\"more\" }}</summary>B</details>":
+    fixed: <details><summary>{{ n|counted:"more" }}</summary>B</details>
+    labels:
+    - source: <details><summary>{{ n|counted:"more" }}</summary>B</details>
+      style: primary
+      start: 0
+      end: 61
+    - source: details
+      style: secondary
+      start: 1
+      end: 8
+    - source: <details>
+      style: secondary
+      start: 0
+      end: 9
+  "{% if a %}<details>{% endif %}<summary>A</summary></details>":
+    fixed: "{% if a %}<details>{% endif %}<summary>A</summary></details>"
+    labels:
+    - source: <details>{% endif %}<summary>A</summary></details>
+      style: primary
+      start: 10
+      end: 60
+    - source: details
+      style: secondary
+      start: 11
+      end: 18
+    - source: <details>
+      style: secondary
+      start: 10
+      end: 19

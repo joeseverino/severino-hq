@@ -44,11 +44,11 @@ func (m *Machine) Sync(ctx context.Context, image string) error {
 	if err := unitsResolve(stage); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(stage, ".source"), []byte("image "+id+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(stage, ".source"), []byte("image "+id+"\n"), 0o644); err != nil { //nolint:gosec // G306: the tree is public by design, 0644 as seal leaves every data file
 		return err
 	}
 	at := time.Now().UTC().Format(time.RFC3339)
-	if err := os.WriteFile(filepath.Join(stage, ".synced-at"), []byte(at+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(stage, ".synced-at"), []byte(at+"\n"), 0o644); err != nil { //nolint:gosec // G306: the tree is public by design, 0644 as seal leaves every data file
 		return err
 	}
 	return swap(stage, m.Lib)
@@ -97,25 +97,30 @@ func seal(dir string, own func(string) error) error {
 		if err := own(path); err != nil {
 			return err
 		}
-		return os.Chmod(path, mode)
+		return os.Chmod(path, mode) //nolint:gosec // G122: the stage is MkdirTemp's, 0700 and root's, in the root-owned directory beside the tree, so no other account can swap a component under the walk
 	})
 }
 
 // unitsResolve refuses a tree whose units name a path under the tree that it
-// does not hold: such a unit fails on its next start.
+// does not hold: such a unit fails on its next start. Each path is looked up
+// beneath the tree, so a name that climbs out of it is not held.
 func unitsResolve(dir string) error {
-	units := filepath.Join(dir, "deploy", "systemd")
-	return filepath.WalkDir(units, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() || strings.HasSuffix(path, ".example") {
+	tree, err := os.OpenRoot(dir)
+	if err != nil {
+		return err
+	}
+	defer tree.Close()
+	return fs.WalkDir(tree.FS(), "deploy/systemd", func(name string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || strings.HasSuffix(name, ".example") {
 			return err
 		}
-		data, err := os.ReadFile(path)
+		data, err := tree.ReadFile(name)
 		if err != nil {
 			return err
 		}
 		for _, named := range unitPath.FindAllString(string(data), -1) {
-			if _, err := os.Stat(filepath.Join(dir, strings.TrimPrefix(named, Lib+"/"))); err != nil {
-				return fmt.Errorf("%s names %s, which the tree does not ship", strings.TrimPrefix(path, dir+"/"), named)
+			if _, err := tree.Stat(strings.TrimPrefix(named, Lib+"/")); err != nil {
+				return fmt.Errorf("%s names %s, which the tree does not ship", name, named)
 			}
 		}
 		return nil

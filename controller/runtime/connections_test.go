@@ -154,6 +154,18 @@ func TestRolesAreTheTransportsOwn(t *testing.T) {
 	}
 }
 
+// The automation worker's transport is never one the controller dials: its
+// account takes a shell, where every reader speaks to the forced command, so
+// a sweep that tried it would fail on every pass.
+func TestTheAutomationWorkersTransportIsNotTheControllers(t *testing.T) {
+	worker, plain := transport("example-machine"), transport("plain")
+	worker.SSHTransport.Role = "runner"
+	held := NewConnections(worker, plain)
+	if !slices.Equal(held.SSHRefs(), []string{"plain"}) || len(held.RoleRefs("runner")) != 0 {
+		t.Fatalf("the controller dials %v", held.SSHRefs())
+	}
+}
+
 // The settings of a shape no provider owns come from the one connection that
 // arrived in it.
 func TestOnlyFindsTheOneConnectionOfAShape(t *testing.T) {

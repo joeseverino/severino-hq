@@ -144,6 +144,33 @@ class TestAtRefTests(GateTestCase):
         self.assertNotIn("tests/helpers.py", replaced.partition(";")[0])
         self.assert_nothing_left()
 
+    def test_another_trees_testdata_is_support_laid_over_and_named_and_a_replaced_copy_runs_again_at_the_ref(self):
+        """A Python test reading a fixture under another tree's testdata/ reads this tree's at the ref."""
+        self.write("controller/providers/testdata/words.json", "old words\n")
+        self.old = self.commit("words")
+        self.write("controller/providers/testdata/words.json", "new words\n")
+        self.write("controller/providers/testdata/golden/test_records.py", "new golden\n")
+        probe = (
+            "import json, pathlib, sys\n"
+            "data = pathlib.Path.cwd() / 'controller' / 'providers' / 'testdata'\n"
+            "seen = pathlib.Path(sys.argv[1])\n"
+            "runs = json.loads(seen.read_text()) if seen.exists() else []\n"
+            "seen.write_text(json.dumps([*runs, [(data / 'words.json').read_text(),"
+            " (data / 'golden' / 'test_records.py').read_text()]]))\n"
+        )
+        with patch.object(at, "UV_RUN", [sys.executable, "-c", probe]):
+            code, out = self.run_main(str(self.seen), at_ref=self.old)
+
+        self.assertEqual(code, 0)
+        runs = json.loads(self.seen.read_text())
+        self.assertEqual(runs, [["new words\n", "new golden\n"], ["old words\n", "new golden\n"]])
+        verdict = out.strip().splitlines()[-1]
+        self.assertIn("new in this tree: controller/providers/testdata/golden/test_records.py", verdict)
+        self.assertIn("kept at the ref: controller/providers/testdata/words.json", verdict)
+        self.assertIn("this tree's controller/providers/testdata/words.json laid over instead", verdict)
+        self.assertFalse(at.is_go_test_module("controller/providers/testdata/case_test.go", []))
+        self.assert_nothing_left()
+
     def test_support_whose_name_git_quotes_is_found_at_the_ref(self):
         name = "tests/fakes/unit\\x2dname.txt"
         self.write(name, "old fake\n")
@@ -275,28 +302,77 @@ class TestAtRefTests(GateTestCase):
                 self.assertNotIn("laid over instead", verdict)
         self.assert_nothing_left()
 
-    def test_support_the_new_test_needs_kept_at_the_ref_is_no_proof_and_the_line_says_so(self):
-        """Kept at the ref, a fixture the new test imports is missing, so that run reached no test."""
-        self.write("tests/fixture.py", "")
-        self.write(
-            "tests/test_app.py",
-            "import unittest\nfrom tests.fixture import NEEDED\n\n"
-            "class Case(unittest.TestCase):\n    def test_needed(self):\n        self.assertTrue(NEEDED)\n",
-        )
+    def run_fixture_and_fix(self, test: str, fixture_at_ref: str = "") -> tuple[int, str]:
+        """``test`` run by the real loader on a tree whose changed support is a fixture it needs, with
+        ``NEEDED`` the ref's copy lacks, beside the estate.py this tree changed, which a test may hold the fix in."""
+        self.write("tests/fixture.py", fixture_at_ref)
+        self.write("tests/test_app.py", test)
         ref = self.commit("a fixture without what the new test needs")
         self.write("tests/fixture.py", "NEEDED = True\n")
-        self.write("tests/test_app.py", Path(self.root, "tests/test_app.py").read_text() + "\n")
+        self.write("hq/core/tests/browser/estate.py", "fixed browser\n")
+        self.write("tests/test_app.py", test + "\n")
         os.environ["PYTHONPATH"] = str(CHECKOUT)
         with patch.object(at, "UV_RUN", [sys.executable, "-c", UNITTEST]):
             code, out = self.run_main("tests.test_app", at_ref=ref)
+        self.assert_nothing_left()
+        return code, out.strip().splitlines()[-1]
+
+    def test_kept_support_the_tests_import_a_missing_name_from_is_laid_over_again_and_the_fix_stays_at_the_ref(self):
+        """A fixture beside the fix: kept at the ref, the fixture lacks the name the new test imports, as its
+        module loads or inside the test, so it is laid over again, and the fix alone stays at the ref for the
+        run that is the verdict."""
+        case = "class Case(unittest.TestCase):\n    def test_fixed(self):\n"
+        fixed = "        estate = pathlib.Path('hq/core/tests/browser/estate.py').read_text()\n"
+        fixed += "        self.assertEqual((NEEDED, estate), (True, 'fixed browser\\n'))\n"
+        needed = "from tests.fixture import NEEDED\n"
+        on_load = f"import pathlib, unittest\n{needed}\n{case}{fixed}"
+        in_test = f"import pathlib, unittest\n\n{case}        {needed}{fixed}"
+        for where, test in (("module", on_load), ("test", in_test)):
+            with self.subTest(imported_in=where):
+                self.assert_the_fix_alone_is_kept(*self.run_fixture_and_fix(test))
+                self.git("reset", "--quiet", "--hard", self.old)
+
+    def assert_the_fix_alone_is_kept(self, code: int, verdict: str) -> None:
+        self.assertEqual(code, 1)
+        self.assertIn("FAILED", verdict)
+        self.assertIn("kept at the ref: hq/core/tests/browser/estate.py", verdict)
+        self.assertIn(
+            "laid over again, since the tests import from each a name the ref's copy lacks: tests/fixture.py", verdict
+        )
+        self.assertIn("this tree's hq/core/tests/browser/estate.py laid over instead, it passed", verdict)
+        rerun = shlex.split(verdict.rpartition("rerun: ")[2])
+        self.assertEqual(rerun[5:7], ["--keep", "hq/core/tests/browser/estate.py"])
+        self.assertNotIn("tests/fixture.py", rerun)
+
+    def test_a_test_that_passes_with_only_its_fixtures_laid_over_passes_at_the_ref(self):
+        code, verdict = self.run_fixture_and_fix(
+            "import unittest\nfrom tests.fixture import NEEDED\n\n"
+            "class Case(unittest.TestCase):\n    def test_needed(self):\n        self.assertTrue(NEEDED)\n"
+        )
+
+        self.assertEqual(code, 0)
+        self.assertIn("passed", verdict)
+        self.assertIn("kept at the ref: hq/core/tests/browser/estate.py", verdict)
+        self.assertIn(
+            "laid over again, since the tests import from each a name the ref's copy lacks: tests/fixture.py", verdict
+        )
+
+    def test_support_the_new_test_needs_kept_at_the_ref_is_no_proof_and_the_line_says_so(self):
+        """Kept at the ref, a fixture the new test imports fails on a name no kept file lacks, so that run
+        reached no test and nothing names what to lay over again."""
+        code, verdict = self.run_fixture_and_fix(
+            "import unittest\nfrom tests.fixture import NEEDED\n\n"
+            "class Case(unittest.TestCase):\n    def test_needed(self):\n        self.assertTrue(NEEDED)\n",
+            fixture_at_ref="from json import ABSENT\n",
+        )
 
         self.assertEqual(code, at.UNIMPORTED)
-        verdict = out.strip().splitlines()[-1]
         self.assertIn("DOES NOT IMPORT", verdict)
-        self.assertIn("kept at the ref: tests/fixture.py", verdict)
-        self.assertIn("this tree's tests/fixture.py laid over instead, it passed", verdict)
+        self.assertIn("kept at the ref: hq/core/tests/browser/estate.py, tests/fixture.py", verdict)
+        self.assertIn(
+            "this tree's hq/core/tests/browser/estate.py, tests/fixture.py laid over instead, it passed", verdict
+        )
         self.assertIn("fixture the new test needs", verdict)
-        self.assert_nothing_left()
 
     def run_unittest_at_old(self, test: str) -> tuple[int, str]:
         """The label run by the real test loader, so its failures read as a real run's do."""

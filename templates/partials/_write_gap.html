@@ -1,0 +1,5 @@
+{% comment %}
+What stands where a change would be offered when its connection cannot make
+it: what the change needs, linked to the setup step that gives it, with the
+whole reason as its title. Context: `gap`, an `adoption.WriteGap`.
+{% endcomment %}<a class="subtle-link" href="{{ gap.setup_url }}" title="{{ gap.reason }}" data-write-gap>{{ gap.needs|breakable }}</a>

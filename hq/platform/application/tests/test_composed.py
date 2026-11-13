@@ -6,6 +6,7 @@ from datetime import date
 from django.test import TestCase
 
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, gather
+from hq.platform.application.card_items import Insight, Kpi
 from hq.platform.application.dashboard import dashboard_highlights, work_queue
 from hq.platform.application.derivation_testing import frozen
 from hq.platform.application.derivations import DERIVATIONS, counting
@@ -29,7 +30,7 @@ from hq.platform.application.plugins import (
 )
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import cli_principal
-from hq.platform.application.ui import DomainOverview, Insight, Kpi
+from hq.platform.application.ui import DomainOverview
 from hq.platform.core.models import UpstreamReading
 
 from .test_derivations import MOMENT

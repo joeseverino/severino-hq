@@ -1,0 +1,9 @@
+{% comment %}
+The failed-mail form's fields (control_plane/zone_mail.html), drawn in
+partials/_form.html: the form's own, then the record they publish as, never
+hidden. Every field is a reading of that string, and an operator checking HQ
+against an outside tool needs to see what will be published.
+{% endcomment %}
+{% for field in form.hidden_fields %}{{ field }}{% endfor %}
+{% for field in form.visible_fields %}{{ field.as_field_group }}{% endfor %}
+<p class="help">Publishes as <code>{{ mail.dmarc_record.content|breakable }}</code></p>

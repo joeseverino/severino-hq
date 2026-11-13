@@ -1,0 +1,9 @@
+id: hand-drawn-toned-value
+valid:
+  - '{% status value tone="good" pill=False %}'
+  - '<span class="stone">A</span>'
+  - '<span class="muted">A</span>'
+invalid:
+  - '<span class="tone-good">A</span>'
+  - '<li class="tone-{{ standing.state }}">A</li>'
+  - '<span class="figure tone-attention">{{ n }}</span>'

@@ -56,6 +56,7 @@ class ReachedButUnmeasuredTests(TestCase):
                     "good",
                     "Healthy",
                     targets=tuple(ConnectionLink(host) for host in hosts),
+                    credential_model="none",
                 ),
             ),
         )

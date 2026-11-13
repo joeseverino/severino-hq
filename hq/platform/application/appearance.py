@@ -37,13 +37,13 @@ def theme_for(user) -> str:
 
 @dataclass(frozen=True, slots=True)
 class ThemeCommand:
-    """The theme to draw this person's pages in."""
+    """The theme to draw your pages in."""
 
     theme: Annotated[str, Choices(Theme.choices), Describe("The theme to draw your pages in.")]
 
 
 class ThemeSet(TypedDict):
-    """The theme the person's pages are drawn in, as the call left it."""
+    """The theme your pages are drawn in, as the call left it."""
 
     ok: Literal[True]
     theme: Annotated[str, Describe(ended(f"The theme now set: {listed(Theme.values)}"))]

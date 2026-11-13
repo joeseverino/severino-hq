@@ -50,10 +50,11 @@ class Identity:
 
     @property
     def route(self) -> str:
-        """How this session was established, in a word."""
+        """How this session was established, in a word; empty when the
+        session does not say, and the row is left out."""
 
         if not self.signed_in_by:
-            return "unknown"
+            return ""
         return "single sign-on" if "OIDC" in self.signed_in_by else "password"
 
     @property

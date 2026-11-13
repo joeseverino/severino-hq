@@ -2,11 +2,11 @@
 {% block page %}
 {% if material %}
   {% section "Current certificate" %}
-    <dl class="kv compact">
-      <dt>Covers</dt><dd>{% for domain in material.domains %}<span class="tag">{{ domain|breakable }}</span>{% endfor %}</dd>
-      <dt>Expires</dt><dd>{{ material.not_after|expiry }}</dd>
-      <dt>Fingerprint</dt><dd><code>{{ material.fingerprint_sha256|slice:":16"|breakable }}…</code></dd>
-    </dl>
+    {% facts %}
+      {% fact "Covers" %}{% for domain in material.domains %}{% status domain chip=True %}{% endfor %}{% endfact %}
+      {% fact "Expires" %}{{ material.not_after|expiry }}{% endfact %}
+      {% fact "Fingerprint" %}<code>{{ material.fingerprint_sha256|slice:":16"|breakable }}…</code>{% endfact %}
+    {% endfacts %}
     <p class="muted">Uploading again replaces it. The key is never shown.</p>
   {% endsection %}
 {% endif %}
@@ -16,20 +16,13 @@
   Refused rather than degraded. Storing a private key in the clear because a
   setting was missing is the one outcome nobody would have chosen.
   {% endcomment %}
-  <p class="msg msg-error">
+  {% notice tone="error" %}
     Sealing is unavailable: HQ has not been given the controller's sealing
     key, so it cannot accept a private key. A release of HQ's host makes it.
-  </p>
+  {% endnotice %}
 {% else %}
-  <form method="post" class="form">
-    {% write_token %}
-    {% include "partials/_form_errors.html" %}
-    {{ form }}
-    <div class="form-actions">
-      <button type="submit" class="primary">Upload</button>
-      <a class="btn" href="{% url 'control_plane:detail' resource.key %}">Cancel</a>
-    </div>
-  </form>
+  {% url 'control_plane:detail' resource.key as cancel_url %}
+  {% include "partials/_form.html" with form=form verb="Upload" cancel_url=cancel_url %}
 
   <p class="muted">
     HQ checks that the certificate and key match and have not expired. The key

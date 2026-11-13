@@ -140,6 +140,72 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertEqual(offered[0], ("infrastructure.resource.update", "Mark it as running only sometimes"))
         self.assertNotIn("infrastructure.resource.reconcile", [capability for capability, _ in offered])
 
+    def on_a_machine(self, *names):
+        """Containers on one declared machine read through its Portainer environment."""
+
+        from hq.platform.application.inventory_testing import store
+
+        ManagedResource.objects.create(
+            key="example-host", kind="machine", spec={"name": "example-host", "addresses": ["192.0.2.30"]}
+        )
+        # The environment as the controller files it (portainer_readings.go).
+        store(
+            "portainer.environment",
+            {
+                "connection_ref": "example-portainer",
+                "id": 2,
+                "name": "example-env",
+                "host": "example-host",
+                "address": "192.0.2.30",
+                "local": True,
+                "type": "docker",
+                "status": "up",
+            },
+        )
+        return [
+            ManagedResource.objects.create(
+                key=f"example-host-{name}",
+                kind="portainer.container",
+                spec={"connection_ref": "example-portainer", "host": "example-host", "name": name},
+            )
+            for name in names
+        ]
+
+    def test_an_environment_that_reads_empty_is_one_finding_about_it(self):
+        """Every container a machine held, missing from one read at once, is
+        Portainer answering with nothing, said once with the restart that
+        brings it back rather than once per container."""
+
+        held = self.on_a_machine("web", "db", "cache", "worker")
+        for container in held:
+            observed(container, self.now - timedelta(hours=3))
+        # The read that came back empty: the kind was read, and listed none of them.
+        kind_read("portainer.container", self.now)
+
+        rules = [f.rule for f in self.raised()]
+        found = [f for f in self.raised() if f.rule == "environment-read-empty"]
+
+        self.assertNotIn("skipped-by-a-sweep", rules)
+        self.assertEqual([f.subject for f in found], ["machine:example-host"])
+        self.assertIn("example-env", found[0].title)
+        commands = [step.command for step in found[0].steps]
+        self.assertTrue(any("docker restart" in command and "io.portainer.server" in command for command in commands))
+        self.assertTrue(all(command.startswith("ssh example-host ") for command in commands if command))
+
+    def test_one_container_gone_from_a_full_environment_is_its_own_finding(self):
+        """The environment answered, so the one it no longer lists is a claim about that one."""
+
+        gone, *kept = self.on_a_machine("web", "db", "cache")
+        for container in kept:
+            observed(container, self.now)
+        observed(gone, self.now - timedelta(hours=3))
+
+        found = [
+            (f.rule, f.subject) for f in self.raised() if f.rule in {"skipped-by-a-sweep", "environment-read-empty"}
+        ]
+
+        self.assertEqual(found, [("skipped-by-a-sweep", "resource:example-host-web")])
+
     def test_a_healthy_estate_says_nothing(self):
         """A rule that cannot be quiet is a lens, not a finding."""
 
@@ -253,7 +319,7 @@ class FindingsTests(SentinelMixin, TestCase):
         self.assertEqual([offer.url for offer in general[0].offers], ["/connections/"])
         self.assertEqual(
             [action.label for action in general[0].investigations],
-            ["See it on the map", "See what depends on it"],
+            ["Map neighborhood", "Impact"],
         )
         self.assertIn("focus=controller%3Aone", general[0].investigations[0].url)
         self.assertEqual(
@@ -664,9 +730,11 @@ class FindingsTests(SentinelMixin, TestCase):
         for rule in finding_rules():
             with self.subTest(rule=rule.name):
                 text = f"{rule.name} {rule.title}".lower()
+                named = sorted(word for word in vocabulary if word in text.split())
                 self.assertFalse(
-                    [word for word in vocabulary if word in text.split()],
-                    f"{rule.name} names a provider family",
+                    named,
+                    f"{rule.name} names the provider family {', '.join(named)} in its name or title; "
+                    "a host rule says what is wrong in words no provider owns",
                 )
 
     def test_serialization_names_the_rule_it_was_narrowed_by(self):

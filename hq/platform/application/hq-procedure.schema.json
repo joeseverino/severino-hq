@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "InputBound": {
+      "additionalProperties": false,
+      "description": "What Ansible's argument spec cannot say of a text input: the shape it\nmust have and how long it may be.",
+      "properties": {
+        "max_length": {
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "pattern": {
+          "maxLength": 500,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "pattern",
+        "max_length"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "A procedure's sidecar (``<name>.hq.yml`` beside ``<name>.yml``): what\nHQ needs to know of it that Ansible has no word for. Its title, its\npreconditions and verification and its inputs' types are Ansible's own,\nread from the playbook and its roles.",
+  "properties": {
+    "effect": {
+      "enum": [
+        "read",
+        "infrastructure_change",
+        "destructive"
+      ],
+      "type": "string"
+    },
+    "fixes": {
+      "default": [],
+      "items": {
+        "maxLength": 64,
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "hosts": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
+      "type": "string"
+    },
+    "inputs": {
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z_][a-z0-9_]{0,63}$": {
+          "$ref": "#/$defs/InputBound"
+        }
+      },
+      "type": "object"
+    },
+    "privilege": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "recovery": {
+      "items": {
+        "maxLength": 500,
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "retry": {
+      "enum": [
+        "never",
+        "observe_first",
+        "safe"
+      ],
+      "type": "string"
+    },
+    "target_kinds": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "timeout_seconds": {
+      "maximum": 3600,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "id",
+    "target_kinds",
+    "effect",
+    "timeout_seconds",
+    "recovery",
+    "retry"
+  ],
+  "type": "object"
+}

@@ -1,5 +1,6 @@
 """Findings about the systemd units a machine runs for HQ: failed, not installed
-or not enabled, a timer not starting its unit, or units nobody could read.
+or not enabled, a timer not starting its unit, a service systemd keeps
+restarting, or units nobody could read.
 
 A unit that fails stays failed in its machine's journal and nothing else
 notices, so these rules read the ``host.unit`` reading's one fact per unit
@@ -25,7 +26,7 @@ from .finding_model import (
     machine_step,
 )
 from .moments import ago, duration
-from .reading_facts import FactRow, rows_of, state_on_controller, stated, unjudged
+from .reading_facts import FactRow, OnEachMachine, rows_of, state_on_controller, stated, unjudged
 from .timestamps import moment
 from .topology_model import TopologyNode
 from .ui import counted, ended
@@ -54,6 +55,15 @@ OVERDUE_AFTER = timedelta(hours=2)
 # every TimeoutStartSec shipped, so systemd's own bound ends a slow run first.
 STARTING_TOO_LONG = timedelta(hours=2)
 # ``test_unit_findings`` holds both to the files under deploy/systemd.
+# How often systemd must have restarted a service on its own for HQ to call it
+# a loop. Above systemd's default StartLimitBurst of 5: a service restarting
+# faster than its start limit allows is stopped and failed, ``unit-failed``'s
+# to say, so a count past it is a loop systemd does not end. A start or
+# ``systemctl reset-failed`` sets the count back to zero.
+RESTARTING_FROM = 10
+# How long a restarted service must have been active, when it was read, to
+# have settled: longer than a loop's RestartSec and one run before it stops.
+SETTLED_AFTER = timedelta(minutes=10)
 
 # Why the reading holds no state for a machine, as evidence says it.
 UNREAD_REASONS = {
@@ -88,6 +98,12 @@ class UnitState(FactRow):
     reason: str = ""
     # What the unit is, in its unit file's words; "" when systemd gave none.
     title: str = ""
+    # How often systemd restarted it on its own, "" for none, and when it
+    # last became active.
+    restarts: str = ""
+    active_at: str = ""
+    # "yes" for a service HQ does not ship, read because systemd restarted it.
+    foreign: str = ""
 
     @property
     def label(self) -> str:
@@ -117,6 +133,18 @@ class UnitState(FactRow):
     @property
     def kept_active(self) -> bool:
         return self.unit.endswith(KEPT_ACTIVE)
+
+    @property
+    def looping(self) -> bool:
+        """Whether systemd keeps restarting the service and it has not stayed up.
+
+        A failed one is ``unit-failed``'s, so one failure is one finding."""
+
+        if int(self.restarts or 0) < RESTARTING_FROM or self.failed:
+            return False
+        if self.active == "active":
+            return bool(self.active_at) and not self.behind(self.active_at, SETTLED_AFTER)
+        return self.sub == "auto-restart" or self.active == "activating"
 
     @property
     def absent(self) -> str:
@@ -162,6 +190,9 @@ def unit_state(record: dict[str, Any]) -> UnitState:
         activates=said("activates"),
         read_at=said("read_at"),
         title=said("title"),
+        restarts=said("restarts"),
+        active_at=said("active_at"),
+        foreign="yes" if record.get("foreign") else "",
     )
 
 
@@ -265,7 +296,9 @@ def _absent(estate: FindingEstate) -> tuple[Finding, ...]:
 
     found = []
     for node, units in _units(estate):
-        absent = tuple(unit for unit in units if unit.absent)
+        # A service another package installs is read only for its restarts;
+        # deploying HQ sets up none of it.
+        absent = tuple(unit for unit in units if unit.absent and not unit.foreign)
         if not absent:
             continue
         found.append(
@@ -396,6 +429,40 @@ def _stalled_finding(
     )
 
 
+# A service systemd keeps restarting on its own that does not stay up.
+# systemd restarts a service with ``Restart=`` set for as long as its start
+# limit allows, and a service slower to fail than that limit is restarted
+# forever: it never reads as failed. The reading holds every such service on
+# the machine, HQ's or not, so a loop in a unit nothing else watches is seen.
+_restarting = OnEachMachine(
+    rule="unit-restarting",
+    row=UnitState,
+    picked=lambda unit: bool(unit.unit) and unit.looping,
+    severity=lambda _looping: "serious",
+    title=lambda node, looping: (
+        f"{looping[0].named} keeps restarting on {node.label}"
+        if len(looping) == 1
+        else f"{counted(len(looping), 'service keeps', 'services keep')} restarting on {node.label}"
+    ),
+    explanation=lambda looping: (
+        "systemd starts it again each time it stops, and it does not stay up."
+        if len(looping) == 1
+        else "systemd starts each again when it stops, and none stays up."
+    ),
+    evidence=lambda unit: (
+        ("Service", unit.unit),
+        ("Restarted", f"{counted(int(unit.restarts), 'time')} since it was last started"),
+        ("How it last ended", _ended(unit)),
+    ),
+    steps=lambda node, unit: (
+        *journal_step(f"See why {unit.named} keeps stopping", node.label, unit.unit),
+        *machine_step(
+            "Once it is fixed, clear its restart count", node.label, f"systemctl reset-failed {shlex.quote(unit.unit)}"
+        ),
+    ),
+)
+
+
 def _unread(estate: FindingEstate) -> tuple[Finding, ...]:
     """A machine whose unit state could not be read, or was read too long ago
     to say how its units stand now.
@@ -460,6 +527,16 @@ RULES: tuple[FindingRule, ...] = (
         "serious",
         _stalled,
         operator_action=("On the machine, see when the timer last ran and read its job's log, then start the job."),
+        no_help_reason=cannot_run_commands(),
+    ),
+    FindingRule(
+        "unit-restarting",
+        "A service keeps restarting",
+        "serious",
+        _restarting,
+        operator_action=(
+            "On the machine, read the service's log for why it keeps stopping, fix that, then clear its restart count."
+        ),
         no_help_reason=cannot_run_commands(),
     ),
     FindingRule(

@@ -1,0 +1,36 @@
+{% comment %}
+Expects `rows`, each an automation_sources.PlaybookTableRow, and `deciding`,
+whether a scanned commit waits: then each row ends with how that commit
+changes it, in the change table's Status words and tones, and the Adopt and
+Reject a reader may press on its change. An adopted playbook's title links
+its command's page; one the commit brings has no page yet.
+{% endcomment %}{% table_region "Playbooks" empty="No playbooks are adopted yet." %}
+  <table class="data-table" data-adopted-playbooks>
+    <thead>
+      <tr>
+        {% table_heading "Playbook" local_sort=True %}
+        {% table_heading "Effect" drop=3 local_sort=True %}
+        {% table_heading "Runs on" "identifier" drop=1 local_sort=True %}
+        {% table_heading "Access" drop=2 local_sort=True %}
+        {% if deciding %}
+          {% table_heading "Status" "status" local_sort=True %}
+          {% table_heading "Adopt or reject" "control" hidden=True %}
+        {% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr{% if row.change %} data-change="{{ row.change }}"{% endif %}>
+        <td>{% if row.url %}<a href="{{ row.url }}">{{ row.title|breakable }}</a>{% else %}{{ row.title|breakable }}{% endif %}</td>
+        <td>{{ row.effect|or_empty }}</td>
+        <td>{% for host in row.hosts %}{% entity "machine"|entity_of:host %}{% if not forloop.last %}<br>{% endif %}{% empty %}{{ row.anywhere|or_empty }}{% endfor %}</td>
+        <td>{{ row.access|or_empty }}</td>
+        {% if deciding %}
+          <td>{% change_status row.change %}</td>
+          {% row_actions row.actions %}
+        {% endif %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endtable_region %}

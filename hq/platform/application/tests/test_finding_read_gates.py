@@ -53,6 +53,7 @@ def gated_family(credential_model: str):
         "Requires infrastructure management.",
         Capability.MANAGE_INFRASTRUCTURE,
         mock.Mock(return_value=(instance,)),
+        secret_store="Example Vault",
     )
 
 
@@ -183,6 +184,7 @@ def naming(name: str, capability: Capability, *names: str, controller: str = "ex
         "Good",
         controller_id=controller,
         targets=tuple(ConnectionLink(label) for label in names),
+        credential_model="none",
     )
     return ConnectionSpec(f"example.{name}", name.title(), "Example.", capability, mock.Mock(return_value=(instance,)))
 
@@ -265,6 +267,13 @@ class AMachineAGatedFamilyNamesTests(TestCase):
                 self.assertIn(Capability.MANAGE_INFRASTRUCTURE, node.read_capabilities)
                 joined = {"controller": "runs_on", "target": "stands_for"}[node.kind]
                 self.assertIn((joined, node.id, machine.id), self.edges)
+
+    def test_a_machine_a_controller_folds_into_opens_only_its_own_page(self):
+        machine, _relations, _by_id = self.machine(
+            naming("open", Capability.READ, "example-host", controller="example-host")
+        )
+
+        self.assertEqual([action.url for action in machine.actions if action.name == "open"], [machine.url])
 
     def test_what_a_family_any_reader_may_read_names_is_still_folded_onto_the_machine(self):
         machine, _relations, by_id = self.machine(

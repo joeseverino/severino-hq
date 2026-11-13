@@ -41,7 +41,7 @@ _CLOSED = ConfigDict(extra="forbid")
 # and its extensions raise. The API answers every one: its query is the same,
 # so absent is the door's to read.
 FIRST_FINDINGS = 2
-type Label = Annotated[str, Describe("What the call does here, in words a person reads.")]
+type Label = Annotated[str, Describe("What the call does, in plain words.")]
 
 
 @with_config(_CLOSED)
@@ -51,8 +51,8 @@ class CapabilityArguments(TypedDict):
     payload: Annotated[
         dict[str, Any],
         Describe(
-            "What HQ already knows the command takes. Add an `idempotency_key` where its effect is not "
-            "`read`, and any field `describe_capabilities` names as required."
+            "The fields HQ already knows. Add an `idempotency_key` where the effect is not `read`, and "
+            "any field `describe_capabilities` marks required."
         ),
     ]
 
@@ -99,7 +99,7 @@ class RecordCall(TypedDict):
 
 @with_config(_CLOSED)
 class FindingsArguments(TypedDict):
-    rule: Annotated[str, Describe("The finding's rule, so the read runs its check alone.")]
+    rule: Annotated[str, Describe("The finding's rule, so only its check runs.")]
 
 
 @with_config(_CLOSED)
@@ -136,13 +136,13 @@ class AgentWorkflowStep(TypedDict):
             "operator runs, `do` an instruction in words, `cannot` why it cannot be done from HQ."
         ),
     ]
-    label: Annotated[str, Describe("The step's heading; empty for an instruction its summary says alone.")]
+    label: Annotated[str, Describe("The step's heading; empty when its summary says it all.")]
     summary: Annotated[str, Describe("The step in full; empty when its label says it.")]
     state: Annotated[
         str,
         Describe(
             "Where it stands: `recommended` to do now, `after_action` once the step before is done, "
-            "`available` at any time, `operator` for a person to do by hand, `blocked` where it cannot be done."
+            "`available` at any time, `operator` for the operator to do by hand, `blocked` where it cannot be done."
         ),
     ]
     calls: Annotated[list[Call], Describe("The calls that carry it out, in order.")]
@@ -169,9 +169,7 @@ class AgentFinding(TypedDict):
     severity: Annotated[str, Describe("How serious it is.")]
     explanation: Annotated[str, Describe("Why it matters and what it rests on, in sentences.")]
     evidence: Annotated[list[FindingEvidence], Describe("What it rests on, a labeled line each.")]
-    remedies: Annotated[
-        list[RemedyCall], Describe("The commands that would fix it which this caller may run, none destructive.")
-    ]
+    remedies: Annotated[list[RemedyCall], Describe("The commands you may run that would fix it. None is destructive.")]
     offers: Annotated[list[RecordCall], Describe("Reads of its subject to make before acting.")]
     investigations: Annotated[
         list[TopologyCall], Describe("Traces around its subject: its neighborhood and what depends on it.")
@@ -182,7 +180,7 @@ class AgentFinding(TypedDict):
     ]
     operator_steps: Annotated[
         list[Annotated[dict[str, Any], Written(OperatorStep)]],
-        Describe("What a person does by hand to resolve it, in order. HQ never runs these."),
+        Describe("What the operator does by hand to resolve it, in order. HQ never runs these."),
     ]
     no_help_reason: Annotated[str | None, Describe("Why HQ can neither run a fix nor name an exact command for it.")]
     since: Annotated[str | None, Describe("When it was first seen open, an ISO 8601 instant; null where unrecorded.")]
@@ -193,7 +191,7 @@ class AgentFindings(TypedDict):
     """What ``get_findings`` answers."""
 
     schema_version: Annotated[SchemaVersion, Pinned(AGENT_FINDINGS_SCHEMA_VERSION)]
-    rule: Annotated[str | None, Describe("The rule the read was narrowed to; null for every rule's.")]
+    rule: Annotated[str | None, Describe("The rule the read was narrowed to; null for all rules.")]
     summary: FindingsSummary
     findings: Annotated[list[AgentFinding], Describe("The problems, most severe first.")]
 

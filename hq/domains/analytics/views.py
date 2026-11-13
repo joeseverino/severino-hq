@@ -11,6 +11,9 @@ from django.views.generic import TemplateView
 from hq.platform.application.analytics import DEFAULT_WINDOW_DAYS, overview
 from hq.platform.application.pages import PageMixin
 
+# Each vital by the name a reader knows it by, its abbreviation after it.
+VITAL_NAMES = {"lcp": "Loading (LCP)", "inp": "Responsiveness (INP)", "cls": "Layout shift (CLS)"}
+
 
 class AnalyticsOverviewView(PageMixin, TemplateView):
     template_name = "analytics/overview.html"
@@ -29,5 +32,8 @@ class AnalyticsOverviewView(PageMixin, TemplateView):
             days = DEFAULT_WINDOW_DAYS
         context = super().get_context_data(**kwargs) | overview(days=days)
         # Page speed is three rates or, with no visit measured, one sentence.
-        context["vitals_measured"] = any(metric["percent"] is not None for metric in context.get("vitals", {}).values())
+        vitals = context.get("vitals", {})
+        context["vitals_measured"] = any(metric["percent"] is not None for metric in vitals.values())
+        context["vitals_named"] = [(VITAL_NAMES.get(key, key.upper()), metric) for key, metric in vitals.items()]
+        context["page_aside"] = "analytics/_window.html"
         return context

@@ -9,6 +9,7 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.models import ProviderConnection
 from hq.domains.control_plane.observations import OBSERVATIONS
 from hq.domains.control_plane.provider_adapters import DECLARATIONS
+from hq.platform.application.tests.reads import reads
 
 from ..connection_setup import setups
 from ..entity_links import connection_anchor
@@ -50,6 +51,22 @@ class OneEmptyStateTests(SimpleTestCase):
         self.assertEqual(page_text(html), "Nothing yet. Ask the owner")
         self.assertEqual(elements(html, "a"), [])
 
+    def test_a_list_that_says_nothing_of_empty_names_what_it_lists(self):
+        from django.views.generic import ListView
+
+        from hq.platform.core.models import AuditLog
+
+        from ..tables import TableListMixin
+
+        class Plain(TableListMixin, ListView):
+            model = AuditLog
+
+        class Projected(TableListMixin, ListView):
+            pass
+
+        self.assertEqual(Plain().get_table_empty(), f"No {AuditLog._meta.verbose_name_plural}.")
+        self.assertEqual(Projected().get_table_empty(), "No rows.")
+
     def test_a_list_without_reads_offers_its_own_lead_action(self):
         page = page_context(
             "Assets", actions=(PageAction("Export", "/export/"), PageAction("New asset", "/new/", primary=True))
@@ -59,15 +76,14 @@ class OneEmptyStateTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class EmptyStateTemplateTests(SimpleTestCase):
     """Templates draw an empty state only through the partial."""
 
-    def test_only_the_partial_draws_an_empty_state(self):
+    def test_no_list_overrides_what_empty_means(self):
+        # An empty state drawn by hand is the hand-drawn-empty-state rule's.
         for name, text in _templates():
-            if name == PARTIAL:
-                continue
             with self.subTest(template=name):
-                self.assertNotRegex(text, r'class="empty[ "]', "include partials/_empty_state.html instead")
                 self.assertNotIn("{% block empty %}", text, "a list says what empty means with table_empty")
 
     def test_an_empty_state_is_one_line_and_one_remedy(self):
@@ -136,12 +152,8 @@ class PageReadsTests(TestCase):
 
         page = all_elements(response)
         (setup,) = [element for element in page if element.attrs.get("id") == "setup-portainer"]
-        opened = [
-            element
-            for element in page
-            if element.tag == "details" and any(ancestor is setup for ancestor in element.ancestors)
-        ]
-        self.assertIn("open", opened[0].attrs)
+        self.assertEqual(setup.tag, "details")
+        self.assertIn("open", setup.attrs)
 
 
 class SetupOrderTests(TestCase):

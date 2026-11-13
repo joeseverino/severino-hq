@@ -9,7 +9,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.core.errors import UpstreamUnavailable
 
 from .capabilities import CapabilitySpec
-from .command_fields import named_records, referred
+from .command_fields import among, named_records, referred
 from .contracts import route_url
 from .entity_links import kind_label
 from .field_masks import WHOLE_RECORD
@@ -77,6 +77,13 @@ def starting_page(spec: CapabilitySpec) -> tuple[str, str] | None:
     route = spec.reached_from
     if not route or route == ON_ITS_PAGE:
         return None
+    return page_named(route)
+
+
+def page_named(route: str) -> tuple[str, str]:
+    """``(label, url)`` of the page at ``route``, called what the navigation
+    or its records call it."""
+
     named = (
         *(item.label for item in domain_navigation() if item.route == route),
         *(resource.label for resource in integration_graph().resources.values() if resource.web_route == route),
@@ -90,14 +97,18 @@ def record_options(
     """The records each record-naming field of a command offers, by field.
 
     A field whose source cannot be listed maps to ``None``, so the form asks
-    for the value typed rather than failing the page.
+    for the value typed rather than failing the page. One that may name only
+    some of its records (``Among``) offers only those.
     """
 
     offered: dict[str, tuple[CommandTargetOption, ...] | None] = {}
     for name, field in fields(schema).items():
         declared = named_records(field)
         if declared is not None:
-            offered[name] = resource_options(declared["resource"], principal=principal, key=declared.get("key", ""))
+            listed = resource_options(declared["resource"], principal=principal, key=declared.get("key", ""))
+            if listed is not None and (only := among(field)) is not None:
+                listed = tuple(option for option in listed if option.value in only)
+            offered[name] = listed
         elif (reference := referred(field)) is not None:
             offered[name] = reference_options(*reference, principal=principal)
     return offered

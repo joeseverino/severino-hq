@@ -6,8 +6,8 @@ region is a fragment (static/js/fragment.js): paging, checking a source and
 opening a day ask this page for the `calendar` part and take it in place.
 {% endcomment %}
 {% partialdef calendar inline %}
-<div class="split calendar-layout" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
-  {% section moment=calendar.month when="month" id="calendar-month" css="calendar-month" %}
+<div class="split" id="calendar" data-fragment data-fragment-name="calendar" data-fragment-links data-fragment-history="replace">
+  {% section moment=calendar.month when="month" id="calendar-month" %}
     {% include "calendars/_month_grid.html" %}
   {% aside %}
     <nav class="calendar-nav" aria-label="Change month">
@@ -17,25 +17,26 @@ opening a day ask this page for the `calendar` part and take it in place.
     </nav>
   {% endsection %}
 
-  <aside class="calendar-aside">
+  <aside class="section-flow">
     {% if day %}
       {% section day.name moment=day.day when="day" id="day-panel" %}
         {% if entry %}
-          <article class="day-panel-entry" aria-label="{{ entry.object.title }}">
-            <h3>{{ entry.object.title|breakable }}</h3>
+          {% section entry.object.title id="day-entry" %}
             <p>{{ entry.when|breakable }}</p>
             {% if entry.object.location or entry.repeat %}<p class="muted">{% if entry.object.location %}{{ entry.object.location|breakable }}{% endif %}{% if entry.object.location and entry.repeat %}{% dot %}{% endif %}{{ entry.repeat|breakable }}</p>{% endif %}
             {% if entry.about %}<p class="muted">About {{ entry.about.kind_label|lower|breakable }} {% entity entry.about %}</p>{% endif %}
             {% if entry.next %}<p class="muted">Next {% for when, url in entry.next %}<a href="{{ url }}">{{ when|when:"day" }}</a>{% if not forloop.last %}{% dot %}{% endif %}{% endfor %}</p>{% endif %}
             {% if entry.object.notes %}<p>{{ entry.object.notes|breakable|linebreaksbr }}</p>{% endif %}
             <p class="page-actions">{% for action in entry.actions %}{% include "partials/_page_action.html" %}{% endfor %}</p>
-          </article>
+          {% endsection %}
         {% endif %}
         {% for source, rows in day_groups %}
-          <h3 class="day-panel-source"><i class="calendar-swatch series-{{ source.slot }}" aria-hidden="true"></i>{{ source.label|breakable }}</h3>
-          {% include "partials/_record_list.html" with rows=rows label=source.label %}
+          {% section source.label %}
+            {% include "partials/_record_list.html" with rows=rows label=source.label %}
+          {% aside %}{% include "partials/_calendar_sources.html#swatch" %}
+          {% endsection %}
         {% empty %}
-          {% if not entry %}<p class="muted">Nothing on this day.</p>{% endif %}
+          {% if not entry %}{% include "partials/_empty_state.html" with message="Nothing on this day." %}{% endif %}
         {% endfor %}
         <div><a href="{{ day.new_entry_url }}" data-hotkey="c">{% words "calendar.entry.create" %}</a></div>
       {% aside %}
@@ -53,27 +54,11 @@ opening a day ask this page for the `calendar` part and take it in place.
       {% endsection %}
     {% endif %}
 
-    {% card css="calendar-sources" id="calendar-sources" label="Calendars" %}
+    {% section "Calendars" id="calendar-sources" %}
       {% for group, sources in calendar.groups %}
-        {% if group %}<h3>{{ group|breakable }}</h3>{% endif %}
-        <ul>
-          {% for source in sources %}
-            <li>
-              <form method="post" action="{% url 'calendar:source' source.id %}" data-fragment-target>
-                {% write_token %}
-                <input type="hidden" name="next" value="{{ here }}">
-                <input type="hidden" name="shown" value="{% if source.shown %}0{% else %}1{% endif %}">
-                <button type="submit" class="calendar-source series-{{ source.slot }}" aria-pressed="{% if source.shown %}true{% else %}false{% endif %}">
-                  <i class="calendar-check" aria-hidden="true"></i>
-                  <span>{{ source.label|breakable }}{% if source.description %}<small class="calendar-source-note">{{ source.description|breakable }}</small>{% endif %}</span>
-                  {% if source.failure %}<small class="calendar-source-failure">{{ source.failure|breakable }}</small>{% endif %}
-                </button>
-              </form>
-            </li>
-          {% endfor %}
-        </ul>
+        {% if group %}{% section group %}{% include "partials/_calendar_sources.html" %}{% endsection %}{% else %}{% include "partials/_calendar_sources.html" %}{% endif %}
       {% endfor %}
-    {% endcard %}
+    {% endsection %}
   </aside>
 </div>
 {% endpartialdef %}

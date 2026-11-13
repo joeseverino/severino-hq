@@ -28,6 +28,10 @@ INLINE_SAFE_CONTENT_TYPES = {
     "image/webp",
     "image/gif",
 }
+# What a receipt's page draws as a picture of it: the inline-safe types an
+# <img> shows. A PDF stays a link, since showing one in place means letting
+# the page frame HQ's own responses, which its policy refuses.
+PICTURE_CONTENT_TYPES = frozenset(kind for kind in INLINE_SAFE_CONTENT_TYPES if kind.startswith("image/"))
 
 MAX_RECEIPT_BYTES = 15 * 1024 * 1024
 # The longest base64 text a file within the limit encodes to, so a longer one

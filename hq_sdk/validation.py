@@ -1,10 +1,10 @@
-"""Static conformance checks for plugin source trees.
+"""For an extension's source tree: the static checks it must pass.
 
-Each read without importing the plugin or configuring Django: its templates
+Each read without importing the extension or configuring Django: its templates
 use only the public pieces of the host's (``contract.json``'s ``templates``
-section), and no page sentence closes on a value by hand. What its Python
+section) and no page sentence closes on a value by hand. What its Python
 imports is Ruff's to hold (tools/pipeline/extension-imports.toml), and the
-host's ast-grep rules the plugin check names hold the rest
+host's ast-grep rules ``plugin:check`` names hold the rest
 (tools/pipeline/check-plugin.sh).
 """
 
@@ -379,8 +379,10 @@ class _Template:
             literal = _LITERAL.fullmatch(value)
             if option in host["classes"] and literal:
                 self._classes(literal.group(2).split(), line)
-        # A later part ({% aside %}) is written only inside its own tag.
-        if host["parts"]:
+        # A later part ({% aside %}) is written only inside its own tag, and a
+        # tag given the option that makes it stand alone encloses nothing.
+        bare = host.get("bare_with") and any(bit.partition("=")[0] == host["bare_with"] for bit in bits)
+        if host["parts"] and not bare:
             self.enclosing.append(tag)
 
     def _classes(self, words: list[str], line: int) -> None:

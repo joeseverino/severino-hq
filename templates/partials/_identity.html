@@ -1,0 +1,19 @@
+{% comment %}
+An account as a page names whose it is: its picture, its name with a state
+beside it, its handle leading to it, and a line about it.
+
+  {% include "partials/_identity.html" with picture=profile.avatar name=profile.name handle="@example" url=profile.url badge="Yours" tone="good" tip=why about=profile.bio only %}
+
+`picture` is a `data:` URI or an HQ path, never another host's address (the
+page's policy loads no image from one); `badge` is a state, drawn by
+`{% status %}` in `tone` with `tip` on hover; `handle` and `url` are the
+account's name where it lives and the page there; `about` is its own words.
+{% endcomment %}
+<div class="identity">
+  {% if picture %}<img class="identity-picture" src="{{ picture }}" alt="" width="64" height="64">{% endif %}
+  <div class="identity-words">
+    <p class="identity-name">{{ name|breakable }}{% if badge %} {% status badge tone=tone tip=tip %}{% endif %}</p>
+    {% if handle %}<div>{% entity url|outside label=handle %}</div>{% endif %}
+    {% if about %}<p>{{ about|breakable }}</p>{% endif %}
+  </div>
+</div>

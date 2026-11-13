@@ -9,7 +9,7 @@ outright. Then there is nothing to confirm, only the reason and the way back.
 {% else %}
   {% card %}
     {% include "control_plane/_removal_summary.html" %}
-    <p class="msg msg-error">{{ removal_explanation|breakable }}</p>
+    {% notice tone="error" %}{{ removal_explanation|breakable }}{% endnotice %}
     <p><a class="btn" href="{{ confirm.cancel_url }}">Back</a></p>
   {% endcard %}
 {% endif %}

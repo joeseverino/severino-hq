@@ -4,6 +4,7 @@ measurement finishes, a failure recorded beside the numbers that did not fail.""
 import contextlib
 import io
 import json
+import subprocess
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -68,15 +69,18 @@ class ServerTimes:
         self.asked: list[list[str]] = []
         self.targets: list[FakeTarget] = []
         self.before: list[list[str]] = []
+        # The pages the last call asked of each server.
+        self.pages: dict[str, list[str]] = {}
 
-    def __call__(self, servers, pages, rounds):
+    def __call__(self, servers, pages, rounds, *, lacks=None):
         self.asked.append(list(servers))
         self.before = [step for target in self.targets for step in target.asked]
+        self.pages = {side: [page for page in pages if page not in (lacks or {}).get(side, ())] for side in servers}
         ms = {"base": 4.0, "here": 6.0 if "base" in servers else 4.0}
         return {
             side: {
                 page: {"status": 200, "p50_ms": ms[side], "p95_ms": 5.0, "times_ms": [ms[side]] * rounds}
-                for page in pages
+                for page in self.pages[side]
             }
             for side in servers
         }
@@ -111,13 +115,12 @@ class Measured(SimpleTestCase):
             self.addCleanup(patcher.stop)
 
     def measure(
-        self, target: FakeTarget, asked: report.Plan = PLAN, log: str = "", base: FakeTarget | None = None
+        self, target: FakeTarget, asked: report.Plan = PLAN, base: FakeTarget | None = None
     ) -> tuple[runs.Run, list[dict]]:
-        """A run measuring ``target`` as its here side, beside ``base`` when given, its server's log
-        saying ``log``, and the document as each save left it."""
+        """A run measuring ``target`` as its here side, beside ``base`` when given, and the document
+        as each save left it."""
 
         kept = runs.Run.start(self.out, "here-dev-scratch", plan=asked.key())
-        (self.out / f"{kept.name}.here.log").write_text(log, encoding="utf-8")
         self.server_times.targets = [base, target] if base else [target]
         served = iter(self.server_times.targets)
         saves = []
@@ -197,13 +200,32 @@ class FailureTests(Measured):
         self.assertIn(kept.path.name, said)
 
 
-# The tail of a scratch server's log when an extension needs a newer plugin API than the ref's HQ.
-REFUSED_LOG = """\
-Operations to perform:
-  File "/tmp/checkout/hq/platform/application/plugins.py", line 141, in _validate_manifest
-    raise ImproperlyConfigured(
-django.core.exceptions.ImproperlyConfigured: Plugin 'example.ledger' requires API 5; HQ supports 4.
-"""
+# How Django stops loading an extension set the tree's HQ cannot take: one built for a newer
+# plugin API, and one importing what this HQ does not have.
+SET_REFUSALS = (
+    "django.core.exceptions.ImproperlyConfigured: Plugin 'example.ledger' requires API 5; HQ supports 4.",
+    "django.core.exceptions.ImproperlyConfigured: Cannot load HQ plugin reference 'example.ledger.plugin:plugin'.",
+)
+SET = "example.ledger.plugin:plugin"
+
+
+class Checks:
+    """`manage.py check` in a tree, stopping at ``composed`` where the extension set is composed
+    and at ``alone`` where it is not, each loading where it is empty; the checks asked are kept."""
+
+    def __init__(self, composed: str = "", alone: str = "") -> None:
+        self.composed, self.alone = composed, alone
+        self.asked: list[list[str]] = []
+
+    def __call__(self, command, *, env, **_kwargs):
+        if command[-1] != "check":
+            raise AssertionError(f"perf ran {command}, not a check")
+        self.asked.append(command)
+        said = self.composed if SET in env.get("HQ_LOCAL_PLUGINS", "") else self.alone
+        # As mise hands a failed task back: Python's traceback, then mise's own line.
+        traceback = f'Traceback (most recent call last):\n  File "manage.py", line 22, in <module>\n{said}\n'
+        stderr = f"{traceback}[manage:scratch] ERROR task failed\n" if said else ""
+        return subprocess.CompletedProcess(command, 1 if said else 0, stdout="", stderr=stderr)
 
 
 class Refusing(FakeTarget):
@@ -339,21 +361,76 @@ class BesideABaseTests(Measured):
 
 
 class HostAloneTests(Measured):
-    def test_a_server_refusing_the_extension_set_for_its_plugin_api_starts_the_run_again_alone(self):
-        with self.assertRaisesRegex(report.SetRefused, r"requires API 5; HQ supports 4\."):
-            self.measure(Refusing(), log=REFUSED_LOG)
+    def setUp(self):
+        super().setUp()
+        composed = mock.patch.dict("os.environ", {"HQ_LOCAL_PLUGINS": SET})
+        composed.start()
+        self.addCleanup(composed.stop)
 
-    def test_any_other_start_failure_is_this_side_s_alone(self):
-        kept, _ = self.measure(Refusing(), log="OSError: [Errno 48] Address already in use\n")
+    def checked(self, checks: Checks):
+        patcher = mock.patch.object(targets.subprocess, "run", checks)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return checks
+
+    def test_a_base_that_cannot_load_the_extension_set_but_serves_the_host_alone_starts_the_run_again_alone(self):
+        for refusal in SET_REFUSALS:
+            with self.subTest(refusal=refusal):
+                self.checked(Checks(composed=refusal))
+
+                with self.assertRaises(report.SetRefused) as raised:
+                    self.measure(FakeTarget(), base=Refusing())
+
+                self.assertIn(refusal, str(raised.exception), "the closing line says why the set was not loaded")
+                self.assertIn("ba9876543210", str(raised.exception), "the commit that cannot load it is named")
+
+    def test_a_refusal_whose_message_runs_over_several_lines_is_said_whole(self):
+        refusal = (
+            "hq.platform.application.plugins.DeclarationRefused: Plugin 'example.ledger' is refused, field by field:\n"
+            "  api_version: requires API 5; HQ supports 4"
+        )
+        self.checked(Checks(composed=refusal))
+
+        with self.assertRaises(report.SetRefused) as raised:
+            self.measure(FakeTarget(), base=Refusing())
+
+        self.assertIn("field by field: api_version: requires API 5; HQ supports 4", str(raised.exception))
+
+    def test_this_tree_refusing_the_set_starts_the_run_again_alone_too(self):
+        self.checked(Checks(composed=SET_REFUSALS[0]))
+
+        with self.assertRaisesRegex(report.SetRefused, r"requires API 5; HQ supports 4\."):
+            self.measure(Refusing())
+
+    def test_a_start_failure_the_host_alone_shares_is_this_side_s_own(self):
+        checks = self.checked(
+            Checks(
+                composed="OSError: [Errno 48] Address already in use",
+                alone="OSError: [Errno 48] Address already in use",
+            )
+        )
+
+        kept, _ = self.measure(Refusing())
 
         self.assertEqual(kept.doc["here"]["failures"][0]["step"], "start")
+        self.assertTrue(checks.asked)
+
+    def test_a_start_failure_where_the_set_loads_is_this_side_s_own(self):
+        self.checked(Checks())
+
+        kept, _ = self.measure(FakeTarget(), base=Refusing())
+
+        self.assertEqual(kept.doc["base"]["failures"][0]["step"], "start")
+        self.assertEqual(self.server_times.asked, [["here"]])
 
     def test_measured_alone_a_refusal_is_a_failure_and_never_a_loop(self):
         alone = report.Plan(**{**PLAN.__dict__, "alone": "--host-alone asked for it"})
+        checks = self.checked(Checks(composed=SET_REFUSALS[1]))
 
-        kept, _ = self.measure(Refusing(), alone, log=REFUSED_LOG)
+        kept, _ = self.measure(Refusing(), alone)
 
         self.assertEqual(kept.doc["here"]["failures"][0]["step"], "start")
+        self.assertEqual(checks.asked, [], "measured alone, nothing is left to fall back to")
 
     def test_the_closing_line_says_the_host_was_measured_alone_and_why(self):
         kept, _ = self.measure(FakeTarget())

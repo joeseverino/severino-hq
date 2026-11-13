@@ -27,7 +27,11 @@ User = get_user_model()
 
 
 def option_values(page, name: str) -> list[str]:
-    return [option.attrs["value"] for option in within(page, "name", name) if option.tag == "option"]
+    """The values a choice called ``name`` offers: a select's options, or a box to each."""
+
+    options = [option.attrs["value"] for option in within(page, "name", name) if option.tag == "option"]
+    boxes = [box.attrs["value"] for box in select(page, "name", name) if box.attrs.get("type") == "checkbox"]
+    return options + boxes
 
 
 class RecordFieldTests(TestCase):

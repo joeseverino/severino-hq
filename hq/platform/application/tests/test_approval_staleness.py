@@ -10,7 +10,8 @@ from hq.domains.control_plane.models import ApprovalRequest, CapabilityRule, Man
 from hq.domains.projects.models import Project
 from hq.platform.core.models import AuditLog
 
-from ..approvals import AUDIT_LABELS, ApprovalError, ApproveCommand, approve, preview
+from ..approval_review import preview
+from ..approvals import AUDIT_LABELS, ApprovalError, ApproveCommand, approve
 from ..capabilities import execute_capability, run_capability
 from ..domains import records_of
 from ..projects import DEPENDENCY_UPDATES
@@ -176,3 +177,85 @@ class SettledThroughTheRunnerTests(TestCase):
 
     def test_rejecting_a_lapsed_request_is_refused_and_it_stays_lapsed(self):
         self.lapsed("reject")
+
+
+class RunStalenessTests(TestCase):
+    """A held run is measured against the manifest as supplied, its parameters
+    as validated and its hosts as they resolve, so a move in any of them
+    stales it; asking again for the same run is the same request."""
+
+    def setUp(self):
+        from .procedures import Supply, manifest
+
+        self.supply = Supply(self, manifest(effect="destructive"))
+
+    def held(self, payload=None) -> ApprovalRequest:
+        from .procedures import RESTART_RUN, run_payload
+
+        answer = run_capability(
+            RESTART_RUN, payload or run_payload(), principal=mcp_principal(), idempotency_key="example-run-1"
+        ).answer
+        self.assertEqual(answer.get("status"), "awaiting_approval", answer)
+        return ApprovalRequest.objects.get(pk=answer["approval"]["id"])
+
+    def test_a_destructive_run_waits_for_a_person_and_asking_again_is_the_same_request(self):
+        first = self.held()
+
+        self.assertEqual(self.held().pk, first.pk)
+        self.assertEqual(ApprovalRequest.objects.count(), 1)
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_an_unmoved_run_is_approved_and_queued_as_its_asker_s(self):
+        held = self.held()
+
+        self.assertEqual(decided(held), ApprovalRequest.State.APPROVED)
+        operation = OperationRequest.objects.get()
+        self.assertEqual(operation.action, OperationRequest.Action.RUN)
+        self.assertEqual(operation.requested_actor, mcp_principal().actor)
+        self.assertEqual(operation.input["approved_by"], "operator")
+
+    def stales(self, held: ApprovalRequest) -> None:
+        self.assertEqual(decided(held), ApprovalRequest.State.STALE)
+        self.assertFalse(OperationRequest.objects.exists())
+
+    def test_a_new_revision_stales_it(self):
+        from .procedures import NEXT_REVISION, manifest
+
+        held = self.held()
+        self.supply(manifest(effect="destructive", revision=NEXT_REVISION))
+
+        self.stales(held)
+
+    def test_a_parameter_that_now_validates_to_another_value_stales_it(self):
+        """The same payload, read by an input type that normalizes it: what would run moved."""
+
+        from typing import Annotated
+
+        from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+        from .procedures import manifest, run_payload
+
+        held = self.held(run_payload(service="Web"))
+
+        class ServiceRestart(BaseModel):
+            model_config = ConfigDict(extra="forbid")
+
+            service: Annotated[
+                str,
+                Field(min_length=1, max_length=60, description="The service to restart."),
+                AfterValidator(str.lower),
+            ]
+
+        self.supply(manifest(effect="destructive", input_type=ServiceRestart))
+
+        self.stales(held)
+
+    def test_a_host_that_now_resolves_to_another_machine_stales_it(self):
+        from ..machines import Machine
+        from .procedures import APP, run_payload
+
+        self.supply.know(Machine(APP, aliases=("web.example.com",)))
+        held = self.held(run_payload("web.example.com"))
+        self.supply.know(Machine(APP), Machine("web.example.com"))
+
+        self.stales(held)

@@ -4,6 +4,11 @@ HQ learns the estate from its connections. An operator adds credentials; HQ
 reads what they can see, joins it, and says where each fact came from. Nothing
 HQ can read is typed in.
 
+This page is for someone adding a reading, or tracing where a fact on a page
+came from. Start with [Readings](#readings), the rules every reading keeps.
+The sections after it each take one kind of fact, and [Adoption](#adoption)
+says when HQ may act on what it read.
+
 ## Kinds of fact
 
 | | Where it lives | Who writes it |
@@ -30,7 +35,7 @@ ObservationSpec(
     "cloudflare_api",
     "Pages project",
     PagesProjectRecord,
-    requires=("Cloudflare Pages Read (account)",),
+    requires=(Cloudflare.PAGES_READ,),
     hostnames=lambda record: (*record.get("domains", ()), record.get("subdomain", "")),
     title=lambda record: record.get("name", ""),
     relation="Served by Pages project",
@@ -59,9 +64,9 @@ Rules:
 - **A release that changes what a record may hold reads it again.** A kind's
   `ObservationSpec.fingerprint` hashes its schema and which of its names the
   bridge declares. The boot (`cadence.request_boot_reads`) asks a read of each
-  kind HQ holds whose fingerprint moved since the last boot, and of every
-  held kind when none is stored, so records stored under an older contract
-  are replaced, not served as current. The fingerprint is stored as the boot
+  kind HQ holds whose fingerprint moved since the last boot, or of every held
+  kind when none is stored. So records stored under an older contract are
+  replaced, never served as current. The fingerprint is stored as the boot
   asks, however the request ends, since a held record its schema refuses is
   never carried: the controller's next sweep reads it in full
   (`github_repositories.plan`).
@@ -76,17 +81,17 @@ Rules:
   provider has none.
 - **A partial read says so, as a part.** A reading read in pieces declares them
   in `parts` (`ReadingPart(name, label, requires)`, each `requires` a subset of
-  the reading's); a resource kind declares them on its provider
-  (`ProviderSpec.parts`: a zone's TLS posture and registration, the tailnet
-  policy's settings, DNS and services). A reader that cannot read one calls
-  `refuse(ctx, part, connectionRef, scope, err)` or `refuseAt(..., address,
-  err)` (`controller/providers/provider.go`); the sweep reports the kind's
-  `refused_parts` beside its records and HQ stores them
+  the reading's). A resource kind declares them on its provider
+  (`ProviderSpec.parts`), such as a zone's TLS posture and registration, or the
+  tailnet policy's settings, DNS and services. A reader that cannot read one
+  calls `refuse(ctx, part, connectionRef, scope, err)` or `refuseAt(...,
+  address, err)` (`controller/providers/provider.go`); the sweep reports the
+  kind's `refused_parts` beside its records and HQ stores them
   (`hq.domains.control_plane.reading_parts`). A refused part is never a record
   or a field, so no count includes it. The whole kind on one zone or one
   machine (`scope` its name, `address` its address) is the part `""`. A refused
-  part reads **Partly read** in credential sight, its permissions join the
-  missing-permissions finding and the mint, it is an unreadable fact on every
+  part reads **Partly read** in credential sight, and its permissions join the
+  missing-permissions finding and the mint. It is an unreadable fact on every
   subject it could hide something about, and a path hop that depends on it says
   "<part> not read: missing <permissions>". The sweep's result (`kinds`) uses
   the same words, and `Not connected` for a kind no connection reads.
@@ -106,10 +111,10 @@ Rules:
   `ProviderSpec.console`: a tailnet device links to the Tailscale admin console
   by its tailnet address.
 - **A reading can depend on what fronts a name.** `fronted_by` names a resource
-  kind whose record must front a hostname for the reading to join it by name:
-  an edge certificate serves a name only through a proxied Cloudflare record,
-  which says so through `ProviderSpec.fronts`. A zone subject is not narrowed: a
-  domain holds its certificates whatever each record does.
+  kind whose record must front a hostname for the reading to join it by name.
+  An edge certificate, for one, serves a name only through a proxied Cloudflare
+  record, which says so through `ProviderSpec.fronts`. A zone subject is not
+  narrowed: a domain holds its certificates whatever each record does.
 - **A reading can say what it supplies.** `facet` is a service facet
   (`runtime`, `dns`, `proxy`, `certificate`) or `registration` or `network`: an
   edge certificate supplies a name's certificate, a Pages project its runtime,
@@ -127,10 +132,10 @@ Rules:
   hands one hostname on (a tunnel's ingress service). `restricts` marks a gate
   in front of what it names (Cloudflare Access, an NPM access list).
 - **A reading can speak for its connection.** `facts` returns `(key, value)`
-  pairs that land on the connection's topology node (a record naming no
-  connection speaks for every connection of its provider), where a finding
-  rule reads them: AdGuard's filtering off, a plain upstream, a rewritten name
-  nobody looked up.
+  pairs that land on the connection's topology node, where a finding rule reads
+  them: AdGuard's filtering off, a plain upstream, a rewritten name nobody
+  looked up. A record naming no connection speaks for every connection of its
+  provider.
 - **One reader per kind, one kind per reader.** The contract tests enforce both
   directions. `read_by` is `controller` for a reading taken through a
   credential, and `hq` for one HQ takes itself from a keyless public registry
@@ -181,7 +186,7 @@ credential and a 403 a missing permission (`runtime.StatusFailure`).
 
 ### The controller's own machine
 
-Four readings are of the machine a controller runs on and need no credential:
+Six readings are of the machine a controller runs on and need no credential:
 root reads a fact on the host and `hq-host controller` mounts the answer into
 the controller read-only, naming it in an environment variable. The controller
 never holds the ruleset or directory the fact came from. A fact the launcher
@@ -204,21 +209,35 @@ failed read that keeps the last one and says why.
 are in [Secrets](Secrets.md#how-hq-reads-it).
 
 `host.unit` is the state of every systemd unit the repository ships
-(`SEVERINO_HOST_UNITS`): one record per unit. The set is derived, never listed:
-`Reported` in `controller/host/readings.go` walks `deploy/systemd` in the
-root-owned tree. It takes each shipped unit that is not a template, and each
-instance of a shipped template that a shipped file starts through `Unit=` or
-`OnFailure=`, so a unit added to the directory is read once installed. The
-launcher asks `systemctl show` for a fixed list of properties
-(`UnitProperties` in `controller/host/layout.go`) and mounts what it printed. The
-controller keeps exactly those properties and refuses a value that is not a
+(`SEVERINO_HOST_UNITS`), and of every other service systemd keeps restarting
+(`SEVERINO_HOST_RESTARTING_UNITS`): one record per unit. The shipped set is
+derived, never listed: `Reported` in `controller/host/readings.go` walks
+`deploy/systemd` in the root-owned tree. It takes each shipped unit that is not
+a template, and each instance of a shipped template that a shipped file starts
+through `Unit=` or `OnFailure=`, so a unit added to the directory is read once
+installed. The launcher asks `systemctl show` for a fixed list of properties
+(`UnitProperties` in `controller/host/layout.go`) and mounts what it printed.
+The controller keeps exactly those properties and refuses a value that is not a
 unit name, a systemd state word, a number or an instant. The one property of
 words is `Description`, the title the unit file gives it, read so a page names
 a unit as a person reads it rather than by a name systemd escapes
-(`run-severino\x2dhq\x2dsecrets.mount`). The repository writes every title,
-and the contract admits one only as printable ASCII on one line, bounded, with
-no slash, equals sign or bar; any other is left out, and the page shows the
-unit's name. `HostUnitRecord` in
+(`run-severino\x2dhq\x2dsecrets.mount`). The repository writes every shipped
+unit's title, and another package a restarting service's. The contract admits
+one only as bounded, printable ASCII on one line, with no slash, equals sign or
+bar. Any other is left out, and the page shows the unit's name.
+
+The second file is the same answer for each loaded service outside the shipped
+set whose `NRestarts` is above zero, so a loop in a unit HQ does not ship is
+seen. (`Restarting` in the same file asks systemd for every `*.service` it
+holds and keeps those.) systemd counts only its own restarts since the unit was
+last started deliberately, and a start or `systemctl reset-failed` sets the
+count back to zero. The file is empty when nothing restarts and absent when
+systemd did not answer, which the controller reads as a failed read, never as
+none. Its records carry `foreign`, set from the file they came from. A service
+there whose name or words the contract does not admit is passed over, never a
+refusal of the shipped units.
+
+`HostUnitRecord` in
 the bridge contract is emitted from the model of that name
 (`hq/domains/control_plane/observations/host.py`): it holds no command line, environment or path, and a
 unit that is not installed is a record saying so. Each record carries when it
@@ -234,11 +253,14 @@ rule by `test_no_rule_measures_an_aged_reading_from_now`).
 |---|---|---|
 | `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer, path or socket starts again |
 | `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer, path, socket or mount is not active | serious |
+| `unit-restarting` | systemd has restarted a service on its own at least ten times since it was last started, and it is not up: waiting to restart, starting, or active for less than ten minutes when read. Ten is above systemd's default start limit of five, so a service restarting faster than that is stopped and failed, `unit-failed`'s to say | serious |
 | `timer-stalled` | an active timer is not running its unit. Nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
 | `unit-state-unread` | the launcher mounted no answer, or the answer was refused, or the reading is too old to judge | attention |
 
-The rules name no unit. A renderer whose own status says its run failed is
-`render-failing`'s to report, with the failure's class, so `unit-failed` leaves
+The rules name no unit. `unit-not-installed` judges only the shipped set:
+deploying HQ sets up none of a restarting service another package installed,
+whose file may well be disabled. `unit-failed` judges both. A renderer whose
+own status says its run failed is `render-failing`'s to report, with the failure's class, so `unit-failed` leaves
 that unit out and one failure is one finding. `host.render_status` stays a
 reading of its own for what systemd cannot know: why a render failed, when the
 installed files were last confirmed, and whether Connect is syncing.
@@ -247,6 +269,66 @@ A unit that fails does not wait for the next sweep: its `OnFailure=` starts the
 `units.read` job ([Deployment](Deployment.md#units)), which stores a read
 request for `host.unit` and rings the doorbell, so the next sweep reads that
 one kind.
+
+`host.filesystem` is the space on each real filesystem of the machine
+(`SEVERINO_HOST_FILESYSTEMS`), one record per filesystem: where it is mounted,
+its free bytes (what a process other than root can still write, as `df` counts
+Avail) and its size. Root reads it, since a statfs in the container answers for
+the container's overlay: `hostcore.ReadFilesystems`
+(`controller/internal/hostcore/filesystem.go`) takes each ext4, xfs, btrfs or
+zfs mount in `/proc/self/mounts`, one per device, leaves out a mount another
+covers, and asks statfs. It sends no device, option or file name, and the
+contract admits a mount only as printable ASCII from a slash, with no bar. The
+launcher names the file whether or not it could be taken, so a table it could
+not read is a failed read that keeps the last one.
+
+`hq/platform/application/filesystem_findings.py` raises, on the same node:
+
+| Finding | When | Severity |
+|---|---|---|
+| `filesystem-nearly-full` | a filesystem had under 2 GiB free and under a tenth of its size, when read; one finding per machine names each | attention; serious when one had under 512 MiB and under 3% |
+
+Both a floor and a share must be crossed: a share alone flags a large disk with
+plenty left, and a floor alone flags every small partition, such as a 1 GiB
+`/boot`, for good. Its steps show the mount's space with `df -h`, then what
+fills it with `du -xh --max-depth=1`.
+
+`host.reboot` is whether the machine waits on a restart
+(`SEVERINO_HOST_REBOOT`), one record: whether `/run/reboot-required` is
+there, when it was created (statx's birth time), the packages
+`/run/reboot-required.pkgs` names, each once, and the shutdown logind has
+scheduled, if any. Debian's and Ubuntu's packaging writes the two files when
+an update needs a restart to take effect. The scheduled shutdown is logind's
+`ScheduledShutdown` property, which `org.freedesktop.login1(5)` documents
+and `shutdown -r <time>` sets: root asks `busctl --json=short get-property`
+for it, since the container reaches neither the host's `/run` nor its system
+bus, and a `dry-` action, which does nothing when its time comes, is nothing
+scheduled. `hostcore.ReadReboot` (`controller/internal/hostcore/reboot.go`)
+reads both, sending no path or file contents beyond the package names, which
+the contract admits only as dpkg spells them, at most 64. The launcher names
+the file whether or not it could be taken, and a logind that did not answer is
+a failed read that keeps the last one.
+
+`host.edge_reboot` is the same of each Caddy edge, one record each: its
+receiver answers the document to its `reboot` operation (`controller/edge`,
+version 5 on) over the edge's SSH transport, which the record names as
+`connection_ref`. Since it logs in, a page visit never asks for it. An edge
+that does not answer, one older than version 5 included, is a refused part
+scoped to that connection, so every other edge's record still stands; the
+read fails only when no edge answered.
+
+`hq/platform/application/reboot_findings.py` raises, on the controller's
+machine node for `host.reboot` and on the machine an edge's connection
+reaches for `host.edge_reboot`:
+
+| Finding | When | Severity |
+|---|---|---|
+| `reboot-pending` | the machine waited on a restart, or had one scheduled, when read | attention |
+
+It says since when, for which packages, and when the restart is scheduled.
+Its steps read the package list, then schedule the restart with
+`shutdown -r 03:00`, or, when one is scheduled, show it with
+`shutdown --show`, which `shutdown -c` cancels.
 
 ## Facts about a subject
 
@@ -272,7 +354,7 @@ the topology's reading edges read `readings()`. Each kind's inventory is read
 once per page, not once per subject.
 
 A kind that could not be read and could join the subject appears as not
-readable (`unreadable_labels`), with its reason; a kind no connection could
+readable (`unreadable_labels`), with its reason. A kind no connection could
 read (`connected` false on its inventory row) yields nothing, since it is not a
 failed read.
 
@@ -347,7 +429,14 @@ says who it admits, worst first:
   meets the edge, or its answer is a public address.
 - **gated**: reachable from the internet, but a reading that `restricts` names
   it. HQ reads that the gate exists, not what its policy admits.
-- **private**: the answer is on the tailnet or the local network.
+- **private**: the answer is on the tailnet or the home network, or a proxy on
+  the route admits only those. A private route says who it admits as its reach
+  (`reach.Reach`): tailnet only, or the home network and tailnet when any
+  answer is a local address. A proxy's access list whose rules HQ read narrows
+  that and never widens it (`reach.admitted_network`): a local or public answer
+  behind a list admitting only tailnet ranges reads tailnet only, and the
+  detail names the list. That wording is the one the service page's header,
+  its path and the services list all show.
 - **unrouted**: nothing HQ reads routes a name to it.
 - **unknown**: nothing HQ saw routes to it, but HQ has not read every kind that
   could (`paths.reads_every_route`), or the container publishes ports and no
@@ -370,7 +459,7 @@ about (`exposure.status_at`):
 
 This applies to container advisories and container posture failures, and the
 item says which container is most exposed and how. Information stays off the
-action queue. The services list gives each name its reach in one word, with the
+action queue. The services list gives each name its reach in a few words, with the
 route as its title. A name open to the internet offers on its page the fix
 HQ can run: an access list on the proxy host it declares.
 
@@ -467,18 +556,18 @@ the topology's own node and edge code, once per projection, without what only
 the topology page needs (health, actions, traffic).
 `relationships.relationships_for(node_id)` returns one node's edges in both
 directions, grouped by the phrase each says from that node: a service "Runs on"
-a machine, the machine "Serves" it, from one edge.
-`topology_model.RELATIONS` states each structural edge kind's phrase, inverse
-and rank once; a reading edge takes its phrase from the reading's `relation`
-and its rank from its facet (`READING_RANKS`), so what serves a name comes first
-and an overlay with no facet (Access) last. Each item is a linked entity, with
-the connection that read it and when.
+a machine, the machine "Serves" it, from one edge. `topology_model.RELATIONS`
+states each structural edge kind's phrase, inverse and rank once. A reading
+edge takes its phrase from the reading's `relation` and its rank from its facet
+(`READING_RANKS`). So what serves a name comes first, and an overlay with no
+facet (Access) last. Each item is a linked entity, with the connection that
+read it and when.
 
 A declared container is a subject keyed by `contract.container_key`, so every
 Docker reading that names it (its networks, mounts, image, runtime and compose
 project) joins to it as it joins to its machine. The machine page's Docker
 bands (environment, compose projects, networks, where data lives, images) and
-the service page's "Who is allowed" band read the same joined records
+the service page's "Access" band read the same joined records
 (`hq/platform/application/docker_sections.py`,
 `hq/platform/application/npm_sections.py`).
 
@@ -495,7 +584,7 @@ Findings from these readings:
   (`hq/platform/application/certificate_expiry.py`).
 
 The machine, service, domain and declaration pages render the section, with
-"See on the map" (`?focus=<node>`), one "Not readable" line linking to the
+"View on map" (`?focus=<node>`), one "Not readable" line linking to the
 connections page, and each source's raw records under a disclosure.
 
 ## Links
@@ -703,8 +792,8 @@ each workflow and each local composite action (`.github/actions/*/action.yml`),
 and the commit each tag or branch names now. It also names each workflow
 called from another repository (`owner/repo/.github/workflows/x.yml@ref`).
 
-It uses the same token with `contents: read` and resolves each action and tag
-once per sweep: a commit read for one repository serves the rest, and a ref
+It uses the same token with Contents: Read-only and resolves each action and
+tag once per sweep. A commit read for one repository serves the rest, and a ref
 one repository could not read is asked again by the next. A repository with no
 `.github/workflows` (GitHub answers 404) has nothing to pin, which is not a
 failed read.
@@ -731,16 +820,17 @@ request reads GitHub.
 
 ### Dependency updates
 
-A project opted in by `project.dependency_updates.set` has its repository updated
-by Renovate once a day and when somebody asks (`project.dependency_updates.run`).
+A project opted in by `project.dependency_updates.set` has its repository
+updated by Renovate once a day and when somebody asks
+(`project.dependency_updates.run`).
 `hq.platform.application.dependency_updates.plan` hands the controller the
 opted-in repositories, grouped by owner, whether a run is due, and
 `last_started_at`, the latest run HQ holds. When one is due the controller
-mints one installation token per owner, naming exactly that owner's
+mints one installation token per owner. Each names exactly that owner's
 repositories and exactly the Renovate grant (`DependencyUpdates` in
-`controller/host/grant.go`, held to `deploy/github-apps.json`),
-and writes them, mode 0600, to `dependency-updates.json` in the directory root
-gives the pass as `HQ_CONTROLLER_OUT`:
+`controller/host/grant.go`, held to `deploy/github-apps.json`). It writes them,
+mode 0600, to `dependency-updates.json` in the directory root gives the pass as
+`HQ_CONTROLLER_OUT`:
 
 ```json
 {"version":1,"runs":[{"owner":"example","repositories":["example/app"],"token":"…","expires_at":"2030-01-01T00:00:00Z"}]}
@@ -798,14 +888,18 @@ connection acts, and HQ manages through it only when its item says so
 ([Adoption](#adoption)). Probing is how HQ learns what a credential can read: a
 refused kind is a missing permission.
 
-`requires` on each reading is a tuple of exact permission names, as the minting
-tasks use them: Cloudflare as `<permission group name> (<account|zone>)`,
-Tailscale as the bare scope name; a part names its subset in `parts`.
-`tools/cloudflare-observer-permissions.txt` and
-`tools/tailscale-observer-scopes.txt` hold every reading's `requires` plus
-the reads in `hq.domains.control_plane.credential_reads` that are not readings
-yet; a test keeps them equal. Minting is in
-[Secrets](Secrets.md#minting-observer-credentials).
+`requires` on each reading is a tuple of members of its provider's table in
+`hq.domains.control_plane.permissions`, and a part names its subset in `parts`.
+A member reads the way the provider's own screen names the permission, where
+the operator grants it. The API's name stands beside it where the two differ
+(Cloudflare's dashboard says `D1 Edit` for the API's `D1 Write`). Each table
+cites the provider's documentation it follows. The registry refuses a
+permission written as text, and a source test refuses one spelled anywhere
+outside the tables. `tools/cloudflare-observer-permissions.txt` and
+`tools/tailscale-observer-scopes.txt` hold the API name of every reading's
+`requires` plus the reads in `hq.domains.control_plane.credential_reads` that
+are not readings yet, as the minting tasks resolve them; a test keeps them
+equal. Minting is in [Secrets](Secrets.md#minting-observer-credentials).
 
 ### What a credential can see
 
@@ -814,11 +908,11 @@ reading it feeds and every resource kind a sweep reads. A kind with an
 `unobserved_reason` is read by no sweep and is not listed. Each kind is one of:
 
 - **Readable**, with its record count and age.
-- **Refused**. The controller reports `refusal` on the kind: `permission` when
-  the provider refused one permission, and the page offers "Add <requires> to
-  see <label>"; `credential` when it refused the credential itself (invalid,
-  expired, locked out, used from a refused location), and the row says so once
-  for the connection.
+- **Refused**. The controller reports `refusal` on the kind. It is `permission`
+  when the provider refused one permission, and the page offers "Add <requires>
+  to see <label>". It is `credential` when the provider refused the credential
+  itself (invalid, expired, locked out, used from a refused location), and the
+  row says so once for the connection.
 - **Partly read**: read, with a declared part refused; the missing permissions
   and the parts they would show are named.
 - **Could not be read**: the read failed for another reason, shown with its
@@ -855,7 +949,7 @@ manage; one that names none needs every connection of its kind's providers to
 manage. Anything else shows everywhere as observed and is never declared.
 
 "Stop managing" an adopted record stores a `NotManaged` row (kind, record
-token, who, when), and sweeps skip it. Managing it again ("Manage this domain",
+token, who, when), and sweeps skip it. Managing it again ("Manage domain",
 or adopting the record) clears the row. Both are audited.
 
 A deployment that relies on a sweep adopting sets `manages` to `1` on each

@@ -12,6 +12,7 @@ A stylesheet's generated marks are `lint:css`'s.
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 from hq.platform.core.tests.separators import loose_dots, typed_marks
 
@@ -75,6 +76,7 @@ class SeparatorRuleTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class TemplateSeparatorTests(SimpleTestCase):
     def test_no_template_types_a_mark_a_reader_hears(self):
         found = [

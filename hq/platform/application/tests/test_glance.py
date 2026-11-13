@@ -23,6 +23,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import AuditLog
 from hq.platform.core.tests.estate_sizes import assert_subject_cost_does_not_grow
+from hq_sdk.testing import plain
 
 from .. import readings
 from ..capabilities import execute_capability
@@ -102,7 +103,7 @@ class DashboardGlanceTests(TestCase):
 
         for machine, name in ((self.machine, "app"), (other, "db")):
             (part,) = select(html, "data-fragment-part", f"machine-{machine.pk}")
-            (head,) = (element for element in with_class(html, "glance-caption") if part in element.ancestors)
+            (head,) = (element for element in with_class(html, "reading-lines") if part in element.ancestors)
             self.assertIn(name, head.text)
 
     def test_compact_summary_preserves_full_readings_in_the_menu_it_opens(self):
@@ -124,7 +125,7 @@ class DashboardGlanceTests(TestCase):
         (opened,) = select(html, "id", opener.attrs["popovertarget"])
         self.assertIn("popover", opened.attrs)
         for metric in ("12%", "Memory", "579 MB", "Storage", "3 GB"):
-            self.assertIn(metric, opened.text)
+            self.assertIn(metric, plain(opened.text))
 
     def setUp(self):
         self.machine = ManagedResource.objects.create(

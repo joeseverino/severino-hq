@@ -1,11 +1,11 @@
 {% comment %}
 The steps of a card, from `application.decisions`: a command to run (a "run"
 step's summary) or an instruction with its own text. One step stands alone and
-several are numbered. Long steps fold under "Steps". A reason is a sentence on
-the card and is never a step. Actions link to their owner; nothing here runs one.
+several are numbered. Long steps fold under "Steps", a folded section under
+the card's own title. A reason is a sentence on the card and is never a step.
+Actions link to their owner; nothing here runs one.
 {% endcomment %}
-{% if steps %}
-{% if fold %}<details class="resolution-fold"><summary>Steps<span class="visually-hidden"> for {{ label|breakable }}</span></summary>{% endif %}
+{% partialdef steps %}
 <{% if steps|length > 1 %}ol{% else %}ul{% endif %} class="resolution-workflow">
   {% for step in steps %}
     <li>
@@ -15,5 +15,7 @@ the card and is never a step. Actions link to their owner; nothing here runs one
     </li>
   {% endfor %}
 </{% if steps|length > 1 %}ol{% else %}ul{% endif %}>
-{% if fold %}</details>{% endif %}
+{% endpartialdef %}
+{% if steps %}
+{% if fold %}{% section "Steps" fold=True %}{% partial steps %}{% endsection %}{% else %}{% partial steps %}{% endif %}
 {% endif %}

@@ -432,7 +432,7 @@ class PageTests(TestCase):
         self.assertNotIn("My Calendar", text(response))
         # An entry opens beside its day: once, with what can be done to it.
         opened = self.client.get(entry.get_absolute_url())
-        self.assertEqual(len(select(opened, "aria-label", "Dentist")), 1)
+        self.assertEqual([heading.words for heading in select(opened, "id", "day-entry-heading")], ["Dentist"])
         self.assertIn(reverse("calendar:entry_edit", args=[entry.uid]), hrefs(opened))
         (panel,) = select(opened, "id", "day-panel")
         self.assertEqual(panel.words.count("Dentist"), 1)

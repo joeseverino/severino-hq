@@ -10,7 +10,7 @@ from django.urls import reverse
 from hq.platform.core.models import AuditLog
 
 from ..demo import amount, day, demo_scope, label, showing_demo
-from .markup import with_class
+from .markup import with_class, within
 
 
 class SubstitutionTests(TestCase):
@@ -188,6 +188,17 @@ class ToggleTests(TestCase):
         # The header's mark stays a label: the corner control is the one way in.
         (flag,) = with_class(copy, "demo-flag")
         self.assertEqual(flag.tag, "span")
+
+    def test_the_about_dialog_leads_to_the_playbooks(self):
+        """Playbooks are the story the demo tells, and nothing else on the
+        landing page leads there."""
+
+        self.client.post(reverse("demo_mode"))
+        with override_settings(SEVERINO_RENDERED_COPY=True):
+            copy = self.client.get(reverse("dashboard"))
+
+        inside = [element.attrs.get("href") for element in within(copy, "id", "modal-demo-about")]
+        self.assertIn(reverse("control_plane:playbooks"), inside)
 
     def test_the_switch_carries_the_state_rather_than_the_label(self):
         """A menu entry that renames itself makes you read the button to work

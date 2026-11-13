@@ -62,7 +62,7 @@ def claim_resolution_plan(
     identity = claim_identity(namespace, rule, subject, scope)
     return WorkflowPlan(
         id=f"resolve:{identity}",
-        label="What to do",
+        label="Next steps",
         steps=tuple(steps),
         outcome=WorkflowOutcome(
             "claim_absent",

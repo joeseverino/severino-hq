@@ -50,6 +50,47 @@ class MultipleFileField(forms.FileField):
         return [clean_one(item, initial) for item in uploads]
 
 
+class ChoiceCards(forms.RadioSelect):
+    """One answer of a few, each a card that says what choosing it does
+    (docs/Design.md, "A choice that has a consequence says it").
+
+    ``described`` maps each value to its consequence, which the card's radio
+    names as its description, so the answer's name stays its few words.
+    """
+
+    template_name = "django/forms/widgets/choice_cards.html"
+
+    def __init__(self, *args, described: dict[str, str], **kwargs):
+        super().__init__(*args, **kwargs)
+        self.described = described
+
+    @override
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(name, value, label, selected, index, subindex, attrs)
+        option["description"] = self.described.get(str(value), "")
+        if option["description"] and (own := option["attrs"].get("id")):
+            named = option["attrs"].get("aria-describedby", "")
+            option["attrs"]["aria-describedby"] = f"{own}_what {named}".strip()
+        return option
+
+
+class SuffixedInput(forms.TextInput):
+    """A line of words with its unit after it (a percent sign), drawn beside
+    the box and never typed into it."""
+
+    template_name = "django/forms/widgets/suffixed.html"
+
+    def __init__(self, *args, suffix: str, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.suffix = suffix
+
+    @override
+    def get_context(self, name, value, attrs):
+        context = super().get_context(name, value, attrs)
+        context["widget"]["suffix"] = self.suffix
+        return context
+
+
 class LinesField(forms.Field):
     """A list edited as one item per line."""
 

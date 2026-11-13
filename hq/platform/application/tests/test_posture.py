@@ -288,7 +288,7 @@ class PageTests(TestCase):
     def test_the_connection_panel_says_advanced_posture_is_enabled(self):
         response = self.client.get(reverse("connection"))
 
-        self.assertContains(response, "Advanced HQ Posture enabled")
+        self.assertContains(response, "Advanced HQ Posture</a>")
         self.assertNotContains(response, "SEVERINO_POSTURE=advanced")
 
     def test_the_api_carries_the_standard(self):

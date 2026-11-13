@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.permissions import Tailscale
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..connection_context import ConnectionsContext, connections_context
@@ -256,7 +257,7 @@ class ConnectionProjectionTests(TestCase):
 
         self.assertEqual(
             rows["example-tailnet"]["would_also_see"],
-            ["Would also see Tailnet user with users:read"],
+            [f"Would also see Tailnet user with {Tailscale.USERS_READ}"],
         )
         sights = {read["sight"]["kind"]: read["sight"] for read in rows["example-tailnet"]["reads"] if read["sight"]}
         self.assertEqual(sights["tailscale.device"]["freshness"], "current")
@@ -264,10 +265,29 @@ class ConnectionProjectionTests(TestCase):
     def test_the_page_renders_the_projection(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertIn("Would also see Tailnet user with users:read", text(response))
+        self.assertIn(f"Would also see Tailnet user with {Tailscale.USERS_READ}", text(response))
         self.assertContains(response, "Reached over the internet")
         self.assertContains(response, "Refresh all")
         self.assertTrue(select(response, "formaction", "/infrastructure/connections/read/?connection_ref=example-host"))
+
+    def test_a_connection_that_only_changes_says_so_where_its_reads_go(self):
+        """A write-only credential (a vault certificates are published to) is
+        Working with nothing to read: its Reads cell says that, and what it
+        changes, rather than the empty marker beside a working state."""
+
+        from ..entity_links import connection_anchor
+
+        connect("example-vault", "onepassword", "https://vault.example.com")
+
+        response = self.client.get(reverse("control_plane:connections"))
+
+        (row,) = [row for row in response.context["connections"].rows if row.instance.connection_ref == "example-vault"]
+        self.assertEqual(row.reads, ())
+        self.assertTrue(row.changes)
+        (drawn,) = select(response, "id", connection_anchor("example-vault"))
+        for state in row.changes:
+            self.assertIn(f"Changes only: {state.ability.label}", drawn.words)
+        self.assertNotIn("Last read", drawn.words)
 
     def test_a_read_asked_for_shows_on_its_row(self):
         self.client.post(reverse("control_plane:read_now"), form_keyed({"connection_ref": "example-tailnet"}))

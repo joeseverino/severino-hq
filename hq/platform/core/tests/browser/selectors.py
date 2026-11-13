@@ -4,6 +4,12 @@
 # test_browser_selectors to markup a template or tag library writes: CSS
 # selectors only (no `xpath=`), and never an attribute only a script sets.
 SELECTORS = {
+    # A row's actions cell ({% row_actions %}) and any cell of a column of
+    # controls, whose controls sit on the row's first line.
+    "row_actions_cell": 'main td.row-actions, main td[data-kind="control"]',
+    # The queue's cell of what a row offers and its dismiss
+    # (`partials/_queue_rows.html`), a table with no headings to name its kind.
+    "queue_actions_cell": "main td.queue-act",
     # A device on the Agents page waiting for the reader's approval.
     "device_prompt": "[data-prompt]",
     # An agent's update streams: a full set warned of in its row's cell, and
@@ -23,19 +29,27 @@ SELECTORS = {
     # A form's closing row (a long form's save bar is one), the section frame
     # it ends, and a control a row of the form chooses with.
     "save_bar": ".form-actions",
+    # A form that asks one question (partials/_form.html), its one control
+    # and its button.
+    "one_question": ".form.is-question",
+    "question_control": ".field > :is(input, select)",
+    "question_button": ".form-actions > button",
     "section_frame": ".section",
     "choice": "select",
     "quiet_link": ".subtle-link",
+    # A service's favorite star (control_plane/_service_pin.html), a control
+    # smaller than a finger that hangs its hit area beside it.
+    "favorite_star": ".pin-toggle",
     "calendar_period": "#calendar-month > .section-head h2",
     "calendar_next": '#calendar a[rel="next"]',
     "decisions": "[data-attention-item]",
     # What a page says of the readings it asked for on opening.
     "ask_note": "[data-ask-note]",
-    # A page's note on its readings, the bar it stands under and the person's
-    # control at the bar's end.
-    "page_note": '.content > [data-ask-note][form="page-visit"]',
-    "bar": ".site-header",
-    "account": ".user-menu",
+    # A page's note on its readings, at the end of the head's first line, and
+    # the page it heads.
+    "page_note": '.page-trail-row [data-ask-note][form="page-visit"]',
+    "page_trail_row": ".page-trail-row",
+    "content": "#content",
     # A family's toggle, the row toggle, and a row's own dismiss.
     "decision_family": "[data-queue-family] [data-fold-toggle]",
     "row_toggle": "[data-row-toggle]",
@@ -51,16 +65,26 @@ SELECTORS = {
     "decision_detail": ".attention-detail",
     # What an item says, and where its buttons are: the words run to the buttons.
     "decision_words": "[data-attention-item] :is(.attention-head, .attention-detail)",
-    "decision_buttons": ":is(.attention-end, .queue-act)",
+    "decision_buttons": ".queue-act",
     # Running text, and what an opened row shows beneath it: code in it is
-    # never cut, since only a cell's own identifier is.
-    "running_text": ":is(p, li, .row-detail)",
+    # never cut, since only a cell's own identifier is. The rest of a
+    # `line_list` is no text but the parts its line has no room for, each
+    # an item of its own.
+    "running_text": ":is(p, li:not(.line-rest), .row-detail)",
     "code": "code",
-    # The boxes that cut a cell's identifier: the token, a part inside it,
-    # the chip.
-    "cut_box": ":is(.token[data-sole], .token[data-sole] .whole, code, code > .token)",
+    # The boxes that cut a cell's identifier: the token, the box it draws
+    # the name in (a chip in code), a part inside it.
+    "cut_box": ":is(.token[data-sole], .token[data-sole] > .cut, .token[data-sole] .whole, code)",
     # The box a name in a cell is held by.
     "name_box": "[data-entity], code, .token[data-sole]",
+    # The box a cell cuts a one-token name in, and the parts it lays out on
+    # its line.
+    "name_cut": "main td :is(.token[data-sole], .cell-line):not(code *) > .cut:has(.whole)",
+    "part": ".whole",
+    # A cell's kept line, the icon it opens with and the name beside it.
+    "kept_line": "main td > .kept-line",
+    "line_icon": ".icon",
+    "line_name": ".token",
     "decision_actions": ".queue-act .attention-actions",
     # The queue's table, and its cells of what is wrong and of its buttons.
     "queue_table": ".queue-table",
@@ -89,10 +113,13 @@ SELECTORS = {
     "nav_menu_panel": ".primary-nav [data-menu] > [popover]",
     "nav_drawer": ".primary-nav",
     "nav_toggle": "[popovertarget=primary-navigation]",
-    "highlights": ".dashboard-highlights > section",
+    # The dashboard's domain overviews, and the row its calendar leads.
+    "highlights": ".section-flow > .section:has(> .section-body > .kpi-grid.is-featured)",
+    "patterns": ".section-flow:has(> #dashboard-calendar) > .section",
     # Each reading in the dashboard's row: a mark, then its lines.
-    "readings": ".dash-readings .glance-panel-head",
-    "patterns": ".dashboard-patterns > .section",
+    "readings": ".readings .reading-head",
+    # The dashboard's strip of counts across HQ, by the name it gives a reader.
+    "dashboard_counts": "main dl[aria-label='Across HQ']",
     # A control a reader fills in or picks from, whose edge is what shows it.
     "fillable": "input:not([type=checkbox], [type=radio], [type=hidden], [type=range], [type=color], [type=submit], [type=button], [type=reset], [type=image]), select, textarea",
     # A link that goes somewhere.
@@ -120,14 +147,23 @@ SELECTORS = {
     "cell_content": "main td *, main th *",
     # A page's title.
     "page_title": ".page-head h1",
+    # A head's line of facts under its title (`page_facts`).
+    "head_facts": ".page-head .page-facts",
     # What holds the content and so stays inside its gutter: a card, a block
     # of code.
-    "gutter_bound": "pre, .card, .boxed-facts",
+    "gutter_bound": "pre, .card",
     # The box built to scroll a table sideways.
     "table_scroll": ".table-scroll",
-    # The boxes allowed to scroll sideways: a table's, and a block of code,
-    # whose lines are as written.
-    "sideways": ".table-scroll, pre",
+    # The boxes allowed to scroll sideways: a table's, a block of code, whose
+    # lines are as written, and a page's map of its sections, one row of
+    # links at every width as a row of tabs is, so a section added never
+    # makes the page taller before its content begins.
+    "sideways": ".table-scroll, pre, .page-nav-list",
+    # A page's map of its sections: the row that scrolls, a link in it, and
+    # the link of the section being read.
+    "page_nav_list": "[data-page-navigation] .page-nav-list",
+    "page_nav_link": "[data-page-nav-link]",
+    "page_nav_current": '[data-page-nav-link][aria-current="location"]',
     # A table whose rows can be chosen, which the table script wires up last.
     "selectable_table": "[data-selectable-table]",
     # What a parser leaves where a <p> was closed early by a block inside it.
@@ -148,21 +184,21 @@ SELECTORS = {
     # stylesheet leaves to the vendor's own rules (tokens.css): the API
     # reference's viewer, which ReferenceBrowserTests holds to its own rules.
     "vendored": "[data-vendored]",
-    # A check in the connection panel: what it says, then what it was read from.
-    "check_statement": ".conn-layer-label",
-    "check_evidence": ".conn-layer-evidence",
+    # A check of a check ladder: what it says, then what it was read from.
+    "check_statement": ".ladder-statement",
+    "check_evidence": ".ladder-evidence",
     # A value a disclosure's handle names.
     "summary_value": "main summary code",
     # The topology map, its lanes and the nodes in them.
     "map": ".topology-map",
     "map_lane": ".topology-lane",
     "map_node": ".topology-node",
-    # A node's select link, the details beside the lanes, a trace's groups of
-    # chips, and a chip.
+    # A node's select link, the details beside the lanes, a trace's switches
+    # and a choice in one.
     "map_select": "[data-topology-select]",
     "map_detail": ".topology-detail",
-    "trace_controls": ".topology-trace-controls",
-    "trace_chip": ".scope-chip",
+    "trace_controls": "#trace .switch",
+    "trace_chip": ".switch li > a",
     # The command center: its field, its options, and the hint Enter's choice hides.
     "palette_input": "[data-command-center-input]",
     "palette_option": "[data-command-center-option]",
@@ -184,6 +220,12 @@ SELECTORS = {
     "figure_value": ".kpi .value",
     # A "do this now" control, whose words are its button's.
     "ask": ".ask",
+    # An ask's button.
+    "ask_button": "[data-ask] [data-ask-button]",
+    # The button of an ask beside a page's title, which a menu holds a copy of.
+    "head_ask_button": ".page-head > .page-actions > .ask [data-ask-button]",
+    # What a page's head offers when it could not draw a reading in place.
+    "head_offer": ".page-head .ask-said a",
     # One standing in a table's row, rather than in the line a row opens.
     "row_ask": ".data-table > tbody > tr:not(.row-detail) > td [data-ask]",
     # What an ask says on the line its row opens to.
@@ -206,18 +248,28 @@ SELECTORS = {
     # A dialog a page declares (partials/_modal.html), and the controls that
     # open one: a link the page's wiring intercepts, or a control that says
     # it opens a dialog and names it.
+    # The flow of sibling sections or cards, and of charts (layout.css).
+    "flow": ".section-flow, .domain-charts",
     # A section's heading (partials/_section_head.html).
     "section_head": ".section-head",
     # A section's body, the frame what it holds is drawn in (partials/_part_section.html).
     "section_body": ".section-body",
     # A fact whose value is a list of names (partials' .code-list, .address-list).
-    "fact_list": "main .kv > dd:has(> :is(.code-list, .address-list) > :nth-child(2))",
+    "fact_list": "main .facts-list .fact-value:has(> :is(.code-list, .address-list) > :nth-child(2))",
+    # A list of facts, label beside value (partials/_facts.html), and the
+    # frames one is drawn in: a card or a section.
+    "facts_list": ".facts-list",
+    "list_frame": ".card, .section",
     # What keeps its line wherever it is drawn: the count of planned days kept
     # beside a calendar's legend.
     "one_line": ".calendar-legend > .count",
     # One fact of a band, and the label that names its value.
-    "band_fact": ".fact-band > *",
-    "band_label": ".band-label",
+    "band_fact": ".facts-band > .fact",
+    "band_label": ".fact-label",
+    "fact_band": ".facts-band",
+    "band_fact_cell": ".fact",
+    "fact_value": ".fact-value",
+    "fact_label": ".fact-label",
     # A tab of a tabbed chart, the radio inside it, and the panels they choose.
     "chart_tab": ".chart-tablist > .chart-tab",
     "chart_tab_input": ".chart-tab-input",
@@ -226,5 +278,13 @@ SELECTORS = {
     # aside.
     "drawing": "main svg:not(.icon), table.activity-calendar",
     "dialog": 'dialog.modal[id^="modal-"]',
-    "dialog_opener": '[data-modal-open], [aria-haspopup="dialog"][aria-controls]',
+    # The controls that open the dialog `modal-{id}`, once `{id}` is filled
+    # in (partials/_modal.html states the contract): a link the page's wiring
+    # intercepts, a control that says it opens a dialog and names it, the
+    # platform's own invoker, and a status naming the popover panel it opens
+    # (an urgency's origin, static/js/app.js).
+    "dialog_opener": (
+        '[data-modal-open="{id}"], [aria-haspopup="dialog"][aria-controls="modal-{id}"],'
+        ' [command="show-modal"][commandfor="modal-{id}"], [data-origin="modal-{id}"]'
+    ),
 }

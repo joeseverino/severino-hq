@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -28,7 +29,7 @@ func (l *launch) spool() string {
 	return grant.Path
 }
 
-func handoffDocument(t *testing.T, edit func(run map[string]any, top map[string]any)) []byte {
+func handoffDocument(t testing.TB, edit func(run map[string]any, top map[string]any)) []byte {
 	t.Helper()
 	run := map[string]any{
 		"owner":        "example",
@@ -234,4 +235,86 @@ func TestTheLastOutcomeIsGivenToTheNextPass(t *testing.T) {
 			t.Error("the outcome itself was mounted, not a copy")
 		}
 	}
+}
+
+// A handoff is untrusted input from the controller's out directory. What
+// parses holds every rule of the contract, and survives the re-encoding
+// root spools it in, unchanged; what is refused is one line of root's log
+// that never repeats a token.
+func FuzzParseHandoff(f *testing.F) {
+	f.Add(handoffDocument(f, nil))
+	for _, edit := range []func(run, top map[string]any){
+		func(run, _ map[string]any) { run["repositories"] = []string{"example/app", "other/app"} },
+		func(run, _ map[string]any) { run["owner"] = "-example"; run["repositories"] = []string{"-example/app"} },
+		func(run, _ map[string]any) { run["permissions"] = "admin" },
+		func(run, _ map[string]any) { run["Token"] = run["token"]; delete(run, "token") },
+		func(run, _ map[string]any) { run["token"] = exampleToken + "\nRENOVATE_X=1" },
+		func(run, _ map[string]any) { run["repositories"] = []string{"example/app", "example/app"} },
+		func(run, _ map[string]any) { run["repositories"] = []string{"example/.."} },
+		func(run, _ map[string]any) { run["expires_at"] = "2030-01-01T00:00:00+05:30" },
+		func(_, top map[string]any) { top["version"] = 2 },
+		func(run, top map[string]any) {
+			twin := map[string]any{}
+			maps.Copy(twin, run)
+			twin["owner"], twin["repositories"] = "Example", []string{"Example/app"}
+			top["runs"] = []any{run, twin}
+		},
+	} {
+		f.Add(handoffDocument(f, edit))
+	}
+	f.Add([]byte(`{"version":1,"runs":[]}`))
+	f.Add([]byte(`{"version":1,"runs":null}{}`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		handoff, err := ParseHandoff(data)
+		if err != nil {
+			if strings.ContainsAny(err.Error(), "\r\n") {
+				t.Fatalf("the refusal is more than one line: %q", err)
+			}
+			var carried struct {
+				Runs []struct {
+					Token string `json:"token"`
+				} `json:"runs"`
+			}
+			_ = json.Unmarshal(data, &carried)
+			for _, run := range carried.Runs {
+				if len(run.Token) >= 8 && strings.Contains(err.Error(), run.Token) {
+					t.Fatalf("the refusal carries the token: %v", err)
+				}
+			}
+			return
+		}
+		if handoff.Version != handoffV1 || len(handoff.Runs) == 0 {
+			t.Fatalf("parsed %+v", handoff)
+		}
+		owners := map[string]bool{}
+		for _, run := range handoff.Runs {
+			if !githubOwner.MatchString(run.Owner) || len(run.Owner) > ownerLimit || owners[strings.ToLower(run.Owner)] {
+				t.Fatalf("parsed the owner %q", run.Owner)
+			}
+			owners[strings.ToLower(run.Owner)] = true
+			if !tokenShape.MatchString(run.Token) {
+				t.Fatal("parsed a token that is not one printable line")
+			}
+			if len(run.Repositories) == 0 || len(slices.Compact(slices.Sorted(slices.Values(run.Repositories)))) != len(run.Repositories) {
+				t.Fatalf("parsed the repositories %q", run.Repositories)
+			}
+			for _, repository := range run.Repositories {
+				name, under := strings.CutPrefix(repository, run.Owner+"/")
+				if !under || !githubName.MatchString(name) || name == "." || name == ".." {
+					t.Fatalf("parsed %q under %q", repository, run.Owner)
+				}
+			}
+		}
+		spooled, err := json.Marshal(handoff)
+		if err != nil {
+			t.Fatalf("parsed a handoff root cannot spool: %v", err)
+		}
+		again, err := ParseHandoff(spooled)
+		if err != nil {
+			t.Fatalf("spooled a handoff the run refuses: %v", err)
+		}
+		if respooled, _ := json.Marshal(again); !bytes.Equal(respooled, spooled) {
+			t.Fatalf("spooling changed the handoff: %s, then %s", spooled, respooled)
+		}
+	})
 }

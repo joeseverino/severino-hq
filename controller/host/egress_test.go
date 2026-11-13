@@ -34,7 +34,7 @@ func TestTheEgressTableIsTheRenderedOne(t *testing.T) {
 	if got := EgressRules(); got != want {
 		t.Errorf("rendered\n%s\nwant\n%s", got, want)
 	}
-	if load := egressLoad(); load != "table inet severino_hq_renovate\ndelete table inet severino_hq_renovate\n"+want {
+	if load := renovateEgress.load(); load != "table inet severino_hq_renovate\ndelete table inet severino_hq_renovate\n"+want {
 		t.Errorf("loads\n%s", load)
 	}
 }
@@ -47,7 +47,7 @@ func TestTheResolversAreReachableAndOtherContainersAreNot(t *testing.T) {
 	for _, cidr := range Unroutable {
 		dropped = append(dropped, netip.MustParsePrefix(cidr))
 	}
-	for _, resolver := range RenovateResolvers {
+	for _, resolver := range PublicResolvers {
 		address := netip.MustParseAddr(resolver)
 		if !address.Is4() || !address.IsGlobalUnicast() || address.IsPrivate() || slices.ContainsFunc(dropped, func(p netip.Prefix) bool { return p.Contains(address) }) {
 			t.Errorf("the resolver %s is not a public IPv4 address the table lets through", resolver)
@@ -77,7 +77,7 @@ func TestAMissingNetworkIsMadeAndTheTableLoadedBeforeTheContainerRuns(t *testing
 		!slices.Equal(v.calls[3], []string{"nft", "-f", "-"}) || !runsContainer(v.calls[4]) {
 		t.Fatalf("ran %q", v.calls)
 	}
-	if loaded, _ := os.ReadFile(v.loaded); string(loaded) != egressLoad() {
+	if loaded, _ := os.ReadFile(v.loaded); string(loaded) != renovateEgress.load() {
 		t.Errorf("nft was given %q", loaded)
 	}
 	run := v.calls[4]

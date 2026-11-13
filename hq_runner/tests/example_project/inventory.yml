@@ -1,0 +1,5 @@
+# The project's own inventory, for running it by hand. A run's inventory is
+# the worker's, built from HQ's machines and their runner connections.
+all:
+  hosts:
+    app.example.com:

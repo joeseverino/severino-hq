@@ -143,7 +143,9 @@ class FacetVisibilityTests(TestCase):
                 "zone": "example.com",
                 "name": "app.example.com",
                 "record_type": "A",
-                "content": "192.0.2.10",
+                # Inside the network: a name served elsewhere is offered no
+                # certificate, so its card would not draw at all.
+                "content": "10.0.0.10",
                 "connection_ref": "example-dns",
             },
         )

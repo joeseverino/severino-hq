@@ -1,0 +1,44 @@
+id: hand-drawn-list-rows
+snapshots:
+  <ul class="compact list-rows"><li>A</li></ul>:
+    labels:
+    - source: <ul class="compact list-rows"><li>A</li></ul>
+      style: primary
+      start: 0
+      end: 45
+    - source: class="compact list-rows"
+      style: secondary
+      start: 4
+      end: 29
+    - source: <ul class="compact list-rows">
+      style: secondary
+      start: 0
+      end: 30
+  <ul class="list-rows"></ul>:
+    labels:
+    - source: <ul class="list-rows"></ul>
+      style: primary
+      start: 0
+      end: 27
+    - source: class="list-rows"
+      style: secondary
+      start: 4
+      end: 21
+    - source: <ul class="list-rows">
+      style: secondary
+      start: 0
+      end: 22
+  "<ul class=\"{{ extra }} list-rows\"></ul>":
+    labels:
+    - source: <ul class="{{ extra }} list-rows"></ul>
+      style: primary
+      start: 0
+      end: 39
+    - source: class="{{ extra }} list-rows"
+      style: secondary
+      start: 4
+      end: 33
+    - source: <ul class="{{ extra }} list-rows">
+      style: secondary
+      start: 0
+      end: 34

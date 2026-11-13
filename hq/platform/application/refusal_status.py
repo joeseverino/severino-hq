@@ -106,6 +106,8 @@ CODES = {
     # A held call nobody decided in time, or whose subject moved before it ran.
     "expired": _code(409, "nobody decided it in time", Door.DECISION),
     "stale": _code(409, "what it acts on changed before it ran", Door.DECISION),
+    # A held call its asker took back before anybody decided it.
+    "withdrawn": _code(409, "its asker withdrew it", Door.DECISION),
     "conflict": _code(409, "what it acts on changed since it was read", Door.CAPABILITY, Door.STALE_WRITE),
     "idempotency_conflict": _code(409, "its retry key was sent before with a different request", Door.RETRY_KEY),
     # The request is valid; the state it acts on refuses it until it changes.

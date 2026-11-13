@@ -8,6 +8,8 @@ from django.template import Context, Template, TemplateSyntaxError
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
+
 from .markup import elements, select, texts, with_class
 from .source import template_files
 
@@ -43,7 +45,7 @@ class FormErrorsTests(SimpleTestCase):
         form = _Refused(data={"name": "x"})
         form.is_valid()
 
-        (notice,) = with_class(render_to_string(self.PARTIAL, {"form": form}), "msg-error")
+        (notice,) = with_class(render_to_string(self.PARTIAL, {"form": form}), "notice-error")
 
         self.assertEqual(notice.attrs.get("role"), "alert")
         self.assertIn("Those two cannot go together.", notice.words)
@@ -56,23 +58,9 @@ class FormErrorsTests(SimpleTestCase):
 
 
 class SectionHeadTests(SimpleTestCase):
+    """The head ``{% section %}`` draws (partials/_section_head.html)."""
+
     PARTIAL = "partials/_section_head.html"
-
-    def test_the_heading_is_named_and_what_sits_beside_it_follows(self):
-        html = _render(
-            '{% section_head id="example-heading" %}Hosts <span class="count">{{ n }}</span>'
-            '{% aside %}<a href="/example/">All</a>{% endsection_head %}',
-            n=3,
-        )
-
-        (head,) = with_class(html, "section-head")
-        (heading,) = elements(html, "h2")
-        (link,) = elements(html, "a")
-        self.assertEqual(heading.attrs["id"], "example-heading")
-        self.assertEqual(heading.words, "Hosts 3")
-        self.assertIn(head, heading.ancestors)
-        self.assertNotIn(heading, link.ancestors)
-        self.assertIn(head, link.ancestors)
 
     def test_what_sits_beside_the_heading_is_one_box_of_the_head(self):
         """A count, a dot and a link beside the heading wrap as one line of
@@ -80,7 +68,7 @@ class SectionHeadTests(SimpleTestCase):
 
         aside = '<span>6 active</span>{% dot %}<a href="/example/">All</a>'
         for source, box in (
-            (f"{{% section_head %}}Projects{{% aside %}}{aside}{{% endsection_head %}}", "div"),
+            (f'{{% section "Projects" %}}<p>Body</p>{{% aside %}}{aside}{{% endsection %}}', "div"),
             (f'{{% section "Projects" fold=True %}}<p>Body</p>{{% aside %}}{aside}{{% endsection %}}', "span"),
         ):
             with self.subTest(box=box):
@@ -97,12 +85,12 @@ class SectionHeadTests(SimpleTestCase):
                 self.assertIn(aside, elements(html, "a")[0].ancestors)
 
     def test_with_nothing_beside_the_heading_the_head_draws_no_aside(self):
-        self.assertEqual(
-            with_class(_render("{% section_head %}Load{% aside %} {% endsection_head %}"), "section-aside"), []
-        )
+        html = _render('{% section "Load" %}<p>Body</p>{% aside %} {% endsection %}')
+
+        self.assertEqual(with_class(html, "section-aside"), [])
 
     def test_a_lede_is_grouped_with_its_heading(self):
-        html = _render("{% section_head lede=lede %}Load{% endsection_head %}", lede="Read a minute ago")
+        html = _render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="Read a minute ago")
 
         (group,) = elements(html, "hgroup")
         (line,) = with_class(html, "section-lede")
@@ -110,60 +98,9 @@ class SectionHeadTests(SimpleTestCase):
         self.assertEqual(line.words, "Read a minute ago")
 
     def test_an_empty_lede_leaves_the_heading_alone(self):
-        self.assertEqual(
-            elements(_render("{% section_head lede=lede %}Load{% endsection_head %}", lede=""), "hgroup"), []
-        )
+        html = _render('{% section "Load" lede=lede %}<p>Body</p>{% endsection %}', lede="")
 
-    def test_what_the_page_writes_is_escaped_as_it_always_is(self):
-        html = _render("{% section_head %}{{ name }}{% endsection_head %}", name="<b>x</b>")
-
-        self.assertEqual(elements(html, "b"), [])
-
-    def test_an_option_it_does_not_take_is_refused(self):
-        for source in (
-            '{% section_head class="x" %}A{% endsection_head %}',
-            '{% section_head "A" %}A{% endsection_head %}',
-        ):
-            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
-                Template(source)
-
-
-class BandFactTests(SimpleTestCase):
-    PARTIAL = "partials/_band_fact.html"
-
-    def test_a_fact_is_its_label_its_value_and_its_tone(self):
-        html = _render(
-            '{% band_fact icon="shield" label=label tone=tone %}<strong>{{ n }} open</strong>'
-            "<small>example-repo</small>{% endband_fact %}",
-            label="Security",
-            tone="serious",
-            n=2,
-        )
-
-        (fact,) = with_class(html, "band-fact")
-        (named,) = with_class(html, "band-label")
-        self.assertIn("tone-serious", fact.classes)
-        self.assertEqual(named.words, "Security")
-        self.assertEqual(len(with_class(html, "band-icon")), 1)
-        self.assertEqual(texts(html, "strong"), ["2 open"])
-        self.assertEqual(texts(html, "small"), ["example-repo"])
-
-    def test_without_a_tone_or_an_icon_it_has_neither(self):
-        html = _render('{% band_fact label="Running" tone=tone %}<strong>3</strong>{% endband_fact %}', tone="")
-
-        (fact,) = with_class(html, "band-fact")
-        self.assertEqual(fact.classes, {"band-fact"})
-        self.assertEqual(with_class(html, "band-icon"), [])
-
-    def test_a_page_cannot_decide_a_tone_in_the_template(self):
-        # The fact's projection says its tone; the tag has no part for it.
-        with self.assertRaises(TemplateSyntaxError):
-            Template('{% band_fact label="A" %}<strong>1</strong>{% tone %}good{% endband_fact %}')
-
-    def test_a_label_from_data_is_escaped(self):
-        html = _render("{% band_fact label=label %}<strong>1</strong>{% endband_fact %}", label="<b>x</b>")
-
-        self.assertEqual(elements(html, "b"), [])
+        self.assertEqual(elements(html, "hgroup"), [])
 
 
 class CardTests(SimpleTestCase):
@@ -172,7 +109,7 @@ class CardTests(SimpleTestCase):
     def test_a_card_frames_what_it_holds_under_its_heading(self):
         html = _render(
             '{% card css="example-card" heading="example-heading" %}'
-            '{% section_head id="example-heading" %}Hosts{% endsection_head %}<p>{{ n }} up</p>{% endcard %}',
+            '<span id="example-heading">Hosts</span><p>{{ n }} up</p>{% endcard %}',
             n=3,
         )
 
@@ -282,7 +219,63 @@ class OutsideLinkTests(SimpleTestCase):
                 self.assertIn("abc", html)
 
 
+class ReadingTests(SimpleTestCase):
+    PARTIALS = ("partials/_reading.html", "partials/_readings.html")
+
+    def test_a_reading_leads_to_its_page_marked_as_its_part_of_a_region(self):
+        html = _render(
+            '{% readings %}{% reading icon="network" url="/example/" modal="example" tone="attention" '
+            'note_tone="attention" data_fragment_part="example" %}Loopback{% lines %}<span>TLS 1.3</span>'
+            "{% note %}A check failed{% endreading %}{% endreadings %}"
+        )
+
+        (row,) = with_class(html, "readings")
+        (reading,) = with_class(html, "reading")
+        (note,) = with_class(html, "reading-standing")
+        self.assertIn(row, reading.ancestors)
+        self.assertEqual(reading.tag, "a")
+        self.assertEqual(reading.attrs["href"], "/example/")
+        self.assertEqual(reading.attrs["data-modal-open"], "example")
+        self.assertEqual(reading.attrs["data-fragment-part"], "example")
+        self.assertIn("tone-attention", reading.classes)
+        self.assertIn("is-attention", note.classes)
+        self.assertEqual(texts(html, "strong"), ["Loopback"])
+
+    def test_a_reading_with_a_panel_opens_it_in_place_by_its_id(self):
+        html = _render(
+            '{% reading icon="cloud" id="example-weather" data_refreshing=refreshing %}71°'
+            '{% heading %}<strong>Weather</strong>{% panel %}<p>Mostly cloudy</p>{% foot %}<a href="/s/">Settings</a>'
+            "{% endreading %}",
+            refreshing=True,
+        )
+
+        (reading,) = with_class(html, "reading")
+        (head,) = elements(html, "button")
+        (panel,) = with_class(html, "reading-panel")
+        self.assertIn("data-menu", reading.attrs)
+        self.assertEqual(reading.attrs["data-refreshing"], "")
+        self.assertEqual(head.attrs["popovertarget"], "example-weather")
+        self.assertEqual(panel.attrs["id"], "example-weather")
+        self.assertIn("popover", panel.attrs)
+        self.assertEqual(with_class(html, "reading-panel-foot")[0].tag, "footer")
+
+    def test_a_neutral_reading_takes_no_tone(self):
+        html = _render('{% reading icon="cloud" url="/" tone="neutral" %}1{% endreading %}')
+
+        (reading,) = with_class(html, "reading")
+        self.assertFalse({word for word in reading.classes if word.startswith("tone-")})
+
+    def test_a_reading_s_tone_is_one_the_status_vocabulary_names(self):
+        for source in (
+            '{% reading icon="cloud" url="/" tone="green" %}1{% endreading %}',
+            '{% reading icon="cloud" url="/" note_tone="good" %}1{% endreading %}',
+        ):
+            with self.subTest(source=source), self.assertRaises(TemplateSyntaxError):
+                _render(source)
+
+
 @tag("source", "tree")
+@reads("**/templates/**")
 class SharedMarkupTemplateTests(SimpleTestCase):
     """No template writes by hand what a shared partial or tag draws."""
 
@@ -292,15 +285,18 @@ class SharedMarkupTemplateTests(SimpleTestCase):
 
     def test_only_the_tag_draws_a_section_head(self):
         found = _written_by_hand(r'class="section-head[" ]', SectionHeadTests.PARTIAL)
-        self.assertEqual(found, [], "write {% section_head %} instead")
+        self.assertEqual(found, [], "write {% section %} instead")
 
     def test_only_the_tag_draws_a_card(self):
         found = _written_by_hand(r'\bclass="(?:[^"]*[\s}])?card[\s"{]', CardTests.PARTIAL)
         self.assertEqual(found, [], "write {% card %} instead")
 
-    def test_only_the_tag_draws_a_band_fact(self):
-        found = _written_by_hand(r'class="band-fact[" {]', BandFactTests.PARTIAL)
-        self.assertEqual(found, [], "write {% band_fact %} instead")
+    def test_only_the_tags_draw_a_reading(self):
+        # A reading's classes are a shared part's, so the page-class check
+        # lets a page write them; this is what keeps them the tags' own.
+        reading = r'\bclass="(?:[^"]*[\s}])?reading(?:s|-head|-mark|-lead|-lines|-standing|-panel[a-z-]*)?[\s"{]'
+        found = [name for name, text in _templates() if name not in ReadingTests.PARTIALS and re.search(reading, text)]
+        self.assertEqual(found, [], "write {% readings %} and {% reading %} instead")
 
     def test_no_template_decides_a_fact_s_tone(self):
         # The tag refuses the part when a page renders; this reads every
@@ -311,7 +307,7 @@ class SharedMarkupTemplateTests(SimpleTestCase):
             for number, line in enumerate(text.splitlines(), 1)
             if re.search(r"\{%\s*tone\s*%\}", line)
         ]
-        self.assertFalse(found, "give the fact's projection a tone and write tone=<it> on {% band_fact %}")
+        self.assertFalse(found, "give the fact's projection a tone and write tone=<it> on {% fact %}")
 
     def test_only_the_outside_link_partial_writes_an_outside_link(self):
         # An anchor to a web address, or one that leaves in a new tab.

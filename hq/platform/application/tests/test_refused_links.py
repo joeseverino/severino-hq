@@ -44,7 +44,9 @@ def _notes_spec(*notes: str) -> ConnectionSpec:
         "The registry's notes.",
         "notes.read",
         lambda: tuple(
-            ConnectionInstance(note, note, "registry", "good", "Read", ability_names=("notes.lookup",))
+            ConnectionInstance(
+                note, note, "registry", "good", "Read", ability_names=("notes.lookup",), credential_model="none"
+            )
             for note in notes
         ),
         abilities,

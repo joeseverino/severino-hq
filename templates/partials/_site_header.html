@@ -1,0 +1,81 @@
+{% comment %}
+Site header: the page frame's top, drawn once by base.html, with the skip link
+before it, the sections, the doorway to search, the queue's count and the
+person's menu (partials/_user_menu.html). The count is a fragment of its own,
+`partials/_site_header.html#action_count`, which the queue's count view answers.
+
+The header is a dozen tab stops wide, and better than thirty with the
+sections menu open, so the skip link is visible only while focused, which
+costs a pointer nothing.
+{% endcomment %}
+<a class="skip-link" href="#content">Skip to content</a>
+<header class="site-header">
+  <a class="brand" href="{% url 'dashboard' %}">{{ SITE_NAME|breakable }}</a>
+  {% if user.is_authenticated %}
+    {% comment %}
+    The sections menu is a popover its button opens, declared in the HTML,
+    so it works with no script: the browser opens and closes it, tells
+    assistive technology whether it is open, closes it on Escape or a press
+    outside, and returns focus to the button. On a wide screen the
+    stylesheet sets the nav in the header's row and the button is hidden.
+    A group's links are a menu of their own (page.css, "Menus"): opening one
+    closes any other, and in the open drawer it opens beside the drawer,
+    which stays open around it.
+    {% endcomment %}
+    <button type="button" class="nav-toggle" popovertarget="primary-navigation" aria-label="Menu">
+      {% include "partials/_icon.html" with name="menu" only %}
+    </button>
+    <nav class="primary-nav" id="primary-navigation" aria-label="Sections" popover>
+      {% for entry in nav_entries %}
+        {% if entry.kind == "group" %}
+          {% with panel="nav-"|add:entry.label|slugify %}
+          <div class="nav-group" data-menu>
+            <button type="button" popovertarget="{{ panel }}"{% if entry.active %} aria-current="true"{% endif %}>
+              <span class="nav-group-label">
+                {{ entry.label|breakable }}
+                {% include "partials/_icon.html" with name="caret" only %}
+              </span>
+            </button>
+            <div class="nav-group-panel" id="{{ panel }}" popover>
+              {% for item in entry.items %}
+                <a href="{% url item.url %}"{% if item.active %} aria-current="page"{% endif %}>{{ item.label|breakable }}</a>
+              {% endfor %}
+            </div>
+          </div>
+          {% endwith %}
+        {% else %}
+          <a href="{% url entry.url %}"{% if entry.active %} aria-current="page"{% endif %}>{{ entry.label|breakable }}</a>
+        {% endif %}
+      {% endfor %}
+    </nav>
+    {% comment %}
+    In the header rather than on a page, because the mode outlives whichever
+    page is open and the one failure worth designing against is an operator
+    forgetting it is on and filing a screenshot of fiction as fact. First of the
+    controls, so it is read before any figure the controls lead to.
+    {% endcomment %}
+    {% if request.showing_demo %}<span class="demo-flag">Demo</span>{% endif %}
+    {% comment %}
+    A doorway, not a field: it opens the search dialog, and without script it
+    is a link to the search page. With nothing to type into here there is no
+    focus to return to it and nothing to expand over its neighbors.
+    {% endcomment %}
+    <a class="global-search" href="{% url 'search' %}" aria-labelledby="search-label search-key" data-command-center-open aria-haspopup="dialog" aria-controls="modal-command-center">
+      {% include "partials/_icon.html" with name="search" only %}
+      <span class="search-label" id="search-label">Find anything</span>
+      <kbd class="search-key keyboard-only" id="search-key" aria-hidden="true">⌘K</kbd>
+    </a>
+    <a class="action-badge" href="{% url 'action_items' %}" title="Needs you">
+      {% include "partials/_icon.html" with name="bell" only %}
+      {% comment %}
+      The queue spans every installed domain, so a page that has not counted
+      it already asks for the count once it is up rather than while rendering.
+      {% endcomment %}
+      {% partialdef action_count inline %}
+      <span id="action-count" data-action-count{% if not show_action_count %} data-fragment="{% url 'action_item_count' %}" data-fragment-load{% endif %}{% if not profile_action_count %} hidden{% endif %}>{{ profile_action_count|default_if_none:""|breakable }}</span>
+      {% endpartialdef %}
+      <span class="visually-hidden">Needs you</span>
+    </a>
+    {% include "partials/_user_menu.html" %}
+  {% endif %}
+</header>

@@ -1,0 +1,45 @@
+# An empty state is the one empty state part: what is missing, then what
+# would fill it. The fix moves a <div> or <p> of the empty class alone whose
+# words are plain; any other is moved by hand.
+id: hand-drawn-empty-state
+language: html
+severity: error
+message: An empty state drawn by hand, where the empty state part draws it.
+note: Write {% include "partials/_empty_state.html" with message="..." %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  pattern: $EMPTY
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?empty(?:[^\w-]|$)'
+rewriters:
+  - id: block
+    rule:
+      pattern: <div class="empty">$MESSAGE</div>
+    constraints:
+      MESSAGE:
+        kind: text
+        not:
+          regex: '[{}"]'
+    fix: '{% include "partials/_empty_state.html" with message="$MESSAGE" %}'
+  - id: line
+    rule:
+      pattern: <p class="empty">$MESSAGE</p>
+    constraints:
+      MESSAGE:
+        kind: text
+        not:
+          regex: '[{}"]'
+    fix: '{% include "partials/_empty_state.html" with message="$MESSAGE" %}'
+transform:
+  MOVED:
+    rewrite:
+      rewriters: [block, line]
+      source: $EMPTY
+fix: $MOVED

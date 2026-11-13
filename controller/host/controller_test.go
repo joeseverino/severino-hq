@@ -1,9 +1,12 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"os"
@@ -16,6 +19,7 @@ import (
 	"time"
 
 	"github.com/joeseverino/severino-hq/controller/connections"
+	"github.com/joeseverino/severino-hq/controller/secrets/project"
 )
 
 // Values that may reach the container only inside the mounted document.
@@ -30,7 +34,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
-	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
+	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS", "SEVERINO_HOST_FILESYSTEMS", "SEVERINO_HOST_REBOOT",
 	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET", "HQ_CONTROLLER_GRANTS",
 }
 
@@ -39,8 +43,10 @@ type launch struct {
 	controller *Controller
 	args       []string
 	mounted    map[string][]byte
-	locked     bool
-	order      []string
+	// lentFiles is every file in the ssh directory the container is lent.
+	lentFiles []string
+	locked    bool
+	order     []string
 	// container is what the pass does, given its out directory on the host.
 	container func(out string)
 }
@@ -56,9 +62,13 @@ func newLaunch(t *testing.T) *launch {
 	if err := os.WriteFile(filepath.Join(secrets, "ssh", reference), []byte("an identity\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	document, _ := json.Marshal(map[string]any{"schema_version": 2, "connections": []any{
-		map[string]any{"ref": reference, "api_token": map[string]string{"api_token": sentinel}},
-	}})
+	document, err := connections.Document{SchemaVersion: connections.SchemaVersion, Connections: []connections.Connection{
+		{Ref: reference, Provider: "cloudflare_dns", Store: connections.Store{Vault: "Example", Item: "example"},
+			APIToken: &connections.APIToken{URL: "https://api.example.com", APIToken: sentinel}},
+	}}.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(secrets, "controller-connections.json"), document, 0o400); err != nil {
 		t.Fatal(err)
 	}
@@ -84,27 +94,36 @@ func newLaunch(t *testing.T) *launch {
 					if data, err := os.ReadFile(source); err == nil {
 						l.mounted[target] = data
 					}
+					if entries, err := os.ReadDir(source); err == nil && target == controllerSSH {
+						for _, entry := range entries {
+							l.lentFiles = append(l.lentFiles, entry.Name())
+						}
+					}
 					if target == controllerOut && l.container != nil {
 						l.container(source)
 					}
 				}
 			}
 		}
-		if name == "nft" || name == "systemctl" {
+		if name == "nft" || name == "systemctl" || name == "busctl" {
 			return exec.CommandContext(ctx, "/bin/sh", "-c", "exit 1")
 		}
 		return program(ctx, name, args...)
 	}
 	l.controller = &Controller{
-		Machine:       f.machine,
-		SecretDir:     secrets,
-		ACME:          filepath.Join(f.root, "acme"),
-		CertStore:     filepath.Join(f.root, "certs"),
-		Tailscaled:    filepath.Join(f.root, "absent.sock"),
-		UnitSocket:    filepath.Join(f.root, "unit", "unit.sock"),
-		Grants:        []Grant{relocated(DependencyUpdates, f.root)},
-		DependencyRun: filepath.Join(f.root, "state", "renovate", "dependency-run.json"),
-		Connections:   func() error { return nil },
+		Machine:        f.machine,
+		SecretDir:      secrets,
+		ACME:           filepath.Join(f.root, "acme"),
+		CertStore:      filepath.Join(f.root, "certs"),
+		Tailscaled:     filepath.Join(f.root, "absent.sock"),
+		UnitSocket:     filepath.Join(f.root, "unit", "unit.sock"),
+		Grants:         []Grant{relocated(DependencyUpdates, f.root)},
+		DependencyRun:  filepath.Join(f.root, "state", "renovate", "dependency-run.json"),
+		MountTable:     filepath.Join(f.root, "absent-mounts"),
+		Statfs:         func(string) (free, total uint64, err error) { return 59 << 20, 29 << 30, nil },
+		RebootRequired: filepath.Join(f.root, "reboot-required"),
+		Born:           func(string) (time.Time, error) { return time.Date(2029, 12, 31, 18, 0, 0, 0, time.UTC), nil },
+		Connections:    func() error { return nil },
 		Lock: func(context.Context) (func(), error) {
 			l.locked = true
 			l.order = append(l.order, "lock")
@@ -292,14 +311,20 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	for _, want := range []string{
 		"SEVERINO_RENDER_STATUS=hq=/run/severino-hq/render-status/hq.json",
 		"SEVERINO_HOST_UNITS=/run/severino-hq/units",
+		"SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting",
 		"SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json",
+		"SEVERINO_HOST_FILESYSTEMS=/run/severino-hq/filesystems.json",
+		"SEVERINO_HOST_REBOOT=/run/severino-hq/reboot.json",
 	} {
 		if !slices.Contains(envs, want) {
 			t.Errorf("%s is not named: %v", want, envs)
 		}
 	}
 	for target := range l.mounted {
-		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || target == "/run/severino-hq/units" || target == "/run/severino-hq/tailnet-lock.json" {
+		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || slices.Contains([]string{
+			"/run/severino-hq/units", "/run/severino-hq/units-restarting",
+			"/run/severino-hq/tailnet-lock.json", "/run/severino-hq/filesystems.json", "/run/severino-hq/reboot.json",
+		}, target) {
 			t.Errorf("%s was mounted with nothing to mount", target)
 		}
 	}
@@ -307,6 +332,63 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 		if strings.HasPrefix(env, "SEVERINO_TAILNET_STATUS") || strings.HasPrefix(env, "SEVERINO_HOST_FIREWALL") || strings.HasPrefix(env, "HQ_CONTROLLER_CA_FILE") {
 			t.Errorf("%s named with nothing read", env)
 		}
+	}
+}
+
+// Root asks each real filesystem its space and hands the container the
+// answer, never the mount table it read it from.
+func TestEachFilesystemsSpaceIsMountedAsAReading(t *testing.T) {
+	l := newLaunch(t)
+	table := "/dev/sda2 / ext4 rw,relatime,errors=remount-ro 0 0\noverlay /var/lib/docker/overlay2/example/merged overlay rw 0 0\n"
+	if err := os.WriteFile(l.controller.MountTable, []byte(table), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	l.run(t, Plan)
+
+	var reading hostcore.FilesystemReading
+	if err := json.Unmarshal(l.mounted["/run/severino-hq/filesystems.json"], &reading); err != nil {
+		t.Fatalf("no filesystem reading was mounted: %v", err)
+	}
+	want := []hostcore.Filesystem{{Mount: "/", FreeBytes: 59 << 20, TotalBytes: 29 << 30}}
+	if !slices.Equal(reading.Filesystems, want) || reading.ReadAt == "" {
+		t.Errorf("mounted %+v, want %+v", reading, want)
+	}
+	if joined := strings.Join(l.args, "\n"); strings.Contains(joined, "/dev/sda2") || strings.Contains(joined, "source="+l.controller.MountTable) {
+		t.Errorf("the mount table reached the container: %v", l.args)
+	}
+}
+
+// Root reads the restart flag and asks logind, and hands the container what
+// they said, never the flag's directory or the bus it asked on.
+func TestAWaitingRestartIsMountedAsAReading(t *testing.T) {
+	l := newLaunch(t)
+	if err := os.WriteFile(l.controller.RebootRequired, []byte("*** System restart required ***\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(l.controller.RebootRequired+".pkgs", []byte("linux-image-example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	faked := l.controller.Command
+	l.controller.Command = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		if name == "busctl" {
+			return exec.CommandContext(ctx, "/bin/sh", "-c", `printf '%s' '{"type":"(st)","data":["reboot",1893466800000000]}'`)
+		}
+		return faked(ctx, name, args...)
+	}
+
+	l.run(t, Plan)
+
+	var reading hostcore.RebootReading
+	if err := json.Unmarshal(l.mounted["/run/severino-hq/reboot.json"], &reading); err != nil {
+		t.Fatalf("no restart reading was mounted: %v", err)
+	}
+	if !reading.Pending || reading.Since != "2029-12-31T18:00:00Z" || !slices.Equal(reading.Packages, []string{"linux-image-example"}) ||
+		reading.ScheduledAction != "reboot" || reading.ScheduledAt != "2030-01-01T03:00:00Z" {
+		t.Errorf("mounted %+v", reading)
+	}
+	if joined := strings.Join(l.args, "\n"); strings.Contains(joined, "source="+l.controller.RebootRequired) || strings.Contains(joined, "dbus") {
+		t.Errorf("the flag or the bus reached the container: %v", l.args)
 	}
 }
 
@@ -431,6 +513,30 @@ func TestTheFirewallIsDistilled(t *testing.T) {
 	}
 }
 
+// Whatever nft prints, the reading is the one record of two answers and
+// when they were read: nothing of the chain's own text reaches HQ.
+func FuzzReadFirewall(f *testing.F) {
+	f.Add([]byte("chain input {\n\tiifname \"tailscale0\" tcp dport 8000 accept\n\tiifname != \"tailscale0\" tcp dport 8000 drop\n}\n"))
+	f.Add([]byte("chain input {\n\ttcp dport 8000 accept\n}\n"))
+	f.Add([]byte("chain input {\n\tiifname != \"tailscale0\" drop comment \"\\\"},{\\\"x\\\":1\"\n}\n"))
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.FixedZone("example", -3600))
+	f.Fuzz(func(t *testing.T, chain []byte) {
+		data, err := ReadFirewall(chain, at)
+		if err != nil {
+			t.Fatalf("the reading failed: %v", err)
+		}
+		var reading Firewall
+		if err := jsonv2.Unmarshal(data, &reading, jsonv2.RejectUnknownMembers(true)); err != nil {
+			t.Fatalf("read %s (%v)", data, err)
+		}
+		fixed := Firewall{Record: "interface-binding", Interface: "tailscale0", ReadAt: "2026-01-02T04:04:05Z",
+			AcceptRequiresInterface: reading.AcceptRequiresInterface, ForeignInterfaceDropped: reading.ForeignInterfaceDropped}
+		if want, _ := json.Marshal(fixed); !bytes.Equal(data, want) {
+			t.Fatalf("read %s, not one of the fixed records", data)
+		}
+	})
+}
+
 func TestTheCertificateStateIsTheControllersWithoutFollowingLinks(t *testing.T) {
 	l := newLaunch(t)
 	if err := os.MkdirAll(filepath.Join(l.controller.ACME, "live", "example"), 0o700); err != nil {
@@ -512,6 +618,86 @@ func TestAGlanceIsGivenOnlyTheConnectionsItReads(t *testing.T) {
 	}
 	if !slices.Contains(l.args, "severino-hq.role=glance") {
 		t.Errorf("the glance's container is not labeled as one: %v", l.args)
+	}
+}
+
+// The automation worker's connection, and its identity, never reach a
+// controller or glance pass, and a pass holds only the identities of the
+// connections it is given.
+func TestNoPassHoldsTheAutomationWorkersKey(t *testing.T) {
+	for _, pass := range []Pass{Plan, Apply, Glance} {
+		t.Run(fmt.Sprint(pass), func(t *testing.T) {
+			l := newLaunch(t)
+			glanceDocument(t, l)
+			withRunnerConnection(t, l.controller.SecretDir)
+
+			l.run(t, pass)
+
+			document, err := connections.Decode(l.mounted[controllerConnections])
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, connection := range document.Connections {
+				if connection.Ref == "example-machine" {
+					t.Errorf("the pass is given %s", connection)
+				}
+			}
+			slices.Sort(l.lentFiles)
+			want := []string{"example-ssh", "example-ssh.pub", "known_hosts"}
+			if pass != Glance {
+				want = []string{"example-dns.key", "example-ssh", "example-ssh.pub", "known_hosts"}
+			}
+			if !slices.Equal(l.lentFiles, want) {
+				t.Errorf("the pass holds %v, want %v", l.lentFiles, want)
+			}
+		})
+	}
+}
+
+func TestThePinnedHostKeysAreTheRenderersFile(t *testing.T) {
+	if knownHosts != project.KnownHosts {
+		t.Errorf("a run is lent %s, the renderer writes %s", knownHosts, project.KnownHosts)
+	}
+}
+
+// withRunnerConnection adds the automation worker's connection to the
+// rendered document, and the files the renderer writes for the document's
+// connections: each SSH identity, a signing key, the pinned host keys.
+func withRunnerConnection(t *testing.T, secrets string) {
+	t.Helper()
+	rendered := filepath.Join(secrets, "controller-connections.json")
+	data, err := os.ReadFile(rendered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document, err := connections.Decode(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document.Connections = append(document.Connections, connections.Connection{
+		Ref: "example-machine", Provider: "ssh", Store: connections.Store{Vault: "Example", Item: "example-machine"},
+		SSHTransport: &connections.SSHTransport{Host: "192.0.2.20", User: "example-read", HostKey: "key", Identity: "example-machine", Port: "22", Role: "runner",
+			Machine: "example-machine", Profile: connections.ReadProfile},
+	})
+	if data, err = document.Encode(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(rendered); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rendered, data, 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(secrets, "ssh")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(secrets, "ssh"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"example-machine", "example-machine.pub", "example-ssh", "example-ssh.pub", "example-dns.key", "known_hosts"} {
+		if err := os.WriteFile(filepath.Join(secrets, "ssh", name), []byte(name+"\n"), 0o400); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

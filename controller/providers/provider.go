@@ -124,7 +124,7 @@ type Registry struct {
 	Commands *Commands
 	TLS      TLSDialer
 	// Resolve returns a name's IPv4 address; nil resolves through DNS.
-	Resolve func(host string) (string, error)
+	Resolve func(ctx context.Context, host string) (string, error)
 	// Dial reports whether a TCP connection to address:port is accepted.
 	Dial func(ctx context.Context, address string, port int) bool
 	// PublishedContainers is the containers the sweep found, with their ports.

@@ -1,7 +1,8 @@
 """Dashboard + audit-log views."""
 
+import re
 from typing import ClassVar, override
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 lazy from datetime import timedelta
 
 from django.conf import settings
@@ -11,23 +12,27 @@ from django.http import Http404, HttpResponse, HttpResponseBadRequest, HttpRespo
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.text import capfirst
 from django.views.generic import TemplateView, View
 
 from hq.domains.contacts import inbox
-from hq.platform.application import agent_activity, agent_devices, capability_policy, fragments
+from hq.platform.application import agent_activity, agent_devices, capability_policy, fragments, history
 from hq.platform.application.agent_access import REMOVE_AGENT, SET_AGENT_ACCESS, SET_AGENT_BLOCK
 from hq.platform.application.agent_devices import APPROVE_AGENT_DEVICE, BLOCK_AGENT_DEVICE
 from hq.platform.application.appearance import SET_THEME
 from hq.platform.application.avatars import avatar_of
+from hq.platform.application.capabilities import capability_words
+from hq.platform.application.card_items import ListRow
 from hq.platform.application.command_center import command_center
 from hq.platform.application.denials import COALESCE_WINDOW, LABEL as DENIAL_LABEL
 from hq.platform.application.own_devices import SET_OWN_DEVICE, devices_of
-from hq.platform.application.pages import PageMixin
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.search import global_search
 from hq.platform.application.security import Capability, agent_grantable, safe_next, web_principal
-from hq.platform.application.ui import counted
+from hq.platform.application.timestamps import moment
+from hq.platform.application.ui import PageNavigation, PageSection, counted
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 lazy from hq.platform.application.approvals import awaiting_ids, entry_event
 lazy from hq.platform.application.connection_catalog import connection_catalog
@@ -39,6 +44,7 @@ lazy from hq.platform.application.visit_refresh import worth_asking
 lazy from hq.platform.mcp import listing
 
 from .audit import record_event
+from .forms import OwnDeviceForm, PolicyForm
 from .middleware import DEMO_SESSION_KEY
 from .models import AuditLog
 from .write_bounds import Bound, RowCap, writes
@@ -211,6 +217,59 @@ class OwnDeviceView(View):
         return redirect(safe_next(request, fallback=reverse("agent_policy")))
 
 
+def _set(command: str, state: str, url: str, target: dict[str, str], field: str, value: str, **style) -> PageAction:
+    """A row's control that sets one ``field`` of the record ``target``
+    names, which travels in the body since its identifier may be any string."""
+
+    words = capability_words(command, state)
+    return PageAction(words, url, method="post", field=field, value=value, fields=target, **style)
+
+
+def agent_actions(standing: agent_activity.AgentStanding, here: str) -> tuple[PageAction, ...]:
+    """What may be done to one agent from its row: let it back in, or block or
+    remove it. Removal never lifts a block, so a blocked agent offers only that."""
+
+    url = reverse("agent_block")
+    target = {"client_id": standing.subject, "next": here}
+    if standing.identity.blocked_at:
+        return (_set(SET_AGENT_BLOCK, "off", url, target, "blocked", "0", primary=True),)
+    return (
+        _set(SET_AGENT_BLOCK, "on", url, target, "blocked", "1"),
+        _set(REMOVE_AGENT, "", url, target, "removed", "1", danger=True),
+    )
+
+
+def device_actions(device: agent_activity.DeviceRow, here: str) -> tuple[PageAction, ...]:
+    """What a person may press for one agent's device: approve it or withdraw
+    the approval when it is theirs to give (``yours``), and block it or let it
+    back in, which anyone who governs agents may. An address the tailnet could
+    not place offers nothing: there is no device to approve. Each returns to
+    the row."""
+
+    record = device.record
+    if record is None:
+        return ()
+    url = reverse("agent_device")
+    target = {"device": str(record.pk), "next": f"{here}#{device.anchor}"}
+    if record.blocked_at:
+        return (_set(BLOCK_AGENT_DEVICE, "off", url, target, "blocked", "0", primary=True),)
+    actions = []
+    if device.yours:
+        if record.approved_at:
+            actions.append(_set(APPROVE_AGENT_DEVICE, "off", url, target, "approved", "0"))
+        else:
+            actions.append(_set(APPROVE_AGENT_DEVICE, "on", url, target, "approved", "1", primary=True))
+    actions.append(_set(BLOCK_AGENT_DEVICE, "on", url, target, "blocked", "1"))
+    return tuple(actions)
+
+
+def own_device_actions(device, here: str) -> tuple[PageAction, ...]:
+    """Removing one of the signed-in person's own devices, from its row."""
+
+    target = {"client_id": device.client_id, "next": here}
+    return (_set(SET_OWN_DEVICE, "off", reverse("own_device"), target, "registered", "0", danger=True),)
+
+
 class ThemeView(View):
     """Choose system, light or dark. The form sends a choice, never a toggle."""
 
@@ -269,16 +328,37 @@ class AgentPolicyView(PageMixin, TemplateView):
         context["every_read"] = part == self.EVERY_PART or "all" in self.request.GET
         if part == self.EVERY_PART:
             return context
-        context["standings"] = agent_activity.standings(self.request.user)
-        context["prompts"] = agent_activity.prompts(context["standings"])
+        context["standings"] = standings = agent_activity.standings(self.request.user)
+        # Each row with what may be done to it, which returns to this view.
+        here = self.request.get_full_path()
+        context["agent_rows"] = [(standing, agent_actions(standing, here)) for standing in standings]
+        context["prompts"] = [
+            (prompt, device_actions(prompt.device, here)) for prompt in agent_activity.prompts(standings)
+        ]
         # The steps for adding an agent start open until one has connected.
-        context["setup_open"] = not context["standings"]
-        context["device_groups"] = [standing for standing in context["standings"] if standing.devices]
+        context["setup_open"] = not standings
+        context["device_groups"] = [
+            (standing, [(device, device_actions(device, here)) for device in standing.devices])
+            for standing in standings
+            if standing.devices
+        ]
         context["recent_days"] = agent_activity.RECENT.days
+        # Each agent's latest events, drawn as the audit log draws its rows.
+        context["agent_events"] = tuple(
+            history.HistoryGroup(
+                tuple(history.entries(list(standing.activity.latest))),
+                standing.identity.client_id,
+                len(standing.activity.latest),
+            )
+            for standing in standings
+            if standing.activity.latest
+        )
         context["offered"] = len(agent_grantable())
         context["client_setup"] = agent_activity.CLIENT_SETUP
         context["placement"] = agent_devices.placement_posture()
-        context["devices"] = devices_of(self.request.user)
+        context["devices"] = [(device, own_device_actions(device, here)) for device in devices_of(self.request.user)]
+        context["device_form"] = OwnDeviceForm()
+        context.setdefault("form", PolicyForm())
         context["awaiting_count"] = len(awaiting_ids())
         context["refused_count"] = agent_activity.refused_since(timezone.now() - timedelta(hours=24))
         return context
@@ -297,22 +377,41 @@ class AgentPolicyView(PageMixin, TemplateView):
         return policy
 
     def post(self, request):
+        form = PolicyForm(request.POST)
+        form.is_valid()
         result = execute_posted(
             request, capability_policy.SET_POLICY, {"rules": capability_policy.submitted_rules(request.POST)}
         )
-        if refused(request, result):
-            return redirect("agent_policy")
+        if refusal := refused(request, result, form=form):
+            return self.render_to_response(self.get_context_data(form=form), status=refusal.status)
         changed, problems = result["changed"], result["problems"]
-        for problem in problems:
-            messages.error(request, problem)
         if changed:
             messages.success(request, f"Saved {counted(changed, 'change')}. Each is in the audit log.")
-        elif not problems:
+        # A rule that could not change is said over the tables, drawn as they
+        # now hold, beside the ones that did.
+        if problems:
+            for problem in problems:
+                form.add_error(None, problem)
+            return self.render_to_response(self.get_context_data(form=form), status=400)
+        if not changed:
             messages.info(request, "Nothing changed.")
         return redirect("agent_policy")
 
 
-DISCOVERY_GROUPS = ("estate", "resources", "commands", "connections", "views", "checks")
+# Each group of places a search finds, by its key, with its heading, in the
+# order the page draws them.
+DISCOVERY_GROUPS = {
+    "estate": "Machines, services and domains",
+    "resources": "Pages",
+    "commands": "Commands",
+    "connections": "Connections",
+    "views": "Map views",
+    "checks": "Checks",
+}
+# The palette's order: what to do leads what to read.
+PALETTE_GROUPS = ("estate", "commands", "resources", "connections", "views", "checks")
+# What a search scope's name may hold besides what a fragment id does.
+SCOPE_ID = re.compile(r"[^a-z0-9-]+")
 
 
 class SearchView(PageMixin, TemplateView):
@@ -337,14 +436,8 @@ class SearchView(PageMixin, TemplateView):
     def _palette_groups(self, discovery):
         remaining = self.palette_result_limit
         groups = []
-        for key, label in (
-            ("estate", "Machines, services and domains"),
-            ("commands", "Commands"),
-            ("resources", "Pages"),
-            ("connections", "Connections"),
-            ("views", "Map views"),
-            ("checks", "Checks"),
-        ):
+        for key in PALETTE_GROUPS:
+            label = DISCOVERY_GROUPS[key]
             items = tuple(item for item in discovery[key] if item.url)[: min(self.palette_group_limit, remaining)]
             if items:
                 groups.append({"key": key, "label": label, "items": items})
@@ -368,6 +461,77 @@ class SearchView(PageMixin, TemplateView):
             if not remaining:
                 break
         return visible
+
+    @staticmethod
+    def _discovery_sections(discovery) -> list[dict]:
+        """The places a search found, a section of rows per group that has
+        any: the name a person knows each by, one line of what it is, and at
+        most a word of state. A page's name says what it is, so it has no
+        line."""
+
+        return [
+            {
+                "label": label,
+                "rows": [
+                    ListRow(
+                        title=item.label,
+                        url=item.url,
+                        detail="" if key == "resources" else item.summary,
+                        chips=tuple(badge for badge in item.badges if badge),
+                    )
+                    for item in discovery[key]
+                ],
+            }
+            for key, label in DISCOVERY_GROUPS.items()
+            if discovery[key]
+        ]
+
+    @staticmethod
+    def _result_sections(q: str, groups: list[dict], contacts: list) -> list[dict]:
+        """The page's results, a section of record rows per group that found
+        something, the messages last; each section's id is a fragment the
+        navigation over them links."""
+
+        # An audit entry has no page of its own: its row opens the log at the
+        # same search.
+        audit = f"{reverse('core:audit_list')}?{urlencode({'q': q})}"
+        sections = [
+            {
+                "id": f"scope-{SCOPE_ID.sub('-', group['scope'].lower()).strip('-')}",
+                "label": group["label"],
+                "rows": [
+                    ListRow(
+                        title=item["title"],
+                        url=item["url"] or audit,
+                        detail=item["badge"],
+                        at=item["timestamp"],
+                        snippet=tuple(item["snippet"]),
+                    )
+                    for item in group["items"]
+                ],
+            }
+            for group in groups
+            if group["count"]
+        ]
+        if contacts:
+            sections.append(
+                {
+                    "id": "scope-contacts",
+                    "label": "Messages",
+                    "rows": [
+                        ListRow(
+                            title=item["name"],
+                            url=reverse("contacts:detail", args=[item["id"]]),
+                            detail=capfirst(item.get("status") or ""),
+                            at=moment(item.get("created_at")),
+                        )
+                        for item in contacts
+                    ],
+                    "more_label": "Search messages",
+                    "more_url": f"{reverse('contacts:list')}?{urlencode({'q': q})}",
+                }
+            )
+        return sections
 
     @override
     def get_context_data(self, **kwargs):
@@ -408,18 +572,23 @@ class SearchView(PageMixin, TemplateView):
         palette_search_groups = self._palette_search_groups(groups)
         palette_search_count = sum(len(group["items"]) for group in palette_search_groups)
         discovery_total = sum(len(discovery[key]) for key in discovery)
+        sections = [] if palette_request else self._result_sections(q, groups, contacts)
         ctx.update(
             q=q,
             search_query=q,
             groups=groups,
-            contacts=contacts,
             total=total,
-            discovered_estate=discovery["estate"],
-            discovered_resources=discovery["resources"],
-            discovered_commands=discovery["commands"],
-            discovered_connections=discovery["connections"],
-            discovered_views=discovery["views"],
-            discovered_checks=discovery["checks"],
+            result_sections=sections,
+            # A way to each group of results, over them, once there are two.
+            result_navigation=(
+                PageNavigation(
+                    tuple(PageSection(section["id"], section["label"]) for section in sections),
+                    label="Result groups",
+                )
+                if len(sections) > 1
+                else None
+            ),
+            discovery_sections=[] if palette_request else self._discovery_sections(discovery),
             discovery_total=discovery_total,
             # The estate leads, above records and the audit log.
             palette_estate=[group for group in palette_groups if group["key"] == "estate"],

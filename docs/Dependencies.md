@@ -9,7 +9,7 @@ Where every pin lives, and how to move one.
 | Tools: Go, uv, CodeQL, Scorecard and the rest | [`mise.toml`](../mise.toml), checksums in [`mise.lock`](../mise.lock). The images install Go and uv from the same lock, with mise copied from its image at `min_version`, by digest | `lint:toolchain`; CodeQL also `lint:codeql-bundle`, the bundle the pinned action runs |
 | Python packages | `pyproject.toml`, resolved with hashes in `uv.lock` | `lint:lockfile`, `lint:audit` |
 | npm tools: Redocly, the browser and stylesheet lints; browser-compat-data apart, for `audit:bcd` alone | `tools/lint/package.json` and `tools/lint/bcd/package.json`, exact, each resolved with hashes in its `package-lock.json` | `npm ci`, which refuses a lock its `package.json` has moved past; `lint:audit` |
-| Go and its modules | the release `controller/go.mod`'s `toolchain` line names, which `mise.toml` reads; modules in `go.sum` | `lint:toolchain`, `controller:check`, `lint:audit`; `MiseConfigTravelsTests`, every image that copies `mise.toml` copies `go.mod` beside it |
+| Go and its modules | the release `controller/go.mod`'s `toolchain` line names, which `mise.toml` reads; modules in `go.sum` | `lint:toolchain`, `lint:controller`, `test:controller`, `lint:audit`; `MiseConfigTravelsTests`, every image that copies `mise.toml` copies `go.mod` beside it |
 | The Python base image, every stage's start | `Dockerfile` and `composition/Dockerfile`, by digest | `image:build`; `lint:toolchain` refuses any other image |
 | GitHub Actions | each workflow, by commit with its version beside it | `ActionPinTests` |
 | Hosted runner image | each workflow's `runs-on`, one versioned label | `JobLimitTests` |
@@ -55,8 +55,12 @@ Renovate moves that workflow's own action and image too.
   approval is the review.
 
 The Dependency Dashboard issue lists what is pending, held for age or
-blocked. A Renovate pull request is worked like any other: push the code a
-major needs onto its branch. To vendor a new API reference bundle by hand,
+blocked. A release still inside its 7 days is listed under Pending Status
+Checks, each with a box that opens its pull request at once. For a pin
+`mise outdated --bump` does not read (an npm tool, an image digest, a
+workflow's action, a regex pin), that list is where an update starts. A
+Renovate pull request is worked like any other: push the code a major needs
+onto its branch. To vendor a new API reference bundle by hand,
 change `version:` in `static/vendor/scalar/UPSTREAM` and run
 `node tools/dev/vendor-scalar.mjs`.
 
@@ -77,8 +81,8 @@ to their jobs:
 Both query their advisory service, so the gate fails offline.
 `mise run lint:govulncheck` runs govulncheck over the controller, its tests
 included, and queries vuln.go.dev, so it too is left to `mise run check` and
-CI's lint job rather than `fast`. The image gates
-scan the built image with Trivy. When an advisory lands against a transitive
+CI's lint job rather than `fast`. The image gates scan the built image with
+Trivy. When an advisory lands against a transitive
 dependency, move only that package:
 
 ```sh
@@ -101,7 +105,11 @@ reason, in `controller/osv-scanner.toml`. osv-scanner reads it beside
 ## Moving a pin
 
 1. Change the pin where the table says, and regenerate its lock (`uv lock`,
-   `mise lock`, `go mod tidy`).
+   `mise lock`, `go mod tidy`). The controller's modules move with
+   `mise run upgrade:go`, then `mise run fix` for the code a tool generates;
+   one module alone moves with `go -C controller get <module>@latest`. Never
+   `go get -u`, which moves every module a tool depends on past the versions
+   it is built and tested with.
 2. `mise run check`. A browser or Playwright change can move rendering: it
    runs `mise run browser` among its gates, the one to repeat.
 3. A change to the Python matrix changes the README badge; `PythonVersionTests`

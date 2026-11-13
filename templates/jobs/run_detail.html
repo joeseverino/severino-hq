@@ -1,0 +1,31 @@
+{% extends "page.html" %}
+{% comment %}
+One run of a playbook, or one scan of its source (`run_pages.run_context`):
+what it ran and on which machines, who asked and who approved it (linking the
+approval it ran under), its lease
+while a runner holds it, how it ended, and each task's outcome, drawn as
+every registry-driven table is. Its state is the badge beside its title.
+{% endcomment %}
+{% block page %}
+<div class="section-flow">
+{% section "Run" %}
+  {% facts label="Run" %}
+    {% if playbook_url %}{% fact ran_label value=run.title url=playbook_url %}{% else %}{% fact ran_label value=run.title %}{% endif %}
+    {% if run.evidence.hosts %}
+      {% fact "Machines" %}{% for host in run.evidence.hosts %}{% entity "machine"|entity_of:host mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}
+    {% endif %}
+    {% if approval_url %}{% fact "Asked by" value=run.by.words url=approval_url %}{% else %}{% fact "Asked by" value=run.by.words|or_empty %}{% endif %}
+    {% fact "Asked" %}{{ run.created_at|when:"exact" }}{% endfact %}
+    {% if operation.reason %}{% fact "Reason" value=operation.reason %}{% endif %}
+    {% if run.evidence.correlation %}{% fact "Correlation" %}<code>{{ run.evidence.correlation|breakable }}</code>{% endfact %}{% endif %}
+    {% if run.started %}{% fact "Started" %}{{ run.started|when:"exact" }}{% endfact %}{% endif %}
+    {% if run.finished %}{% fact "Finished" %}{{ run.finished|when:"exact" }}{% endfact %}{% endif %}
+    {% if run.duration is not None %}{% fact "Duration" value=run.duration|seconds %}{% endif %}
+    {% if run.evidence.worker %}{% fact "Lease" %}{{ run.evidence.worker|breakable }}{% detail %}<small>Until {{ run.evidence.lease_until|when:"exact" }}</small>{% endfact %}{% endif %}
+    {% if operation.attempt_count > 1 %}{% fact "Attempts" value=operation.attempt_count %}{% endif %}
+    {% if run.note %}{% fact "Result" value=run.note %}{% endif %}
+  {% endfacts %}
+{% endsection %}
+{% include "partials/_page_sections.html" with spans_row=True %}
+</div>
+{% endblock %}

@@ -42,7 +42,7 @@ lazy from hq.platform.core import seeds
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.names import MACHINE, SERVICES
 lazy from hq.platform.core.example_estate.network import ZONE_KEY
-lazy from hq.platform.core.example_estate.records import RUNBOOKS, SERVER_ASSET, WRITEUPS
+lazy from hq.platform.core.example_estate.records import RUNBOOKS, SERVER_ASSET, SWITCH_ASSET, UNFILED_RECEIPT, WRITEUPS
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
 
 # The gate's widths, a wide desktop and the laptop windows where a wide table
@@ -81,6 +81,19 @@ HIDE_POPOVER = "(place) => document.querySelectorAll('[popover]')[place].hidePop
 # The checks a shown popover's own boxes and lines are held to: its rows are
 # laid out by the same primitives as the page's, over whatever lies beneath.
 _IN_A_POPOVER = ("overlaps", "overlapping text", "touching text")
+
+
+_PICTURE = re.compile(r'<img\b[^>]*\ssrc="(/[^"/][^"]*)"')
+
+
+def pictures_of(pages, ask):
+    """Each picture ``pages`` draw from HQ's own records (a receipt's file),
+    by its address, as the server answers it: a browser asks for it as the
+    page loads."""
+
+    addresses = {url for page in pages for url in _PICTURE.findall(page) if not url.startswith(settings.STATIC_URL)}
+    asked = {url: ask(url) for url in sorted(addresses)}
+    return {(url, ""): answered(response) for url, response in asked.items() if response.status_code == 200}
 
 
 def fragments_of(client, address, page, answers, ask):
@@ -158,8 +171,10 @@ def records():
     service with the longest name, its container (which has an upgrade to
     make), the zone, a message with the page that deletes it, HQ's project
     (the one every other kind is about), the server as an asset and its
-    expense and receipt, a runbook and a writeup; then each one an installed
-    extension's demo names (``seeds.demo_pages``)."""
+    expense and receipt, the switch nothing else is about, the receipt not
+    yet filed (a picture) and the expense its match page offers, a runbook
+    and a writeup; then each one an installed extension's demo names
+    (``seeds.demo_pages``)."""
 
     hostname, container, *_ = max(SERVICES, key=lambda service: len(service[0]))
     return [
@@ -173,17 +188,30 @@ def records():
         reverse("assets:detail", kwargs={"slug": SERVER_ASSET}),
         reverse("expenses:detail", args=[1]),
         reverse("receipts:detail", args=[1]),
+        reverse("assets:detail", kwargs={"slug": SWITCH_ASSET}),
+        reverse("receipts:detail", args=[UNFILED_RECEIPT]),
+        reverse("receipts:match", args=[UNFILED_RECEIPT]),
         reverse("docs_index:detail", kwargs={"doc_id": RUNBOOKS[0][0]}),
         reverse("content:detail", kwargs={"slug": WRITEUPS[0][0]}),
         *seeds.demo_pages(),
     ]
 
 
+def opened():
+    """Each page drawn with a folded part open, at the address its placeholder
+    falls back to (``data-fragment-fallback``): loaded as a reader first meets
+    it, the fold stays closed and its part is never drawn."""
+
+    agents = reverse("agent_policy")
+    return [f"{agents}?endpoint=1", f"{agents}?all=1"]
+
+
 def estate_pages():
     """Every page of the example estate the gate reads and dev:look's ``all``
-    stands for, by address: the navigation's, then a record's page of each kind."""
+    stands for, by address: the navigation's, each with its folded parts open,
+    then a record's page of each kind."""
 
-    return [*navigation(), *records()]
+    return [*navigation(), *opened(), *records()]
 
 
 def render_estate():
@@ -204,6 +232,7 @@ def render_estate():
                 raise AssertionError(f"{path} answered {response.status_code}")
             answers[path, ""] = answered(response)
             fragments_of(client, path, answers[path, ""], answers, ask)
+        answers |= pictures_of(list(answers.values()), lambda url: ask(client, url))
     return paths, answers
 
 
@@ -280,7 +309,10 @@ class ExampleEstateGate(BrowserGate):
     def visit(self, path, width):
         self.page.set_viewport_size(viewport(width))
         self.page.goto(f"{ORIGIN}{path}", wait_until="load")
-        self.in_flight.settle(f"{path} at {width}px")
+        # A page without script runs no frame callback, so a wait on one never
+        # ends, and starts no request of its own once loaded.
+        if self.runs_script:
+            self.in_flight.settle(f"{path} at {width}px")
         self.page.evaluate(FONTS_READY)
 
 
@@ -297,7 +329,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
         )
         self.page.evaluate(SETTLE)
         found = {"sideways, opened": self.page.evaluate(SIDEWAYS, SELECTORS["sideways"])}
-        probes = {check: probe for check, probe in geometry_probes(path, width).items() if check in _IN_A_POPOVER}
+        probes = {check: probe for check, probe in geometry_probes().items() if check in _IN_A_POPOVER}
         for (label, _slug), _alike in self.each_popover_kind():
             self.page.evaluate(SETTLE)
             found |= {f"{check}, with {label} shown": said for check, said in self.checked(probes).items()}
@@ -311,11 +343,14 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
                     self.page.emulate_media(color_scheme="light")
                     self.visit(path, width)
                     found = self.geometry(path, width)
-                    for theme in THEMES:
+                    # A palette is a color per token, the same at every width, so
+                    # the narrowest and widest read every part either draws.
+                    for theme in THEMES if width in (READ_AT[0], READ_AT[-1]) else ():
                         self.page.emulate_media(color_scheme=theme)
                         self.page.evaluate(SETTLE)
                         self.page.evaluate(FINISH_TRANSITIONS)
                         found |= {f"{check} ({theme})": said for check, said in self.palette().items()}
+                    self.page.emulate_media(color_scheme="light")
                     found |= self.opened(path, width)
                     found["unanswered"], self.unanswered = self.unanswered, []
                     found["refused"] = self.refusals_so_far()
@@ -328,7 +363,7 @@ class ExampleEstateBrowserTests(ExampleEstateGate):
 # server stands at, the links its headings sort by, and the queue's choices.
 _TOOLBAR_BOX = re.compile(r'<input type="checkbox" name="([^"]+)" value="([^"]*)"')
 _DEFAULT_SORT = re.compile(r'<select name="sort">.*?<option value="([^"]*)" selected>', re.DOTALL)
-_SORT_LINK = re.compile(r'class="table-sort-link" href="([^"]+)"')
+_SORT_LINK = re.compile(r'<a class="table-sort-link"[^>]* href="([^"]+)"')
 _QUEUE_CHOICES = re.compile(r'<select name="(status|source)"[^>]*>(.*?)</select>', re.DOTALL)
 _OPTION = re.compile(r'<option value="([^"]+)"')
 _FIRST_ROW = re.compile(r"<tbody>\s*<tr[^>]*>(.*?)</tr>", re.DOTALL)
@@ -471,7 +506,10 @@ class ExampleEstateControlTests(BrowserGate):
         body = ask(path)
         for name, value in _TOOLBAR_BOX.findall(body):
             ask(f"{path}?{name}={value}")
-        for href in _SORT_LINK.findall(body):
+        sorts = _SORT_LINK.findall(body)
+        if not sorts:
+            raise AssertionError(f"{path} draws no heading that sorts")
+        for href in sorts:
             for deeper in _SORT_LINK.findall(ask(urljoin(path, unescape(href)))):
                 ask(urljoin(path, unescape(deeper)))
         first = _FIRST_ROW.search(body)
@@ -542,23 +580,22 @@ class ExampleEstateControlTests(BrowserGate):
                 self.page.wait_for_function(_LET_GO, arg=asked)
                 self.assertEqual(self.rows(), every)
 
-                # A list its filters empty says so, and gives every row back.
+                # A toggle beside the menus narrows the list too, and gives every row back.
                 toggle = self.page.locator(SELECTORS["table_toggle"]).first
                 asked = [toggle.get_attribute("name"), toggle.get_attribute("value")]
                 toggle.check()
                 self.page.wait_for_function(_ASKED, arg=asked)
-                self.assertEqual(self.rows(), 0)
-                self.assertTrue(self.page.locator(SELECTORS["table_empty"]).is_visible())
+                kept = self.rows()
+                self.assertLess(kept, every)
                 toggle.uncheck()
                 self.page.wait_for_function(_LET_GO, arg=asked)
                 self.assertEqual(self.rows(), every)
-                self.assertFalse(self.page.locator(SELECTORS["table_empty"]).count())
 
                 # Back is the list as it was, the address and the box agreeing,
                 # and Forward the list after it.
                 self.page.go_back()
                 self.page.wait_for_function(_ASKED, arg=asked)
-                self.assertEqual(self.rows(), 0)
+                self.assertEqual(self.rows(), kept)
                 self.assertTrue(toggle.is_checked())
                 self.page.go_forward()
                 self.page.wait_for_function(_LET_GO, arg=asked)

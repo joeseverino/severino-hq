@@ -10,6 +10,7 @@ from django.utils import timezone as dj_timezone
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.provider_spec import expiry_phrase
+from hq.platform.application.tests.reads import reads
 
 from ..expiry import days_until, renewal_opens_at, renewal_window
 from ..resource_context import resource_context
@@ -46,6 +47,7 @@ class DaysUntilTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/*.py")
 class DaysUntilSourceTests(SimpleTestCase):
     """No other module counts days itself."""
 

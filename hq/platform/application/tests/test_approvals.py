@@ -18,6 +18,7 @@ from hq.domains.control_plane.models import ApprovalRequest, ManagedResource, Op
 from hq.domains.control_plane.providers import PROVIDERS
 from hq.platform.core.models import AuditLog
 
+from ..approval_review import compare, preview
 from ..approvals import (
     APPROVE,
     MAX_PENDING_PER_ACTOR,
@@ -26,9 +27,7 @@ from ..approvals import (
     ApproveCommand,
     RejectCommand,
     approve,
-    compare,
     pending,
-    preview,
     reject,
 )
 from ..capabilities import execute_capability
@@ -586,7 +585,7 @@ class FloorTests(TestCase):
     def test_writing_a_gated_declaration_without_consent_is_refused(self):
         from ..record_errors import PolicyError
 
-        with self.assertRaisesMessage(PolicyError, "This change needs a person to approve it."):
+        with self.assertRaisesMessage(PolicyError, "This change needs approval."):
             save_managed_resource(
                 ManagedResourceCommand(
                     key=POLICY_KEY,
@@ -601,7 +600,7 @@ class FloorTests(TestCase):
         from ..record_errors import PolicyError
         from ..resource_operations import OperationCommand, request_reconcile
 
-        with self.assertRaisesMessage(PolicyError, "This change needs a person to approve it."):
+        with self.assertRaisesMessage(PolicyError, "This change needs approval."):
             request_reconcile(
                 OperationCommand(idempotency_key="direct", reason=""),
                 principal=Principal("a-token", "mcp", frozenset({Capability.MANAGE_INFRASTRUCTURE})),

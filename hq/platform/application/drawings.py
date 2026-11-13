@@ -1,7 +1,7 @@
 """What a figure may be drawn as, beside being said.
 
 A ``Kpi`` takes one drawing or none: dots for a part of a whole, a trend for
-recent readings. An ``AllocationBar`` is the parts of one whole as one bar.
+recent readings, or an ``AllocationBar``, the parts of one whole as one bar.
 ``hq_sdk.ui`` hands these to extensions.
 """
 
@@ -82,6 +82,8 @@ class Trend:
     tips: tuple[str, ...] = ()
 
     kind: ClassVar[str] = "trend"
+    # A line has no part that leads anywhere.
+    links: ClassVar[bool] = False
     # The line's box, in the units the template's viewBox is drawn in.
     WIDTH: ClassVar[int] = 100
     HEIGHT: ClassVar[int] = 24
@@ -167,6 +169,7 @@ class AllocationBar:
     label: str
     parts: tuple[Share, ...]
 
+    kind: ClassVar[str] = "allocation"
     # The narrowest a part with any value is drawn, as a share of the bar, so
     # a sliver still shows; the widest part gives up what that takes.
     FLOOR: ClassVar[float] = 0.5
@@ -202,8 +205,30 @@ class AllocationBar:
         return tuple((part, f"{part.value / whole:.0%}") for part in self.parts if part.value > 0)
 
     @property
+    def links(self) -> bool:
+        """Whether a part leads somewhere, so a figure drawn with the bar cannot itself be one link."""
+
+        return any(part.url for part, _percent in self.legend)
+
+    @property
     def spoken(self) -> str:
         """The bar as a screen reader hears it: the whole, then each part and its share."""
 
         heard = ", ".join(f"{part.label} {percent}" for part, percent in self.legend)
         return f"{self.label}: {heard}" if heard else self.label
+
+
+@display
+class StripTile:
+    """One of a strip of small figures read across, each as a person scans
+    a forecast: what it is of, the figure, and what stands out about it.
+
+    Drawn by ``partials/_tile_strip.html``. ``note`` is said only when there
+    is something to say, and then it is marked; ``tip`` is the tile's whole
+    sentence, on hover.
+    """
+
+    label: str
+    value: str
+    note: str = ""
+    tip: str = ""

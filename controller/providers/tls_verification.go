@@ -46,6 +46,71 @@ func daysUntil(when, now time.Time) int {
 	return 0
 }
 
+// expiryWords says when something runs out, from a daysUntil count, as HQ's
+// moments.expiry_words does: "expires in 3 days", "expires today", "expired
+// today", "expired 4 days ago". A past expiry is a past tense, never a count
+// below nothing. testdata/expiry-words.json holds the two to one table.
+func expiryWords(days int) string {
+	if days > 0 {
+		return "expires in " + daySpan(days)
+	}
+	if days == 0 {
+		return "expires today"
+	}
+	// daysUntil counts a moment past by under a day as -1, so the whole days
+	// since are one fewer.
+	if since := -days - 1; since > 0 {
+		return "expired " + daySpan(since) + " ago"
+	}
+	return "expired today"
+}
+
+// daysSaidAsDays is HQ's moments.DAYS_SAID_AS_DAYS: up to it a length is
+// counted in days, past it in years, months and weeks.
+const daysSaidAsDays = 90
+
+// daySpan is a whole number of days as HQ's moments.span says it. Past
+// daysSaidAsDays it is Django's timesince over that many days from the start
+// of 2000, as moments.duration measures it: the first unit that is not zero
+// and the next one with it when that is not zero either, each number held to
+// its unit by a no-break space.
+func daySpan(days int) string {
+	if days <= daysSaidAsDays {
+		return countedDays(days)
+	}
+	start := time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	end := start.AddDate(0, 0, days)
+	months := (end.Year()-start.Year())*12 + int(end.Month()-start.Month())
+	rest := int(end.Sub(start.AddDate(0, months, 0)).Hours()) / 24
+	counts := []int{months / 12, months % 12, rest / 7, rest % 7}
+	units := []string{"year", "month", "week", "day"}
+	said := []string{}
+	for i, count := range counts {
+		if count == 0 {
+			if len(said) > 0 {
+				break
+			}
+			continue
+		}
+		unit := units[i]
+		if count != 1 {
+			unit += "s"
+		}
+		said = append(said, strconv.Itoa(count)+"\u00a0"+unit)
+		if len(said) == 2 {
+			break
+		}
+	}
+	return strings.Join(said, ", ")
+}
+
+func countedDays(days int) string {
+	if days == 1 {
+		return "1 day"
+	}
+	return strconv.Itoa(days) + " days"
+}
+
 // npmCoveredHosts is the serving proxy hosts with a name the certificate covers.
 func (r *Registry) npmCoveredHosts(ctx context.Context, certificateDomains []string) ([]npmapi.ProxyHostObject, error) {
 	base, headers, err := r.npmSession(ctx, "")
@@ -163,7 +228,7 @@ func tlsConditions(spec TLSCertificateSpec, observations []TLSObservation, unver
 		conditions = append(conditions, Condition{Type: runtime.ConditionDrifted, Status: true, Reason: "ConsumerMismatch", Message: "Sites are serving different certificates."})
 	}
 	if daysRemaining <= spec.RenewalWindowDays {
-		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ExpiringSoon", Message: fmt.Sprintf("A verified TLS consumer expires in %d days.", daysRemaining)})
+		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ExpiringSoon", Message: "A certificate a site serves " + expiryWords(daysRemaining) + "."})
 	}
 	if len(unverified) > 0 {
 		conditions = append(conditions, Condition{Type: runtime.ConditionDegraded, Status: true, Reason: "ConsumerUnverified", Message: "No name to check is set for: " + strings.Join(unverified, ", ")})

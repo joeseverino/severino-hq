@@ -1,6 +1,7 @@
 """Probes of controls drawn as controls: their words on one line, and one height to a row."""
 
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE, TEXT_SHOWN
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # A control drawn as one: a select, or a box the selector names that
 # paints an edge, a fill or a shadow. A bare button is a link set in a
@@ -12,7 +13,12 @@ const paints = (style) => seen(style.backgroundColor) || style.backgroundImage !
   || style.boxShadow !== 'none'
   || ['Top', 'Right', 'Bottom', 'Left'].some((side) => parseFloat(style[`border${side}Width`]) > 0
     && style[`border${side}Style`] !== 'none' && seen(style[`border${side}Color`]));
-const drawn = (el) => !el.matches('summary:has(h1, h2, h3, h4, h5, h6, hgroup)')
+// A disclosure's face: what a reader presses to open it is the thing it
+// discloses, drawn as itself, never a label: a heading that opens its section,
+// a reading that opens its panel (partials/_reading.html), tinted while open
+// and holding its lead, its quiet lines and its standing, which wrap as text.
+const DISCLOSURE_FACE = 'summary:has(h1, h2, h3, h4, h5, h6, hgroup), .reading-head';
+const drawn = (el) => !el.matches(DISCLOSURE_FACE)
   && (el.matches('select') || paints(getComputedStyle(el)));
 // The words a control says itself, a control inside it left out.
 const ownWords = (el, controls) => {
@@ -154,3 +160,191 @@ CONTROL_HEIGHTS = (
   return found;
 }"""
 )
+
+# Where a row's first line of words stands: the padding above it in the
+# row's first cell of words, a cell of controls taking some of its own out
+# for a control taller than a line.
+_ROW_WORDS = """
+const wordsOf = (cell) => [...cell.parentElement.children].find((other) => other !== cell
+  && other.matches('td, th') && !other.matches(CONTROL_CELL) && other.checkVisibility()) || cell;
+const lineOf = (style) => parseFloat(style.lineHeight) || 1.2 * parseFloat(style.fontSize);
+"""
+
+# Each control a row's actions cell holds on its first line whose middle is
+# off that line's middle, where the words in the cells beside it are set: a
+# button taller than a line, set on the line's top, sits lower than the row's
+# text. The cell is a row's actions (`{% row_actions %}`) or any cell of a
+# column of controls.
+ACTIONS_OFF_THE_LINE = (
+    "() => {"
+    + DESCRIBE
+    + f"const CONTROL_CELL = '{SELECTORS['row_actions_cell']}';"
+    + _ROW_WORDS
+    + """
+  const found = [];
+  const pressed = 'a, button, form, [role="button"], [data-ask]';
+  for (const cell of document.querySelectorAll(CONTROL_CELL)) {
+    if (!cell.checkVisibility()) continue;
+    const style = getComputedStyle(cell);
+    const words = getComputedStyle(wordsOf(cell));
+    const line = lineOf(style);
+    const middle = box(cell).top + parseFloat(style.borderTopWidth) + parseFloat(words.paddingTop) + line / 2;
+    const controls = [...cell.children].filter((el) => el.matches(pressed) && el.checkVisibility() && box(el).height >= 2);
+    if (!controls.length) continue;
+    const first = box(controls[0]);
+    for (const el of controls) {
+      const r = box(el);
+      if (r.top >= first.bottom) continue;
+      const off = r.top + r.height / 2 - middle;
+      if (Math.abs(off) > 1.5) {
+        found.push(`${describe(el)} sits ${Math.round(Math.abs(off))}px ${off > 0 ? 'below' : 'above'} its row's first line: ${el.textContent.trim().slice(0, 40)}`);
+      }
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+# Each cell of a row's controls whose controls, on one line, make the row
+# taller than a line of words: a button taller than the line, set inside the
+# cell's whole padding, grows its row past the rows of words beside it. A cell
+# holding an ask keeps a line under its button for what the ask says
+# (tables.css), so it is left to its own check.
+ACTIONS_GROW_THE_ROW = (
+    "() => {"
+    + DESCRIBE
+    + f"const CONTROL_CELL = '{SELECTORS['row_actions_cell']}';"
+    + _ROW_WORDS
+    + """
+  const found = [];
+  const pressed = 'a, button, form, [role="button"]';
+  for (const cell of document.querySelectorAll(CONTROL_CELL)) {
+    if (!cell.checkVisibility() || cell.querySelector(':scope > [data-ask]')) continue;
+    const controls = [...cell.children].filter((el) => el.matches(pressed) && el.checkVisibility() && box(el).height >= 2);
+    if (!controls.length) continue;
+    const first = box(controls[0]);
+    const line = controls.map(box).filter((r) => r.top < first.bottom);
+    if (line.length < controls.length) continue;
+    const style = getComputedStyle(cell);
+    const words = getComputedStyle(wordsOf(cell));
+    const top = box(cell).top;
+    const needs = Math.max(...line.map((r) => r.bottom)) - top + parseFloat(style.paddingBottom) + parseFloat(style.borderBottomWidth);
+    const row = parseFloat(words.paddingTop) + lineOf(style) + parseFloat(words.paddingBottom)
+      + parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+    if (needs > row + 1.5) {
+      found.push(`${describe(cell)} holds controls ${Math.round(needs - row)}px taller than its row's line of words: ${cell.textContent.trim().replace(/\\s+/g, ' ').slice(0, 40)}`);
+    }
+  }
+  return [...new Set(found)];
+}"""
+)
+
+# A row's controls stand side by side while its table has room for them: a
+# cell of controls (``cells``) whose controls lay out on more than one line,
+# when the table laid out at its least width, this cell's column widened to
+# hold them on one line, still fits its region with a pixel to spare. The
+# controls are the outermost pressable boxes in the cell, and their line is
+# their widths and the least gap between two of them on a shared line (none
+# when no two share one), so a row a table truly cannot widen is left alone.
+ACTIONS_STACKED_WITH_ROOM = (
+    "(cells) => {"
+    + DESCRIBE
+    + """
+  const pressed = 'a[href], button, .btn, [role="button"], input:is([type=submit], [type=button])';
+  const held = (el, css, read) => {
+    const before = el.style.cssText;
+    el.style.cssText += css;
+    const value = read();
+    el.style.cssText = before;
+    return value;
+  };
+  const least = new Map();
+  const leastOf = (table) => {
+    if (!least.has(table)) {
+      least.set(table, held(table, ';inline-size: min-content !important; min-inline-size: 0 !important; max-inline-size: none !important',
+        () => new Map([[table, box(table).width],
+          ...[...table.querySelectorAll(cells)].map((cell) => [cell, box(cell).width])])));
+    }
+    return least.get(table);
+  };
+  const found = [];
+  for (const cell of document.querySelectorAll(cells)) {
+    if (!cell.checkVisibility()) continue;
+    const controls = [...cell.querySelectorAll(pressed)]
+      .filter((el) => el.checkVisibility() && !el.parentElement.closest(pressed))
+      .map((el) => [el, box(el)])
+      .filter(([, r]) => r.width >= 2 && r.height >= 2);
+    if (controls.length < 2) continue;
+    const overlaps = (a, b) => Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > Math.min(a.height, b.height) / 2;
+    const [, first] = controls[0];
+    if (controls.every(([, r]) => overlaps(r, first))) continue;
+    let gap = Infinity;
+    for (const [, a] of controls) {
+      for (const [, b] of controls) {
+        if (a !== b && overlaps(a, b) && b.left >= a.right) gap = Math.min(gap, b.left - a.right);
+      }
+    }
+    if (gap === Infinity) gap = 0;
+    const line = controls.reduce((sum, [, r]) => sum + r.width, 0) + gap * (controls.length - 1);
+    const table = cell.closest('table');
+    const region = table.parentElement;
+    const widths = leastOf(table);
+    const style = getComputedStyle(cell);
+    const frame = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight)
+      + parseFloat(style.borderLeftWidth) + parseFloat(style.borderRightWidth);
+    const column = widths.get(cell) ?? box(cell).width;
+    const wanted = widths.get(table) - column + Math.max(column, line + frame);
+    if (wanted + 1 <= region.clientWidth) {
+      const words = controls.map(([el]) => el.textContent.trim().replace(/\\s+/g, ' ').slice(0, 24)).join(' / ');
+      found.push(`${describe(cell)} stands "${words}" on several lines: one line takes ${line.toFixed(1)}px and its table would be ${wanted.toFixed(1)}px of ${region.clientWidth}px`);
+    }
+  }
+  return found;
+}"""
+)
+
+
+# A filter bar's choice (a select, a filter's menu, the sort) is as wide as
+# its options, never stretched over the bar: one drawn wider than it lays out
+# at its own width, the bar's room being its search's. One a bar too narrow
+# for it shrinks stays within its own width, so it passes.
+CHOICES_AS_WIDE_AS_THEIR_OPTIONS = (
+    "(choices) => {"
+    + DESCRIBE
+    + """
+  const found = [];
+  for (const el of document.querySelectorAll(choices)) {
+    if (!el.checkVisibility()) continue;
+    const drawn = box(el).width;
+    const before = el.style.cssText;
+    el.style.cssText += ';flex: none !important; inline-size: auto !important';
+    const own = box(el).width;
+    el.style.cssText = before;
+    if (drawn > own + 1) found.push(`${describe(el)} is ${drawn.toFixed(1)}px wide, its options ${own.toFixed(1)}px`);
+  }
+  return found;
+}"""
+)
+
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "actions on the first line": ACTIONS_OFF_THE_LINE,
+    "actions no taller than the row": ACTIONS_GROW_THE_ROW,
+    "row actions stacked with room": (
+        ACTIONS_STACKED_WITH_ROOM,
+        f"{SELECTORS['row_actions_cell']}, {SELECTORS['queue_actions_cell']}",
+    ),
+    "control words on one line": (
+        WRAPPED_CONTROLS,
+        [SELECTORS["pressed"], SELECTORS["choice"], SELECTORS["unseen"], SELECTORS["vendored"]],
+    ),
+    "one height to a row of controls": (
+        CONTROL_HEIGHTS,
+        [SELECTORS["pressed"], SELECTORS["fillable"], SELECTORS["vendored"]],
+    ),
+    "filter choices as wide as their options": (
+        CHOICES_AS_WIDE_AS_THEIR_OPTIONS,
+        ".filter-bar-controls > :is(select, .table-filter-menu, .table-sort)",
+    ),
+}

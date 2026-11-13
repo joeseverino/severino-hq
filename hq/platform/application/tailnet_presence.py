@@ -13,7 +13,7 @@ from .tailnet import TAILNET_KIND, snapshots
 lazy from .arrivals import arrivals
 lazy from .expiry import days_until
 lazy from .locate import container_hosts, host_of
-lazy from .moments import elapsed
+lazy from .moments import elapsed, expiry_words
 lazy from .reach import is_public, network_of
 lazy from .timestamps import moment
 
@@ -181,6 +181,13 @@ class Presence:
 
         when = moment(self.key_expires)
         return days_until(when) if when is not None else None
+
+    @property
+    def key_expiry(self) -> str:
+        """When the node key runs out, in words ("expired 4 days ago"), or "" when it does not."""
+
+        days = self.key_expiry_days
+        return expiry_words(days) if days is not None else ""
 
 
 def _instant(stamp: object) -> str:

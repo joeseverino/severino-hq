@@ -12,6 +12,7 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CO
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec
 from hq.domains.control_plane.observations.contract import registry
+from hq.domains.control_plane.permissions import Cloudflare, Tailscale
 from hq.domains.control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
@@ -43,7 +44,7 @@ EXAMPLE = ObservationSpec(
     "cloudflare_api",
     "Pages project",
     ExampleRecord,
-    requires=("Pages Read (account)",),
+    requires=(Cloudflare.PAGES_READ,),
 )
 
 
@@ -225,6 +226,11 @@ class PerConnectionSightTests(TestCase):
             observed_at=now,
         )
         ProviderInventory.objects.create(
+            kind="host.edge_reboot",
+            records=[{"connection_ref": "edge", "pending": False, "read_at": "2030-01-01T00:00:00Z"}],
+            observed_at=now,
+        )
+        ProviderInventory.objects.create(
             kind="caddy.route",
             records=[
                 {"connection_ref": "edge", "domain": name, "upstream": "app:80"}
@@ -239,9 +245,10 @@ class PerConnectionSightTests(TestCase):
     def test_each_connection_counts_only_what_was_read_through_it(self):
         connected, _ = sight_by_connection({"edge": "ssh", "shared-host": "ssh"})
 
-        self.assertEqual(self.labels(connected["edge"]), {"host.perimeter": 1, "caddy.route": 3})
+        self.assertEqual(self.labels(connected["edge"]), {"host.perimeter": 1, "host.edge_reboot": 1, "caddy.route": 3})
         seen = self.labels(connected["shared-host"])
         self.assertNotIn("host.perimeter", seen)
+        self.assertNotIn("host.edge_reboot", seen)
         self.assertNotIn("caddy.route", seen)
 
     def test_the_provider_view_still_counts_every_connection(self):
@@ -433,7 +440,7 @@ class CredentialSightPageTests(TestCase):
         api = rows["example-api"].sight
         self.assertFalse([sight.remedy for sight in api.sights if sight.remedy])
         (tailnet_user,) = [sight for sight in rows["example-tailnet"].sight.sights if sight.kind == "tailscale.user"]
-        self.assertIn("users:read", tailnet_user.remedy)
+        self.assertIn(Tailscale.USERS_READ, tailnet_user.remedy)
         said = text(response)
         self.assertIn(tailnet_user.remedy, said)
         readable = {sight.kind for sight in rows["example-ssh"].sight.sights if sight.state == READABLE}

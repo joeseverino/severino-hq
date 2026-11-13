@@ -150,6 +150,7 @@ const markPathsIn = (added) => {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  // eslint-disable-next-line no-restricted-syntax -- the viewer mounts once, and its page answers nothing in place
   const root = document.getElementById("api-reference-root");
   // From the server, set before the viewer draws: each tag's list of
   // operations sits in a section of its own, and they line up only at one width.
@@ -168,6 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Scalar scrolls an entry to just below what it is told stands over the
   // page, so HQ's header is named to it. Where its bars stick is the
   // stylesheet's (static/css/api-reference.css).
+  // eslint-disable-next-line no-restricted-syntax -- the frame's header, which no fragment holds
   document.querySelector(".site-header")?.setAttribute("data-scalar-scroll-header", "");
   // Scalar holds the page on an entry it was sent to that is not drawn yet,
   // scrolling back to it every frame until its next batch is drawn

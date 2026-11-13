@@ -2,25 +2,31 @@
 
 A record's form and a command's end alike: the verb its view supplies, Cancel,
 and what saving does (docs/Design.md, "Every form a page is about is drawn one
-way"). A form template that writes its own submit button or ``form-actions``
-row has drawn a second kind.
+way"). Every host template that writes a form is read, whatever its name: one
+that writes its own submit button or ``form-actions`` row has drawn a second
+kind.
 """
 
 import re
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.tree import ROOT
 
 TEMPLATES = ROOT / "templates"
 PARTIAL = "partials/_form_actions.html"
-# The command page's form, and every template named for the form it draws.
-COMMAND = "command.html"
+# The form part itself, which every form that writes is drawn through.
+FORM = "partials/_form.html"
 # A form that writes: a query form (method get) closes with its own Filter.
 _POSTS = re.compile(r"<form\b[^>]*\bmethod=\"post\"", re.IGNORECASE)
 _OWN_ROW = re.compile(r"type=\"submit\"|class=\"[^\"]*\bform-actions\b|<button\b(?![^>]*type=\"button\")")
 _COMMENT = re.compile(r"{%\s*comment\s*%}.*?{%\s*endcomment\s*%}|{#.*?#}", re.DOTALL)
 _FORM = re.compile(r"<form\b.*?</form>", re.DOTALL | re.IGNORECASE)
+# A form that is one verb or none (a menu's button, a form a script submits)
+# is marked as a part of its own where it is drawn, by the suppression of
+# the hand-drawn-form rule (tools/lint/ast-grep/rules), which says why.
+_ONE_VERB = re.compile(r"<!-- ast-grep-ignore:[^>]*\bhand-drawn-form\b")
 
 
 def form_templates() -> dict[str, str]:
@@ -28,11 +34,9 @@ def form_templates() -> dict[str, str]:
 
     found = {}
     for path in sorted(TEMPLATES.rglob("*.html")):
-        name = path.relative_to(TEMPLATES).as_posix()
-        if name == COMMAND or path.stem.endswith("_form"):
-            source = _COMMENT.sub("", path.read_text(encoding="utf-8"))
-            if _POSTS.search(source):
-                found[name] = source
+        source = _COMMENT.sub("", path.read_text(encoding="utf-8"))
+        if _POSTS.search(source):
+            found[path.relative_to(TEMPLATES).as_posix()] = source
     return found
 
 
@@ -73,14 +77,19 @@ class MissesTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class FormTemplateTests(SimpleTestCase):
     def test_every_form_closes_with_the_shared_row(self):
         forms = form_templates()
+        raw = {name: (TEMPLATES / name).read_text(encoding="utf-8") for name in forms}
 
-        self.assertIn(COMMAND, forms)
-        self.assertTrue(any(name != COMMAND for name in forms), f"no *_form.html under {TEMPLATES}")
+        self.assertIn(FORM, forms)
         self.assertEqual(
-            [f"{name}: {missed}" for name, source in forms.items() if (missed := misses(source))],
+            [
+                f"{name}: {missed}"
+                for name, source in forms.items()
+                if not _ONE_VERB.search(raw[name]) and (missed := misses(source))
+            ],
             [],
             f"A form closes with {{% include {PARTIAL!r} with verb=... cancel_url=... only %}}, its verb and its"
             " way back from the view",

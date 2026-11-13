@@ -109,11 +109,12 @@
       list.className = "messages";
       main.prepend(list);
     }
-    const note = document.createElement("li");
-    note.className = "msg msg-info";
-    note.setAttribute("role", "status");
+    // The empty info notice the page drew for a script to fill (base.html).
+    const note = document.querySelector('template[data-notice="info"]').content.firstElementChild.cloneNode(true);
     note.textContent = words;
-    list.replaceChildren(note);
+    const item = document.createElement("li");
+    item.append(note);
+    list.replaceChildren(item);
     main.scrollIntoView({ block: "start" });
   };
 
@@ -189,16 +190,6 @@
     if (places) places.insertBefore(reset, places.querySelector(":scope > form"));
     else document.querySelector(".site-header")?.append(reset);
   });
-
-  // Say where the connection panel's headers came from.
-  const relabel = () => {
-    const note = document.querySelector("[data-response-headers]")?.previousElementSibling;
-    if (note?.classList.contains("conn-note")) {
-      note.textContent = "Recorded from HQ when this demo was built. GitHub Pages, which serves the demo, can't send them.";
-    }
-  };
-  document.addEventListener("DOMContentLoaded", relabel);
-  document.addEventListener("hq:fragment", relabel);
 
   // Save dismissals and un-dismissals.
   document.addEventListener("click", (event) => {

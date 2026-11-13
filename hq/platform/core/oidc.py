@@ -102,8 +102,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
         except requests.RequestException as exc:
             status = exc.response.status_code if exc.response is not None else None
             reason = (
-                "Pocket ID refused HQ's client credentials: the client secret HQ "
-                "holds is not the one Pocket ID issued for this client."
+                "Pocket ID refused HQ's client credentials. HQ's client secret must match the one Pocket ID issued."
                 if status in (400, 401)
                 else "HQ could not reach Pocket ID to finish signing in."
             )
@@ -200,7 +199,7 @@ class HQOIDCAuthenticationBackend(OIDCAuthenticationBackend):
             return False
 
         if not settings.SEVERINO_OIDC_ROLE_GROUPS and not settings.SEVERINO_OIDC_ALLOWED_EMAILS:
-            reason = "Nobody can sign in until HQ's settings name the people or groups allowed in."
+            reason = "Sign-in is closed until HQ's settings name the emails or groups allowed in."
             _refuse(self.request, reason)
             raise PermissionDenied(reason)
         self._role = resolved_role(claims)

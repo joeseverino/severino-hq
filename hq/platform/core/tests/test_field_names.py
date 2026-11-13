@@ -5,7 +5,7 @@ from django.apps import apps
 from django.test import SimpleTestCase
 from django.utils.text import capfirst
 
-from hq.platform.application.labels import field_label
+from hq.platform.application.labels import field_label, lower_first
 
 
 class VerboseNameTests(SimpleTestCase):
@@ -13,7 +13,7 @@ class VerboseNameTests(SimpleTestCase):
 
     def test_a_fields_name_keeps_each_acronym_in_capitals(self):
         lowered = [
-            f"{model._meta.label}.{field.name}: verbose_name={field_label(said)[:1].lower() + field_label(said)[1:]!r}"
+            f"{model._meta.label}.{field.name}: verbose_name={lower_first(field_label(said))!r}"
             for model in apps.get_models()
             if model.__module__.startswith("hq.")
             for field in model._meta.get_fields()

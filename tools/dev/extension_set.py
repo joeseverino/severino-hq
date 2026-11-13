@@ -35,7 +35,7 @@ def packages(checkout: Path) -> list[Path]:
 
 
 def extension_set(checkouts: list[Path]) -> dict[str, str]:
-    """The two values mise.local.toml names the set by."""
+    """The two values mise.local.toml names the set by, each as the environment would hold it."""
 
     roots = [root for checkout in checkouts for root in packages(checkout.resolve())]
     if not roots:
@@ -46,19 +46,26 @@ def extension_set(checkouts: list[Path]) -> dict[str, str]:
     if "'" in sources:
         raise SystemExit(f"An extension path holds a quote, which the file cannot carry: {sources}")
     return {
-        # A value already in the environment wins, so an extension worktree is
-        # composed by naming its sources on the command line.
-        "HQ_LOCAL_PYTHONPATH": f"{{{{ get_env(name='HQ_LOCAL_PYTHONPATH', default='{sources}') }}}}",
+        "HQ_LOCAL_PYTHONPATH": sources,
         "HQ_LOCAL_PLUGINS": ",".join(identity(root)["plugin-reference"] for root in roots),
     }
+
+
+def write(local: Path, named: dict[str, str]) -> None:
+    """Set each of ``named`` in ``local`` through mise, which keeps every other value in it.
+
+    A value already in the environment wins, so a worktree, which copies the
+    file, composes another set by naming it on the command line.
+    """
+
+    templated = (f"{key}={{{{ get_env(name='{key}', default='{value}') }}}}" for key, value in named.items())
+    subprocess.run(["mise", "set", "--file", str(local), *templated], check=True)
 
 
 def main() -> int:
     checkouts = [Path(each).expanduser() for each in usage().repeated("checkout")]
     named = extension_set(checkouts)
-    subprocess.run(
-        ["mise", "set", "--file", str(LOCAL), *(f"{key}={value}" for key, value in named.items())], check=True
-    )
+    write(LOCAL, named)
     print(f"{LOCAL.name} names {named['HQ_LOCAL_PLUGINS']}")
     return 0
 

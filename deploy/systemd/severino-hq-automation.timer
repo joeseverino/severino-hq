@@ -1,0 +1,14 @@
+[Unit]
+Description=Run the Severino HQ automation worker
+
+[Timer]
+# A floor, not the schedule: HQ rings the doorbell (the .path unit) when a run
+# is queued. This catches a doorbell missed while the host was off, and a run
+# queued behind one the bound stopped.
+OnBootSec=2min
+OnUnitInactiveSec=15min
+RandomizedDelaySec=5s
+Unit=severino-hq-automation.service
+
+[Install]
+WantedBy=timers.target

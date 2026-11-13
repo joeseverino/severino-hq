@@ -4,8 +4,13 @@ from dataclasses import dataclass
 
 from hq.platform.core.network import split_host_port
 
+from .reach import NETWORKS
 from .request_channel import channel_of
 from .request_connection import Connection
+
+# The tone of an address's network: the tailnet is the private way in, the
+# internet the exposed one.
+_TONES = {"tailnet": "good", "elsewhere": "serious"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +22,10 @@ class Address:
     label: str
     source: str
     current: bool = False
+
+    @property
+    def tone(self) -> str:
+        return _TONES.get(self.kind, "neutral")
 
 
 def _address_row(value: str, source: str, *, current: bool = False) -> Address | None:
@@ -35,11 +44,7 @@ def _address_row(value: str, source: str, *, current: bool = False) -> Address |
     return Address(
         value=text,
         kind=channel.id,
-        label={
-            "tailnet": "Tailnet",
-            "network": "Local network",
-            "loopback": "Loopback",
-        }.get(channel.id, "Public"),
+        label=NETWORKS.get(channel.id, NETWORKS["public"]),
         source=source,
         current=current,
     )
@@ -56,28 +61,15 @@ def addresses_of(found: Connection) -> tuple[Address, ...]:
     """
 
     current = found.peer_address
-    current_source = (
-        "given by a proxy HQ does not trust, so HQ does not use it"
-        if found.untrusted_forwarding
-        else "this request came from it"
-    )
+    current_source = "From an untrusted proxy, unused" if found.untrusted_forwarding else "This request"
     rows: list[Address | None] = [_address_row(current, current_source, current=True)]
     device = found.caller_device
     if device is not None:
-        rows.extend(
-            _address_row(address, "issued to this device by Tailscale")
-            for address in device.addresses
-            if address != current
-        )
+        rows.extend(_address_row(address, "Issued by Tailscale") for address in device.addresses if address != current)
     presence = found.presence
     if presence is not None:
-        rows.append(
-            _address_row(
-                presence.direct_endpoint,
-                "seen as this device's endpoint",
-            )
-        )
-        rows.extend(_address_row(endpoint, "seen as one of this device's endpoints") for endpoint in presence.endpoints)
+        rows.append(_address_row(presence.direct_endpoint, "WireGuard endpoint"))
+        rows.extend(_address_row(endpoint, "Endpoint") for endpoint in presence.endpoints)
     return tuple(_deduplicated(rows))
 
 
@@ -87,7 +79,7 @@ def addresses_of_hq(found: Connection) -> tuple[Address, ...]:
     serves = found.serves
     if serves is None:
         return ()
-    rows: list[Address | None] = [_address_row(address, "HQ answers here") for address in serves.addresses]
+    rows: list[Address | None] = [_address_row(address, "") for address in serves.addresses]
     return tuple(_deduplicated(rows))
 
 

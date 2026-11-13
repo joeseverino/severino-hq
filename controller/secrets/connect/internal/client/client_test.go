@@ -78,7 +78,11 @@ func TestOnlyAPrivilegedPortIsDialedOutsideATest(t *testing.T) {
 	// checked: a listener on a high port sees no connection and no token.
 	fake := connecttest.New(t)
 	inner := newHTTPClient(Privileged)
-	if _, err := inner.Get(fake.Server.URL + "/v1/vaults"); !errors.Is(err, ErrPort) {
+	response, err := get(t, inner, fake.Server.URL+"/v1/vaults")
+	if err == nil {
+		response.Body.Close()
+	}
+	if !errors.Is(err, ErrPort) {
 		t.Fatalf("a high port was dialed: %v", err)
 	}
 	rigged := &Client{endpoint: fake.Server.URL, authorize: bearer(token(t)), http: newHTTPClient(Privileged), Sleep: clock.Sleep}
@@ -178,7 +182,10 @@ func TestDialerRefusesEverythingButIPv4Loopback(t *testing.T) {
 	// not loopback: the dialer itself refuses, before any packet.
 	inner := newHTTPClient(AnyPort)
 	for _, url := range []string{"http://192.0.2.1:8080/v1/vaults", "http://[::1]:8080/v1/vaults", "http://localhost:8080/v1/vaults"} {
-		_, err := inner.Get(url)
+		response, err := get(t, inner, url)
+		if err == nil {
+			response.Body.Close()
+		}
 		if !errors.Is(err, ErrNotLoopback) {
 			t.Errorf("%s was dialed: %v", url, err)
 		}
@@ -481,4 +488,14 @@ func TestHealthReportsSyncState(t *testing.T) {
 	if err != nil || health.Version != "1.8.1" || len(health.Dependencies) != 2 || *health.Dependencies[0].Status != "TOKEN_NEEDED" {
 		t.Fatalf("health: %+v %v", health, err)
 	}
+}
+
+// get is a GET of url through client, bounded by the test.
+func get(t *testing.T, client *http.Client, url string) (*http.Response, error) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return client.Do(request)
 }

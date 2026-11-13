@@ -1,0 +1,18 @@
+# The smoke run's procedure: it acts on the machine it runs on alone. Its
+# inventory reaches the host over ssh, as every run's does, so the play's own
+# vars, which outrank the inventory's, set the connection to local.
+- name: Check a service on the host
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+  pre_tasks:
+    - name: The service to check is named
+      ansible.builtin.assert:
+        that: service | length > 0
+  roles:
+    - health
+  post_tasks:
+    - name: The check ran
+      ansible.builtin.assert:
+        that: checked is changed

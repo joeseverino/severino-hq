@@ -1,37 +1,28 @@
-{% extends "base.html" %}
+{% extends "page.html" %}
 {% block title %}Dashboard{% endblock %}
-{% block content %}
+{% block page %}
 {% comment %}
 Rows, not columns: each row is a grid whose cards share one width and one
 height, so the page stays even whatever set of domains an installation has.
 Domains contribute through their cards, overviews and attention items; nothing
-here names one.
+here names one. The head is the frame's: the day over the greeting, the
+readings beside it (core/_dashboard_readings.html) and under it what needs
+you, the line drawn here as `status`.
 {% endcomment %}
-<header class="page-head dash-head">
-  <div class="dash-hello">
-    <p class="dash-date">{{ calendar.today|when:"weekday" }}, {{ calendar.today|when:"day" }}</p>
-    <h1>{{ greeting|breakable }}</h1>
-    <p class="dash-status">
-      {% if action_queue_count %}
-        <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>{% if notice_count %}<span class="muted">{% dot %}{{ notice_count|counted:"notice,notices" }}</span>{% endif %}
-      {% elif notice_count %}
-        Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
-      {% elif aside_count %}
-        Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count|breakable }} dismissed</a>
-      {% elif not controller.known %}
-        {% comment %}An empty queue the controller never filled is not a clear one.{% endcomment %}
-        HQ has read nothing yet.
-      {% else %}
-        Nothing needs you.
-      {% endif %}
-    </p>
-  </div>
-  <div class="dash-readings">
-    {% include "core/_dashboard_connection.html" with connection=request_connection only %}
-    {% include "core/_dashboard_controller.html" with controller=controller only %}
-    {% include "core/_dashboard_glance.html" %}
-  </div>
-</header>
+{% partialdef status %}
+{% if action_queue_count %}
+  <a href="{% url 'action_items' %}"><strong>{{ action_queue_count|counted:"thing needs you,things need you" }}</strong></a>{% if notice_count %}{% dot %}{{ notice_count|counted:"notice,notices" }}{% endif %}
+{% elif notice_count %}
+  Nothing needs you. <a href="{% url 'action_items' %}">{{ notice_count|counted:"notice,notices" }}</a>
+{% elif aside_count %}
+  Nothing needs you. <a href="{% url 'action_items' %}">{{ aside_count|measured:"dismissed" }}</a>
+{% elif not controller.known %}
+  {% comment %}An empty queue the controller never filled is not a clear one.{% endcomment %}
+  HQ has read nothing yet.
+{% else %}
+  Nothing needs you.
+{% endif %}
+{% endpartialdef %}
 
 {% comment %}
 Serious items show here as the queue's own cards, fix button included, with no
@@ -41,8 +32,8 @@ count above and in the header.
 {% endcomment %}
 {% if needs_you %}
 {% url 'action_items_set_aside' as set_aside_url %}{% url 'action_items_bring_back' as bring_back_url %}
-{% card css="dash-needs tone-serious" label="Needs you" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
-  {% include "partials/_queue_glance.html" with items=needs_you only %}
+{% card css="tone-serious" label="Needs you" data_triage_routes=True data_dismiss=set_aside_url data_restore=bring_back_url %}
+  {% include "partials/_work_queue.html" with items=needs_you grouped=True triage=True glance=True only %}
 {% endcard %}
 {% endif %}
 
@@ -51,36 +42,27 @@ A new HQ's first steps (application/getting_started.py). Derived, not stored;
 the row is gone once every step is done.
 {% endcomment %}
 {% if getting_started %}
-{% section "Get started" id="dash-start" css="dash-start" %}
-  <ol class="step-list">
+{% section "Get started" %}
+  {% steps %}
     {% for step in getting_started %}
-      <li{% if step.done %} class="is-done"{% endif %}>
-        <span class="band-icon">{% include "partials/_icon.html" with name=step.done|yesno:"check-circle,"|default:step.icon %}</span>
-        <span>{% if step.done %}<strong>{{ step.label|breakable }}</strong> <span class="muted">Done.</span>{% else %}<a href="{{ step.url }}">{{ step.label|breakable }}</a> <span class="muted">{{ step.why|breakable }}</span>{% endif %}</span>
-      </li>
+      {% step icon=step.done|yesno:"check-circle,"|default:step.icon done=step.done %}{% if step.done %}<strong>{{ step.label|breakable }}</strong> <span class="muted">Done.</span>{% else %}<a href="{{ step.url }}">{{ step.label|breakable }}</a> <span class="muted">{{ step.why|breakable }}</span>{% endif %}{% endstep %}
     {% endfor %}
-  </ol>
-{% aside %}<span class="count">{{ getting_started_left|breakable }} left{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>
+  {% endsteps %}
+{% aside %}<span class="count">{{ getting_started_left|measured:"left" }}{% if install_guide %}{% dot %}{% entity install_guide|outside label="Install guide" %}{% endif %}</span>
 {% endsection %}
 {% endif %}
 
 {% include "core/_dashboard_highlights.html" %}
 
-{% if dashboard_cards %}<div class="dashboard-counts" role="group" aria-label="Across HQ">
-  {% for card in dashboard_cards %}
-    <a class="kpi{% if not card.value %} is-zero{% endif %}" href="{{ card.url }}">
-      <span class="label">{{ card.label|breakable }}</span>
-      <span class="value">{{ card.value|breakable }}</span>
-      {% if card.detail %}<span class="muted">{{ card.detail|breakable }}</span>{% endif %}
-    </a>
-  {% endfor %}
-</div>{% endif %}
+{% if dashboard_cards %}{% card element="div" %}{% facts layout="inline" label="Across HQ" %}
+  {% for card in dashboard_cards %}{% fact card.label value=card.value url=card.url detail=card.detail %}{% endfor %}
+{% endfacts %}{% endcard %}{% endif %}
 
 {% comment %}
-Each domain's leading chart, a row of its own, so however many there are they
-never break up the row under them.
+Each domain's leading chart, a row of its own as a domain's page draws its
+charts, so however many there are they never break up the row under them.
 {% endcomment %}
-{% if dashboard_charts %}<div class="dashboard-patterns">
+{% if dashboard_charts %}<div class="domain-charts">
   {% for chart in dashboard_charts %}{% include "partials/_stacked_bar_chart.html" with chart=chart %}{% endfor %}
 </div>{% endif %}
 
@@ -89,11 +71,11 @@ The calendar, recent projects, Publishing and Messages, as many to a row as
 fit. A domain's own calendar stays on its pages. How many projects are active
 is said here, over the ones most recently changed, and nowhere else on the page.
 {% endcomment %}
-<div class="dashboard-patterns">
+<div class="section-flow">
   {% partialdef calendar inline %}
   {% if not calendar.empty %}
-  {% section moment=calendar.month when="month" id="dashboard-calendar" css="calendar-month is-compact" data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
-    {% include "calendars/_month_grid.html" %}
+  {% section moment=calendar.month when="month" id="dashboard-calendar" data_fragment=True data_fragment_name="calendar" data_fragment_links=True data_fragment_history="replace" %}
+    {% include "calendars/_month_grid.html" with compact=True %}
   {% aside %}
       <nav class="calendar-nav" aria-label="Change month">
         <a href="{{ calendar_paging.previous }}" rel="prev" aria-label="Previous month">&lsaquo;</a>
@@ -104,23 +86,10 @@ is said here, over the ones most recently changed, and nowhere else on the page.
   {% endif %}
   {% endpartialdef %}
 
-  {% url 'projects:create' as add_project_url %}{% if active_projects %}{% url 'projects:list' as projects_url %}{% endif %}
+  {% url 'projects:create' as add_project_url %}{% if project_rows %}{% url 'projects:list' as projects_url %}{% endif %}
   {% section "Projects" remedy_label="Add one" remedy_url=add_project_url more_label="All projects" more_url=projects_url %}
-    {% if active_projects %}
-      <ul class="list-rows">
-        {% for p in active_projects %}
-          <li>
-            <span class="row-main">
-              <span class="cat-dot cat-{{ p.category }}" aria-hidden="true"></span>
-              {% if p.get_category_display %}<span class="visually-hidden">{{ p.get_category_display|breakable }}</span>{% endif %}
-              <strong>{% entity "project"|entity_of:p.slug label=p.name %}</strong>
-            </span>
-            <span class="row-meta">{{ p.updated_at|when:"day" }}</span>
-          </li>
-        {% endfor %}
-      </ul>
-    {% endif %}
-  {% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|breakable }} active{% if projects_needing_output %}{% dot %}{{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}
+    {% if project_rows %}{% include "partials/_record_list.html" with rows=project_rows %}{% endif %}
+  {% aside %}{% if active_project_count %}<span class="count">{{ active_project_count|measured:"active" }}{% if projects_needing_output %}{% dot %}{{ projects_needing_output|counted:"has no writeup or doc,have no writeup or doc" }}{% endif %}</span>{% endif %}
   {% empty %}No active projects.
   {% endsection %}
 
@@ -145,20 +114,11 @@ is said here, over the ones most recently changed, and nowhere else on the page.
 {% if external_links %}
 {% section "Links" %}
   {% partialdef links inline %}
-  <ul class="ext-links" id="dashboard-links" data-fragment data-fragment-name="links">
+  <div id="dashboard-links" data-fragment data-fragment-name="links">{% link_chips %}
     {% for l in external_links %}
-      <li>
-        {% if l.where == "hq" %}
-        <a href="{{ l.href }}" title="{{ l.sub }}"><span>{{ l.label|breakable }}</span></a>
-        {% else %}
-        {% outside_link url=l.href title=l.sub %}
-          <span>{{ l.label|breakable }}</span>
-          <span class="ext-arrow" aria-hidden="true">↗</span>
-        {% endoutside_link %}
-        {% endif %}
-      </li>
+      <li>{% if l.where == "hq" %}<a href="{{ l.href }}" title="{{ l.sub }}">{{ l.label|breakable }}</a>{% else %}{% entity l.href|outside label=l.label %}{% endif %}</li>
     {% endfor %}
-  </ul>
+  {% endlink_chips %}</div>
   {% endpartialdef %}
 {% aside %}
   {% comment %}

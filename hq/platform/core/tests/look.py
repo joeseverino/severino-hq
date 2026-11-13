@@ -12,6 +12,7 @@ import inspect
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -19,18 +20,21 @@ import tempfile
 import time
 from collections.abc import Callable
 from contextlib import ExitStack, suppress
+from dataclasses import dataclass
 from pathlib import Path
-from typing import override
+from typing import Any, NoReturn, override
 from unittest import mock
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.management import call_command
 from django.db import connections
+from django.template.autoreload import get_template_directories
 from django.test import Client
-from django.urls import Resolver404, resolve
+from django.urls import Resolver404, get_resolver, resolve
 lazy from playwright.sync_api import Error as BrowserError
 
+from hq.platform.application import fragments
 from hq.platform.core import append_only, seeds
 from hq.platform.core.speculation import NOT_A_NAVIGATION
 from hq.platform.core.test_runner import stall_watch
@@ -39,6 +43,7 @@ from hq.platform.core.tests.browser import probes
 from hq.platform.core.tests.browser.estate import ExampleEstateBrowserTests, estate_pages, navigation
 from hq.platform.core.tests.browser.gate import BrowserGate, add_css
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
+from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.reference import (
     REFERENCE,
     REFERENCE_DARK,
@@ -52,24 +57,33 @@ from hq.platform.core.tests.browser.reference import (
     wait_for_reference,
 )
 from hq.platform.core.tests.browser.selectors import SELECTORS
-from hq.platform.core.tests.browser.shots import TALLEST, shoot_page
+from hq.platform.core.tests.browser.shots import TALLEST, extent_of, shoot_page
 from hq.platform.core.tests.browser.stress import ALL_PAGES, stress_pages
-from hq.platform.core.tests.browser.survey import AUDIT, palette_probes, survey_checks
+from hq.platform.core.tests.browser.survey import BUSY, CLOSE_OPENED, open_every_fold, palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import PHONE_SCREEN
+from hq.platform.core.tests.look_posts import Posted, is_post, post_names, posted
 from hq.platform.core.tests.look_records import EstatePages
 from hq.platform.core.tests.look_report import (
     Found,
     Measured,
     beside,
     closing,
+    drawn_only_here,
+    failed_pages,
+    found_lines,
     looked,
     unmatched,
 )
 from hq.platform.core.tests.look_tables import COLUMNS, TABLES, columns_line
-from hq.platform.core.tests.task import PREFIX, Usage, estate_name, estate_path, is_estate, usage
+from hq.platform.core.tests.task import PREFIX, TEMPLATE, Usage, estate_name, estate_path, is_estate, usage
 from hq.platform.core.tests.test_browser_derived_fixtures import derived_pages
 lazy from hq.platform.core.example_estate import REQUEST
 lazy from hq.platform.core.example_estate.testing import as_production, sign_in
+
+# The catalog builds its entries from the shared parts' constructors as it is
+# imported, so a base whose constructors this tree's catalog does not fit still
+# looks at every other page: it is read only for a name nothing else is.
+lazy from hq.platform.core.tests.browser import catalog
 
 # Each run's shots go to a folder of their own under here, named for when the
 # run began, so a later run never overwrites what an earlier one printed: the
@@ -82,13 +96,59 @@ _RUN_NAME = re.compile(r"\d{8}-\d{6}(?:-\d+)?")
 # The base's shots, written by the run at the base into this run's folder, so
 # the two sides of a change are read together and outlive the base's worktree.
 BASE_OUT = "base"
-# What a look against a base runs at the base as this checkout has it beside
-# this tree's test files, so a finding is new for what the change drew rather
-# than for how it was judged: the probes the survey runs.
-LENS = (AUDIT.resolve(),)
-# A look against a base writes its whole report here and prints only its new
-# findings and its verdict, so a long report is never cut short where it is read.
-REPORT = Path(settings.BASE_DIR) / "var" / "gate" / "look.txt"
+# What a look against a base lays over it from this checkout, so a finding is
+# new for what the change drew rather than for how it was judged: the probes
+# the survey runs. Every other file the base runs is its own (the look, the
+# catalog, the fixtures and the seeds they read), so a page, an entry or a
+# field only this tree has never reaches the base's code.
+LENS = (AUDIT.resolve(), Path(probes.__file__).resolve().parent)
+# A run with a rule writes its whole report here, in its own folder, and prints
+# only its verdict and, against a base, its new findings, so a long report is
+# never cut short where it is read.
+REPORT = "report.txt"
+# The files a gate running the look hands it (tools/gate/verdict.py names
+# them too), where a run says what it judged and what reruns what it failed:
+# mise-tasks/dev/look runs a survey so, kept as `look-survey-<engine>`.
+GATE_DETAIL = "HQ_GATE_DETAIL"
+GATE_RERUN = "HQ_GATE_RERUN"
+# The checkout the gate judges when it is not this one, as an extension's
+# survey names its own (tools/gate/verdict.py's JUDGED_FOLDER).
+GATE_TREE = "HQ_GATE_TREE"
+# What a survey's verdict can read, as the git pathspecs of its record's
+# `inputs:` line: landing keeps a passing survey for a tree that differs from
+# the one it judged only outside them. It is the whole tree less what no page,
+# seed, probe or this look reads, since a path missed by an exclusion costs a
+# rerun while a path missed by an inclusion keeps a survey that should run
+# again. The Go controller is a separate program; its JSON contracts, which
+# pages read, stay in. Every module the look and the pages load is held inside
+# by test_look_survey_record.py.
+SURVEY_INPUTS = (
+    ".",
+    ":(exclude)docs",
+    ":(exclude)tests/shell",
+    ":(exclude)tests/fuzz",
+    ":(exclude).github",
+    ":(exclude,glob)controller/**/*.go",
+    ":(exclude,glob)*.md",
+    ":(exclude)LICENSE",
+)
+# A rule's verdict when it judged no page at any width: none matched, or none drew.
+JUDGED_NOTHING = "{} judged no page: none matched, or none drew"
+# The flags that change what a run draws or reads, named in what it says it judged.
+DRAWN_WITH = (
+    "base",
+    "seed",
+    "widths",
+    "dialog",
+    "dark",
+    "fallback_face",
+    "open",
+    "open_folds",
+    "expand",
+    "no_script",
+    "deep",
+    "composed",
+)
 REFERENCE_PAGES = (REFERENCE, REFERENCE_DARK)
 # What the console errors, uncaught errors and policy refusals a page had are
 # reported as: judged as a rule's findings are, so only a new one fails against a base.
@@ -96,12 +156,22 @@ _ERRORS = "the error check"
 # A probe's source, as a module of probes/ holds it: a function, its one
 # argument a selector or a list of them.
 _A_PROBE = re.compile(r"\s*(?:async\s*)?\(")
-# A run's verdict when a file changed while it ran.
-TREE_CHANGED = "the tree changed while dev:look ran; its shots and verdict mix two trees"
+# What a run says last when a file a page reads changed while it ran. Its
+# findings still stand as found, and the gate keeps a verdict whose tree
+# changed under it as no tree's (tools/gate/verdict.py), so it is said rather
+# than failed, and the reader decides from the files named whether to look again.
+TREE_CHANGED = (
+    "the tree changed while dev:look ran ({}): its shots and findings read the tree it began on, {},"
+    " up to each change, so they hold for neither tree, and no survey of either is kept as a pass"
+)
+# How many of the files that changed it names.
+_CHANGED_NAMED = 5
 
 # Request headers the browser sends that are not the view's to read. The
 # answer goes back with its type alone, so it is never asked to be compressed.
 _TRANSPORT = frozenset({"host", "cookie", "content-length", "connection", "accept-encoding"})
+# The header a region asks for its page's part by, as a browser route names it.
+_REGION = fragments.HEADER.lower()
 
 # The links a page offers a reader to go to: same origin, a page rather than a
 # file, a dialog or a region answered in place, as speculation judges them.
@@ -109,30 +179,10 @@ _LINKS = """(notANavigation) => [...document.querySelectorAll('main a[href]')]
   .filter((a) => a.origin === location.origin && !a.matches(notANavigation))
   .map((a) => a.pathname + a.search)"""
 
-# A region waiting on its answer: fragment.js marks one busy until then, and a
-# live ask is busy for as long as its job runs.
-_BUSY = "[data-fragment][aria-busy=true]:not([data-ask])"
-# Every disclosure not yet open, opened, and how many: an exclusive group's
-# name is dropped, so opening one closes no other.
-_OPEN_ONCE = """(busy) => {
-  // A region already waiting is not one this round brings in.
-  document.querySelectorAll(busy).forEach((region) => { region.lookWaiting = true; });
-  let opened = 0;
-  document.querySelectorAll('details:not([open])').forEach((details) => {
-    details.removeAttribute('name');
-    details.open = true;
-    opened += 1;
-  });
-  return opened;
-}"""
-# No region a round of opening brought in is waiting on its answer.
-_ANSWERED = "(busy) => [...document.querySelectorAll(busy)].every((region) => region.lookWaiting)"
 # The rows a reader opens: the folds first, then each row on its own.
 _FOLD_TOGGLES = "main button[data-fold-toggle]"
 ROW_TOGGLES = "main button[data-row-toggle]:not([data-fold-toggle])"
 _PRESS_SHOWN = "(toggles) => document.querySelectorAll(toggles).forEach((t) => t.checkVisibility() && t.click())"
-# Rounds of opening, each after what the last one brought in has arrived.
-_OPEN_ROUNDS = 10
 # The page's extent once it has held still for three polls running: a shot
 # and its bands are cut from one reading, so a page still laying itself out
 # (a viewer drawing what nears the view) would leave a band outside the image.
@@ -148,9 +198,6 @@ _EXTENT_POLL = 100
 
 # Every dialog the page declares, by the id after `modal-` (partials/_modal.html).
 _DIALOGS = """() => [...document.querySelectorAll('dialog.modal[id^="modal-"]')].map((dialog) => dialog.id.slice(6))"""
-# The controls that open a dialog: a link the page's wiring intercepts, or a
-# control that says it opens a dialog and names it.
-_OPENERS = '[data-modal-open="{id}"], [aria-haspopup="dialog"][aria-controls="modal-{id}"]'
 # Which of a dialog's openers a reader can press, as its place among them: one
 # shown, or one inside closed menus they open first, by their summaries. The
 # menus opened are kept to close once the dialog is done; -1 for none.
@@ -444,12 +491,10 @@ def _commit(ref: str) -> str:
     return said
 
 
-def tree_of(root: Path) -> str:
-    """The checkout at ``root`` as one git tree id: every file in it but those
-    git ignores, untracked ones too, so two checkouts that differ in any file
-    name different trees. It is written from an index and an object store of
-    its own, the checkout's objects read beside them, so the checkout's index
-    and objects are left as they were."""
+def _snapshot_env(root: Path, store: Path) -> dict[str, str]:
+    """The environment git writes a snapshot of ``root`` in: an index and an
+    object store in ``store``, the checkout's objects read beside them, so the
+    checkout's index and objects are left as they were."""
 
     objects = subprocess.run(
         ["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-path", "objects"],
@@ -457,25 +502,52 @@ def tree_of(root: Path) -> str:
         text=True,
         check=True,
     ).stdout.strip()
-    with tempfile.TemporaryDirectory() as folder:
-        Path(folder, "objects").mkdir()
-        env = os.environ | {
-            "GIT_INDEX_FILE": str(Path(folder, "index")),
-            "GIT_OBJECT_DIRECTORY": str(Path(folder, "objects")),
-            "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects,
-        }
-        subprocess.run(["git", "-C", str(root), "add", "--all"], env=env, capture_output=True, check=True)
-        written = subprocess.run(
-            ["git", "-C", str(root), "write-tree"], env=env, capture_output=True, text=True, check=True
-        )
-        return written.stdout.strip()
+    Path(store, "objects").mkdir(parents=True, exist_ok=True)
+    return os.environ | {
+        "GIT_INDEX_FILE": str(Path(store, "index")),
+        "GIT_OBJECT_DIRECTORY": str(Path(store, "objects")),
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES": objects,
+    }
 
 
-def changed_since(tree: str, root: Path) -> str:
-    """The run's refusal when the checkout at ``root`` is no longer ``tree``,
-    the one it began on: its pages were drawn from both."""
+def tree_of(root: Path, store: Path | None = None) -> str:
+    """The files a look can read in the checkout at ``root`` (`SURVEY_INPUTS`)
+    as one git tree id, untracked ones too and none git ignores, so two
+    checkouts that differ in any of them name different trees. It is written
+    into ``store``, kept for `changed_since` to read, or a folder of its own."""
 
-    return "" if tree_of(root) == tree else TREE_CHANGED
+    with ExitStack() as stack:
+        folder = store or Path(stack.enter_context(tempfile.TemporaryDirectory()))
+        env = _snapshot_env(root, folder)
+        git = ["git", "-C", str(root)]
+        subprocess.run([*git, "add", "--all", "--", *SURVEY_INPUTS], env=env, capture_output=True, check=True)
+        return subprocess.run([*git, "write-tree"], env=env, capture_output=True, text=True, check=True).stdout.strip()
+
+
+def changed_since(tree: str, root: Path, store: Path) -> list[str]:
+    """The files that differ between ``tree``, the one the run began on, kept in
+    ``store``, and the checkout at ``root`` now: none when it holds still."""
+
+    now = tree_of(root, store)
+    if now == tree:
+        return []
+    listed = subprocess.run(
+        ["git", "-C", str(root), "diff-tree", "-r", "-z", "--name-only", "--no-renames", tree, now],
+        env=_snapshot_env(root, store),
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    return [path for path in listed.split("\0") if path]
+
+
+def tree_changed(tree: str, changed: list[str]) -> str:
+    """What a run whose files ``changed`` under it says last, naming the tree it began on."""
+
+    named = ", ".join(changed[:_CHANGED_NAMED]) + (
+        f" and {len(changed) - _CHANGED_NAMED} more" if len(changed) > _CHANGED_NAMED else ""
+    )
+    return TREE_CHANGED.format(named, tree[:12])
 
 
 def _relay(command: list[str], sink, ref: str, **options) -> None:
@@ -496,48 +568,175 @@ def _relay(command: list[str], sink, ref: str, **options) -> None:
             raise
 
 
-def _look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found]:
+# Run at a base, each module named on its stdin imported and every name it
+# imports read, so a lazy import of a name the base lacks, or a key its tables
+# lack (a selector a probe reads as it loads), fails here rather than mid-look;
+# each that fails is printed after `_UNIMPORTABLE`, then the first line of why.
+_UNIMPORTABLE = "unimportable: "
+_IMPORTS = f"""
+import importlib, sys
+for name in sys.stdin.read().split():
+    try:
+        module = importlib.import_module(name)
+        for each in list(vars(module)):
+            getattr(module, each)
+    except Exception as error:
+        why = (str(error).splitlines() or [""])[0]
+        print({_UNIMPORTABLE!r} + name + " " + type(error).__name__ + ": " + why, flush=True)
+"""
+
+
+class BaseUnfit(Exception):
+    """Why the base cannot be looked at with this tree's lens, so the look goes on without it."""
+
+
+def _module(path: str) -> str:
+    return ".".join(Path(path).with_suffix("").parts).removesuffix(".__init__")
+
+
+def _unimportable(tree: Path, modules: list[str], python: list[str], env: dict[str, str]) -> dict[str, str]:
+    """Each of ``modules`` that does not import at ``tree``, with why."""
+
+    done = subprocess.run(
+        [*python, "-c", _IMPORTS],
+        input="\n".join(modules),
+        cwd=tree,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    said = (
+        line.removeprefix(_UNIMPORTABLE).partition(" ")
+        for line in done.stdout.splitlines()
+        if line.startswith(_UNIMPORTABLE)
+    )
+    failed = {name: why for name, _, why in said}
+    # Python that ends before it says (a module exits as it loads, the settings fail) fails them all.
+    if done.returncode and not failed:
+        failed = {name: (done.stderr.strip().splitlines() or ["Python ended early"])[-1] for name in modules}
+    return failed
+
+
+def _put_back(tree: Path, commit: str, paths: list[str]) -> None:
+    """Each of ``paths`` at ``tree`` as ``commit`` has it, or gone where it has none."""
+
+    held = [path for path in paths if task.git("ls-tree", commit, "--", path, root=tree)]
+    if held:
+        task.git("checkout", commit, "--", *held, root=tree)
+    for path in set(paths) - set(held):
+        (tree / path).unlink(missing_ok=True)
+
+
+def kept_own(
+    tree: Path,
+    commit: str,
+    laid: list[str],
+    python: list[str],
+    env: dict[str, str],
+    *,
+    taken: tuple[str, ...] = (),
+    loads: tuple[str, ...] = (__name__,),
+) -> list[str]:
+    """The files of this tree's lens laid over the worktree ``tree`` of
+    ``commit`` (``laid``, with ``taken`` those this tree took out) that the
+    base cannot run, each put back as the base has it, or taken out where the
+    base has none: the files put back. A Python file that does not import there
+    goes first, until every one left does; then, should the base's own modules
+    ``loads`` (its look, its survey and catalog with it) still not import, the
+    whole lens is the base's own. A base that cannot import those even so is
+    `BaseUnfit`. ``python`` is the command that runs Python there with its settings."""
+
+    checked = [path for path in laid if path.endswith(".py")]
+    kept: list[str] = []
+    while checked and (failed := _unimportable(tree, list(map(_module, checked)), python, env)):
+        back = [path for path in checked if _module(path) in failed]
+        _put_back(tree, commit, back)
+        kept += back
+        checked = [path for path in checked if path not in back]
+    # Only Python laid or taken out changes what imports there.
+    rest = [path for path in [*laid, *taken] if path not in kept]
+    if any(path.endswith(".py") for path in rest) and _unimportable(tree, list(loads), python, env):
+        _put_back(tree, commit, rest)
+        kept += rest
+        if failed := _unimportable(tree, list(loads), python, env):
+            name, why = next(iter(failed.items()))
+            raise BaseUnfit(f"its own {name} does not import there ({why})")
+    return sorted(kept)
+
+
+def look_at(ref: str, rule: str, clock_at: float) -> tuple[Found, Measured, Found, list[str]]:
     """What this run finds, measures and hears go wrong, looked for at ``ref``: the same
-    task's run, in a worktree of it with this checkout's test files and lens
-    (`LENS`) laid over it as `test --at` lays them, so a base older than a test
-    file still looks and both are judged alike. Its environment is this run's, but for a
+    task's run, in a worktree of it with only this checkout's lens (`LENS`) laid
+    over it, so both are judged alike and the base draws with its own code. Its environment is this run's, but for a
     database of its own, this run's clock, and the CSS already read and the
     script's absolute path, since a relative path names this checkout, and
-    without ``--css``'s sheet."""
+    without ``--css``'s sheet. A ref that names no commit is refused; a base
+    whose look cannot run or does not finish is `BaseUnfit`, with why."""
 
     checkout = Path(settings.BASE_DIR).resolve()
     try:
         commit = task.commit_of(ref, checkout)
-        present, deleted = task.changed_tests(commit, checkout)
     except task.RefError as error:
         raise AssertionError(f"--base {ref}: {error}") from None
-    with task.worktree(commit, checkout, lint_tools=True) as tree:
-        lens = [str(path.relative_to(checkout)) for path in LENS]
-        task.overlay(tree, [*present, *lens], deleted, checkout)
-        found, log = tree.parent / "found.json", tree.parent / "look.log"
-        # The kept test database is migrated for this checkout's code, so the base makes its own in its worktree.
-        left = {f"{PREFIX}base", "VIRTUAL_ENV", "SEVERINO_TEST_DATABASE_PATH"}
-        env = {name: value for name, value in os.environ.items() if name not in left}
-        env |= {
-            PREFIX + _FINDINGS: str(found),
-            PREFIX + _CLOCK: str(clock_at),
-            "SEVERINO_DATABASE_PATH": str(tree.parent / "look.sqlite3"),
-            f"{PREFIX}rule": rule,
-            # Drawn as its tree draws, so a sheet laid over this side reads as what it fixes and breaks.
-            f"{PREFIX}css": "",
-            PREFIX + _SHOTS: str(this_run() / BASE_OUT),
-        }
-        if script := _asked().text("eval"):
-            env[f"{PREFIX}eval"] = str(Path(settings.BASE_DIR, script).resolve())
-        print(f"Looking at {ref} first, in {tree}", flush=True)
-        # The run there is watched by its own stall watch.
-        with log.open("w", encoding="utf-8") as sink, stall_watch.paused():
-            # The command this run was started with, run there by its own environment.
-            _relay(["uv", "run", "--group", "browser", "python", *sys.argv], sink, ref, cwd=tree, env=env)
-        if not found.is_file():
-            said = log.read_text(encoding="utf-8").splitlines()[-40:]
-            raise AssertionError(f"The look at {ref} did not finish:\n" + "\n".join(said))
-        return _read_found(found)
+    lens = [path.relative_to(checkout).as_posix() for path in LENS]
+    present, deleted = task.changed_tests(commit, checkout, functools.partial(_in_lens, lens))
+    # Making the worktree, its lint tools and its run are the base's to fail.
+    try:
+        with task.worktree(commit, checkout, lint_tools=True) as tree:
+            task.overlay(tree, present, deleted, checkout)
+            found, log = tree.parent / "found.json", tree.parent / "look.log"
+            # The kept test database is migrated for this checkout's code, so the base makes its own in its worktree.
+            left = {f"{PREFIX}base", "VIRTUAL_ENV", "SEVERINO_TEST_DATABASE_PATH"}
+            env = {name: value for name, value in os.environ.items() if name not in left}
+            env |= {
+                PREFIX + _FINDINGS: str(found),
+                PREFIX + _CLOCK: str(clock_at),
+                "SEVERINO_DATABASE_PATH": str(tree.parent / "look.sqlite3"),
+                f"{PREFIX}rule": rule,
+                # Drawn as its tree draws, so a sheet laid over this side reads as what it fixes and breaks.
+                f"{PREFIX}css": "",
+                PREFIX + _SHOTS: str(this_run() / BASE_OUT),
+            }
+            if script := _asked().text("eval"):
+                env[f"{PREFIX}eval"] = str(Path(settings.BASE_DIR, script).resolve())
+            shell = ["uv", "run", "--group", "browser", "python", "manage.py", "shell", "--no-imports", "-v", "0"]
+            if kept := kept_own(tree, commit, present, shell, env, taken=tuple(deleted)):
+                print(f"{ref}: {_its_own(kept)}", flush=True)
+            print(f"Looking at {ref} first, in {tree}", flush=True)
+            # The run there is watched by its own stall watch.
+            with log.open("w", encoding="utf-8") as sink, stall_watch.paused():
+                # The command this run was started with, run there by its own environment.
+                _relay(["uv", "run", "--group", "browser", "python", *sys.argv], sink, ref, cwd=tree, env=env)
+            if not found.is_file():
+                raise BaseUnfit(f"its look did not finish ({_why_it_ended(log.read_text(encoding='utf-8'))})")
+            return (*_read_found(found), kept)
+    except (task.RefError, RuntimeError, subprocess.CalledProcessError) as broke:
+        raise BaseUnfit(f"its worktree could not be set up ({(str(broke).splitlines() or [''])[0]})") from None
+
+
+# A line a Python traceback ends on, or a refusal a look prints: what ended a run.
+_ENDED = re.compile(r"^(?:[\w.]+(?:Error|Exception|Exit|Interrupt)\b.*|mise run dev:look: .*)$")
+
+
+def _why_it_ended(log: str) -> str:
+    """The last line in a look's ``log`` that says what ended it, or its last line."""
+
+    lines = [line.strip() for line in log.splitlines() if line.strip()]
+    return next((line for line in reversed(lines) if _ENDED.match(line)), lines[-1] if lines else "it said nothing")
+
+
+# What a look says of a base it could not look at, which it judges without:
+# every finding counts, as with no base asked.
+BASE_UNFIT = "--base {}: not looked at, as {}; judged without a base, so every finding counts"
+
+
+def _in_lens(lens: list[str], path: str) -> bool:
+    return any(path == part or path.startswith(f"{part}/") for part in lens)
+
+
+def _its_own(kept: list[str]) -> str:
+    return f"drawn with its own {', '.join(kept)}, or none where it has none, as this tree's do not run there"
 
 
 def _address(url: str) -> str:
@@ -547,12 +746,19 @@ def _address(url: str) -> str:
     return parts.path + (f"?{parts.query}" if parts.query else "")
 
 
-def _guessable(path: str) -> bool:
-    """Whether a browser could request ``path`` speculatively: the rules
-    prefetch only a route behind the session (`speculation.sessionless`)."""
+def _marked_a_guess(request: Any) -> bool:
+    """Whether the look sends a request of the browser's marked as a guess, so
+    a part a page fetches that would act or reach out is refused
+    (`speculation.answer`). A document the look opens is a person's, so a page
+    that reads outside HQ (a DNS lookup) draws its answer; so is a route that
+    answers without a session (the reference's document), which the rules
+    never prefetch and where a guess is refused whole. A guess the browser
+    makes itself carries its own Sec-Purpose, forwarded as it came."""
 
+    if request.is_navigation_request():
+        return False
     try:
-        view = resolve(path).func
+        view = resolve(urlsplit(request.url).path).func
     except Resolver404:
         return True
     return getattr(view, "login_required", True)
@@ -652,17 +858,252 @@ def no_rule(rule: str) -> str:
     return f"{said} Rules: {', '.join(_rules())}"
 
 
-def _pages(asked: tuple[str, ...]) -> list[str]:
-    """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out, an
-    estate page by its name; one dev:look cannot draw is refused."""
+def _families(asked: tuple[str, ...]) -> list[str]:
+    """``asked`` with each name that begins catalog entries rather than naming
+    one (``part/notice``, ``table``) spelled out as those entries, in the
+    catalog's order."""
 
-    gate = [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES]
+    spelled = []
+    for name in asked:
+        family = [entry for entry in catalog.CATALOG if entry.startswith((f"{name}/", f"{name}-"))]
+        spelled += family if family and name not in catalog.CATALOG else [name]
+    return spelled
+
+
+def _named() -> list[str]:
+    """Every page dev:look knows by name but a catalog entry."""
+
+    return [*ALL_PAGES, *derived_pages(), *REFERENCE_PAGES]
+
+
+def catalog_pages(asked) -> dict[str, str]:
+    """The catalog entries ``asked`` names, each drawn as the catalog's own
+    gate draws it, so a look and that gate never draw an entry apart. An
+    entry is the one name ``_pages`` hands on that is no other kind."""
+
+    known = {*_named(), *post_names()}
+    entries = {name for name in asked if not is_estate(name) and name not in known}
+    if not entries:
+        return {}
+    return {name: page for name, page in catalog.CatalogLayoutTests.render().items() if name in entries}
+
+
+# A template no page or entry draws, with why: once one is drawn, the test
+# says so, and its line goes. A look asked for one is not refused: its record
+# says it was undrawn, since the change owes no survey of a page that is not.
+DRAWN_BY_NOTHING = {
+    "403.html": "Django draws it for a refused request, and the look asks as the estate's owner",
+    "404.html": "Django draws it for an address no route answers, which no page of the estate is",
+    "500.html": "Django draws it for a request that raised, which no page of the estate does",
+    "auth/login.html": "drawn for a reader signed out, and the look signs in as the estate's owner",
+    "control_plane/zone_index.html": "drawn only where no zone is managed, and the estate manages one",
+    "control_plane/certificate_upload.html": "the estate holds no certificate to upload one for",
+    "calendars/entry_confirm_delete.html": "an entry's page is linked only from a day opened beside the month",
+    "partials/_attention_list.html": "no template or view draws it; only a test renders it",
+    "partials/_row_field.html": "only itself includes it, and no form names it as its table body",
+}
+
+
+def _pages(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
+    """The pages ``asked`` names, ``all`` and ``estate/all`` spelled out, an
+    estate page by its name; one dev:look cannot draw is refused. The catalog
+    is read only for ``all`` or a name no other page is, so its refusal
+    offers its entries too. Without ``records``, a name only the estate drawn
+    resolves is left out, and a record's address is taken unchecked."""
+
+    named, posts = _named(), post_names()
+    if records is None:
+        asked = tuple(name for name in asked if name not in task.naming_records(asked))
+        if not asked:
+            return []
     try:
-        with EstatePages(_asked().text("seed")) as records:
-            found = task.pages(asked, estate_pages(), gate, records)
+        found = None
+        if asked and "all" not in asked:
+            with suppress(task.PageRefused):
+                found = task.pages(asked, estate_pages(), [*named, *posts], records)
+        if found is None:
+            named += catalog.CATALOG
+            found = task.pages(_families(asked), estate_pages(), [*named, *posts], records)
     except task.PageRefused as refused:
-        raise AssertionError(str(refused)) from None
-    return [page if page in gate else estate_name(page) for page in found]
+        raise AssertionError(f"{refused}\n{_rerun(refused.instead)}") from None
+    # An estate page is found as its address, which no page known by name begins as.
+    return [estate_name(page) if page.startswith("/") else page for page in found]
+
+
+@functools.cache
+def declared_flags() -> dict[str, dict]:
+    """dev:look's flags as mise parses its usage, by the name its variable has,
+    or none where mise cannot say: what a rerun leaves at its default."""
+
+    try:
+        done = subprocess.run(
+            ["mise", "-C", str(settings.BASE_DIR), "tasks", "info", "dev:look", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        flags = json.loads(done.stdout)["usage_spec"]["cmd"]["flags"]
+    except OSError, ValueError, KeyError, TypeError:
+        return {}
+    return {flag["name"].replace("-", "_"): flag for flag in flags}
+
+
+def _rerun(instead: dict[str, str]) -> str:
+    """The command that runs this look again with each refused name of
+    ``instead`` swapped for its nearest, or left out where it has none, its
+    flags as given; a look left with no page is pointed at what a page is."""
+
+    asked, declared = _asked(), declared_flags()
+    pages = [instead.get(name, name) for name in asked.repeated(_ASKED)]
+    if not (pages := [page for page in pages if page]):
+        return "No name asked is near a page; what a page is:\nmise run dev:look --help"
+    words = ["mise", "run", "dev:look"]
+    for name in declared or sorted(asked.values):
+        flag, value = declared.get(name, {}), asked.text(name)
+        if name in (_ASKED, _FINDINGS, _CLOCK, _SHOTS) or not value or [value] == flag.get("default"):
+            continue
+        dashed = f"--{name.replace('_', '-')}"
+        if "arg" in flag or (not flag and value not in ("true", "false")):
+            words += [dashed, value]
+        elif value == "true":
+            words.append(dashed)
+        else:
+            words.append(flag.get("negate") or f"--no-{name.replace('_', '-')}")
+    return f"To look at the nearest instead:\n{shlex.join([*words, *pages])}"
+
+
+# What a look at a base says of a page it does not have.
+NOT_AT_BASE = "not at this ref, so looked at only in the tree that asked"
+# What the look that asked says of those pages as it closes.
+DRAWN_ONLY_HERE = "not drawn at {}, so judged here alone"
+
+
+def drawn_at_base(found: Found, unanswered: dict[str, int | None]) -> Found:
+    """What a look at a base hands the run that asked: ``found`` less each page
+    that did not answer there (a record only that run's tree holds), said, so
+    that run judges it alone as it does a page the base predates."""
+
+    for name in unanswered:
+        print(f"{name}: {NOT_AT_BASE}", flush=True)
+    return {key: said for key, said in found.items() if key[0] not in unanswered}
+
+
+def _served(asked: tuple[str, ...], records: task.Records | None) -> list[str]:
+    """``_pages``'s pages; at a base, whose asker already took every name, a
+    name the base cannot draw (a record its estate lacks, a page it predates)
+    is said and left out, so the base draws the rest."""
+
+    try:
+        return _pages(asked, records)
+    except AssertionError:
+        if not _asked().text(_FINDINGS):
+            raise
+    pages = []
+    for name in asked:
+        try:
+            pages += _pages((name,), records)
+        except AssertionError:
+            print(f"{name}: {NOT_AT_BASE}", flush=True)
+    return pages
+
+
+@dataclass(frozen=True, slots=True)
+class Asked:
+    """What the run was asked, each name in it checked: the pages, and the probe with its argument."""
+
+    pages: list[str]
+    probe: str
+    probe_source: str
+    probe_arg: object
+    # The asked templates on ``DRAWN_BY_NOTHING``, which no page shows.
+    undrawn: tuple[str, ...] = ()
+
+
+def _checked(records: task.Records | None) -> Asked:
+    """What the run was asked, or AssertionError naming what it refuses and
+    what to type instead: the seed first, as a record's page is found in its
+    estate, then the pages, the rule, the probe and its argument, and the
+    operation. ``records`` is ``_pages``'."""
+
+    given = _asked()
+    try:
+        seeds.get(given.text("seed"))
+    except LookupError as unknown:
+        raise AssertionError(f"--seed: {unknown}") from None
+    names = given.repeated("pages")
+    undrawn = tuple(
+        name
+        for name in names
+        if name.removeprefix(task.TEMPLATE) in DRAWN_BY_NOTHING and name.startswith(task.TEMPLATE)
+    )
+    rest = tuple(name for name in names if name not in undrawn)
+    pages = _served(rest, records) if rest or not undrawn else []
+    if (rule := Look.rule_asked()) and rule not in _rules():
+        raise AssertionError(no_rule(rule))
+    probe, probe_source = _probe(given.text("probe"))
+    if given.text("arg") and not probe:
+        raise AssertionError("--arg is what --probe's function takes: name the probe")
+    if given.text("operation") and not set(pages) & set(REFERENCE_PAGES):
+        raise AssertionError(
+            f"--operation opens an operation of the API reference: name {' or '.join(REFERENCE_PAGES)}"
+        )
+    return Asked(pages, probe, probe_source, _argument(given.text("arg")), undrawn)
+
+
+def _not_the_hosts(asked: tuple[str, ...]) -> list[str]:
+    """The names of ``asked`` no page of the host alone can be, so an
+    extension's, which a look draws only composed: ``template:<name>`` that no
+    host template directory holds, and a route under a namespace the host has
+    none of. A named POST is the host's, though it reads like a route."""
+
+    held = {
+        path.relative_to(folder).as_posix() for folder in get_template_directories() for path in folder.rglob("*.html")
+    }
+    namespaces = set(get_resolver().namespace_dict)
+    return [
+        name
+        for name in asked
+        if (
+            name.removeprefix(TEMPLATE) not in held
+            and not any(known.endswith(f"/{name.removeprefix(TEMPLATE)}") for known in held)
+            if name.startswith(TEMPLATE)
+            else not is_post(name)
+            and ":" in name.partition("?")[0]
+            and "/" not in name
+            and name.split(":", 1)[0] not in namespaces
+        )
+    ]
+
+
+def refuse_early() -> None:
+    """Check what the task was asked before it waits for the heavy turn and
+    draws the estate, exiting 64 with the refusal: every name but those only
+    the estate drawn resolves, which the run checks (``_pages``). Not
+    composed, a name only an extension's page can be is refused too, with
+    the flag that loads them."""
+
+    said = []
+    try:
+        _checked(None)
+        _css(_asked().text("css"))
+        _script(_asked().text("eval"))
+    except AssertionError as refused:
+        said.append(str(refused))
+    if not _asked().switch("composed") and (theirs := _not_the_hosts(_asked().repeated("pages"))):
+        said.append(
+            f"No page of the host alone is {', '.join(theirs)}: an extension's page is drawn with --composed,"
+            " which loads the extension set mise.local.toml names"
+        )
+    if said:
+        refuse("\n".join(said))
+
+
+def refuse(said: str) -> NoReturn:
+    """End the run on what it was asked, as a usage error: exit 64 with
+    ``said``, which a page's verdict never is."""
+
+    print(f"mise run dev:look: {said}", file=sys.stderr, flush=True)
+    sys.exit(64)
 
 
 class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
@@ -674,6 +1115,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     on_reference = False
     # Whether the run takes its screenshots, as ``asked_for`` decides.
     shooting = True
+    # The catalog entries asked, which are drawn without script (``scripted_for``).
+    unscripted: frozenset[str] = frozenset()
     # A look's record is its findings and shots; a trace would snapshot the
     # page at every step of every page the look reads.
     traced = False
@@ -682,9 +1125,15 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     tree: str
     clock_at: float
     asked: list[str]
+    undrawn: tuple[str, ...] = ()
     base: Found | None
     base_measured: Measured
     base_errors: Found
+    # The test files the base drew with its own copy of (`kept_own`).
+    base_kept: list[str]
+    # Why a base asked for was not looked at (`BASE_UNFIT`), or "".
+    base_unfit = ""
+    tree_store: Path
     # The probe --probe names, its source, and the argument --arg gives it.
     probe = probe_source = ""
     probe_arg: object = None
@@ -697,30 +1146,46 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     @classmethod
     @override
     def setUpClass(cls):
-        # The tree the run draws from, held to the end (`changed_since`).
-        cls.tree = tree_of(Path(settings.BASE_DIR))
+        # The tree the run draws from, held to the end (`changed_since`) in a store of its own.
+        store = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(store.cleanup)
+        cls.tree_store = Path(store.name)
+        cls.tree = tree_of(Path(settings.BASE_DIR), cls.tree_store)
         cls.clock_at = float(_asked().text(_CLOCK) or round(time.time()))
         # What was asked is checked before the base is looked at, which takes a
-        # while: the seed first, as a record's page is found in its estate.
+        # while, and a name refused ends the run as `refuse_early` does.
         try:
-            seeds.get(_asked().text("seed"))
-        except LookupError as unknown:
-            raise AssertionError(f"--seed: {unknown}") from None
-        cls.asked = _pages(_asked().repeated("pages"))
-        if (rule := cls.rule_asked()) and rule not in _rules():
-            raise AssertionError(no_rule(rule))
-        cls.probe, cls.probe_source = _probe(_asked().text("probe"))
-        cls.probe_arg = _argument(_asked().text("arg"))
-        if _asked().text("arg") and not cls.probe:
-            raise AssertionError("--arg is what --probe's function takes: name the probe")
-        if _asked().text("operation") and not set(cls.asked) & set(REFERENCE_PAGES):
-            raise AssertionError(
-                f"--operation opens an operation of the API reference: name {' or '.join(REFERENCE_PAGES)}"
-            )
+            with EstatePages(_asked().text("seed")) as records:
+                asked = _checked(records)
+        except AssertionError as refused:
+            cls.refuse(str(refused))
+        cls.asked, cls.undrawn, cls.probe, cls.probe_source, cls.probe_arg = (
+            asked.pages,
+            asked.undrawn,
+            asked.probe,
+            asked.probe_source,
+            asked.probe_arg,
+        )
         # The base next, while nothing of this run's holds memory but Django.
-        ref = _asked().text("base")
-        cls.base, cls.base_measured, cls.base_errors = _look_at(ref, rule, cls.clock_at) if ref else (None, {}, {})
+        cls.base, cls.base_measured, cls.base_errors, cls.base_kept, cls.base_unfit = None, {}, {}, [], ""
+        if ref := _asked().text("base"):
+            try:
+                cls.base, cls.base_measured, cls.base_errors, cls.base_kept = look_at(
+                    ref, cls.rule_asked(), cls.clock_at
+                )
+            except AssertionError as refused:
+                cls.refuse(str(refused))
+            except BaseUnfit as unfit:
+                cls.base_unfit = BASE_UNFIT.format(ref, unfit)
+                print(cls.base_unfit, flush=True)
         super().setUpClass()
+
+    @classmethod
+    def refuse(cls, said: str) -> NoReturn:
+        """`refuse`, once what the class holds is let go: an exit runs no class cleanup."""
+
+        cls.doClassCleanups()
+        refuse(said)
 
     @override
     def start(self, **options):
@@ -738,12 +1203,18 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         pages = cls.asked
         estate = [estate_name(path) for path in navigation()]
         cls.addresses = {name: estate_path(name) for name in {*estate, *filter(is_estate, pages)}}
-        rendered = stress_pages(pages)
+        cls.addresses |= {name: posted(name).address() for name in filter(is_post, pages)}
+        entries = catalog_pages(pages)
+        cls.unscripted = frozenset(entries)
+        rendered = stress_pages(pages) | entries
         if set(pages) & set(REFERENCE_PAGES):
             rendered |= render_reference()
         # Last: the stress estates are rolled back, the example estate is
-        # committed, and both sign in as the same owner.
-        cls.estate_client = cls.serve_estate() if any(map(is_estate, pages)) else None
+        # committed, and both sign in as the same owner. A dialog fills itself
+        # from its region's own request, which only a server answers, so a
+        # dialog asked for on a page answered from memory is served too.
+        served = any(is_estate(name) or is_post(name) for name in pages) or bool(_listed("dialog"))
+        cls.estate_client = cls.serve_estate() if served else None
         return rendered
 
     @classmethod
@@ -778,6 +1249,8 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     # and an estate page can share an address (`projects`), so the address
     # alone cannot say whose it is.
     on_estate = False
+    # The named POST the next load of its address sends, set by ``open``.
+    sending: Posted | None = None
 
     @override
     def answer(self, route):
@@ -790,10 +1263,13 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
     def respond(self, route):
         request = route.request
         parts = urlsplit(request.url)
+        # A region of another page asks the server for that page's region,
+        # where a page in memory would answer it whole.
+        another_region = _REGION in request.headers and parts.path != urlsplit(self.page.url).path
         if (
             self.estate_client is None
             or parts.path.startswith(settings.STATIC_URL)
-            or (not self.on_estate and parts.path.strip("/") in self.pages)
+            or (not self.on_estate and parts.path.strip("/") in self.pages and not another_region)
         ):
             LayoutBrowserTests.respond(self, route)
             return
@@ -806,14 +1282,16 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             for name, value in request.headers.items()
             if name not in _TRANSPORT
         }
-        # Marked as a guess, so a page that would act or reach out is refused,
-        # except where no browser guesses: a route that answers without a
-        # session is never prefetched, and a guess there is refused whole, so
-        # the page's own fetch of one (the reference's document) is sent as made.
-        if _guessable(parts.path):
-            headers["HTTP_SEC_PURPOSE"] = "prefetch"
         # A browser route cannot answer with a redirect, so it is followed here.
-        response = self.estate_client.get(address, secure=True, follow=True, **{**headers, **REQUEST})
+        sending = self.sending
+        if sending is not None and request.is_navigation_request() and address == sending.address():
+            # The page a named POST lands on: the form sent once, as its page sends it.
+            self.sending = None
+            response = sending.send(self.estate_client, **headers)
+        else:
+            if _marked_a_guess(request):
+                headers["HTTP_SEC_PURPOSE"] = "prefetch"
+            response = self.estate_client.get(address, secure=True, follow=True, **{**headers, **REQUEST})
         self.answered[address] = (response.status_code, response.get("X-Speculation-Refused", ""))
         body = response.getvalue()
         # The event loop's own connection, closed rather than left to leak.
@@ -831,7 +1309,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
 
     @override
     def open(self, name, width):
+        # Every page, since one after a catalog entry would be drawn as it was.
+        self.draw_scripted_as(name)
         if is_estate(name):
+            self.visit(self.addresses[name], width)
+        elif is_post(name):
+            self.sending = posted(name)
             self.visit(self.addresses[name], width)
         else:
             self.on_estate = False
@@ -839,7 +1322,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         # The viewer mounts on its root wherever a page carries one: the
         # reference HQ serves and the gate's copy in the operator's dark theme.
         reference = self.page.locator(SELECTORS["reference"]).count() > 0
-        self.on_reference = reference and not _asked().switch("no_script")
+        self.on_reference = reference and self.runs_script
         if self.on_reference:
             wait_for_reference(self.page)
             draw_whole_reference(self.page)
@@ -849,48 +1332,132 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             add_css(self.page, self.css)
             self.settle()
 
+    def scripted_for(self, name) -> bool:
+        """Whether ``name`` is drawn with script: a page is unless
+        ``--no-script``, and a catalog entry never is, as the catalog's gate
+        judges it (``CatalogLayoutTests``), so a look at one sees the state
+        that gate does."""
+
+        return not _asked().switch("no_script") and name not in self.unscripted
+
+    def draw_scripted_as(self, name):
+        """A context that runs script as ``name`` is drawn with, started
+        afresh only when the one open does not."""
+
+        if (scripted := self.scripted_for(name)) != self.runs_script:
+            self.draw_with_script(scripted)
+
+    def draw_with_script(self, scripted):
+        self.start(java_script_enabled=scripted, color_scheme="dark" if _asked().switch("dark") else "light")
+
+    @override
+    def settle(self):
+        # A page without script runs no frame callback or timer, so a wait on
+        # one never ends; nothing there moves but an animation, which the shot
+        # finishes itself (``animations="disabled"``).
+        if self.runs_script:
+            BrowserGate.settle(self)
+
     def test_look(self):
         widths, rule = self.asked_for()
-        self.start(java_script_enabled=not _asked().switch("no_script"))
-        if _asked().switch("dark"):
-            self.page.emulate_media(color_scheme="dark")
+        self.draw_with_script(not _asked().switch("no_script"))
         self.errors: Found = {}
         self.unanswered_pages: dict[str, int | None] = {}
+        # Each page and width the rule ran to its end on, whatever it found.
+        self.judged_at: dict[tuple[str, int], None] = {}
         if _asked().switch("deep"):
             self.follow(widths[0])
         self.measured: Measured = {}
         found = self.look_at_every_page(widths, rule)
         if into := _asked().text(_FINDINGS):
-            _write_found(Path(into), found, self.measured, self.errors)
+            _write_found(Path(into), drawn_at_base(found, self.unanswered_pages), self.measured, self.errors)
         if failed := self.close(rule, found):
             self.fail("\n".join(failed))
 
     def close(self, rule, found) -> list[str]:
         """What the run found and heard said, each new one against a base on
-        a line and each verdict last, the rule's report kept in ``REPORT``;
-        the verdicts that failed."""
+        a line and each verdict last, the rule's report kept in the run's
+        ``REPORT``; the verdicts that failed. A rule that judged no page fails,
+        so a run of it over nothing never passes."""
 
         ref = _asked().text("base")
         base_errors = self.base_errors if self.base is not None else None
         report, printed, errors_failed = closing(_ERRORS, self.errors, base_errors, ref)
-        failed = [printed[-1]] if errors_failed else []
+        # Each page's first error inline, or each new one against a base, then the verdict.
+        failed = [*(printed[:-1] or found_lines(self.errors)), printed[-1]] if errors_failed else []
         if rule:
             judged, said, rule_failed = closing(rule, found, self.base, ref)
             head = _commit("HEAD") + (f" against {ref} at {_commit(ref)}" if self.base is not None else "")
-            REPORT.parent.mkdir(parents=True, exist_ok=True)
-            REPORT.write_text(f"{head}\n{judged}\n{report}\n", encoding="utf-8")
-            printed = [f"Page by page: {REPORT}", *said, *printed]
-            failed = [said[-1]] * rule_failed + failed
+            head += f"\n{self.base_unfit}" if self.base_unfit else ""
+            kept = this_run() / REPORT
+            kept.write_text(f"{head}\n{judged}\n{report}\n", encoding="utf-8")
+            printed = [f"Page by page: {_shown(kept)}", *said, *printed]
+            if self.base is not None and (alone := drawn_only_here(self.base, found)):
+                printed.append(f"{', '.join(alone)}: {DRAWN_ONLY_HERE.format(ref)}")
+            # A line for each page with something new or found, then the
+            # verdict: what the look's failure says, which a gate shows.
+            pages = said[:-1] or found_lines(found, lambda name, width: _shown(_shot(name, width).with_suffix(".txt")))
+            failed = [*pages, said[-1]] * rule_failed + failed
+            if not self.judged_at and not self.undrawn:
+                failed.append(nothing := JUDGED_NOTHING.format(rule))
+                printed.append(nothing)
         # A page that did not answer was not looked at, here or at a base, so it fails either way.
-        unanswered = [f"{name} answered {status}, not 200" for name, status in self.unanswered_pages.items()]
+        unanswered = [
+            f"{name} answered {status}, not {posted(name).status if is_post(name) else 200}"
+            for name, status in self.unanswered_pages.items()
+        ]
         base = f", the base's in {_shown(this_run() / BASE_OUT)}/" if self.base is not None else ""
+        if self.base is not None and self.base_kept:
+            base += f", {_its_own(self.base_kept)}"
         shots = f"Screenshots in {_shown(this_run())}/{base}"
         if not self.shooting:
             shots = f"Findings in {_shown(this_run())}/, no screenshots: --shots takes them"
-        # Last, as it voids every verdict before it.
-        changed = [moved] if (moved := changed_since(self.tree, Path(settings.BASE_DIR))) else []
-        print(*printed, *unanswered, shots, *changed, sep="\n", flush=True)
-        return failed + unanswered + changed
+        unfit = [self.base_unfit] if self.base_unfit else []
+        # Last, as it says which tree every line before it read.
+        moved = changed_since(self.tree, Path(settings.BASE_DIR), self.tree_store)
+        changed = [tree_changed(self.tree, moved)] if moved else []
+        print(*printed, *unanswered, *unfit, shots, *changed, sep="\n", flush=True)
+        if rule:
+            again = [*failed_pages(found), *(name for (name, _), heard in self.errors.items() if heard)]
+            self.tell_the_gate(rule, said[-1], [*again, *self.unanswered_pages])
+        return failed + unanswered
+
+    def tell_the_gate(self, rule, verdict, blamed):
+        """What the rule judged, under its verdict, and the look that runs it
+        again on the pages that failed (or on all it was asked, when none is
+        to blame), to the gate running the look, when one does: the reader of
+        a survey's record tells a survey of one page from one of all. A base's
+        run is this run's to judge, so it says nothing."""
+
+        asked = _asked()
+        if not (into := os.environ.get(GATE_DETAIL)) or asked.text(_FINDINGS):
+            return
+        # A base it could not look at drew nothing it judged.
+        held = [flag for flag in DRAWN_WITH if not (flag == "base" and self.base_unfit)]
+        given = {flag: asked.text(flag) for flag in held if asked.text(flag) not in ("", "false")}
+        drawn = [
+            f"--{flag.replace('_', '-')}" + ("" if value == "true" else f" {shlex.quote(value)}")
+            for flag, value in given.items()
+        ]
+        lines = [
+            verdict,
+            f"asked: {' '.join(asked.repeated(_ASKED))}",
+            *([f"undrawn: {' '.join(self.undrawn)}"] if self.undrawn else []),
+            f"judged: {', '.join(dict.fromkeys(name for name, _ in self.judged_at)) or 'none'}",
+            f"at: {', '.join(dict.fromkeys(str(width) for _, width in self.judged_at)) or 'none'}",
+            f"with: {' '.join(drawn) or 'the defaults'}",
+        ]
+        # The inputs name this checkout's paths, so another checkout's record
+        # holds only for the tree it judged.
+        judged = os.environ.get(GATE_TREE)
+        if not judged or Path(judged).resolve() == Path(settings.BASE_DIR).resolve():
+            lines.append(f"inputs: {' '.join(SURVEY_INPUTS)}")
+        Path(into).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        pages = list(dict.fromkeys(blamed)) or list(asked.repeated(_ASKED))
+        engine = asked.text("engine") or "webkit"
+        again = ["mise run dev:look", f"--rule {rule}", f"--engine {engine}", *drawn, shlex.join(pages)]
+        if rerun := os.environ.get(GATE_RERUN):
+            Path(rerun).write_text(" ".join(again) + "\n", encoding="utf-8")
 
     def look_at_every_page(self, widths, rule) -> Found:
         """Each page at each width, said as it starts, so a look that hangs
@@ -968,6 +1535,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         said = self.judged(name, width, rule) if rule else []
         if rule and _asked().switch("open"):
             said += self.with_each_popover(name, width, rule, said)
+        said += self.with_every_fold_open(name, width, rule, said)
         said += self.with_each_dialog(name, width, rule, said)
         if self.on_reference and _asked().switch("open"):
             said += self.with_each_tag_opened(name, width, rule, said)
@@ -979,9 +1547,11 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         try:
             getattr(self, rule)(name)
         except AssertionError as found:
+            self.judged_at[name, width] = None
             return [line.strip() for line in str(found).splitlines() if line.strip()]
         except BrowserError as broke:
             return self.shoot_failure(name, width, f"{rule} could not run ({str(broke).splitlines()[0]})")
+        self.judged_at[name, width] = None
         return []
 
     def with_each_popover(self, name, width, rule, beneath) -> list[str]:
@@ -1075,7 +1645,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         disclosure in it open too. The page's own wiring opens it, so that is
         looked at as well. Whether it opened."""
 
-        openers = _OPENERS.format(id=dialog)
+        openers = SELECTORS["dialog_opener"].format(id=dialog)
         place = self.page.evaluate(_REACH, openers)
         if place < 0:
             print(f"{name} at {width}: no control a reader can reach opens dialog {dialog!r}", flush=True)
@@ -1083,7 +1653,7 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         at = self.page.evaluate(_WINDOW_AT)
         self.page.locator(openers).nth(place).click()
         try:
-            self.page.wait_for_function(_DIALOG_READY, arg=[dialog, _BUSY])
+            self.page.wait_for_function(_DIALOG_READY, arg=[dialog, BUSY])
             # The page beneath as it was judged on its own: the press scrolled
             # the opener into view and left the pointer on it, hovered.
             self.page.evaluate(_WINDOW_TO, at)
@@ -1138,9 +1708,12 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
             self.open(name, width)
         except BrowserError as refused:
             return f"not a page ({str(refused).splitlines()[0]})"
-        if is_estate(name) and (said := self.answered.get(_address(self.page.url), (None, ""))) != (200, ""):
+        # A named POST's page is its refusal, so it answers that refusal's status.
+        expected = posted(name).status if is_post(name) else 200
+        served = is_estate(name) or is_post(name)
+        if served and (said := self.answered.get(_address(self.page.url), (None, ""))) != (expected, ""):
             status, refusal = said
-            if status != 200:
+            if status != expected:
                 self.unanswered_pages[name] = status
             return f"answered {status}{f', refused as a guess ({refusal})' if refusal else ''}, not looked at"
         if not self.page.locator("main").count():
@@ -1191,61 +1764,86 @@ class Look(LayoutBrowserTests, ExampleEstateBrowserTests):
         self.as_a_reader(_PRESS_SHOWN, ROW_TOGGLES)
         self.settle()
 
-    def open_everything(self, name, width):
-        """Every disclosure open, round after round until none is
-        left closed: a disclosure a region brings in when another opens is
-        opened once the region's answer has arrived. A region that never
-        answers is said, and the page is looked at as it stands."""
+    def open_everything(self, name, width) -> int:
+        """Every disclosure open, nested ones and those a region brings in
+        once it has answered (``open_every_fold``), and how many it opened.
+        What kept it short is said, and the page is looked at as it stands."""
 
-        for _round in range(_OPEN_ROUNDS):
-            if not self.as_a_reader(_OPEN_ONCE, _BUSY):
-                return
-            self.settle()
-            try:
-                self.page.wait_for_function(_ANSWERED, arg=_BUSY)
-            except BrowserError as waited:
-                print(f"{name} at {width}: --open left a region loading ({str(waited).splitlines()[0]})", flush=True)
-                return
+        opened, short = open_every_fold(self)
+        if short:
+            print(f"{name} at {width}: opening every fold stopped short: {short}", flush=True)
+        return opened
+
+    def with_every_fold_open(self, name, width, rule, beneath) -> list[str]:
+        """What the survey finds with every fold open, past what it finds on
+        the page ``beneath``, when ``--open-folds`` asks, shot so
+        (``.folds-open``) when the run shoots; the folds closed again after,
+        so a dialog is opened from the page as it loaded. A page with no fold
+        closed is not judged twice."""
+
+        if rule != "survey" or not _asked().switch("open_folds") or not self.open_everything(name, width):
+            return []
+        stall_watch.mark(f"dev:look {name} at {width} with every fold open")
+        shows = "with every fold open"
+        part = "folds-open"
+        self.take_shot(name, width, functools.partial(self.screenshot, name, width, part, shows), part, shows)
+        found = [f"{shows}: {line}" for line in unmatched(self.judged(name, width, rule), beneath)]
+        self.page.evaluate(CLOSE_OPENED)
+        self.settle()
+        return found
 
     def screenshot(self, name, width, part="", shows="") -> list[Band]:
         """The whole page, or a ``part`` of it open that ``shows`` says, and,
         when it is taller than the window, the same cut into window-sized
-        bands beside it, so each can be read at once, each to ``TALLEST``
-        at most (``shoot_page``). Shot once its extent holds still; one
-        that never does is shot as it stands, with no bands, and the shot
+        bands beside it (``in_bands``). Shot once its extent holds still; one
+        that never does is shot and cut from one reading of it, and the shot
         says so. The part of the page each file holds: its bands, or the
         shot when it has none."""
 
         shot = _shot(name, width, part)
+        # A page without script polls once and never again, and has nothing
+        # that could move it, so its extent is read once.
+        if not self.runs_script:
+            return self.in_bands(shot, extent_of(self.page), shows)
         try:
             held = self.page.wait_for_function(_EXTENT_HELD, arg=shot.name, polling=_EXTENT_POLL)
             wide, tall = held.json_value()
         except BrowserError as moving:
-            cut = shoot_page(self.page, shot, animations="disabled")
-            said = f"its height never held still, so no bands ({str(moving).splitlines()[0]})"
-            self.shots.append((_shown(shot), ", ".join(filter(None, [shows, cut, said]))))
-            return [(shot.name, 0, TALLEST)]
-        cut = shoot_page(self.page, shot, extent=(wide, tall), animations="disabled")
-        shows = ", ".join(filter(None, [shows, cut]))
-        bands = _bands(min(tall, TALLEST), self.page.viewport_size["height"])
-        files = []
-        for number, band in enumerate(bands, start=1):
-            files.append((shot.with_name(f"{shot.stem}.band-{number:02}.png"), *band))
-            shoot_page(self.page, files[-1][0], extent=(wide, tall), band=band, animations="disabled")
-        self.shots.append((_shown(shot), _with(shows, len(bands))))
-        return [(path.name, top, height) for path, top, height in files] or [(shot.name, 0, min(tall, TALLEST))]
+            wide, tall = extent_of(self.page)
+            shows = ", ".join(filter(None, [shows, f"its height never held still ({str(moving).splitlines()[0]})"]))
+        return self.in_bands(shot, (wide, tall), shows)
+
+    def in_bands(self, shot, extent, shows) -> list[Band]:
+        """The page shot whole at ``shot`` and, when it is taller than the
+        window, cut into window-sized bands beside it, so each can be read at
+        once, each to ``TALLEST`` at most (``shoot_page``), all from the one
+        ``extent``. A page that moved past that extent ends its bands where
+        it went, and the shot says so. The part of the page each file holds."""
+
+        wide, tall = extent
+        cut = shoot_page(self.page, shot, extent=extent, animations="disabled")
+        said = [shows, cut]
+        files: list[Band] = []
+        for number, band in enumerate(_bands(min(tall, TALLEST), self.page.viewport_size["height"]), start=1):
+            path = shot.with_name(f"{shot.stem}.band-{number:02}.png")
+            try:
+                shoot_page(self.page, path, extent=(wide, tall), band=band, animations="disabled")
+            except BrowserError as moved:
+                said.append(f"its bands end at {band[0]} px, where it moved ({str(moved).splitlines()[0]})")
+                break
+            files.append((path.name, *band))
+        self.shots.append((_shown(shot), _with(", ".join(filter(None, said)), len(files))))
+        return files or [(shot.name, 0, min(tall, TALLEST))]
 
     def shoot_failure(self, name, width, said) -> list[str]:
         """``said`` as the finding, with the page as it stands kept beside the
-        screenshots (``.failed.png``) and its path printed."""
+        screenshots (``.failed.png``), in bands as any shot is, and its path printed."""
 
         path = _shot(name, width).with_suffix(".failed.png")
         try:
-            cut = shoot_page(self.page, path, animations="disabled")
+            self.in_bands(path, extent_of(self.page), "as it failed")
         except BrowserError as broke:
             print(f"{name} at {width}: {said}; no screenshot ({str(broke).splitlines()[0]})", flush=True)
-        else:
-            self.shots.append((_shown(path), ", ".join(filter(None, ["as it failed", cut]))))
         return [said]
 
     def beside_base(self, name, width, kind, said) -> str:

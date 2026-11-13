@@ -1,15 +1,46 @@
 # The Lint job: every lint:* gate here and under mise-tasks/lint/. A derived
 # file's gate is lint:drift-<file>, held against its source; `mise run fix`
 # rewrites them all.
+#
+# A quick gate, one `mise run fast` runs when a change affects it, is tagged
+# fast. Its sources are the files it reads, then the dependencies, tool pins
+# and task definitions every gate reads; `!` takes out a path its tool never
+# reads, as the tool's own config says. outputs = [] keeps mise from skipping
+# it as up to date. tools/gate/tests/test_fast_selection.py holds all of it,
+# and tools/tests/test_drift_sources.py holds a drift gate's sources to every
+# file of the checkout its run opens.
 
 ["lint:ruff"]
 description = "Ruff lints the Python and holds it to its format"
 hide = true
-run = ["uv run ruff check .", "uv run ruff format --check ."]
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+usage = 'flag "--fix" help="Write the fixes and format Ruff makes instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run ruff check --fix-only --quiet . && uv run ruff format --quiet .; else uv run ruff check . && uv run ruff format --check .; fi'
 
 ["lint:mypy"]
 description = "mypy type-checks the seams pyproject.toml names and the browser test package's calls, then every source module for code its types rule out"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # django-stubs loads the host's settings.
 extends = "django"
 run = [
@@ -20,17 +51,43 @@ run = [
 ["lint:ast-grep"]
 description = "ast-grep holds every Python module to the structural rules in tools/lint/ast-grep/rules, each over the scope its rule declares (code HQ runs: hq, hq_sdk and tools less their tests; test code: tests/, test_*.py, testing.py and *_testing.py; or every module), and each rule to its own cases"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "**/templates/**/*.html",
+  "tools/lint/ast-grep/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+usage = 'flag "--fix" help="Write what each rule that carries a fix: rewrites instead of checking: fast runs it first"'
 # The scan reads the whole repository, since each rule's files: and ignores:
 # say which modules it holds. A rule's cases (rule-tests/) prove it refuses
-# what it is for before its scan is trusted to find nothing.
-run = [
-  "ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests",
-  "ast-grep scan -c tools/lint/ast-grep/sgconfig.yml .",
-]
+# what it is for before its scan is trusted to find nothing, and the template
+# rules' snapshots hold what each fix writes. A suppression no match needs any
+# more fails, so each is removed as its page moves.
+run = 'if [ "${usage_fix:-}" = true ]; then ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --update-all . >/dev/null; else ast-grep test -c tools/lint/ast-grep/sgconfig.yml --skip-snapshot-tests && ast-grep test -c tools/lint/ast-grep/sgconfig.yml --filter "^hand-drawn-" && ast-grep scan -c tools/lint/ast-grep/sgconfig.yml --error=unused-suppression .; fi'
 
 ["lint:openapi"]
 description = "Both OpenAPI descriptions pass specification lint"
 hide = true
+tags = ["fast"]
+sources = [
+  "hq/platform/api/hq-api.openapi.json",
+  "controller/api/*.openapi.json",
+  "tools/lint/package*.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 depends = ["setup:lint-tools"]
 # Specification rules cover wire contracts. HTTP style recommendations do not
 # apply to Django's canonical trailing slashes or the stdin/stdout bridge.
@@ -39,36 +96,133 @@ depends = ["setup:lint-tools"]
 env = { REDOCLY_SUPPRESS_UPDATE_NOTICE = "true" }
 run = "redocly lint --extends=spec --format=stylish hq/platform/api/hq-api.openapi.json controller/api/hq-controller.openapi.json controller/api/hq-connections.openapi.json || { echo 'lint:openapi: each problem is at the file:line:column above. HQ writes these documents: fix the Python that declares the shape, then rewrite them: mise run manage -- api_openapi for hq-api, mise run manage -- bridge_contract for the two under controller/api.' >&2; exit 1; }"
 
+["lint:openapi-breaking"]
+description = "The machine API's document breaks no client of its base's, or its exemption file admits the break with a reason"
+hide = true
+tags = ["fast"]
+sources = [
+  "hq/platform/api/hq-api.openapi.json",
+  "hq/platform/api/hq-api.breaking-exemptions.md",
+  "tools/openapi_breaking.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+# Only hq-api: the controller's two documents ship in the same image as both
+# of their ends. The base is fast's; CI's lint job names the commit its
+# change lands on in CHECK_BASE.
+usage = 'arg "[base]" env="CHECK_BASE" help="The ref to compare with; default the branch HEAD lands on, then origin/main"'
+run = 'uv run python -m tools.openapi_breaking "${usage_base:-}"'
+
 ["lint:deptry"]
 description = "Host code imports only declared runtime dependencies and imports every one, or pyproject.toml says why not"
 hide = true
-# Host code is these two packages less their tests/ ([tool.deptry]).
-run = "uv run deptry hq hq_sdk"
+tags = ["fast"]
+sources = [
+  "hq/**/*.py",
+  "hq_sdk/**/*.py",
+  "hq_runner/**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+# The code is these three packages less their tests/ ([tool.deptry]).
+run = "uv run deptry hq hq_sdk hq_runner"
 
 ["lint:imports"]
 description = "Each module imports only what pyproject.toml's import contracts allow it"
 hide = true
+tags = ["fast"]
+sources = [
+  "hq/**/*.py",
+  "hq_sdk/**/*.py",
+  "hq_runner/**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "uv run lint-imports --no-cache"
 
 ["lint:lockfile"]
 description = "uv.lock matches pyproject.toml"
 hide = true
+tags = ["fast"]
+sources = [
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # uv's own hint, a plain uv lock, is refused under mise.toml's UV_LOCKED.
 run = "uv lock --check || { echo 'lint:lockfile: write the lock with UV_LOCKED=0 uv lock, then commit uv.lock (docs/Development.md).' >&2; exit 1; }"
 
 ["lint:toolchain"]
 description = "mise.lock checksums every pinned tool for each gate platform, mise renders Go from go.mod's toolchain line, no image borrows a build tool"
 hide = true
+tags = ["fast"]
+sources = [
+  "controller/go.mod",
+  "Dockerfile",
+  "composition/Dockerfile",
+  "tools/pipeline/toolchain_lock.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "uv run python -m tools.pipeline.toolchain_lock"
 
 ["lint:mise-tasks"]
 description = "Every task is valid: its usage spec parses, its dependencies exist, its timeout and globs are well formed"
 hide = true
+tags = ["fast"]
+sources = [
+  "mise-tasks/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 run = "mise tasks validate"
 
 ["lint:workflows"]
 description = "The workflows are valid, run: blocks included, and pass zizmor's security audit"
 hide = true
+tags = ["fast"]
+sources = [
+  ".github/workflows/**",
+  ".github/actions/**",
+  ".github/actionlint.yaml",
+  ".github/zizmor.yml",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # zizmor runs offline, with no token, at its default persona; a deliberate
 # finding is suppressed in .github/zizmor.yml with its reason.
 # Named rather than found: found, jactionlint reads every action.yml under the
@@ -81,6 +235,17 @@ run = [
 ["lint:deploycheck"]
 description = "Production settings raise no security warning"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 # DEBUG off, a real host. The values mirror a production configuration so the
 # check judges how settings.py reads one. The key is a throwaway long enough
 # for the strength check.
@@ -91,36 +256,94 @@ run = "uv run python manage.py check --deploy --fail-level WARNING"
 ["lint:structural"]
 description = "No new near-duplicate pair outside tests"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "**/*.go",
+  "**/*.js",
+  "**/*.mjs",
+  "**/*.sh",
+  "mise-tasks/**",
+  "tools/structural/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+  "!**/test_*.py",
+  "!**/tests.py",
+  "!**/*_tests.py",
+  "!**/tests/**",
+  "!**/*_test.go",
+]
+outputs = []
 usage = '''
 flag "--record" help="Rewrite the baseline from this tree instead of checking it"
 flag "--pairs" help="First print every pair outside tests with the classification that explains it, or unexplained, one per line, sorted"
 '''
 run = "uv run python -m tools.structural.bar"
 
-["lint:complexity"]
-description = "complexipy holds every function but a migration to cognitive complexity 20"
-hide = true
-# The bound and the tree are complexipy.toml's, which reads and writes no
-# snapshot: every function over the bound fails.
-run = "uv run complexipy"
-
 ["lint:css"]
 description = "Stylelint holds the stylesheets to their contract: color and sizes from tokens, every custom property defined"
 hide = true
+tags = ["fast"]
+sources = [
+  "static/css/**",
+  "tools/lint/*.mjs",
+  "tools/lint/package*.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 depends = ["setup:lint-tools"]
-run = "stylelint --config tools/lint/stylelint.config.mjs 'static/css/**/*.css'"
+usage = 'flag "--fix" help="Write what the tool fixes itself, then report the rest: fast runs it first"'
+run = 'stylelint --config tools/lint/stylelint.config.mjs $([ "${usage_fix:-}" != true ] || echo --fix) "static/css/**/*.css"'
 
 ["lint:js"]
 description = "ESLint holds the browser scripts to its recommended rules and the modern forms (const and let, strict equality), every name they use defined, no unsanitized markup sink, fetching, parsing and polling to fragment.js, and tables.js's layout reads to the places that say why"
 hide = true
+tags = ["fast"]
+sources = [
+  "static/js/**",
+  "tools/lint/eslint-suppressions.json",
+  "tools/lint/*.mjs",
+  "tools/lint/package*.json",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 depends = ["setup:lint-tools"]
-run = "eslint --config tools/lint/eslint.config.mjs --max-warnings 0 'static/js/**/*.js'"
+usage = 'flag "--fix" help="Write what the tool fixes itself, then report the rest: fast runs it first"'
+run = 'eslint --config tools/lint/eslint.config.mjs --suppressions-location tools/lint/eslint-suppressions.json --max-warnings 0 $([ "${usage_fix:-}" != true ] || echo --fix) "static/js/**/*.js"'
 
 # The Go controller's static half: format, generated types, the vendor slicer,
 # golangci-lint and the advisory guard. Its race tests are test:controller.
 ["lint:controller"]
 description = "The Go controller is formatted and linted, its generated types current"
 hide = true
+tags = ["fast"]
+sources = [
+  "controller/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+usage = 'flag "--fix" help="Format, modernize and regenerate the controller instead of checking: fast runs it first"'
+# The bridge contract's fix writes the specs go generate reads.
+wait_for = ["lint:drift-bridge-contract"]
 run = "controller/scripts/check.sh"
 
 # Every advisory whose vulnerable function the controller can reach, through
@@ -139,39 +362,162 @@ run = "go tool govulncheck -test ./..."
 ["lint:drift-sdk-contract"]
 description = "hq_sdk's committed shape, text examples and docs/Plugins.md table are what the SDK offers"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "hq_sdk/**",
+  "docs/Plugins.md",
+  "templates/**",
+  "static/css/**",
+  "static/js/**",
+  "tools/lint/ast-grep/rules/hand-drawn-*.yml",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
-run = "uv run python manage.py sdk_contract --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py sdk_contract; else uv run python manage.py sdk_contract --check; fi'
 
 ["lint:drift-api-document"]
 description = "The machine API's OpenAPI document is current"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "hq/platform/api/hq-api.openapi.json",
+  "hq/platform/api/openapi-examples.json",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
-run = "uv run python manage.py api_openapi --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py api_openapi; else uv run python manage.py api_openapi --check; fi'
 
 # A recording the examples file must equal, written to a temporary file of its
 # own rather than over the file.
 ["lint:drift-api-examples"]
 description = "The machine API's recorded examples are what its tests receive"
 hide = true
+sources = [
+  "**/*.py",
+  "hq/platform/api/openapi-examples.json",
+  "hq/domains/control_plane/bridge_base.json",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "templates/**",
+  "static/css/**",
+  "static/js/**",
+  "static/vendor/scalar/**",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
-run = 'recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
+# A recording: a serial run of the tests fix:api-examples names. So fast
+# selects it on a change to Python alone only where it selects one of those
+# tests, and runs its fix only once its check has failed, then checks again
+# (tools/gate/fast.py, RECORDING).
+tags = ["fast", "recording"]
+usage = 'flag "--fix" help="Record the examples into the file and rewrite the document instead of checking: fast runs it once the check fails"'
+run = 'if [ "${usage_fix:-}" = true ]; then mise run fix:api-examples; exit; fi; recorded="$(mktemp)"; trap "rm -f \"$recorded\"" EXIT; HQ_API_RECORD_EXAMPLES_TO="$recorded" mise run fix:api-examples && diff -u hq/platform/api/openapi-examples.json "$recorded" || { echo "lint:drift-api-examples: the recording differs from hq/platform/api/openapi-examples.json, or did not finish; mise run fix:api-examples records it again" >&2; exit 1; }'
 
 ["lint:drift-bridge-contract"]
 description = "The controller's contracts are the ones the registry derives"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "hq/domains/control_plane/bridge_base.json",
+  "controller/api/**",
+  "hq/config/controller-connections.json",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
-run = "uv run python manage.py bridge_contract --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py bridge_contract; else uv run python manage.py bridge_contract --check; fi'
 
 ["lint:drift-connections-reference"]
 description = "docs/Connections.md is what the providers declare"
 hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "docs/Connections.md",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
 extends = "django"
-run = "uv run python manage.py connections_reference --check"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py connections_reference; else uv run python manage.py connections_reference --check; fi'
+
+["lint:drift-procedure-schema"]
+description = "The published JSON Schema of a procedure's sidecar is what ProcedureDeclaration validates"
+hide = true
+tags = ["fast"]
+sources = [
+  "**/*.py",
+  "hq/platform/application/hq-procedure.schema.json",
+  "deploy/systemd/severino-hq-secrets.timer",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+extends = "django"
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+run = 'if [ "${usage_fix:-}" = true ]; then uv run python manage.py procedure_schema; else uv run python manage.py procedure_schema --check; fi'
 
 ["lint:drift-font"]
 description = "The served font is its source cut to the characters HQ prints and the features its stylesheets use"
 hide = true
-run = "uv run python -m tools.fonts.subset --check"
+tags = ["fast"]
+sources = [
+  "tools/fonts/**",
+  "static/fonts/**",
+  "static/css/**",
+  "tools/__init__.py",
+  "pyproject.toml",
+  "uv.lock",
+  "mise.toml",
+  "mise.lock",
+  "mise-tasks/*.toml",
+  "tools/pipeline/toolchain.env",
+]
+outputs = []
+usage = 'flag "--fix" help="Rewrite the file instead of checking: fast runs it first"'
+# The subsetter reads the fix flag itself.
+run = "uv run python -m tools.fonts.subset"
 
 ["lint:shell:suite"]
 description = "One shell suite under the shell named, or as its first line says for -: a run lint:shell makes of every suite"
@@ -182,6 +528,8 @@ arg "<shell>" help="The shell to run the suite under, which the suite finds in S
 arg "<suite>" help="The suite, tests/shell/test-*.sh"
 '''
 # A suite matches the words the tools it runs print, and mise colors them
-# under GitHub Actions even with no terminal.
+# under GitHub Actions even with no terminal. Every mise a suite starts reads
+# its project's config alone: under fast, the config environment is fast's,
+# whose summary output keeps a passing run silent.
 env = { NO_COLOR = "1" }
-run = 'if [ "$usage_shell" = - ]; then exec "$usage_suite"; fi; SHELL_UNDER_TEST="$usage_shell" exec "$usage_shell" "$usage_suite"'
+run = 'unset MISE_ENV; if [ "$usage_shell" = - ]; then exec "$usage_suite"; fi; SHELL_UNDER_TEST="$usage_shell" exec "$usage_shell" "$usage_suite"'

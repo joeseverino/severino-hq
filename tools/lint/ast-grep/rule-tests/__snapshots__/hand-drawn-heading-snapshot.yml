@@ -1,0 +1,44 @@
+id: hand-drawn-heading
+snapshots:
+  <div><h6>A</h6></div>:
+    labels:
+    - source: <h6>A</h6>
+      style: primary
+      start: 5
+      end: 15
+    - source: h6
+      style: secondary
+      start: 6
+      end: 8
+    - source: <h6>
+      style: secondary
+      start: 5
+      end: 9
+  "<h1 class=\"title\">{{ page.title }}</h1>":
+    labels:
+    - source: <h1 class="title">{{ page.title }}</h1>
+      style: primary
+      start: 0
+      end: 39
+    - source: h1
+      style: secondary
+      start: 1
+      end: 3
+    - source: <h1 class="title">
+      style: secondary
+      start: 0
+      end: 18
+  <h2>A</h2>:
+    labels:
+    - source: <h2>A</h2>
+      style: primary
+      start: 0
+      end: 10
+    - source: h2
+      style: secondary
+      start: 1
+      end: 3
+    - source: <h2>
+      style: secondary
+      start: 0
+      end: 4

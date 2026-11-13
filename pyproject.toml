@@ -34,12 +34,14 @@ dependencies = [
     "whitenoise==6.12.0",
 ]
 
-# lint:deptry: host code is hq/ and hq_sdk/, which the task names, less every
-# tests/ directory. The groups under [dependency-groups] are development
-# dependencies, which DEP002 leaves alone.
+# lint:deptry: the code is hq/, hq_sdk/ and hq_runner/, which the task names,
+# less every tests/ directory. The groups under [dependency-groups] are
+# development dependencies, which DEP002 leaves alone, all but the runner
+# group: the automation worker's own runtime, installed in its image alone.
 [tool.deptry]
-known_first_party = ["hq", "hq_sdk"]
+known_first_party = ["hq", "hq_sdk", "hq_runner"]
 extend_exclude = [".*/tests/"]
+non_dev_dependency_groups = ["runner"]
 [tool.deptry.per_rule_ignores]
 # Runtime dependencies no host code imports, and why each is installed anyway.
 DEP002 = [
@@ -49,6 +51,9 @@ DEP002 = [
     # Django's parallel test runner pickles a failure's traceback with it, in
     # the image as well.
     "tblib",
+    # ansible-runner runs its ansible-playbook as a program; the worker
+    # imports none of it.
+    "ansible-core",
 ]
 # Transitive dependencies host code imports, each where its version belongs to
 # the dependency that installs it.
@@ -76,13 +81,30 @@ DEP004 = [
     # hq/platform/core/test_runner.py registers the Hypothesis profiles when
     # the suite starts, and does nothing in the image, which has no Hypothesis.
     "hypothesis",
+    # hq/platform/core/tracing.py and hq_runner/tracing.py load the SDK and
+    # its exporter only while OTEL_EXPORTER_OTLP_ENDPOINT is set, which
+    # development alone sets; no image installs them.
+    "opentelemetry",
 ]
 
 # Which module may import which, read by lint:imports from every import,
 # lazy or not, however it is spelled. A forbidden list names `hq.**` rather
 # than `hq`: import-linter skips a forbidden module that contains the source.
+# Every package of the code is a root, so a path through the SDK is in the graph.
 [tool.importlinter]
-root_package = "hq"
+root_packages = ["hq", "hq_sdk", "hq_runner"]
+
+[[tool.importlinter.contracts]]
+name = "The automation worker imports nothing of HQ or its SDK: it ships in an image of its own"
+type = "forbidden"
+source_modules = ["hq_runner"]
+forbidden_modules = ["hq", "hq_sdk"]
+
+[[tool.importlinter.contracts]]
+name = "HQ and its SDK never import the automation worker, which their image does not ship"
+type = "forbidden"
+source_modules = ["hq", "hq_sdk"]
+forbidden_modules = ["hq_runner"]
 
 [[tool.importlinter.contracts]]
 name = "The workflow contracts are a leaf: they import nothing of HQ"
@@ -106,6 +128,19 @@ type = "forbidden"
 source_modules = ["hq.platform.application.answer_fields"]
 forbidden_modules = ["hq.**"]
 ignore_imports = ["hq.platform.application.answer_fields -> hq.platform.application.describe"]
+
+[[tool.importlinter.contracts]]
+name = "The operation manifest is a leaf: it imports nothing of HQ but two validators"
+type = "forbidden"
+source_modules = ["hq.platform.application.automation_manifest"]
+forbidden_modules = ["hq.**"]
+# HQ's one spelling of a dotted name (contracts.DOTTED_NAME) and of a host
+# name (names.is_hostname), which the manifest holds its ids, kinds and hosts
+# to rather than restating them.
+ignore_imports = [
+  "hq.platform.application.automation_manifest -> hq.platform.application.contracts",
+  "hq.platform.application.automation_manifest -> hq.domains.control_plane.names",
+]
 
 [[tool.importlinter.contracts]]
 name = "The UI primitives never reach the workflow engine"
@@ -145,6 +180,11 @@ default-groups = ["dev", "tools", "source-tests"]
 [dependency-groups]
 dev = [
     "django-debug-toolbar==8.0.0",
+    # Spans for a trace viewer on this machine (hq/platform/core/tracing.py,
+    # hq_runner/tracing.py), sent only while OTEL_EXPORTER_OTLP_ENDPOINT is
+    # set; no image installs them. OTLP over HTTP, which needs no grpcio.
+    "opentelemetry-exporter-otlp-proto-http==1.45.2",
+    "opentelemetry-sdk==1.45.2",
     "watchfiles==1.3.0",
 ]
 # What the source tests import beyond the runtime requirements; an extension's
@@ -154,18 +194,16 @@ source-tests = [
     "pyyaml==6.0.3",
 ]
 tools = [
-    # Holds every function but a migration to cognitive complexity 20 (lint:complexity).
-    "complexipy==8.3.0",
     "coverage==7.17.2",
     # Holds the runtime dependencies to what host code imports (lint:deptry).
     "deptry==0.25.1",
     "django-stubs==6.1.2",
     # Writes the served font from its source (tools/fonts), and the font tests read it.
     "fonttools==4.68.0",
-    "hypothesis==6.170.14",
+    "hypothesis==6.170.15",
     # Holds the layering contracts in [tool.importlinter] (lint:imports); its
     # graph, grimp, counts the imports between the layers (audit:layers).
-    "import-linter==2.15",
+    "import-linter==2.16",
     "mypy==2.4.1",
     "ruff==0.17.4",
     # Holds the clock still while the API examples are recorded (fix:api-examples).
@@ -176,6 +214,14 @@ tools = [
 ]
 browser = [
     "playwright==1.64.1",
+]
+# The automation worker's runtime (hq_runner), which no default group and no
+# web image installs: ansible-runner, and the ansible-playbook it runs.
+runner = [
+    "ansible-core==2.22.0",
+    "ansible-runner==2.4.3",
+    # hq_runner/catalog.py reads each sidecar and playbook with it.
+    "pyyaml==6.0.3",
 ]
 # Generates the API cases of test:api-properties, the one task that installs it.
 fuzz = [
@@ -206,25 +252,31 @@ extend-include = ["deploy/targets/severino-hq-cpanel-controller"]
 "deploy/targets/severino-hq-cpanel-controller" = "py37"
 
 [tool.ruff.lint]
-# Keep the contract explicit and stable across developer machines and CI.
-# Left off as noise:
-# D: a docstring is written where it says what and why, never on every name.
-# PT009: the suite is unittest, so assertEqual is its assertion.
-# COM812: the formatter decides trailing commas.
-# CPY001: the repository's license covers every file without a header.
-# TRY003, EM: an exception's message is written where it is raised.
-# PLR2004: a number named once at its use reads better than a constant for it.
-# TC: lazy imports already keep import cost off the start path, without type-only blocks.
-# T201: commands and tools print to their terminal by design.
-# PLR0913: a keyword-only signature is how a use case states its inputs.
-select = ["E4", "E7", "E9", "W605", "F", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE", "TID251", "PLC", "PLE", "PLW", "PLR1714", "DTZ", "A", "TRY", "ARG", "SLF001", "ISC004", "PIE", "RET", "ERA", "FBT", "S"]
+# A rule runs when it catches a defect, or when Ruff fixes what it finds,
+# since fast writes Ruff's fixes before it judges. A rule whose finding is
+# style a person must rewrite by hand stays a written rule, never a gate:
+# that is why FBT, SLF001, ERA, A, ARG and TRY are not selected, and why the
+# selected families leave out the rules listed in ignore.
+select = ["E4", "E7", "E9", "W605", "F", "I", "UP", "B", "SIM", "PTH", "C4", "PERF", "RUF", "FURB", "DJ", "BLE", "TID251", "PLC", "PLE", "PLW", "PLR1714", "DTZ", "ISC004", "PIE", "RET", "S"]
 ignore = [
     # En dashes, multiplication signs and curly quotes are deliberate typography in user-facing copy.
     "RUF001",
     "RUF002",
     "RUF003",
-    # The message is written where the exception is raised; a class per message would only move it.
-    "TRY003",
+    # Style with no fix, inside families kept for their defect and fixable rules.
+    "PLC0206",
+    "PLC0415",
+    "PLW0603",
+    "PLW2901",
+    "PERF203",
+    "PERF402",
+    "SIM113",
+    "SIM116",
+    "PTH118",
+    "PTH122",
+    "PTH124",
+    "PTH206",
+    "PTH207",
 ]
 
 [tool.ruff.lint.flake8-bandit]
@@ -240,28 +292,24 @@ check-typed-exception = true
 "urllib.request".msg = "urllib carries every header across a redirect, to any origin and to http://; read over HTTP with hq.platform.application.http_read."
 
 [tool.ruff.lint.per-file-ignores]
+# OperationRequest distinguishes unknown legacy attribution (NULL) from a machine's known empty person key.
+"hq/domains/control_plane/models.py" = ["DJ001"]
 # A synthetic extension standing in for a separate package, outside the host's product code.
 "tests/fixtures/example_hq_plugin/registry.py" = ["TID251"]
 # vulture's whitelist is attribute reads that do nothing, which vulture counts as uses.
 "tools/lint/vulture-whitelist.py" = ["B018"]
 # Django's declarative class bodies: Meta options, form fields and migration operations are lists by contract.
-# Django's RunPython calls a migration function with (apps, schema_editor).
-"**/migrations/*.py" = ["RUF012", "PLC0415", "ARG001"]
+"**/migrations/*.py" = ["RUF012"]
 "**/models.py" = ["RUF012"]
 "**/forms.py" = ["RUF012"]
-# Django's system check framework calls a check with app_configs.
-"**/checks.py" = ["ARG001"]
-# Test classes hold fixtures as plain class attributes. A test imports inside
-# the test; converting the suite to lazy imports is its own pass. A fake takes
-# the arguments of what it stands in for, whether or not it reads them, a
-# test reaches into what it tests, and a case a test cannot set up is one its
-# assertions do not cover. A test's credentials, addresses, temporary paths
-# and seeded randomness are synthetic fixtures; it writes raw SQL against a
-# model's own table to prove what the database refuses, round-trips its own
-# values through pickle as the parallel runner does, runs the repository's own
-# commands by name, and its assert is a check the suite runs, never under -O.
+# Test classes hold fixtures as plain class attributes. A test's credentials,
+# addresses, temporary paths and seeded randomness are synthetic fixtures; it
+# writes raw SQL against a model's own table to prove what the database
+# refuses, round-trips its own values through pickle as the parallel runner
+# does, runs the repository's own commands by name, and its assert is a check
+# the suite runs, never under -O.
 "**/tests/**" = [
-    "RUF012", "PLC0415", "ARG", "SLF001",
+    "RUF012",
     "S101", "S104", "S105", "S106", "S107", "S108", "S110", "S112", "S301", "S311", "S603", "S607", "S608",
 ]
 # Development and CI code runs the toolchain mise puts on PATH (git, uv, mise,
@@ -271,55 +319,13 @@ check-typed-exception = true
 # Lint and build steps that run one tool of the toolchain by name, as an argument list.
 "hq/platform/core/plain_words.py" = ["S603", "S607"]
 "demo/build.py" = ["S607"]
-"demo/check.py" = ["PLC0415"]
-# Django's AppConfig.create reads every name an apps module binds
-# (inspect.getmembers), which reifies a lazy import before the app registry is
-# ready; ready() imports what needs the registry.
-"**/apps.py" = ["PLC0415"]
 # Pydantic copies a field default for each instance.
 "hq/domains/control_plane/observations/*.py" = ["RUF012"]
 # Runs on the 3.6 interpreter shared hosting ships; newer idioms would not run there.
 # It runs cPanel's uapi by name, as an argument list.
 "deploy/targets/severino-hq-cpanel-controller" = ["UP", "SIM", "PTH", "PERF", "FURB", "B", "RUF", "C4", "S603"]
-# Django's execute_wrapper calls a wrapper with (execute, sql, params, many, context), positionally.
-"hq/platform/application/derivations.py" = ["FBT001"]
-"hq/platform/core/ahead.py" = ["FBT001"]
-"hq/platform/core/database.py" = ["FBT001"]
-# Signatures in hq_sdk/contract.json: demo_scope, and the entity and referenced_by tags.
-"hq/platform/application/demo.py" = ["FBT001"]
-"hq/platform/core/templatetags/value_tags.py" = ["FBT002"]
-# It proves a type checker refuses the SDK's flag passed positionally.
-"tests/sdk_consumer/consumer.py" = ["FBT003"]
-# socket.setblocking takes its flag positionally.
-"hq/platform/core/unix_server.py" = ["FBT003"]
-"hq/platform/core/tests/test_unix_server.py" = ["FBT003"]
-# unittest's assertIs takes the expected True or False positionally, to hold a value to the bool and not to 1.
-"hq/domains/projects/tests/test_dependency_updates.py" = ["FBT003"]
-"hq/platform/api/tests/test_openapi.py" = ["FBT003"]
-"hq/platform/application/tests/test_cadence.py" = ["FBT003"]
-"hq/platform/application/tests/test_capability_responses.py" = ["FBT003"]
-"hq/platform/application/tests/test_findings.py" = ["FBT003"]
-"hq/platform/application/tests/test_pipeline.py" = ["FBT003"]
-"hq/platform/core/tests/test_first_paint.py" = ["FBT003"]
-"hq/platform/core/tests/test_web.py" = ["FBT003"]
-# A bool is the value under test, passed where a filter and Django's render take the value they print.
-"hq/platform/application/tests/test_payload_words.py" = ["FBT003"]
-"hq/platform/core/tests/test_print_gate.py" = ["FBT003"]
 # Naive datetimes are the input moment() is tested on.
 "hq/platform/application/tests/test_timestamps.py" = ["DTZ001", "DTZ901"]
-
-[tool.ruff.lint.flake8-unused-arguments]
-# *args and **kwargs take what a caller passes beyond what a function reads, as
-# Django's signals and checks require of a receiver.
-ignore-variadic-names = true
-
-[tool.ruff.lint.flake8-self]
-# Django documents a model's _meta, _default_manager and _state as its API.
-extend-ignore-names = ["_meta", "_default_manager", "_state"]
-
-[tool.ruff.lint.flake8-builtins]
-# A record's id goes by its field's name, and nothing beside one calls the builtin.
-ignorelist = ["id"]
 
 [tool.ruff.lint.isort]
 combine-as-imports = true
@@ -375,6 +381,7 @@ files = [
     "hq/platform/api",
     "hq/platform/mcp",
     "tests/sdk_consumer",
+    "hq_runner",
     "tools/credentials.py",
     "hq/platform/core/tests/browser",
     "hq/platform/core/tests/look.py",
@@ -417,10 +424,11 @@ disallow_untyped_decorators = false
 disallow_any_generics = false
 warn_return_any = false
 
-# Playwright is in the optional browser group, which lint:mypy does not
-# install; it reads as Any whether or not it is installed, so one result holds.
+# Playwright, ansible-runner and ansible-core are in optional groups, which lint:mypy does
+# not install; each reads as Any whether or not it is installed, so one result
+# holds. Neither ansible package ships types.
 [[tool.mypy.overrides]]
-module = ["playwright.*"]
+module = ["playwright.*", "ansible_runner.*", "ansible.*"]
 follow_imports = "skip"
 ignore_missing_imports = true
 

@@ -1,0 +1,6 @@
+{% comment %}
+The body of a machine's "Run a playbook here" dialog: each playbook its
+reader may run on the machine (`automation_runs.playbooks_on`), linked to its
+Run page with the machine chosen.
+{% endcomment %}
+{% stack_list %}{% for title, url in playbooks_here %}<li><a href="{{ url }}">{{ title|breakable }}</a></li>{% endfor %}{% endstack_list %}

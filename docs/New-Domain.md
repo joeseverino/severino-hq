@@ -36,8 +36,8 @@ the model (a validator or a constraint), never on the form or the service.
 ## Steps
 
 What a new host domain has to do before the gate passes. Every row names the
-test that enforces it, in `Class.method` form. Extensions take a different
-path: [Plugins](Plugins.md).
+test that enforces it, in `Class.method` form. An extension takes its own
+path: [Extensions](Plugins.md).
 
 `hq/platform/application/tests/test_new_domain.py` fails if an architecture
 rule exists that this page does not name, or names one that is gone, so edit
@@ -81,11 +81,10 @@ docstring is the rule.
 | `lint:css` | Stylelint under `tools/lint/stylelint.config.mjs`: tokens, spacing, color |
 | `StyleContractTests`, `TemplateClassStyleTests` | CSS, layers |
 | `TemplateCommentTests` | what a `{# #}` comment left open is |
-| `lint:complexity` | complexipy's cognitive complexity, 20 per function |
 | `FileSizeTests` | no source or test file past `SEVERINO_FILE_LINE_LIMIT` |
 | `PageReadCapabilityTests` | every routed page reads under one capability (`required_capability`, else `read`), refused before its view; a route that answers without a session authorizes itself |
 | `PageTrailTests` | a view declares `page_trail`, every crumb above it, and `trail_label`, not a `get_page_trail` that restates them |
-| `lint:ast-grep` | the rules under `tools/lint/ast-grep`, among them: a setting is read as `settings.NAME`, never with a default; an operation is queued through `resource_operations.enqueue`, whose unique key settles two writers; who a request's session signed in is `request_identity.signed_in`; a test writes `assertEqual(a, b)`, not `assertTrue(a == b)`; a module-level name is assigned once; a table cell is read by its text, never by the tag that closes it, in HQ or an extension |
+| `lint:ast-grep` | the rules under `tools/lint/ast-grep`. Among them, a setting is read as `settings.NAME`, never with a default. An operation is queued through `resource_operations.enqueue`, whose unique key settles two writers. Who a request's session signed in is `request_identity.signed_in`. A module-level name is assigned once. A table cell is read by its text, never by the tag that closes it, in HQ or an extension |
 | `CountedTests` | plurals |
 | `InterfaceTextTests` | no hand-built plural, nested form, `counted` phrase that cannot agree or `{# #}` comment that spans lines, in HQ or an extension; no system check reads source |
 | `lint:prose` | Vale under `tools/lint/vale/.vale.ini`: no comment narrates history, no em dash or hedged plural, and no word HQ keeps to itself in what its owner reads, with what to say instead |

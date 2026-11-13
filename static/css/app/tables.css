@@ -1,26 +1,11 @@
-/* Tables: the filter bar, the data table and its regions, allocation rows,
+/* Tables: the data table and its regions, allocation rows,
    and how a table gives way in a narrow box. */
 
+/* A length rather than the words that make it, so `1lh` is read on the cell
+   that declares it and inherited as that cell's line. */
+@property --row-line { syntax: "<length>"; inherits: true; initial-value: 0px; }
+
 @layer components {
-
-/* ── Filter bar ─────────────────────────────────────────────────── */
-
-.filter-bar {
-  display: flex; flex-wrap: wrap; gap: var(--space-4);
-  padding: var(--surface-inset, var(--space-5));
-  margin-bottom: var(--space-8);
-}
-/* A wrapped bar is whole rows: controls grow to fill their row, the first (search or the one choice) takes most of it, words never grow. */
-:where(.filter-bar, .table-filters) > :where(:not(.control-label, .filter-bar-summary)) { flex: 1 1 auto; }
-.filter-bar > :first-child:not(.control-label) { flex: 1000 1 240px; min-width: 0; }
-/* The search asks for its whole placeholder, or what is typed in it (`field-sizing`), so the filters beside it wrap before it is cut. */
-.table-toolbar > .table-search { field-sizing: content; flex: 1000 1 auto; min-width: 0; }
-/* A select is as wide as its longest option unless told otherwise. */
-.filter-bar > select { max-width: 100%; min-width: 0; }
-.filter-bar > .btn, .table-filters > .btn { justify-content: center; }
-/* A field and its button on one line: the field takes the room. */
-.field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
-.field-row > input { flex: 1; min-width: 0; }
 
 /* ── Data table ─────────────────────────────────────────────────── */
 
@@ -34,10 +19,6 @@
 .table-scroll > .data-table { border: 0; border-radius: 0; box-shadow: none; }
 /* A trailing margin inside a padded box is a band of empty card. */
 .table-scroll:last-child { margin-bottom: 0; }
-/* With no script nothing is held back for a toggle, so every table is read whole, sized to its content, inside its region. */
-@media (scripting: none) {
-  .table-scroll > .data-table:has(tbody td:not([colspan])) { width: max-content; min-width: 100%; max-width: 1400px; }
-}
 /* Refreshes pin column widths (fixed layout), so an unbroken token must wrap in its cell rather than bleed across them. */
 .table-scroll td { overflow-wrap: break-word; }
 .data-table {
@@ -65,19 +46,19 @@
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the table's corners clip its rows' fill, not their text */
   width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);
 }
-/* A value no longer than the floor (`data-short`, value_tags._short) holds out for all of it and no more, so no gulf follows it; the floor is on the box that cuts it. */
-.data-table tr:not(.is-expanded) td :is(:has(> .token[data-short]), .cell-line:has(> .cut > .token[data-short]), .name-line > strong:has(> [data-entity] > .token[data-short])):not(.muted *) { --cut-floor: max-content; }
+/* A value no longer than the floor (`data-short`, line_breaks._short) holds out for all of it and no more, so no gulf follows it; the floor is on the box that cuts it. */
+.data-table tr:not(.is-expanded) td :is(:has(> .token[data-short]), .name-line > strong:has(> [data-entity] > .token[data-short])):not(.muted *) { --cut-floor: max-content; }
 .data-table th, .data-table td { padding: var(--row-pad) var(--space-6); text-align: left; vertical-align: top; border-bottom: 1px solid var(--line-2); font-size: var(--text-sm); }
 .data-table thead th { background: var(--surface-2); font-size: var(--text-xs); line-height: var(--heading-line); color: var(--muted); font-weight: 600; }
 /* Sticky heading: the region is no scroll container (its table fits, so no `auto`), so the heading pins to the viewport under the chrome; `overflow: hidden` on the table, a transparent sticky cell or collapsed borders would each silently break it, and `overscroll-behavior` would trap the wheel. */
 /* A table fits its box by dropping columns, so the region is no scroll box; only a declared pane (`is-pane`) or a chart's scrolls, and every region with no script. */
 @media (scripting: enabled) {
-  .table-scroll:not([data-chart], .is-pane, .chart-data > *) { overflow: visible; }
+  .table-scroll:not([data-chart], .is-pane) { overflow: visible; }
   /* A table wider than its region once it has given all it can (`data-scrolls`, tables.js) scrolls in it, so it never runs past its card; its heading then sticks to nothing, since inside the region the inset kept for the page's chrome would push it down over the rows. */
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a region scrolls sideways; stated so overflow-y does not compute to auto */
   .table-scroll:has(> .data-table[data-scrolls]) { overflow-x: auto; overflow-y: clip; }
-  .table-scroll:not([data-chart], .is-pane, .chart-data > *) .data-table { overflow: visible; }
-  .table-scroll:not([data-chart], .is-pane, .chart-data > *) .data-table:not([data-scrolls]) thead th {
+  .table-scroll:not([data-chart], .is-pane) .data-table { overflow: visible; }
+  .table-scroll:not([data-chart], .is-pane) .data-table:not([data-scrolls]) thead th {
     position: sticky;
     z-index: 2;
     background: var(--surface-2);
@@ -87,11 +68,12 @@
   /* A row a link lands on, or a control the keyboard reaches, is scrolled to
      below the heading that sticks over the rows, past the chrome the page's
      scroll padding already clears. */
-  .table-scroll:not([data-chart], .is-pane, .chart-data > *) .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
+  .table-scroll:not([data-chart], .is-pane) .data-table:has(> thead) > tbody :is(tr, a, button, input, select, textarea, summary, [tabindex]) {
     scroll-margin-block-start: calc(var(--page-nav-height) + var(--heading-height));
   }
 }
-/* A pane is the scroll container, so its heading pins to the pane's top edge with no chrome offset. */
+/* A pane is the scroll container, so its heading pins to the pane's top edge with no chrome offset. It is as tall as its rows up to a fixed reading height, as a ledger is; scroll chaining is kept, so reaching its last row hands the wheel back to the page. */
+.table-scroll.is-pane:not([data-chart]) { max-block-size: 480px; overflow-y: auto; }
 .table-scroll.is-pane:not([data-chart]) .data-table { overflow: visible; }
 .table-scroll.is-pane:not([data-chart]) .data-table thead th {
   position: sticky;
@@ -118,6 +100,9 @@
 .data-table tbody tr:last-child > * { border-bottom: 0; }
 /* A heading row that opens a group of rows (a tbody per group), so grouped rows share one set of column widths. */
 .data-table .row-group > th { padding-top: var(--space-6); background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); font-weight: 650; text-align: left; }
+/* A row or group a reader should weigh first (a row's `data-attention`, row_group attention=) is washed in the caution tone, and a group's words beside its name, which say why, are its ink. */
+.data-table tr[data-attention] > * { background: var(--tone-caution-wash); }
+.data-table .row-group[data-attention] .count { color: var(--tone-caution-ink); }
 /* Inside a card the card is the frame, so the table drops its own. */
 .card .data-table { border: 0; border-radius: 0; box-shadow: none; }
 /* A totals row is ruled off and weighted, a conclusion about the rows above; a table is the only way a total lands under its column. */
@@ -132,8 +117,23 @@
 .data-table .date-col { white-space: nowrap; }
 /* Figures right-aligned on fixed digit widths compare by eye; the heading too, so the label sits over them. A cell is a figure by its heading's kind, which the region writes on it (table_tags). */
 .data-table > * > tr > [data-kind="numeric"] { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Two values set side by side to be compared (`compare-table`) share the room evenly, so neither is squeezed into breaking inside its words, and leave the field they belong to a fifth of it. */
-.data-table.compare-table > tbody > tr > td { inline-size: 40%; }
+/* Two values set side by side to be compared (the `data-side` cells of a `compare` region) share the room evenly, so neither is squeezed into breaking inside its words, and leave the field they belong to, and its status, a fifth of it. */
+/* The table is as wide as its region, so the shares are of the region: a table of auto width grows until its field's own width is the fifth that is left. */
+.table-scroll.is-compare > .data-table { inline-size: 100%; }
+.table-scroll.is-compare > .data-table > tbody > tr > td[data-side] { inline-size: 40%; }
+/* A change's side (`data-side`, partials/_change_table.html) keeps its words whole, so it is never narrower than its longest word and an identifier in it breaks into pieces no narrower than that, never a letter wide; a table too wide then lets its Status go to the row's line beneath (tables.js). */
+.table-scroll > .data-table > tbody > tr > td[data-side] { overflow-wrap: break-word; }
+/* With no script a phone's box has no line beneath a row for Status to go to, and the change's columns of whole words are wider than the box, so Status, its last column, leaves outright: each side already shows the change, with a dash where a value is absent. */
+@media (scripting: none) {
+  @container table-region (width < 640px) {
+    .table-scroll > .data-table:has(> tbody > tr > td[data-side]) > * > tr:not(.row-detail) > :last-child { display: none; }
+    /* Its three columns of whole words then fill the narrowest phone to the pixel, and an engine draws the same words a pixel or two wider than another, so its cells stand closer and the table keeps room to spare. */
+    .table-scroll > .data-table:has(> tbody > tr > td[data-side]) > * > tr > * { padding-inline: var(--space-2); }
+  }
+}
+/* A row that asks to be read first (`{% row_state emphasized=True %}`) is tinted, and its links weigh more, as an unread message does in a mail client. */
+.data-table > tbody > tr[data-emphasized] > * { background: var(--accent-tint); }
+.data-table > tbody > tr[data-emphasized] > * a:not(.btn) { font-weight: 650; }
 /* An index or label column takes only what it needs; auto layout would hand digits the share of sentences. */
 .data-table .tight-col { width: 1%; white-space: nowrap; }
 /* A `th[scope=row]` table with no `thead` is a description list: its label column as wide as its longest label and no wider; with headings the row header breaks at its words. */
@@ -147,12 +147,14 @@
 .data-table > tbody > tr > [data-kind="control"] :is(select, input:not([type="checkbox"], [type="radio"])) { inline-size: auto; max-inline-size: none; }
 /* A long line (`data-long`, table_tags.LONG) holds out for a floor up to its column's share, as a box inside the cell both engines size, and for a few words a line however small the share, so its column leaves before it wraps a word a line; in a narrow box no column is left to leave, so there the share alone bounds it. A status asks a pixel and a cut sentence almost nothing, and Chromium shares the rest in proportion. */
 .data-table > tbody td[data-long]::before { content: ""; display: block; inline-size: min(16ch, max(var(--hold), 14ch)); }
-.data-table[data-narrow] > tbody td[data-long]::before { inline-size: min(16ch, var(--hold)); }
+@container style(--box: narrow) {
+  .data-table > tbody td[data-long]::before { inline-size: min(16ch, var(--hold)); }
+}
 /* Outside a narrow box the columns showing have the room they ask (tables.js), so such a line keeps it. */
 @container style(--box: whole) {
-  /* The region wraps what such a cell says in one `.kept-line`, as wide as its line up to the share; an identifier in it breaks past the share, a pill or a time never wraps. */
+  /* The region wraps what such a cell says in one `.kept-line`, as wide as its line up to the share and the icon it opens with (`--hang`, figures.css); an identifier in it breaks past the share, a pill or a time never wraps. */
   .data-table > tbody td > .kept-line {
-    display: inline-block; width: max-content; max-width: var(--hold); vertical-align: top;
+    display: inline-block; width: max-content; max-width: calc(var(--hold) + var(--hang, 0px)); vertical-align: top;
     white-space: normal; overflow-wrap: break-word;
   }
   /* A line is never narrower than what in it cannot wrap, or it runs out of its cell while the table counts as fitting; an identifier in it is cut or breaks at its seams, so it keeps no floor. */
@@ -171,9 +173,6 @@
 .data-table > tbody > tr.is-expanded > td :is(.cell-part, time) { display: inline-block; }
 .data-table input[type=checkbox] { inline-size: 16px; block-size: 16px; accent-color: var(--accent); }
 
-/* One row: the search takes the room the filters leave, one button applies both, Enter submits the same form. */
-.table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-6); padding: var(--surface-inset, var(--space-5)); }
-.table-filters { flex: 1 1 auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4); }
 /* A filter is its button and the panel it opens in the top layer, placed against the button (its anchor, below): the scope keeps each panel to its own button. */
 .table-filter-menu { display: grid; anchor-scope: --filter; }
 /* A menu, a toggle and the sort are pressed by their labels, so they wear the Filter button's edge and stand at the control size; only the search wears a field's. The sort's select sits inside that box, so it takes no control height of its own. */
@@ -202,98 +201,132 @@
 .table-selection strong { margin-right: auto; font-size: var(--text-sm); }
 main[aria-busy="true"] :is([data-table-results], [data-search-results]) { opacity: .55; transition: opacity 100ms ease; }
 
-/* Global search results */
-.search-summary { display: flex; align-items: baseline; gap: var(--space-7); flex-wrap: wrap; margin-bottom: var(--space-7); }
-.search-summary p { margin: 0; }
-.search-scopes { display: flex; gap: var(--space-3); flex-wrap: wrap; }
 .scope-chip { display: inline-flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-5); border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--ink-2); font-size: var(--text-xs); text-decoration: none; }
-a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
+a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var(--muted-2); text-decoration: none; }
 /* The current choice in a group of chip links: a heavier border, drawn inside
-   so the chip keeps its size. */
-.scope-chip[aria-current] { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.search-group { margin-bottom: var(--space-7); }
-.search-hits { list-style: none; margin: 0; padding: 0; }
-.search-hit { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-8); padding: var(--space-5) var(--frame-inset, 0); border-top: 1px solid var(--line); }
-.search-hit:first-child { border-top: 0; }
-.search-hit-main { min-width: 0; }
-.search-hit-title { margin: 0; display: flex; align-items: baseline; gap: var(--space-4); flex-wrap: wrap; }
-.search-badge { font-size: var(--text-2xs); color: var(--muted-2); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 1px var(--space-2); }
-/* A match is part of the word it is found in, so it adds no room inside it, and reads in the ink of what it names. */
-.search-snippet mark { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--ink); border-radius: 3px; font-weight: 600; }
-.search-hit .row-meta { flex-shrink: 0; }
-.row-actions a { font-size: var(--text-sm); }
+   so the chip keeps its size. A switch's chip is inside its link, which holds
+   the count a chip never does. */
+:is(.scope-chip[aria-current], [aria-current] > .scope-chip) { color: var(--ink); border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+/* A switch (`{% switch %}`): links to the same view in a row that wraps, the
+   current one marked by its chip. */
+.switch { margin: 0 0 var(--stack-gap); }
+.switch ul { display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-5); margin: 0; padding: 0; list-style: none; }
+.switch a { display: inline-flex; align-items: center; gap: var(--space-2); border-radius: 999px; color: inherit; text-decoration: none; }
+.switch .scope-chip > [aria-hidden] { color: var(--accent); }
+.switch p { margin: var(--space-3) 0 0; }
 .actions-col { width: 1%; text-align: right; white-space: nowrap; }
+/* A row's actions (`{% row_actions %}`) end its line side by side, each with its middle on the middle of the row's first line, as the words beside it are set, however much taller than a line a button stands. `--row-line` carries the cell's line down to each control, whose own is its label's. */
+.data-table td.row-actions { --row-line: 1lh; text-align: right; white-space: nowrap; }
+.data-table td.row-actions > *, .data-table td.row-actions > [data-ask] > [data-ask-button] { translate: 0 calc(var(--row-line) / 2 - 50%); }
+/* A row's control (a compact button, as `{% row_actions %}` or an ask draws each, or an icon link) stands taller than the row's line by twice `--control-rise`, which its cell takes out of its padding above and below, so a row holding one is as tall as a row of words and the control's middle is still the line's. A row's controls that wrap stand a control apart, as they would anywhere. */
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(.btn, .icon-link, form, [data-ask])) { --control-rise: max(0px, (var(--control-compact) - var(--row-line)) / 2); padding-block-start: calc(var(--row-pad) - var(--control-rise)); }
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(.btn, .icon-link, form, [data-ask])):not(:has(> [data-ask])) { padding-block-end: calc(var(--row-pad) - var(--control-rise)); }
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]):has(> :is(.btn, .icon-link, form, [data-ask])) > :is(.btn, .icon-link, form, [data-ask]),
+.data-table :is(td.row-actions, tbody > tr > [data-kind="control"]) > [data-ask] > .btn { vertical-align: top; translate: none; }
+.data-table td.row-actions > * + * { margin-inline-start: var(--space-4); }
+/* An ask's controls flow as words do in a cell (partials/_ask.html), so its own line there would break theirs and stand the next control under it. The cell keeps the line under all its controls instead, and what the ask says stands in it out of the flow, as wide as the cell and asking it for no width, so a press moves nothing. */
+.data-table td:has(> [data-ask]) { position: relative; padding-block-end: calc(var(--row-pad) + 1lh); }
+.data-table td > [data-ask] > :has(> [data-ask-note]) { position: absolute; inset-inline: var(--space-6); inset-block-end: var(--row-pad); }
+.data-table td.row-actions > [data-ask] > :has(> [data-ask-note]) { justify-content: flex-end; }
+/* A control column is as wide as what it holds will go (`width: 1px` above), so a row's controls keep one line between them and the column asks for that line: controls that may wrap would stand one to a line in a row with room to spare. Each has its middle on the middle of the row's first line, as a row's actions do; a note the cell holds beside them wraps as words do. */
+.data-table td > span.row-actions { flex-wrap: nowrap; }
+.data-table > tbody > tr > [data-kind="control"] { --row-line: 1lh; white-space: nowrap; }
+.data-table > tbody > tr > [data-kind="control"] > :is(.muted, p) { white-space: normal; }
+.data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form),
+.data-table > tbody > tr > [data-kind="control"] > [data-ask] > [data-ask-button] { vertical-align: top; translate: 0 calc(var(--row-line) / 2 - 50%); }
+.data-table > tbody > tr > [data-kind="control"] > :is(a, button, .btn, form) + :is(a, button, .btn, form) { margin-inline-start: var(--space-4); }
 
 /* A pill fits the cell's line, so a row holding one is no taller than one without. */
 .data-table td .pill { vertical-align: top; line-height: 1.4; }
+/* A status said by one pill alone (`data-pill-only`, table_cells) fills its column, which is as wide as its widest pill, so the pills down a column share both edges. */
+.data-table > tbody > tr > td[data-pill-only] > .kept-line { display: flex; width: auto; max-width: none; }
+.data-table > tbody > tr > td[data-pill-only] .pill { display: flex; flex: auto; justify-content: center; text-align: center; }
+/* A pill is a label, whole until its table is tight (figures.css), so a name it says (a header's, as an evidence row's type) is never cut inside it: it holds out for its whole length (`--cut-floor`), so its column holds the pill, and the prose beside it wraps. */
+@container not style(--tight: given) {
+  .data-table tr:not(.is-expanded) td .pill { --cut-floor: max-content; }
+}
 /* A time is one phrase; broken over two lines it doubles its row. */
 .data-table td time { white-space: nowrap; }
 /* Cut to one line, a token is plain text: the ellipsis lands in it and no part draws a box past the cut. */
-.data-table td code:not(:where(td) :is(p, li) *) :is(.token, .whole) { display: contents; }
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *) :is(.token, .whole) { display: contents; }
 /* A one-token identifier asks for its whole length and holds out for its longest piece, through a grid track sized by the name's unseen strut (value_tags); the chip is as wide as the track, with a pixel of slack so a value that fits keeps its last character. Nothing in it is clipped, so it sits on the baseline of the words before it. */
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole):has(> .token[data-sole]) {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole):has(> .token[data-sole]) {
   display: inline-grid; grid-template-columns: minmax(0, max-content);
   min-width: var(--cut-floor); max-width: none; padding: 0; background: none; vertical-align: baseline;
 }
 /* A panel shown from the cell is not the column: there the token sets the track, and only the column holds out for the longest piece. */
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *):has(> .token[data-sole]) {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *):has(> .token[data-sole]) {
   grid-template-columns: minmax(min-content, max-content);
-  & > .token[data-sole] { contain: inline-size; justify-self: stretch; }
+  & > .token[data-sole] > .cut { contain: inline-size; justify-self: stretch; }
 }
 /* The strut is the name twice, unseen: one holds out for the longest piece, one asks for the whole name, so a cap on the hold never caps the ask. */
 .strut { display: none; }
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut { display: contents; }
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::before,
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::after {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut { display: contents; }
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::before,
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::after {
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
   content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden; white-space: normal;
   padding-inline: var(--space-2) calc(var(--space-2) + 1px);
 }
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::before {
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::before {
   overflow-wrap: normal;
-  /* No piece holds out for more than half its region: one longer breaks where it must (value_tags.breakable), so the table still fits. */
+  /* No piece holds out for more than half its region: one longer breaks where it must (line_breaks.breakable), so the table still fits. */
   max-width: 50cqi;
 }
-.data-table td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *) > .strut::after { overflow-wrap: anywhere; }
-/* A narrow box has no width to hold out with (`--cut-floor`), read from the table's mark since a style query does not reach a pseudo-element in every engine. */
-.data-table[data-narrow] td code:not(:where(td) :is(p, li) *) > .strut::before { display: none; }
+.data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::after { overflow-wrap: anywhere; }
+/* A narrow box has no width to hold out with (`--cut-floor`), where a row can open to show what is cut, so only with script. The selector is the strut's own above, so it is as specific and, coming later, wins. */
+@media (scripting: enabled) {
+  @container style(--box: narrow) {
+    .data-table td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *) > .token[data-sole] > .strut::before { display: none; }
+  }
+}
 /* Outside it a closed row's chip holds out for its whole name, up to half the region, so it is cut only once its table has no column left to give way. One in a context line (`.muted`) holds out only for its longest piece, as a name there does (figures.css): the row's name sizes the column. */
-.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:where(td) :is(p, li) *, .cell-whole, [popover] *, .muted *) > .strut::before { white-space: nowrap; }
+@container style(--box: whole) {
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole, [popover] *, .muted *) > .token[data-sole] > .strut::before { white-space: nowrap; }
+}
 /* With its cuts lifted an opened row lays an identifier out as a page does (base.css): a part that fits moves whole, and breaks inside only when longer than its line. */
 .data-table > tbody > tr.is-expanded > td .whole:not([data-cell~=name] *, [data-cell~=data] *, .visually-hidden *) { display: inline-block; }
 /* In a chip such a part is set by its top, so a part that wraps leaves the chip's first line on the baseline its line shares (a change's arrow beside it): an inline block's baseline is its last line, and WebKit has no `baseline-source`. The chip's token sets every part in its own face, so the top puts the first line where the baseline would. */
-.data-table > tbody > tr.is-expanded > td code:not(:where(td) :is(p, li) *, .cell-whole) > .token[data-sole] .whole { vertical-align: top; }
+.data-table > tbody > tr.is-expanded > td code:not(:is(:where(td) :is(p, li), :where([data-cell~=data], [data-cell~=prose])) *, .cell-whole) > .token[data-sole] .whole { vertical-align: top; }
 /* A box that cut a value is as wide as its track, never its content, or a run with no seam would push past the column. */
-.data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole) > .token[data-sole], [data-entity] > :is(.token[data-sole], .cut)) { width: 100%; }
+.data-table > tbody > tr.is-expanded > td :is(code:not(.cell-whole), [data-entity], .cell-line) > .token[data-sole] > .cut { width: 100%; }
 /* A row header's one-token name asks for its whole length and fills the room its row has, so the header gives way with the other columns; past it the chip is cut, and the opened row shows it whole. A grid, so the chip sits on its token's baseline as a cell's does. */
 .data-table th[scope=row] > code:has(> .token[data-sole]) {
   display: inline-grid; grid-template-columns: minmax(0, max-content);
   max-width: 100%; padding: 0; background: none; vertical-align: baseline;
 }
-.data-table th[scope=row] > code > .token[data-sole] .whole { display: contents; }
+.data-table th[scope=row] > code > .token[data-sole], .data-table th[scope=row] > code > .token[data-sole] .whole { display: contents; }
 /* Outside a narrow box a closed row's header holds out for its name up to its column's hold (`--hold`, a share of the region) through its strut, as a cell's chip does: one copy holds out, one asks for the whole name, and the name itself asks nothing. */
-.data-table:not([data-narrow]) > tbody > tr:not(.is-expanded, .row-detail) > th[scope=row] > code:has(> .token[data-sole]) {
-  grid-template-columns: minmax(min-content, max-content);
-  & > .token[data-sole] { grid-area: 1 / 1; contain: inline-size; justify-self: stretch; }
-  & > .strut { display: contents; }
-  & > .strut::before, & > .strut::after {
-    /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
-    content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden;
-    padding-inline: var(--space-2) calc(var(--space-2) + 1px);
+@container style(--box: whole) {
+  .data-table > tbody > tr:not(.is-expanded, .row-detail) > th[scope=row] > code:has(> .token[data-sole]) {
+    grid-template-columns: minmax(min-content, max-content);
+    & > .token[data-sole] > .cut { grid-area: 1 / 1; contain: inline-size; justify-self: stretch; }
+    & > .token[data-sole] > .strut { display: contents; }
+    & > .token[data-sole] > .strut::before, & > .token[data-sole] > .strut::after {
+      /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a strut is unseen and of no height; it only holds its column's width */
+      content: attr(data-strut); display: block; visibility: hidden; block-size: 0; overflow: hidden;
+      padding-inline: var(--space-2) calc(var(--space-2) + 1px);
+    }
+    & > .token[data-sole] > .strut::before { grid-area: 2 / 1; white-space: nowrap; max-width: min(var(--identifier-max), var(--hold)); }
+    & > .token[data-sole] > .strut::after { grid-area: 3 / 1; white-space: normal; overflow-wrap: anywhere; }
   }
-  & > .strut::before { grid-area: 2 / 1; white-space: nowrap; max-width: min(var(--identifier-max), var(--hold)); }
-  & > .strut::after { grid-area: 3 / 1; white-space: normal; overflow-wrap: anywhere; }
 }
 /* An identifier the row is read by, among many columns, wraps at its seams with a chip on each line, so its column can give way without hiding any of it. */
 .data-table td code.cell-whole { display: inline; white-space: normal; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
-.data-table td code.cell-whole .whole { white-space: nowrap; }
+@container not style(--break: given) {
+  .data-table td code.cell-whole .whole { white-space: nowrap; }
+}
+/* A name among names on a line (an item of a line list) is no sentence, though it is a list item in a cell: its hyphenated part stays whole, so its column holds the longest name or leaves the table (tables.js), and never squeezes a name into breaking at a hyphen. */
+@container not style(--break: given) {
+  .data-table td :is(.line-list, .line-run) > li code .whole { white-space: nowrap; }
+}
 /* A square for a glyph, and as wide as its word when it holds one. */
 .icon-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 28px;
-  height: 28px;
+  min-width: var(--control-compact);
+  height: var(--control-compact);
   padding-inline: var(--space-3);
   white-space: nowrap;
   border: 1px solid var(--line);
@@ -335,30 +368,6 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .allocation-legend b { font-weight: 650; font-feature-settings: "tnum"; }
 .allocation-legend > * > span { color: var(--muted); }
 
-/* Supporting figures under a hero, label under value, so three read as one row of facts rather than more legend entries. */
-.figure-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6) var(--space-12);
-  margin: var(--space-8) 0 0;
-  padding-top: var(--space-7);
-  border-top: 1px solid var(--line-2);
-}
-.figure-stats > span { display: inline-flex; flex-direction: column; gap: var(--space-1); }
-.figure-stats b { font-size: var(--text-lg); font-weight: 650; font-feature-settings: "tnum"; }
-.figure-stats i { font-style: normal; color: var(--muted); font-size: var(--text-xs); }
-
-/* One number a page is built around; tabular so it does not reflow as it changes. */
-.figure-hero {
-  font-size: clamp(32px, 4.4vw, 44px);
-  font-weight: 660;
-  letter-spacing: -.022em;
-  line-height: 1.05;
-  font-feature-settings: "tnum";
-  margin: 0;
-}
-.figure-hero-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); font-feature-settings: "tnum"; }
-
 /* A table in a narrow box (`--box`, tables.js): rows get the room a control needs, and a column's `narrow-more` waits in the line beneath the row. */
 @container style(--box: narrow) {
   .data-table > tbody { --row-pad: var(--space-6); }
@@ -376,20 +385,38 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 @media (scripting: none) {
   .data-table .narrow-only { display: none; }
+  /* A row's editor (`row-editor`): the server draws its row open, which with no script only this shows, since no toggle can open it; a narrow part stays in its row then, so the line holds no copy of it. */
+  .data-table > tbody > tr.is-expanded + tr.row-detail:has(> td > .row-editor) { display: table-row; }
+  .data-table > tbody > tr.is-expanded + tr.row-detail > td > .row-columns > [data-narrow],
+  .data-table > tbody > tr.is-expanded + tr.row-detail > td > .row-columns:not(:has(> dd[data-label])) { display: none; }
 }
+/* `wide-only`: what a narrow box lets go outright, held for no row's toggle, since what it says is on a page of its own (a table of marks' older periods). */
+@container style(--box: narrow) {
+  .data-table .wide-only { display: none; }
+}
+/* A table of marks (`data-marks`): one row a thing, one column a period, a mark in each cell, read down a column against the rows around it (the cadence matrix). Every heading but the names stands centered over its column. Its cells stand closer where it shares a row with a chart (`data-marks="compact"`), and in a narrow box, where the marks are what is read. */
+.data-table[data-marks] > thead > tr > :not(:first-child) { text-align: center; }
+@container style(--box: narrow) {
+  .data-table[data-marks] > * > tr > * { padding: var(--space-3) var(--space-1); }
+}
+.data-table[data-marks="compact"] > * > tr > * { padding: var(--space-3) var(--space-2); }
 /* With no script a toggle opens nothing, so nothing is held back for it and the table scrolls in its region; known before paint, so this moves nothing. */
 .data-table [data-row-toggle]:not([data-fold-toggle]) { display: none; }
 @media (scripting: enabled) {
 @container style(--box: narrow) {
   .data-table > tbody > tr:not(.row-detail) .narrow-more { display: none; }
 }
+/* `row-later`: a narrow part that waits in the line beneath at any width (a row's buttons past the first few), so its row opens at any width too. */
+.data-table > tbody > tr:not(.row-detail) .row-later { display: none; }
+.data-table > tbody > tr:not(.row-detail):has(> * .row-later) > * > [data-row-toggle] { display: inline-grid; }
+.data-table:has(> tbody > tr > * .row-later) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* The server draws a toggle in every row that can open; the stylesheet shows it only where the row holds something back now (a dropped column, a part, a cut value, or open already). */
 .data-table tr.is-expanded > * > [data-row-toggle],
 .data-table tr:has(> * .row-more) > * > [data-row-toggle],
 .data-table tr:has(> * .row-below) > * > [data-row-toggle] { display: inline-grid; }
 /* The gutter the toggle stands in is kept in every row and the heading of a table where any row opens, so names share one edge; every rule reads only what the server drew and the box's width (`--gutter`), so nothing marked after paint moves a name. */
 .data-table .row-gutter { position: relative; }
-.data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * .row-more), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
+.data-table:is(:has(> tbody > tr.is-expanded), :has(> tbody > tr > * :is(.row-more, .line-rest)), :has(> tbody > tr > * .row-below), :has(> tbody > tr > * > [data-fold-toggle])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A value found cut opens its row only where the gutter is already kept; elsewhere it reads whole on hover, by the title tables.js gives it (`markCut`). */
 @container style(--gutter: kept) {
   .data-table tr[data-cut] > .row-gutter > [data-row-toggle] { display: inline-grid; }
@@ -397,7 +424,7 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 @container style(--box: narrow) {
   /* A narrow box has no width to hold out with: a cut value takes what its neighbors leave, so the words beside it keep their lines. */
   .data-table > * { --cut-floor: min(4ch, var(--hold)); }
-  .data-table td :is(:has(> .token[data-short="16"]), .cell-line:has(> .cut > .token[data-short="16"]), .name-line > strong:has(> [data-entity] > .token[data-short="16"])):not(.muted *) { --cut-floor: inherit; }
+  .data-table td :is(:has(> .token[data-short="16"]), .name-line > strong:has(> [data-entity] > .token[data-short="16"])):not(.muted *) { --cut-floor: inherit; }
   .data-table > tbody > tr:not(.row-detail):has(> * .narrow-more) > * > [data-row-toggle] { display: inline-grid; }
   .data-table:has(> tbody > tr > * .narrow-more) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
   /* Touch has no hover title, so in a narrow box an openable table keeps the gutter: a cut value can always be opened. */
@@ -405,32 +432,65 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 }
 }
 /* A column let go while the table was wider than its region, and a narrow box (tables.js): a row with something there shows its toggle and its table keeps the gutter. */
+/* stylelint-disable-next-line selector-disallowed-list -- where the script's mark becomes the property every rule reads */
 .data-table[data-narrow] { --box: narrow; }
-/* With no script nothing measures the table, so a phone's box is narrow by its width alone. */
+/* A table still wider than its region in a narrow box is tight (`data-tight`, tables.js), and then breaks its identifiers (`data-break`); each give is a property the rules below read, so a box no script measures can take them too. */
+.data-table[data-tight] { --tight: given; }
+.data-table[data-break] { --break: given; }
+/* With no script nothing measures the table, so a phone's box is narrow by its width alone, and takes every give at once: the table wraps all it can before its region scrolls. No column leaves, so the columns that share the region (`--showing`) are every heading drawn, counted here as tables.js counts them. */
 @media (scripting: none) {
+  .data-table:has(> thead > tr:last-child > th:nth-child(2 of :not(.select-column, [data-blank-column]))) { --showing: 2; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(3 of :not(.select-column, [data-blank-column]))) { --showing: 3; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(4 of :not(.select-column, [data-blank-column]))) { --showing: 4; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(5 of :not(.select-column, [data-blank-column]))) { --showing: 5; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(6 of :not(.select-column, [data-blank-column]))) { --showing: 6; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(7 of :not(.select-column, [data-blank-column]))) { --showing: 7; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(8 of :not(.select-column, [data-blank-column]))) { --showing: 8; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(9 of :not(.select-column, [data-blank-column]))) { --showing: 9; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(10 of :not(.select-column, [data-blank-column]))) { --showing: 10; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(11 of :not(.select-column, [data-blank-column]))) { --showing: 11; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(12 of :not(.select-column, [data-blank-column]))) { --showing: 12; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(13 of :not(.select-column, [data-blank-column]))) { --showing: 13; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(14 of :not(.select-column, [data-blank-column]))) { --showing: 14; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(15 of :not(.select-column, [data-blank-column]))) { --showing: 15; }
+  .data-table:has(> thead > tr:last-child > th:nth-child(16 of :not(.select-column, [data-blank-column]))) { --showing: 16; }
   @container table-region (width < 640px) {
-    .data-table { --box: narrow; }
+    .data-table { --box: narrow; --tight: given; --break: given; }
   }
 }
-/* A table still wider than its region in a narrow box is tight (`data-tight`, tables.js): kept lines wrap at their spaces and cells stand closer, so a phone's narrowest screen holds it. */
-.data-table[data-tight] > * > tr > * { padding-inline: var(--space-3); }
-.data-table[data-tight] :is(.table-sort-link, time, .date-col, .nowrap, .cell-part, .pill) { white-space: normal; }
-/* A tight table still wider than its region breaks its identifiers where they must (`data-break`, tables.js), its last give before it scrolls: a name broken is read where a name past the card is not. */
-.data-table[data-break] :is(td, th) .whole { white-space: normal; }
-.data-table[data-break] :is(td, th) :is(code, .token, .whole, [data-entity]) { overflow-wrap: anywhere; }
-/* A pill that wraps (tight, or in an opened row) flows as text: as a flex box its words and an identifier among them are items side by side, each squeezed until it breaks inside a word. Its corners round by half of one line, so it is a capsule on one line and a rounded box on several. */
-.data-table[data-tight] td .pill, .data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
-/* A row's controls side by side are wider than any other cell, so tight they stand one above the other, each its own width; a label stays whole on its line (the button rule) and the other columns give way to it. */
-.data-table[data-tight] td.row-actions > * { display: block; width: fit-content; margin-inline: auto 0; }
-.data-table[data-tight] td.row-actions > * + * { margin-top: var(--space-2); }
+/* A table with no headings has none to count, so it says how many columns its rows hold (`data-columns`). With no script a phone's box opens no line beneath, so every part stays beside the name and the row shares the region as one column. */
+.data-table[data-columns="2"] { --columns: 2; }
+@media (scripting: none) {
+  @container table-region (width < 640px) {
+    .data-table[data-columns] { --columns: 1; }
+  }
+}
+/* Tight, kept lines wrap at their spaces and cells stand closer, so a phone's narrowest screen holds the table. */
+@container style(--tight: given) {
+  .data-table > * > tr > * { padding-inline: var(--space-3); }
+  .data-table :is(.table-sort-link, time, .date-col, .nowrap, .cell-part, .pill) { white-space: normal; }
+  /* A pill that wraps (tight, or in an opened row, below) flows as text: as a flex box its words and an identifier among them are items side by side, each squeezed until it breaks inside a word. Its corners round by half of one line, so it is a capsule on one line and a rounded box on several. */
+  .data-table td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
+}
+/* A row's controls side by side are a kept line too, so tight they wrap where the cell is too narrow for them all, each line ending the cell. Only a table the script measured lets them go: in one no script measures, the words beside them wrap first, so controls with room stay on one line. */
+.data-table[data-tight] > tbody > tr > :is(td.row-actions, [data-kind="control"]) { white-space: normal; }
+.data-table[data-tight] td > span.row-actions { flex-wrap: wrap; justify-content: end; }
+.data-table tr.is-expanded td .pill { display: inline-block; border-radius: calc(.5lh + 2px); }
+/* A button's label wraps in an opened row and the line beneath it (surfaces.css), where its words and an identifier in it are flex items side by side, each squeezed until it breaks inside a word; wrapping, each keeps its own line before it shrinks. One with an icon keeps its label beside it. */
+.data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) td .btn:not(:has(> svg)) { flex-wrap: wrap; }
+/* Broken, its identifiers break where they must, the last give before it scrolls: a name broken is read where a name past the card is not. A word is no identifier (line_breaks.breakable leaves it plain text), so a chip or a link holding only words keeps them whole, and its column is never narrower than its longest word. Code a template writes is an identifier, one with no seam for `breakable` to mark (`describe_capabilities`) too; an entity's label is the name it was given, which may be a word (a connection called Portainer), so code inside one breaks only where it holds an identifier. */
+@container style(--break: given) {
+  .data-table :is(td, th) .whole { white-space: normal; }
+  .data-table :is(td, th) :is(.token, .whole, code:not([data-entity] *), [data-entity]:has(.token, .whole)) { overflow-wrap: anywhere; }
+}
 .data-table > * > tr > [data-dropped] { display: none; }
 .data-table > tbody > tr:has(> td[data-dropped]:not([data-blank])) > * > [data-row-toggle] { display: inline-grid; }
 .data-table:has(> tbody > tr > td[data-dropped]:not([data-blank])) > * > tr > .row-gutter { padding-left: var(--row-gutter); --gutter: kept; }
 /* A column with nothing in any row is not drawn: the server marks each cell that says nothing (`data-blank`) and every cell of a column where all do (`data-blank-column`), never the naming column. */
 .data-table > * > tr > [data-blank-column] { display: none; }
 .data-table .row-gutter > [data-row-toggle] { position: absolute; inset-inline-start: var(--space-3); inset-block-start: calc(var(--row-pad) - var(--space-1)); }
-/* What a row holds back, in the line the server drew beneath it (`table_tags._detail_row`), shown while the row is open: a column's part while its column is gone (`data-dropped`), a narrow part in a narrow box, a labeled block always; it asks its columns for no width (`contain`), so opening moves no column. */
-.row-detail { display: none; }
+/* What a row holds back, in the line the server drew beneath it (`table_tags._detail_row`), shown while the row is open: a column's part while its column is gone (`data-dropped`), a narrow part in a narrow box, a labeled block always; it asks its columns for no width (`contain`), so opening moves no column. A part in it asks `--cell` (below). */
+.row-detail { display: none; --cell: open; }
 @media (scripting: enabled) {
   .data-table > tbody > tr.is-expanded + .row-detail { display: table-row; }
 }
@@ -447,23 +507,32 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 .row-columns > [data-column]:not([data-dropped]) { display: none; }
 .row-columns:not(:has(> dd[data-dropped], > dd[data-label], > dd[data-narrow])) { display: none; }
 @container style(--box: whole) {
-  .row-columns > [data-narrow] { display: none; }
-  .row-columns:not(:has(> dd[data-dropped], > dd[data-label])) { display: none; }
+  /* A part that waits at any width (`row-later`) keeps its place in a whole box, without the narrow parts beside it, which stay in the row there. */
+  .row-columns > [data-narrow]:not(:has(> .row-later)) { display: none; }
+  .row-columns:not(:has(> dd[data-dropped], > dd[data-label], > dd > .row-later)) { display: none; }
+  .row-columns > dd[data-narrow] > .narrow-more:not(.row-later) { display: none; }
 }
 .row-columns { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--space-3) var(--space-6); margin: 0; }
 .row-columns dt { color: var(--muted); font-size: var(--text-2xs); }
 /* A value under its column's name has the line to itself, not the share its column had in the row, less the em a list's separator takes before a name. */
 .row-columns dd { min-width: 0; margin: 0; overflow-wrap: break-word; --hold: calc(100% - 1em); --name-hold: min(28ch, 100%); }
+/* A narrow part opens its own line in the cell (`<span class="narrow-more"><br>…`); copied under its column's name it already has one. */
+.row-columns dd > .narrow-more:first-child > br:first-child { display: none; }
+/* Where a cell stands, for a part drawn in it to ask (`@container style(--cell: line)`) without naming the table: on its row's own line, or in the line beneath an open row (`open`, above). */
+.data-table > tbody > tr:not(.row-detail) > td { --cell: line; }
 /* What a row keeps for that line at any width (`row-below`): its tall parts, on the name's edge. */
 .data-table > tbody > tr:not(.row-detail) .row-below { display: none; }
 .row-detail .row-below + :is(.row-below, .row-columns) { margin-top: var(--space-5); }
-/* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. */
+/* Rows folded under the row that heads them (`data-folds`), shown while it is open; with no script every row shows. In a whole box, rows folded under a row rather than a group's heading, and their open lines, are set in under it. */
+@container style(--box: whole) {
+  .data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] > td.row-gutter,
+  .data-table > tbody:not(:has(> .row-group[data-folds])) > tr[data-folded] + .row-detail > td { padding-inline-start: calc(var(--row-gutter) + var(--space-10)); }
+}
 @media (scripting: enabled) {
   .data-table tr[data-folded]:not([data-open]) { display: none; }
   /* The last row showing ends its section, as the last row does. */
   .data-table tbody tr:has(~ tr[data-folded]):not(:has(~ tr:not([data-folded]:not([data-open])))) > * { border-bottom: 0; }
 }
-@media (scripting: none) { .row-fold { display: none; } }
 .data-table tr.is-expanded:has(+ .row-detail) > * { border-bottom: 0; }
 /* An opened row adds one panel under the row's name: each part's name in one column, its value beside it. */
 .data-table .row-detail > td { padding-block: 0; padding-left: calc(var(--space-6) + 1.5rem); }
@@ -480,6 +549,15 @@ a.scope-chip:hover { color: var(--ink); border-color: var(--muted-2); text-decor
 @container row-columns (width < 18rem) {
   .row-columns > :is(dt, dd) { grid-column: 1 / -1; }
   .row-columns > dt:not(.visually-hidden) + dd { margin-block-start: calc(var(--space-1) - var(--space-5)); }
+}
+/* A flat line (`data-line="flat"` on the table): what a row holds back, in one column on no panel, the buttons of its parts side by side, and on a phone each the line's width, one to a line. One track that asks the line for no width (`minmax(0, 1fr)`) keeps a long label from widening the table; a contained button (`contain: inline-size`) would too, but WebKit measures its height at no width and draws it hundreds of pixels tall. Its displays are `:where()`, so a part the line hides stays hidden. */
+.data-table[data-line="flat"] .row-detail .row-columns { padding: 0; background: none; }
+.data-table[data-line="flat"] .row-detail .row-columns > * { grid-column: 1 / -1; }
+:where(.data-table[data-line="flat"]) .row-columns > dd { display: flex; flex-wrap: wrap; gap: var(--space-4); }
+:where(.data-table[data-line="flat"]) .row-columns > dd > .narrow-more { display: contents; }
+@container style(--box: narrow) {
+  :where(.data-table[data-line="flat"]) .row-columns > dd { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .data-table[data-line="flat"] .row-columns > dd .btn { justify-content: center; white-space: normal; text-align: center; }
 }
 .data-table .row-detail:hover { background: none; }
 

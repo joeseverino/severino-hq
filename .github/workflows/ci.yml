@@ -2,7 +2,9 @@ name: CI
 
 # Every gate a change passes, as one graph. On a pull request the image is
 # also checked and composed with the extensions (compose.yml), and Ready
-# passes only when every job did: the one check the ruleset requires. On main,
+# passes only when every job did: the one check the ruleset requires. Lint,
+# Test and Browser run on a pull request only where its change reaches them
+# (Legs, below); a push to main runs them all. On main,
 # Release starts Compose once the gates pass; Deploy (deploy.yml) is never
 # reached from a pull request.
 #
@@ -11,8 +13,9 @@ name: CI
 # (lint, test, browser, build, scan), and `mise run check` runs the same list
 # on a developer's machine. A gate is added there, never here.
 #
-# The file keeps its name: the host image is signed by it, and what verifies
-# that signature (Compose, and the deploy script on the host) pins this path.
+# The file keeps its name: the host and worker images are signed by it, and
+# what verifies that signature (Compose, and the deploy script on the host)
+# pins this path.
 on:
   push:
     branches: [main]
@@ -28,9 +31,10 @@ concurrency:
 
 jobs:
   # A push to main whose pull request already passed with this exact tree is
-  # not checked twice: Lint, Test and Browser stand on that run, and Build
-  # promotes the pull request's image instead of building another. Anything
-  # less than proof (tools/pipeline/proven-on-pr.sh) and every gate runs.
+  # not checked twice: Build promotes the pull request's image instead of
+  # building another, and Lint, Test and Browser stand on that run when it
+  # left none of them out. Anything less than proof
+  # (tools/pipeline/proven-on-pr.sh) and every gate runs.
   proven:
     name: Proven on its pull request
     if: github.event_name == 'push'
@@ -47,6 +51,8 @@ jobs:
     outputs:
       pr: ${{ steps.proof.outputs.pr }}
       digest: ${{ steps.proof.outputs.digest }}
+      runner: ${{ steps.proof.outputs.runner }}
+      gates: ${{ steps.proof.outputs.gates }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,7 +62,7 @@ jobs:
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
       # The cosign mise.lock records, which the host verifies with too.
       - name: Install the pinned cosign
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -79,10 +85,50 @@ jobs:
             echo "Proven on #$pr: its checks passed on this exact tree, and its image is promoted." >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  # Which of Lint, Test, Test's Go tests and Browser a pull request's change
+  # can affect. Each declares what it reads as the `sources` of the task it
+  # runs, and tools/pipeline/legs.py asks mise's --affected which of those the
+  # change touches; a changed path none declares runs every leg. A leg left out
+  # is skipped, which Ready passes. A push to main skips this job, and a job
+  # that fails here leaves its outputs empty: either way every leg runs.
+  legs:
+    name: Legs
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      lint: ${{ steps.legs.outputs.lint }}
+      test: ${{ steps.legs.outputs.test }}
+      controller: ${{ steps.legs.outputs.controller }}
+      browser: ${{ steps.legs.outputs.browser }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The merge commit and its first parent, the base it merges into.
+          fetch-depth: 2
+      - name: Read the pinned mise
+        id: mise
+        run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
+      # mise alone: --affected reads the task definitions and installs nothing.
+      - name: Install the pinned mise
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        env:
+          MISE_LOCKED_VERIFY_PROVENANCE: "1"
+        with:
+          version: ${{ steps.mise.outputs.version }}
+          install: false
+          cache: false
+      - name: The legs this change reaches
+        id: legs
+        run: python3 -m tools.pipeline.legs HEAD^1 HEAD
+
   lint:
     name: Lint
-    needs: proven
-    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
+    needs: [proven, legs]
+    if: ${{ !cancelled() && needs.proven.outputs.gates != 'passed' && needs.legs.outputs.lint != 'false' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 25
     permissions:
@@ -91,6 +137,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # The commit and its first parent: on a pull request the base its
+          # merge commit merges into, on main the commit before the squash.
+          # lint:openapi-breaking compares the API document with that one.
+          fetch-depth: 2
       - uses: ./.github/actions/toolchain
         with:
           # The structural bar builds its Go inspector from the controller's
@@ -101,6 +151,8 @@ jobs:
         # Every gate named lint:* (mise-tasks/lint.toml, mise-tasks/lint/).
         # Each runs to the end, and the last lines of this step name every one
         # that failed.
+        env:
+          CHECK_BASE: HEAD^1
         run: mise run lint
       - name: Dependency review
         if: github.event_name == 'pull_request'
@@ -111,8 +163,8 @@ jobs:
 
   test:
     name: Test
-    needs: proven
-    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
+    needs: [proven, legs]
+    if: ${{ !cancelled() && needs.proven.outputs.gates != 'passed' && needs.legs.outputs.test != 'false' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
@@ -123,6 +175,8 @@ jobs:
     env:
       # `mise run test` walks this list; a leg is one interpreter.
       TEST_PYTHONS: ${{ matrix.python }}
+      # The Go tests, left out where the change reaches none of what they read.
+      MISE_TASK_SKIP: ${{ needs.legs.outputs.controller == 'false' && 'test:controller' || '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,6 +189,11 @@ jobs:
           go: true
           # `mise run test` installs the lint tools a test label can reach.
           npm: true
+      - name: Install nft
+        # test:controller loads every egress table in `nft -c`, through the
+        # runner's passwordless sudo, and the runner image ships no nft.
+        if: needs.legs.outputs.controller != 'false'
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends nftables
       - name: Test
         # Every gate named test:* (mise-tasks/test.toml, mise-tasks/test/).
         run: mise run test
@@ -146,10 +205,10 @@ jobs:
   # a job skipped before its matrix expands shows its name as written.
   browser:
     name: Browser
-    needs: proven
-    if: ${{ !cancelled() && needs.proven.outputs.digest == '' }}
+    needs: [proven, legs]
+    if: ${{ !cancelled() && needs.proven.outputs.gates != 'passed' && needs.legs.outputs.browser != 'false' }}
     runs-on: ubuntu-26.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     # Playwright's image for the release uv.lock pins carries its browsers and
     # their system libraries, so a leg installs nothing from apt or a browser
     # CDN (BrowserInstallTests holds the two versions together). As its CI
@@ -161,7 +220,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        gate: [layout-1, layout-2, layout-chromium-1, layout-chromium-2, navigation, table-fit, demo]
+        gate: [layout-1, layout-2, layout-chromium-1, layout-chromium-2, navigation, table-fit, demo, demo-chromium]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -227,7 +286,8 @@ jobs:
           path: ${{ steps.toolchain.outputs.npm-path }}
           key: ${{ steps.toolchain.outputs.npm-key }}
 
-  # The one writer of the registry layer cache Build reads, on every push to
+  # The one writer of the registry layer caches Build reads (the host image's
+  # and, at the same ref with -runner, the worker's), on every push to
   # main, since a push whose tree its pull request proved promotes rather than
   # builds. A cache entry maps a step to a layer on its writer's word, so no
   # pull request writes one. The image built here is thrown away with the
@@ -317,17 +377,24 @@ jobs:
       # in the certificate, which is the whole point: the signature says which
       # workflow, in which repository, at which commit, produced this image.
       id-token: write
+    # The host image and the automation worker's image (the Dockerfile's
+    # runner stage), built from one tree and published, promoted, signed and
+    # attested together: a release pins the worker image CI built beside its
+    # host image.
     outputs:
       image: ${{ steps.publish.outputs.digest }}
+      runner: ${{ steps.publish.outputs.runner }}
     env:
       # The commit the image is tagged for. On a pull request `GITHUB_SHA` is
       # the merge commit, while the push to main that merges it looks for the
       # pull request's head, the branch tip (tools/pipeline/proven-on-pr.sh).
       HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-      # Set when this tree's image was proven on its pull request: promoted,
-      # not rebuilt.
+      # Set when this tree's images were proven on its pull request: promoted,
+      # not rebuilt. proven-on-pr.sh names both or neither.
       PROVEN: ${{ needs.proven.outputs.digest }}
-      # Written by Build cache alone; a missing or unreadable one builds cold.
+      PROVEN_RUNNER: ${{ needs.proven.outputs.runner }}
+      # Written by Build cache alone, with the worker's at the ref plus -runner;
+      # a missing or unreadable one builds cold.
       BUILD_CACHE: ghcr.io/${{ github.repository }}/build-cache:main
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -342,7 +409,7 @@ jobs:
         id: mise
         run: echo "version=$(.github/actions/toolchain/mise-version.sh mise.toml)" >> "$GITHUB_OUTPUT"
       - name: Install the pinned Trivy and cosign
-        uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         env:
           MISE_LOCKED_VERIFY_PROVENANCE: "1"
         with:
@@ -354,29 +421,39 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-      - name: Build the production image
+      - name: Build the production images
         id: build
         if: env.PROVEN == ''
         run: |
           set -euo pipefail
-          image="ghcr.io/${{ github.repository }}:sha-${HEAD_SHA::12}"
-          mise run build --tag "$image" --revision "$HEAD_SHA" --no-verify --cache "$BUILD_CACHE"
+          image="ghcr.io/$GITHUB_REPOSITORY:sha-${HEAD_SHA::12}"
+          runner="ghcr.io/$GITHUB_REPOSITORY/runner:sha-${HEAD_SHA::12}"
+          mise run build --tag "$image" --runner-tag "$runner" --revision "$HEAD_SHA" --no-verify --cache "$BUILD_CACHE"
           echo "image=$image" >> "$GITHUB_OUTPUT"
-      # On main only: a pull request's image is checked by Build verify,
+          echo "runner=$runner" >> "$GITHUB_OUTPUT"
+      # On main only: a pull request's images are checked by Build verify,
       # alongside its composition.
       - name: Every check an image must pass
-        # Every gate named image:verify:* (mise-tasks/image.toml), against the image just built.
+        # Every gate named image:verify:* (mise-tasks/image.toml), against the images just built.
         if: env.PROVEN == '' && github.event_name == 'push'
         env:
           IMAGE: ${{ steps.build.outputs.image }}
+          RUNNER_IMAGE: ${{ steps.build.outputs.runner }}
         run: mise run build
       - name: Publish
         id: publish
         if: env.PROVEN == ''
         env:
           IMAGE: ${{ steps.build.outputs.image }}
+          RUNNER_IMAGE: ${{ steps.build.outputs.runner }}
         run: |
           set -euo pipefail
+          # The worker's image first: Compose looks it up once the host
+          # image is there (tools/pipeline/host-image.sh).
+          docker push "$RUNNER_IMAGE"
+          runner=$(docker buildx imagetools inspect "$RUNNER_IMAGE" \
+            --format '{{.Manifest.Digest}}')
+          echo "runner=${RUNNER_IMAGE%:*}@$runner" >> "$GITHUB_OUTPUT"
           docker push "$IMAGE"
           # `latest` follows main and nothing else. A pull request publishes
           # an image so it can be checked and composed; it does not get to move
@@ -395,50 +472,65 @@ jobs:
       #
       # Signed by digest, not by tag: a tag is a pointer somebody can move, and
       # a signature over a pointer proves nothing about what it points at now.
-      - name: Promote the image its pull request proved
+      - name: Promote the images its pull request proved
         # The same manifest under this commit's tag, so the tag names the
         # digest that is signed: from one source, `imagetools create
         # --prefer-index=false` pushes the bytes it fetched by digest, an index
         # or a single manifest alike, where the default wraps a single manifest
         # in a new index. Each tag is read back and must name that digest.
+        # Only the host image carries `latest`.
         id: promote
         if: env.PROVEN != ''
         run: |
           set -euo pipefail
-          for tag in "sha-${HEAD_SHA::12}" latest; do
-            docker buildx imagetools create --prefer-index=false \
-              --tag "${PROVEN%@*}:$tag" "$PROVEN"
-            resolved=$(docker buildx imagetools inspect "${PROVEN%@*}:$tag" \
-              --format '{{.Manifest.Digest}}')
-            if [ "$resolved" != "${PROVEN#*@}" ]; then
-              echo "::error::$tag resolves to $resolved, not ${PROVEN#*@}"
-              exit 1
-            fi
-          done
+          promote() {
+            local proven=$1 tag resolved
+            shift
+            for tag do
+              docker buildx imagetools create --prefer-index=false \
+                --tag "${proven%@*}:$tag" "$proven"
+              resolved=$(docker buildx imagetools inspect "${proven%@*}:$tag" \
+                --format '{{.Manifest.Digest}}')
+              if [ "$resolved" != "${proven#*@}" ]; then
+                echo "::error::${proven%@*}:$tag resolves to $resolved, not ${proven#*@}"
+                exit 1
+              fi
+            done
+          }
+          promote "$PROVEN_RUNNER" "sha-${HEAD_SHA::12}"
+          promote "$PROVEN" "sha-${HEAD_SHA::12}" latest
           echo "digest=$PROVEN" >> "$GITHUB_OUTPUT"
+          echo "runner=$PROVEN_RUNNER" >> "$GITHUB_OUTPUT"
       - name: Sign
-        # On a promotion too: Compose deploys only an image signed by this
+        # On a promotion too: Compose composes only images signed by this
         # workflow on main, and the pull request's signature is not that.
         env:
           DIGEST: ${{ steps.publish.outputs.digest || steps.promote.outputs.digest }}
-        run: cosign sign --yes "$DIGEST"
-      # What the image holds, as Trivy reads it (Debian packages, Python
+          RUNNER: ${{ steps.publish.outputs.runner || steps.promote.outputs.runner }}
+        run: |
+          set -euo pipefail
+          for image in "$RUNNER" "$DIGEST"; do cosign sign --yes "$image"; done
+      # What each image holds, as Trivy reads it (Debian packages, Python
       # distributions, each Go binary's modules), in CycloneDX, signed by the
       # same workflow identity as the image and stored beside it in the
       # registry. Rekor's entry keeps only the envelope's hashes, so the list
       # is exactly as visible as the image. Trivy needs no vulnerability
       # database for an SBOM.
-      - name: Attest the SBOM
+      - name: Attest the SBOMs
         env:
           DIGEST: ${{ steps.publish.outputs.digest || steps.promote.outputs.digest }}
+          RUNNER: ${{ steps.publish.outputs.runner || steps.promote.outputs.runner }}
         run: |
           set -euo pipefail
-          trivy image --quiet --format cyclonedx --output sbom.cdx.json "$DIGEST"
-          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$DIGEST"
+          for image in "$RUNNER" "$DIGEST"; do
+            trivy image --quiet --format cyclonedx --output sbom.cdx.json "$image"
+            cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$image"
+          done
 
-  # A pull request's image, checked from the registry while its composition
+  # A pull request's images, checked from the registry while its composition
   # runs: the same gates main runs inside Build before it publishes. IMAGE
-  # names it, so `mise run build` checks it without building another.
+  # and RUNNER_IMAGE name them, so `mise run build` checks them without
+  # building others.
   build-verify:
     name: Build verify
     needs: build
@@ -450,6 +542,7 @@ jobs:
       packages: read
     env:
       IMAGE: ${{ needs.build.outputs.image }}
+      RUNNER_IMAGE: ${{ needs.build.outputs.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -458,8 +551,12 @@ jobs:
         env:
           GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-      - name: Pull the image by digest
-        run: docker pull --quiet "$IMAGE"
+      - name: Pull the images by digest
+        # The worker's smoke runs with --pull never, as hq-host runs it.
+        run: |
+          set -euo pipefail
+          docker pull --quiet "$IMAGE"
+          docker pull --quiet "$RUNNER_IMAGE"
       - uses: ./.github/actions/toolchain
       - name: Every check an image must pass
         # Every gate named image:verify:* (mise-tasks/image.toml).
@@ -487,6 +584,7 @@ jobs:
       id-token: write
     with:
       host-image: ${{ needs.build.outputs.image }}
+      runner-image: ${{ needs.build.outputs.runner }}
     secrets:
       HQ_APP_CLIENT_ID: ${{ secrets.HQ_APP_CLIENT_ID }}
       HQ_APP_KEY: ${{ secrets.HQ_APP_KEY }}
@@ -494,7 +592,7 @@ jobs:
 
   ready:
     name: Ready
-    needs: [proven, lint, test, browser, scan, build, build-verify, compose]
+    needs: [proven, legs, lint, test, browser, scan, build, build-verify, compose]
     # The one check the ruleset requires, accepted only from GitHub Actions:
     # it passes when every job above passed, so a gate added or removed here
     # never touches the repository's settings.

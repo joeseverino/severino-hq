@@ -32,6 +32,7 @@ from hq.platform.application.capabilities import adapter_refusal
 from hq.platform.application.refusal_status import LATER_CODES, Refusal, refusal_of
 from hq.platform.application.security import Principal
 from hq.platform.core.outside_requests import connections_of_its_own
+lazy from hq.platform.application import automation_adoption
 
 from . import listen, prompts, resources, tasks
 from .binding import Tool, bind_tools
@@ -49,47 +50,50 @@ RETRY_AFTER = "retry_after"
 INSTRUCTIONS = "\n\n".join(
     (
         (
-            "Typed access to Severino HQ's live operational records. describe_resources names what "
-            "list_resource and get_resource read; describe_capabilities, narrowed by name or resource, "
-            "names what execute_capability runs."
+            "Typed access to Severino HQ's live records. `describe_resources` names what `list_resource` "
+            "and `get_resource` read. `describe_capabilities`, narrowed by name or resource, names what "
+            "`execute_capability` runs."
         ),
         (
-            "An answer is JSON. A refusal has ok: false and error.code; a held change is not one. A field "
-            "a success leaves out holds its default, as the tool's outputSchema states it: empty text, false, "
-            "null, or an empty list or object."
+            "Every answer is JSON. A refusal has `ok: false` and an `error.code`. A success leaves out "
+            "any field at its default: empty text, false, null, or an empty list or object. Each tool's "
+            "`outputSchema` gives the defaults."
         ),
         (
-            'A change run through execute_capability may answer status: "awaiting_approval": nothing was '
-            "written, a person decides it in HQ's web interface, and repeating the call returns the same "
-            "request, so report approval.id to whoever asked and stop."
+            'A change may answer `status: "awaiting_approval"`. That is not a refusal: nothing was written, '
+            "and an operator approves or rejects it in HQ's web interface. Repeating the call returns the "
+            "same request. Report `approval.id` to the user you act for, and stop. Later, `get_resource` of "
+            "`approvals` reads where it stands by that id, and `get_resource` of `runs` reads a playbook's "
+            "run by its `operation.id`. Asked by mistake, `approval.withdraw` takes the request back by its "
+            "`approval.id`, and `automation.run.cancel` cancels a run you asked for by its `operation.id` "
+            "until HQ's runner starts it."
         ),
         (
-            "Every capability whose effect is not read takes an idempotency_key in its payload: send one, "
-            "and reuse it when you retry, so a repeat returns the first result instead of acting twice."
+            "Every capability that changes something takes an `idempotency_key` in its payload. Send a new "
+            "one for each change and the same one on a retry, so a retry never acts twice."
         ),
         (
-            "While an operator has paused agents, every tool call answers error.code agents_paused and "
-            "does nothing; the connection stays up, so retry the call later, without reconnecting. "
-            f"error.code {' or '.join(sorted(LATER_CODES))} means HQ takes no more of this agent's calls "
-            "for now: nothing ran, so wait error.retry_after seconds and retry. call_timed_out means HQ "
-            "stopped waiting and the call may still finish: read before repeating it, and repeat a change "
-            "with the same idempotency_key."
+            "While an operator has paused agents, every call answers `error.code` `agents_paused` and does "
+            "nothing. The connection stays open: retry later, without reconnecting. "
+            f"{' or '.join(f'`{code}`' for code in sorted(LATER_CODES))} means nothing ran and HQ takes no "
+            "more calls from this agent for now: wait `error.retry_after` seconds, then retry. "
+            "`call_timed_out` means HQ stopped waiting, but the call may still finish. Read before you "
+            "repeat it, and repeat a change with the same `idempotency_key`."
         ),
         (
-            "Prompts needs-me, status-brief and held-requests each return one message of HQ's live answer "
-            "for a person to act on. Resources hq://action_items, hq://approvals and hq://hq are the "
-            "action queue, the held requests and HQ itself; a template hq://<kind>/{identifier} reads one "
-            "record as get_resource does. hq://approvals, the held-requests prompt and the action queue "
-            "show you only the held requests you asked for yourself; a request another agent holds is "
-            "not yours to read or to wait on."
+            "The prompts `needs-me`, `status-brief` and `held-requests` each return HQ's live answer as one "
+            "message. The resources `hq://action_items`, `hq://approvals` and `hq://hq` are the action "
+            "queue, the held requests and HQ itself. The template `hq://<kind>/{identifier}` reads one "
+            "record, as `get_resource` does. `hq://approvals`, the `held-requests` prompt and the action "
+            "queue list only the held requests you made."
         ),
         (
-            "A client that declares the io.modelcontextprotocol/tasks extension is answered a held change "
-            "as a task whose id is approval.id: tasks/get reads working until a person decides and HQ "
-            "applies it, then completed with the call's answer, or with an error result coded declined, "
-            "expired, stale or operation_failed. "
-            "Poll at pollIntervalMs; neither tasks/update nor tasks/cancel decides it, and a task answers "
-            "only the agent that asked."
+            "A client that declares the `io.modelcontextprotocol/tasks` extension gets a held change back "
+            "as a task whose id is `approval.id`. `tasks/get` reads `working` until an operator decides and "
+            "HQ applies it. It then reads `completed` with the call's answer, or an error coded `declined`, "
+            "`expired`, `stale` or `operation_failed`. Poll at `pollIntervalMs`. `tasks/cancel` withdraws it "
+            "while it waits, as `approval.withdraw` does, and the task reads `cancelled`. `tasks/update` "
+            "changes nothing, and only the agent that asked can read the task."
         ),
     )
 )
@@ -309,6 +313,8 @@ class ToolServer:
             refused = await sync_to_async(_refused_now)()
             if refused is not None:
                 return _answer(refused.answer())
+            # Served from the procedures adopted now, whichever process adopted them.
+            await sync_to_async(automation_adoption.catch_up)()
             result = await tool.call(params.arguments or {})
             if isinstance(result, dict) and approvals.is_held(result) and tasks.requested(context):
                 task = await sync_to_async(tasks.created)(result, current_principal())

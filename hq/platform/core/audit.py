@@ -32,7 +32,6 @@ from . import speculation
 from .attribution import OperationContext, bound, operation_context
 from .audit_words import REDACTED, changes_said
 from .facets import as_metadata as facet_metadata
-from .logging import get_request_id
 from .models import AuditLog
 lazy from .facets import Facet
 
@@ -346,7 +345,7 @@ def register_audit(
     def _on_init(instance, **kwargs):
         # What the row looked like when it was read. Taken here rather than
         # re-read on save, which would put a second query on every write.
-        instance._audit_snapshot = _capture(instance, names)  # noqa: SLF001 - audit's own attribute, kept on each instance it watches
+        instance._audit_snapshot = _capture(instance, names)
 
     @receiver(post_save, sender=model, weak=False, dispatch_uid=AUDIT_DISPATCH_UID)
     def _on_save(instance, created, **kwargs):
@@ -365,7 +364,7 @@ def register_audit(
             # diff rather than before it, so the timestamp still appears beside
             # a real change and only disappears when it is the whole story.
             if looked and changes and set(changes) <= looked:
-                instance._audit_snapshot = _capture(instance, names)  # noqa: SLF001 - audit's own attribute, kept on each instance it watches
+                instance._audit_snapshot = _capture(instance, names)
                 return
             if not changes:
                 return
@@ -381,7 +380,7 @@ def register_audit(
         )
         # Re-armed for the next save in the same request: without this, a
         # second save would re-report the first one's changes.
-        instance._audit_snapshot = _capture(instance, names)  # noqa: SLF001 - audit's own attribute, kept on each instance it watches
+        instance._audit_snapshot = _capture(instance, names)
 
     @receiver(post_delete, sender=model, weak=False, dispatch_uid=AUDIT_DISPATCH_UID)
     def _on_delete(instance, **kwargs):
@@ -589,7 +588,6 @@ def emit_line(event: str, line: dict[str, Any]) -> None:
     or a shipper of it, holds even if the database is lost or rewritten.
     """
 
-    line = {**line, "request_id": get_request_id()}
     transaction.on_commit(
         lambda: logger.info("%s %s", event, line["id"], extra={"event": event, "audit": line}),
         robust=True,

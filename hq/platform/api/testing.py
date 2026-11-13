@@ -160,7 +160,7 @@ _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 
 def _hold_the_clock() -> None:
-    import time_machine  # noqa: PLC0415 - a tools-group dependency, which the image's suite never loads
+    import time_machine
 
     time_machine.travel(RECORDED_AT, tick=False).start()
 

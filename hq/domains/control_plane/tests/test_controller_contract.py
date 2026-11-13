@@ -31,6 +31,7 @@ from . import bridge_client
 from .certificate_cases import certificate_spec, declare_targets
 
 CONTRACT_URI = "urn:hq:controller-bridge"
+CERTIFICATE = [f"tls.certificate:{action}" for action in ("reconcile", "renew")]
 CONTRACT = contract()
 REGISTRY = Registry().with_resource(CONTRACT_URI, Resource.from_contents(CONTRACT, default_specification=DRAFT202012))
 
@@ -112,8 +113,8 @@ class ControllerContractTests(TestCase):
                 limit(*path)
 
     def test_an_empty_queue(self):
-        self.assertIsNone(bridge("peek")["operation"])
-        self.assertIsNone(bridge("claim", controller_id="example-controller")["operation"])
+        self.assertIsNone(bridge("peek", capability=CERTIFICATE)["operation"])
+        self.assertIsNone(bridge("claim", controller_id="example-controller", capability=CERTIFICATE)["operation"])
 
     @patch(
         "hq.platform.application.resource_operations.controller_action_policy",
@@ -125,8 +126,8 @@ class ControllerContractTests(TestCase):
             principal=cli_principal(),
             current_key=self.resource.key,
         )
-        self.assertIsNotNone(bridge("peek")["operation"])
-        claimed = bridge("claim", controller_id="example-controller")
+        self.assertIsNotNone(bridge("peek", capability=CERTIFICATE)["operation"])
+        claimed = bridge("claim", controller_id="example-controller", capability=CERTIFICATE)
         report = {
             "success": True,
             "observed_generation": claimed["resource"]["generation"],
@@ -159,8 +160,8 @@ class ControllerContractTests(TestCase):
             current_key=self.resource.key,
         )
         expected = {"timeout_seconds": 180, "interval_seconds": 5}
-        self.assertEqual(bridge("peek")["verification"], expected)
-        claimed = bridge("claim", controller_id="example-controller")
+        self.assertEqual(bridge("peek", capability=CERTIFICATE)["verification"], expected)
+        claimed = bridge("claim", controller_id="example-controller", capability=CERTIFICATE)
         self.assertEqual(claimed["operation"]["action"], "renew")
         self.assertEqual(claimed["verification"], expected)
 
@@ -171,7 +172,7 @@ class ControllerContractTests(TestCase):
             current_key=self.resource.key,
         )
         self.assertEqual(
-            bridge("peek")["verification"],
+            bridge("peek", capability=CERTIFICATE)["verification"],
             {"timeout_seconds": 180, "interval_seconds": 5},
         )
 

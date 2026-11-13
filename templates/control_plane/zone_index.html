@@ -10,23 +10,18 @@ one situation it is ever seen in.
     HQ can see these domains at Cloudflare and manages none of them yet.
     Managing one changes nothing at Cloudflare.
   </p>
-  <div class="control-summary">
+  {% facts layout="band" label="Domains at Cloudflare" %}
     {% for zone in zones %}
-      <div class="control-metric">
-        <span class="control-label">{{ zone.zone|breakable }}</span>
-        <strong>{{ zone.records|length|counted:"record" }}</strong>
-        <span class="readout">
-          <a class="subtle-link" href="{{ zone.url }}">View records{% arrow %}</a>
-        </span>
+      {% fact zone.zone %}<a href="{{ zone.url }}">{{ zone.records|length|counted:"record" }}</a>{% detail %}
         {% if zone.adopt_token %}
           {% url 'zones:adopt' zone.zone as adopt_url %}
-          {% post_button "Manage this domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}
+          {% post_button "Manage domain" adopt_url name="token" value=zone.adopt_token css="btn primary" %}
         {% elif zone.observed_only %}
-          <span class="readout muted">Read only</span>
+          <small>Read only</small>
         {% endif %}
-      </div>
+      {% endfact %}
     {% endfor %}
-  </div>
+  {% endfacts %}
 {% else %}
   {% include "partials/_empty_state.html" with message="No domains yet." remedy=page.remedy %}
 {% endif %}

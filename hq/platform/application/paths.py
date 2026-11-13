@@ -11,7 +11,6 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from hq.domains.control_plane.certificate_authorities import authority_name
 from hq.domains.control_plane.connection_kinds import CONNECTION_LABELS
 from hq.domains.control_plane.names import is_hostname, normalized_hostname
 from hq.domains.control_plane.observations import OBSERVATIONS
@@ -25,9 +24,9 @@ from .facts import Joined, Subject, readings, refusals_about, snapshots_of
 from .infrastructure import enabled_resources
 from .labels import dotted, lower_first
 from .locate import host_of, split_endpoint
-from .path_model import NETWORK_LABELS, Certificate, Hop, HopSource, Route, ServicePath, dns_label, pointing_at
+from .path_model import Certificate, Hop, HopSource, Route, ServicePath, dns_label, pointing_at
 from .projection import read_once
-from .reach import is_documentation, network_of
+from .reach import NETWORKS, admitted_network, is_documentation, network_of
 lazy from . import connections, request_path, services
 lazy from .containers import container_watchers, standing_of, started_at, up_for
 lazy from .expiry import days_until
@@ -511,7 +510,8 @@ def _from_answer(name: str, answer: str, *, fronted: bool, depth: int, edge: str
         return _alias(name, host, depth=depth)
     if is_documentation(host):
         return [_placeholder(name, host, fronted=fronted, edge=edge)]
-    hops = [Hop("network", NETWORK_LABELS.get(network, network), "", detail=host)]
+    # Named by the address it is reached at there, the one value the step has.
+    hops = [Hop("network", NETWORKS.get(network, network), host, detail=host)]
     machine = _machine(host)
     if machine is None:
         hops.append(
@@ -642,6 +642,7 @@ def _ingress(name: str, *, behind_edge: bool, on: str = "") -> list[Hop]:
                 detail=_answer(row),
                 source=row.source,
                 certificate=_served_certificate(name, row, "Origin" if behind_edge else "Served"),
+                admits=_admits(row),
             )
             return [hop, *_upstream(_answer(row), on=on)]
     answered = _redirect(name, at_ingress=True) or _not_found(name)
@@ -651,6 +652,13 @@ def _ingress(name: str, *, behind_edge: bool, on: str = "") -> list[Hop]:
     if gap:
         return [Hop("ingress", "Ingress", unread=gap)]
     return []
+
+
+def _admits(row: _Row) -> str:
+    """The network the proxy record's access list admits requests from."""
+
+    read = PROVIDERS[row.kind].ingress_policy
+    return admitted_network(read(row.record)) if read is not None and row.record else ""
 
 
 def _served_certificate(name: str, row: _Row, role: str) -> Certificate:
@@ -667,7 +675,7 @@ def _served_certificate(name: str, row: _Row, role: str) -> Certificate:
             return Certificate(
                 role,
                 name=str(certificate.get("name", "") or ""),
-                issuer=authority_name(certificate.get("provider")),
+                issuer=served.issuer,
                 expiry=expiry_phrase(str(certificate.get("expires_on", "") or "")),
                 source=row.source,
                 left=_days_left(str(certificate.get("expires_on", "") or "")),

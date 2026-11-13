@@ -59,7 +59,7 @@ async (page) => {
       const beside = shown(row).filter((k) => round(k.getBoundingClientRect().top) === top);
       return round(Math.max(...beside.map(filled)) - filled(card));
     };
-    const CARDS = '.card, .control-card, :is(' + PAIRS + ') > :is(section, .page-section)';
+    const CARDS = '.card, :is(' + PAIRS + ') > :is(section, .page-section)';
     document.querySelectorAll(CARDS).forEach((card) => {
       const kids = shown(card);
       if (!kids.length) return;
@@ -164,6 +164,10 @@ async (page) => {
     // this is looking for.
     const SCROLL_SLOP = 1;
     document.querySelectorAll('*').forEach((el) => {
+      // A box the browser does not draw (inside a closed fold) shows no
+      // scrollbar, and measuring it lays out content the browser skips,
+      // which leaves the page changed for whatever reads it next.
+      if (!el.checkVisibility()) return;
       const style = getComputedStyle(el);
       const scrolls = (value) => value === 'auto' || value === 'scroll';
       const horizontal = el.scrollWidth - el.clientWidth;
@@ -235,10 +239,17 @@ async (page) => {
     // and its child does not.
     document.querySelectorAll('.page-actions, .form-actions, .filter-bar').forEach((row) => {
       // Controls only: a status line at the end of a filter bar is text, and
-      // text is not the height of a button.
+      // text is not the height of a button. A label that holds its control
+      // (a table toolbar's toggle or sort) is pressed as the label, so the
+      // label is the control's box. A filter bar's row is its controls and
+      // the button that sends them, each in a box of its own.
       const control = 'input, select, textarea, button, summary, a.btn';
-      const controls = Array.from(row.children)
-        .map((child) => (child.matches(control) ? child : child.querySelector(control)))
+      const pressed = (child) => child.matches(`${control}, label:has(input, select)`);
+      const children = row.matches('.filter-bar')
+        ? row.querySelectorAll(':scope .filter-bar-controls > *, :scope .filter-bar-send > *')
+        : row.children;
+      const controls = Array.from(children)
+        .map((child) => (pressed(child) ? child : child.querySelector(control)))
         .filter((el) => el && el.getBoundingClientRect().height > 0);
       if (controls.length < 2) return;
       const heights = controls.map((el) => round(el.getBoundingClientRect().height));

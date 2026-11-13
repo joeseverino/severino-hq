@@ -213,7 +213,7 @@
                 "tool": "describe_capabilities"
               }
             },
-            "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones this caller may run."
+            "message": "Unknown capability 'nope.nothing'. describe_capabilities lists the ones you may run."
           },
           "ok": false
         },
@@ -288,17 +288,17 @@
                 "affected_scopes": [],
                 "evidence": [
                   {
-                    "label": "Container",
-                    "value": "nginx-proxy-manager"
+                    "label": "Free on /",
+                    "value": "56 MB of 29.0 GB (0.2%)"
                   }
                 ],
-                "explanation": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
-                "id": "claim:727c884d159f86c2",
+                "explanation": "The next write that needs more room than is left fails, and says only that the write did.",
+                "id": "claim:e378f3b6e41c6c8c",
                 "investigations": [
                   {
                     "capability": "",
                     "effect": "read",
-                    "label": "See it on the map",
+                    "label": "Map neighborhood",
                     "method": "GET",
                     "name": "topology",
                     "reason": "What this is connected to.",
@@ -325,23 +325,23 @@
                 ],
                 "operator_steps": [
                   {
-                    "command": "docker compose up -d --force-recreate nginx-proxy-manager",
-                    "label": "On docker-host-01, in the compose project that runs nginx-proxy-manager, recreate it",
+                    "command": "ssh docker-host-01 \"sudo df -h /\"",
+                    "label": "See the space on /",
                     "notes": []
                   }
                 ],
                 "remedies": [],
-                "rule": "container-image-unpinned",
-                "scope": null,
-                "severity": "attention",
+                "rule": "filesystem-nearly-full",
+                "scope": "host.filesystem",
+                "severity": "serious",
                 "since": null,
                 "subject": "machine:docker-host-01",
-                "title": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
+                "title": "The filesystem at / on docker-host-01 is nearly full",
                 "workflow": {
-                  "id": "resolve:claim:727c884d159f86c2",
-                  "label": "What to do",
+                  "id": "resolve:claim:e378f3b6e41c6c8c",
+                  "label": "Next steps",
                   "outcome": {
-                    "claim_id": "claim:727c884d159f86c2",
+                    "claim_id": "claim:e378f3b6e41c6c8c",
                     "kind": "claim_absent",
                     "label": ""
                   },
@@ -358,7 +358,7 @@
                           "recommended": false,
                           "refusal": "",
                           "target": "",
-                          "url": "/infrastructure/findings/?rule=container-image-unpinned"
+                          "url": "/infrastructure/findings/?rule=filesystem-nearly-full"
                         }
                       ],
                       "label": "Check again",
@@ -373,11 +373,12 @@
             "rule": null,
             "schema_version": 2,
             "summary": {
-              "findings": 2,
-              "returned": 2,
+              "findings": 6,
+              "returned": 6,
               "severities": {
-                "attention": 1,
-                "neutral": 1
+                "attention": 3,
+                "neutral": 1,
+                "serious": 2
               },
               "truncated": false
             }
@@ -386,37 +387,81 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "getApprovalsV2Forbidden": {
+        "dataValue": {
+          "error": {
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getApprovalsV2NotFound": {
+        "dataValue": {
+          "error": {
+            "code": "not_found",
+            "details": {
+              "identifier": "id"
+            },
+            "message": "No held request of yours has that id."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getApprovalsV2OK": {
+        "dataValue": {
+          "data": {
+            "answer": {},
+            "asks": "example-automation wants to carry out the playbook example.service_restart",
+            "capability": "automation.example.service_restart.run",
+            "content_fingerprint": "b6a89f32118450a586acc5756910731655bd71fb60990a8193ebb9b5bc27baac",
+            "done": false,
+            "expires_at": "2026-01-16T09:30:00+00:00",
+            "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
+            "operation": "",
+            "reason": "",
+            "requested_actor": "example-automation",
+            "requested_at": "2026-01-15T09:30:00+00:00",
+            "requested_interface": "api",
+            "resource_key": "automation-example-service_restart",
+            "resource_kind": "automation.operation",
+            "review_url": "https://hq.example.com/audit/approval/5da6c038-f78f-583a-b073-5da59683c5b1/",
+            "said": "It waits for approval in HQ, at https://hq.example.com/audit/approval/5da6c038-f78f-583a-b073-5da59683c5b1/.",
+            "state": "pending",
+            "target": ""
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "getAssetsV2OK": {
         "dataValue": {
           "data": {
-            "business_use_percentage": 80,
-            "category": "server_hardware",
-            "estimated_deductible_amount": "311.20",
-            "infrastructure": "machine:docker-host-01",
-            "item_name": "Small form factor server",
+            "business_use_percentage": 100,
+            "category": "networking",
+            "estimated_deductible_amount": "0.00",
+            "infrastructure": "",
+            "item_name": "8-port gigabit switch",
             "notes": "",
-            "payment_method": "credit",
-            "purchase_date": "2024-11-11",
+            "payment_method": "",
+            "purchase_date": "2025-03-21",
             "relationships": {
               "content": [],
               "documentation": [],
-              "expense_ids": [
-                1
-              ],
-              "projects": [
-                "hq",
-                "media-server",
-                "photo-library",
-                "self-hosted-git",
-                "tailnet-hardening"
-              ]
+              "expense_ids": [],
+              "projects": []
             },
             "serial_number": "",
-            "slug": "sff-server",
+            "slug": "hallway-switch",
             "status": "active",
-            "total_cost": "389.00",
-            "updated_at": "2024-11-11T19:45:00+00:00",
-            "vendor": "eBay",
+            "total_cost": "0.00",
+            "updated_at": "2025-03-21T21:29:00+00:00",
+            "vendor": "",
             "warranty_date": null
           },
           "ok": true
@@ -457,7 +502,7 @@
               }
             ],
             "connection_ref": "adguard",
-            "controller_id": "example-controller",
+            "controller_id": "docker-host-01",
             "credential_fix": null,
             "credential_model": "coarse",
             "dependencies": [
@@ -467,13 +512,13 @@
                 "url": "/infrastructure/hq-dns/"
               }
             ],
-            "detail": "5 rewrites.",
+            "detail": "6 rewrites.",
             "endpoint": "http://10.100.200.214:3080",
             "facts": [],
             "family": "infrastructure.controllers",
             "family_label": "Infrastructure",
             "granted_scopes": [],
-            "id": "example-controller:adguard",
+            "id": "docker-host-01:adguard",
             "kind": "adguard",
             "label": "adguard",
             "last_activity": {
@@ -694,8 +739,8 @@
                 "by_design": [],
                 "checks": [
                   {
-                    "id": "sbom",
-                    "label": "Has a package list (SBOM)",
+                    "id": "pinned",
+                    "label": "Pinned by digest",
                     "state": "met"
                   }
                 ],
@@ -744,7 +789,7 @@
             "insights": [
               {
                 "concern": false,
-                "detail": "All fully wired.",
+                "detail": "All set up.",
                 "label": "Services",
                 "notice": false,
                 "url": "/infrastructure/services/",
@@ -827,7 +872,10 @@
                 "name": "docker-host-01",
                 "url": "/infrastructure/machines/docker-host-01/"
               },
-              "provider_machine": null,
+              "provider_machine": {
+                "name": "docker-host-01",
+                "url": "/infrastructure/machines/docker-host-01/"
+              },
               "readout": [
                 {
                   "desired": "10.100.200.214",
@@ -868,7 +916,7 @@
                 "reason": "Reconciled",
                 "state": "healthy"
               },
-              "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
+              "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
               "in_sync": true,
               "key": "forgejo-dns",
               "kind": "adguard.rewrite",
@@ -992,6 +1040,105 @@
             "state": "online",
             "unanswered": [],
             "url": "/infrastructure/machines/docker-host-01/"
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getPlaybookScansV2OK": {
+        "dataValue": {
+          "data": {
+            "adopted": false,
+            "branch": "main",
+            "changes": [
+              {
+                "change": "changed",
+                "playbook": "example.cache_flush",
+                "refused": [],
+                "title": "Empty a cache"
+              },
+              {
+                "change": "added",
+                "playbook": "example.disk_cleanup",
+                "refused": [],
+                "title": "Free space on a mount"
+              },
+              {
+                "change": "removed",
+                "playbook": "example.package_upgrade",
+                "refused": [],
+                "title": "Upgrade packages"
+              }
+            ],
+            "committer": "example-maintainer",
+            "id": 3,
+            "pending": true,
+            "read_at": "2026-01-15T06:30:00+00:00",
+            "refused": [],
+            "revision": "84a1356b06c87ff497625948f9dba7bed1e4dc1b",
+            "widens": [
+              "Empty a cache gains sudo (example.cache_admin).",
+              "Free space on a mount is new, and it changes a live system."
+            ]
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getPlaybooksV2OK": {
+        "dataValue": {
+          "data": {
+            "capability": "automation.example.cache_flush.run",
+            "effect": "infrastructure_change",
+            "facts": [
+              {
+                "label": "Runs on",
+                "value": "Any machine"
+              },
+              {
+                "label": "Effect",
+                "value": "Changes a live system"
+              },
+              {
+                "label": "Access",
+                "value": "No sudo"
+              },
+              {
+                "label": "Timeout",
+                "value": "5\u00a0min"
+              },
+              {
+                "label": "Preconditions",
+                "value": "The cache's service is running on the machine."
+              },
+              {
+                "label": "Verification",
+                "value": "The cache reports no entries."
+              },
+              {
+                "label": "Recovery",
+                "value": "The cache refills on its own as it is read."
+              },
+              {
+                "label": "Retry",
+                "value": "Only once the machines are looked at"
+              },
+              {
+                "label": "Adopted commit",
+                "value": "0123456789ab"
+              },
+              {
+                "label": "Playbook file",
+                "value": "playbooks/cache_flush.yml"
+              }
+            ],
+            "playbook": "example.cache_flush",
+            "reachable": [
+              "docker-host-01",
+              "iphone-16-pro",
+              "macbook-pro-16"
+            ],
+            "title": "Empty a cache"
           },
           "ok": true
         },
@@ -1141,6 +1288,46 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "getRunsV2Forbidden": {
+        "dataValue": {
+          "error": {
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getRunsV2OK": {
+        "dataValue": {
+          "data": {
+            "approved_by": "",
+            "by": "example-agent, over MCP",
+            "capability": "automation.example.package_upgrade.run",
+            "correlation": "",
+            "created_at": "2026-01-15T09:29:00+00:00",
+            "duration_seconds": null,
+            "events": [],
+            "finished_at": null,
+            "headline": "",
+            "hosts": [
+              "macbook-pro-16"
+            ],
+            "lease_until": null,
+            "operation_id": "330b177e-3075-5811-9fba-835493beb091",
+            "playbook": "example.package_upgrade",
+            "started_at": null,
+            "state": "queued",
+            "state_label": "Waiting",
+            "worker": ""
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "getServicesV2OK": {
         "dataValue": {
           "data": {
@@ -1223,11 +1410,9 @@
                 {
                   "id": "certificate",
                   "label": "Certificate",
-                  "present": true,
-                  "resources": [
-                    "wildcard-example-com"
-                  ],
-                  "state": "good"
+                  "present": false,
+                  "resources": [],
+                  "state": ""
                 }
               ],
               "faults": [],
@@ -1254,7 +1439,7 @@
             "blockers": [
               {
                 "id": "no-apply-path",
-                "reason": "HQ cannot apply an upgrade on docker-host-01 yet."
+                "reason": "HQ does not send upgrades to docker-host-01."
               }
             ],
             "change": "minor",
@@ -1339,38 +1524,20 @@
       "listActionItemsV2OK": {
         "dataValue": {
           "data": {
-            "count": 3,
+            "count": 11,
             "items": [
               {
-                "action": "Open containers",
-                "detail": "registry.example.net/example-builds/home-automation-server:2024.11.3-ubu2404-ls45 to 2024.12.1-ubu2404-ls48.",
-                "label": "1 running image has an update",
+                "action": "Review docs",
+                "detail": "",
+                "label": "1 doc is past its review date",
                 "since": "",
-                "source": "Containers",
+                "source": "Docs",
                 "status": "attention",
-                "url": "/infrastructure/containers/"
-              },
-              {
-                "action": "Open certificate",
-                "detail": "Expires Feb\u00a08\u00a0\u00b7 24 days. Renewal opens at 30 days; renew it or check why renewal did not run.",
-                "label": "wildcard-example-com expires in 24 days",
-                "since": "",
-                "source": "Estate",
-                "status": "attention",
-                "url": "/infrastructure/wildcard-example-com/"
-              },
-              {
-                "action": "",
-                "detail": "A tag can later name a different build, so the next pull or recreate may run one nobody chose. Pin it by digest in its compose file and recreate it.",
-                "label": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
-                "since": "",
-                "source": "Infrastructure",
-                "status": "attention",
-                "url": "/infrastructure/findings/?rule=container-image-unpinned"
+                "url": "/docs/?needs_review=1"
               }
             ],
             "next": null,
-            "total": 3,
+            "total": 11,
             "truncated": false
           },
           "ok": true
@@ -1467,8 +1634,25 @@
       "listAssetsV2OK": {
         "dataValue": {
           "data": {
-            "count": 1,
+            "count": 4,
             "items": [
+              {
+                "business_use_percentage": 100,
+                "category": "networking",
+                "estimated_deductible_amount": "0.00",
+                "infrastructure": "",
+                "item_name": "8-port gigabit switch",
+                "notes": "",
+                "payment_method": "",
+                "purchase_date": "2025-03-21",
+                "serial_number": "",
+                "slug": "hallway-switch",
+                "status": "active",
+                "total_cost": "0.00",
+                "updated_at": "2025-03-21T21:29:00+00:00",
+                "vendor": "",
+                "warranty_date": null
+              },
               {
                 "business_use_percentage": 80,
                 "category": "server_hardware",
@@ -1485,10 +1669,44 @@
                 "updated_at": "2024-11-11T19:45:00+00:00",
                 "vendor": "eBay",
                 "warranty_date": null
+              },
+              {
+                "business_use_percentage": 100,
+                "category": "server_hardware",
+                "estimated_deductible_amount": "0.00",
+                "infrastructure": "",
+                "item_name": "SSD enclosure",
+                "notes": "",
+                "payment_method": "",
+                "purchase_date": "2025-05-20",
+                "serial_number": "",
+                "slug": "ssd-enclosure",
+                "status": "active",
+                "total_cost": "0.00",
+                "updated_at": "2025-05-20T21:14:00+00:00",
+                "vendor": "",
+                "warranty_date": null
+              },
+              {
+                "business_use_percentage": 100,
+                "category": "camera_audio",
+                "estimated_deductible_amount": "0.00",
+                "infrastructure": "",
+                "item_name": "USB microphone",
+                "notes": "",
+                "payment_method": "",
+                "purchase_date": "2025-07-19",
+                "serial_number": "",
+                "slug": "usb-microphone",
+                "status": "active",
+                "total_cost": "0.00",
+                "updated_at": "2025-07-19T14:01:00+00:00",
+                "vendor": "",
+                "warranty_date": null
               }
             ],
             "next": null,
-            "total": 1,
+            "total": 4,
             "truncated": false
           },
           "ok": true
@@ -1531,11 +1749,11 @@
                 "connection_ref": "npm",
                 "detail": "5 proxy hosts.",
                 "family": "infrastructure.controllers",
-                "id": "example-controller:npm",
+                "id": "docker-host-01:npm",
                 "kind": "npm",
                 "label": "npm",
                 "observed_at": "2026-01-15T09:30:00+00:00",
-                "open_problems": 0,
+                "open_problems": 1,
                 "status": "good",
                 "status_label": "Working"
               }
@@ -1551,7 +1769,7 @@
               }
             ],
             "posture": {
-              "abilities": 49,
+              "abilities": 50,
               "controls": [
                 {
                   "detail": "HQ has no reading of an access list for this name.",
@@ -1763,7 +1981,7 @@
                 "provider": "ssh",
                 "tally": [
                   {
-                    "count": 2,
+                    "count": 3,
                     "state": "Readable"
                   }
                 ]
@@ -1799,7 +2017,7 @@
                 "environment": "homelab",
                 "external_url": "",
                 "github_path": "",
-                "last_reviewed": "2025-12-16",
+                "last_reviewed": "2025-06-29",
                 "notes": "",
                 "obsidian_path": "",
                 "published_at": null,
@@ -1807,7 +2025,7 @@
                 "status": "active",
                 "system": "",
                 "title": "Publish the public site and answer its contact form",
-                "updated_at": "2025-12-17T02:40:00+00:00"
+                "updated_at": "2025-06-30T01:56:00+00:00"
               },
               {
                 "doc_id": "rb-restore-backup",
@@ -2021,17 +2239,17 @@
       "listExpensesV2OK": {
         "dataValue": {
           "data": {
-            "count": 9,
+            "count": 10,
             "items": [
               {
                 "about": "",
                 "business_purpose": "",
-                "business_use_percentage": 100,
-                "category": "domains",
-                "date": "2025-08-03",
-                "estimated_deductible_amount": "10.44",
-                "id": 3,
-                "item": "example.com renewal",
+                "business_use_percentage": 80,
+                "category": "hardware",
+                "date": "2026-01-12",
+                "estimated_deductible_amount": "43.99",
+                "id": 10,
+                "item": "Replacement UPS battery",
                 "notes": "",
                 "paid_from": "",
                 "payment_method": "credit",
@@ -2039,13 +2257,13 @@
                 "related_content": null,
                 "related_documentation": null,
                 "related_project": null,
-                "total_cost": "10.44",
-                "updated_at": "2025-08-03T23:51:00+00:00",
-                "vendor": "Cloudflare"
+                "total_cost": "54.99",
+                "updated_at": "2026-01-12T20:24:00+00:00",
+                "vendor": "APC"
               }
             ],
             "next": null,
-            "total": 9,
+            "total": 10,
             "truncated": false
           },
           "ok": true
@@ -2088,7 +2306,7 @@
               "never_read": 1,
               "not_connected": [],
               "out_of_date": 0,
-              "read": 40,
+              "read": 43,
               "readings": [
                 {
                   "error": "",
@@ -2166,7 +2384,7 @@
                   "loc": [
                     "kind"
                   ],
-                  "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone' or 'cloudflare.contact_inbox'",
+                  "msg": "Input should be 'tls.certificate', 'tls.uploaded_certificate', 'npm.proxy_host', 'github.delivery', 'portainer.stack', 'portainer.container', 'tailscale.device', 'tailscale.policy', 'network', 'pki.authority', 'machine', 'tls.delivery_target', 'caddy.route', 'adguard.rewrite', 'cloudflare.dns_record', 'cloudflare.zone', 'cloudflare.contact_inbox', 'automation.operation' or 'automation.source'",
                   "type": "literal_error"
                 }
               ],
@@ -2181,7 +2399,7 @@
                 "tool": "describe_resources"
               }
             },
-            "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox."
+            "message": "infrastructure: kind must be one of tls.certificate, tls.uploaded_certificate, npm.proxy_host, github.delivery, portainer.stack, portainer.container, tailscale.device, tailscale.policy, network, pki.authority, machine, tls.delivery_target, caddy.route, adguard.rewrite, cloudflare.dns_record, cloudflare.zone, cloudflare.contact_inbox, automation.operation, automation.source."
           },
           "ok": false
         },
@@ -2190,25 +2408,25 @@
       "listInfrastructureV2OK": {
         "dataValue": {
           "data": {
-            "count": 42,
+            "count": 46,
             "items": [
               {
                 "enabled": true,
                 "health": {
-                  "label": "Working",
+                  "label": "Not checked",
                   "message": "",
-                  "reason": "Reconciled",
-                  "state": "healthy"
+                  "reason": "",
+                  "state": "declared"
                 },
-                "in_sync": true,
-                "key": "hq-dns",
-                "kind": "adguard.rewrite",
-                "last_observed_at": "2026-01-15T09:30:00+00:00",
+                "in_sync": false,
+                "key": "automation-source",
+                "kind": "automation.source",
+                "last_observed_at": null,
                 "public_effect": false
               }
             ],
             "next": null,
-            "total": 42,
+            "total": 46,
             "truncated": false
           },
           "ok": true
@@ -2271,6 +2489,101 @@
                 "runs_hq": false,
                 "state": "online",
                 "url": "/infrastructure/machines/macbook-pro-16/"
+              }
+            ],
+            "next": null,
+            "total": 3,
+            "truncated": false
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "listPlaybookScansV2OK": {
+        "dataValue": {
+          "data": {
+            "count": 1,
+            "items": [
+              {
+                "adopted": false,
+                "branch": "main",
+                "changes": [
+                  {
+                    "change": "changed",
+                    "playbook": "example.cache_flush",
+                    "refused": [],
+                    "title": "Empty a cache"
+                  },
+                  {
+                    "change": "added",
+                    "playbook": "example.disk_cleanup",
+                    "refused": [],
+                    "title": "Free space on a mount"
+                  },
+                  {
+                    "change": "removed",
+                    "playbook": "example.package_upgrade",
+                    "refused": [],
+                    "title": "Upgrade packages"
+                  }
+                ],
+                "committer": "example-maintainer",
+                "id": 3,
+                "pending": true,
+                "read_at": "2026-01-15T06:30:00+00:00",
+                "refused": [],
+                "revision": "84a1356b06c87ff497625948f9dba7bed1e4dc1b",
+                "widens": [
+                  "Empty a cache gains sudo (example.cache_admin).",
+                  "Free space on a mount is new, and it changes a live system."
+                ]
+              }
+            ],
+            "next": null,
+            "total": 1,
+            "truncated": false
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "listPlaybooksV2OK": {
+        "dataValue": {
+          "data": {
+            "count": 3,
+            "items": [
+              {
+                "capability": "automation.example.cache_flush.run",
+                "effect": "infrastructure_change",
+                "playbook": "example.cache_flush",
+                "reachable": [
+                  "docker-host-01",
+                  "iphone-16-pro",
+                  "macbook-pro-16"
+                ],
+                "title": "Empty a cache"
+              },
+              {
+                "capability": "automation.example.disk_report.run",
+                "effect": "read",
+                "playbook": "example.disk_report",
+                "reachable": [
+                  "docker-host-01",
+                  "iphone-16-pro",
+                  "macbook-pro-16"
+                ],
+                "title": "Report a mount's use"
+              },
+              {
+                "capability": "automation.example.package_upgrade.run",
+                "effect": "infrastructure_change",
+                "playbook": "example.package_upgrade",
+                "reachable": [
+                  "docker-host-01",
+                  "iphone-16-pro",
+                  "macbook-pro-16"
+                ],
+                "title": "Upgrade packages"
               }
             ],
             "next": null,
@@ -2372,7 +2685,7 @@
       "listReadingsV2OK": {
         "dataValue": {
           "data": {
-            "count": 41,
+            "count": 44,
             "items": [
               {
                 "error": "",
@@ -2385,7 +2698,7 @@
               }
             ],
             "next": null,
-            "total": 41,
+            "total": 44,
             "truncated": false
           },
           "ok": true
@@ -2395,25 +2708,25 @@
       "listReceiptsV2OK": {
         "dataValue": {
           "data": {
-            "count": 9,
+            "count": 10,
             "items": [
               {
-                "amount": "389.00",
-                "content_type": "application/pdf",
-                "date": "2024-11-11",
-                "id": 1,
+                "amount": "54.99",
+                "content_type": "image/png",
+                "date": "2026-01-12",
+                "id": 10,
                 "notes": "",
-                "original_filename": "eBay receipt.pdf",
+                "original_filename": "APC receipt.png",
                 "related_asset": null,
-                "related_expense": 1,
-                "size_bytes": 0,
-                "updated_at": "2024-11-11T17:33:00+00:00",
+                "related_expense": null,
+                "size_bytes": 121,
+                "updated_at": "2026-01-12T15:34:00+00:00",
                 "uploaded_at": "2026-01-15T09:30:00+00:00",
-                "vendor": "eBay"
+                "vendor": "APC"
               }
             ],
             "next": null,
-            "total": 9,
+            "total": 10,
             "truncated": false
           },
           "ok": true
@@ -2427,22 +2740,22 @@
               {
                 "kind": "loopback",
                 "label": "Loopback",
-                "source": "this request came from it",
+                "source": "This request",
                 "value": "127.0.0.1"
               }
             ],
             "connection": {
               "address": "127.0.0.1",
-              "carried_over": "Not known yet",
+              "carried_over": "",
               "channel": "loopback",
               "channel_label": "Loopback",
-              "device": "No tailnet device at this address",
+              "device": "",
               "device_standing": "unplaced",
               "forwarded": false,
               "handshake": "\u2013",
               "identity_agrees": false,
               "measured_by": "Another tailnet machine (docker-host-01)",
-              "path": "Unknown",
+              "path": "",
               "summary": "6 failed\u00a0\u00b7 4 not confirmed",
               "tailnet_observed_at": "2026-01-15T09:30:00+00:00",
               "transport": "Encryption not confirmed",
@@ -2463,38 +2776,38 @@
               {
                 "certificate": null,
                 "check": {
-                  "detail": "This request reached HQ at testserver.",
-                  "label": "Confirmed by this request",
-                  "state": "proven",
+                  "detail": "No reading names the device at 127.0.0.1.",
+                  "label": "Not confirmed",
+                  "state": "unproven",
                   "step": ""
                 },
-                "detail": "",
+                "detail": "127.0.0.1",
                 "evidence": [
                   {
-                    "detail": "Whether this request arrived encrypted.",
-                    "label": "Scheme",
-                    "role": "",
-                    "value": "http"
+                    "detail": "Your address, as HQ sees it.",
+                    "label": "Address",
+                    "role": "judged",
+                    "value": "127.0.0.1"
                   }
                 ],
-                "label": "HQ",
+                "label": "Device",
                 "layers": [
                   {
-                    "boundary": "Network",
-                    "detail": "This request never left the machine HQ runs on.",
-                    "evidence": "127.0.0.1",
-                    "id": "channel",
-                    "label": "The address is on the tailnet",
-                    "mechanism": "The tailnet address range",
+                    "boundary": "Device identity",
+                    "detail": "No device on the tailnet has this address.",
+                    "evidence": "",
+                    "id": "device",
+                    "label": "The tailnet knows this device",
+                    "mechanism": "The tailnet device list",
                     "rules": [],
                     "state": "does-not"
                   }
                 ],
                 "link": null,
-                "name": "Severino HQ",
+                "name": "",
                 "overlays": [],
                 "source": null,
-                "step": "hq",
+                "step": "device",
                 "unread": ""
               }
             ],
@@ -2503,6 +2816,38 @@
             "total": 2,
             "truncated": false,
             "unread": []
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "listRunsV2OK": {
+        "dataValue": {
+          "data": {
+            "count": 9,
+            "items": [
+              {
+                "approved_by": "",
+                "by": "example-agent, over MCP",
+                "capability": "automation.example.package_upgrade.run",
+                "correlation": "",
+                "created_at": "2026-01-15T09:29:00+00:00",
+                "duration_seconds": null,
+                "finished_at": null,
+                "headline": "",
+                "hosts": [
+                  "macbook-pro-16"
+                ],
+                "operation_id": "330b177e-3075-5811-9fba-835493beb091",
+                "playbook": "example.package_upgrade",
+                "started_at": null,
+                "state": "queued",
+                "state_label": "Waiting"
+              }
+            ],
+            "next": null,
+            "total": 9,
+            "truncated": false
           },
           "ok": true
         },
@@ -2656,19 +3001,19 @@
                       }
                     ],
                     "explanation": "HQ accepts requests from every address in the range. You can narrow the trusted networks in HQ's settings to the addresses the tailnet uses.",
-                    "id": "claim:5bec129f1d278ff4",
+                    "id": "claim:d3cadf1809bee399",
                     "investigations": [
                       {
                         "capability": "",
                         "effect": "read",
-                        "label": "See it on the map",
+                        "label": "Map neighborhood",
                         "method": "GET",
                         "name": "topology",
                         "reason": "What this is connected to.",
                         "recommended": false,
                         "refusal": "",
                         "target": "",
-                        "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Aexample-controller%3Atailscale#trace"
+                        "url": "/infrastructure/topology/?focus=connection%3Ainfrastructure.controllers%3Adocker-host-01%3Atailscale#trace"
                       }
                     ],
                     "no_help_reason": null,
@@ -2700,13 +3045,13 @@
                     "scope": null,
                     "severity": "neutral",
                     "since": null,
-                    "subject": "connection:infrastructure.controllers:example-controller:tailscale",
+                    "subject": "connection:infrastructure.controllers:docker-host-01:tailscale",
                     "title": "HQ trusts all of 100.64.0.0/10, fd7a:115c:a1e0::/48, and the tailnet uses 6 device addresses and 1 subnet route",
                     "workflow": {
-                      "id": "resolve:claim:5bec129f1d278ff4",
-                      "label": "What to do",
+                      "id": "resolve:claim:d3cadf1809bee399",
+                      "label": "Next steps",
                       "outcome": {
-                        "claim_id": "claim:5bec129f1d278ff4",
+                        "claim_id": "claim:d3cadf1809bee399",
                         "kind": "claim_absent",
                         "label": ""
                       },
@@ -2835,7 +3180,7 @@
                 "blockers": [
                   {
                     "id": "no-apply-path",
-                    "reason": "HQ cannot apply an upgrade on docker-host-01 yet."
+                    "reason": "HQ does not send upgrades to docker-host-01."
                   }
                 ],
                 "change": "minor",
@@ -2907,18 +3252,18 @@
               "capability": "project.create",
               "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
               "expires_at": "2026-01-16T09:30:00+00:00",
-              "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
+              "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
               "reason": "",
               "requested_actor": "example-automation",
               "requested_at": "2026-01-15T09:30:00+00:00",
               "requested_interface": "api",
               "resource_key": "",
               "resource_kind": "projects",
-              "review_url": "https://hq.example.com/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
+              "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
               "state": "pending",
               "target": ""
             },
-            "message": "This change is waiting for a person to approve it in HQ. Nothing has been written and nothing is queued. Tell whoever asked, with the request id, and stop; approving it is not something a token can do.",
+            "message": "This change waits for approval in HQ. Nothing is written or queued until an operator approves it, which a token cannot. Report the request id to your user, and read `approvals` by that id for how it stands.",
             "queued": false,
             "repeated": false,
             "status": "awaiting_approval"
@@ -2934,7 +3279,7 @@
             "details": {
               "field": "payload.idempotency_key"
             },
-            "message": "A retry key is required for capabilities that change state: send a new one as payload.idempotency_key, and the same one again when you retry this change."
+            "message": "A capability that changes something needs an idempotency key. Send a new payload.idempotency_key, and the same one when you retry this change."
           },
           "ok": false
         },
@@ -2954,7 +3299,7 @@
         "dataValue": {
           "error": {
             "code": "agents_paused",
-            "message": "Agents are paused by the operator."
+            "message": "An operator paused all agents in HQ. Try again later."
           },
           "ok": false
         },
@@ -3196,7 +3541,7 @@
               }
             ],
             "schema_version": 3,
-            "schemas": "Each list's query_schema, its filters' types and choices, and its paging, the most limit may ask for, are describe_resources with name set to its resource."
+            "schemas": "Each list's query_schema, filters, paging and largest limit are in describe_resources with name set to its resource."
           },
           "ok": true
         },
@@ -3206,7 +3551,7 @@
         "dataValue": {
           "error": {
             "code": "agents_paused",
-            "message": "Agents are paused by the operator."
+            "message": "An operator paused all agents in HQ. Try again later."
           },
           "ok": false
         },
@@ -3330,19 +3675,18 @@
             ],
             "schema_version": 2,
             "summary": {
-              "edges": 305,
+              "edges": 307,
               "kinds": {
-                "ability": 58,
+                "ability": 61,
                 "connection": 10,
-                "controller": 1,
                 "machine": 3,
                 "registry": 1,
-                "resource": 42,
+                "resource": 46,
                 "service": 8,
-                "target": 1,
+                "target": 2,
                 "zone": 1
               },
-              "nodes": 125
+              "nodes": 132
             },
             "trace": null
           },
@@ -3353,7 +3697,7 @@
     },
     "headers": {
       "ChangeTooManyRequestsRetryAfter": {
-        "description": "Whole seconds until asking again can succeed, as `error.retry_after` says.",
+        "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
         "required": false,
         "schema": {
           "minimum": 1,
@@ -3367,7 +3711,7 @@
         }
       },
       "TooManyRequestsRetryAfter": {
-        "description": "Whole seconds until asking again can succeed, as `error.retry_after` says.",
+        "description": "Whole seconds to wait before retrying, the same as `error.retry_after`.",
         "required": true,
         "schema": {
           "minimum": 1,
@@ -3478,6 +3822,15 @@
           "type": "integer"
         }
       },
+      "IdLookup": {
+        "description": "The `id` to read it for.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "IdempotencyKey": {
         "in": "header",
         "name": "Idempotency-Key",
@@ -3522,6 +3875,15 @@
           "type": "string"
         }
       },
+      "OperationIdIdentifier": {
+        "description": "The record's `operation_id`, as each item of the list carries it.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "PageLimit": {
         "description": "How many records a page holds, 1 to 100; next.cursor reads the page after.",
         "explode": true,
@@ -3535,6 +3897,15 @@
           "type": "integer"
         },
         "style": "form"
+      },
+      "PlaybookIdentifier": {
+        "description": "The record's `playbook`, as each item of the list carries it.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
       },
       "ProviderIdentifier": {
         "description": "The record's `provider`, as each item of the list carries it.",
@@ -3693,6 +4064,30 @@
         },
         "description": "Not Found."
       },
+      "ApprovalWithdrawnSuccess": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "additionalProperties": false,
+              "properties": {
+                "data": {
+                  "$ref": "#/components/schemas/ApprovalWithdrawn"
+                },
+                "ok": {
+                  "$ref": "#/components/schemas/Outcome",
+                  "const": true
+                }
+              },
+              "required": [
+                "ok",
+                "data"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        "description": "Success."
+      },
       "AssetSavedSuccess": {
         "content": {
           "application/json": {
@@ -3739,7 +4134,7 @@
             }
           }
         },
-        "description": "Accepted: held for a person, and nothing has happened yet."
+        "description": "Accepted: held for approval in HQ. Nothing has happened yet."
       },
       "ChangeConflict": {
         "content": {
@@ -5237,19 +5632,6 @@
             "description": "The list of records it governs; null for none."
           }
         },
-        "required": [
-          "name",
-          "label",
-          "effect",
-          "required_scopes",
-          "grant",
-          "evidence",
-          "available",
-          "missing_scopes",
-          "capability",
-          "subject_resource",
-          "action"
-        ],
         "type": "object"
       },
       "ActionItemRestoreRequest": {
@@ -5391,7 +5773,7 @@
           },
           "refusal": {
             "default": "",
-            "description": "Why its command would be refused if asked for now, in the command's words: set, the link is shown unusable with it. Empty when it would run.",
+            "description": "Why its command would be refused now, in the command's words. When set, the link shows as unusable with it. Empty when it would run.",
             "type": "string"
           },
           "target": {
@@ -5404,12 +5786,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "label",
-          "effect",
-          "url"
-        ],
         "type": "object"
       },
       "AddressLookedUp": {
@@ -5482,12 +5858,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "severity",
-          "summary",
-          "url"
-        ],
         "type": "object"
       },
       "AgendaItem": {
@@ -5682,7 +6052,7 @@
           },
           "payload": {
             "additionalProperties": false,
-            "description": "The theme to draw this person's pages in.",
+            "description": "The theme to draw your pages in.",
             "properties": {
               "idempotency_key": {
                 "$ref": "#/components/schemas/IdempotencyKey"
@@ -5725,6 +6095,50 @@
         ],
         "description": "The operation queued to apply the change at once; null where none was.",
         "title": "Applying"
+      },
+      "ApprovalWithdrawRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The held request to take back, which you asked for.",
+            "properties": {
+              "approval_id": {
+                "description": "The held request to withdraw. The `approval.id` its held answer carried.",
+                "type": "string"
+              },
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              }
+            },
+            "required": [
+              "approval_id"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "ApprovalWithdrawn": {
+        "additionalProperties": false,
+        "description": "A held change its asker took back, so nothing it asked was done.",
+        "properties": {
+          "withdrawn": {
+            "description": "The id of the request withdrawn.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "withdrawn"
+        ],
+        "type": "object"
       },
       "AsRead": {
         "description": "An object in its source's own shape, passed on as HQ read it: its keys are the source's.",
@@ -5950,12 +6364,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "projects",
-          "content",
-          "documentation",
-          "expense_ids"
-        ],
         "type": "object"
       },
       "AssetName": {
@@ -6249,7 +6657,7 @@
         "type": "string"
       },
       "Assignee": {
-        "description": "Who is handling it. Empty for nobody.",
+        "description": "Who is handling it. Empty when unassigned.",
         "maxLength": 120,
         "type": "string"
       },
@@ -6257,13 +6665,70 @@
         "description": "How many times a controller has tried it.",
         "type": "integer"
       },
+      "AutomationRunCancelRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "The run to cancel, by its operation id.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "operation_id": {
+                "description": "The run to cancel. Its `operation.id`, from the answer that queued it, or its held request's `operation` once approved.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "operation_id"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "payload"
+        ],
+        "type": "object"
+      },
+      "AutomationSourceRefreshRequest": {
+        "additionalProperties": false,
+        "description": "A capability call: the command, the record it acts on, and that record as it was last read.",
+        "properties": {
+          "expected_updated_at": {
+            "$ref": "#/components/schemas/ExpectedUpdatedAt"
+          },
+          "payload": {
+            "additionalProperties": false,
+            "description": "A Refresh takes nothing but why it was asked and its retry key: the\nrepository is the host's configuration.",
+            "properties": {
+              "idempotency_key": {
+                "$ref": "#/components/schemas/IdempotencyKey"
+              },
+              "reason": {
+                "default": "",
+                "description": "Why it is refreshed, kept with the scan.",
+                "maxLength": 300,
+                "type": "string"
+              }
+            },
+            "type": "object"
+          }
+        },
+        "required": [],
+        "type": "object"
+      },
       "AwaitingApproval": {
         "additionalProperties": false,
-        "description": "A call held for a person, which is no error: nothing is written or queued until one agrees.",
+        "description": "A call held for approval, which is no error: nothing is written or queued until an operator approves.",
         "properties": {
           "applied": {
             "const": false,
-            "description": "Whether anything changed, which nothing has while the call waits.",
+            "description": "Always false: nothing changes while the call waits.",
             "type": "boolean"
           },
           "approval": {
@@ -6275,7 +6740,7 @@
           },
           "queued": {
             "const": false,
-            "description": "Whether any work was queued, which it never is while the call waits.",
+            "description": "Always false: no work is queued while the call waits.",
             "type": "boolean"
           },
           "repeated": {
@@ -6284,7 +6749,7 @@
           },
           "status": {
             "const": "awaiting_approval",
-            "description": "That the call waits for a person.",
+            "description": "That the call waits for approval.",
             "type": "string"
           }
         },
@@ -6310,10 +6775,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "reason"
-        ],
         "type": "object"
       },
       "Breakdown": {
@@ -6713,14 +7174,14 @@
             "type": "string"
           },
           "target_initial_fields": {
-            "description": "The fields of its command filled in from the target's record, to be changed from there.",
+            "description": "The command's fields filled in from the target's record, which you may change.",
             "items": {
               "type": "string"
             },
             "type": "array"
           },
           "target_label": {
-            "description": "What a person calls the record it acts on; empty for none.",
+            "description": "The type of record it acts on, as HQ's pages name it; empty for none.",
             "type": "string"
           },
           "target_query": {
@@ -6747,7 +7208,7 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "What its button says in each of its modes, by the mode's name, where one button cannot say all.",
+            "description": "What its button says in each mode, by mode name, where one label cannot fit every mode.",
             "type": "object"
           },
           "verb": {
@@ -6786,7 +7247,7 @@
             "$ref": "#/components/schemas/CapabilityDescription/properties/execution_notes"
           },
           "idempotency_key_required": {
-            "description": "Whether this caller must send an idempotency key to run it: any change, from all but the host's shell.",
+            "description": "Whether you must send an idempotency key to run it: true for any change, except from the host's shell.",
             "type": "boolean"
           },
           "input_schema": {
@@ -6802,7 +7263,7 @@
             "$ref": "#/components/schemas/CapabilitySummary/properties/permitted"
           },
           "request_schema": {
-            "description": "The JSON Schema of the body a call to run it sends.",
+            "description": "The JSON Schema of the request body that runs it.",
             "type": "object"
           },
           "required_capabilities": {
@@ -6863,7 +7324,7 @@
         "description": "The capability catalog as the machine API answers it: each entry with the body it is called by.",
         "properties": {
           "capabilities": {
-            "description": "Each capability asked for that this caller's interface can run.",
+            "description": "Each capability asked for that you can run from here.",
             "items": {
               "$ref": "#/components/schemas/CapabilityEntry"
             },
@@ -6882,18 +7343,18 @@
       },
       "CapabilitySummary": {
         "additionalProperties": false,
-        "description": "One registry entry as an index names it: what it is and whether the caller may run it, without its schema.",
+        "description": "One command as the index lists it: what it does and whether you may run it, without its schema.",
         "properties": {
           "effect": {
             "description": "What running it does: `read`, `remote_write`, `infrastructure_change` or `destructive`.",
             "type": "string"
           },
           "label": {
-            "description": "What a person calls the command.",
+            "description": "The command's name, as HQ's pages show it.",
             "type": "string"
           },
           "name": {
-            "description": "The command's dotted name, which running it takes.",
+            "description": "The command's dotted name, which you run it by.",
             "type": "string"
           },
           "permitted": {
@@ -6933,7 +7394,7 @@
             "type": "string"
           },
           "issuer": {
-            "description": "Who issued it; empty when not read.",
+            "description": "Who issued it, or 'uploaded' for one uploaded to the proxy that serves it; empty when not read.",
             "type": "string"
           },
           "name": {
@@ -6961,14 +7422,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "role",
-          "name",
-          "issuer",
-          "expiry",
-          "source",
-          "unread"
-        ],
         "type": "object"
       },
       "CertificateRenewRequest": {
@@ -7012,6 +7465,7 @@
                   "refused_hold",
                   "rejected",
                   "stale",
+                  "withdrawn",
                   "work_failed"
                 ]
               },
@@ -7165,7 +7619,7 @@
         "type": "object"
       },
       "CommandAnswer": {
-        "description": "What the command answers, in the shape its capability names, which that capability's own route in this document gives.",
+        "description": "What the command answers, in the shape its capability's own route in this document gives.",
         "type": "object"
       },
       "CompletedAt": {
@@ -7208,12 +7662,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "type",
-          "status",
-          "reason",
-          "message"
-        ],
         "type": "object"
       },
       "ConfirmPrune": {
@@ -7265,7 +7713,7 @@
             "description": "The service's own documentation for it; null for none."
           },
           "label": {
-            "description": "What a person calls this type of connection.",
+            "description": "The name a page gives this type of connection.",
             "type": "string"
           },
           "management_route": {
@@ -7349,11 +7797,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "url",
-          "resource_key"
-        ],
         "type": "object"
       },
       "ConnectionStandingRecord": {
@@ -7520,7 +7963,7 @@
                 "type": "null"
               }
             ],
-            "description": "When a refresh of it was asked for that has not run yet, an ISO 8601 date-time; null when none waits."
+            "description": "When a refresh still waiting to run was asked for, an ISO 8601 date-time; null when none waits."
           },
           "reads": {
             "description": "What its credential reads.",
@@ -7602,7 +8045,7 @@
                 "type": "null"
               }
             ],
-            "description": "The ref its controller and HQ's audit log name it by, which a read of one names it by; null for none."
+            "description": "The ref its controller and HQ's audit log name it by, which a read of one also takes. Null for none."
           },
           "detail": {
             "description": "A line on what it last reported, such as how much it holds; empty when there is nothing to add.",
@@ -7921,7 +8364,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/compose_project"
           },
           "image": {
-            "description": "What it runs: the reference, registry, repository, tag, digest and image id, whether it is pinned by digest, when it was built, and its source.",
+            "description": "What it runs: reference, registry, repository, tag, digest, image id, whether pinned by digest, build time and source.",
             "type": "object"
           },
           "machine": {
@@ -7931,7 +8374,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/name"
           },
           "posture": {
-            "description": "How it measures against the container standard: how many checks it meets of those measured, each check's state, why each unmet one matters and its fix, and what is off by design.",
+            "description": "How it meets the container standard: the checks met and each check's state. An unmet check has its reason and fix; a check off by design says so.",
             "type": "object"
           },
           "project": {
@@ -7973,7 +8416,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/serves"
           },
           "standing": {
-            "description": "Whether what it runs is current and safe: a state and summary, newer tags, the latest release, advisories, and when the registry and upstream were last read.",
+            "description": "Whether what it runs is current and safe: its state and summary, newer tags, the latest release and advisories. It also says when the registry and upstream were last read.",
             "type": "object"
           },
           "state": {
@@ -7983,7 +8426,7 @@
             "$ref": "#/components/schemas/ContainerRow/properties/status"
           },
           "supply_chain": {
-            "description": "Where its image comes from: its source, provenance, packages, SBOM, attestations, known vulnerabilities and when they were read, and how it measures against the supply chain standard.",
+            "description": "Where its image comes from: source, provenance, packages, SBOM, attestations, and known vulnerabilities with when they were read. It also says how it meets the supply chain standard.",
             "type": "object"
           },
           "url": {
@@ -8523,7 +8966,7 @@
             "description": "The service's words when it refused the credential; null when it did not."
           },
           "steps": {
-            "description": "What a person does to replace it, in order.",
+            "description": "What you do to replace it, in order.",
             "items": {
               "$ref": "#/components/schemas/OperatorStep"
             },
@@ -8537,16 +8980,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "missing",
-          "unseen",
-          "refused",
-          "expires_at",
-          "expiring",
-          "expired",
-          "permissions",
-          "steps"
-        ],
         "type": "object"
       },
       "CredentialRecord": {
@@ -8627,13 +9060,6 @@
             "$ref": "#/components/schemas/CredentialRow/properties/tally"
           }
         },
-        "required": [
-          "provider",
-          "label",
-          "credential_refusal",
-          "tally",
-          "manages"
-        ],
         "type": "object"
       },
       "Cursor": {
@@ -8901,15 +9327,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "record_type",
-          "value",
-          "proxied",
-          "ttl",
-          "declaration",
-          "observed_only"
-        ],
         "type": "object"
       },
       "DocEnvironment": {
@@ -9649,7 +10066,7 @@
             "type": "string"
           },
           "label": {
-            "description": "The name a person reads; never matched on, since `identity` is what addresses it.",
+            "description": "The name shown; never matched on, since `identity` is what addresses it.",
             "type": "string"
           },
           "title": {
@@ -9663,9 +10080,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label"
-        ],
         "type": "object"
       },
       "EntryRecord": {
@@ -9710,7 +10124,7 @@
             "$ref": "#/components/schemas/CalendarEntryRepeat"
           },
           "repeat_label": {
-            "description": "How it repeats, as a person says it, such as `Every 2 weeks on Mon`; empty for once.",
+            "description": "How it repeats, in words, such as `Every 2 weeks on Mon`; empty for once.",
             "type": "string"
           },
           "repeat_until": {
@@ -9848,12 +10262,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "value",
-          "detail",
-          "role"
-        ],
         "type": "object"
       },
       "ExpectedUpdatedAt": {
@@ -10373,13 +10781,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label",
-          "present",
-          "state",
-          "resources"
-        ],
         "type": "object"
       },
       "FactPart": {
@@ -10394,10 +10795,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "value"
-        ],
         "type": "object"
       },
       "Failure": {
@@ -10430,10 +10827,6 @@
             "description": "What was found, most often a name or a sentence."
           }
         },
-        "required": [
-          "label",
-          "value"
-        ],
         "type": "object"
       },
       "Findings": {
@@ -10608,10 +11001,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "entry",
-          "name"
-        ],
         "type": "object"
       },
       "GroupPart": {
@@ -10629,17 +11018,13 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "members"
-        ],
         "type": "object"
       },
       "HeaderAddressPart": {
         "additionalProperties": false,
         "properties": {
           "address": {
-            "description": "The address a person reaches the machine at there.",
+            "description": "The address you reach the machine at there.",
             "type": "string"
           },
           "holder": {
@@ -10651,11 +11036,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "address",
-          "holder"
-        ],
         "type": "object"
       },
       "HealthPart": {
@@ -10679,17 +11059,11 @@
             "type": "string"
           }
         },
-        "required": [
-          "state",
-          "label",
-          "reason",
-          "message"
-        ],
         "type": "object"
       },
       "HeldRequest": {
         "additionalProperties": false,
-        "description": "A call held for a person: what it asks, who asked, and where it is decided.",
+        "description": "A call held for approval: what it asks, who asked, and where it is decided.",
         "properties": {
           "capability": {
             "description": "The command it would run, by name.",
@@ -10704,7 +11078,7 @@
             "type": "string"
           },
           "id": {
-            "description": "The request's id, which its asker reports to whoever asked.",
+            "description": "The request's id, which the asking agent reports back to its user and `approvals` reads it by.",
             "type": "string"
           },
           "reason": {
@@ -10728,15 +11102,15 @@
             "type": "string"
           },
           "resource_kind": {
-            "description": "The type of what it would change, which is why it waits for a person; empty for none.",
+            "description": "The type of what it would change, which is why it needs approval; empty for none.",
             "type": "string"
           },
           "review_url": {
-            "description": "Where a person decides it in HQ's web interface, as an absolute address.",
+            "description": "The absolute address in HQ's web interface where an operator decides it.",
             "type": "string"
           },
           "state": {
-            "description": "Where the request stands: `pending`, `approved`, `rejected`, `expired` or `stale`; only a `pending` one can still be decided.",
+            "description": "Where the request stands: `pending`, `approved`, `rejected`, `expired`, `stale` or `withdrawn`; only a `pending` one can still be decided.",
             "type": "string"
           },
           "target": {
@@ -10761,6 +11135,72 @@
         ],
         "type": "object"
       },
+      "HeldRequestRecord": {
+        "additionalProperties": false,
+        "description": "A held request you asked for: what it asks, where it stands, and once done what the call answered.",
+        "properties": {
+          "answer": {
+            "description": "What the call answered once done: its command's own answer, carrying its work as it ended, or a refusal coded `declined`, `expired`, `stale`, `withdrawn` or `operation_failed`; empty until then.",
+            "type": "object"
+          },
+          "asks": {
+            "description": "What it asks, in the sentence its card in HQ says.",
+            "type": "string"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/HeldRequest/properties/capability"
+          },
+          "content_fingerprint": {
+            "$ref": "#/components/schemas/HeldRequest/properties/content_fingerprint"
+          },
+          "done": {
+            "description": "Whether it is settled: declined, lapsed, overtaken or withdrawn, or approved and its work ended.",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/HeldRequest/properties/expires_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/HeldRequest/properties/id"
+          },
+          "operation": {
+            "description": "The id of the work its call queued once approved, which `runs` reads a playbook's run by; empty while it waits, or for a call that queued nothing.",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HeldRequest/properties/reason"
+          },
+          "requested_actor": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_actor"
+          },
+          "requested_at": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_at"
+          },
+          "requested_interface": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_interface"
+          },
+          "resource_key": {
+            "$ref": "#/components/schemas/HeldRequest/properties/resource_key"
+          },
+          "resource_kind": {
+            "$ref": "#/components/schemas/HeldRequest/properties/resource_kind"
+          },
+          "review_url": {
+            "$ref": "#/components/schemas/HeldRequest/properties/review_url"
+          },
+          "said": {
+            "description": "Where it stands, in a sentence.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HeldRequest/properties/state"
+          },
+          "target": {
+            "$ref": "#/components/schemas/HeldRequest/properties/target"
+          }
+        },
+        "type": "object"
+      },
       "HopCheckPart": {
         "additionalProperties": false,
         "properties": {
@@ -10777,16 +11217,10 @@
             "type": "string"
           },
           "step": {
-            "description": "What a person does to settle a disagreement; empty for none.",
+            "description": "What you do to settle a disagreement; empty for none.",
             "type": "string"
           }
         },
-        "required": [
-          "state",
-          "label",
-          "detail",
-          "step"
-        ],
         "type": "object"
       },
       "HopRow": {
@@ -10908,13 +11342,6 @@
             ]
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "connection",
-          "observed_at",
-          "declared"
-        ],
         "type": "object"
       },
       "HqImportRequest": {
@@ -11080,10 +11507,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "tag",
-          "digest"
-        ],
         "type": "object"
       },
       "ImportSummary": {
@@ -11617,14 +12040,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "value",
-          "detail",
-          "url",
-          "concern",
-          "notice"
-        ],
         "type": "object"
       },
       "InternalServerErrorRefusal": {
@@ -11734,12 +12149,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "connection",
-          "records"
-        ],
         "type": "object"
       },
       "KeptValue": {
@@ -11782,11 +12191,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "summary",
-          "created_at",
-          "audit_id"
-        ],
         "type": "object"
       },
       "LastReviewed": {
@@ -11841,16 +12245,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label",
-          "state",
-          "detail",
-          "evidence",
-          "boundary",
-          "mechanism",
-          "rules"
-        ],
         "type": "object"
       },
       "LensEntry": {
@@ -12030,16 +12424,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "stack",
-          "image",
-          "state",
-          "status",
-          "published",
-          "watcher",
-          "observed_at"
-        ],
         "type": "object"
       },
       "MachineRecord": {
@@ -12072,7 +12456,7 @@
             "type": "string"
           },
           "header_addresses": {
-            "description": "The addresses a person reaches it at, tailnet then LAN then public.",
+            "description": "The addresses you reach it at, tailnet then LAN then public.",
             "items": {
               "$ref": "#/components/schemas/HeaderAddressPart"
             },
@@ -12238,7 +12622,7 @@
             "$ref": "#/components/schemas/ManagedResourceRow/properties/last_observed_at"
           },
           "observed_generation": {
-            "description": "Which version of HQ's copy was last applied and confirmed back; it equals the current version when no change waits to apply.",
+            "description": "Which version of HQ's copy was last applied and confirmed back. It equals the current version when no change waits to apply.",
             "type": "integer"
           },
           "public_effect": {
@@ -12256,22 +12640,6 @@
             "$ref": "#/components/schemas/UpdatedAt"
           }
         },
-        "required": [
-          "key",
-          "kind",
-          "enabled",
-          "in_sync",
-          "health",
-          "public_effect",
-          "last_observed_at",
-          "id",
-          "spec",
-          "status",
-          "conditions",
-          "generation",
-          "observed_generation",
-          "updated_at"
-        ],
         "type": "object"
       },
       "ManagedResourceKey": {
@@ -12297,11 +12665,15 @@
           "adguard.rewrite",
           "cloudflare.dns_record",
           "cloudflare.zone",
-          "cloudflare.contact_inbox"
+          "cloudflare.contact_inbox",
+          "automation.operation",
+          "automation.source"
         ],
         "type": "string",
         "x-enumDescriptions": {
           "adguard.rewrite": "Internal DNS record",
+          "automation.operation": "Playbook",
+          "automation.source": "Playbooks",
           "caddy.route": "Caddy route",
           "cloudflare.contact_inbox": "Contact inbox",
           "cloudflare.dns_record": "Public DNS record",
@@ -12325,7 +12697,7 @@
         "description": "One managed record, what HQ derives from it, and the operations run on it.",
         "properties": {
           "derived": {
-            "description": "What HQ makes of the record: its health, what may be done to it and why not, its machines and services, what HQ expects beside what is live, a certificate's expiry and use, the changes waiting for approval, and what uses it.",
+            "description": "What HQ derives from the record. It holds health, allowed actions, machines and services, expected beside live, certificate expiry, pending approvals and what uses it.",
             "type": "object"
           },
           "operations": {
@@ -12755,12 +13127,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "type",
-          "source",
-          "destination",
-          "read_only"
-        ],
         "type": "object"
       },
       "NameAnswer": {
@@ -12939,13 +13305,6 @@
             "description": "Where HQ read it; null when nothing says."
           }
         },
-        "required": [
-          "relation",
-          "name",
-          "link",
-          "detail",
-          "source"
-        ],
         "type": "object"
       },
       "ObsidianPath": {
@@ -12953,7 +13312,7 @@
         "type": "string"
       },
       "OperationAction": {
-        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop` or `approve-routes`.",
+        "description": "What it does: `reconcile`, `renew`, `delete`, `restart`, `start`, `stop`, `approve-routes`, `run` or `scan`.",
         "type": "string"
       },
       "OperationCommand": {
@@ -12991,6 +13350,10 @@
           },
           "completed_at": {
             "$ref": "#/components/schemas/CompletedAt"
+          },
+          "correlation": {
+            "description": "The asker's own id for finding it later; empty for none.",
+            "type": "string"
           },
           "created_at": {
             "$ref": "#/components/schemas/AskedAt"
@@ -13043,7 +13406,8 @@
           "claimed_by",
           "lease_expires_at",
           "attempt_count",
-          "result"
+          "result",
+          "correlation"
         ],
         "type": "object"
       },
@@ -13102,7 +13466,7 @@
             "type": "boolean"
           },
           "by": {
-            "description": "Who asked for it, as a person reads it: `Automatic` for the controller.",
+            "description": "Who asked for it, through which door, and who approved it, as HQ's pages name them.",
             "type": "string"
           },
           "completed_at": {
@@ -13170,30 +13534,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "action",
-          "action_label",
-          "state",
-          "state_label",
-          "tone",
-          "headline",
-          "automatic",
-          "requested_actor",
-          "requested_interface",
-          "by",
-          "approved_by",
-          "created_at",
-          "completed_at",
-          "attempt_count",
-          "reason",
-          "condition",
-          "affected",
-          "evidence",
-          "matched",
-          "expected_fingerprint_sha256",
-          "raw_result"
-        ],
         "type": "object"
       },
       "OperatorStep": {
@@ -13218,9 +13558,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "label"
-        ],
         "type": "object"
       },
       "OriginPart": {
@@ -13240,11 +13577,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "address",
-          "host",
-          "container"
-        ],
         "type": "object"
       },
       "Outcome": {
@@ -13270,10 +13602,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "relation",
-          "link"
-        ],
         "type": "object"
       },
       "PageLimit": {
@@ -13374,12 +13702,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "name",
-          "label",
-          "requires",
-          "provider"
-        ],
         "type": "object"
       },
       "PartRefusalPart": {
@@ -13413,15 +13735,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "part",
-          "refusal",
-          "reason",
-          "scope",
-          "connection_ref",
-          "address"
-        ],
         "type": "object"
       },
       "PathRecord": {
@@ -13629,7 +13942,7 @@
       },
       "PinsChanged": {
         "additionalProperties": false,
-        "description": "Which type of thing the call changed the person's pins of.",
+        "description": "Which type of thing the call changed your pins of.",
         "properties": {
           "kind": {
             "$ref": "#/components/schemas/PinKind"
@@ -13638,6 +13951,78 @@
         "required": [
           "kind"
         ],
+        "type": "object"
+      },
+      "PlaybookFact": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "What the fact is about, as its Run page labels it.",
+            "type": "string"
+          },
+          "value": {
+            "description": "The fact in the words its Run page says it in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "PlaybookRecord": {
+        "additionalProperties": false,
+        "description": "One playbook whole: its row, and what its Run page states of it.",
+        "properties": {
+          "capability": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/capability"
+          },
+          "effect": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/effect"
+          },
+          "facts": {
+            "description": "What its Run page states of it, each fact by its label, such as where it runs and its timeout.",
+            "items": {
+              "$ref": "#/components/schemas/PlaybookFact"
+            },
+            "type": "array"
+          },
+          "playbook": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/playbook"
+          },
+          "reachable": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/reachable"
+          },
+          "title": {
+            "$ref": "#/components/schemas/PlaybookRow/properties/title"
+          }
+        },
+        "type": "object"
+      },
+      "PlaybookRow": {
+        "additionalProperties": false,
+        "properties": {
+          "capability": {
+            "description": "The command that runs it, by name. Its schema says what it takes, and its notes what it does.",
+            "type": "string"
+          },
+          "effect": {
+            "description": "What it does to a machine: `read`, `infrastructure_change` or `destructive`. Anything but a read waits for an operator's approval when an agent asks.",
+            "type": "string"
+          },
+          "playbook": {
+            "description": "The playbook's id, which a read of one and the `runs` filter `playbook` take.",
+            "type": "string"
+          },
+          "reachable": {
+            "description": "The machines a run of it may name now, each by its name in HQ. HQ's runner has a login to each as it needs. A Refresh reads them anew.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "Its name in HQ, as its Run page is headed.",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "PolicyCounts": {
@@ -13661,12 +14046,6 @@
             "type": "integer"
           }
         },
-        "required": [
-          "grants",
-          "groups",
-          "tags",
-          "tests"
-        ],
         "type": "object"
       },
       "PolicyGrantPart": {
@@ -13691,13 +14070,6 @@
             "$ref": "#/components/schemas/PolicyRulePart/properties/src"
           }
         },
-        "required": [
-          "src",
-          "dst",
-          "sources",
-          "destinations",
-          "ports"
-        ],
         "type": "object"
       },
       "PolicyNamePart": {
@@ -13720,10 +14092,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "text",
-          "link"
-        ],
         "type": "object"
       },
       "PolicyRulePart": {
@@ -13757,12 +14125,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "src",
-          "dst",
-          "sources",
-          "destinations"
-        ],
         "type": "object"
       },
       "PresencePart": {
@@ -13874,27 +14236,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "online",
-          "last_seen",
-          "tailnet_name",
-          "dns_name",
-          "tailnet_address",
-          "lan_address",
-          "os",
-          "client_version",
-          "update_available",
-          "key_expires",
-          "authorized",
-          "tags",
-          "advertised_routes",
-          "enabled_routes",
-          "offers_exit_node",
-          "exit_node_approved",
-          "ssh_enabled",
-          "blocks_incoming",
-          "observed_at"
-        ],
         "type": "object"
       },
       "Problem": {
@@ -14204,12 +14545,6 @@
             "$ref": "#/components/schemas/LinkedExpenses"
           }
         },
-        "required": [
-          "assets",
-          "content",
-          "documentation",
-          "expense_ids"
-        ],
         "type": "object"
       },
       "ProjectName": {
@@ -14232,11 +14567,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "slug",
-          "url"
-        ],
         "type": "object"
       },
       "ProjectRecord": {
@@ -14563,12 +14893,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "number",
-          "title",
-          "url",
-          "draft"
-        ],
         "type": "object"
       },
       "PurchaseDate": {
@@ -14600,10 +14924,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "name",
-          "url"
-        ],
         "type": "object"
       },
       "ReachPart": {
@@ -14736,20 +15056,6 @@
             "description": "The bytes sent to it over the tailnet; null when not read."
           }
         },
-        "required": [
-          "network",
-          "label",
-          "summary",
-          "host",
-          "address",
-          "machine",
-          "peer_path",
-          "direct_endpoint",
-          "relay",
-          "handshake",
-          "rx_bytes",
-          "tx_bytes"
-        ],
         "type": "object"
       },
       "ReadConflictRefusal": {
@@ -14868,11 +15174,6 @@
             "description": "What was last read of it; null when nothing reads it yet."
           }
         },
-        "required": [
-          "label",
-          "sight",
-          "ability"
-        ],
         "type": "object"
       },
       "ReadingItem": {
@@ -15303,11 +15604,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "expires",
-          "source",
-          "auto_renew"
-        ],
         "type": "object"
       },
       "RelationGroupPart": {
@@ -15329,11 +15625,6 @@
             "type": "integer"
           }
         },
-        "required": [
-          "phrase",
-          "rank",
-          "items"
-        ],
         "type": "object"
       },
       "RelationshipPart": {
@@ -15369,12 +15660,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "entity",
-          "source",
-          "observed_at",
-          "stale"
-        ],
         "type": "object"
       },
       "RelationshipsRecord": {
@@ -15436,11 +15721,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "tag",
-          "url",
-          "published"
-        ],
         "type": "object"
       },
       "RenewalAllowed": {
@@ -15523,16 +15803,6 @@
             "type": "boolean"
           }
         },
-        "required": [
-          "name",
-          "url",
-          "default_branch",
-          "head",
-          "deployed",
-          "undeployed",
-          "verified",
-          "open_pull_requests"
-        ],
         "type": "object"
       },
       "RepositoryUrl": {
@@ -15653,7 +15923,7 @@
         "description": "One registry entry as every adapter describes it.",
         "properties": {
           "label": {
-            "description": "What a person calls the resource.",
+            "description": "The name a page gives the resource.",
             "type": "string"
           },
           "name": {
@@ -15809,7 +16079,7 @@
         "type": "object"
       },
       "ResourceRecordAnswer": {
-        "description": "One record, in the shape its resource names, which that resource's own route in this document gives.",
+        "description": "One record, in the shape its resource's own route in this document gives.",
         "type": "object"
       },
       "ResourceSaved": {
@@ -15868,15 +16138,11 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label"
-        ],
         "type": "object"
       },
       "RootData": {
         "additionalProperties": false,
-        "description": "What this API is, and what the presented credential may do.",
+        "description": "What this API is, and what your credential may do.",
         "properties": {
           "actor": {
             "description": "Who the presented credential acts as, by the name HQ records its calls under.",
@@ -15917,18 +16183,18 @@
       },
       "RootLinks": {
         "additionalProperties": false,
-        "description": "Where each of the API's own reads is, every one a path on this host.",
+        "description": "The path of each of the API's reads on this host.",
         "properties": {
           "capabilities": {
-            "description": "Every capability a token could ever hold, flagged by whether this one may run it.",
+            "description": "Every capability, each flagged by whether your token may run it.",
             "type": "string"
           },
           "connections": {
-            "description": "Connection contracts and whether this token is permitted each.",
+            "description": "The connection contracts, and whether your token may use each.",
             "type": "string"
           },
           "findings": {
-            "description": "What HQ currently claims is wrong, with the evidence and a remedy.",
+            "description": "The open problems HQ found, with the evidence and a remedy for each.",
             "type": "string"
           },
           "openapi": {
@@ -15936,11 +16202,11 @@
             "type": "string"
           },
           "resources": {
-            "description": "Every readable resource, including operations this token may use.",
+            "description": "Every readable resource, with the operations your token may use.",
             "type": "string"
           },
           "topology": {
-            "description": "The live permitted infrastructure graph and its canonical actions.",
+            "description": "The live infrastructure graph you may read, with each node's safe actions.",
             "type": "string"
           }
         },
@@ -15984,12 +16250,77 @@
             "type": "string"
           }
         },
-        "required": [
-          "via",
-          "port",
-          "line",
-          "hops"
-        ],
+        "type": "object"
+      },
+      "RunRecord": {
+        "additionalProperties": false,
+        "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
+        "properties": {
+          "approved_by": {
+            "$ref": "#/components/schemas/RunRow/properties/approved_by"
+          },
+          "by": {
+            "$ref": "#/components/schemas/RunRow/properties/by"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/RunRow/properties/capability"
+          },
+          "correlation": {
+            "$ref": "#/components/schemas/RunRow/properties/correlation"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/RunRow/properties/created_at"
+          },
+          "duration_seconds": {
+            "$ref": "#/components/schemas/RunRow/properties/duration_seconds"
+          },
+          "events": {
+            "description": "Each task's outcome on each machine, in the order the worker ran them.",
+            "items": {
+              "$ref": "#/components/schemas/RunTask"
+            },
+            "type": "array"
+          },
+          "finished_at": {
+            "$ref": "#/components/schemas/RunRow/properties/finished_at"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/RunRow/properties/headline"
+          },
+          "hosts": {
+            "$ref": "#/components/schemas/RunRow/properties/hosts"
+          },
+          "lease_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When that worker must next report, or HQ reads the run as stopped; null unless one runs it."
+          },
+          "operation_id": {
+            "$ref": "#/components/schemas/RunRow/properties/operation_id"
+          },
+          "playbook": {
+            "$ref": "#/components/schemas/RunRow/properties/playbook"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/RunRow/properties/started_at"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RunRow/properties/state"
+          },
+          "state_label": {
+            "$ref": "#/components/schemas/RunRow/properties/state_label"
+          },
+          "worker": {
+            "description": "The worker running it now; empty unless one is.",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "RunRequested": {
@@ -16010,6 +16341,201 @@
           "requested",
           "asked_at"
         ],
+        "type": "object"
+      },
+      "RunRow": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "description": "Who approved it; empty for a run that needed no approval.",
+            "type": "string"
+          },
+          "by": {
+            "description": "Who asked for it, through which door, and who approved it, as Jobs names them.",
+            "type": "string"
+          },
+          "capability": {
+            "description": "The command it was asked for through, by name.",
+            "type": "string"
+          },
+          "correlation": {
+            "description": "The correlation id its asker sent; empty when it sent none.",
+            "type": "string"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AskedAt"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How long it worked for; null until it ends."
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it ended; null while it waits or works."
+          },
+          "headline": {
+            "description": "What it is doing or how it ended, in a sentence.",
+            "type": "string"
+          },
+          "hosts": {
+            "description": "The machines it acts on, each by its name in HQ.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "operation_id": {
+            "description": "The run's id: the `operation.id` its command answered, which a read of one names.",
+            "type": "string"
+          },
+          "playbook": {
+            "description": "The id of the playbook it runs, which the `playbook` filter takes.",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When a worker took it up; null while it waits."
+          },
+          "state": {
+            "description": "Where it stands, as Jobs shows it: `queued`, `running`, `succeeded`, `failed` or `lost`. `lost` is a run whose worker stopped reporting.",
+            "type": "string"
+          },
+          "state_label": {
+            "description": "That state in the words HQ's pages say it in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RunTask": {
+        "additionalProperties": false,
+        "description": "One task's outcome on one machine, as the worker reported it.",
+        "properties": {
+          "host": {
+            "description": "The machine the task ran on, as the playbook's inventory names it.",
+            "type": "string"
+          },
+          "message": {
+            "description": "What the task said; empty when it said nothing.",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "How it ended: `ok`, `changed`, `skipped`, `failed` or `unreachable`.",
+            "type": "string"
+          },
+          "task": {
+            "description": "The task, by its name in the playbook.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScanChange": {
+        "additionalProperties": false,
+        "properties": {
+          "change": {
+            "description": "How the scan changes it: added, changed or removed.",
+            "type": "string"
+          },
+          "playbook": {
+            "description": "The playbook by the key adopting or rejecting it alone takes: its id, or its sidecar.",
+            "type": "string"
+          },
+          "refused": {
+            "description": "Each reason HQ will not adopt its change; empty when it can.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "description": "Its name in HQ.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ScanResult": {
+        "additionalProperties": false,
+        "properties": {
+          "adopted": {
+            "description": "Whether every playbook it holds is adopted as it reads it, or rejected, so adopting it does nothing.",
+            "type": "boolean"
+          },
+          "branch": {
+            "description": "The branch that commit is on.",
+            "type": "string"
+          },
+          "changes": {
+            "description": "Each playbook whose change waits, neither adopted nor rejected, in the order of their titles.",
+            "items": {
+              "$ref": "#/components/schemas/ScanChange"
+            },
+            "type": "array"
+          },
+          "committer": {
+            "description": "Who committed it, as GitHub names them; empty when it said no one.",
+            "type": "string"
+          },
+          "id": {
+            "description": "The scan result's id.",
+            "type": "integer"
+          },
+          "pending": {
+            "description": "Whether it waits for an operator to adopt or reject it in HQ. An agent can't decide it.",
+            "type": "boolean"
+          },
+          "read_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When HQ read it, an ISO 8601 date-time."
+          },
+          "refused": {
+            "description": "Each reason HQ will not adopt it; empty when it can.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "The commit it read, by its full id.",
+            "type": "string"
+          },
+          "widens": {
+            "description": "Each way adopting it lets a run do more than it may now.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
         "type": "object"
       },
       "SchemaVersion": {
@@ -16085,23 +16611,6 @@
             "$ref": "#/components/schemas/SightPart/properties/state_label"
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "source",
-          "state",
-          "state_label",
-          "records",
-          "observed_at",
-          "error",
-          "requires",
-          "refusal",
-          "permissions",
-          "parts",
-          "remedy",
-          "freshness",
-          "freshness_label"
-        ],
         "type": "object"
       },
       "SerialNumber": {
@@ -16160,7 +16669,7 @@
             "type": "array"
           },
           "operator_steps": {
-            "description": "What a person does by hand to resolve it, in order. HQ never runs these.",
+            "description": "What you do by hand to resolve it, in order. HQ never runs these.",
             "items": {
               "$ref": "#/components/schemas/OperatorStep"
             },
@@ -16212,7 +16721,7 @@
                 "type": "null"
               }
             ],
-            "description": "The id of the map node it is about; null when it is about a type or a check as a whole."
+            "description": "The id of the map node it is about. Null when it is about a whole type or check."
           },
           "title": {
             "description": "The problem, in a line.",
@@ -16231,24 +16740,6 @@
             "description": "The plan that resolves it, a fix and then the check that confirms it; null when it has neither."
           }
         },
-        "required": [
-          "id",
-          "rule",
-          "subject",
-          "scope",
-          "affected_scopes",
-          "title",
-          "severity",
-          "explanation",
-          "evidence",
-          "remedies",
-          "offers",
-          "investigations",
-          "workflow",
-          "operator_steps",
-          "no_help_reason",
-          "since"
-        ],
         "type": "object"
       },
       "ServiceAdopted": {
@@ -16307,16 +16798,6 @@
             "$ref": "#/components/schemas/ServiceRow/properties/status_label"
           }
         },
-        "required": [
-          "hostname",
-          "status",
-          "status_label",
-          "origin",
-          "project",
-          "faults",
-          "mark",
-          "facets"
-        ],
         "type": "object"
       },
       "ServiceRecord": {
@@ -16443,11 +16924,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "label",
-          "value",
-          "machines"
-        ],
         "type": "object"
       },
       "SightPart": {
@@ -16518,21 +16994,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "source",
-          "state",
-          "state_label",
-          "records",
-          "observed_at",
-          "error",
-          "requires",
-          "refusal",
-          "permissions",
-          "parts",
-          "remedy"
-        ],
         "type": "object"
       },
       "Since": {
@@ -16545,7 +17006,7 @@
       },
       "SourcesChosen": {
         "additionalProperties": false,
-        "description": "Which calendar sources the person shows, as the call left them.",
+        "description": "Which calendar sources you show, as the call left them.",
         "properties": {
           "choices": {
             "additionalProperties": {
@@ -16601,17 +17062,10 @@
             "description": "The record the command runs on."
           }
         },
-        "required": [
-          "capability",
-          "target",
-          "label",
-          "effect",
-          "auto"
-        ],
         "type": "object"
       },
       "SyncStats": {
-        "description": "How the sync went: how many docs it created, updated and skipped, the links naming a record HQ does not hold, and the orphans found or pruned where asked.",
+        "description": "Docs created, updated and skipped, links to records HQ does not hold, and orphans found or pruned.",
         "type": "object"
       },
       "TagPart": {
@@ -16636,11 +17090,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "name",
-          "owners",
-          "machines"
-        ],
         "type": "object"
       },
       "Tailnet": {
@@ -16698,7 +17147,7 @@
                 "type": "null"
               }
             ],
-            "description": "Each node attribute target holding funnel, which a node needs to publish to the internet; empty when none does, null when the reading does not say."
+            "description": "The targets of node attributes that grant funnel, which a node needs to publish to the internet. Empty when none does; null when the reading does not say."
           },
           "grants": {
             "description": "The policy's grants as written.",
@@ -16854,10 +17303,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "count",
-          "state"
-        ],
         "type": "object"
       },
       "TargetedChangeBadRequestRefusal": {
@@ -16920,7 +17365,7 @@
       },
       "ThemeSet": {
         "additionalProperties": false,
-        "description": "The theme the person's pages are drawn in, as the call left it.",
+        "description": "The theme your pages are drawn in, as the call left it.",
         "properties": {
           "theme": {
             "description": "The theme now set: `system`, `light` or `dark`.",
@@ -17126,7 +17571,7 @@
           },
           "declared_revision": {
             "default": 0,
-            "description": "Which version of HQ's copy of the record HQ last asked for, counting up from 1 as the copy changes; 0 on a node HQ keeps no copy of.",
+            "description": "Which version of HQ's copy of the record HQ last asked for, counting up from 1 as the copy changes. It is 0 on a node HQ keeps no copy of.",
             "type": "integer"
           },
           "detail": {
@@ -17153,7 +17598,7 @@
             "type": "array"
           },
           "id": {
-            "description": "Names this node for the rest of the answer and later reads: an edge's source and target, a trace's focus, a problem's subject. Stable while the thing it stands for exists.",
+            "description": "Names this node across the answer and later reads, such as an edge's source or a problem's subject. Stable while the thing it stands for exists.",
             "type": "string"
           },
           "kind": {
@@ -17166,7 +17611,7 @@
             "type": "string"
           },
           "label": {
-            "description": "The key HQ files it under, which a command or a record's page is addressed by: a record's key, a machine's name, a hostname.",
+            "description": "The key commands and pages address it by: a record's key, a machine's name or a hostname.",
             "type": "string"
           },
           "managed": {
@@ -17176,7 +17621,7 @@
           },
           "name": {
             "default": "",
-            "description": "What a person calls it, where that differs from `label`: the name a record stands for. Empty when `label` already reads as that name.",
+            "description": "The name it goes by, where that differs from `label`: the name a record stands for. Empty when `label` already reads as that name.",
             "type": "string"
           },
           "observed_at": {
@@ -17220,7 +17665,7 @@
           },
           "reason": {
             "default": "",
-            "description": "The reason on its current condition, verbatim, saying whether a read of the live system wrote it or applying HQ's copy did, which no read has confirmed since.",
+            "description": "The reason on its current condition, verbatim. A live read sets it, or applying HQ's copy before a read confirms it.",
             "type": "string"
           },
           "status": {
@@ -17244,7 +17689,7 @@
           },
           "unconfirmed_fields": {
             "default": [],
-            "description": "Fields HQ's copy sets that the last read did not report back, leaving out those the service cannot report: set, but never checked.",
+            "description": "Fields HQ's copy sets that the last read did not report back: set, but never checked. Fields the service cannot report are left out.",
             "items": {
               "type": "string"
             },
@@ -17504,16 +17949,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "label",
-          "state",
-          "state_label",
-          "refusal",
-          "error",
-          "remedy",
-          "requires"
-        ],
         "type": "object"
       },
       "UnsupportedMediaTypeRefusal": {
@@ -17668,11 +18103,6 @@
             "description": "When it started, an ISO 8601 date-time."
           }
         },
-        "required": [
-          "outcome",
-          "started_at",
-          "finished_at"
-        ],
         "type": "object"
       },
       "UpdatedAt": {
@@ -17728,12 +18158,6 @@
             "description": "How many open Dependabot alerts no open update pull request answers."
           }
         },
-        "required": [
-          "open_pulls",
-          "oldest_pull_days",
-          "unmatched_alerts",
-          "last_run"
-        ],
         "type": "object"
       },
       "UpgradeRecord": {
@@ -17774,7 +18198,7 @@
             "type": "array"
           },
           "not_automatic": {
-            "description": "Why it would not apply on its own, though a person may approve it: every blocker, then the bar a patch must clear.",
+            "description": "Why it would not apply on its own, though an operator may approve it. Every blocker comes first, then the bar a patch must clear.",
             "items": {
               "$ref": "#/components/schemas/BlockerPart"
             },
@@ -17875,11 +18299,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "label",
-          "detail"
-        ],
         "type": "object"
       },
       "UsagePart": {
@@ -17905,7 +18324,7 @@
                 "type": "null"
               }
             ],
-            "description": "The CPU it used since the read before, as a percentage of one core; null until two reads have sampled one run of it."
+            "description": "The CPU it used since the read before, as a percentage of one core. Null until two reads have sampled one run of it."
           },
           "memory_bytes": {
             "description": "The memory it uses, in bytes.",
@@ -17949,15 +18368,6 @@
             "description": "When its use was read, an ISO 8601 date-time; null when not said."
           }
         },
-        "required": [
-          "memory_bytes",
-          "memory_counted_as",
-          "memory_limit_bytes",
-          "memory_of_limit_percent",
-          "cpu_percent_of_one_core",
-          "cpu_limit",
-          "read_at"
-        ],
         "type": "object"
       },
       "VisitRefreshRequest": {
@@ -18123,11 +18533,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "kind",
-          "claim_id",
-          "label"
-        ],
         "type": "object"
       },
       "WorkflowPlan": {
@@ -18139,7 +18544,7 @@
             "type": "string"
           },
           "label": {
-            "description": "The plan's heading, such as `What to do`.",
+            "description": "The plan's heading, such as `Next steps`.",
             "type": "string"
           },
           "outcome": {
@@ -18153,12 +18558,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "id",
-          "label",
-          "steps",
-          "outcome"
-        ],
         "type": "object"
       },
       "WorkflowStep": {
@@ -18182,7 +18581,7 @@
             "type": "string"
           },
           "state": {
-            "description": "Where it stands: `recommended` to do now, `after_action` once the step before is done, `available` at any time, `operator` for a person to do by hand, `blocked` where it cannot be done.",
+            "description": "Where it stands: `recommended` to do now, `after_action` once the step before is done, `available` at any time, `operator` for you to do by hand, `blocked` where it cannot be done.",
             "type": "string"
           },
           "summary": {
@@ -18190,12 +18589,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "phase",
-          "label",
-          "summary",
-          "state"
-        ],
         "type": "object"
       },
       "ZoneAdopted": {
@@ -18231,10 +18624,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "hostname",
-          "status"
-        ],
         "type": "object"
       }
     },
@@ -18248,7 +18637,7 @@
     }
   },
   "info": {
-    "description": "Versioned machine-client transport over the shared capability registry. Derived from HQ's routes and its capability, resource and domain registries.\n\nWhat `x-hq-effect` says running it does:\n\n- `read`: Reads and answers; changes nothing.\n- `remote_write`: Changes a record, in HQ or through a connection HQ holds.\n- `infrastructure_change`: Changes a live system HQ manages, such as a DNS record, a proxy route or a container.\n- `destructive`: Stops or deletes something; running it again does not bring it back.",
+    "description": "HQ's versioned machine API, over the same capabilities the web UI, CLI and MCP run. Derived from HQ's routes and its capability, resource and domain registries.\n\nWhat `x-hq-effect` says running it does:\n\n- `read`: Reads and answers; changes nothing.\n- `remote_write`: Changes a record, in HQ or through a connection HQ holds.\n- `infrastructure_change`: Changes a live system HQ manages, such as a DNS record, a proxy route or a container.\n- `destructive`: Stops or deletes something; running it again does not bring it back.",
     "title": "Severino HQ machine API",
     "version": "2"
   },
@@ -18257,7 +18646,7 @@
   "paths": {
     "/api/v2/": {
       "get": {
-        "description": "What this is, and what the presented credential may actually do.",
+        "description": "What this API is, and what your credential may do.",
         "operationId": "rootV2",
         "responses": {
           "200": {
@@ -18362,7 +18751,7 @@
     },
     "/api/v2/capabilities/": {
       "get": {
-        "description": "Every capability a token could ever hold, flagged by whether this one may run it.",
+        "description": "Every capability, each flagged by whether your token may run it.",
         "operationId": "capabilitiesV2",
         "parameters": [
           {
@@ -18603,7 +18992,7 @@
     },
     "/api/v2/capabilities/appearance.theme.set/": {
       "post": {
-        "description": "Draw the signed-in person's pages in the system's theme, light or dark.",
+        "description": "Choose whether your pages are light, dark, or follow the system.",
         "operationId": "appearanceThemeSetV2",
         "parameters": [
           {
@@ -18669,6 +19058,77 @@
         "x-hq-effect": "remote_write",
         "x-hq-required-capabilities": [
           "set_preferences"
+        ]
+      }
+    },
+    "/api/v2/capabilities/approval.withdraw/": {
+      "post": {
+        "description": "Take back a change you asked for that still waits for approval, so no operator is asked to decide it. Send the `approval.id` its held answer carried.",
+        "operationId": "approvalWithdrawV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalWithdrawRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/ApprovalWithdrawnSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Withdraw a held change",
+        "tags": [
+          "hq.approvals"
+        ],
+        "x-hq-capability": "approval.withdraw",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "read"
         ]
       }
     },
@@ -18984,6 +19444,148 @@
         "x-hq-effect": "remote_write",
         "x-hq-required-capabilities": [
           "write_assets"
+        ]
+      }
+    },
+    "/api/v2/capabilities/automation.run.cancel/": {
+      "post": {
+        "description": "Cancel a playbook's run that has not started, so it holds its playbook and machines no more. Send the run's `operation.id`. An agent may cancel only a run it asked for.",
+        "operationId": "automationRunCancelV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationRunCancelRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationQueuedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Cancel run",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-capability": "automation.run.cancel",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "read"
+        ]
+      }
+    },
+    "/api/v2/capabilities/automation.source.refresh/": {
+      "post": {
+        "description": "Scan your repository for playbooks and keep the scan result. Nothing in it runs until an operator adopts it.",
+        "operationId": "automationSourceRefreshV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutomationSourceRefreshRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/OperationQueuedSuccess"
+          },
+          "202": {
+            "$ref": "#/components/responses/AwaitingApprovalAccepted"
+          },
+          "400": {
+            "$ref": "#/components/responses/UntargetedChangeBadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/ChangeForbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ChangeNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "409": {
+            "$ref": "#/components/responses/ChangeConflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/RequestTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/ChangeTooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Refresh playbooks",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-capability": "automation.source.refresh",
+        "x-hq-effect": "remote_write",
+        "x-hq-required-capabilities": [
+          "manage_infrastructure"
         ]
       }
     },
@@ -19912,7 +20514,7 @@
     },
     "/api/v2/capabilities/dashboard.settings.update/": {
       "post": {
-        "description": "Set where the dashboard reads the weather for, and what its panels are called.",
+        "description": "Set the dashboard's weather location and its panel names.",
         "operationId": "dashboardSettingsUpdateV2",
         "parameters": [
           {
@@ -20521,7 +21123,7 @@
     },
     "/api/v2/capabilities/github.profile.read/": {
       "post": {
-        "description": "Ask HQ to read a signed-in person's GitHub profile now.",
+        "description": "Ask HQ to read a user's GitHub profile now.",
         "operationId": "githubProfileReadV2",
         "parameters": [
           {
@@ -22044,7 +22646,7 @@
                 }
               }
             },
-            "description": "Accepted: held for a person, and nothing has happened yet."
+            "description": "Accepted: held for approval in HQ. Nothing has happened yet."
           },
           "400": {
             "content": {
@@ -22318,7 +22920,7 @@
     },
     "/api/v2/capabilities/project.dependency_updates.set/": {
       "post": {
-        "description": "Whether HQ's dependency update run opens pull requests in a project's repository, from its next run.",
+        "description": "Turn HQ's dependency update pull requests on or off for a project's repository, from the next run.",
         "operationId": "projectDependencyUpdatesSetV2",
         "parameters": [
           {
@@ -23124,7 +23726,7 @@
     },
     "/api/v2/capabilities/{name}/": {
       "post": {
-        "description": "Run one HQ capability, replaying machine writes by idempotency key.",
+        "description": "Run one HQ capability. A retry with the same idempotency key returns the first answer.",
         "operationId": "executeV2",
         "parameters": [
           {
@@ -23137,10 +23739,13 @@
                 "action_item.restore",
                 "action_item.set_aside",
                 "appearance.theme.set",
+                "approval.withdraw",
                 "asset.create",
                 "asset.delete",
                 "asset.update",
                 "asset.upsert",
+                "automation.run.cancel",
+                "automation.source.refresh",
                 "calendar.entry.create",
                 "calendar.entry.delete",
                 "calendar.entry.update",
@@ -23324,7 +23929,7 @@
     },
     "/api/v2/connections/": {
       "get": {
-        "description": "Connection contracts and whether this token is permitted each.",
+        "description": "The connection contracts, and whether your token may use each.",
         "operationId": "connectionsV2",
         "responses": {
           "200": {
@@ -23383,7 +23988,7 @@
     },
     "/api/v2/findings/": {
       "get": {
-        "description": "What HQ currently claims is wrong, with the evidence and a remedy.",
+        "description": "The open problems HQ found, with the evidence and a remedy for each.",
         "operationId": "findingsV2",
         "parameters": [
           {
@@ -23413,7 +24018,10 @@
                 "unit-failed",
                 "unit-not-installed",
                 "timer-stalled",
+                "unit-restarting",
                 "unit-state-unread",
+                "filesystem-nearly-full",
+                "reboot-pending",
                 "certificate-expiring",
                 "registration-lapsing",
                 "names-nothing",
@@ -23421,6 +24029,7 @@
                 "connections-lost",
                 "work-that-keeps-failing",
                 "controller-sweep-stale",
+                "environment-read-empty",
                 "skipped-by-a-sweep",
                 "kind-never-swept",
                 "reporting-a-fault",
@@ -23625,7 +24234,7 @@
     },
     "/api/v2/resources/": {
       "get": {
-        "description": "Every readable resource, including operations this token may use.",
+        "description": "Every readable resource, with the operations your token may use.",
         "operationId": "resourcesV2",
         "parameters": [
           {
@@ -23997,6 +24606,110 @@
         "x-hq-resource": "analytics"
       }
     },
+    "/api/v2/resources/approvals/{identifier}/": {
+      "get": {
+        "description": "A change you asked for that waits for approval, by the `approval.id` its answer carried.",
+        "operationId": "getApprovalsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdLookup"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getApprovalsV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/HeldRequestRecord"
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getApprovalsV2Forbidden"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenRefusal"
+                }
+              }
+            },
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getApprovalsV2NotFound"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceReadNotFoundRefusal"
+                }
+              }
+            },
+            "description": "Not Found."
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Held requests: one by id",
+        "tags": [
+          "hq.approvals"
+        ],
+        "x-hq-identifier": "id",
+        "x-hq-resource": "approvals"
+      }
+    },
     "/api/v2/resources/assets/": {
       "get": {
         "description": "Assets and their safe cross-domain relationships.",
@@ -24343,7 +25056,7 @@
     },
     "/api/v2/resources/connections/": {
       "get": {
-        "description": "Each connection with what its credential sees, how fresh each reading is, what was refused and the fix; the summary counts, the security posture and HQ's path.",
+        "description": "Each connection with what its credential sees, how fresh each reading is, what was refused and the fix. It also gives the counts, the security posture and HQ's path.",
         "operationId": "listConnectionsV2",
         "parameters": [
           {
@@ -24673,7 +25386,7 @@
     },
     "/api/v2/resources/containers/": {
       "get": {
-        "description": "Every running container: what it runs and whether that is current and safe, how it is run and the memory and CPU it uses beside its limits, and its posture against the container standard.",
+        "description": "Every running container: its image and whether it is current and safe, its runtime, memory and CPU, and its posture.",
         "operationId": "listContainersV2",
         "parameters": [
           {
@@ -25630,7 +26343,7 @@
     },
     "/api/v2/resources/hq/": {
       "get": {
-        "description": "HQ itself: the release it runs and whether its branch is ahead, the machine and container it runs in, its background jobs, what it can read and its open problems.",
+        "description": "HQ itself: its release and branch, machine and container, background jobs, what it reads and open problems.",
         "operationId": "listHqV2",
         "parameters": [
           {
@@ -25762,7 +26475,9 @@
                     "adguard.rewrite",
                     "cloudflare.dns_record",
                     "cloudflare.zone",
-                    "cloudflare.contact_inbox"
+                    "cloudflare.contact_inbox",
+                    "automation.operation",
+                    "automation.source"
                   ],
                   "type": "string"
                 },
@@ -26131,6 +26846,322 @@
         ],
         "x-hq-identifier": "name",
         "x-hq-resource": "machines"
+      }
+    },
+    "/api/v2/resources/playbook_scans/": {
+      "get": {
+        "description": "The newest scan of your playbooks' repository, or one by its id. It says what adopting it widens; an operator adopts or rejects it in HQ.",
+        "operationId": "listPlaybookScansV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/listPlaybookScansV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ResourceCollection"
+                        }
+                      ],
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/ScanResult"
+                          },
+                          "type": "array"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbook scans: the list",
+        "tags": [
+          "hq.procedures"
+        ],
+        "x-hq-resource": "playbook_scans"
+      }
+    },
+    "/api/v2/resources/playbook_scans/{identifier}/": {
+      "get": {
+        "description": "One of the records Playbook scans lists, found by its `id`.",
+        "operationId": "getPlaybookScansV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getPlaybookScansV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ScanResult"
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbook scans: one by id",
+        "tags": [
+          "hq.procedures"
+        ],
+        "x-hq-identifier": "id",
+        "x-hq-resource": "playbook_scans"
+      }
+    },
+    "/api/v2/resources/playbooks/": {
+      "get": {
+        "description": "Every adopted playbook: the command that runs it, what it does, and the machines it can run on now.",
+        "operationId": "listPlaybooksV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/listPlaybooksV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ResourceCollection"
+                        }
+                      ],
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/PlaybookRow"
+                          },
+                          "type": "array"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbooks: the list",
+        "tags": [
+          "hq.procedures"
+        ],
+        "x-hq-resource": "playbooks"
+      }
+    },
+    "/api/v2/resources/playbooks/{identifier}/": {
+      "get": {
+        "description": "One of the records Playbooks lists, found by its `playbook`.",
+        "operationId": "getPlaybooksV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/PlaybookIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getPlaybooksV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/PlaybookRecord"
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbooks: one by playbook",
+        "tags": [
+          "hq.procedures"
+        ],
+        "x-hq-identifier": "playbook",
+        "x-hq-resource": "playbooks"
       }
     },
     "/api/v2/resources/projects/": {
@@ -26762,7 +27793,7 @@
     },
     "/api/v2/resources/request.path/": {
       "get": {
-        "description": "How the calling request reached HQ: HQ's own path hop by hop, each hop checked against what the request shows, with the admission layers decided there.",
+        "description": "How the calling request reached HQ, hop by hop, each checked against the request, with the admission layers decided there.",
         "operationId": "listRequestPathV2",
         "parameters": [
           {
@@ -26841,6 +27872,277 @@
           "hq.connections"
         ],
         "x-hq-resource": "request.path"
+      }
+    },
+    "/api/v2/resources/runs/": {
+      "get": {
+        "description": "Every run of a playbook: its machines, who asked and approved it, its state and each task's outcome.",
+        "operationId": "listRunsV2",
+        "parameters": [
+          {
+            "description": "Only the runs of the playbook with this id; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "playbook",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the runs on the machine with this name, as `machines` names it; absent, every machine.",
+            "explode": true,
+            "in": "query",
+            "name": "machine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 253,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the runs asked for with this correlation id; absent, every run.",
+            "explode": true,
+            "in": "query",
+            "name": "correlation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[!-~]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the runs in this state, as Jobs shows it; absent, every state.",
+            "explode": true,
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "succeeded",
+                    "failed",
+                    "lost"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/listRunsV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ResourceCollection"
+                        }
+                      ],
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/RunRow"
+                          },
+                          "type": "array"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbook runs: the list",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-resource": "runs"
+      }
+    },
+    "/api/v2/resources/runs/{identifier}/": {
+      "get": {
+        "description": "One of the records Playbook runs lists, found by its `operation_id`.",
+        "operationId": "getRunsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperationIdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getRunsV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RunRecord"
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getRunsV2Forbidden"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenRefusal"
+                }
+              }
+            },
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbook runs: one by operation id",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-identifier": "operation_id",
+        "x-hq-resource": "runs"
       }
     },
     "/api/v2/resources/search/": {
@@ -27151,7 +28453,7 @@
     },
     "/api/v2/resources/tailnet/": {
       "get": {
-        "description": "The tailnet policy: settings, grants, shell rules, groups and tags with their machines, services, app connectors, tests, problems, and what could not be read.",
+        "description": "The tailnet policy: settings, grants, shell rules, groups, tags and their machines, services, app connectors, tests, problems and read failures.",
         "operationId": "listTailnetV2",
         "parameters": [
           {
@@ -27234,7 +28536,7 @@
     },
     "/api/v2/resources/upgrades/": {
       "get": {
-        "description": "Every running container something newer is published for: the target by digest, what it fixes, its data and how it would be verified, every reason it cannot go ahead yet, and the steps an upgrade would take. Read-only.",
+        "description": "Every running container with a newer release: target digest, fixes, data, verification, blockers and steps. Read-only.",
         "operationId": "listUpgradesV2",
         "parameters": [
           {
@@ -27398,7 +28700,7 @@
     },
     "/api/v2/resources/{name}/": {
       "get": {
-        "description": "List one resource through its declared, schema-validated query.",
+        "description": "One resource's records, narrowed by the query its schema checks.",
         "operationId": "resourceListV2",
         "parameters": [
           {
@@ -27424,10 +28726,13 @@
                 "hq",
                 "infrastructure",
                 "machines",
+                "playbook_scans",
+                "playbooks",
                 "projects",
                 "readings",
                 "receipts",
                 "request.path",
+                "runs",
                 "search",
                 "services",
                 "tailnet",
@@ -27506,7 +28811,7 @@
     },
     "/api/v2/resources/{name}/{identifier}/": {
       "get": {
-        "description": "Get one resource record through its declared identifier contract.",
+        "description": "One record of a resource, by its identifier.",
         "operationId": "resourceDetailV2",
         "parameters": [
           {
@@ -27516,6 +28821,7 @@
             "required": true,
             "schema": {
               "enum": [
+                "approvals",
                 "assets",
                 "calendar",
                 "connections",
@@ -27525,9 +28831,12 @@
                 "domains",
                 "infrastructure",
                 "machines",
+                "playbook_scans",
+                "playbooks",
                 "projects",
                 "readings",
                 "relationships",
+                "runs",
                 "service.paths",
                 "services",
                 "upgrades"
@@ -27536,7 +28845,7 @@
             }
           },
           {
-            "description": "The record's value of the field its resource is addressed by.",
+            "description": "The record's value of the field its resource is found by.",
             "in": "path",
             "name": "identifier",
             "required": true,
@@ -27585,7 +28894,7 @@
     },
     "/api/v2/topology/": {
       "get": {
-        "description": "The live permitted infrastructure graph and its canonical actions.",
+        "description": "The live infrastructure graph you may read, with each node's safe actions.",
         "operationId": "topologyV2",
         "parameters": [
           {
@@ -27886,11 +29195,25 @@
       "summary": "Containers"
     },
     {
+      "description": "HQ's background jobs and their runs.",
+      "kind": "nav",
+      "name": "hq.jobs",
+      "parent": "hq.infrastructure",
+      "summary": "Jobs"
+    },
+    {
       "description": "The machines the estate runs on, as the services and agents on them report them.",
       "kind": "nav",
       "name": "hq.machines",
       "parent": "hq.infrastructure",
       "summary": "Machines"
+    },
+    {
+      "description": "The playbooks HQ can run, and the scans of your repository you adopt them from.",
+      "kind": "nav",
+      "name": "hq.procedures",
+      "parent": "hq.infrastructure",
+      "summary": "Playbooks"
     },
     {
       "description": "The credentials HQ reads each system through, and what each can see.",
@@ -27918,6 +29241,12 @@
       "kind": "nav",
       "name": "hq.search",
       "summary": "Search"
+    },
+    {
+      "description": "Changes held until an operator approves them.",
+      "kind": "nav",
+      "name": "hq.approvals",
+      "summary": "Waiting for approval"
     }
   ]
 }

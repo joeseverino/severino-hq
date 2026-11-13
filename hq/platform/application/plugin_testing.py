@@ -29,6 +29,7 @@ lazy from django.utils import timezone
 lazy from hq.platform.core.stylesheets import stylesheet
 lazy from hq.platform.core.templatetags import table_tags
 
+from .card_items import Insight
 from .plugins import (
     DERIVED_PROVIDERS,
     PLUGIN_API_VERSION,
@@ -36,7 +37,7 @@ from .plugins import (
     PluginManifest,
     clear_plugin_composition_cache,
 )
-from .ui import DomainOverview, Insight
+from .ui import DomainOverview
 lazy from . import pages, plugins
 lazy from .connection_contracts import ConnectionSpec
 lazy from .derivation_testing import frozen
@@ -98,6 +99,7 @@ def undefined_style_classes(template_root: str | Path) -> list[str]:
 _OPEN, _CLOSE = "\x00region\x00", "\x00/region\x00"
 _HEADING, _DROPPED_HEADING = "\x00heading\x00", "\x00heading-drops\x00"
 _TABLE = re.compile(r'<table\b[^>]*\bclass="[^"]*\bdata-table\b')
+_ANY_TABLE = re.compile(r"<table\b[^>]*>")
 _HEAD = re.compile(r"<thead\b.*?</thead>", re.DOTALL)
 _HAND_HEADING = re.compile(r"<th[\s>]")
 
@@ -132,14 +134,32 @@ def _flatten(nodelist, out: list[str]) -> list[str]:
     return out
 
 
+def _unshared_tables(markup: str) -> list[str]:
+    """A region or heading around a table without the shared table's class,
+    whose sort controls and fit the stylesheet then never draws."""
+
+    problems = []
+    for table in _ANY_TABLE.finditer(markup):
+        before = markup[: table.start()]
+        if before.count(_OPEN) > before.count(_CLOSE) and not _TABLE.match(table.group()):
+            problems.append('a table in {% table_region %} without class="data-table"')
+    for heading in re.finditer(f"{_HEADING}|{_DROPPED_HEADING}", markup):
+        opened = markup.rfind("<table", 0, heading.start())
+        if opened < 0 or markup.rfind("</table>", 0, heading.start()) > opened or not _TABLE.match(markup, opened):
+            problems.append('a {% table_heading %} outside a table with class="data-table"')
+    return problems
+
+
 def table_problems(source: str) -> list[str]:
     """What keeps a template's tables off the contract: a table outside its region,
-    a heading written by hand, a region written by hand, a dropped name column."""
+    a heading written by hand, a region written by hand, a dropped name column,
+    and a region or heading around a table the shared stylesheet does not draw."""
 
     markup = "".join(_flatten(engines["django"].from_string(source).template.nodelist, []))
     problems = []
     if re.search(r'class="[^"]*\btable-scroll\b', markup):
         problems.append("a scroll region written by hand")
+    problems.extend(_unshared_tables(markup))
     for table in _TABLE.finditer(markup):
         before = markup[: table.start()]
         if before.count(_OPEN) <= before.count(_CLOSE):

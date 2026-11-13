@@ -1,23 +1,23 @@
 {% extends "page.html" %}
 {% block page %}
-<dl class="kv">
-  {% if thing %}<dt>This is</dt><dd class="prose">{{ thing.kind_label|breakable }} {% entity thing %}</dd>{% endif %}
-  {% if domain %}<dt>Domain page</dt><dd>{% entity domain %}</dd>{% endif %}
-  {% if asset.vendor %}<dt>Vendor</dt><dd>{{ asset.vendor|breakable }}</dd>{% endif %}
-  <dt>Purchased</dt><dd>{{ asset.purchase_date|when }}</dd>
+<div class="section-flow">
+{% card label="Asset" %}{% facts %}
+  {% if thing %}{% fact "This is" %}<span class="prose">{{ thing.kind_label|breakable }} {% entity thing %}</span>{% endfact %}{% endif %}
+  {% if domain %}{% fact "Domain page" %}{% entity domain %}{% endfact %}{% endif %}
+  {% if asset.vendor %}{% fact "Vendor" value=asset.vendor %}{% endif %}
+  {% fact "Purchased" %}{{ asset.purchase_date|when }}{% endfact %}
   {% if asset.total_cost %}
-    <dt>Cost</dt><dd>{{ asset.total_cost|money }}</dd>
-    <dt>Business use</dt><dd>{{ asset.business_use_percentage|breakable }}%</dd>
-    <dt>Deductible (est.)</dt><dd>{{ asset.estimated_deductible_amount|money }} <span class="muted">(estimate, not tax advice)</span></dd>
+    {% fact "Cost" %}{{ asset.total_cost|money }}{% endfact %}
+    {% fact "Business use" %}{{ asset.business_use_percentage|breakable }}%{% endfact %}
+    {% fact "Deductible (est.)" %}{{ asset.estimated_deductible_amount|money }}{% endfact %}
   {% else %}
-    <dt>Cost</dt><dd class="muted">Not recorded</dd>
+    {% fact "Cost" %}<span class="muted">Not recorded</span>{% endfact %}
   {% endif %}
-  {% if asset.payment_method %}<dt>Payment method</dt><dd>{{ asset.get_payment_method_display|breakable }}</dd>{% endif %}
-  {% if asset.serial_number %}<dt>Serial</dt><dd><code>{{ asset.serial_number|breakable }}</code></dd>{% endif %}
-  {% if asset.warranty_date %}<dt>Warranty until</dt><dd>{{ asset.warranty_date|when }}</dd>{% endif %}
-</dl>
-
+  {% if asset.payment_method %}{% fact "Payment method" value=asset.get_payment_method_display %}{% endif %}
+  {% if asset.serial_number %}{% fact "Serial" %}<code>{{ asset.serial_number|breakable }}</code>{% endfact %}{% endif %}
+  {% if asset.warranty_date %}{% fact "Warranty until" %}{{ asset.warranty_date|when }}{% endfact %}{% endif %}
+{% endfacts %}{% endcard %}
 {% if asset.notes %}{% section "Notes" %}<p>{{ asset.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
-
-<div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
+{% include "partials/_related.html" with groups=related %}
+</div>
 {% endblock %}

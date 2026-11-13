@@ -22,7 +22,7 @@ from .action_links import (
 # record without importing this reader. Re-exported here as the one name
 # callers already use.
 from .connection_contracts import (
-    CREDENTIAL_MODELS,
+    UNKNOWN_CREDENTIAL,
     ConnectionAbility,
     ConnectionInstance,
     ConnectionLink,
@@ -80,6 +80,9 @@ EVIDENCE_DETAILS = {
 # Evidence that settles the question: the ability may be performed and HQ can
 # say why. The rest either cannot be performed or has not been shown.
 PROVEN_EVIDENCE = frozenset({"verified", "coarse", "not_applicable"})
+# Evidence that says the ability cannot be performed, drawn as a fault; the
+# rest of what is unproven is said quietly.
+FAILED_EVIDENCE = frozenset({"missing", "revoked"})
 
 # What HQ can say about the credential's permissions, as the one line under
 # the state. Blank where the owner can do nothing about it: a connection type
@@ -93,8 +96,6 @@ AUTHORITY_LABELS = {
     "missing": "Permission missing",
     "none": "HQ reads nothing through it",
 }
-# The same line for a connection whose every ability needs no key.
-KEYLESS_LABEL = EVIDENCE_LABELS["not_applicable"]
 # Authority the row shows only when it is expanded: true of the connection,
 # and nothing to act on.
 QUIET_AUTHORITY = frozenset({"whole_account"})
@@ -210,6 +211,10 @@ class ConnectionAbilityState:
     def proven(self) -> bool:
         return self.evidence in PROVEN_EVIDENCE
 
+    @property
+    def evidence_tone(self) -> str:
+        return "serious" if self.evidence in FAILED_EVIDENCE else ""
+
 
 # Actions derived from the family's spec rather than from one connection.
 FAMILY_ACTIONS = frozenset({"open", "manage", "set_up", "documentation"})
@@ -224,18 +229,13 @@ class ConnectionView:
     authority: str = "none"
 
     @property
-    def authority_label(self) -> str:
-        if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
-            return KEYLESS_LABEL
-        return AUTHORITY_LABELS[self.authority]
-
-    @property
     def state_line(self) -> str:
         """The one line under the state word, or "" when the word says it all.
 
         Since when for a state that has an age, the missing permissions for a
         credential that lacks them, and otherwise what HQ knows about the
-        credential's permissions.
+        credential's permissions. A connection that needs no key has none to
+        know about, and its name cell already says so.
         """
 
         observed = self.instance.observed_at
@@ -248,10 +248,11 @@ class ConnectionView:
         if self.lifecycle == Lifecycle.UNAUTHORIZED:
             missing = tuple(dict.fromkeys(scope for state in self.abilities for scope in state.missing_scopes))
             return f"Needs {', '.join(missing)}" if missing else ""
-        label = self.authority_label
-        if self.lifecycle == Lifecycle.CONFIGURED and (label != KEYLESS_LABEL and self.authority != "none"):
+        if self.abilities and all(state.evidence == "not_applicable" for state in self.abilities):
+            return ""
+        if self.lifecycle == Lifecycle.CONFIGURED and self.authority != "none":
             return Lifecycle.UNPROBED.label
-        return label
+        return AUTHORITY_LABELS[self.authority]
 
     @property
     def state_line_quiet(self) -> bool:
@@ -317,6 +318,13 @@ def _validate_instance(spec: ConnectionSpec, instance: ConnectionInstance) -> Co
     _check_reading(instance)
     _check_grants(instance)
     _check_relations(spec, instance)
+    # The page says where a connection's secret is kept or that it needs none,
+    # so one that holds a credential names its family's store.
+    if not instance.keyless and not spec.secret_store.strip():
+        raise ImproperlyConfigured(
+            f"Connection {instance.id!r} holds a {instance.credential_model} credential, "
+            f"so {spec.name!r} must name its secret_store."
+        )
     return instance
 
 
@@ -339,10 +347,6 @@ def _check_grants(instance: ConnectionInstance) -> None:
     scopes = instance.granted_scopes
     if len(scopes) != len(set(scopes)) or any(not SCOPE_NAME.fullmatch(scope) for scope in scopes):
         raise ImproperlyConfigured(f"Connection {instance.id!r} has invalid granted scopes.")
-    if instance.credential_model not in ("", *CREDENTIAL_MODELS):
-        raise ImproperlyConfigured(
-            f"Connection {instance.id!r} has invalid credential model {instance.credential_model!r}."
-        )
     if instance.credential_model == "none" and (scopes or instance.scopes_known):
         raise ImproperlyConfigured(f"Connection {instance.id!r} is keyless but reports grants.")
 
@@ -496,7 +500,7 @@ def serialize_connection(connection: ConnectionView) -> dict:
         "observed_at": (instance.observed_at.isoformat() if instance.observed_at else None),
         "scopes_known": instance.scopes_known,
         "granted_scopes": list(instance.granted_scopes),
-        "credential_model": instance.credential_model or None,
+        "credential_model": None if instance.credential_model == UNKNOWN_CREDENTIAL else instance.credential_model,
         "lifecycle": connection.lifecycle,
         "authority": connection.authority,
         "abilities": [serialize_ability(state) for state in connection.abilities],

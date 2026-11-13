@@ -55,6 +55,7 @@ class SectionTakes:
         "moment",
         "when",
         "head",
+        "edge",
     )
 
     def __init__(self) -> None:
@@ -149,3 +150,30 @@ def compile_section(parser, token) -> SectionNode:
 
 # The template contract reads a tag's parameters from what it wraps.
 compile_section.__wrapped__ = SECTION  # type: ignore[attr-defined]  # a function's attribute, which typeshed does not declare
+
+
+class HeadedNode(template.Node):
+    def __init__(self, nodelist: template.NodeList) -> None:
+        self.nodelist = nodelist
+
+    def render(self, context) -> str:
+        root = context.render_context.dicts[0]
+        level = root.get(_LEVEL, TOP_LEVEL)
+        root[_LEVEL] = min(level + 1, LAST_LEVEL)
+        try:
+            return self.nodelist.render(context)
+        finally:
+            root[_LEVEL] = level
+
+
+@register.tag(name="headed")
+def compile_headed(parser, token) -> HeadedNode:
+    """``{% headed %}body{% endheaded %}``: a body under a heading its part
+    draws itself at the level a section here would take (a dialog's title,
+    an insight's), so a section in the body heads itself a level below it."""
+
+    if len(token.split_contents()) != 1:
+        raise template.TemplateSyntaxError("headed takes no arguments")
+    nodelist = parser.parse(("endheaded",))
+    parser.delete_first_token()
+    return HeadedNode(nodelist)

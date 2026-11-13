@@ -7,10 +7,12 @@ name a project publishes at, a document describes, an audit entry changed:
 every side already carries it, and storing the tie again would make two answers.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
+
+lazy from django import urls
 
 from hq.domains.control_plane.names import normalized_hostname
 from hq.platform.application.labels import dotted
@@ -18,6 +20,7 @@ from hq.platform.application.routes import reverse
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.projects.models import Project
 lazy from hq.platform.core.network import split_host_port
+lazy from hq.platform.core.templatetags.value_tags import seconds
 
 from .analytics import HOST_TRAFFIC_DAYS, traffic_for_hosts
 from .display_words import display
@@ -25,15 +28,28 @@ from .entity_links import EntityLink, entity_link, kind_label
 from .moments import ago
 from .published_sites import projects_by_hostname
 from .ui import MISSING, PAGE_SECTION_ID, counted, ended
-lazy from . import machines
+lazy from . import history, machines
+lazy from .action_links import command_url
+lazy from .automation_runs import listed_with_actions
 lazy from .containers import standings_on
 lazy from .github_estate import repository_for
+lazy from .history import HistoryGroup
 lazy from .infrastructure import RESOURCE_TONES
 lazy from .npm_sections import access
-lazy from .pages import PageBadge
+lazy from .pages import PageBadge, principal_opens
 lazy from .path_dependencies import consequence_of
 lazy from .path_model import Route
 lazy from .paths import hq_path
+lazy from .reach import network_of
+lazy from .security import Capability, Principal
+lazy from .service_facets import CERTIFICATE_FACET
+lazy from .services import served_here
+lazy from .work_runs import WorkRun
+
+if TYPE_CHECKING:
+    from .history import HistoryLine
+    from .pages import PageAction
+    from .work_runs import RunEvidence
 
 
 @display
@@ -48,12 +64,19 @@ class Cell:
     muted: bool = False
     # An entity mention, rendered through the link builder's answer.
     link: EntityLink | None = None
+    # A state: ``text`` is its word and this its tone, drawn as a status.
+    tone: str = ""
 
     @classmethod
     def of(cls, link: EntityLink, *, muted: bool = False) -> Cell:
         """A cell naming one entity, from ``entity_link``."""
 
         return cls(link.label, link.url, external=link.external, muted=muted, link=link)
+
+
+# The columns from which a section's table takes the whole row of a flow
+# (layout.css, `.section-flow`); test_service_context holds the two to one.
+ROW_COLUMNS = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,12 +101,33 @@ class ServiceSection:
     renders: tuple[str, ...] = ()
     # Reference rather than a glance: shown folded, its size in the heading.
     folded: bool = False
+    # The way to everything the rows are the latest of, as the heading's
+    # quiet link ("All runs").
+    more_label: str = ""
+    more_url: str = ""
+    # What each row's open line shows beneath it, one for each record in its
+    # order (None for a row with nothing), drawn through the run evidence part.
+    below: tuple[RunEvidence | None, ...] = ()
+    # What may be done to each row's record, one tuple for each record in its
+    # order, drawn as the row's last cell (``{% row_actions %}``); left empty,
+    # or with nothing in any, the table has no column for them.
+    actions: tuple[tuple[PageAction, ...], ...] = ()
+    # Audit events, drawn in place of ``records`` by the row the audit log
+    # draws (``{% history_table %}``), who did each left out where ``hide_who``.
+    history: tuple[HistoryLine, ...] = ()
+    hide_who: bool = False
 
     def __post_init__(self) -> None:
         if not PAGE_SECTION_ID.fullmatch(self.id):
             raise ValueError("ServiceSection id must be a valid page section id.")
         if not self.label.strip():
             raise ValueError("ServiceSection label must not be empty.")
+        if self.below and len(self.below) != len(self.records):
+            raise ValueError("ServiceSection below holds one entry for each record.")
+        if self.actions and len(self.actions) != len(self.records):
+            raise ValueError("ServiceSection actions holds one entry for each record.")
+        if not any(self.actions):
+            object.__setattr__(self, "actions", ())
         # A column no row has anything in is a heading over nothing. Dropped
         # here, so no section has to check its own; an unknown value (the dash placeholder) is
         # something to say and keeps its column.
@@ -91,6 +135,35 @@ class ServiceSection:
         if self.records and len(keep) < len(self.columns):
             object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
             object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
+
+    @property
+    def count(self) -> int:
+        """How many rows it holds."""
+
+        return len(self.history) or len(self.records)
+
+    @property
+    def groups(self) -> tuple[HistoryGroup, ...]:
+        """Its audit events as the one group of their table."""
+
+        return (HistoryGroup(self.history),) if self.history else ()
+
+    @property
+    def spans_row(self) -> bool:
+        """Whether it takes the whole row of the flow it is drawn in: a fold,
+        or a table too wide to share one. A page writes these ahead of the
+        short ones, which then collect to share rows."""
+
+        return self.folded or bool(self.history) or len(self.columns) >= ROW_COLUMNS
+
+    @property
+    def rows(self) -> tuple[tuple[tuple[Cell, ...], RunEvidence | None, tuple[PageAction, ...]], ...]:
+        """Each record with what its open line shows beneath it, if anything,
+        and what may be done to it."""
+
+        below = self.below or (None,) * len(self.records)
+        actions = self.actions or ((),) * len(self.records)
+        return tuple(zip(self.records, below, actions, strict=True))
 
 
 def filled_columns(width: int, records: tuple[tuple[Cell, ...], ...]) -> tuple[int, ...]:
@@ -112,7 +185,7 @@ def sections_for(service) -> tuple[ServiceSection, ...]:
     found = []
     for resolve in SECTIONS:
         section = resolve(service, project)
-        if section is not None and section.records:
+        if section is not None and section.count:
             found.append(section)
     return tuple(found)
 
@@ -133,35 +206,98 @@ def _activity(service, _project) -> ServiceSection | None:
     "what changed".
     """
 
-    return recent_changes([claim.resource_key for claim in service.claims], what="Resource", limit=6)
+    return recent_changes([claim.resource_key for claim in service.claims], limit=6)
 
 
-def recent_changes(keys: list[str], *, what: str, limit: int) -> ServiceSection | None:
-    """The latest audit entries on the records ``keys`` name, as a section; None
-    when there are none. The machine page asks the same of its declarations."""
+def recent_changes(keys: list[str], *, limit: int, principal: Principal | None = None) -> ServiceSection | None:
+    """The latest audit entries on the records ``keys`` name, as a section
+    drawn as the audit log draws its rows; None when there are none. The
+    machine page asks the same of its declarations. Who did each is shown
+    only to a ``principal`` who may read the audit log."""
 
     if not keys:
         return None
-    events = AuditLog.objects.filter(object_id__in=keys).order_by("-created_at")[:limit]
-    records = tuple(
-        (
-            Cell(
-                event.object_repr or event.object_id,
-                reverse("core:audit_detail", kwargs={"pk": event.pk}),
-            ),
-            Cell(event.get_action_display()),
-            Cell(ago(event.created_at), muted=True),
-        )
-        for event in events
-    )
-    if not records:
+    events = list(AuditLog.objects.filter(object_id__in=keys).select_related("user").order_by("-created_at")[:limit])
+    if not events:
         return None
     return ServiceSection(
         id="activity",
         label="Recent changes",
-        columns=(what, "Change", "When"),
-        records=records,
+        columns=tuple(heading for heading, _css in history.COLUMNS),
+        records=(),
+        history=tuple(history.entries(events)),
+        hide_who=principal is None or not principal.permits(Capability.READ_AUDIT_LOG),
     )
+
+
+# The id of the section of a page's latest runs (``recent_work``).
+RUNS_SECTION = "runs"
+
+
+def recent_work(
+    runs: Sequence[WorkRun], *, by_machine: bool, more_url: str, principal: Principal | None = None
+) -> ServiceSection | None:
+    """The latest ``runs`` as a section, each state in its word and tone; None
+    when there are none. A machine's page names what each run was
+    (``by_machine``), a playbook's page leads with when each was asked and
+    the machines each acted on, and ``more_url`` is every run of the two on
+    Jobs. Each row leads with the link to the run's own page.
+
+    Who asked for each run and its evidence are Jobs' to show, so only a
+    ``principal`` who may open Jobs reads them here, and opens a run's page;
+    without one, nobody does.
+    """
+
+    shows = principal is not None and principal_opens(principal, urls.resolve(reverse("jobs:list")).func)
+    opens = (
+        bool(runs and runs[0].url)
+        and principal is not None
+        and principal_opens(principal, urls.resolve(runs[0].url).func)
+    )
+    if principal is not None:
+        runs = listed_with_actions(runs, principal)
+    records = tuple(_run_record(run, by_machine=by_machine, opens=opens, shows=shows) for run in runs)
+    if not records:
+        return None
+    return ServiceSection(
+        id=RUNS_SECTION,
+        label="Recent runs",
+        columns=(
+            ("Playbook", "State", "Started", "Duration", "Result", "By")
+            if by_machine
+            else ("Started", "Machines", "State", "Duration", "Result", "By")
+        ),
+        records=records,
+        more_label="All runs",
+        more_url=more_url,
+        below=tuple(run.evidence or None for run in runs) if shows else (),
+        actions=tuple(run.actions for run in runs),
+    )
+
+
+def _run_record(run: WorkRun, *, by_machine: bool, opens: bool, shows: bool) -> tuple[Cell, ...]:
+    """One run's row, led by its link to its own page where its reader ``opens``
+    it: by the playbook on a machine's page, else by when it was asked."""
+
+    rest = (
+        Cell(str(seconds(run.duration)) if run.duration is not None else ""),
+        Cell(run.note),
+        Cell(run.by.words if shows else ""),
+    )
+    state = Cell(run.word, tone=run.tone)
+    if by_machine:
+        # Read without the run's page, the playbook leads to the command it is run through.
+        playbook = Cell(run.title, run.url if opens else command_url(run.kind))
+        return (playbook, state, Cell(ago(run.created_at), muted=True), *rest)
+    return (Cell(ago(run.created_at), run.url if opens else ""), machines_cell(run.evidence.hosts), state, *rest)
+
+
+def machines_cell(hosts: Sequence[str]) -> Cell:
+    """The machines a run acted on: the one by its link, several by name."""
+
+    if len(hosts) == 1:
+        return Cell.of(entity_link("machine", hosts[0]))
+    return Cell(", ".join(hosts))
 
 
 def _traffic(service) -> SummaryItem | None:
@@ -185,7 +321,7 @@ def _traffic(service) -> SummaryItem | None:
     return SummaryItem(
         dotted("Traffic", f"{HOST_TRAFFIC_DAYS} days"),
         counted(measured["pageviews"], "pageview"),
-        detail=dotted(counted(measured["visits"], "visit"), basis),
+        detail=lines(counted(measured["visits"], "visit"), basis),
         icon="eye",
     )
 
@@ -195,12 +331,13 @@ def _traffic(service) -> SummaryItem | None:
 
 @dataclass(frozen=True, slots=True)
 class SummaryItem:
-    """One line of a service's summary: a label, a value, and what backs it."""
+    """One line of a service's summary: a label, a value, and what backs it,
+    each part of that a line of its own under the value."""
 
     label: str
     value: str
     link: EntityLink | None = None
-    detail: str = ""
+    detail: tuple[str, ...] = ()
     tone: str = ""
     # What kind of fact it is, drawn as its tile: a name in partials/_icon.html.
     icon: str = ""
@@ -238,16 +375,23 @@ def service_summary(service) -> tuple[SummaryItem, ...]:
     )
 
 
-def _health_detail(service) -> str:
+def lines(*parts: str) -> tuple[str, ...]:
+    """The parts of a fact's detail that say something, each a line."""
+
+    return tuple(part for part in parts if part)
+
+
+def _health_detail(service) -> tuple[str, ...]:
     """What the health rests on, and what the container itself says: its
     uptime and its own health check."""
 
     # The uptime is the container's card on the path; the health check is the
     # evidence the verdict rests on.
     running = service.container
-    # Not twice: a health check that passes is already the verdict's word.
-    check = running.check if running and running.check.lower() != service.health.label.lower() else ""
-    return dotted(check, service.health.detail)
+    # Not twice: a health check the verdict or its sentence already says.
+    said = f"{service.health.label} {service.health.detail}".lower()
+    check = running.check if running and running.check.lower() not in said else ""
+    return lines(check, service.health.detail)
 
 
 def _what(service) -> str:
@@ -277,9 +421,9 @@ def _where(path) -> SummaryItem:
         )
     if end is not None and end.step == "hq" and path.machine:
         # HQ's own name ends at HQ; where it runs is the machine HQ is on.
-        return SummaryItem("Where it runs", path.machine, entity_link("machine", path.machine), end.detail)
+        return SummaryItem("Where it runs", path.machine, entity_link("machine", path.machine), lines(end.detail))
     if end is not None and end.step in ("served", "external", "origin", "hq"):
-        return SummaryItem("Where it runs", f"{end.label} {end.name}".strip(), end.link, end.detail)
+        return SummaryItem("Where it runs", f"{end.label} {end.name}".strip(), end.link, lines(end.detail))
     if path.machine:
         container = next(
             (hop.name for route in path.routes for hop in route.hops if hop.step == "container"),
@@ -291,17 +435,17 @@ def _where(path) -> SummaryItem:
             entity_link("machine", path.machine),
             _container_detail(path.machine, container),
         )
-    return SummaryItem("Where it runs", MISSING, detail=path.gaps[0] if path.gaps else "")
+    return SummaryItem("Where it runs", MISSING, detail=lines(path.gaps[0] if path.gaps else ""))
 
 
-def _container_detail(machine: str, container: str) -> str:
+def _container_detail(machine: str, container: str) -> tuple[str, ...]:
     """The container, and whether what it runs is current and safe."""
 
     if not container:
-        return ""
+        return ()
 
     standing = standings_on(machine).get(container)
-    return dotted(f"Container {container}", standing.summary if standing else "")
+    return lines(f"Container {container}", standing.summary if standing else "")
 
 
 def _certificate(path) -> SummaryItem | None:
@@ -322,7 +466,7 @@ def _certificate(path) -> SummaryItem | None:
         "Certificate",
         certificate.name,
         certificate.link,
-        dotted(certificate.issuer, certificate.left),
+        lines(certificate.issuer, certificate.left),
         icon="lock",
     )
 
@@ -337,17 +481,19 @@ def _project(service) -> SummaryItem | None:
 
     project = Project.objects.filter(slug=service.project["slug"]).only("repository_url", "last_push_at").first()
     repo = repository_for(project.repository_url) if project and project.repository_url else None
-    parts = [
-        _repository_detail(repo)
-        or (_repository_label(project.repository_url) if project and project.repository_url else ""),
+    parts = (
+        *(
+            _repository_detail(repo)
+            or (_repository_label(project.repository_url) if project and project.repository_url else "",)
+        ),
         f"pushed {ago(project.last_push_at)}" if project and project.last_push_at else "",
-    ]
-    return SummaryItem("Project", service.project["name"], link, dotted(*parts), icon="commit")
+    )
+    return SummaryItem("Project", service.project["name"], link, lines(*parts), icon="commit")
 
 
-def _repository_detail(repo) -> str:
+def _repository_detail(repo) -> tuple[str, ...]:
     if repo is None:
-        return ""
+        return ()
 
     head, deployed = (repo.head or {}).get("sha", ""), (repo.production or {}).get("sha", "")
     parts = [repo.short]
@@ -355,7 +501,7 @@ def _repository_detail(repo) -> str:
         parts.append(counted(len(repo.pull_requests), "open pull request", "open pull requests"))
     if head and deployed and head != deployed:
         parts.append(f"{repo.default_branch} is ahead of production")
-    return dotted(*parts)
+    return lines(*parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -463,7 +609,7 @@ def _read_from(hops, index: int):
     link from the machine's tailnet device, a forward from its proxy."""
 
     step = hops[index].step
-    if step == "network":
+    if step == "network" and _on_the_tailnet(hops[index]):
         after = _next_step(hops, index, "machine")
         return after.source if after is not None else None
     if step == "upstream":
@@ -498,10 +644,19 @@ def _machine_health(hops, index: int) -> tuple[str, str] | None:
     return (found.state[0].capitalize(), found.state[1]) if found else None
 
 
+def _on_the_tailnet(hop) -> bool:
+    """Whether a network hop is the tailnet, the one link HQ reads: the
+    machine's tailnet device says nothing of its home-network link."""
+
+    return network_of(hop.detail) == "tailnet"
+
+
 def _link_health(hops, index: int) -> tuple[str, str] | None:
-    """A network hop's link, read from the tailnet presence of the machine the
+    """A tailnet hop's link, read from the tailnet presence of the machine the
     address belongs to: the next machine hop."""
 
+    if not _on_the_tailnet(hops[index]):
+        return None
     after = _next_step(hops, index, "machine")
     found = machines.machine(after.name) if after else None
     if found is None or found.presence is None:
@@ -585,20 +740,22 @@ def missing_facets(service: Any) -> list[Any]:
     running and not declared, with what taking it on would mean. What is
     declared is a row of the parts table."""
 
-    origin = service.origin
+    # A name served somewhere HQ does not reach is routed and certified there,
+    # so nothing HQ could add for those parts would be the one it is served by.
+    elsewhere = not served_here(service.origin)
     return [
         facet
         for facet in service.facets
         if not facet.present
         and (facet.observed or not facet.readings)
-        and not (origin is not None and origin.external and facet.routes)
+        and not (elsewhere and (facet.routes or facet.id == CERTIFICATE_FACET))
     ]
 
 
 def service_badges(service: Any, *, own: bool) -> tuple[Any, ...]:
     """Beside the hostname: who can reach it, and whether HQ may change it."""
 
-    reach = service.reach
+    reach = service.exposure.reach
     found = []
     if reach.label:
         found.append(PageBadge(reach.label, "reachable" if reach.tailnet_only else "unprobed", reach.detail))

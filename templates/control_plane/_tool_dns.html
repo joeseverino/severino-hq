@@ -1,35 +1,24 @@
 {% load nav_tags %}
-<div class="lookup-grid">
-  {% section "Name lookup" lede="Every public record for a name." %}
-    <form method="get" class="lookup-form">
-      <input type="hidden" name="tab" value="dns">
-      <div class="field compact">
-        <label for="lookup-name">Hostname</label>
-        <input type="text" name="name" id="lookup-name" spellcheck="false"
-               autocomplete="off" placeholder="example.com"
-               value="{{ asked|dictkey:'lookup.name.read' }}">
-      </div>
-      <div class="form-actions">
-        <button type="submit" class="primary">{% words "lookup.name.read" %}</button>
-      </div>
-    </form>
+<div class="section-flow">
+  {% section "Name lookup" %}
+    {% words "lookup.name.read" as verb %}
+    {% include "partials/_form.html" with form=lookups|dictkey:"lookup.name.read" method="get" verb=verb only %}
 
     {% with reading=results|dictkey:"lookup.name.read" %}
       {% if reading %}
-    <div class="tool-result">
         {% if reading.ok %}
           {% table_region "Public records" %}
-            <table>
-              <thead><tr>{% table_heading "Type" "identifier" %}{% table_heading "Name" "identifier" %}{% table_heading "Answer" "identifier" %}</tr></thead>
+            <table class="data-table">
+              <thead><tr>{% table_heading "Type" "identifier" gutter=True %}{% table_heading "Name" "identifier" drop=1 %}{% table_heading "Answer" "identifier" %}</tr></thead>
               <tbody>
                 {% for answer in reading.answers %}
                   <tr>
                     <td><code>{{ answer.type|breakable }}</code></td>
                     <td>{{ answer.name|breakable }}</td>
-                    <td><code>{{ answer.value|breakable }}</code></td>
+                    <td><code class="cell-whole">{{ answer.value|breakable }}</code></td>
                   </tr>
                 {% empty %}
-                  <tr><td colspan="3" class="muted">No public records.</td></tr>
+                  <tr><td colspan="3">{% include "partials/_empty_state.html" with message="No public records." only %}</td></tr>
                 {% endfor %}
               </tbody>
             </table>
@@ -40,70 +29,44 @@
         {% else %}
           <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>
         {% endif %}
-    </div>
       {% endif %}
     {% endwith %}
   {% endsection %}
 
-  {% section "Address lookup" lede="The name for an address, and who owns it." %}
-    <form method="get" class="lookup-form">
-      <input type="hidden" name="tab" value="dns">
-      <div class="field compact">
-        <label for="lookup-address">IP address</label>
-        <input type="text" name="address" id="lookup-address" spellcheck="false"
-               autocomplete="off" placeholder="1.1.1.1"
-               value="{{ asked|dictkey:'lookup.address.read' }}">
-      </div>
-      <div class="form-actions">
-        <button type="submit" class="primary">{% words "lookup.address.read" %}</button>
-      </div>
-    </form>
+  {% section "Address lookup" %}
+    {% words "lookup.address.read" as verb %}
+    {% include "partials/_form.html" with form=lookups|dictkey:"lookup.address.read" method="get" verb=verb only %}
 
     {% with reading=results|dictkey:"lookup.address.read" %}
       {% if reading %}
-    <div class="tool-result">
         {% if reading.ok %}
-          <dl class="kv">
-            <dt>Address</dt>
-            <dd><code>{{ reading.address|breakable }}</code> IPv{{ reading.version|breakable }}</dd>
+          {% facts %}
+            {% fact "Address" %}<code>{{ reading.address|breakable }}</code> IPv{{ reading.version|breakable }}{% endfact %}
             {% if reading.hostnames %}
-              <dt>Reverse DNS</dt>
-              <dd>{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}</dd>
+              {% fact "Reverse DNS" %}{% for hostname in reading.hostnames %}<code>{{ hostname|breakable }}</code> {% endfor %}{% endfact %}
             {% endif %}
             {% if reading.allocation.organization %}
-              <dt>Allocated to</dt>
-              <dd><strong>{{ reading.allocation.organization|breakable }}</strong></dd>
+              {% fact "Allocated to" %}<strong>{{ reading.allocation.organization|breakable }}</strong>{% endfact %}
             {% endif %}
             {% if reading.allocation.prefixes %}
-              <dt>Block</dt>
-              <dd>{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}</dd>
+              {% fact "Block" %}{% for prefix in reading.allocation.prefixes %}<code>{{ prefix|breakable }}</code> {% endfor %}{% endfact %}
             {% endif %}
             {% if reading.allocation.range %}
-              <dt>Range</dt><dd>{{ reading.allocation.range|breakable }}</dd>
+              {% fact "Range" value=reading.allocation.range %}
             {% endif %}
             {% if reading.allocation.handle %}
-              <dt>Registry handle</dt><dd><code>{{ reading.allocation.handle|breakable }}</code></dd>
+              {% fact "Registry handle" %}<code>{{ reading.allocation.handle|breakable }}</code>{% endfact %}
             {% endif %}
             {% if reading.note %}
-              <dt>Note</dt><dd class="muted">{{ reading.note|breakable }}</dd>
+              {% fact "Note" %}<span class="muted">{{ reading.note|breakable }}</span>{% endfact %}
             {% endif %}
-          </dl>
-          {% if reading.observed_at %}
-            <p class="help">
-              Read
-              {{ reading.observed_at|when }}
-              <form method="post" class="inline-form">
-                {% write_token %}
-                <input type="hidden" name="tab" value="dns">
-                <input type="hidden" name="address" value="{{ asked|dictkey:'lookup.address.read' }}">
-                <button type="submit" class="btn ghost compact">{% words "lookup.address.read" %}</button>
-              </form>
-            </p>
+          {% endfacts %}
+          {% if reread %}
+            <div class="help">Read {{ reading.observed_at|when }} {% include "partials/_page_action.html" with action=reread extra="ghost compact" only %}</div>
           {% endif %}
         {% else %}
           <p class="help">{{ reading.message|default:"Lookup failed."|breakable }}</p>
         {% endif %}
-    </div>
       {% endif %}
     {% endwith %}
   {% endsection %}

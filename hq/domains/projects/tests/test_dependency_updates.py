@@ -10,6 +10,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.domains.projects.models import Project
 from hq.domains.projects.views import run_now_ask
+from hq.platform.application import cadence
 from hq.platform.application.action_links import command_url
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.dependency_updates import KIND as RUN_KIND, RUN_NOW, asked_at
@@ -140,10 +141,9 @@ class UpdatesSurfaceTests(TestCase):
 
         response = self.client.get(reverse("projects:detail", args=["alpha"]))
 
-        updates = [element.attrs["href"] for element in within(response, "data-updates") if element.tag == "a"]
-        alerts = [element.attrs["href"] for element in within(response, "data-unmatched-alerts") if element.tag == "a"]
-        self.assertEqual(updates, [UPDATE["url"]])
-        self.assertEqual(alerts, [estate.UNANSWERED["url"]])
+        # The updates and the alert none answers, and never the answered one.
+        listed = [element.attrs["href"] for element in within(response, "id", "updates") if element.tag == "a"]
+        self.assertEqual(listed, [UPDATE["url"], estate.UNANSWERED["url"]])
         self.assertIn(LONG_TITLE, text(response))
         self.assertIn("Checks failing", text(response))
         self.assertIn("no fixed version yet", text(response))
@@ -175,7 +175,7 @@ class UpdatesSurfaceTests(TestCase):
         self.assertIn("/projects/alpha/#updates", hrefs(response))
         self.assertIn("1 open update", text(response))
         # The alert count is a figure, so its state is its ink, never a chip.
-        self.assertIn("2 open alerts", [figure.words for figure in with_class(response, "tone-attention")])
+        self.assertIn("2 open alerts", [figure.words for figure in with_class(response, "toned-attention")])
         self.assertEqual({project.slug for project in filtered.context["object_list"]}, {"alpha"})
 
     def test_the_record_carries_the_update_state_when_it_names_a_repository(self):
@@ -249,6 +249,8 @@ class LastRunSurfaceTests(TestCase):
         self.client.force_login(get_user_model().objects.create_user("runs-reader"))
         self.project = Project.objects.create(name="Alpha", slug="alpha", repository_url=URL, dependency_updates=True)
         store()
+        # A controller reports to this HQ, so a run asked for is one it takes.
+        cadence.note_controller()
 
     def state(self):
         response = self.client.get(reverse("projects:detail", args=["alpha"]))

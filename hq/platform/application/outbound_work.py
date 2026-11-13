@@ -30,6 +30,7 @@ from .projection import read_once
 from .record_errors import RecordNotFound
 from .refusal_status import RefusalEnvelope, refuse
 from .security import WAITING_INTERFACES, Principal, person_of
+from .ui import ended
 lazy from .domains import host_specs
 lazy from .plugins import plugin_outbound_work
 lazy from .routes import reverse
@@ -275,7 +276,7 @@ def request_work(work: OutboundWork, subject: str, *, principal: Principal) -> W
         return {"ok": True, "started": True, "job": str(job.pk), "message": requested(work.words, subject)}
     standing = job_standing(job)
     if standing.state == FAILED:
-        return cast(RefusalEnvelope, refuse("work_failed", standing.note))
+        return cast(RefusalEnvelope, refuse("work_failed", standing.note or ended(standing.label)))
     return {"ok": True, "started": True, "job": str(job.pk), "message": standing.note, "result": job.result}
 
 

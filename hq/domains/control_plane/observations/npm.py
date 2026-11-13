@@ -11,8 +11,9 @@ from typing import Any
 
 from hq.platform.core.network import is_address
 
-from ..certificate_authorities import authority_name
+from ..certificate_authorities import npm_issuer
 from ..names import normalized_hostname
+from ..permissions import NginxProxyManager
 from .cloudflare import redirect_target
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
@@ -27,12 +28,12 @@ DEAD_HOST_KIND = "npm.dead_host"
 # The host lists that say which names a certificate serves, each a part of the
 # certificate reading, and the one that says which names an access list guards.
 SERVING_PARTS = (
-    ReadingPart("proxy_hosts", "Names served by proxy hosts", ("proxy_hosts: view",)),
-    ReadingPart("redirection_hosts", "Names served by redirection hosts", ("redirection_hosts: view",)),
-    ReadingPart("dead_hosts", "Names served by 404 hosts", ("dead_hosts: view",)),
-    ReadingPart("streams", "Streams served", ("streams: view",)),
+    ReadingPart("proxy_hosts", "Names served by proxy hosts", (NginxProxyManager.PROXY_HOSTS_VIEW,)),
+    ReadingPart("redirection_hosts", "Names served by redirection hosts", (NginxProxyManager.REDIRECTION_HOSTS_VIEW,)),
+    ReadingPart("dead_hosts", "Names served by 404 hosts", (NginxProxyManager.DEAD_HOSTS_VIEW,)),
+    ReadingPart("streams", "Streams served", (NginxProxyManager.STREAMS_VIEW,)),
 )
-PROTECTED_HOSTS_PART = ReadingPart("proxy_hosts", "Proxy hosts behind it", ("proxy_hosts: view",))
+PROTECTED_HOSTS_PART = ReadingPart("proxy_hosts", "Proxy hosts behind it", (NginxProxyManager.PROXY_HOSTS_VIEW,))
 
 
 def _names(values: Any) -> tuple[str, ...]:
@@ -146,7 +147,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "NPM certificate",
         CertificateRecord,
         requires=(
-            "certificates: view",
+            NginxProxyManager.CERTIFICATES_VIEW,
             *(name for part in SERVING_PARTS for name in part.requires),
         ),
         parts=SERVING_PARTS,
@@ -156,14 +157,14 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         facet="certificate",
         short_label="NPM",
         expires=lambda record: str(record.get("expires_on", "")),
-        issuer=lambda record: authority_name(record.get("provider")),
+        issuer=lambda record: npm_issuer(record.get("provider")),
     ),
     ObservationSpec(
         REDIRECT_KIND,
         PROVIDER,
         "NPM redirect",
         RedirectionHostRecord,
-        requires=("redirection_hosts: view",),
+        requires=(NginxProxyManager.REDIRECTION_HOSTS_VIEW,),
         hostnames=_enabled_names,
         title=lambda record: str(record.get("target_host") or record.get("target") or ""),
         relation="Redirects to",
@@ -177,7 +178,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "NPM stream",
         StreamRecord,
-        requires=("streams: view",),
+        requires=(NginxProxyManager.STREAMS_VIEW,),
         hostnames=_stream_hosts,
         addresses=_stream_addresses,
         title=_stream_title,
@@ -189,7 +190,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "NPM access list",
         AccessListRecord,
-        requires=("access_lists: view", *PROTECTED_HOSTS_PART.requires),
+        requires=(NginxProxyManager.ACCESS_LISTS_VIEW, *PROTECTED_HOSTS_PART.requires),
         parts=(PROTECTED_HOSTS_PART,),
         hostnames=lambda record: _names(record.get("protects")),
         title=lambda record: str(record.get("name", "")),
@@ -201,7 +202,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "NPM dead host",
         DeadHostRecord,
-        requires=("dead_hosts: view",),
+        requires=(NginxProxyManager.DEAD_HOSTS_VIEW,),
         hostnames=_enabled_names,
         title=lambda record: ", ".join(record.get("hostnames") or ()),
         relation="Answers 404 through",

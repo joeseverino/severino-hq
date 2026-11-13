@@ -1,0 +1,30 @@
+id: hand-drawn-title-meta
+snapshots:
+  <p class="page-title-meta">A</p>:
+    labels:
+    - source: <p class="page-title-meta">A</p>
+      style: primary
+      start: 0
+      end: 32
+    - source: class="page-title-meta"
+      style: secondary
+      start: 3
+      end: 26
+    - source: <p class="page-title-meta">
+      style: secondary
+      start: 0
+      end: 27
+  <ul class="page-title-meta dot-list"></ul>:
+    labels:
+    - source: <ul class="page-title-meta dot-list"></ul>
+      style: primary
+      start: 0
+      end: 42
+    - source: class="page-title-meta dot-list"
+      style: secondary
+      start: 4
+      end: 36
+    - source: <ul class="page-title-meta dot-list">
+      style: secondary
+      start: 0
+      end: 37

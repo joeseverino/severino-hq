@@ -12,7 +12,8 @@ carries its ``enum``), and a date's format is its ``format``. What only a
 client reading JSON needs (what null or empty means, a ``type:key`` shape,
 that the value is a slug or an id) is the marker's second part, ``api``,
 which the schema's description adds after the meaning and a form leaves off
-(``meanings``). ``lint:prose`` holds both, as every string under ``hq/``
+(``meanings``). A field whose label says all a person needs has only the
+``api`` part. ``lint:prose`` holds both, as every string under ``hq/``
 that can reach a page.
 """
 
@@ -36,7 +37,7 @@ class Describe:
     api: str = ""
 
     def __get_pydantic_json_schema__(self, schema: CoreSchema, handler: GetJsonSchemaHandler) -> dict[str, Any]:
-        return {**handler(schema), "description": f"{self.text} {self.api}" if self.api else self.text}
+        return {**handler(schema), "description": " ".join(part for part in (self.text, self.api) if part)}
 
 
 @cache

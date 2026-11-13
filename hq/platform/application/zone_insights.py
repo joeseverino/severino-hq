@@ -10,8 +10,9 @@ function takes a Zone and returns one insight or None, registered by name in
 import re
 from functools import partial
 
-from hq.domains.control_plane.credential_reads import REGISTRAR_READ
+from hq.domains.control_plane.certificate_authorities import UPLOADED
 from hq.domains.control_plane.names import in_zone, normalized_hostname
+from hq.domains.control_plane.permissions import Cloudflare
 from hq.domains.control_plane.provider_adapters.cloudflare import caa_parts
 from hq.domains.control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
 from hq.domains.control_plane.provider_adapters.tls import (
@@ -20,17 +21,19 @@ from hq.domains.control_plane.provider_adapters.tls import (
 )
 from hq.domains.control_plane.provider_spec import expiry_phrase
 from hq.domains.control_plane.providers import PROVIDERS, read_spec
-from hq.platform.application.labels import dotted
+from hq.platform.application.labels import dotted, lower_first
 from hq.platform.application.routes import reverse
 
+from .card_items import ListRow
 from .entity_links import entity_link
 from .expiry import days_until
 from .facts import Subject, inventory_about, inventory_records, readings as stored_readings, refusals_about
 from .infrastructure import delivery_targets, enabled_resources, resolved_spec
 from .known_hosts import operator, registrable
 from .mail_policy import is_null_mx
+from .moments import expiry_words
 from .timestamps import moment
-from .ui import ListRow, counted, ended
+from .ui import counted, ended
 from .zones import ZONE_KIND, ZoneInsight
 lazy from . import zones
 lazy from .service_list import services_by_zone
@@ -73,7 +76,7 @@ def services(zone) -> ZoneInsight | None:
         return ZoneInsight(
             label="Services",
             value="None",
-            detail="HQ has nothing set up behind any name in this domain.",
+            detail="No name here is set up.",
             links=(("Served by", serving),) if serving else (),
             note=overlays,
         )
@@ -85,7 +88,7 @@ def services(zone) -> ZoneInsight | None:
         detail = ended(f"Handled at {', '.join(handlers)}") if handlers else "Nothing answers there."
     else:
         value = counted(len(members), "service")
-        detail = f"{len(unhealthy)} missing something behind it." if unhealthy else "All fully wired."
+        detail = f"{len(unhealthy)} incomplete." if unhealthy else "All set up."
     # A count, with the list one click beneath it: the number opens onto the
     # whole list, and ``url`` reaches a page that does the same job.
     return ZoneInsight(
@@ -116,13 +119,7 @@ def _overlays(joined) -> str:
         if item.facet or not item.spec.joins_hostnames:
             continue
         counts.setdefault(item.relation, set()).update(item.hostnames)
-    return dotted(*(f"{len(names)} {_mid_sentence(relation)}" for relation, names in sorted(counts.items())))
-
-
-def _mid_sentence(phrase: str) -> str:
-    """A phrase as it reads after a number: "Behind Access" lowercased, "DNS lookups" kept."""
-
-    return phrase if phrase[1:2].isupper() else phrase[:1].lower() + phrase[1:]
+    return dotted(*(f"{len(names)} {lower_first(relation)}" for relation, names in sorted(counts.items())))
 
 
 def certificates(zone) -> ZoneInsight | None:
@@ -241,7 +238,7 @@ def security(zone) -> ZoneInsight | None:
         certificates_fact = counted(count, "certificate")
         first = moment(earliest) if earliest else None
         if first is not None:
-            certificates_fact += f", first expires in {counted(days_until(first), 'day')}"
+            certificates_fact += f", first {expiry_words(first)}"
         facts.append(certificates_fact)
     stronger = _stronger_elsewhere(zone)
     concerns = []
@@ -303,12 +300,15 @@ def _edge_certificates(edge) -> ZoneInsight:
     """Edge certificates covering the zone: how many, the earliest expiry, who issued them."""
 
     earliest = _earliest(item.expires for item in edge)
-    issuers = sorted({item.issuer for item in edge if item.issuer})
+    issuers = sorted({item.issuer for item in edge if item.issuer and item.issuer != UPLOADED})
+    uploaded = sum(item.issuer == UPLOADED for item in edge)
     detail = []
     if earliest:
         detail.append(f"Earliest expires {expiry_phrase(earliest)}.")
     if issuers:
         detail.append(ended(f"Issued by {', '.join(issuers)}"))
+    if uploaded:
+        detail.append(f"{counted(uploaded, 'certificate')} {UPLOADED}.")
     return ZoneInsight(
         label="Certificates",
         value=counted(len(edge), "edge certificate", "edge certificates"),
@@ -576,7 +576,7 @@ def _registrar_note(refused: str, refusal: str) -> tuple[str, str]:
     if not refused:
         return "", ""
     if refusal == PERMISSION_REFUSAL:
-        return f"Add {REGISTRAR_READ} to see auto-renew.", refused
+        return f"Add {Cloudflare.REGISTRAR_DOMAINS_READ} to see auto-renew.", refused
     return f"Registrar not read: {refused}", ""
 
 

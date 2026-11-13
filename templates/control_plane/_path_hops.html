@@ -23,5 +23,5 @@ where they would not.
     </li>
   {% endfor %}
 </ol>
-{% for hop in route.line_hops %}{% if hop.check and forloop.first %}<p class="path-proof-note"><span class="hop-proof-key">{% include "partials/_icon.html" with name="check-circle" %}</span><span>Confirmed by this request. <a href="{% url 'connection' %}">How I am connected</a></span></p>{% endif %}{% endfor %}
+{% for hop in route.line_hops %}{% if hop.check and forloop.first %}<p class="path-proof-note"><span class="hop-proof-key">{% include "partials/_icon.html" with name="check-circle" %}</span><span>Confirmed by this request. <a href="{% url 'connection' %}">Your connection</a></span></p>{% endif %}{% endfor %}
 </div>

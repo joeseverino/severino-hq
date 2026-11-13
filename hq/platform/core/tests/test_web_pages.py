@@ -31,6 +31,7 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.application.tests.markup import elements, hrefs, select, text
+from hq_sdk.testing import plain
 
 from .signed_in_case import _AuthedTestCase
 
@@ -51,6 +52,27 @@ class SearchPageTests(_AuthedTestCase):
         self.assertIn(command_url("project.create"), links)
         self.assertIn(reverse("projects:list"), links)
         self.assertNotIn("project.create", text(response))
+
+    def test_a_place_found_is_a_row_with_its_state_and_a_page_is_its_name(self):
+        from hq.platform.application.command_center import DiscoveryItem
+        from hq.platform.core.views import DISCOVERY_GROUPS
+
+        def item(kind, label, summary, badges):
+            return DiscoveryItem(kind, label.lower(), label, summary, f"/example/{kind}/", label, badges)
+
+        found = {
+            **dict.fromkeys(DISCOVERY_GROUPS, ()),
+            "estate": (item("machine", "Example host", "An example machine", ("Running", "")),),
+            "resources": (item("page", "Example page", "What the example page lists", ()),),
+        }
+        with patch("hq.platform.core.views.command_center", return_value=found):
+            response = self.client.get("/search/", {"q": "example"})
+
+        shown = text(response)
+        self.assertLessEqual({"/example/machine/", "/example/page/"}, set(hrefs(response)))
+        self.assertIn("An example machine", shown)
+        self.assertIn("Running", shown)
+        self.assertNotIn("What the example page lists", shown)
 
     def test_query_filters_commands_as_well_as_records(self):
         response = self.client.get("/search/", {"q": "certificate.renew"})
@@ -73,7 +95,6 @@ class SearchPageTests(_AuthedTestCase):
                 HTTP_X_FRAGMENT="palette",
             )
 
-        self.assertTemplateUsed(response, "core/_command_center_results.html")
         self.assertTrue(select(response, "data-command-center-results"))
         self.assertFalse(elements(response, "html"))
         records.assert_called_once()
@@ -134,7 +155,27 @@ class SearchPageTests(_AuthedTestCase):
             for each in select(response, "aria-labelledby")
             if each.attrs.get("id", "").startswith("scope-")
         }
-        self.assertEqual(shown, {f"scope-{group['scope']}" for group in response.context["groups"] if group["count"]})
+        self.assertEqual(shown, {section["id"] for section in response.context["result_sections"]})
+        self.assertEqual(
+            {section["id"] for section in response.context["result_sections"]},
+            {f"scope-{group['scope']}" for group in response.context["groups"] if group["count"]},
+        )
+
+    def test_a_hit_quotes_its_records_text_and_each_group_is_a_way_from_the_navigation(self):
+        """What a record holds is shown as written, however unlike HQ's own
+        words, and every group of results is one link over them."""
+
+        Project.objects.create(name="Quoted target", description="enabled: False at 2026-11-02 09:30, quoted")
+        ContentItem.objects.create(title="Quoted content", notes="A quoted piece of content.")
+        response = self.client.get("/search/", {"q": "quoted"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("2026-11-02 09:30", text(response))
+        ids = [section["id"] for section in response.context["result_sections"]]
+        self.assertGreater(len(ids), 1)
+        self.assertEqual(
+            [link.attrs["href"] for link in select(response, "data-page-nav-link")], [f"#{i}" for i in ids]
+        )
 
 
 class EmptyListTests(_AuthedTestCase):
@@ -350,7 +391,7 @@ class DashboardWorkflowTests(_AuthedTestCase):
         badge = next(
             each
             for each in select(page, "data-modal-open", "connection")
-            if all(part in each.text for part in found.summary.split(DOT))
+            if all(plain(part) in plain(each.text) for part in found.summary.split(DOT))
         )
         self.assertEqual(badge.attrs["href"], reverse("connection"))
         self.assertIn(found.transport, badge.text)
@@ -543,9 +584,10 @@ class DashboardWorkflowTests(_AuthedTestCase):
         response = self.client.get("/reports/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["docs_needing_review_count"], 1)
+        figures = {figure.label: figure for figure in response.context["figures"]}
+        self.assertEqual(figures["Docs due for review"].value, 1)
         self.assertEqual(
-            [link.title for link, _reviewed in response.context["docs_needing_review"]],
+            [row.link.title for row in response.context["docs_needing_review"]],
             [stale.doc_id],
         )
 

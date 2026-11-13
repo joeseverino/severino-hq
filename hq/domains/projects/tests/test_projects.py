@@ -207,10 +207,10 @@ class ProjectSectionTests(ComposedPluginTestCase, TestCase):
         named = render_to_string("page.html", {"page": Page("Alpha"), "built_from": built_from("example.alpha")})
         unnamed = render_to_string("page.html", {"page": Page("Alpha"), "built_from": built_from("example.missing")})
 
-        (line,) = with_class(named, "page-foot")
+        (line,) = with_class(named, "section-foot")
         self.assertTrue(line.words.startswith("Built from"))
         self.assertIn(("Example Alpha", built.get_absolute_url()), links(named))
-        self.assertEqual(with_class(unnamed, "page-foot"), [])
+        self.assertEqual(with_class(unnamed, "section-foot"), [])
         self.assertNotIn("Built from", text(unnamed))
 
 
@@ -227,8 +227,10 @@ class ProjectListTests(TestCase):
         page = text(response)
         self.assertIn("Example Tool tool", page)
         self.assertNotIn("Example example", page)
-        # The first three technologies, the rest behind the row's toggle.
-        self.assertIn("Go SQLite Django +2", page)
+        # Every technology is drawn, in its order; the cell's room decides how
+        # many show before the row opens.
+        self.assertIn("Go SQLite Django htmx CSS", page)
+        self.assertNotIn("+2", page)
 
     def test_every_cell_answers_its_heading(self):
         Project.objects.create(name="Example", slug="example")

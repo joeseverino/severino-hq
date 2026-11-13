@@ -1,6 +1,8 @@
 """Probes of tables: their cells, rows, columns and gutter, and the tables drawn to probe them."""
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import CUTS, DESCRIBE, PAINTED_PART
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 CELLS = (
     "() => {"
@@ -277,7 +279,7 @@ CUT_WITH_ROOM = (
       // The hold bounds the name's whole box, an external link's arrow with it.
       let holder = el;
       for (let up = el.parentElement; up && up !== cell; up = up.parentElement) {
-        if (up.matches(holders)) holder = up;
+        if (up.matches(holders) && up.getClientRects().length) holder = up;
       }
       const beside = holder.getBoundingClientRect().width - el.clientWidth;
       if (asks + beside <= hold + 1)
@@ -296,6 +298,9 @@ CUT_WITH_ROOM = (
 # max-content, unseen, beside it so its rules still reach it). A column
 # holding a cut gives none, and a fixed layout's columns none at all. A value
 # longer than its row's room is cut wherever it goes, so that room is none.
+# A box that asks its column for nothing (a flex item grown from no basis, as
+# the rest of a `line_list` is) never widens a column, so only its own cell's
+# room is its, and it is given that room as a box of its own size.
 CUT_BESIDE_ROOM = (
     "(unseen) => {"
     + DESCRIBE
@@ -357,7 +362,9 @@ CUT_BESIDE_ROOM = (
         }
       }
       const own = Math.max(0, inner(cell).right - end);
-      const others = [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
+      const asksNothing = boxes.some((box) => /flex/.test(getComputedStyle(box.parentElement).display)
+        && getComputedStyle(box).flexGrow !== '0' && parseFloat(getComputedStyle(box).flexBasis) === 0);
+      const others = asksNothing ? 0 : [...slack].reduce((sum, [place, room]) => sum + (place === cell.cellIndex ? 0 : room), 0);
       const room = own + others;
       if (room < 1) continue;
       // Each box that cuts it given the room, to see whether it then shows
@@ -366,7 +373,7 @@ CUT_BESIDE_ROOM = (
       const kept = boxes.map((box) => [box, box.style.cssText, box.getBoundingClientRect().width]);
       for (const [box, was, wide] of kept) {
         box.style.cssText = `${was}; box-sizing: border-box !important; inline-size: ${wide + room - 1}px !important; `
-          + 'min-inline-size: 0 !important; max-inline-size: none !important';
+          + `min-inline-size: 0 !important; max-inline-size: none !important${asksNothing ? '; flex: none !important' : ''}`;
       }
       const cured = !cutsIn(cell, unseen).some((cut) => cut.node === node);
       for (const [box, was] of kept) box.style.cssText = was;
@@ -590,7 +597,9 @@ COLUMNS_SHOWN = """() => [...document.querySelectorAll('thead th')]
 # row's only clipped text is for screen readers, beside a decoration hidden
 # from them, and one row's value really is cut off. In the second a row folds
 # part of a list, so the gutter is kept at every width, and a row's value is
-# cut off there too.
+# cut off there too. In the third a run of parts (`line_list`) shows them all
+# in a cell with room, and in a cell held narrow it cuts the parts its line
+# has no room for.
 ROW_TOGGLE_TABLES = """
 {% table_region "Dropping" %}<table class="data-table"><thead><tr>
 {% table_heading "Name" gutter=True %}{% table_heading "Value" %}{% table_heading "Note" drop=1 %}</tr></thead><tbody>
@@ -609,7 +618,19 @@ ROW_TOGGLE_TABLES = """
 <td><span class="tag">One</span><span class="muted row-less">+1</span><span class="row-more"><span class="tag">Two</span></span></td></tr>
 <tr data-probe="cut-in-a-kept-gutter"><td>Name</td>
 <td><div style="max-width: 40px; overflow: hidden; white-space: nowrap">a value far too long to fit</div></td></tr>
+</tbody></table>{% endtable_region %}
+{% table_region "Lining" %}<table class="data-table"><thead><tr>
+{% table_heading "Name" gutter=True %}{% table_heading "Parts" %}</tr></thead><tbody>
+<tr data-probe="line-fits"><td>Fits</td>
+<td>{% line_list fits as part %}<span class="tag">{{ part }}</span>{% endline_list %}</td></tr>
+<tr data-probe="line-cut"><td>Cut</td>
+<td><div style="max-width: 9rem">{% line_list many as part %}<span class="tag">{{ part }}</span>{% endline_list %}</div></td></tr>
 </tbody></table>{% endtable_region %}"""
+
+ROW_TOGGLE_VALUES = {
+    "fits": ("One", "Two", "Three", "Four"),
+    "many": ("One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight"),
+}
 
 # A table of cut values, each the word its row is probed by then more: one
 # with no title, one carrying its whole text as a title, one titled in a row
@@ -691,8 +712,8 @@ POPOVER_IN_A_CELL = """{% load value_tags %}
 {% table_region "Origins" %}<table class="data-table"><thead><tr>
 {% table_heading "Item" gutter=True %}{% table_heading "Urgency" %}</tr></thead><tbody>
 <tr><td class="row-gutter">Example item</td><td><span class="pill">Urgent</span>
-<div class="modal origin-panel" id="example-origin" popover><div class="modal-panel"><dl class="kv compact">
-<dt>From</dt><dd>{{ source|breakable }}</dd><dt>Key</dt><dd><code>{{ key|breakable }}</code></dd></dl></div></div></td></tr>
+<div class="modal origin-panel" id="example-origin" popover><div class="modal-panel">{% facts %}
+{% fact "From" value=source %}{% fact "Key" %}<code>{{ key|breakable }}</code>{% endfact %}{% endfacts %}</div></div></td></tr>
 </tbody></table>{% endtable_region %}"""
 
 POPOVER_VALUES = {
@@ -718,7 +739,7 @@ ROW_TOGGLES = """() => [...document.querySelectorAll('tbody tr:not([data-row-det
 IDENTIFIER_TABLES = """{% load value_tags %}
 {% table_region "Steps" %}<table class="data-table"><thead><tr>
 {% table_heading "Step" gutter=True %}{% table_heading "Name" "identifier" %}{% table_heading "State" "status" %}
-{% table_heading "Since" drop=3 %}{% table_heading "If it breaks" drop=2 %}{% table_heading "Read from" drop=1 %}</tr></thead><tbody>
+{% table_heading "Since" drop=3 %}{% table_heading "Impact" drop=2 %}{% table_heading "Read from" drop=1 %}</tr></thead><tbody>
 <tr><td>Proxy host</td><td><a href="/proxy/" data-entity="Proxy host">{{ address|breakable }}</a></td>
 <td><span class="pill">Up</span></td><td>1 day</td><td>If it is removed, the name stops reaching the app it serves.</td>
 <td>Read from the proxy's own list of hosts, a minute ago</td></tr>
@@ -727,7 +748,7 @@ IDENTIFIER_TABLES = """{% load value_tags %}
 <tr><td>Service</td><td><span data-entity="Service">{{ host|breakable }}</span></td><td></td><td>1 day</td>
 <td>The service stops answering at this name.</td><td>Declared in HQ</td></tr>
 </tbody></table>{% endtable_region %}
-{% table_region "Who is allowed" %}<table class="data-table"><thead><tr>
+{% table_region "Access" %}<table class="data-table"><thead><tr>
 {% table_heading "Access list" gutter=True %}{% table_heading "Admits by" drop=3 %}
 {% table_heading "Addresses" drop=2 %}{% table_heading "Logins" drop=1 %}</tr></thead><tbody>
 <tr><td>office only</td><td>Address rules</td><td>{{ networks|breakable }}</td><td>{{ logins|breakable }}</td></tr>
@@ -738,4 +759,24 @@ IDENTIFIER_VALUES = {
     "host": "status.example.com",
     "networks": "allow 198.51.100.0/24; allow 2001:db8:a1e0::/48",
     "logins": "none",
+}
+
+
+# The survey checks these probes answer (`probes/__init__.py`); the table
+# checks (`table=True`) are read again by the sweep of every width
+# (`BrowserGate.table_defects_at_every_width`) at each shape of the layout,
+# with the rows a reader can open opened.
+CHECKS = {
+    "cells": Check(CELLS, table=True),
+    "tables": Check(TABLES, table=True, findings=lambda report: report["found"]),
+    "tables fit": Check((TABLES_THAT_DO_NOT_FIT, SELECTORS["table_scroll"]), table=True),
+    "unseen columns": Check((UNSEEN_COLUMNS, SELECTORS["table_scroll"]), table=True),
+    "cut with room": Check(
+        (CUT_WITH_ROOM, [SELECTORS["cut_box"], SELECTORS["name_box"], SELECTORS["unseen"]]), table=True
+    ),
+    "cut beside room": Check((CUT_BESIDE_ROOM, SELECTORS["unseen"]), table=True),
+    "cut and closed": Check((CUT_AND_CLOSED, SELECTORS["unseen"]), table=True),
+    "cut when open": Check((CUT_WHEN_OPEN, SELECTORS["unseen"]), table=True),
+    # Every box and every line of text, not only a card's or code's.
+    "gutter": (PAST_THE_GUTTER, ["*", True]),
 }

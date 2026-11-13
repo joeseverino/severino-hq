@@ -1,8 +1,9 @@
 # Security policy
 
-Severino HQ is a single-user internal application. It is intended to run
-**only over a private Tailscale network** behind authentication. The
-project's security model is documented in [`docs/Security.md`](../docs/Security.md).
+Severino HQ is a self-hosted operations application. Each person who signs
+in holds a role of their own. It runs **only over a private
+Tailscale network**, behind sign-in. The security model is in
+[`docs/Security.md`](../docs/Security.md).
 
 ## Reporting a vulnerability
 
@@ -19,10 +20,11 @@ reproduce and, where applicable, a suggested mitigation.
 
 - Auth bypass on any Severino HQ route.
 - Receipt file disclosure to unauthenticated parties.
-- CSRF / XSS / injection in the admin or app UI.
+- CSRF, XSS or injection in the web UI, the API or MCP.
 - Exposure of restricted documentation records via exports.
-- Container escape / privilege escalation in the shipped Docker image.
-- Privilege escalation or destructive-action bypass by an authenticated user.
+- Container escape or privilege escalation in the shipped Docker image.
+- Privilege escalation or destructive-action bypass by a signed-in person,
+  or by an agent beyond the role of the person it acts for.
 - Authentication throttling or session weaknesses with a reproducible impact.
 
 ## What's out of scope

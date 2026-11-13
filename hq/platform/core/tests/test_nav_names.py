@@ -8,8 +8,9 @@ from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.bench import seed
 
 # Entries whose page is one of several things the entry lists, so the page is
-# titled by the thing: a domain's page is named for the domain.
-NAMED_FOR_ITS_SUBJECT = frozenset({"zones:index"})
+# titled by the thing: a domain's page is named for the domain. The dashboard
+# is titled by its greeting.
+NAMED_FOR_ITS_SUBJECT = frozenset({"zones:index", "dashboard"})
 
 
 class NavigationNameTests(TestCase):
@@ -23,8 +24,8 @@ class NavigationNameTests(TestCase):
                     continue
                 response = self.client.get(reverse(item.route), follow=True)
                 page = response.context.get("page") if response.context else None
-                # A page that draws its own head (the dashboard, the API
-                # reference) has no title to hold to.
+                # A page that draws its own head (the API reference) has no
+                # title to hold to.
                 if page is not None and page.title != item.label:
                     differing[item.route] = (item.label, page.title)
 

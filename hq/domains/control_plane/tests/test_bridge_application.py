@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator
 from hq.domains.control_plane import bridge_application
 from hq.domains.control_plane.bridge_actions import ACTIONS, Action
 from hq.domains.control_plane.bridge_contract import contract, max_body_bytes, operations
+from hq.platform.application.tests.reads import reads
 
 from . import bridge_client
 
@@ -75,9 +76,10 @@ class RefusalTests(TestCase):
             bridge_client.call("claim", controller_id="x", lease_seconds="45", capability=["a:b", "c:d"])
             bridge_client.call("claim", controller_id="x")
         self.assertEqual(
-            claim.call_args_list[0].kwargs, {"lease_seconds": 45, "capabilities": (("a", "b"), ("c", "d"))}
+            claim.call_args_list[0].kwargs,
+            {"lease_seconds": 45, "capabilities": (("a", "b"), ("c", "d")), "attempt": ""},
         )
-        self.assertEqual(claim.call_args_list[1].kwargs, {"lease_seconds": 300, "capabilities": ()})
+        self.assertEqual(claim.call_args_list[1].kwargs, {"lease_seconds": 300, "capabilities": (), "attempt": ""})
 
     def test_a_malformed_capability(self):
         self.refused(400, "kind:action", "/peek", query={"capability": "no-colon"})
@@ -389,6 +391,7 @@ class ReachabilityTests(TestCase):
 
 
 @tag("source", "tree")
+@reads("**/*.py")
 class ListenerSourceTests(SimpleTestCase):
     """Which listener is handed the bridge, read from the launcher source."""
 

@@ -34,7 +34,7 @@ func (f *fakeHost) volumes(t *testing.T) (map[string]string, *age.HybridIdentity
 	}
 	database := filepath.Join(volume("data"), Database)
 	sql := "CREATE TABLE proof (value TEXT NOT NULL); INSERT INTO proof VALUES ('restorable');"
-	if out, err := exec.Command("sqlite3", database, sql).CombinedOutput(); err != nil {
+	if out, err := exec.CommandContext(t.Context(), "sqlite3", database, sql).CombinedOutput(); err != nil {
 		t.Fatalf("sqlite3 is needed for the backup drill: %v %s", err, out)
 	}
 	if err := os.WriteFile(filepath.Join(volume("media"), "receipts", "receipt.txt"), []byte("receipt-proof\n"), 0o644); err != nil {
@@ -101,7 +101,7 @@ func decrypt(t *testing.T, dir string, identity age.Identity) io.Reader {
 func restore(t *testing.T, archive io.Reader) string {
 	t.Helper()
 	into := t.TempDir()
-	extract := exec.Command("tar", "-xzf", "-", "-C", into)
+	extract := exec.CommandContext(t.Context(), "tar", "-xzf", "-", "-C", into)
 	extract.Stdin = archive
 	if out, err := extract.CombinedOutput(); err != nil {
 		t.Fatalf("the archive does not extract: %v %s", err, out)
@@ -124,7 +124,7 @@ func TestABackupRestoresIntoAFreshDatabase(t *testing.T) {
 		t.Errorf("the archive is %v, readable beyond root", info.Mode().Perm())
 	}
 	restored := restore(t, decrypt(t, dir, identity))
-	value, err := exec.Command("sqlite3", filepath.Join(restored, Database), "SELECT value FROM proof;").Output()
+	value, err := exec.CommandContext(t.Context(), "sqlite3", filepath.Join(restored, Database), "SELECT value FROM proof;").Output()
 	if err != nil || strings.TrimSpace(string(value)) != "restorable" {
 		t.Errorf("the restored database answers %q, %v", value, err)
 	}

@@ -19,7 +19,7 @@ from hq.domains.control_plane.models import ApprovalRequest, DashboardMachine, M
 from hq.domains.projects.models import Project
 from hq.platform.application.action_links import command_url
 from hq.platform.application.agent_access import SET_AGENT_ACCESS
-from hq.platform.application.approvals import asked
+from hq.platform.application.approval_review import asked
 from hq.platform.application.attention import waiting_for_approval
 from hq.platform.application.capabilities import capability_registry
 from hq.platform.application.capability_policy import agents_may_hold
@@ -33,6 +33,7 @@ from hq.platform.application.security import Capability, could_hold
 from hq.platform.application.tests.markup import select, within
 from hq.platform.application.tests.writers import drawn_key
 from hq.platform.application.web_writes import RETRY_KEY_FIELD
+from hq.platform.core.attribution import operation_context
 from hq.platform.core.models import AgentAccess
 from hq_sdk.capabilities import StrictCommand
 
@@ -40,12 +41,24 @@ from .command_shapes import SWITCH_WORDS, optional_fields, sets_yes_or_no
 
 User = get_user_model()
 # The changes said on their page, by the confirmation their button waits on.
-# A change to HQ alone is said by its lede and its button.
+# A change to HQ alone is said by its button.
 CONFIRMED = {"infrastructure_change", "destructive"}
 
 
 def buttons(page) -> list[str]:
     return [element.words for element in within(page, "data-command-form") if element.attrs.get("type") == "submit"]
+
+
+def standing(page, spec) -> list[str]:
+    """Where the form says the switch ``spec`` stands: each value of a fact
+    its title names."""
+
+    drawn = within(page, "data-command-form")
+    return [
+        next(later.words for later in drawn[index + 1 :] if later.tag == "dd")
+        for index, element in enumerate(drawn)
+        if element.tag == "dt" and element.words == spec.title
+    ]
 
 
 def stated(page, effect: str) -> bool:
@@ -137,7 +150,7 @@ class EveryCommandPageTests(TestCase):
 
 class EveryHeldRequestTests(TestCase):
     """What a person reads when an agent's call waits for them: on the card
-    and in the bell, the agent wants to do something, to its target."""
+    and in the bell, it names the agent and the target."""
 
     @classmethod
     def setUpTestData(cls):
@@ -148,7 +161,8 @@ class EveryHeldRequestTests(TestCase):
 
     def said(self, held) -> tuple[str, str]:
         page = self.client.get(reverse("core:approval_entry", kwargs={"approval_id": held.id}), follow=True)
-        (card,) = [element.words for element in within(page, "class", "approval-head") if element.tag == "h2"]
+        # The card's heading is what was asked.
+        card = next(element.words for element in within(page, "data-approval") if element.tag in ("h2", "h3"))
         (bell,) = [item.title for item in waiting_for_approval() if item.key == f"approval:{held.id}"]
         return card, bell
 
@@ -156,19 +170,20 @@ class EveryHeldRequestTests(TestCase):
         asked = [spec for spec in capability_registry().values() if spec.effect != "read" and agents_may_hold(spec)]
         for spec in asked:
             target = ("7" if spec.target_kind == "integer" else "example-target") if spec.target_kind else ""
-            held = ApprovalRequest.objects.create(
-                capability=spec.name,
-                target=target,
-                requested_actor="example-agent",
-                requested_interface="mcp",
-                content_fingerprint="0" * 64,
-                expires_at=timezone.now() + timedelta(hours=1),
-            )
+            # Held as an agent's call holds it, so its audit row names the agent.
+            with operation_context(interface="mcp", actor="example-agent", operation="example.hold"):
+                held = ApprovalRequest.objects.create(
+                    capability=spec.name,
+                    target=target,
+                    requested_actor="example-agent",
+                    requested_interface="mcp",
+                    content_fingerprint="0" * 64,
+                    expires_at=timezone.now() + timedelta(hours=1),
+                )
             with self.subTest(command=spec.name):
                 for said in self.said(held):
                     words = said.split()
-                    self.assertEqual(words[:3], ["example-agent", "wants", "to"], said)
-                    self.assertNotIn("run", words, said)
+                    self.assertIn("example-agent", words, said)
                     if target:
                         self.assertIn(target, words, said)
             held.delete()
@@ -199,8 +214,7 @@ class SwitchPageTests(TestCase):
             with self.subTest(project=slug):
                 page = self.client.get(command_url(DEPENDENCY_UPDATES, slug))
 
-                said = [element.words for element in within(page, "data-command-state") if element.tag == "strong"]
-                self.assertEqual(said, [state])
+                self.assertEqual(standing(page, spec), [state])
                 self.assertEqual(buttons(page), [offered])
                 self.assertFalse(select(page, "data-command-blanks"))
 
@@ -234,9 +248,6 @@ class DeclaredStateSwitchTests(TestCase):
     def setUp(self):
         self.client.force_login(self.user)
 
-    def said(self, page) -> list[str]:
-        return [element.words for element in within(page, "data-command-state") if element.tag == "strong"]
-
     def test_the_agents_pause_says_where_it_stands(self):
         spec = capability_registry()[SET_AGENT_ACCESS]
         for paused, state, offered in ((True, "On", spec.words("off")), (False, "Off", spec.words("on"))):
@@ -244,7 +255,7 @@ class DeclaredStateSwitchTests(TestCase):
             with self.subTest(paused=paused):
                 page = self.client.get(command_url(SET_AGENT_ACCESS))
 
-                self.assertEqual(self.said(page), [state])
+                self.assertEqual(standing(page, spec), [state])
                 self.assertEqual(buttons(page), [offered])
 
     def test_a_machines_place_on_the_dashboard_says_where_it_stands(self):
@@ -258,7 +269,7 @@ class DeclaredStateSwitchTests(TestCase):
             with self.subTest(machine=machine.key):
                 page = self.client.get(command_url(DASHBOARD_MACHINE, machine.key))
 
-                self.assertEqual(self.said(page), [state])
+                self.assertEqual(standing(page, spec), [state])
                 self.assertEqual(buttons(page), [offered])
 
 

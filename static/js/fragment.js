@@ -193,11 +193,13 @@ const hqFragment = (() => {
   // follows it instead of a second one starting.
   const successor = new WeakMap();
 
+  // A notice in a tone, cloned from the empty one the server drew for it
+  // (base.html), so a line a script adds is the part the server draws.
+  const notice = (tone) =>
+    document.querySelector(`template[data-notice="${tone}"]`).content.firstElementChild.cloneNode(true);
   // One line, the same everywhere a part could not be had.
   const explain = (region, text, link) => {
-    const line = document.createElement("p");
-    line.className = "notice notice-attention";
-    line.setAttribute("role", "status");
+    const line = notice("warning");
     line.append(text);
     if (link) {
       const anchor = document.createElement("a");
@@ -215,11 +217,31 @@ const hqFragment = (() => {
       list.className = "messages";
       region.prepend(list);
     }
-    const line = document.createElement("li");
-    line.className = "msg msg-error";
-    line.setAttribute("role", "status");
+    const line = notice("error");
     line.textContent = text;
-    list.append(line);
+    const item = document.createElement("li");
+    item.append(line);
+    list.append(item);
+  };
+
+  // Why a post was refused, as the page it was answered with says it among
+  // its messages: the server's own sentence, which nothing else carries once
+  // that page is not the one shown. An error is the one notice that is an
+  // alert.
+  const refusals = (page) =>
+    [...page.querySelectorAll(".messages [role=alert]")].map((line) => line.textContent.trim()).filter(Boolean);
+  // Why an answer that is not a success was given, where it says: a refusal
+  // is a sentence, or the page drawn again with it. A server's failure says
+  // nothing a person can act on.
+  const failed = async (response) => {
+    const failure = new Error(String(response.status));
+    const type = response.headers.get("Content-Type") || "";
+    if (response.status < 500 && type.startsWith("text/plain")) {
+      failure.said = [(await response.text()).trim()].filter(Boolean);
+    } else if (response.status < 500 && type.startsWith("text/html")) {
+      failure.said = refusals(parse(await response.text()));
+    }
+    return failure;
   };
 
   // A region says why it is empty: the session ended, or its own failure
@@ -251,7 +273,7 @@ const hqFragment = (() => {
     if (response.redirected && new URL(response.url).pathname.startsWith(SIGN_IN)) {
       throw Object.assign(new Error("signed out"), { signIn: response.url });
     }
-    if (!response.ok) throw new Error(String(response.status));
+    if (!response.ok) throw await failed(response);
     return { response, page: parse(await response.text()) };
   };
 
@@ -493,6 +515,7 @@ const hqFragment = (() => {
         // or for a press this one.
         if (options.method && (response.redirected || options.page)) {
           error.landed = response.redirected ? response.url : window.location.href;
+          error.said = refusals(page);
         }
         throw error;
       }
@@ -639,9 +662,12 @@ const hqFragment = (() => {
 
   // A form answered in place. A question (GET) that cannot be answered here
   // is asked the ordinary way. A post is never sent twice: what went wrong is
-  // said beside the form, in its `[data-fragment-status]` or in the region.
-  // A post answered with another page, or one that is not this page's, shows
-  // that page, as the post would have without this file.
+  // said beside the form, in its `[data-fragment-status]` or in the region,
+  // in the server's words where its answer gives them: a refusal is answered
+  // here even when the server sent it on to another page, since showing that
+  // page would read it again without them. Any other post answered with
+  // another page, or one that is not this page's, shows that page, as the
+  // post would have without this file.
   //
   // A button that names its form from outside it (`post_button`, which posts
   // the one form base.html draws) is answered in the region it sits in, and
@@ -656,6 +682,10 @@ const hqFragment = (() => {
     const action = submitter?.hasAttribute("formaction") ? submitter.formAction : form.action;
     const url = posting ? action : `${action.split("?")[0]}?${new URLSearchParams(body)}`;
     const pressed = submitter && !form.contains(submitter) ? submitter : null;
+    // The one form a press posts was drawn with the page's first address; a
+    // region answered in place since may have moved it (a month paged), and
+    // the press comes back to where the reader is now.
+    if (pressed && body.has("next")) body.set("next", window.location.pathname + window.location.search);
     // A press's region is the page's, whose status lines are other forms'.
     const status =
       form.querySelector("[data-fragment-status]") || (pressed ? null : region.querySelector("[data-fragment-status]"));
@@ -684,17 +714,20 @@ const hqFragment = (() => {
       done?.close();
     } catch (error) {
       if (error.name === "AbortError") return;
-      if (!posting || error.signIn || error.landed) {
+      const refused = posting && !error.signIn && error.said?.length ? error.said : null;
+      if (!refused && (!posting || error.signIn || error.landed)) {
         window.location.assign(posting ? error.signIn || error.landed : url);
         return;
       }
-      const said = form.dataset.fragmentFailure || region.dataset.fragmentFailure || "That could not be sent.";
-      if (status?.isConnected) status.textContent = said;
+      const said = refused || [
+        form.dataset.fragmentFailure || region.dataset.fragmentFailure || "That could not be sent.",
+      ];
+      if (status?.isConnected) status.textContent = said.join(" ");
       // A press's region is the page's content, which keeps what it shows:
-      // the line is said where the server says how a post went, among the
+      // each line is said where the server says how a post went, among the
       // page's messages.
-      else if (pressed) say(region, said);
-      else explain(region, said);
+      else if (pressed) said.forEach((line) => say(region, line));
+      else explain(region, said.join(" "));
     } finally {
       form.removeAttribute("aria-busy");
       controls.forEach((control) => control.removeAttribute("aria-disabled"));
@@ -730,10 +763,29 @@ const hqFragment = (() => {
       .catch(() => {});
   };
 
+  // A script's setup for the elements a selector matches, run once for each:
+  // on the page as drawn, and in every part placed since, so an element an
+  // answer brings in is set up as the one it replaced was. A setup that
+  // listens beyond its element (the window, the document) does so once,
+  // outside it, since a replaced element's setup is never undone.
+  const each = (selector, setup) => {
+    const done = new WeakSet();
+    const run = (root) => within(root, selector).forEach((element) => {
+      if (done.has(element)) return;
+      done.add(element);
+      setup(element);
+    });
+    run(document.documentElement);
+    document.addEventListener("hq:fragment", (event) => run(event.target));
+  };
+
   reveal(document);
   watch(document.documentElement);
+  // Only the page as drawn: an answer to the form is drawn with it again
+  // while a reading is still due, and sending it then would ask forever.
+  // eslint-disable-next-line no-restricted-syntax -- sent once per page, never per part placed
   document.querySelectorAll("form[data-fragment-auto]").forEach(auto);
 
-  return { swap, fail };
+  return { swap, fail, each };
 })();
 window.hqFragment = hqFragment;

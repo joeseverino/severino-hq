@@ -41,9 +41,11 @@ class IngressPolicy:
 class ServedCertificate:
     """The certificate an observed record serves its names with.
 
-    ``unread`` says why the record cannot name it; ``certificate`` is then empty.
+    ``issuer`` is who issued it, as the provider's own code means; ``unread``
+    says why the record cannot name it, and ``certificate`` is then empty.
     """
 
     hostnames: tuple[str, ...]
     certificate: Mapping[str, Any]
     unread: str = ""
+    issuer: str = ""

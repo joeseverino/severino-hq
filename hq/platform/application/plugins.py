@@ -10,6 +10,7 @@ import pickle
 import re
 import time
 import weakref
+from collections import Counter
 from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass, fields, is_dataclass, replace
 from functools import cache, lru_cache, partial
@@ -21,9 +22,12 @@ from django.core.exceptions import ImproperlyConfigured
 
 from hq.platform.application.routes import reverse
 
+from .card_items import Insight
 from .demo import showing_demo
 from .derivations import derivation, forget, holds_until, present
-from .ui import STATUS_VALUES, DomainOverview, Insight
+from .ui import STATUS_VALUES, DomainOverview
+lazy from .action_items import item_key
+lazy from .automation_runs import clear_operation_registry_cache
 lazy from .domains import NAVIGATION_GROUPS
 lazy from .integrations import clear_integration_graph_cache
 lazy from .item_help import instructions
@@ -33,7 +37,7 @@ lazy from .security import host_capabilities
 
 logger = logging.getLogger("severino.composition")
 
-PLUGIN_API_VERSION = 10
+PLUGIN_API_VERSION = 12
 
 PLUGIN_ID = re.compile(r"^[a-z][a-z0-9]*(?:\.[a-z][a-z0-9_]*)+$")
 PLUGIN_DISTRIBUTION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -379,6 +383,7 @@ def clear_plugin_composition_cache() -> None:
 
     clear_integration_graph_cache()
     clear_outbound_work_cache()
+    clear_operation_registry_cache()
 
 
 def installed_plugin_apps() -> list[str]:
@@ -609,11 +614,11 @@ def source_attention(
 
     return read_source(
         source_id,
-        lambda: checked_attention(source_id, tuple(provider())),
+        lambda: distinct_attention(source_id, checked_attention(source_id, tuple(provider()))),
         lambda: (
             Insight(
                 status="attention",
-                eyebrow=label,
+                eyebrow="HQ",
                 title=f"{label} could not be read",
                 value="",
                 body="What it reports is missing from this queue until it reads again. The failure is logged.",
@@ -671,6 +676,53 @@ def checked_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]
     return items
 
 
+def repeated_keys(source_id: str, items: tuple[Any, ...]) -> tuple[str, ...]:
+    """Each queue key (``action_items.item_key``) more than one of a source's items share."""
+
+    counts = Counter(item_key(source_id, item) for item in items)
+    return tuple(key for key, count in counts.items() if count > 1)
+
+
+def distinct_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
+    """A source's items, one per queue key: the worst of each, where it stood.
+
+    A key is what the queue knows an item by (its row, its dismissal), so two
+    items under one are one to every reader. The source is still read: one
+    repeat in live data must not hide the source's other items, so the rest
+    of a key's items are dropped and logged as the source's defect.
+    """
+
+    worst: dict[str, Any] = {}
+    for item in items:
+        key = item_key(source_id, item)
+        held = worst.get(key)
+        if held is None or _urgency(item) < _urgency(held):
+            worst[key] = item
+    if len(worst) < len(items):
+        logger.error(
+            "%s gave more than one attention item under %s; the queue keeps the worst of each.",
+            source_id,
+            ", ".join(repeated_keys(source_id, items)),
+            extra={"event": "composition.source.repeated_key"},
+        )
+    kept = {id(item) for item in worst.values()}
+    return tuple(item for item in items if id(item) in kept)
+
+
+def _urgency(item: Insight) -> tuple[int, bool]:
+    rank = ATTENTION_ORDER.index(item.status) if item.status in ATTENTION_ORDER else len(ATTENTION_ORDER)
+    return rank, item.notice
+
+
+def _refused_attention(source_id: str, items: tuple[Any, ...]) -> tuple[Any, ...]:
+    """What a source's own suite holds it to: no two items under one key."""
+
+    checked = checked_attention(source_id, items)
+    if repeated := repeated_keys(source_id, checked):
+        raise ImproperlyConfigured(f"{source_id!r} produced two attention items with one key: {', '.join(repeated)}.")
+    return checked
+
+
 def checked_cards(source_id: str, cards: tuple[Any, ...]) -> tuple[dict[str, Any], ...]:
     _validate_dashboard_cards(cards)
     ids = [card["id"] for card in cards]
@@ -686,7 +738,7 @@ def checked_overview(source_id: str, overview: Any) -> DomainOverview | None:
 
 
 SOURCE_CHECKS: dict[str, Callable[[str, Any], Any]] = {
-    "attention": lambda source_id, answer: checked_attention(source_id, tuple(answer)),
+    "attention": lambda source_id, answer: _refused_attention(source_id, tuple(answer)),
     "dashboard": lambda source_id, answer: checked_cards(source_id, tuple(answer)),
     "overview": checked_overview,
 }

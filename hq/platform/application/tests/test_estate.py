@@ -454,6 +454,21 @@ class CertificateListTests(TestCase):
             },
         )
 
+    def test_a_name_one_reading_holds_twice_is_one_certificate_judged_by_the_newer(self):
+        # The older one stays in the reading beside the one that replaced it.
+        self.edge(("example.com", in_days(5)), ("example.com", in_days(-3)), ("www.example.com", in_days(-1)))
+
+        with projection_scope():
+            found = estate_reading().certificates
+            items = [item for item in estate_attention() if item.eyebrow == "Certificates"]
+
+        self.assertEqual(
+            sorted((item.subject, item.days) for item in found), [("example.com", 5), ("www.example.com", -1)]
+        )
+        self.assertEqual(len({item.key for item in items}), len(items))
+        (held_twice,) = [item for item in items if item.title.startswith("example.com ")]
+        self.assertEqual(held_twice.value, "5")
+
 
 class StaleGlanceTests(TestCase):
     def test_a_reading_older_than_its_cadence_is_shown_as_of_its_age_and_steps_aside(self):

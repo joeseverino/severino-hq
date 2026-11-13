@@ -20,7 +20,7 @@ class HeldJobs:
     def __init__(self) -> None:
         self.waiting: list[tuple[Any, Any]] = []
 
-    def thread(self, *, target: Any, args: tuple[Any, Any], **_named: Any) -> Any:  # noqa: ARG002 - threading.Thread's keyword
+    def thread(self, *, target: Any, args: tuple[Any, Any], **_named: Any) -> Any:
         self.waiting.append(args)
         return SimpleNamespace(start=lambda: None)
 

@@ -17,6 +17,8 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
+lazy from hq.platform.application.tests import reads
+
 ROOT = Path(__file__).resolve().parents[4]
 
 
@@ -27,6 +29,7 @@ def apart(walk: Callable[..., Any], *args: Any) -> Any:
         [sys.executable, "-m", __name__, walk.__module__, walk.__qualname__],
         input=json.dumps(args, default=str),
         cwd=ROOT,
+        env=reads.handing(),
         capture_output=True,
         text=True,
         check=False,
@@ -38,7 +41,14 @@ def apart(walk: Callable[..., Any], *args: Any) -> Any:
 
 def main() -> None:
     module, name = sys.argv[1:]
-    json.dump(getattr(import_module(module), name)(*json.load(sys.stdin)), sys.stdout)
+    walk, args = getattr(import_module(module), name), json.load(sys.stdin)
+    # A test that declares what it reads (reads.py) holds the walk it runs here to the same declaration.
+    if declared := reads.handed():
+        with reads.watching(declared):
+            answer = walk(*args)
+    else:
+        answer = walk(*args)
+    json.dump(answer, sys.stdout)
 
 
 if __name__ == "__main__":

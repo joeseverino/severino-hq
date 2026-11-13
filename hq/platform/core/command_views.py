@@ -2,8 +2,9 @@
 
 import json
 import secrets
-from typing import override
+from typing import Any, override
 
+from django import forms
 from django.core.exceptions import PermissionDenied
 from django.core.serializers.json import DjangoJSONEncoder
 from django.http import Http404
@@ -21,6 +22,7 @@ from hq.platform.application.command_forms import command_form_class, own_fields
 from hq.platform.application.command_targets import (
     capability_target_initial,
     capability_target_options,
+    page_named,
     record_options,
     starting_page,
     with_requested_target,
@@ -30,9 +32,9 @@ from hq.platform.application.integration_specs import ON_ITS_PAGE, capability_sc
 from hq.platform.application.integrations import integration_graph
 from hq.platform.application.pages import page_context
 from hq.platform.application.payload_words import value_words
-from hq.platform.application.records import says_only_its_title
 from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import safe_next, web_principal
+from hq.platform.application.service_context import Cell, ServiceSection
 from hq.platform.application.ui import MISSING
 from hq.platform.application.web_writes import refused, run_posted
 
@@ -50,7 +52,7 @@ def _cell(value) -> str:
     return MISSING if value is None else value_words(value)
 
 
-def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict | None]:
+def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], ServiceSection | None]:
     """The facts a result states, and the one list it carries, if any.
 
     A result is a machine contract that a person reads as facts: its scalars
@@ -69,6 +71,18 @@ def _result_projection(payload: dict) -> tuple[tuple[tuple[str, str], ...], dict
     return facts, _result_table(*listed) if listed else None
 
 
+# What a command that queues work answers beside it: whether this call queued
+# it, which the work's own row says as its state.
+_QUEUED_WORK = frozenset({"ok", "queued", "operation"})
+
+
+def _only_queues(payload: dict) -> bool:
+    """Whether a result says only that work was queued, so the page draws no
+    result: the work stands in its own row, among its runs or on Jobs."""
+
+    return "operation" in payload and set(payload) <= _QUEUED_WORK
+
+
 def _is_flat_records(value: object) -> bool:
     """Whether a value is a list of records, each a non-empty mapping of scalars."""
 
@@ -82,15 +96,34 @@ def _is_flat_records(value: object) -> bool:
     )
 
 
-def _result_table(key: str, records: list[dict]) -> dict:
-    """A list of records as a table: a column for every field any record has."""
+def _result_table(key: str, records: list[dict]) -> ServiceSection:
+    """A list of records as a table: a column for every field any record has,
+    drawn as every registry-driven table is (partials/_page_sections.html)."""
 
     columns = tuple(dict.fromkeys(column for item in records for column in item))
-    return {
-        "label": key.replace("_", " "),
-        "columns": tuple(column.replace("_", " ") for column in columns),
-        "rows": tuple(tuple(_cell(item.get(column)) for column in columns) for item in records),
-    }
+    return ServiceSection(
+        id="command-result-list",
+        label=key.replace("_", " ").strip() or "records",
+        columns=tuple(column.replace("_", " ") for column in columns),
+        records=tuple(tuple(Cell(_cell(item.get(column))) for column in columns) for item in records),
+    )
+
+
+def _named_records(form, query) -> dict[str, Any]:
+    """The records a link names for each field that chooses records (a run's
+    machines), kept only where the field offers them, so a link cannot
+    choose one its reader could not have picked. A form's own fields
+    (``__target``, its confirmation) and any other field are never filled
+    from a link."""
+
+    named: dict[str, Any] = {}
+    for name, field in form.fields.items():
+        if name.startswith("__") or not isinstance(field, forms.TypedChoiceField | forms.TypedMultipleChoiceField):
+            continue
+        offered = [value for value in query.getlist(name) if value and field.valid_value(value)]
+        if offered:
+            named[name] = offered if isinstance(field, forms.TypedMultipleChoiceField) else offered[0]
+    return named
 
 
 class CommandView(View):
@@ -137,27 +170,35 @@ class CommandView(View):
         return saved
 
     def _context(self, form, *, result=None):
+        if result and _only_queues(result["payload"]):
+            result = None
         resource = integration_graph().resources.get(self.spec.subject_resource)
         schema = capability_schema(self.spec)
         facts, table = _result_projection(result["payload"]) if result else ((), None)
         resource_url = route_url(resource.web_route) if resource else ""
-        # The trail names where the form lives: the records it writes, or
-        # Search for a command that belongs to none.
-        trail = ((resource.label, resource_url),) if resource_url else (("Search", reverse("search")),)
+        # The trail names where the form lives: the records it writes, the
+        # page it declares as its home, or Search for a command that has neither.
+        if resource_url:
+            trail = ((resource.label, resource_url),)
+        elif self.spec.home:
+            trail = (page_named(self.spec.home),)
+        else:
+            trail = (("Search", reverse("search")),)
         return {
-            **page_context(
-                self.spec.title,
-                "" if says_only_its_title(self.spec) else self.spec.summary,
-                trail=trail,
-            ),
+            # No lede: the summary is the agent's description of the command,
+            # and the page says what it changes in its fields and its button.
+            **page_context(self.spec.title, trail=trail),
             "command": self.spec,
             "command_label": self.spec.title,
             "chosen_target": self._chosen_target(form),
             "form": form,
             "result": result,
             "result_facts": facts,
-            "result_table": table,
+            # The one list it carries, as the sections partials/_page_sections.html draws.
+            "result_sections": (table,) if table else (),
             "result_json": (json.dumps(result["payload"], indent=2, sort_keys=True) if result else ""),
+            # The JSON opens only when the result shows nothing else.
+            "result_json_open": not facts and table is None,
             "return_url": safe_next(self.request),
             # Cancel goes back where it was opened from, else to the trail's end.
             "cancel_url": safe_next(self.request) or trail[-1][1],
@@ -169,6 +210,8 @@ class CommandView(View):
             "starting_page": starting_page(self.spec),
             "starts_on_its_page": self.spec.reached_from == ON_ITS_PAGE,
             "saves_blanks": self._saves_blanks(schema),
+            # What the command says of itself beside its form, if it says anything.
+            "about": self.spec.about(web_principal(self.request.user)) if self.spec.about is not None else None,
         }
 
     def _saves_blanks(self, schema: dict) -> bool:
@@ -237,7 +280,7 @@ class CommandView(View):
             "change_url": command_url(self.spec.name),
         }
 
-    def get(self, request, name: str):  # noqa: ARG002 - Django passes the URL's name; dispatch read it into spec
+    def get(self, request, name: str):
         initial = {"next": safe_next(request)}
         target = request.GET.get("target", "") if self.spec.target_kind else ""
         known_targets = {option.value for option in self.target_options or ()}
@@ -245,6 +288,8 @@ class CommandView(View):
             initial["__target"] = target
             initial.update(capability_target_initial(self.spec, target, principal=self.principal))
         form = self.form_class(initial=initial)
+        if named := _named_records(form, request.GET):
+            form = self.form_class(initial={**initial, **named})
         context = self._context(form, result=self._result())
         # A link that named a target the form cannot offer says so, rather than
         # opening on an empty choice that looks like the link worked.
@@ -260,7 +305,7 @@ class CommandView(View):
             return {}
         return capability_target_initial(self.spec, target, principal=self.principal)
 
-    def post(self, request, name: str):  # noqa: ARG002 - Django passes the URL's name; dispatch read it into spec
+    def post(self, request, name: str):
         form = self.form_class(request.POST, request.FILES, initial=self._held(request.POST.get("__target", "")))
         if not form.is_valid():
             return TemplateResponse(request, self.template_name, self._context(form), status=400)

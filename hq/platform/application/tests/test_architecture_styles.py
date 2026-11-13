@@ -6,10 +6,11 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
-from hq.platform.core.interface_text import TEMPLATE_COMMENT
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import STATIC, sheet_paths, stylesheet
-from hq.platform.core.templatetags import table_tags
+from hq.platform.core.table_cells import ROLE_CLASSES
 
+from .hand_rolled import hand_rolled_classes, literal_classes
 from .source import template_files
 
 
@@ -337,8 +338,8 @@ class StyleContractTests(SimpleTestCase):
         """
 
         root = Path(__file__).resolve().parents[4]
-        template = (root / "templates" / "base.html").read_text(encoding="utf-8")
-        panel = template.split('<div class="user-menu-panel"', 1)[1].split("</header>", 1)[0]
+        template = (root / "templates" / "partials" / "_user_menu.html").read_text(encoding="utf-8")
+        panel = template.split('<div class="user-menu-panel"', 1)[1]
         rows = re.findall(r"<(?:a|button)\b[^>]*>", panel, re.DOTALL)
 
         self.assertTrue(rows)
@@ -396,7 +397,8 @@ class StyleContractTests(SimpleTestCase):
             findings,
             [],
             f"reachable endpoints in tracked files: {findings}. A dotted number that is not an address,"
-            " such as a specification's section, passes written as section-3.1.3.7.",
+            " such as a specification's section, passes written as section-3.1.3.7. A host key a fixture"
+            " needs passes written short, under 32 base64 characters after AAAA.",
         )
 
     def test_images_live_where_images_belong(self):
@@ -544,24 +546,6 @@ class StyleContractTests(SimpleTestCase):
             )
 
 
-# A class a script or a test finds an element by, which no rule styles. Each
-# says who reads it; a class that styles nothing and nothing reads is deleted.
-HOOK_CLASSES: dict[str, str] = {}
-
-# Decided at render time, so a word joined to one is not a literal class.
-_INTERPOLATED = re.compile(r"\{\{.*?\}\}|\{%.*?%\}", re.DOTALL)
-
-
-def literal_classes(text: str) -> set[str]:
-    """Every class a template names in full, outside its comments: in a class
-    attribute, or as the css= a tag draws as one."""
-
-    text = TEMPLATE_COMMENT.sub("", text)
-    options = [css for tag in _INTERPOLATED.findall(text) for css in re.findall(r'\bcss="([^"]*)"', tag)]
-    attributes = re.findall(r'\bclass="([^"]*)"', _INTERPOLATED.sub("\0", text))
-    return {word for value in (*options, *attributes) for word in value.split() if "\0" not in word}
-
-
 def defined_classes() -> set[str]:
     """Every class a stylesheet HQ serves defines: the bundle every page
     links, and a sheet one page links on its own."""
@@ -571,6 +555,12 @@ def defined_classes() -> set[str]:
 
 
 @tag("source", "tree")
+@reads(
+    "**/templates/**",
+    "static/css/**/*.css",
+    "hq/platform/core/browser_audit.js",
+    lists=("hq/platform/core/tests/browser/probes/*.py",),
+)
 class TemplateClassStyleTests(SimpleTestCase):
     """Every class a template names is one the stylesheet defines.
 
@@ -587,19 +577,47 @@ class TemplateClassStyleTests(SimpleTestCase):
 
         # A class that declares a part's role in a table is read by the region,
         # which marks the part for the stylesheet (table_tags.mark_cells).
-        defined = defined_classes() | set(table_tags.ROLE_CLASSES)
+        defined = defined_classes() | set(ROLE_CLASSES)
         offenders = sorted(
             f"{name}: .{word}"
             for name, path in template_files()
             for word in literal_classes(path.read_text(encoding="utf-8"))
-            if word not in defined and word not in HOOK_CLASSES
+            if word not in defined
         )
         self.assertEqual(offenders, [], "define the class where its part is styled, or delete it")
 
-    def test_a_hook_class_is_one_no_rule_styles(self):
-        """An allowance for a class the stylesheet defines has no job left."""
+    def test_each_dialog_size_is_one_the_dialog_offers(self):
+        """The dialog draws its `size` as a class built as it renders, which the
+        literal read above never sees, so a size it does not offer would draw
+        a form-width dialog with nothing to say why."""
 
-        self.assertEqual(sorted(set(HOOK_CLASSES) & defined_classes()), [])
+        defined = defined_classes()
+        sizes = [
+            (name, size)
+            for name, path in template_files()
+            for include in re.findall(
+                r'{%\s*include\s+"partials/_modal\.html"[^%]*%}', path.read_text(encoding="utf-8")
+            )
+            for size in re.findall(r'\bsize="([^"]*)"', include)
+        ]
+        self.assertTrue(sizes, "no dialog names a size, so this check reads nothing")
+        self.assertEqual(
+            [f"{name}: size={size!r}" for name, size in sizes if f"modal-{size}" not in defined],
+            [],
+            "name a size the dialog offers (partials/_modal.html), or add it beside .modal-wide in forms.css",
+        )
+
+    def test_host_templates_draw_only_the_shared_parts_classes(self):
+        """A host page is drawn from the shared parts, so a class of its own is
+        a hand-rolled part the survey never sees and an extension cannot draw."""
+
+        self.assertEqual(
+            sorted(f"templates/{name}: .{word}" for name, word in hand_rolled_classes()),
+            [],
+            "draw it with a shared part or one of its options (hq_sdk.template_contract.CLASSES, or a template "
+            "the component catalog draws); a widget with no part becomes one, with its own entry in "
+            "hq/platform/core/tests/browser/catalog/families/",
+        )
 
     def test_literal_classes_reads_attributes_and_tag_options(self):
 
@@ -609,4 +627,15 @@ class TemplateClassStyleTests(SimpleTestCase):
                 '{% comment %}<b class="gone">{% endcomment %}{# class="gone" #}'
             ),
             {"note", "on", "frame", "wide"},
+        )
+
+    def test_literal_classes_reads_a_word_glued_to_a_tag(self):
+
+        self.assertEqual(
+            literal_classes(
+                '<a class="tab{% if a %} tab-current{% endif %}"><b class="{% if a %}band{% else %}list{% endif %}">'
+                '<i class="table{% if dense %} is-dense{% endif %}"><s class="series-{{ slot }}{% if a %} is-start{% endif %}">'
+                '<u class="tone-{% if a %}ok{% endif %} mark-{% if a %}{% endif %}">'
+            ),
+            {"tab", "tab-current", "band", "list", "table", "is-dense", "is-start"},
         )

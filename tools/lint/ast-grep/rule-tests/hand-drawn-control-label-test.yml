@@ -1,0 +1,7 @@
+id: hand-drawn-control-label
+valid:
+  - '{% control_label "From" control="example-from" %}'
+  - '<label class="control-label-wide" for="example">A</label>'
+invalid:
+  - '<label class="control-label" for="example">From</label>'
+  - '<span class="muted control-label">Stage</span>'

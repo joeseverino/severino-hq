@@ -4,7 +4,11 @@ The showcase and standard data sets (``hq.platform.core.seeds``) and the
 rendered-page and export tests use it; HQ itself never reads it. Unlike the
 stress estate (``test_browser_fixtures.build_estate``), it is an HQ run for
 months, reached over the tailnet through the proxy with single sign-on, where
-what is left to point out is an image with a release out since it was pulled.
+what is left to point out is what such an HQ gathers: an image with a release
+out since it was pulled, a rewrite made in AdGuard's own screen, certificates
+left in the proxy that lapsed, a runbook due for review and a receipt not yet
+filed. Each is a named constant beside the records it seeds, so the browser
+gate reads the page it changes.
 """
 
 from django.contrib.auth import get_user_model
@@ -13,7 +17,7 @@ from hq.platform.application import cadence, pins, roles
 from hq.platform.application.linked_accounts import GITHUB, record_claimed_accounts
 from hq.platform.core.network import SOCKET_PEER
 
-from . import agents, docker, history, infra, network, records, web, work
+from . import agents, automation, docker, history, infra, network, records, web, work
 from .names import HQ, LAPTOP, OWNER, OWNER_NAME, OWNER_USERNAME, PROXY, SSO
 
 # The services the operator starred, to keep at the top of the list.
@@ -61,6 +65,11 @@ def seed(owner=None):
     """Every record of the estate, written into an empty database, the hand-kept
     ones by ``owner`` (``history.dated`` says who when none is named)."""
 
+    with automation.numbered():
+        _seed(owner)
+
+
+def _seed(owner):
     with history.dated(owner):
         # The controller checked in a moment ago; a fresh install's never has.
         cadence.note_controller()
@@ -84,3 +93,5 @@ def seed(owner=None):
         agents.seen(owner)
     history.settle()
     agents.lately(owner)
+    # Last, so no later step's claim takes the run left waiting.
+    automation.runs(owner)

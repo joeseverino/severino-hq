@@ -1,20 +1,11 @@
 #!/bin/sh
-#MISE description="When a lint gate fails, a derived file is behind its source, or a rebase conflicts in one: rewrite every derived file, then Ruff's fixes and format and mise fmt's"
+#MISE description="When a lint gate fails, a derived file is behind its source, or a rebase conflicts in one: rewrite every derived file, lower each fallen lint suppression count, then Ruff's fixes and format and mise fmt's"
 
-# The same file set the format gates read, so a fix run leaves them nothing
-# to report. The derived files load Django, so fix:derived writes them on an
+# Each format gate's own fix mode, so a fix run leaves them nothing to
+# report. The derived files load Django, so fix:derived writes them on an
 # empty database, one process at a time, outside the heavy turn.
 set -eu
-# shellcheck source=tools/lib/mise-files.sh
-. ./tools/lib/mise-files.sh
 
 mise run fix:derived
-uv run ruff check --fix .
-uv run ruff format .
-files="$(mktemp)"
-trap 'rm -f "${files}"' EXIT
-mise_files "${files}"
-while IFS= read -r file; do
-    formatted="$(mise fmt --stdin <"${file}")"
-    printf '%s\n' "${formatted}" >"${file}"
-done <"${files}"
+mise run fix:suppressions
+mise run lint:ruff --fix ::: lint:mise-format --fix

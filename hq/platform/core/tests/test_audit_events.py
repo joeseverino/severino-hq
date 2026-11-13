@@ -45,7 +45,7 @@ class AuditEventPageTests(TestCase):
         response = self.page()
         (event,) = [line for line in response.context["events"] if not line.under]
         self.assertEqual(event.title, "Sweep the examples")
-        self.assertEqual((event.actor, event.action), (SCHEDULER, "done"))
+        self.assertEqual((event.who.actor, event.action), (SCHEDULER, "done"))
         self.assertEqual(len(event.items), 2)
         # The items are rows of the same table, folded under the event's own row.
         html = response.content.decode()
@@ -122,7 +122,7 @@ class EventPageTests(TestCase):
 
         html = self.client.get(reverse("core:audit_detail", args=[(row or self.row).pk])).content.decode()
         found = []
-        for region in ("Event", "Recorded with it"):
+        for region in ("Event", "Metadata"):
             elements = [
                 element for element in within(html, "aria-label", region) if element.tag in {"dt", "dd", "th", "td"}
             ]
@@ -161,7 +161,7 @@ class EventPageTests(TestCase):
         html = self.client.get(reverse("core:audit_detail", args=[row.pk])).content.decode()
 
         self.assertEqual(dict(self.facts(row))["Who"], "local-operator, at the shell")
-        self.assertFalse(within(html, "aria-label", "Recorded with it"))
+        self.assertFalse(within(html, "aria-label", "Metadata"))
 
 
 class RecentActivityTests(TestCase):

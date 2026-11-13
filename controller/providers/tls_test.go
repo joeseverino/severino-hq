@@ -239,7 +239,7 @@ func TestCPanelPlanRefusesUnservedNames(t *testing.T) {
 	h.command.outcomes["ssh sites"] = fakeOutcome{Stdout: `{"sites":{"a.example":["www.a.example"],"b.example":null}}`}
 	consumer := TLSConsumer{Kind: "cpanel", Name: "host", ConnectionRef: "cpanel", VerifyDomains: []string{"WWW.a.example", "b.example"}, InstallDomains: []string{"a.example"}}
 	_, err := h.r.cpanelSitesFor(t.Context(), consumer)
-	want := "host would be checked at b.example but installs only on a.example; add those names to the target's install list, or leave it empty to install on every site that serves a checked name"
+	want := "host would be checked at b.example but installs only on a.example; add them to the target's install list, or leave it empty"
 	if err == nil || err.Error() != want {
 		t.Fatalf("plan: %v", err)
 	}
@@ -454,6 +454,34 @@ func TestAnUploadedCertificateInstallsTheKeyOpenedFromItsSlot(t *testing.T) {
 		_, err := h.r.runAction(t.Context(), runtime.ResourceKindTLSUploadedCertificate, "reconcile", spec(secrets), nil, false)
 		if err == nil || !strings.Contains(err.Error(), "upload it again") {
 			t.Errorf("%s: %v", name, err)
+		}
+	}
+}
+
+// The expiry condition words a count of days as HQ's moments.expiry_words
+// does, a past one as past: both read the one table in
+// testdata/expiry-words.json.
+func TestTLSConditionsWordAnExpiryAsHQDoes(t *testing.T) {
+	data, err := os.ReadFile("testdata/expiry-words.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cases []struct {
+		Days  int    `json:"days"`
+		Words string `json:"words"`
+	}
+	if err := json.Unmarshal(data, &cases); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range cases {
+		// A window as long as the count, so every case raises the condition.
+		spec := TLSCertificateSpec{RenewalWindowDays: max(tc.Days, 0)}
+		conditions := tlsConditions(spec, nil, nil, nil, tc.Days)
+		if len(conditions) != 1 || conditions[0].Reason != "ExpiringSoon" {
+			t.Fatalf("%d days: conditions %+v", tc.Days, conditions)
+		}
+		if got := conditions[0].Message; got != "A certificate a site serves "+tc.Words+"." {
+			t.Errorf("%d days: %q, want it to say %q", tc.Days, got, tc.Words)
 		}
 	}
 }

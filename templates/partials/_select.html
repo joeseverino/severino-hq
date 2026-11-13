@@ -1,0 +1,10 @@
+{% comment %}
+A choice of one, drawn by
+{% select "rule" choices chosen=rule label="What it sets" tone="good" %}:
+an option for each (value, words), the chosen one selected, id the one a
+{% control_label %} names it by, label the name a reader hears where no
+visible label names it, and with a tone the choice said in that tone
+(forms.css).
+{% endcomment %}<select name="{{ name }}"{% if id %} id="{{ id }}"{% endif %}{% if label %} aria-label="{{ label }}"{% endif %}{% if classes %} class="{{ classes }}"{% endif %}>
+  {% for value, words, selected in choices %}<option value="{{ value }}"{% if selected %} selected{% endif %}>{{ words }}</option>{% endfor %}
+</select>

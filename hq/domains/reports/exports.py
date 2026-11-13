@@ -1,11 +1,4 @@
-"""
-Exports: CSV per entity, plus a year-summary in JSON and Markdown.
-
-The Markdown export is designed to be AI-readable; the JSON export uses stable
-internal IDs/slugs so a future MCP can reason about relationships.
-
-No secrets, no sensitive doc bodies, no receipt file contents: by design.
-"""
+"""CSV downloads and year summaries, scoped by the caller for automated retrieval."""
 
 import csv
 import json
@@ -16,7 +9,7 @@ from io import StringIO
 from operator import attrgetter
 from typing import Any
 
-from django.db.models import Sum
+from django.db.models import Prefetch, QuerySet, Sum
 from django.utils import timezone
 
 from hq.domains.assets.models import Asset
@@ -267,7 +260,9 @@ def _records(records: Iterable[Any], fields: tuple[Column, ...]) -> list[dict[st
     return [{name: read(record) for name, read in readers} for record in records]
 
 
-def year_summary(year: int) -> dict:
+def year_summary(year: int, *, documentation: QuerySet[DocumentationRecord] | None = None) -> dict:
+    if documentation is None:
+        documentation = DocumentationRecord.objects.all()
     expenses = Expense.objects.filter(date__year=year)
     assets = Asset.objects.filter(purchase_date__year=year)
     return {
@@ -280,12 +275,14 @@ def year_summary(year: int) -> dict:
         "projects": _records(Project.objects.all().order_by("name"), PROJECT_FIELDS),
         "content": _records(
             ContentItem.objects.all()
-            .prefetch_related("related_projects", "related_assets", "related_documentation")
+            .prefetch_related(
+                "related_projects", "related_assets", Prefetch("related_documentation", queryset=documentation)
+            )
             .order_by("-updated_at"),
             CONTENT_FIELDS,
         ),
         "documentation": _records(
-            DocumentationRecord.objects.all().prefetch_related("related_projects", "related_assets").order_by("doc_id"),
+            documentation.prefetch_related("related_projects", "related_assets").order_by("doc_id"),
             DOCUMENTATION_FIELDS,
         ),
         "assets": _records(assets.prefetch_related("related_projects"), ASSET_FIELDS),
@@ -337,8 +334,8 @@ def _largest_expenses(expenses) -> list[dict[str, Any]]:
     ]
 
 
-def year_summary_json(year: int) -> str:
-    return json.dumps(year_summary(year), indent=2, sort_keys=False)
+def year_summary_json(year: int, *, documentation: QuerySet[DocumentationRecord] | None = None) -> str:
+    return json.dumps(year_summary(year, documentation=documentation), indent=2, sort_keys=False)
 
 
 def _section(title, rows, line, empty, intro=()) -> list[str]:
@@ -436,8 +433,8 @@ RECORD_HOMES = [
 ]
 
 
-def year_summary_markdown(year: int) -> str:
-    data = year_summary(year)
+def year_summary_markdown(year: int, *, documentation: QuerySet[DocumentationRecord] | None = None) -> str:
+    data = year_summary(year, documentation=documentation)
     no_expenses = "_No expenses recorded._"
     lines = [
         f"# Severino HQ year summary {year}",

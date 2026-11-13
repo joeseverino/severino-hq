@@ -19,8 +19,9 @@ and Ruff's TID251 (`banned-api` in `pyproject.toml`) refuses an import of
 | `tests/` | the tests of the top-level modules |
 
 The top level holds the credential minting (`credentials.py`) and the
-permission lists it and its tests read, and `audit:image`'s reader of a
-built image (`audit_image.py`).
+permission lists it and its tests read, `audit:image`'s reader of a built
+image (`audit_image.py`), and `lint:openapi-breaking`, which holds the API
+document to its base's clients (`openapi_breaking.py`).
 
 Language: shell (POSIX sh) for a short pipeline of other programs; Python for
 anything with logic, run through `uv run`, or plain stdlib at the runner's

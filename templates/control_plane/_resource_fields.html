@@ -1,0 +1,58 @@
+{% comment %}A resource form's fields (control_plane/resource_form.html), derived from its provider's model.{% endcomment %}
+{% if not resource %}<input type="hidden" name="kind" value="{{ kind }}">{% endif %}
+{% include "partials/_form_errors.html" with form=identity %}
+{% include "partials/_form_errors.html" with form=spec %}
+
+{% comment %}
+What the thing already is, before what can be changed about it. Read from the
+provider's own readout, so this is the same description the resource page and
+the service page give, not a second one written here.
+{% endcomment %}
+{% if facts %}
+  {% facts %}
+    {% for label, desired, observed in facts %}
+      {% fact label %}<code>{{ observed|default:desired|or_empty|breakable }}</code>{% endfact %}
+    {% endfor %}
+  {% endfacts %}
+{% endif %}
+
+{% for field in spec.primary %}{{ field.as_field_group }}{% endfor %}
+
+{% comment %}
+Material the operator has to supply, on the same page as the rest of it. A
+resource that cannot work without this should not be creatable without it.
+{% endcomment %}
+{% if material %}
+  {% include "partials/_form_errors.html" with form=material %}
+  {{ material }}
+{% endif %}
+
+{% comment %}
+Everything the model already has a good answer for sits one disclosure away.
+
+The tuning knobs are offered when creating as well as when editing: a field
+that is optional to the model can still be required by it in combination (an
+MX record must carry a priority), and a create form that hides it cannot add
+such a record.
+
+The identity fields stay edit-only: a name HQ derives from the record itself,
+and a switch to pause something that does not exist yet, are not questions
+worth interrupting for.
+{% endcomment %}
+{% if spec.advanced or resource %}
+  {% comment %}A create has no identity form, and a filter's argument that names a missing value stops the page, so firstof reads both.{% endcomment %}
+  {% firstof spec.errors identity.errors as options_wrong %}
+  {% section "Options" fold=True open=options_wrong %}
+    {% for field in spec.advanced %}{{ field.as_field_group }}{% endfor %}
+    {% if resource %}
+      {{ identity }}
+      {% if kind == "machine" %}
+        <div class="field">
+          <label for="id_show_on_dashboard">Show on dashboard</label>
+          <input id="id_show_on_dashboard" type="checkbox" name="show_on_dashboard"{% if show_on_dashboard %} checked{% endif %}>
+          <p class="help">Its CPU, memory and storage in the dashboard header.</p>
+        </div>
+      {% endif %}
+    {% endif %}
+  {% endsection %}
+{% endif %}

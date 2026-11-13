@@ -134,6 +134,17 @@ class SpeculativeRequestTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Sec-Purpose", response["Vary"])
 
+    def test_a_lookup_that_reads_outside_hq_is_refused_when_prefetched(self):
+        # dev:look opens the page as a person; a browser's own prefetch of it is still a guess.
+        self.client.force_login(get_user_model().objects.create_superuser("operator"))
+
+        response = self.client.get(
+            reverse("control_plane:tools"), {"tab": "dns", "name": "example.com"}, headers=PREFETCH
+        )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertTrue(response["X-Speculation-Refused"])
+
     def test_the_outbound_boundary_refuses_a_guess(self):
         from hq.platform.core.outbound import allowed
 

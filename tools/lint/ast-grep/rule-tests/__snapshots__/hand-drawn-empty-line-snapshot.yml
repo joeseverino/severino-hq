@@ -1,0 +1,117 @@
+id: hand-drawn-empty-line
+snapshots:
+  <li class="muted">There are no rules.</li>:
+    fixed: <li class="muted">There are no rules.</li>
+    labels:
+    - source: <li class="muted">There are no rules.</li>
+      style: primary
+      start: 0
+      end: 42
+    - source: li
+      style: secondary
+      start: 1
+      end: 3
+    - source: class="muted"
+      style: secondary
+      start: 4
+      end: 17
+    - source: There are no rules.
+      style: secondary
+      start: 18
+      end: 37
+    - source: <li class="muted">
+      style: secondary
+      start: 0
+      end: 18
+  <p class="muted">No notes yet.</p>:
+    fixed: "{% include \"partials/_empty_state.html\" with message=\"No notes yet.\" %}"
+    labels:
+    - source: <p class="muted">No notes yet.</p>
+      style: primary
+      start: 0
+      end: 34
+    - source: p
+      style: secondary
+      start: 1
+      end: 2
+    - source: class="muted"
+      style: secondary
+      start: 3
+      end: 16
+    - source: No notes yet.
+      style: secondary
+      start: 17
+      end: 30
+    - source: <p class="muted">
+      style: secondary
+      start: 0
+      end: 17
+  "<p class=\"muted\">No visits in the last {{ days|counted:\"day\" }}</p>":
+    fixed: <p class="muted">No visits in the last {{ days|counted:"day" }}</p>
+    labels:
+    - source: <p class="muted">No visits in the last {{ days|counted:"day" }}</p>
+      style: primary
+      start: 0
+      end: 67
+    - source: p
+      style: secondary
+      start: 1
+      end: 2
+    - source: class="muted"
+      style: secondary
+      start: 3
+      end: 16
+    - source: No visits in the last {{ days|counted:"day" }}
+      style: secondary
+      start: 17
+      end: 63
+    - source: <p class="muted">
+      style: secondary
+      start: 0
+      end: 17
+  <span class="muted">None composed into this build</span>:
+    fixed: <span class="muted">None composed into this build</span>
+    labels:
+    - source: <span class="muted">None composed into this build</span>
+      style: primary
+      start: 0
+      end: 56
+    - source: span
+      style: secondary
+      start: 1
+      end: 5
+    - source: class="muted"
+      style: secondary
+      start: 6
+      end: 19
+    - source: None composed into this build
+      style: secondary
+      start: 20
+      end: 49
+    - source: <span class="muted">
+      style: secondary
+      start: 0
+      end: 20
+  <td class="muted">Nothing</td>:
+    fixed: <td class="muted">Nothing</td>
+    labels:
+    - source: <td class="muted">Nothing</td>
+      style: primary
+      start: 0
+      end: 30
+    - source: td
+      style: secondary
+      start: 1
+      end: 3
+    - source: class="muted"
+      style: secondary
+      start: 4
+      end: 17
+    - source: Nothing
+      style: secondary
+      start: 18
+      end: 25
+    - source: <td class="muted">
+      style: secondary
+      start: 0
+      end: 18

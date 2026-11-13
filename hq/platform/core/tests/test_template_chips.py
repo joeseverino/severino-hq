@@ -13,6 +13,7 @@ from html.parser import HTMLParser
 from django.template.base import Lexer, TokenType
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.tests.test_template_values import filters, template_sources
 
 # The classes a chip is drawn by: one of these, or any class ending "-chip".
@@ -148,6 +149,7 @@ class FiguresInChipsTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class TemplateChipTests(SimpleTestCase):
     def test_no_template_prints_a_figure_in_a_chip(self):
         found = [site for name, source in template_sources().items() for site in figures_in_chips(source, name)]

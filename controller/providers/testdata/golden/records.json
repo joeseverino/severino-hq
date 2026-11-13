@@ -578,6 +578,27 @@
       "carried": true
     }
   ],
+  "host.edge_reboot": [
+    {
+      "connection_ref": "example",
+      "packages": [
+        "example"
+      ],
+      "pending": true,
+      "read_at": "2030-01-01T00:00:00Z",
+      "scheduled_action": "reboot",
+      "scheduled_at": "2030-01-01T00:00:00Z",
+      "since": "2030-01-01T00:00:00Z"
+    }
+  ],
+  "host.filesystem": [
+    {
+      "free_bytes": 1,
+      "mount": "/",
+      "read_at": "2030-01-01T00:00:00Z",
+      "total_bytes": 1
+    }
+  ],
   "host.firewall": [
     {
       "record": "example",
@@ -602,6 +623,18 @@
         1
       ],
       "read_at": "example"
+    }
+  ],
+  "host.reboot": [
+    {
+      "packages": [
+        "example"
+      ],
+      "pending": true,
+      "read_at": "2030-01-01T00:00:00Z",
+      "scheduled_action": "reboot",
+      "scheduled_at": "2030-01-01T00:00:00Z",
+      "since": "2030-01-01T00:00:00Z"
     }
   ],
   "host.render_status": [
@@ -657,16 +690,19 @@
     {
       "activates": "example.service",
       "active": "example",
+      "active_at": "2030-01-01T00:00:00Z",
       "condition": "example",
       "condition_at": "2030-01-01T00:00:00Z",
       "ended_at": "2030-01-01T00:00:00Z",
       "file_state": "example",
+      "foreign": true,
       "last_trigger_at": "2030-01-01T00:00:00Z",
       "load": "example",
       "main_code": 1,
       "main_status": 1,
       "next_elapse_at": "2030-01-01T00:00:00Z",
       "read_at": "2030-01-01T00:00:00Z",
+      "restarts": 1,
       "result": "example",
       "started_at": "2030-01-01T00:00:00Z",
       "sub": "example",

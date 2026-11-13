@@ -10,9 +10,9 @@ from hq.platform.application.routes import reverse
 
 from ..connection_shapes import API_TOKEN
 from ..consoles import cloudflare_dashboard
-from ..credential_reads import REGISTRAR_READ
 from ..names import LEADS_TO, normalized_hostname
 from ..observations.contract import ReadingPart
+from ..permissions import Cloudflare
 from ..provider_spec import (
     ConnectionKind,
     NameContext,
@@ -162,8 +162,8 @@ class CloudflareDNSRecordSpec(ProviderModel):
         max_length=2048,
         title="Value",
         description=(
-            "An IP address for A and AAAA, a hostname for CNAME and MX, quoted "
-            'text for TXT, or for CAA, e.g. 0 issue "letsencrypt.org".'
+            "An IP address for A and AAAA, a hostname for CNAME and MX, quoted text for TXT. "
+            'For CAA, a value such as 0 issue "letsencrypt.org".'
         ),
     )
     priority: int | None = Field(
@@ -561,8 +561,8 @@ ZONE = ProviderSpec(
     declaration_only=True,
     contains=(DNS_RECORD_KIND, "zone", "zone"),
     parts=(
-        ReadingPart("posture", "Zone TLS posture", ("Zone Settings Read (zone)",), "cloudflare_api"),
-        ReadingPart("registration", "Domain registration", (REGISTRAR_READ,), "cloudflare_api"),
+        ReadingPart("posture", "Zone TLS posture", (Cloudflare.ZONE_SETTINGS_READ,), "cloudflare_api"),
+        ReadingPart("registration", "Domain registration", (Cloudflare.REGISTRAR_DOMAINS_READ,), "cloudflare_api"),
     ),
 )
 
@@ -651,7 +651,7 @@ CONNECTIONS = {
         create_url="https://dash.cloudflare.com/profile/api-tokens",
         # Changing a contact message's status, notes or presence: the
         # cloudflare.contact_inbox declaration.
-        writes=("D1 Write (account)",),
+        writes=(Cloudflare.D1_EDIT,),
         gives="Your site's visits and contact-form messages, its tunnels, Access apps and Pages projects.",
     ),
     "cloudflare_dns": ConnectionKind(
@@ -660,7 +660,7 @@ CONNECTIONS = {
         API_TOKEN,
         create="A custom API token in the Cloudflare dashboard, under My Profile, API Tokens, limited to your zones.",
         create_url="https://dash.cloudflare.com/profile/api-tokens",
-        writes=("DNS Write (zone)", "Zone Read (zone)"),
+        writes=(Cloudflare.DNS_WRITE, Cloudflare.ZONE_READ),
         gives="Your domains and their public DNS records.",
     ),
 }

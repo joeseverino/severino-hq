@@ -1,0 +1,9 @@
+{% comment %}
+A group of choices, a box or a radio to each (CheckboxSelectMultiple,
+RadioSelect), as Django draws one, the group named by its field's label
+(templates/django/forms/field.html), which names no one control of it.
+{% endcomment %}{% with id=widget.attrs.id %}<div{% if id %} id="{{ id }}" role="group" aria-labelledby="{{ id }}_label"{% endif %}{% if widget.attrs.class %} class="{{ widget.attrs.class }}"{% endif %}>{% for group, options, index in widget.optgroups %}{% if group %}
+  <div><label>{{ group|breakable }}</label>{% endif %}{% for option in options %}<div>
+    {% include option.template_name with widget=option %}</div>{% endfor %}{% if group %}
+  </div>{% endif %}{% endfor %}
+</div>{% endwith %}

@@ -16,13 +16,6 @@ from .labels import dotted, lower_first
 lazy from .freshness import Freshness, freshness as reading_freshness
 lazy from .moments import ago
 
-NETWORK_LABELS = {
-    "tailnet": "Tailnet",
-    "network": "Local network",
-    "loopback": "Loopback",
-    "public": "Internet",
-}
-
 
 @dataclass(frozen=True, slots=True)
 class HopSource:
@@ -163,6 +156,9 @@ class Hop:
     layers: tuple[Any, ...] = ()
     # ``(text, url)`` lines under the name: what a container is running.
     facts: tuple[tuple[str, str], ...] = ()
+    # On a proxy's hop: the network its access list admits requests from
+    # (``reach.admitted_network``), "" when it narrows nothing HQ read.
+    admits: str = ""
 
     @property
     def icon(self) -> str:

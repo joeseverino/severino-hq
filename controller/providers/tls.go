@@ -93,7 +93,7 @@ func (r *Registry) cpanelSitesFor(ctx context.Context, consumer TLSConsumer) ([]
 		}
 	}
 	if len(unserved) > 0 {
-		return nil, &ProviderError{Message: consumer.Name + " would be checked at " + strings.Join(unserved, ", ") + " but installs only on " + strings.Join(chosen, ", ") + "; add those names to the target's install list, or leave it empty to install on every site that serves a checked name"}
+		return nil, &ProviderError{Message: consumer.Name + " would be checked at " + strings.Join(unserved, ", ") + " but installs only on " + strings.Join(chosen, ", ") + "; add them to the target's install list, or leave it empty"}
 	}
 	if len(chosen) == 0 {
 		return nil, &ProviderError{Message: consumer.Name + " has no site to install on"}
@@ -423,7 +423,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 		}
 		slices.Sort(named)
 		if len(named) > 0 {
-			return Result{}, &ProviderError{Message: "NPM holds " + strings.Join(named, ", ") + ", but HQ has no record of installing it, so it was not removed; remove it in NPM if it is HQ's, then remove this again"}
+			return Result{}, &ProviderError{Message: "NPM holds " + strings.Join(named, ", ") + ", which HQ has no record of installing, so HQ left it. If it is HQ's, delete it in NPM, then remove this again"}
 		}
 		return Result{Changed: false, Status: CertificateRemoval{Removed: true}, Conditions: []Condition{condition(runtime.ConditionReady, "Absent", "No such certificate in NPM.")}, Message: "Certificate was already absent from NPM."}, nil
 	}

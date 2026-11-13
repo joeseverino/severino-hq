@@ -27,13 +27,14 @@ from hq.domains.control_plane.observations.public_registry import (
 )
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 
+from .card_items import Insight
 from .container_words import UP_TO_DATE, UPDATE_AVAILABLE, ImageStandingWords
 from .display_words import display
 from .github_public import github_repository
 from .images import ImageRef, affected, compare, newer, version
 from .projection import projection_scope, read_once
 from .timestamps import moment
-from .ui import Insight, counted
+from .ui import counted
 lazy from . import connections, container_attention
 lazy from .attestations import github_source
 lazy from .container_hardening import hardening_of

@@ -1,0 +1,11 @@
+id: example.disk_report
+target_kinds: [machine]
+effect: read
+timeout_seconds: 60
+retry: safe
+recovery:
+  - Nothing changes, so nothing needs recovering.
+inputs:
+  mount:
+    pattern: "^/[A-Za-z0-9/_.-]*$"
+    max_length: 200

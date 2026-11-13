@@ -408,7 +408,7 @@ def _controller_connection_spec() -> ConnectionSpec:
         secret_store="1Password",  # noqa: S106 - the store's name, no credential
         # The one family fed by sweeps rather than by its own configuration,
         # so the one whose emptiness means a report has not arrived.
-        empty_message="Each is a vault item the controller is given; it appears here once the controller reports.",
+        empty_message="The controller has not reported yet.",
         documentation_url=guide_url(),
     )
 
@@ -452,7 +452,7 @@ class ConnectionDescription(TypedDict):
     """One connection family as every adapter describes it."""
 
     name: Annotated[str, Describe("The name of this type of connection.")]
-    label: Annotated[str, Describe("What a person calls this type of connection.")]
+    label: Annotated[str, Describe("The name a page gives this type of connection.")]
     summary: Annotated[str, Describe("What this type of connection lets HQ reach, in a sentence.")]
     required_capabilities: RequiredPermissions
     web_route: WebRoute

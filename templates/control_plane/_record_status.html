@@ -5,8 +5,8 @@ shows two statuses, so two can never disagree. The sentence is the state's own,
 so it takes the state's tone; as parts of one `.dot-list` it shares the line
 where it fits and wraps under the state where it does not.
 {% endcomment %}
-<ul class="page-title-meta dot-list" data-record-status="{{ status.state }}">
+{% title_meta element="ul" data_record_status=status.state %}
   <li><strong>{% status status.label tone=status.tone pill=False %}</strong>{% if status.since %} since {{ status.since|when }}{% endif %}</li>
   {% if status.detail %}<li data-record-detail>{% status status.detail tone=status.tone pill=False %}</li>{% endif %}
   {% if status.read_at %}<li>{% include "partials/_reading_age.html" with at=status.read_at only %}</li>{% endif %}
-</ul>
+{% endtitle_meta %}

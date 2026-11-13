@@ -14,8 +14,8 @@ ARG HQ_IMAGE=scratch
 # mise.lock, which refuses a download whose checksum differs from it (as the
 # host image's tools stage does, with the same mise). mise.toml reads Go's
 # release from go.mod, so mise cannot load it without that file.
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.11.2@sha256:39cd8aad519a3dbc860eceb64dfd8cb5efe4cdbb8ad741a6867b544b2787b79c /usr/local/bin/mise /usr/local/bin/mise
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS tools
+COPY --from=ghcr.io/jdx/mise:2026.11.6@sha256:d4de1845114f6d73e90e15f7642885f74f3ca93074491038a2b9c43e4b897f21 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
@@ -25,7 +25,7 @@ RUN mise install uv ast-grep \
     && install -D "$(mise which ast-grep)" /opt/bin/ast-grep
 
 # The installer uses the same Python ABI as HQ.
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS installer-base
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS installer-base
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The extension check's scan of a package's source (tools/pipeline/check-plugin.sh),
 # which Compose runs in this base. The installer stage after it ships only
@@ -98,6 +98,15 @@ COPY --chown=severino:severino build/composition/plugin-lock.json /opt/severino/
 COPY build/composition/plugin-retired.json /opt/severino/plugin-retired.json
 RUN test -s /opt/severino/plugin-lock.json \
     && test -s /opt/severino/plugin-retired.json
+# The automation worker's image this release runs, by digest: Compose passes
+# the one CI built for the same commit, once it has verified CI signed it, and
+# signs it beside this composition. It lands in the root-owned tree a release
+# installs (AutomationImage, controller/host/layout.go), and the release's
+# deploy verifies and pulls it. Required, so every release pins one.
+ARG RUNNER_IMAGE
+RUN [ -n "${RUNNER_IMAGE}" ] || { echo "RUNNER_IMAGE names the automation worker's image this release pins" >&2; exit 1; } \
+    && mkdir -p /app/deploy/automation \
+    && printf "%s\n" "${RUNNER_IMAGE}" > /app/deploy/automation/image
 
 ENV SEVERINO_HQ_REQUIRE_PLUGIN_ADMISSION=1 \
     SEVERINO_HQ_PLUGIN_LOCK=/opt/severino/plugin-lock.json \

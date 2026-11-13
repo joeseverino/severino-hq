@@ -9,8 +9,8 @@
 # mise.toml reads Go's release from go.mod, so mise loads neither without it.
 # mise is the release min_version names, from its image by digest
 # (lint:toolchain holds the tag to min_version).
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS tools
-COPY --from=ghcr.io/jdx/mise:2026.11.2@sha256:39cd8aad519a3dbc860eceb64dfd8cb5efe4cdbb8ad741a6867b544b2787b79c /usr/local/bin/mise /usr/local/bin/mise
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS tools
+COPY --from=ghcr.io/jdx/mise:2026.11.6@sha256:d4de1845114f6d73e90e15f7642885f74f3ca93074491038a2b9c43e4b897f21 /usr/local/bin/mise /usr/local/bin/mise
 ENV MISE_TRUSTED_CONFIG_PATHS=/tools
 WORKDIR /tools
 COPY mise.toml mise.lock ./
@@ -20,7 +20,9 @@ RUN mise install go uv \
     && install -D "$(mise which uv)" /opt/bin/uv
 
 
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS build
+# uv and the lock, which the web image's dependencies and the worker's are
+# each installed from.
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS locked
 COPY --from=tools /opt/bin/uv /usr/local/bin/uv
 # The cache mount and /install are different filesystems, so files are copied.
 ENV UV_COMPILE_BYTECODE=1 \
@@ -28,6 +30,9 @@ ENV UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never
 WORKDIR /build
 COPY pyproject.toml uv.lock ./
+
+
+FROM locked AS build
 # The export is complete and hashed: nothing resolves, and a file that differs
 # from the lock is refused. Every package installs from a wheel, since the
 # stage carries no compiler: --only-binary fails the build on a package with
@@ -100,7 +105,56 @@ FROM scratch AS programs
 COPY --from=controller /out/ /
 
 
-FROM python:3.15-slim-trixie@sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75 AS runtime
+# The automation worker's dependencies: the runner group alone, from the same
+# lock, complete, hashed and installed without resolving, as the build stage's.
+# Each installs from a wheel but PyYAML, which publishes none for this Python:
+# it builds from the sdist the lock hashes, its build backend pinned and hashed
+# by hq_runner/build-constraints.txt, and with no compiler here it builds as
+# pure Python.
+FROM locked AS runner-build
+COPY hq_runner/build-constraints.txt /build/
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv export --locked --no-default-groups --only-group runner --no-emit-project \
+        --format requirements-txt --output-file /tmp/runner.txt > /dev/null \
+    && uv pip install --python /usr/local/bin/python --prefix /install \
+        --require-hashes --no-deps --only-binary :all: --no-binary pyyaml \
+        --build-constraints /build/build-constraints.txt --require-build-hashes \
+        -r /tmp/runner.txt
+
+
+# The automation worker (hq_runner), an image of its own: CI builds this
+# stage beside the web image, and a release pins it (deploy/automation/image).
+# It carries ansible-runner, the ansible-playbook it runs, and the ssh and git
+# a run's connections and checkout need, none of which the web image holds.
+# hq-host runs it as the web account, which the bridge's peer check admits,
+# and ssh refuses to run for an account with no passwd entry. Its home is
+# /tmp, the scratch tmpfs and the one place its read-only root lets it write:
+# a task on the worker itself (connection local, delegate_to localhost) keeps
+# its module under ~/.ansible/tmp, and Ansible finds ~ from the passwd entry.
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runner
+# As the runtime stage's: Debian's fixes since the base was built, keyed on
+# the security archive's release date.
+ARG DEBIAN_SECURITY_RELEASE=
+RUN python -m pip uninstall --yes pip \
+    && groupadd --system --gid 10001 severino \
+    && useradd  --system --uid 10001 --gid severino \
+                --home /tmp --shell /usr/sbin/nologin severino \
+    && apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends ca-certificates git openssh-client \
+    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random
+COPY --from=runner-build /install /usr/local
+WORKDIR /app
+# Its tests ship with it, as the web image's do, so its smoke runs in it.
+COPY hq_runner/ /app/hq_runner/
+RUN PYTHONHASHSEED=0 python -m compileall -q --invalidation-mode unchecked-hash hq_runner
+USER severino
+ENTRYPOINT ["python", "-m", "hq_runner"]
+
+
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928 AS runtime
 
 # Non-root user. UID/GID 10001 to be predictable in volume permissions.
 # `apt-get upgrade` applies Debian security fixes published after the base
@@ -140,9 +194,10 @@ COPY --from=programs /hq-controller /usr/local/bin/hq-controller
 
 WORKDIR /app
 # The controller's source is the controller stage's input: its programs are
-# copied in built, and HQ never reads the source. The toolchain and dependency
+# copied in built, and HQ never reads the source. The worker's source is the
+# runner stage's, whose image the web process never runs. The toolchain and dependency
 # manifests and locks are the tools and build stages' inputs in the same way.
-COPY --exclude=controller --exclude=mise.toml --exclude=mise.lock --exclude=pyproject.toml --exclude=uv.lock . /app
+COPY --exclude=controller --exclude=hq_runner --exclude=mise.toml --exclude=mise.lock --exclude=pyproject.toml --exclude=uv.lock . /app
 # The renderer root runs on the host. It ships in the root-run tree, beside
 # the units that name it, which hq-host copies out of the signed image: the
 # host's copy is the image's, byte for byte, and checked daily like every script.

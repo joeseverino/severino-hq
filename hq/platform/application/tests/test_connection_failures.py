@@ -150,7 +150,7 @@ class FindingCardTests(TestCase):
                 {"attention-links"},
             ],
         )
-        self.assertNotIn("What to do", words)
+        self.assertNotIn("Next steps", words)
         self.assertNotIn("Fix it", words)
         # A connection that does not answer is a reading: confirming it reads now.
         self.assertIn("Check again", words)

@@ -370,9 +370,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "containers",
             "Containers",
-            "Every running container: what it runs and whether that is current and safe, "
-            "how it is run and the memory and CPU it uses beside its limits, and its posture against the "
-            "container standard.",
+            "Every running container: its image and whether it is current and safe, its runtime, "
+            "memory and CPU, and its posture.",
             Capability.READ,
             container_reads.list_containers,
             BoundedQuery,
@@ -385,9 +384,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "upgrades",
             "Upgrades",
-            "Every running container something newer is published for: the target by digest, "
-            "what it fixes, its data and how it would be verified, every reason it cannot go "
-            "ahead yet, and the steps an upgrade would take. Read-only.",
+            "Every running container with a newer release: target digest, fixes, data, verification, "
+            "blockers and steps. Read-only.",
             Capability.READ,
             container_reads.list_upgrades,
             BoundedQuery,
@@ -434,8 +432,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "hq",
             "HQ",
-            "HQ itself: the release it runs and whether its branch is ahead, the machine and "
-            "container it runs in, its background jobs, what it can read and its open problems.",
+            "HQ itself: its release and branch, machine and container, background jobs, "
+            "what it reads and open problems.",
             Capability.READ,
             hq_context.read_hq,
             EmptyQuery,
@@ -472,8 +470,8 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "tailnet",
             "Tailnet",
-            "The tailnet policy: settings, grants, shell rules, groups and tags with their "
-            "machines, services, app connectors, tests, problems, and what could not be read.",
+            "The tailnet policy: settings, grants, shell rules, groups, tags and their machines, "
+            "services, app connectors, tests, problems and read failures.",
             Capability.READ,
             tailnet_context.get_tailnet,
             EmptyQuery,
@@ -485,7 +483,7 @@ def core_resource_specs() -> tuple[ResourceSpec, ...]:
             "connections",
             "Connection status",
             "Each connection with what its credential sees, how fresh each reading is, what "
-            "was refused and the fix; the summary counts, the security posture and HQ's path.",
+            "was refused and the fix. It also gives the counts, the security posture and HQ's path.",
             Capability.READ,
             connection_context.list_connection_standing,
             EmptyQuery,
@@ -524,8 +522,8 @@ def connections() -> tuple[ResourceSpec, ...]:
         ResourceSpec(
             "request.path",
             "Request path",
-            "How the calling request reached HQ: HQ's own path hop by hop, each hop "
-            "checked against what the request shows, with the admission layers decided there.",
+            "How the calling request reached HQ, hop by hop, each checked against the request, "
+            "with the admission layers decided there.",
             Capability.READ,
             derived_reads.list_request_path,
             EmptyQuery,
@@ -676,7 +674,7 @@ class ResourceDescription(TypedDict):
     """One registry entry as every adapter describes it."""
 
     name: Annotated[str, Describe("The resource's name, which `list_resource` and `get_resource` take.")]
-    label: Annotated[str, Describe("What a person calls the resource.")]
+    label: Annotated[str, Describe("The name a page gives the resource.")]
     summary: Annotated[str, Describe("What the resource holds, in a sentence.")]
     web_route: WebRoute
     required_capabilities: RequiredPermissions
@@ -686,8 +684,8 @@ class ResourceDescription(TypedDict):
 
 # What the catalog of every resource says in place of each list's whole schema.
 WHOLE_SCHEMA = (
-    "Each list's query_schema, its filters' types and choices, and its paging, the most limit may ask for, are "
-    "describe_resources with name set to its resource."
+    "Each list's query_schema, filters, paging and largest limit are in describe_resources with name set to "
+    "its resource."
 )
 
 

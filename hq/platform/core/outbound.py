@@ -26,22 +26,22 @@ logger = logging.getLogger("severino.request")
 ALLOWED = frozendict(
     {
         "oidc": (
-            "Signing in is an exchange with the sign-in service: the token, "
-            "the person's claims and picture are asked for while the "
-            "browser waits, with the service's own short-lived token, and "
-            "each call is bounded by OIDC_TIMEOUT or the picture's timeout."
+            "Signing in waits on the sign-in service for the token and the "
+            "user's claims and picture. Each call carries the service's own "
+            "short-lived token and is bounded by OIDC_TIMEOUT or the "
+            "picture's timeout."
         ),
         "lookup": (
-            "A lookup is one question to a public resolver or registry that an "
-            "operator or a program asked for by name and waits for; it is "
-            "bounded by SEVERINO_LOOKUP_TIMEOUT_SECONDS and carries no credential."
+            "A lookup asks a public resolver or registry one question that an "
+            "operator or a program waits on. It carries no credential and is "
+            "bounded by SEVERINO_LOOKUP_TIMEOUT_SECONDS."
         ),
         "tailscaled": (
-            "An agent's call is placed on the tailnet device that sent it by "
-            "asking tailscaled on this host, over its Unix socket, who holds "
-            "the address now: no network, no name lookup, no credential, "
-            "bounded by tailscaled.TIMEOUT. A stored answer would be the stale "
-            "reading the question replaces."
+            "To name the tailnet device behind an agent's call, HQ asks the "
+            "local tailscaled who holds its address now. It asks over a Unix "
+            "socket, with no network, name lookup or credential, bounded by "
+            "tailscaled.TIMEOUT. A stored answer would be the stale reading "
+            "the question replaces."
         ),
     }
 )

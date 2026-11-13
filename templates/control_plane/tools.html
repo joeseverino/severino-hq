@@ -3,17 +3,16 @@
   {% if tabs %}
     {% comment %}Tabs, and a line saying which, only when there is a choice.{% endcomment %}
     {% if tabs|length > 1 %}
-      <nav class="tool-tabs" aria-label="Tools">
+      {% switch label="Tools" %}
         {% for entry in tabs %}
-          <a href="?tab={{ entry.id }}"
-             class="tool-tab{% if entry.id == tab.id %} tool-tab-current{% endif %}"
-             {% if entry.id == tab.id %}aria-current="page"{% endif %}>{{ entry.label|breakable }}</a>
+          {% querystring tab=entry.id as href %}
+          {% choice url=href current=entry.current %}{{ entry.label|breakable }}{% endchoice %}
         {% endfor %}
-      </nav>
-      <p class="muted tool-summary">{{ tab.summary|breakable }}</p>
+      {% summary %}{{ tab.summary|breakable }}
+      {% endswitch %}
     {% endif %}
     {% include tab.template %}
   {% else %}
-    <p class="muted">No tools available.</p>
+    {% include "partials/_empty_state.html" with message="No tools available." %}
   {% endif %}
 {% endblock %}

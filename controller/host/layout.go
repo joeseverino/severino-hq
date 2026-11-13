@@ -41,7 +41,7 @@ func StartPeriod(value string) (time.Duration, error) {
 
 const (
 	// SecretsUnit renders the application environment from the vault.
-	SecretsUnit = "severino-hq-secrets.service"
+	SecretsUnit = "severino-hq-secrets.service" //nolint:gosec // G101: a unit's name
 	// ControllerUnit runs one controller pass.
 	ControllerUnit = "severino-hq-controller.service"
 	// GlanceUnit runs one glance pass, beside a controller pass.
@@ -98,6 +98,24 @@ const (
 	// the next controller pass is given read-only.
 	DependencyRunFile   = StateDir + "/renovate/dependency-run.json"
 	dependencyRunTarget = hostcore.RunDir + "/dependency-run.json"
+
+	// AutomationUnit runs the automation worker until no run is queued. Its
+	// path unit starts it when HQ rings AutomationDoorbell, beside the
+	// controller's.
+	AutomationUnit     = "severino-hq-automation.service"
+	AutomationDoorbell = hostcore.RunDir + "/automation-doorbell"
+	// AutomationState is the worker's journal directory, the one place it
+	// writes that outlives a crash: the worker's account's alone, made by
+	// the tmpfiles rule.
+	AutomationState = StateDir + "/automation"
+	// AutomationImage is the worker's image in the tree, one digest-pinned
+	// reference; a release without one runs no worker.
+	AutomationImage = "deploy/automation/image"
+	// AutomationBound is the longest the worker runs before it is removed:
+	// the longest run a procedure may ask for (an hour), its checkout and its
+	// report, with room for one queued behind it. The unit's start
+	// timeout outlasts it (tested).
+	AutomationBound = 90 * time.Minute
 )
 
 // Renderers names each secret renderer on the host and its status document
@@ -107,12 +125,14 @@ var Renderers = []struct{ Name, Status string }{
 }
 
 // UnitProperties is what the controller asks systemd of each unit: its
-// title, states, the last run's result and exit, and instants, as `systemctl
+// title, states, the last run's result and exit, how often systemd restarted
+// it, and instants, as `systemctl
 // show` names them. None holds a command line, an environment or a path.
 var UnitProperties = []string{
 	"Id", "Description", "LoadState", "UnitFileState", "ActiveState", "SubState", "Result",
 	"ExecMainCode", "ExecMainStatus", "InactiveExitTimestamp", "InactiveEnterTimestamp",
 	"ConditionResult", "ConditionTimestamp", "LastTriggerUSec", "NextElapseUSecRealtime", "Unit",
+	"NRestarts", "ActiveEnterTimestamp",
 }
 
 // Volume is a named docker volume and where the container mounts it. The

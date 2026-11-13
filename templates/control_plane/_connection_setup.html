@@ -13,22 +13,17 @@ list, with what it says and where it is set up, so everything not yet
 connected is in one place.
 {% endcomment %}
 {% load value_tags %}
-{% section again|yesno:"Add another account,Add a connection" count=count id="connection-setup" lede="Each connection is a 1Password item the controller is given. Open one to see what to make." %}
-  <ul class="setup-list">
+{% section again|yesno:"Add another account,Add a connection" count=count id="connection-setup" %}
     {% for setup in setups %}
-      <li id="setup-{{ setup.provider }}">
-        <details{% if opened == setup.provider %} open{% endif %}>
-          <summary>
-            <strong>{{ setup.label|breakable }}</strong>
-            <span class="muted">{{ setup.gives|breakable }}</span>
-          </summary>
+        {% if opened == setup.provider %}{% firstof "open" as shown %}{% else %}{% firstof "" as shown %}{% endif %}
+        {% section setup.label lede=setup.gives fold=True open=shown id="setup-"|add:setup.provider %}
           <ol class="resolution-workflow">
             <li>
               <strong>Create</strong>
-              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Where to make it" %}{% endif %}</p>
+              <p>{{ setup.create|breakable }}{% if setup.create_url|web_url %} {% entity setup.create_url|outside label="Setup page" %}{% endif %}</p>
               {% if setup.permissions %}
                 <p>Give it these permissions, and no others:</p>
-                <ul class="setup-permissions">{% for permission in setup.permissions %}<li><code>{{ permission|breakable }}</code></li>{% endfor %}</ul>
+                <p><span class="code-list">{% for permission in setup.permissions %}<code>{{ permission|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span></p>
               {% elif setup.credential == "coarse" %}
                 <p class="muted">This is the whole account: {{ setup.label|breakable }} offers nothing narrower, so make it for HQ alone.</p>
               {% endif %}
@@ -42,7 +37,7 @@ connected is in one place.
               <p>In the vault HQ reads, as {{ setup.item|breakable }} with these fields:</p>
               {% table_region setup.label|add:" fields" %}
                 <table class="data-table">
-                  <thead><tr>{% table_heading "Field" "identifier" gutter=True local_sort=True %}{% table_heading "Value" "identifier" drop=2 local_sort=True %}{% table_heading "What it is" css="optional-col" drop=1 local_sort=True %}</tr></thead>
+                  <thead><tr>{% table_heading "Field" "identifier" gutter=True local_sort=True %}{% table_heading "Value" "identifier" drop=2 local_sort=True %}{% table_heading "Description" css="optional-col" drop=1 local_sort=True %}</tr></thead>
                   <tbody>
                     {% for field in setup.fields %}
                       <tr>
@@ -61,16 +56,13 @@ connected is in one place.
               {% include "partials/_command.html" with command="sudo systemctl start severino-hq-secrets.service" only %}
             </li>
           </ol>
-        </details>
-      </li>
+        {% endsection %}
     {% endfor %}
     {% for group in others %}
-      <li class="setup-other">
-        <strong>{{ group.spec.label|breakable }}</strong>
-        <span class="muted">{{ group.spec.empty_message|breakable }}</span>
-        {% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}{% entity group.spec.documentation_url|outside label="Docs" %}{% endif %}
-      </li>
+      {% section group.spec.label %}
+        <p class="muted">{{ group.spec.empty_message|breakable }}</p>
+      {% aside %}{% if group.spec.setup_route %}<a href="{% url group.spec.setup_route %}">Connect</a>{% elif group.spec.documentation_url %}{% entity group.spec.documentation_url|outside label="Docs" %}{% endif %}
+      {% endsection %}
     {% endfor %}
-  </ul>
-{% aside %}{% if guide %}{% entity guide|outside label="How connections work" %}{% endif %}
+{% aside %}{% if guide %}{% entity guide|outside label="Connections guide" %}{% endif %}
 {% endsection %}

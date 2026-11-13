@@ -17,6 +17,7 @@ from hq.domains.control_plane.names import certificate_covers, in_zone, normaliz
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.domains.control_plane.providers import PROVIDERS, registry_label, resource_home, service_facets
 
+from .card_items import ListRow
 from .containers import Running, container_watchers
 from .derivations import derivation
 from .derived_inputs import ESTATE_READS, estate_variant
@@ -28,10 +29,9 @@ from .locate import host_of, split_endpoint
 from .naming import name_context
 from .projection import read_once
 from .published_sites import published_projects
-from .reach import UNKNOWN, Reach, is_documentation, reach_of
+from .reach import is_documentation
 from .service_declarations import Claim, declarations, runtime_claim
 from .service_facets import CERTIFICATE_FACET, DNS_FACET, RUNTIME_FACET, ServiceFacet
-from .ui import ListRow
 from .whereabouts import Origin, Whereabouts, locate, machine_for, whereabouts
 lazy from .exposure import exposure_of_name
 lazy from .paths import path_to
@@ -57,9 +57,6 @@ class Service:
     # Other names that reach this same service, folded in rather than listed
     # separately. See ``_aliases``.
     aliases: tuple[str, ...] = ()
-    # Who can open a connection to this name, derived from the addresses it
-    # resolves to. Not a declaration anybody makes: a consequence of one.
-    reach: Reach = UNKNOWN
     # ``(alias, claim)`` for the declarations that make those other names work.
     # Beside the service, never merged into its facets: merged, two CNAMEs read
     # as two records competing for one name.
@@ -255,7 +252,6 @@ def _service_catalog() -> tuple[Service, ...]:
         aliases,
         alias_claims,
         machines,
-        answers,
         routed,
         served_with,
     ) = declarations()
@@ -271,7 +267,6 @@ def _service_catalog() -> tuple[Service, ...]:
             origins.get(hostname, ""),
             tuple(by_target.get(hostname, ())),
             tuple(alias_claims.get(hostname, ())),
-            tuple(answers.get(hostname, ())),
             routed=hostname in routed,
             served_with=served_with.get(hostname, frozenset()),
         )
@@ -361,10 +356,23 @@ def _serves(hostname: str, names, claim: Claim, served_with: frozenset[str]) -> 
     return certificate_covers(hostname, names) and (not served_with or claim.resource_key in served_with)
 
 
+def served_here(origin: Origin | None) -> bool:
+    """Whether a certificate HQ holds can be what the name is served with.
+
+    A name served somewhere HQ does not reach (a CNAME to a hosted page) is
+    served with that host's certificate, whatever names HQ's own cover.
+    """
+
+    return origin is None or not origin.external
+
+
 def certificates_serving(hostname: str) -> tuple[str, ...]:
     """The declared certificates a name is served with, by key. Read once per projection."""
 
     wanted = normalized_hostname(hostname)
+    service = find_service(wanted)
+    if service is not None and not served_here(service.origin):
+        return ()
     found = declarations()
     covering, served_with = found.covering, found.served_with
     named = served_with.get(wanted, frozenset())
@@ -413,7 +421,6 @@ def prospects(hostnames: tuple[str, ...]) -> tuple[Service, ...]:
         aliases,
         alias_claims,
         machines,
-        answers,
         routed,
         served_with,
     ) = declarations()
@@ -426,7 +433,6 @@ def prospects(hostnames: tuple[str, ...]) -> tuple[Service, ...]:
             origins.get(name, ""),
             tuple(alias for alias, target in sorted(aliases.items()) if target == name),
             tuple(alias_claims.get(name, ())),
-            answers=tuple(answers.get(name, ())),
             routed=name in routed,
             served_with=served_with.get(name, frozenset()),
         )
@@ -522,7 +528,6 @@ def _assemble(
     origin_address: str,
     aliases: tuple[str, ...] = (),
     alias_claims: tuple[tuple[str, Claim], ...] = (),
-    answers: tuple[str, ...] = (),
     *,
     routed: bool = True,
     served_with: frozenset[str] = frozenset(),
@@ -543,6 +548,7 @@ def _assemble(
         else None
     )
     context = name_context(hostname)
+    certified_here = served_here(origin)
     # A container declaration names a machine and a container, not a hostname,
     # so nothing else ties it to the name it serves. The origin resolves both
     # halves, which is the tie.
@@ -556,7 +562,7 @@ def _assemble(
             + tuple(
                 claim
                 for covered_facet, names, claim in covering
-                if covered_facet == facet_id and _serves(hostname, names, claim, served_with)
+                if covered_facet == facet_id and certified_here and _serves(hostname, names, claim, served_with)
             ),
             observed=_observed(facet_id, origin, estate.running),
             machine=(machine_for(origin, machines) if facet_id == RUNTIME_FACET else None),
@@ -575,7 +581,6 @@ def _assemble(
         origin=origin,
         project=projects.get(hostname),
         faults=_faults(facets, origin, in_use, hostname),
-        reach=reach_of(answers),
     )
 
 

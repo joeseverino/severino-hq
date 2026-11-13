@@ -1,0 +1,8 @@
+id: hand-drawn-empty-state
+valid:
+  - '{% include "partials/_empty_state.html" with message="Nothing yet." %}'
+  - '<td class="row-empty">A</td>'
+invalid:
+  - '<p class="empty">Nothing here yet.</p>'
+  - '<div class="empty">No notes.</div>'
+  - '<div class="empty compact"><p>{{ message }}</p></div>'

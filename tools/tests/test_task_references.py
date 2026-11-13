@@ -109,9 +109,9 @@ def a_task(name: str, tasks: set[str]) -> bool:
     return any(pattern.fullmatch(task) for task in tasks)
 
 
-# The jobs that run no task of their own: the proof a push stands on, the cache
-# writer, the composition and the two verdicts.
-NOT_TASK_JOBS = {"proven", "caches", "compose", "ready", "release"}
+# The jobs that run no task of their own: the proof a push stands on, the legs
+# a pull request runs, the cache writer, the composition and the two verdicts.
+NOT_TASK_JOBS = {"proven", "legs", "caches", "compose", "ready", "release"}
 # A second job of a task: a pull request's image, verified from the registry
 # beside its composition, and main's build that writes the layer cache.
 SECOND_JOBS = {"build-verify": "build", "build-cache": "build"}

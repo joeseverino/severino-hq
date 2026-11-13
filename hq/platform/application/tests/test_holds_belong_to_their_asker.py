@@ -13,7 +13,8 @@ from django.test import TestCase
 
 from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 
-from ..approvals import ApprovalError, ApproveCommand, approve, asked, asked_by, pending
+from ..approval_review import asked
+from ..approvals import ApprovalError, ApproveCommand, approve, asked_by, pending
 from ..capabilities import execute_capability
 from ..resources import list_resource
 from ..security import Capability, Principal, cli_principal

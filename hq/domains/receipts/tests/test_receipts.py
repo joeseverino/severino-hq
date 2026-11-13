@@ -52,6 +52,15 @@ class ReceiptLinkTests(TestCase):
         self.assertContains(response, "No expense or asset")
         self.assertNotContains(response, ">expense</a>")
 
+    def test_a_match_s_row_links_it_to_this_receipt(self):
+        receipt = _receipt(vendor="Example Host", amount=Decimal("12.00"))
+        url = reverse("receipts:match", args=[receipt.pk])
+
+        (button,) = select(self.client.get(url), "formaction", url)
+
+        self.assertEqual((button.attrs["name"], button.attrs["value"]), ("expense_id", str(self.expense.pk)))
+        self.assertTrue(any("row-actions" in ancestor.classes for ancestor in button.ancestors))
+
     def test_a_linked_receipt_says_what_it_is_linked_to(self):
         receipt = _receipt(vendor="Example Host", related_expense=self.expense)
 
@@ -69,14 +78,6 @@ class ReceiptLinkTests(TestCase):
         (line,) = select(response, "data-empty-state")
         (add,) = [link for link in elements(response, "a") if line in link.ancestors]
         self.assertEqual(add.attrs["href"], response.context["new_expense"])
-
-    def test_the_page_says_the_file_type_as_a_word(self):
-        receipt = _receipt(vendor="Example Host")
-
-        response = self.client.get(receipt.get_absolute_url())
-
-        self.assertIn("File type PDF", text(response))
-        self.assertNotContains(response, "application/pdf")
 
     def test_uploading_from_an_expense_starts_on_that_expense(self):
         response = self.client.get(reverse("receipts:create"), {"related_expense": self.expense.pk})
@@ -157,3 +158,122 @@ class ReceiptEditTests(TestCase):
         self.assertNotEqual(self.receipt.file.name, stored)
         self.assertEqual(self.receipt.original_filename, "photo.png")
         self.assertEqual(self.receipt.content_type, "image/png")
+
+
+class ReceiptPageFileTests(TestCase):
+    """A receipt's page shows its file beside its facts: a picture of an
+    image, a link to anything else, and what is wrong when there is none."""
+
+    def setUp(self):
+        self.client.force_login(get_user_model().objects.create_superuser("receipt-viewer"))
+        media = tempfile.TemporaryDirectory()
+        self.addCleanup(media.cleanup)
+        storage = Receipt._meta.get_field("file").storage
+        patcher = mock.patch.object(storage, "location", media.name)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def _stored(self, name: str, content_type: str, body: bytes = b"bytes") -> Receipt:
+        receipt = Receipt.objects.create(
+            vendor="Example Host", original_filename=name, content_type=content_type, size_bytes=len(body)
+        )
+        receipt.file.save(name, ContentFile(body))
+        return receipt
+
+    def _file_part(self, response) -> str:
+        (part,) = select(response, "data-receipt-file")
+        return part.attrs["data-receipt-file"]
+
+    def test_an_image_is_drawn_from_the_picture_view(self):
+        receipt = self._stored("photo.png", "image/png")
+
+        response = self.client.get(receipt.get_absolute_url())
+
+        self.assertEqual(self._file_part(response), "picture")
+        (picture,) = elements(response, "img")
+        self.assertEqual(picture.attrs["src"], reverse("receipts:picture", args=[receipt.pk]))
+        self.assertTrue(picture.attrs["alt"])
+
+    def test_the_picture_is_served_inline_as_its_stored_type_and_not_audited(self):
+        from hq.platform.core.models import AuditLog
+
+        receipt = self._stored("photo.png", "image/png", b"\x89PNG")
+        before = AuditLog.objects.count()
+
+        response = self.client.get(reverse("receipts:picture", args=[receipt.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/png")
+        self.assertEqual(response["X-Content-Type-Options"], "nosniff")
+        self.assertTrue(response["Content-Disposition"].startswith("inline"))
+        self.assertEqual(b"".join(response.streaming_content), b"\x89PNG")
+        # The page view is the read; only taking the file away is recorded.
+        self.assertEqual(AuditLog.objects.count(), before)
+        # Read to the end, as a server would, which closes the file.
+        b"".join(self.client.get(reverse("receipts:file", args=[receipt.pk])).streaming_content)
+        self.assertEqual(AuditLog.objects.count(), before + 1)
+
+    def test_a_speculative_request_for_the_picture_is_answered(self):
+        receipt = self._stored("photo.png", "image/png")
+
+        response = self.client.get(reverse("receipts:picture", args=[receipt.pk]), headers={"Sec-Purpose": "prefetch"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(b"".join(response.streaming_content), b"bytes")
+
+    def test_the_picture_needs_a_session(self):
+        receipt = self._stored("photo.png", "image/png")
+        self.client.logout()
+
+        response = self.client.get(reverse("receipts:picture", args=[receipt.pk]))
+
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_a_pdf_is_a_link_to_the_download_never_framed(self):
+        receipt = self._stored("scan.pdf", "application/pdf", b"%PDF-1.4")
+
+        response = self.client.get(receipt.get_absolute_url())
+
+        self.assertEqual(self._file_part(response), "link")
+        self.assertIn(("scan.pdf", reverse("receipts:file", args=[receipt.pk])), links(response))
+        self.assertFalse(elements(response, "img") + elements(response, "iframe") + elements(response, "object"))
+        self.assertIn("PDF", text(response))
+        self.assertNotContains(response, "application/pdf")
+        self.assertEqual(self.client.get(reverse("receipts:picture", args=[receipt.pk])).status_code, 404)
+
+    def test_an_image_no_browser_draws_is_a_link(self):
+        receipt = self._stored("photo.heic", "image/heic")
+
+        response = self.client.get(receipt.get_absolute_url())
+
+        self.assertEqual(self._file_part(response), "link")
+        self.assertFalse(elements(response, "img"))
+        self.assertEqual(self.client.get(reverse("receipts:picture", args=[receipt.pk])).status_code, 404)
+
+    def test_an_image_stored_under_an_unaccepted_type_is_never_a_picture(self):
+        receipt = self._stored("page.svg", "image/svg+xml", b"<svg/>")
+
+        response = self.client.get(receipt.get_absolute_url())
+
+        self.assertFalse(elements(response, "img"))
+        self.assertEqual(self.client.get(reverse("receipts:picture", args=[receipt.pk])).status_code, 404)
+
+    def test_a_receipt_with_no_file_says_so_and_offers_one(self):
+        receipt = Receipt.objects.create(vendor="Example Host")
+
+        response = self.client.get(receipt.get_absolute_url())
+
+        self.assertEqual(self._file_part(response), "none")
+        self.assertIn(("Add a file", reverse("receipts:edit", args=[receipt.pk])), links(response))
+        self.assertNotIn(reverse("receipts:file", args=[receipt.pk]), [href for _, href in links(response)])
+
+    def test_a_missing_file_says_it_is_gone_and_offers_no_download(self):
+        receipt = _receipt(vendor="Example Host", original_filename="lost.pdf")
+
+        response = self.client.get(receipt.get_absolute_url())
+
+        self.assertEqual(self._file_part(response), "missing")
+        self.assertIn("lost.pdf", text(response))
+        self.assertIn(("Replace the file", reverse("receipts:edit", args=[receipt.pk])), links(response))
+        self.assertNotIn(reverse("receipts:file", args=[receipt.pk]), [href for _, href in links(response)])
+        self.assertFalse(elements(response, "img"))

@@ -1,0 +1,44 @@
+id: hand-drawn-facts
+snapshots:
+  <div class="card attention-facts"></div>:
+    labels:
+    - source: <div class="card attention-facts"></div>
+      style: primary
+      start: 0
+      end: 40
+    - source: class="card attention-facts"
+      style: secondary
+      start: 5
+      end: 33
+    - source: <div class="card attention-facts">
+      style: secondary
+      start: 0
+      end: 34
+  <div class="vitals-strip"></div>:
+    labels:
+    - source: <div class="vitals-strip"></div>
+      style: primary
+      start: 0
+      end: 32
+    - source: class="vitals-strip"
+      style: secondary
+      start: 5
+      end: 25
+    - source: <div class="vitals-strip">
+      style: secondary
+      start: 0
+      end: 26
+  <dl class="fact-band"></dl>:
+    labels:
+    - source: <dl class="fact-band"></dl>
+      style: primary
+      start: 0
+      end: 27
+    - source: class="fact-band"
+      style: secondary
+      start: 4
+      end: 21
+    - source: <dl class="fact-band">
+      style: secondary
+      start: 0
+      end: 22

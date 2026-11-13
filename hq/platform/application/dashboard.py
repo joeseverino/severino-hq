@@ -29,7 +29,8 @@ from .read_models import ActivityEvent, recent_activity
 from .security import Capability, Principal
 from .workflows import WrittenAction, WrittenWorkflow, serialize_workflow
 lazy from .action_items import item_key, item_revision, waiting_count
-lazy from .ui import DomainOverview, Insight
+lazy from .card_items import Insight
+lazy from .ui import DomainOverview
 
 
 @derivation("dashboard.highlights", reads=DASHBOARD_READS, vary=reader_variant)

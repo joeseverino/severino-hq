@@ -24,12 +24,12 @@ from django.db.models.functions import Cast
 lazy from hq.domains.control_plane.providers import PROVIDERS
 
 lazy from . import entity_links, security
+lazy from .card_items import Insight, ListRow
 lazy from .demo import showing_demo
 lazy from .entity_links import NODE_KINDS, entity_link, kind_label, node_name
 lazy from .projection import read_once
 lazy from .security import Principal, cli_principal
 lazy from .topology import derive_topology
-lazy from .ui import Insight
 
 # Named for annotations alone: a class's annotations can be read as it is made
 # (a dataclass's are), which would load a lazy import at once.
@@ -668,6 +668,12 @@ class Mentions:
     heading: str
     items: tuple[Mention, ...]
 
+    @property
+    def rows(self) -> tuple[ListRow, ...]:
+        """The items as the record list part draws them."""
+
+        return tuple(ListRow(link=item.link, meta=item.note) for item in self.items)
+
 
 def referenced_by(kind: str, identity: str, *, principal: Principal) -> tuple[Mentions, ...]:
     """Every row that names this thing, grouped under each reference's heading.
@@ -776,7 +782,7 @@ def _dangling_item(field: ReferenceField, row: models.Model, source: Callable[[m
     name = getattr(row, field.name_attname) or getattr(row, field.attname)
     return Insight(
         status="attention",
-        eyebrow="Links",
+        eyebrow="Records",
         title=f"{source(row)} links to {name}, which HQ does not have",
         value="",
         body="Choose something else for it, or clear the link.",

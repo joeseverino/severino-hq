@@ -253,15 +253,23 @@ func Parse(args []string) (Request, error) {
 	options := flag.NewFlagSet("upgrade", flag.ContinueOnError)
 	options.SetOutput(io.Discard)
 	var request Request
-	var wait, data string
-	options.StringVar(&request.Operation, "operation", "", "")
-	options.StringVar(&request.ProjectDir, "project-dir", "", "")
-	options.StringVar(&request.Service, "service", "", "")
-	options.StringVar(&request.From, "from", "", "")
-	options.StringVar(&request.To, "to", "", "")
-	options.StringVar(&request.Tag, "tag", "", "")
-	options.StringVar(&wait, "wait", "120", "")
-	options.StringVar(&data, "data", "", "")
+	var data string
+	wait := "120"
+	// The flag package lets a later copy of a flag win, so one given twice
+	// is counted here and refused.
+	repeated := false
+	for name, value := range map[string]*string{
+		"operation": &request.Operation, "project-dir": &request.ProjectDir, "service": &request.Service,
+		"from": &request.From, "to": &request.To, "tag": &request.Tag, "wait": &wait, "data": &data,
+	} {
+		set := false
+		options.Func(name, "", func(given string) error {
+			repeated = repeated || set
+			set = true
+			*value = given
+			return nil
+		})
+	}
 	if err := options.Parse(args); err != nil {
 		if strings.Contains(err.Error(), "needs an argument") {
 			return Request{}, refusal("an argument has no value")
@@ -273,6 +281,8 @@ func Parse(args []string) (Request, error) {
 	switch {
 	case given:
 		return Request{}, refusal("data is read from the running service, not given")
+	case repeated:
+		return Request{}, refusal("an argument is given twice")
 	case options.NArg() != 0:
 		return Request{}, refusal("unknown argument")
 	}

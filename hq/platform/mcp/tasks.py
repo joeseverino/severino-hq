@@ -1,9 +1,10 @@
 """A held change as a task of the MCP tasks extension, which a client waits on while a person decides and HQ applies it.
 
 The task is the hold. Its id is the hold's, its state is read from the hold,
-and from the operation its call queued, at each ``tasks/get``, and nothing
-here writes either: a person decides it in HQ, and no method of the extension
-reaches a decision. docs/API.md states the properties.
+and from the operation its call queued, at each ``tasks/get``. A person
+decides it in HQ; ``tasks/cancel`` is the asker withdrawing it, through the
+same command a call of ``approval.withdraw`` runs. docs/API.md states the
+properties.
 """
 
 from collections.abc import Mapping
@@ -14,11 +15,11 @@ from mcp.shared.exceptions import MCPError
 from mcp_types.version import MODERN_PROTOCOL_VERSIONS
 from pydantic import Field
 
-from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
-from hq.platform.application import approvals
-from hq.platform.application.held_answer import applying
-from hq.platform.application.refusal_status import refusal_of, refuse
-from hq.platform.application.resource_operations import serialize_operation
+from hq.domains.control_plane.models import ApprovalRequest
+from hq.platform.application import approval_review, approvals
+from hq.platform.application.capabilities import run_capability
+from hq.platform.application.held_reads import standing
+from hq.platform.application.refusal_status import refusal_of
 from hq.platform.application.security import Principal
 
 IDENTIFIER = "io.modelcontextprotocol/tasks"
@@ -27,9 +28,6 @@ IDENTIFIER = "io.modelcontextprotocol/tasks"
 POLL_INTERVAL_MS = 30_000
 # The controller applies a change in seconds, so an approved one is read again soon.
 APPLYING_POLL_INTERVAL_MS = 2_000
-
-# An operation still to finish, so the call it answers is not yet done.
-_UNFINISHED = frozenset({OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED})
 
 # The one answer for an id this caller did not ask for, whether or not it exists.
 _UNKNOWN = "No task of this caller has that id."
@@ -83,11 +81,27 @@ def acknowledge(task_id: str, principal: Principal) -> dict[str, Any]:
 
 
 def cancel(task_id: str, principal: Principal) -> dict[str, Any]:
-    """``tasks/cancel``'s acknowledgement. Cancellation is the server's to honor
-    or not, and a held change stays a person's to decide, so the task goes on
-    as it was."""
+    """``tasks/cancel``: the asker withdraws its hold while it still waits.
 
-    _own(task_id, principal)
+    Cancellation is cooperative in the extension, so a hold already decided
+    goes on as it was and the request is acknowledged all the same, with the
+    empty result the specification requires.
+    """
+
+    held = _own(task_id, principal)
+    if approvals.outcome(held) is None:
+        # Keyed by the hold, so a resent cancel withdraws it once.
+        ran = run_capability(
+            approvals.WITHDRAW,
+            {"approval_id": str(held.pk)},
+            principal=principal,
+            idempotency_key=f"tasks-cancel:{held.pk}",
+        )
+        # A person who decided it first settled it, which a cooperative cancel
+        # accepts; any other refusal is the caller's to read.
+        held.refresh_from_db()
+        if ran.answer.get("ok") is False and approvals.outcome(held) is None:
+            raise MCPError(types.INTERNAL_ERROR, refusal_of(ran.answer).message)
     return {}
 
 
@@ -104,10 +118,11 @@ def _task(held: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
 
     approval = approvals.serialize_approval(held)
     settled = approvals.outcome(held)
-    answer, said = _standing(held, settled, approval["review_url"])
+    now = standing(held)
+    answer, said = now.answer, now.said
     task: dict[str, Any] = {
         "taskId": approval["id"],
-        "status": "working" if answer is None else "completed",
+        "status": _status(held, answer),
         "createdAt": approval["requested_at"],
         "lastUpdatedAt": held.updated_at.isoformat(),
         # Until a person decides, the request lapses at its expiry. HQ keeps a
@@ -115,31 +130,13 @@ def _task(held: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
         "ttlMs": None if settled else int((held.expires_at - held.created_at).total_seconds() * 1000),
         "pollIntervalMs": APPLYING_POLL_INTERVAL_MS if settled else POLL_INTERVAL_MS,
         # On every answer, since a client shows the last one it was sent.
-        "statusMessage": f"{approvals.asked(held)}. {said}",
+        "statusMessage": f"{approval_review.asked(held)}. {said}",
     }
-    return task, answer
+    # A cancelled task carries no result (the extension's ``CancelledTask``).
+    return task, None if task["status"] == "cancelled" else answer
 
 
-def _standing(held: Any, settled: dict[str, Any] | None, review_url: str) -> tuple[dict[str, Any] | None, str]:
-    """The call's answer, None until it is done, and the sentence saying where it stands."""
-
-    if settled is None:
-        return None, f"A person decides it in HQ, at {review_url}."
-    if held.state != ApprovalRequest.State.APPROVED:
-        return settled, refusal_of(settled).message
-    queued = applying(held)
-    if queued is None:
-        return settled, "A person approved it in HQ, and it is done."
-    field, operation = queued
-    if operation.state in _UNFINISHED:
-        return None, f"A person approved it in HQ, at {review_url}, and HQ is applying it now."
-    # The call's own answer, carrying its operation as it ended.
-    ended = {**settled, field: serialize_operation(operation)}
-    if operation.state == OperationRequest.State.SUCCEEDED:
-        return ended, "A person approved it in HQ, and it is applied."
-    failed = refuse(
-        "operation_failed",
-        "A person approved this change in HQ, and applying it did not succeed; details carries the operation.",
-        ended,
-    )
-    return failed, "A person approved it in HQ, and applying it did not succeed."
+def _status(held: Any, answer: dict[str, Any] | None) -> str:
+    if held.state == ApprovalRequest.State.WITHDRAWN:
+        return "cancelled"
+    return "working" if answer is None else "completed"

@@ -35,7 +35,10 @@ class FindingsView(PageMixin, TemplateView):
         principal = web_principal(self.request.user)
         requested_rule = self.request.GET.get("rule", "").strip()
         active_rule = rule_for(requested_rule)
-        raised = estate_findings(principal=principal, rule=active_rule.name if active_rule else "")
+        # Every problem, so the bar counts the shown ones out of all of them
+        # and offers each rule that raised one, whichever is viewed.
+        every = estate_findings(principal=principal)
+        raised = tuple(finding for finding in every if not active_rule or finding.rule == active_rule.name)
         url = reverse("control_plane:findings")
         # The queue's own cards: one renderer for a problem wherever it is drawn.
         entries = [queue_item(SOURCE_ID, SOURCE, finding_insight(finding, url)) for finding in raised]
@@ -44,12 +47,13 @@ class FindingsView(PageMixin, TemplateView):
         context.update(
             {
                 "finding_entries": tuple(entries),
+                "finding_total": len(every),
                 # Only rules that raised something, or the one being viewed. A
                 # chip for every rule HQ knows is a list of what is fine.
                 "finding_rules": tuple(
-                    rule
+                    (rule.name, rule.title)
                     for rule in finding_rules()
-                    if rule.name in {finding.rule for finding in raised}
+                    if rule.name in {finding.rule for finding in every}
                     or (active_rule and rule.name == active_rule.name)
                 ),
                 "active_rule": active_rule,

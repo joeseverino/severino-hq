@@ -5,6 +5,7 @@
 //	hq-host controller       one controller pass, planning; --apply to apply,
 //	                         --glance to read only the dashboard panels HQ waits on
 //	hq-host renovate         run the dependency handoff a pass spooled
+//	hq-host automation       run the automation worker until no run is queued
 //	hq-host install          install the release in the root-owned tree
 //	hq-host deploy IMAGE     verify and pull IMAGE, then hand over to its hq-host
 //	hq-host release IMAGE    switch HQ to IMAGE, install it, or roll back
@@ -22,6 +23,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/joeseverino/severino-hq/controller/internal/born"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"io"
 	"io/fs"
@@ -42,7 +44,7 @@ import (
 	"github.com/joeseverino/severino-hq/controller/secrets/install"
 )
 
-const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | unit --serve | check --release DIR --main DIR"
+const usage = "usage: hq-host run-web | controller [--apply | --glance] | renovate | automation | install | deploy IMAGE | release [--stage DIR] IMAGE | sync IMAGE | verify | bootstrap | backup | upgrade ARGS | unit --serve | check --release DIR --main DIR"
 
 // passes are the controller passes `hq-host controller` launches, by flag.
 var passes = map[string]host.Pass{"": host.Plan, "--apply": host.Apply, "--glance": host.Glance}
@@ -99,6 +101,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, euid in
 			return 2
 		}
 		err = renovator(stdout).Run(ctx)
+	case "automation":
+		if len(args) != 1 {
+			fmt.Fprintln(stderr, usage)
+			return 2
+		}
+		err = automation(stdout, stderr).Run(ctx)
 	case "install":
 		err = machine(stdout).Install(ctx, requireConnections)
 	case "deploy":
@@ -169,7 +177,7 @@ func runWeb(ctx context.Context, args []string, getenv func(string) string, stdo
 		RootUID:   0, WebUID: hostcore.WebUID,
 		Docker: func(ctx context.Context, args ...string) *exec.Cmd { return hostcore.Command(ctx, "docker", args...) },
 		Notify: func(state string) error { return host.Notify(getenv("NOTIFY_SOCKET"), state) },
-		Poll:   2 * time.Second,
+		Poll:   host.WebPoll,
 		// The renderer's own bound on a run, so a slow boot render is waited
 		// out and a failed one retried when the unit restarts.
 		Await:          host.RenderBound,
@@ -252,36 +260,64 @@ const cosign = "/usr/local/lib/severino-hq-verifier/cosign"
 
 func controller(stdout, stderr io.Writer) *host.Controller {
 	return &host.Controller{
-		Machine:       machine(stdout),
-		SecretDir:     hostcore.SecretDir,
-		ACME:          host.ACMEDir,
-		CertStore:     "/usr/local/share/ca-certificates",
-		Tailscaled:    host.TailscaledSocket,
-		UnitSocket:    host.UnitSocket,
-		Grants:        hostGrants(stderr),
-		DependencyRun: host.DependencyRunFile,
-		Connections:   requireConnections,
-		Lock:          host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
-		LookPath:      exec.LookPath,
-		Now:           time.Now,
-		Stdout:        stdout, Stderr: stderr,
+		Machine:        machine(stdout),
+		SecretDir:      hostcore.SecretDir,
+		ACME:           host.ACMEDir,
+		CertStore:      "/usr/local/share/ca-certificates",
+		Tailscaled:     host.TailscaledSocket,
+		UnitSocket:     host.UnitSocket,
+		Grants:         hostGrants(stderr),
+		DependencyRun:  host.DependencyRunFile,
+		MountTable:     hostcore.MountTable,
+		Statfs:         hostcore.Statfs,
+		RebootRequired: hostcore.RebootRequired,
+		Born:           born.At,
+		Connections:    requireConnections,
+		Lock:           host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
+		LookPath:       exec.LookPath,
+		Now:            time.Now,
+		Stdout:         stdout, Stderr: stderr,
 	}
 }
 
-// hostGrants is HQ's own grants and those the host's configuration adds. A
-// configuration that cannot be read adds none, and says why.
+// hostGrants is HQ's own grants and those the host's configuration adds.
 func hostGrants(stderr io.Writer) []host.Grant {
+	return host.Grants(hostConfiguration(stderr))
+}
+
+// hostConfiguration is the host's own configuration, for what a pass adds
+// from it. One that cannot be read adds nothing, and says why.
+func hostConfiguration(stderr io.Writer) host.Config {
 	data, err := os.ReadFile(hostConfig)
 	if err == nil {
 		var config host.Config
 		if config, err = host.ReadConfig(data); err == nil {
-			return host.Grants(config)
+			return config
 		}
 	}
 	if !errors.Is(err, fs.ErrNotExist) {
-		fmt.Fprintf(stderr, "The host's own grants were not read: %v\n", err)
+		fmt.Fprintf(stderr, "The host's own configuration was not read: %v\n", err)
 	}
-	return host.Grants(host.Config{})
+	return host.Config{}
+}
+
+func automation(stdout, stderr io.Writer) *host.Automation {
+	config := hostConfiguration(stderr)
+	id, _ := os.Hostname()
+	return &host.Automation{
+		Machine:     machine(stdout),
+		Source:      host.Source(host.BuildSource),
+		SecretDir:   hostcore.SecretDir,
+		Journal:     host.AutomationState,
+		Project:     config.Automation,
+		Grants:      config.Grants,
+		ID:          id,
+		Bound:       host.AutomationBound,
+		TokenPoll:   time.Minute,
+		Connections: requireConnections,
+		Lock:        host.SharedLock(filepath.Join(hostcore.SecretDir, "ssh.lock"), time.Minute),
+		Stdout:      stdout, Stderr: stderr,
+	}
 }
 
 func renovator(stdout io.Writer) *host.Renovator {

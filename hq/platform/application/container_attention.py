@@ -15,12 +15,14 @@ from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
 from hq.platform.application.routes import reverse
 
 from .action_links import command_action, command_url
+from .card_items import Insight
 from .containers import VULNERABLE, Container, ImageStanding, containers
 from .exposure import LEVELS, OPEN, UNKNOWN, UNROUTED, exposure_of_container, status_at, worse
 from .finding_model import on_machine
 from .images import version
 from .item_help import do_step, run_step, steps
-from .ui import Insight, counted, ended
+from .labels import lower_first
+from .ui import counted, ended
 from .workflow_contracts import ActionLink, WorkflowPlan, WorkflowStep
 lazy from .container_standard import STANDARD
 lazy from .standards import UNMET
@@ -264,10 +266,7 @@ def _reach(running) -> tuple[str, str]:
     item, exposure = worst
     return (
         level,
-        ended(
-            f" Most exposed: {item.running.name} on {item.machine.name}, "
-            f"{exposure.sentence[:1].lower()}{exposure.sentence[1:]}"
-        ),
+        ended(f" Most exposed: {item.running.name} on {item.machine.name}, {lower_first(exposure.sentence)}"),
     )
 
 

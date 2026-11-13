@@ -1,6 +1,8 @@
 """What the operator keeps by hand: projects, runbooks, the calendar, and what
 running the homelab costs."""
 
+import struct
+import zlib
 from datetime import time, timedelta
 from decimal import Decimal
 
@@ -28,6 +30,26 @@ _RECEIPT = (
     b"4 0 obj<</Length 44>>stream\nBT /F1 14 Tf 20 60 Td (Example receipt) Tj ET\nendstream endobj\n"
     b"5 0 obj<</Type/Font/Subtype/Type1/BaseFont/Helvetica>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
 )
+
+
+def _png(width, height):
+    """A slip of paper photographed, a line of print every eighth row, as a
+    grayscale PNG written here so the repository holds no binary for it."""
+
+    def chunk(kind, data):
+        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data))
+
+    paper, ink = b"\xff", b"\x60"
+    rows = b"".join(
+        b"\0" + ((ink * (width // 2)).center(width, paper) if row % 8 == 4 and 4 < row < height - 8 else paper * width)
+        for row in range(height)
+    )
+    header = struct.pack(">IIBBBBB", width, height, 8, 0, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b"")
+
+
+# A receipt photographed rather than scanned, so a receipt's page draws its picture.
+_PICTURE = _png(60, 80)
 # Name, slug, repository, public address, what it is.
 PROJECTS = (
     (
@@ -74,7 +96,11 @@ PROJECTS = (
     ),
 )
 # What each project is built with, where its operator wrote it down.
-STACKS = {"hq": "Django, SQLite, Go", "photo-library": "Immich, PostgreSQL"}
+STACKS = {
+    "hq": "Django, SQLite, Go",
+    "photo-library": "Immich, PostgreSQL",
+    "tailnet-hardening": "Debian, systemd, Caddy, Tailscale",
+}
 # Slug, title, the project it writes up, how long ago it was published.
 WRITEUPS = (
     ("why-a-control-panel", "Why the homelab has a control panel", "hq", 40),
@@ -96,7 +122,8 @@ RUNBOOKS = (
         20,
     ),
     ("rb-rotate-tailnet-keys", "Rotate the tailnet lock signing keys", "tailscale", ("tailnet-hardening",), 140, 45),
-    ("rb-public-site", "Publish the public site and answer its contact form", "homelab", ("hq",), 380, 30),
+    # Past the review interval: the one runbook due for review.
+    ("rb-public-site", "Publish the public site and answer its contact form", "homelab", ("hq",), 380, 200),
     (
         "rb-upgrade-containers",
         "Upgrade a container to a new release",
@@ -188,10 +215,44 @@ SERVER_ASSET = "sff-server"
 SERVER = (430, "eBay", "Small form factor server", "hardware", "389.00", 80)
 # How long ago each monthly storage bill was paid since the backups started.
 STORAGE = (2, 32, 62, 92, 122)
+# What running the host has cost, each filed with its receipt: an expense's
+# fields, whether it bought the server, and the project it went to by slug.
+SPENDING = (
+    (*SERVER, True, None),
+    (120, "Newegg", "2 TB backup drive", "hardware", "79.99", 50, False, "offsite-backups"),
+    # Renewed a year before the registration next runs out.
+    (365 - RENEWS_IN.days, "Cloudflare", "example.com renewal", "domains", "10.44", 100, False, None),
+    # Storage is billed monthly; the backups hold family photos as well as the lab's volumes.
+    *(
+        (days, "Backblaze", "Offsite backup storage", "hosting", "6.00", 50, False, "offsite-backups")
+        for days in STORAGE
+    ),
+    # A refund is a negative cost.
+    (100, "Newegg", "2 TB backup drive return", "hardware", "-79.99", 50, False, "offsite-backups"),
+)
+# A bill paid this week whose receipt was photographed, dropped in and not yet
+# filed against it, so the receipt's match page offers the expense of its
+# amount and its own page draws the picture. The receipt follows every filed
+# one, numbered as an empty database numbers them.
+UNFILED = (3, "APC", "Replacement UPS battery", "hardware", "54.99", 80)
+UNFILED_RECEIPT = len(SPENDING) + 1
+# A switch handed down by a friend: no cost, no expense, nothing written about
+# it and no record beside it, so its page is its facts alone.
+SWITCH_ASSET = "hallway-switch"
+SWITCH = (300, "8-port gigabit switch", "networking")
+# More gear handed down with no cost written, so the queue's item for assets
+# without a cost names three, each a button, and its row holds more buttons
+# than its line shows.
+HANDED_DOWN = (
+    (240, "SSD enclosure", "server_hardware"),
+    (180, "USB microphone", "camera_audio"),
+)
 
 
 def money():
-    """The host as an asset, and what running it has cost, every expense with its receipt."""
+    """The host as an asset, and what running it has cost, every expense with
+    its receipt but this week's, a switch nothing else is about, and more gear
+    handed down."""
 
     machine = f"machine:{MACHINE}"
     today = timezone.localdate()
@@ -208,36 +269,45 @@ def money():
         infrastructure_name=MACHINE,
     )
     asset.related_projects.set(Project.objects.exclude(slug="offsite-backups"))
-    backups = Project.objects.get(slug="offsite-backups")
-    for days, vendor, item, category, cost, business_use, about, project in (
-        (*SERVER, asset, None),
-        (120, "Newegg", "2 TB backup drive", "hardware", "79.99", 50, None, backups),
-        # Renewed a year before the registration next runs out.
-        (365 - RENEWS_IN.days, "Cloudflare", "example.com renewal", "domains", "10.44", 100, None, None),
-        # Storage is billed monthly; the backups hold family photos as well as the lab's volumes.
-        *((days, "Backblaze", "Offsite backup storage", "hosting", "6.00", 50, None, backups) for days in STORAGE),
-        # A refund is a negative cost.
-        (100, "Newegg", "2 TB backup drive return", "hardware", "-79.99", 50, None, backups),
-    ):
-        expense = Expense.objects.create(
-            date=today - timedelta(days=days),
-            vendor=vendor,
-            item=item,
-            category=category,
-            total_cost=Decimal(cost),
-            business_use_percentage=business_use,
-            payment_method="credit",
-            related_asset=about,
-            related_project=project,
-            about=machine if about else "",
-            about_name=MACHINE if about else "",
-        )
-        Receipt.objects.create(
-            file=ContentFile(_RECEIPT, name=f"receipt-{expense.pk}.pdf"),
-            original_filename=f"{vendor} receipt.pdf",
-            content_type="application/pdf",
-            vendor=vendor,
-            date=expense.date,
-            amount=expense.total_cost,
-            related_expense=expense,
-        )
+    for *fields, bought, project in SPENDING:
+        expense = _expense(*fields, project=project, asset=asset if bought else None)
+        _receipt(expense.vendor, expense.date, expense.total_cost, related_expense=expense)
+    expense = _expense(*UNFILED)
+    _receipt(expense.vendor, expense.date, expense.total_cost, picture=True)
+    days, name, category = SWITCH
+    Asset.objects.create(
+        item_name=name, slug=SWITCH_ASSET, category=category, purchase_date=today - timedelta(days=days)
+    )
+    for days, name, category in HANDED_DOWN:
+        Asset.objects.create(item_name=name, category=category, purchase_date=today - timedelta(days=days))
+
+
+def _expense(days, vendor, item, category, cost, business_use, *, project=None, asset=None):
+    machine = f"machine:{MACHINE}"
+    return Expense.objects.create(
+        date=timezone.localdate() - timedelta(days=days),
+        vendor=vendor,
+        item=item,
+        category=category,
+        total_cost=Decimal(cost),
+        business_use_percentage=business_use,
+        payment_method="credit",
+        related_asset=asset,
+        related_project=Project.objects.get(slug=project) if project else None,
+        about=machine if asset else "",
+        about_name=MACHINE if asset else "",
+    )
+
+
+def _receipt(vendor, date, amount, *, picture=False, **filed):
+    content, extension, kind = (_PICTURE, "png", "image/png") if picture else (_RECEIPT, "pdf", "application/pdf")
+    return Receipt.objects.create(
+        file=ContentFile(content, name=f"receipt-{vendor.lower()}-{date.isoformat()}.{extension}"),
+        original_filename=f"{vendor} receipt.{extension}",
+        content_type=kind,
+        size_bytes=len(content),
+        vendor=vendor,
+        date=date,
+        amount=amount,
+        **filed,
+    )

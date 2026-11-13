@@ -6,21 +6,16 @@ person and an agent read one answer, each blocker an id an agent can act on.
 HQ's own image is never upgraded from here: only its signed pipeline deploys it.
 """
 
-import re
-import shlex
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-lazy from django.conf import settings
-
 from .containers import BEHIND, SERIOUS, VULNERABLE, Container, containers, ranked
 from .images import affected, version
 from .ui import ended
-lazy from . import exposure, hq_self
+lazy from . import exposure
 lazy from .container_standard import DOCKER_SOCKETS, runtime_path, system_path
 lazy from .exposure import LEVELS
-lazy from .github_public import github_repository
 
 PATCH = "patch"
 MINOR = "minor"
@@ -66,22 +61,6 @@ class Plan:
     @property
     def viable(self) -> bool:
         return not self.blockers
-
-    @property
-    def install(self) -> tuple[Step, ...]:
-        """How to give its machine the helper, while that is what stands in the way."""
-
-        if not any(blocker.id == "no-apply-path" for blocker in self.blockers):
-            return ()
-        machine = self.container.machine
-        return install_steps(machine.name, deployed_here=machine.runs_hq)
-
-    @property
-    def install_brought(self) -> bool:
-        """Whether HQ's own deploys bring the helper to its machine: only to the
-        one HQ runs on, which is the one its deploy targets."""
-
-        return bool(self.container.machine.runs_hq)
 
     @property
     def stateful(self) -> bool:
@@ -279,9 +258,9 @@ def _blockers(item: Container, standing: Any, introduces) -> tuple[Blocker, ...]
         )
     if introduces:
         found.append(Blocker("target-affected", f"{standing.latest} brings a known vulnerability of its own."))
-    # The queue does not yet send an upgrade to the one machine it concerns,
-    # with or without the helper there (``install_steps``).
-    found.append(Blocker("no-apply-path", f"HQ cannot apply an upgrade on {item.machine.name} yet."))
+    # The queue sends no upgrade to the one machine it concerns. Said as that
+    # missing step, since the page draws the reason under "Not yet, because".
+    found.append(Blocker("no-apply-path", ended(f"HQ does not send upgrades to {item.machine.name}")))
     return tuple(found)
 
 
@@ -396,150 +375,6 @@ def readiness_of(item: Container) -> Readiness:
         if blocker.id != "not-a-patch"
     )
     return Readiness(item, data, verified_by, blockers, not_automatic)
-
-
-# The helper is `hq-host upgrade`, in the root-owned tree each deploy syncs
-# (controller/host/upgrade).
-HELPER = "/usr/local/lib/severino-hq/deploy/bin/hq-host"
-SUDOERS = "/etc/sudoers.d/severino-hq-upgrade"
-# The one directory whose direct children the helper upgrades. The helper
-# holds the same constant, and nothing a sudo caller passes can move it.
-STACKS_ROOT = "/opt/apps"
-
-# An upgrade's arguments in the form the rule allows, naming a stack that does
-# not exist and a digest of zeros, so `sudo -l` with them asks whether the rule
-# allows such a call without naming anything real; were it run, the helper
-# would refuse it.
-_PROBE = (
-    f"upgrade --operation sudo-check --project-dir {STACKS_ROOT}/example --service example "
-    f"--from example/app:1 --to example/app@sha256:{'0' * 64}"
-)
-
-# What a release's signature is checked against: the source's compose
-# workflow on main, as hq-host's deploy checks it (controller/host/deploy.go).
-SIGNER_ISSUER = "https://token.actions.githubusercontent.com"
-_PINNED = re.compile(r"^[a-z0-9][a-z0-9_./:-]*@sha256:[0-9a-f]{64}$")
-
-
-def sudoers_command() -> str:
-    """The helper with any arguments. sudo-rs matches no pattern inside an
-    argument, so the helper's own parser, run as root, is the boundary
-    (controller/host/upgrade: each flag once, every value whole by its
-    pattern, the stack directly under STACKS_ROOT)."""
-
-    return f"{HELPER} upgrade *"
-
-
-def signer(source: str) -> str:
-    """The certificate identity a release of ``source`` is signed with, or ""
-    when it names no GitHub repository."""
-
-    named = github_repository(source)
-    if named is None:
-        return ""
-    return rf"^https://github\.com/{re.escape('/'.join(named))}/\.github/workflows/compose\.yml@refs/heads/main$"
-
-
-def _running_image() -> str:
-    """The digest-pinned image HQ runs, or "" when HQ cannot tell."""
-
-    container = hq_self.own_container()
-    image = str(container.running.image) if container is not None else ""
-    return image if _PINNED.match(image) else ""
-
-
-def _copy_steps(machine: str) -> tuple[Step, ...]:
-    """The helper put on a machine HQ's deploys never reach: hq-host, copied out
-    of the release HQ runs once its signature is verified, refused when that
-    release is built for another platform than the machine's."""
-
-    image = _running_image()
-    identity = signer(settings.SEVERINO_HQ_SOURCE)
-    if not (image and identity):
-        fetch = _copy_from_hq(machine)
-    else:
-        platform = "{{.Os}}/{{.Architecture}}"
-        fetch = Step(
-            "fetch",
-            f"On {machine}, take hq-host from the release HQ runs, once its signature checks out "
-            "(this needs cosign there, and read access to the image)",
-            f"image={image} && cosign verify --certificate-oidc-issuer {SIGNER_ISSUER} "
-            f"--certificate-identity-regexp '{identity}' \"$image\" >/dev/null "
-            '&& docker pull -q "$image" >/dev/null '
-            f'&& built="$(docker image inspect --format \'{platform}\' "$image")" '
-            "&& here=\"$(docker version --format '{{.Server.Os}}/{{.Server.Arch}}')\" "
-            '&& { [ "$built" = "$here" ] || { echo "hq-host in this release is built for $built; '
-            f'{machine} runs $here" >&2; false; }}; }} '
-            '&& container="$(docker create --pull never "$image")" '
-            '&& docker cp "$container:/app/deploy/bin/hq-host" ./hq-host && docker rm "$container" >/dev/null',
-        )
-    directory = HELPER.rsplit("/", 1)[0]
-    return (
-        fetch,
-        Step(
-            "install",
-            f"Install it on {machine} owned by root",
-            f"sudo install -d -o root -g root -m 0755 {directory} "
-            f"&& sudo install -o root -g root -m 0755 hq-host {HELPER}",
-        ),
-    )
-
-
-def _copy_from_hq(machine: str) -> Step:
-    """The helper copied from the machine HQ runs on, where every deploy
-    installs it from the signed release, when HQ cannot name that release
-    itself; refused when the two machines run different platforms."""
-
-    hq_machine = hq_self.own_machine()
-    source = str(hq_machine.name) if hq_machine is not None else ""
-    if not source or source == machine:
-        return Step(
-            "fetch",
-            f"Copy hq-host to {machine} from the machine HQ runs on, where every deploy of HQ installs it, "
-            "if the two machines run the same platform. HQ cannot tell which machine that is, so it cannot "
-            "write the command.",
-            "",
-        )
-    there, here = shlex.quote(source), shlex.quote(machine)
-    return Step(
-        "fetch",
-        f"From your own computer, copy hq-host to {machine} from {source}, where every deploy of HQ "
-        "installs it. It stops if the two machines run different platforms.",
-        f'built="$(ssh {there} uname -sm)" && runs="$(ssh {here} uname -sm)" '
-        f'&& {{ [ "$built" = "$runs" ] || {{ echo "hq-host on {source} is built for $built; '
-        f'{machine} runs $runs" >&2; false; }}; }} '
-        f"&& scp -3 {there}:{HELPER} {here}:hq-host",
-    )
-
-
-def install_steps(machine: str, *, deployed_here: bool = False) -> tuple[Step, ...]:
-    """The helper's install on one machine: on the machine HQ deploys to, every
-    deploy brings it; anywhere else it is copied there root-owned first. Then
-    a sudo rule for it, with only the arguments it takes, and nothing else.
-
-    HQ does not know which account the controller signs in as on a machine
-    (the controller's own environment holds it), so the step names a
-    placeholder and refuses to write the rule until it is replaced.
-    """
-
-    return (() if deployed_here else _copy_steps(machine)) + (
-        Step(
-            "allow",
-            f"On {machine}, let the controller run it with an upgrade's arguments, and nothing else. "
-            "HQ does not know which account the controller signs in as there: put that account in place of "
-            "CONTROLLER_ACCOUNT first.",
-            'account=CONTROLLER_ACCOUNT && id -u "$account" >/dev/null '
-            f"&& printf '%s ALL=(root) NOPASSWD: %s\\n' \"$account\" '{sudoers_command()}' "
-            f"| sudo tee {SUDOERS} >/dev/null && sudo chmod 0440 {SUDOERS} && sudo visudo -cf {SUDOERS}",
-        ),
-        Step(
-            "check",
-            "Signed in as that account, check that sudo allows it: sudo prints the helper's command when the "
-            "rule allows it. sudo -l only says whether a call is allowed, and the call it asks about names a "
-            "stack that does not exist (example) and a digest of zeros.",
-            f"sudo -n -l {HELPER} {_PROBE}",
-        ),
-    )
 
 
 def _uncheckable(standing: Any) -> tuple[Blocker, ...]:

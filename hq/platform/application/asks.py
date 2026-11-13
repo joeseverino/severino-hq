@@ -18,9 +18,10 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect
 from django.utils import timezone
 
-lazy from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+lazy from hq.domains.control_plane.models import OperationState, ProviderConnection, ProviderInventory
 lazy from hq.domains.control_plane.providers import registry_label
 lazy from hq.domains.control_plane.reading_parts import WHOLE, refused_parts
+lazy from hq.domains.jobs.models import JobState
 
 from .describe import Describe, listed
 from .moments import duration
@@ -28,7 +29,9 @@ from .routes import reverse
 from .ui import ended
 lazy from . import cadence
 lazy from .cadence import every_sweep, read_request_lifetime
+lazy from .resource_operations import headline as operation_headline
 lazy from .security import safe_next
+lazy from .work_runs import LAPSED
 
 IDLE = "idle"
 QUEUED = "queued"
@@ -44,9 +47,13 @@ _LABELS = {IDLE: "", QUEUED: "Waiting", RUNNING: "Running", DONE: "Done", FAILED
 # What asked-for work says while it waits its turn, and while a read is under way.
 WAITING = "Waiting…"
 REFRESHING = "Refreshing…"
-# What a read asked of the controller says while it waits for one to arrive,
-# and when none is arriving to take it.
-READ_WAITING = "Refresh asked for; HQ reads it shortly."
+# What a read says once it is in, and what a page says of a newer reading it
+# could not draw in place, with the link that loads it.
+REFRESHED = "Refreshed just now."
+NEWER_READING = "A newer reading is in."
+SHOW_NEWER = "Show the reading"
+# What a read asked of the controller says when none is arriving to take it;
+# while one is on its way, it says REFRESHING.
 READ_UNTAKEN = "Cannot refresh: {absent}"
 # What a saved change says of when it reaches the live system.
 APPLIES_SHORTLY = "HQ applies it shortly."
@@ -70,6 +77,16 @@ class StandingAnswer(TypedDict):
     percent: Annotated[int | None, Describe("How far along the work is, where it knows; null where it does not.")]
 
 
+def _bare(said: str) -> str:
+    return said.strip().rstrip(".…").strip().casefold()
+
+
+def restates(sentence: str, word: str) -> bool:
+    """Whether ``sentence`` says nothing ``word`` does not, its stops aside."""
+
+    return bool(sentence) and _bare(sentence) == _bare(word)
+
+
 @dataclass(frozen=True, slots=True)
 class Standing:
     """How one piece of asked-for work stands; a status resource answers with ``as_json``."""
@@ -83,6 +100,13 @@ class Standing:
     percent: int | None = None
     # The state in words, where the work's own record has them.
     word: str = ""
+
+    def __post_init__(self) -> None:
+        # Every caller says how its work stands through here, so a sentence
+        # that only says the state's word again ("Waiting" and "Waiting…") is
+        # dropped once, for every control, and the word stands alone.
+        if restates(self.note, self.label):
+            object.__setattr__(self, "note", "")
 
     @property
     def live(self) -> bool:
@@ -122,7 +146,7 @@ class Ask:
     # The resource that says how the work stands while it is live.
     status_url: str = ""
     # A CSS selector for the part of the page the result shows in, fetched
-    # again when the work ends; without one the page is loaded again.
+    # again when the work ends; without one, the page's content.
     refresh: str = ""
     name: str = "action"
     value: str = ""
@@ -204,17 +228,18 @@ def read_status_url(kinds: Iterable[str], asked: datetime, *, connection_ref: st
 def _untried(asked: datetime) -> Standing:
     """How a read asked for at ``asked``, and not yet answered, stands: under
     way once the controller has arrived since, waiting while one is due, and
-    failed when none is arriving to take it."""
+    failed when none is arriving to take it. Readings in a database copied from
+    elsewhere are no controller of this HQ's (``ControllerStanding.here``)."""
 
     controller = cadence.controller_standing()
-    if controller.seen_at is None:
-        return Standing(FAILED, ended(READ_UNTAKEN.format(absent="no controller has ever reported")), since=asked)
+    if controller.seen_at is None or not controller.here:
+        return Standing(FAILED, ended(READ_UNTAKEN.format(absent="no controller reports to this HQ")), since=asked)
     if controller.seen_at > asked:
         return Standing(RUNNING, REFRESHING, since=asked)
     if controller.silent:
         silence = duration(timezone.now() - controller.seen_at)
         return Standing(FAILED, ended(READ_UNTAKEN.format(absent=f"no controller seen in {silence}")), since=asked)
-    return Standing(QUEUED, READ_WAITING, since=asked)
+    return Standing(QUEUED, REFRESHING, since=asked)
 
 
 def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str = "") -> Standing:
@@ -262,22 +287,23 @@ def read_standing(kinds: Iterable[str], asked: datetime, *, connection_ref: str 
     ]
     if refused:
         return Standing(FAILED, ended(refused[0].phrase), since=asked)
-    return Standing(DONE, "Refreshed just now.", since=asked)
+    return Standing(DONE, REFRESHED, since=asked)
 
 
 # ----- Jobs the runner runs ---------------------------------------------------
 
 
+# How work stands by the state it is seen in, as ``jobs.JobState`` says it,
+# so a job and an operation a worker carries out read alike; any other has
+# ended badly.
+_STANDS = {"queued": QUEUED, "running": RUNNING, "succeeded": DONE}
+
+
 def job_standing(job: Any) -> Standing:
     """How a ``jobs.Job`` stands, in the shared shape."""
 
-    states = {"queued": QUEUED, "running": RUNNING, "succeeded": DONE}
-    state = states.get(job.seen_state, FAILED)
-    note = job.note
-    if state == FAILED:
-        note = job.seen_error or "Failed."
-    elif state == QUEUED and not note:
-        note = WAITING
+    state = _STANDS.get(job.seen_state, FAILED)
+    note = job.seen_error if state == FAILED else job.note
     return Standing(
         state,
         note,
@@ -285,3 +311,17 @@ def job_standing(job: Any) -> Standing:
         percent=job.percent if state != DONE else 100,
         word=job.seen_state_display,
     )
+
+
+# ----- Operations a worker carries out ----------------------------------------
+
+
+def operation_standing(operation: Any) -> Standing:
+    """How an ``OperationRequest`` stands, in the shared shape: by the state
+    Jobs shows it in, which its query annotates as ``seen``
+    (``work_runs.run_seen_state``), and in the sentence its history says."""
+
+    seen = JobState(operation.seen)
+    lapsed = seen == JobState.LOST and operation.state == OperationState.CLAIMED
+    note = LAPSED if lapsed else operation_headline(operation)
+    return Standing(_STANDS.get(seen, FAILED), note, since=operation.created_at, word=seen.label)

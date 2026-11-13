@@ -1,0 +1,13 @@
+{% comment %}
+The answers of a ChoiceCards field (hq.platform.application.forms), each a card:
+its radio, its few words as the radio's name, and what choosing it does as the
+radio's description. The label reaches over the whole card, so pressing
+anywhere on it chooses (forms.css, "Choice cards").
+{% endcomment %}
+{% with id=widget.attrs.id %}<div class="choice-cards"{% if id %} id="{{ id }}" role="radiogroup" aria-labelledby="{{ id }}_label"{% endif %}>{% for group, options, index in widget.optgroups %}{% for option in options %}
+  <div class="choice-card">
+    {% include "django/forms/widgets/input.html" with widget=option %}
+    <label for="{{ option.attrs.id }}">{{ option.label|breakable }}</label>
+    {% if option.description %}<p class="choice-card-what" id="{{ option.attrs.id }}_what">{{ option.description|breakable }}</p>{% endif %}
+  </div>{% endfor %}{% endfor %}
+</div>{% endwith %}

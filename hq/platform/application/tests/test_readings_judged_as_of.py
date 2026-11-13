@@ -13,13 +13,20 @@ from hq.domains.control_plane.tests import bridge_client
 
 from ..cadence import slowest_sweep_interval
 from ..derivation_testing import frozen, uncached
+from ..filesystem_findings import FilesystemSpace
 from ..findings import RULES, derive_findings
 from ..moments import when
 from ..reading_facts import FactRow
+from ..reboot_findings import EdgeRebootState, RebootState
 from ..render_status_findings import Rendering
 from ..topology import derive_topology
 from ..unit_findings import UnitState
-from . import test_render_status as render, test_unit_findings as units
+from . import (
+    test_filesystem_findings as filesystems,
+    test_reboot_findings as reboots,
+    test_render_status as render,
+    test_unit_findings as units,
+)
 from .test_tailnet_posture import EVERYTHING, raised, tailnet_connection
 
 # Past the slowest the controller ever reads, so nothing it says is current.
@@ -98,7 +105,28 @@ def _aged_units() -> None:
     )
 
 
-READINGS = {Rendering: (RENDER_STATUS_KIND, _aged_render_status), UnitState: (UNIT_KIND, _aged_units)}
+def _aged_filesystems() -> None:
+    filesystems.sweep(filesystems.filesystem(free=59 * 1000 * 1000, read_at=units.stamp(AGED)), age=AGED)
+
+
+def _aged_reboot() -> None:
+    reboots.sweep(reboots.reading(read_at=units.stamp(AGED)), age=AGED)
+
+
+def _aged_edge_reboot() -> None:
+    reboots.edge()
+    reboots.sweep(
+        reboots.reading(connection_ref="example-edge", read_at=units.stamp(AGED)), kind=reboots.EDGE_KIND, age=AGED
+    )
+
+
+READINGS = {
+    Rendering: (RENDER_STATUS_KIND, _aged_render_status),
+    UnitState: (UNIT_KIND, _aged_units),
+    FilesystemSpace: (filesystems.KIND, _aged_filesystems),
+    RebootState: (reboots.KIND, _aged_reboot),
+    EdgeRebootState: (reboots.EDGE_KIND, _aged_edge_reboot),
+}
 KINDS = frozenset(kind for kind, _store in READINGS.values())
 
 
@@ -114,6 +142,12 @@ def said(now) -> dict[tuple[str, str, str], tuple]:
     }
 
 
+def _descendants(row: type) -> set[type]:
+    """Every row a reading is stored as, a row of a row included."""
+
+    return {found for child in row.__subclasses__() for found in (child, *_descendants(child))}
+
+
 class AgedReadingGuardTests(TestCase):
     """Every rule in ``findings.RULES``, over every reading of a machine aged
     past the slowest sweep."""
@@ -125,13 +159,23 @@ class AgedReadingGuardTests(TestCase):
         self.taken = {row.kind: row.observed_at for row in ProviderInventory.objects.filter(kind__in=KINDS)}
 
     def test_every_reading_of_a_machine_is_covered(self):
-        self.assertEqual(set(READINGS), set(FactRow.__subclasses__()))
+        self.assertEqual(set(READINGS), _descendants(FactRow))
         self.assertTrue(RULES)
 
     def test_the_readings_raise_their_rules_when_judged_as_they_were_taken(self):
         fired = {rule for rule, _subject, _kind in said(min(self.taken.values()) + timedelta(minutes=1))}
 
-        self.assertLessEqual({"render-failing", "connect-sync-stalled", "unit-failed", "timer-stalled"}, fired)
+        self.assertLessEqual(
+            {
+                "render-failing",
+                "connect-sync-stalled",
+                "unit-failed",
+                "timer-stalled",
+                "filesystem-nearly-full",
+                "reboot-pending",
+            },
+            fired,
+        )
 
     def test_no_rule_measures_an_aged_reading_from_now(self):
         now = timezone.now()

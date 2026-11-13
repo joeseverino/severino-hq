@@ -5,26 +5,21 @@ it is defined at; hovering says the rule and its line in a tooltip. A plain
 click does nothing; the panel is the page's own markup, opened by app.js and
 dismissed like any popover. With `mark` (a queue row) it is a small word in its tone
 after the title when the item is urgent, and for a screen reader only when it
-is not.
+is not or when the row is `quiet`.
 {% endcomment %}
-{% with panel="origin-"|add:item.origin.key|slugify %}
-{% if not mark %}{% status item.urgency tone=item|urgency_tone tip=item|origin_tip data_origin=panel %}{% elif item.notice or item.status != "serious" %}{% status item.urgency tone=item|urgency_tone css="is-mark visually-hidden" tip=item|origin_tip:"mark" data_origin=panel %}{% else %}{% status item.urgency tone=item|urgency_tone css="is-mark" tip=item|origin_tip:"mark" data_origin=panel %}{% endif %}
-<div class="modal origin-panel" id="{{ panel }}" popover>
-  <div class="modal-panel">
-    <div class="modal-head">
-      <h2>{{ item.label|breakable }}</h2>
-      <button type="button" class="modal-close" popovertarget="{{ panel }}" popovertargetaction="hide" aria-label="Close">&times;</button>
-    </div>
-    <dl class="kv compact">
-      {% if item.origin.rule %}
-        <dt>Rule</dt><dd>{{ item.origin.title|breakable }} <code>{{ item.origin.rule|breakable }}</code></dd>
-        <dt>Severity</dt><dd>{{ item.origin.severity|breakable }}</dd>
-        {% if item.origin.where %}<dt>Defined at</dt><dd><code>{{ item.origin.where|breakable }}</code></dd>{% endif %}
-        {% if item.origin.subsumes %}<dt>Stands in for</dt><dd>{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</dd>{% endif %}
-      {% endif %}
-      <dt>From</dt><dd>{{ item.origin.source|breakable }}</dd>
-      <dt>Key</dt><dd><code>{{ item.origin.key|breakable }}</code></dd>
-    </dl>
-  </div>
-</div>
-{% endwith %}
+{% partialdef origin %}
+{% facts %}
+  {% if item.origin.rule %}
+    {% fact "Rule" %}{{ item.origin.title|breakable }} <code>{{ item.origin.rule|breakable }}</code>{% endfact %}
+    {% fact "Severity" value=item.origin.severity %}
+    {% if item.origin.where %}{% fact "Defined at" %}<code>{{ item.origin.where|breakable }}</code>{% endfact %}{% endif %}
+    {% if item.origin.subsumes %}{% fact "Stands in for" %}{% for name in item.origin.subsumes %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}{% endif %}
+  {% endif %}
+  {% fact "From" value=item.origin.source %}
+  {% fact "Key" %}<code>{{ item.origin.key|breakable }}</code>{% endfact %}
+{% endfacts %}
+{% endpartialdef %}
+{% with panel="origin-"|add:item.origin.key|slugify %}{% with dialog="modal-"|add:panel %}
+{% if not mark %}{% status item.urgency tone=item|urgency_tone tip=item|origin_tip data_origin=dialog %}{% elif quiet or item.notice or item.status != "serious" %}{% status item.urgency tone=item|urgency_tone css="is-mark visually-hidden" tip=item|origin_tip:"mark" data_origin=dialog %}{% else %}{% status item.urgency tone=item|urgency_tone css="is-mark" tip=item|origin_tip:"mark" data_origin=dialog %}{% endif %}
+{% include "partials/_modal.html" with id=panel title=item.label body_template="partials/_urgency_pill.html#origin" modal_class="origin-panel" popover=True %}
+{% endwith %}{% endwith %}

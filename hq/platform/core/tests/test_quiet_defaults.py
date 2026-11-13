@@ -20,7 +20,7 @@ from hq.platform.application.capability_policy import (
     split_by_default,
     submitted_rules,
 )
-from hq.platform.application.tests.markup import all_elements, elements, hrefs, select, text, with_class, within
+from hq.platform.application.tests.markup import all_elements, elements, hrefs, select, text, within
 from hq.platform.core.models import AgentIdentity, AuditLog
 
 # The name the page's placeholder asks for the every-rule part by, written out:
@@ -72,8 +72,8 @@ class AgentRulesTests(TestCase):
 
     def test_the_page_opens_on_what_differs_and_draws_the_rest_when_opened(self):
         page = self.page()
-        (rules,) = with_class(page, "policy")
-        (folded,) = [fold for fold in within(page, "class", "policy") if "section-fold" in fold.classes]
+        (rules,) = select(page, "data-policy")
+        (folded,) = [fold for fold in within(page, "data-policy") if "section-fold" in fold.classes]
         (placeholder,) = select(page, "data-fragment-name", EVERY_PART)
 
         self.assertIn("Do example.delete", rules.words)
@@ -95,7 +95,7 @@ class AgentRulesTests(TestCase):
 
     def test_without_script_the_address_draws_every_action_and_none_is_lost(self):
         page = self.page(groups=(Group("Example notes", (_row("example.note", None),)),), all=1)
-        (folded,) = [fold for fold in within(page, "class", "policy") if "section-fold" in fold.classes]
+        (folded,) = [fold for fold in within(page, "data-policy") if "section-fold" in fold.classes]
 
         self.assertIn("open", folded.attrs)
         self.assertIn("Do example.note", folded.words)
@@ -110,7 +110,7 @@ def _drawn(*answers) -> dict[str, str]:
     for answer in answers:
         for element in all_elements(answer):
             name = element.attrs.get("name", "")
-            if element.tag == "input" and name and any("policy" in held.classes for held in element.ancestors):
+            if element.tag == "input" and name and any("data-policy" in held.attrs for held in element.ancestors):
                 fields[name] = element.attrs.get("value", "")
             elif element.tag == "option" and "selected" in element.attrs:
                 fields[element.ancestors[-1].attrs["name"]] = element.attrs["value"]

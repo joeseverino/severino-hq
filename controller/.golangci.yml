@@ -16,15 +16,35 @@ linters:
   # backup, an optional NPM list, an ACME account not yet made) or a stop on
   # cancellation, and each says so where it does it.
   enable:
+    - bodyclose
     - errorlint
     - forbidigo
     - gocritic
+    - gosec
     - modernize
+    - noctx
     - perfsprint
     - revive
     - unparam
     - usestdlibvars
   settings:
+    gosec:
+      excludes:
+        # Unchecked errors, which errcheck holds with the exclusions below;
+        # G104 would repeat it without them.
+        - G104
+        # A file opened by any path held in a variable, which is every file the
+        # controller opens. A path an outside input can steer is G703's, which
+        # traces it from its source.
+        - G304
+      config:
+        # A directory the controller makes is writable by root alone; one that
+        # systemd, the web container or a reader of the public key must list
+        # stays readable, and a secret is closed by its file's own mode.
+        G301: "0755"
+        # A chmod or an open closes the path to every other account. A
+        # directory needs its owner's execute bit, which the default refuses.
+        G302: "0700"
     errcheck:
       exclude-functions:
         # os.Root's twins of os.Remove and os.RemoveAll, which the preset below
@@ -101,6 +121,15 @@ linters:
       - linters: [forbidigo]
         path: (^internal/hostcore/process\.go$|_test\.go$)
         text: hostcore\.Process
+      # The same one place, where gosec's G204 repeats forbidigo's ban on
+      # starting a program anywhere else.
+      - linters: [gosec]
+        path: ^internal/hostcore/process\.go$
+        text: G204
+      # A test runs as whoever runs the suite, on files under its own
+      # temporary directory and testdata, and builds into no binary.
+      - linters: [gosec]
+        path: _test\.go$
 
 issues:
   max-issues-per-linter: 0

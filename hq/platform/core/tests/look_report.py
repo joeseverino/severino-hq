@@ -5,6 +5,7 @@ what a change drew and never for which run drew it."""
 import math
 import re
 from collections import Counter
+from collections.abc import Callable
 from itertools import groupby, zip_longest
 
 # What a look found, by page and width, each finding a line.
@@ -38,12 +39,27 @@ def failed_pages(found: Found) -> list[str]:
 
 
 def verdict_line(rule: str, found: Found) -> str:
+    """What a run of ``rule`` came to, with how many pages and widths it judged."""
+
     pages = list(dict.fromkeys(name for name, _ in found))
-    widths = ", ".join(map(str, dict.fromkeys(width for _, width in found)))
+    widths = list(dict.fromkeys(width for _, width in found))
+    at = f"{len(widths)} width{'s' * (len(widths) != 1)} ({', '.join(map(str, widths))})"
     failed = failed_pages(found)
     if not failed:
-        return f"{rule} holds on every page at {widths}"
-    return f"{rule} fails on {len(failed)} of {len(pages)} pages: {', '.join(failed)}"
+        return f"{rule} holds on all {len(pages)} page{'s' * (len(pages) != 1)} at {at}"
+    return f"{rule} fails on {len(failed)} of {len(pages)} pages at {at}: {', '.join(failed)}"
+
+
+def found_lines(found: Found, report: Callable[[str, int], str] | None = None) -> list[str]:
+    """A line for each page and width that has a finding: the first, which a
+    survey's check begins with its name, so a failure reads without opening a
+    file, then how many and the file ``report`` names that holds them all."""
+
+    return [
+        f"{name} at {width}: {said[0]} ({len(said)} found{f', in {report(name, width)}' if report else ''})"
+        for (name, width), said in found.items()
+        if said
+    ]
 
 
 # What a finding names that is drawn anew on every run, so no fact of the
@@ -117,6 +133,14 @@ def compare(base: Found, branch: Found) -> tuple[Found, Found]:
     return {key: said for key, said in new.items() if said}, {key: said for key, said in fixed.items() if said}
 
 
+def drawn_only_here(base: Found, branch: Found) -> list[str]:
+    """The pages the branch looked at that the base drew at no width: new here,
+    or ones the base's own code cannot draw, so each finding on them is new."""
+
+    at_base = {name for name, _ in base}
+    return list(dict.fromkeys(name for name, _ in branch if name not in at_base))
+
+
 def against(ref: str, rule: str, base: Found, branch: Found) -> tuple[str, list[str], bool]:
     """A look against a base: the whole report, new and fixed findings page by
     page and then all this checkout found; what is printed, a line for each new finding and the verdict last;
@@ -175,7 +199,7 @@ def looked(shots: list[tuple[str, str]], said: list[str], rule: str, report: str
 
     lines = [f"  shot {path}{f', {shows}' if shows else ''}" for path, shows in shots]
     if rule:
-        lines.append(f"  {rule}: {len(said)} found, in {report}" if said else f"  {rule} holds")
+        lines.append(f"  {rule}: {said[0]} ({len(said)} found, in {report})" if said else f"  {rule} holds")
     else:
         lines += [f"  {line}" for line in said]
     return lines + ([f"  error: {line}" for line in errors] or ["  no console error, uncaught error or policy refusal"])

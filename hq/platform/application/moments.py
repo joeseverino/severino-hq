@@ -12,6 +12,7 @@ lazy from django.utils.timesince import timesince
 
 from .timestamps import moment as _stamp
 lazy from .derivations import reached, since, this_year
+lazy from .expiry import days_until
 lazy from .ui import MISSING, counted
 
 
@@ -223,6 +224,26 @@ def span(days: int) -> str:
     said = counted(abs(days), "day") if abs(days) <= DAYS_SAID_AS_DAYS else duration(timedelta(days=abs(days)))
     # A count below nothing is that long past.
     return f"{said} overdue" if days < 0 else said
+
+
+def expiry_words(when: datetime | int, now: datetime | None = None) -> str:
+    """When something runs out, from today: "expires in 3 days", "expires today", "expired 4 days ago".
+
+    ``when`` is the moment it runs out, or the days left as ``days_until``
+    counts them. A past expiry is a past tense, never a count below nothing.
+    The controller's ``expiryWords`` says the same, and
+    ``controller/providers/testdata/expiry-words.json`` holds both to one table.
+    """
+
+    days = when if isinstance(when, int) else days_until(when, now)
+    if days > 0:
+        return f"expires in {span(days)}"
+    if days == 0:
+        return "expires today"
+    # days_until counts a moment past by under a day as -1, so the whole days
+    # since are one fewer, truncated as ``ago`` truncates an age.
+    since = -days - 1
+    return f"expired {span(since)} ago" if since else "expired today"
 
 
 def _ago_or_day(value: date) -> str:

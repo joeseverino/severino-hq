@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 # Whether this composition has been published before, and whether to build it.
-#   tools/pipeline/composition-fingerprint.sh HOST_IMAGE ADMISSIONS POLICY
-# What a composition IS: this host image, these admitted wheels (ADMISSIONS,
-# from admissions.sh find) and this admission policy. Two runs agreeing on all
-# three produce the same image, so there is nothing to build and nothing to
-# deploy. Asked before anything is downloaded or verified.
+#   tools/pipeline/composition-fingerprint.sh HOST_IMAGE RUNNER_IMAGE ADMISSIONS POLICY
+# What a composition IS: this host image, the automation worker's image it
+# pins, these admitted wheels (ADMISSIONS, from admissions.sh find) and this
+# admission policy. Two runs agreeing on all four produce the same image, so
+# there is nothing to build and nothing to deploy. Asked before anything is
+# downloaded or verified.
 #
 # Writes fingerprint, tag (ghcr.io/$GITHUB_REPOSITORY/composition:fp-…),
 # changed and build to $GITHUB_OUTPUT. FORCE=false, which only an admission's
 # dispatch passes, is the one case that does not rebuild what is published.
 set -euo pipefail
 
-[ "$#" -eq 3 ] || { echo "usage: $0 HOST_IMAGE ADMISSIONS POLICY" >&2; exit 2; }
-host_image=$1 admissions=$2 policy=$3
+[ "$#" -eq 4 ] || { echo "usage: $0 HOST_IMAGE RUNNER_IMAGE ADMISSIONS POLICY" >&2; exit 2; }
+host_image=$1 runner_image=$2 admissions=$3 policy=$4
 
-fingerprint=$(printf '%s\n%s\n%s\n' \
+fingerprint=$(printf '%s\n%s\n%s\n%s\n' \
   "$host_image" \
+  "$runner_image" \
   "$(sha256sum "$admissions" | cut -d' ' -f1)" \
   "$(sha256sum "$policy" | cut -d' ' -f1)" |
   sha256sum | cut -c1-32)

@@ -6,11 +6,13 @@ lazy from urllib.parse import urlencode
 from django.shortcuts import redirect
 from django.views.generic import TemplateView
 
-from hq.platform.application.pages import PageMixin
+from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.routes import reverse
 from hq.platform.application.timestamps import moment
 from hq.platform.application.web_writes import execute_posted, refused
+lazy from hq.domains.control_plane.forms import LOOKUP_FORMS
 lazy from hq.platform.application import security
+lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.lookup import LOOK_UP_ADDRESS
 lazy from hq.platform.application.toolkit import tab_named, tabs_for
 
@@ -26,7 +28,7 @@ class ToolsView(PageMixin, TemplateView):
 
     template_name = "control_plane/tools.html"
     page_title = "Tools"
-    page_lede = "These look a name up on the public internet, not in AdGuard."
+    page_lede = "Answers from the public internet, not AdGuard."
 
     @override
     def get_context_data(self, **kwargs):
@@ -34,7 +36,7 @@ class ToolsView(PageMixin, TemplateView):
         principal = security.web_principal(self.request.user)
         tabs = tabs_for(principal)
         current = tab_named(self.request.GET.get("tab", ""), principal)
-        context["tabs"] = tabs
+        context["tabs"] = [{"id": each.id, "label": each.label, "current": each == current} for each in tabs]
         context["tab"] = current
         if current is None:
             return context
@@ -42,7 +44,10 @@ class ToolsView(PageMixin, TemplateView):
         # Only what this tab offers, and only what was actually asked. An empty
         # field is not a lookup of the empty string.
         asked = {name: self.request.GET.get(field, "").strip() for name, field in current.capabilities.items()}
-        context["asked"] = asked
+        context["lookups"] = {
+            name: LOOKUP_FORMS[name](initial={"tab": current.id, field: asked[name]})
+            for name, field in current.capabilities.items()
+        }
         context["results"] = {
             name: execute_posted(self.request, name, {current.capabilities[name]: value})
             for name, value in asked.items()
@@ -56,6 +61,15 @@ class ToolsView(PageMixin, TemplateView):
             stamp = reading.get("observed_at") if isinstance(reading, dict) else None
             if (when := moment(stamp, naive="keep")) is not None:
                 reading["observed_at"] = when
+        # A stored answer is read again by a POST of its own, beside the moment it was read.
+        address = context["results"].get(LOOK_UP_ADDRESS)
+        if isinstance(address, dict) and address.get("observed_at"):
+            context["reread"] = PageAction(
+                capability_words(LOOK_UP_ADDRESS),
+                reverse("control_plane:tools"),
+                method="post",
+                fields={"tab": current.id, "address": asked[LOOK_UP_ADDRESS]},
+            )
         return context
 
     def post(self, request, *args, **kwargs):

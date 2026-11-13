@@ -25,6 +25,8 @@ from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 lazy from django.contrib.staticfiles.storage import staticfiles_storage
 
+from demo import first_glance
+from hq.platform.application.decisions import item_anchor
 from hq.platform.application.fragments import regions
 from hq.platform.core import seeds
 from hq.platform.core.example_estate import REQUEST, SSO
@@ -40,6 +42,8 @@ _SKIPPED = ("/accounts/", "/oidc/", "/api/v2/", "/static/", "/csp-report/", "/ad
 _MOST_PAGES = 800
 # Links, and addresses a script reads from the page (data-*-url).
 _HREF = re.compile(r'(?:href|data-[\w-]+-url)="(/[^"#?]*)')
+# An image a page draws from one of HQ's own addresses, not a static file.
+_PICTURE = re.compile(r'(<img\b[^>]*\ssrc=")(/(?!static/)[^"#?]*/)(")')
 # Inserted right after the charset tag, before HQ's own scripts.
 _INJECT = '<script src="/static/js/demo-theme.js"></script><script defer src="/static/js/demo.js"></script>'
 # A static page has no response to draw a nonce for: one saved into the HTML is
@@ -345,14 +349,19 @@ class DemoBuild(TestCase):
         with suppress(FileNotFoundError):
             shutil.rmtree(OUT)
         OUT.mkdir(parents=True)
+        seed = os.environ.get("HQ_DEMO_SEED") or "showcase"
         # A saved copy: what a page says about the reader is an example, not
         # the reader's, and each page says what the copy is.
         with (
             as_production(),
             override_settings(SEVERINO_RENDERED_COPY=True),
-            seeds.built(os.environ.get("HQ_DEMO_SEED") or "showcase") as owner,
+            seeds.built(seed) as owner,
             _hashed_static() as collected,
         ):
+            kept = first_glance.settle(owner) if seed in first_glance.ESTATES else []
+            # Each thing left to do on purpose by where it is on Needs you, for the checks.
+            (OUT / "__fragments__").mkdir()
+            (OUT / "__fragments__" / "on-purpose.json").write_text(json.dumps({item_anchor(key): key for key in kept}))
             client = _Browser(**REQUEST)
             client.force_login(owner, backend=SSO)
             # Demo data on for every page; demo.js keeps the switch from turning it off.
@@ -412,9 +421,23 @@ class DemoBuild(TestCase):
             links.extend(unescape(href) for href in _HREF.findall(fragment))
             offered.read(path, fragment)
         offered.read(path, page)
+        page = _PICTURE.sub(lambda found: self._save_picture(client, found), page)
         _write(path, _inject(page, response))
         links.extend(unescape(href) for href in _HREF.findall(page))
         return links
+
+    def _save_picture(self, client: Client, found: re.Match) -> str:
+        """An image HQ answers at an address of its own, saved under its type's
+        extension, which the tag then names: an <img> follows no redirect page."""
+
+        address = unescape(found.group(2))
+        response = client.get(address)
+        kind = response.get("Content-Type", "").split(";")[0]
+        if response.status_code != 200 or not kind.startswith("image/"):
+            return found.group(0)
+        target = address.rstrip("/") + (mimetypes.guess_extension(kind) or "")
+        _write(target, b"".join(response.streaming_content) if response.streaming else response.content, page=False)
+        return f"{found.group(1)}{target}{found.group(3)}"
 
     def _save_fragments(self, client: Client, address: str, page: str, fragments: dict[str, str]) -> list[str]:
         """Save each partial-load response of the page at ``address``, and the
@@ -485,6 +508,7 @@ class DemoBuild(TestCase):
             "nothing": _NOTHING,
             "sorts": offered.sorts,
             "refused": offered.refused,
+            "most_pages": _MOST_PAGES_OF_A_LIST,
         }
 
     def _save_reads(self, client: Client, offered: _Offered, read: set[str], fragments: dict[str, str]) -> list[str]:

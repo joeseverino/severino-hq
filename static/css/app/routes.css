@@ -87,136 +87,8 @@
 .hop-proof-key { display: grid; flex-shrink: 0; place-items: center; width: 20px; height: 20px; border-radius: var(--radius-sm); font-size: var(--text-sm); }
 .request-path li.is-unknown .hop-icon { background: linear-gradient(var(--line-2) 0 0), var(--surface); color: var(--muted-2); }
 .request-path li.is-attention .hop-icon { background: linear-gradient(var(--tone-critical-tint) 0 0), var(--surface); color: var(--danger); }
-.connection-control-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(var(--tracks-3-1), 1fr));
-  border-top: 1px solid var(--line);
-}
-.connection-control { min-width: 0; padding: var(--space-8) var(--space-9); }
-.connection-control header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); margin-bottom: var(--space-6); }
-.connection-control h3 { margin: 0; font-size: var(--text-xs); font-weight: 500; color: var(--muted); }
-.connection-control > strong { display: block; margin-bottom: var(--space-2); font-size: var(--text-md); }
-.connection-control p { margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
-.connection-control > a { display: inline-block; margin-top: var(--space-4); font-size: var(--text-xs); }
-.connection-control-good { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ok) 65%, transparent); }
-.connection-control-attention,
-.connection-control-serious { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--danger) 65%, transparent); }
-/* Nothing here restates .data-table. The primitive already gives padding,
-   alignment, a sticky head, break-word cells and .tight-col; this is only what
-   is particular to connections. Cells keep their own display: grid or flex on
-   a td drops it out of table layout and stacks the row into one column. */
-.connection-table .muted,
-.connection-table code { font-size: var(--text-2xs); }
-.connection-ability-list { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
-.connection-ability-list li {
-  display: grid;
-  grid-template-columns: 5px minmax(0, 1fr);
-  align-items: baseline;
-  gap: var(--space-3);
-  font-size: var(--text-2xs);
-  line-height: 1.35;
-}
-.connection-ability-list li::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-.connection-ability-list li.is-unavailable { color: var(--muted); }
-.connection-ability-list li.is-unavailable::before { background: var(--muted-2); }
-.connection-ability-list small { grid-column: 2; color: var(--danger); font-size: var(--text-3xs); font-weight: 650; }
-/* Short of proof is not the same as refused: an undeclared or unverified
-   requirement is a debt, said quietly; a missing or rejected grant is a stop. */
-.connection-ability-list small.connection-evidence-undeclared,
-.connection-ability-list small.connection-evidence-unverified,
-.connection-ability-list small.connection-evidence-unknown { color: var(--muted); font-weight: 600; }
-/* Lifecycle, authority and the reading's age, one under the other, in the
-   table and in the stacked card alike. How wide the line is held is the
-   table's (`.kept-line`). */
-.connection-standing { display: grid; gap: var(--space-1); justify-items: start; }
-.connection-standing .muted { font-size: var(--text-2xs); }
-.connection-authority { color: var(--muted); font-size: var(--text-2xs); }
-.connection-problems { color: var(--attn); font-size: var(--text-2xs); font-weight: 650; }
 /* A note with the names in it as links. */
 .linked-text { white-space: pre-line; overflow-wrap: anywhere; }
-.connection-authority-proven { color: var(--muted); }
-.connection-authority-missing { color: var(--danger); }
-.connection-ability-more { display: block; margin-top: var(--space-2); font-size: var(--text-3xs); color: var(--muted); }
-.connection-ability-list + .connection-ability-list { margin-top: var(--space-2); }
-/* In the row, what a connection reads is a run of names like the links beside
-   it, each kept whole, at the row's own size. */
-.connection-table td > .connection-ability-list { display: inline; }
-.connection-table td > .connection-ability-list > li { display: inline; font-size: inherit; line-height: inherit; }
-.connection-table td > .connection-ability-list > li::before { content: none; }
-.connection-table td > .connection-ability-list > li:not(:last-child)::after { content: "\a0·" / ""; color: var(--muted-2); }
-.connection-table td > .connection-ability-list > li > * + * { margin-left: var(--space-2); }
-.connection-table td > .connection-ability-more { display: inline; margin: 0 0 0 var(--space-3); font-size: var(--text-2xs); }
-/* Its names wrap one under another, so each line is a target tall. The
-   targets and the dependencies are a list each, one under the other, and
-   each name is an item: a box of its own, the whole of what it links. */
-.connection-depends { display: grid; line-height: var(--target-min); }
-.connection-depends-list { display: flex; flex-wrap: wrap; }
-/* The dot before a name keeps to it: a line breaks only between names, so
-   no dot stands on a line of its own. The name itself still wraps, and
-   asks its column for the room it holds out for (figures.css). */
-.connection-depends-list > span { white-space: nowrap; }
-.connection-depends-list > span > * { white-space: normal; }
-.connection-depends .row-less { margin-left: var(--space-2); }
-/* Opened, the rest of them, flowing across the line beneath the row. */
-.connection-ability-all { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-6); }
-.connection-ability-all > li { flex: none; }
-/* Opened, the rest are listed, so their count is not. */
-.row-detail .connection-ability-more { display: none; }
-.connection-state {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--tone-ink, var(--muted));
-  font-size: var(--text-2xs);
-  font-weight: 650;
-  white-space: nowrap;
-}
-.connection-state::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  flex: none;
-  border-radius: 50%;
-  background: currentColor;
-}
-/* Each destination is its own target, so two commands on one row cannot read
-   as one link. */
-/* Spacing only. Setting `display` here would be (0,1,1) and would silently
-   beat any single-class variant, un-centring the icon. */
-.connection-next > a,
-.connection-next > .btn { margin: 0 var(--space-2) var(--space-2) 0; }
-.connection-next > a:last-child,
-.connection-next > .btn:last-child { margin-bottom: 0; }
-/* A row's own commands are drawn by the shared action renderer as buttons and
-   read here as quiet words, so the column stays as narrow as its longest
-   phrase. The element qualifier outranks the button's tone variants
-   (`.btn.ghost.danger`), which keep only their color. */
-td.connection-next > .btn.connection-direct-action,
-td.connection-next > .btn.connection-direct-action:hover {
-  display: inline-block;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  box-shadow: none;
-  color: var(--accent-2);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  line-height: inherit;
-}
-td.connection-next > .btn.connection-direct-action.danger { color: var(--danger); }
-
-/* Each thing to do next is a control, so it keeps its line (page.css): the
-   column is as wide as its longest, and the table gives the room from columns
-   that can wrap. */
-.connection-next { min-width: 0; }
-.connection-next > .muted { display: block; max-width: 240px; margin-top: var(--space-2); font-size: var(--text-2xs); line-height: 1.35; }
 kbd {
   border: 1px solid var(--line);
   border-bottom-width: 2px;
@@ -231,12 +103,14 @@ kbd {
 /* ── Messages ───────────────────────────────────────────────────── */
 
 .messages { list-style: none; padding: 0; margin: 0 0 var(--space-8); }
-/* Same tone contract as `.pill`, at the wash fill level. A success banner and
-   a success chip therefore cannot drift apart: they read the same three
-   tokens, and only the fill differs by design. */
-/* A notice in the page: a titled callout in one of the tones, for anything
-   that needs saying before the content it is about. Tone from the modifier
-   (notice-attention, notice-info); the tone section colors it. */
+/* Among the page's messages a notice is a toast: the same part, set close,
+   one to a line. */
+.messages > li + li { margin-top: var(--space-3); }
+.messages .notice { margin: 0; padding: var(--space-4) var(--space-6); }
+/* A notice ({% notice %}): a callout in one of the tones, for anything that
+   needs saying before the content it is about. It reads the same tone
+   contract as `.pill`, at the wash fill level, so a success notice and a
+   success chip cannot drift apart; the tone section (page.css) colors it. */
 .notice {
   margin: 0 0 var(--stack-gap);
   padding: var(--space-6) var(--space-7);
@@ -251,45 +125,29 @@ kbd {
 .notice > strong { display: block; }
 /* On a saved copy, a line about the reader's connection is marked as an example. */
 span.example-connection { color: var(--muted); font-size: var(--text-2xs); font-weight: 400; }
-/* In a grid that spaces its own rows, a notice adds no margin of its own. */
-.conn > .notice { margin: 0; }
 .notice p { margin: var(--space-2) 0 0; }
-.msg {
-  padding: var(--space-4) var(--space-6); border-radius: var(--radius-sm); margin-bottom: var(--space-3);
-  font-size: var(--text-sm);
-  background: var(--tone-wash, transparent);
-  color: var(--tone-ink, inherit);
-  border: 1px solid var(--tone-line, var(--line));
+/* A notice is words, so a link in it differs from them by more than its
+   color (WCAG 1.4.1), as a link in a paragraph does (base.css). A link drawn
+   as a chip (a switch's choice) is a place to go, marked by its frame. */
+.notice a:where(:not([class]), .external-link):not(strong a, :has(> .scope-chip)) {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: .18em;
+  &:is(:hover, :focus-visible) { text-decoration-color: currentColor; }
 }
-/* Variants carry no color of their own: the tone assignment (page.css)
-   gives them one. */
 
 .pagination { display: flex; gap: var(--space-6); align-items: center; margin: var(--space-8) 0; font-size: var(--text-sm); }
 
 
-.auth-card { max-width: 380px; margin: clamp(var(--space-20), 10vh, var(--space-40)) auto; padding: var(--surface-inset, var(--space-14)); text-align: center; }
-.auth-logo { display: block; width: 64px; height: 64px; margin: 0 auto var(--space-7); }
-.auth-card h1 { font-size: var(--text-2xl); margin-bottom: var(--space-9); }
-.auth-card label { display: block; margin: var(--space-5) 0 var(--space-2); font-weight: 600; font-size: var(--text-sm); text-align: left; }
-.auth-card input { width: 100%; padding: var(--space-4) var(--space-5); font-size: var(--text-md); }
-.auth-card button { margin-top: var(--space-8); width: 100%; }
-.auth-sso { display: block; text-align: center; margin-top: var(--space-2); }
-
-.auth-note { margin: var(--space-8) 0 0; font-size: var(--text-xs); text-align: center; }
-.notice-search { justify-content: center; margin: 0 0 var(--space-8); }
-
-/* ── Dashboard: external links ─────────────────────────────────── */
-
-.ext-links { display: flex; flex-wrap: wrap; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
-.ext-links a {
-  display: inline-flex; align-items: center; gap: var(--space-3);
-  padding: var(--space-2) var(--space-6);
-  border: 1px solid var(--line); border-radius: 999px;
-  background: var(--surface); color: var(--ink-2); font-size: var(--text-sm); font-weight: 500;
-}
-.ext-links a:hover { border-color: var(--line-strong); color: var(--ink); text-decoration: none; }
-.ext-arrow { color: var(--muted-2); font-size: var(--text-xs); }
-.ext-links a:hover .ext-arrow { color: var(--accent-2); }
+/* A card that is the whole of a page outside the page frame ({% card alone=True %},
+   the sign-in): centered at a dialog's width, its mark over its title, and
+   its one action the card's width. */
+.card[data-alone] { max-width: 380px; margin: clamp(var(--space-20), 10vh, var(--space-40)) auto; padding: var(--surface-inset, var(--space-14)); text-align: center; }
+.card[data-alone] > img { display: block; margin: 0 auto var(--space-7); }
+.card[data-alone] > h1 { font-size: var(--text-2xl); margin-bottom: var(--space-9); }
+.card[data-alone] > p > .btn:only-child { display: block; margin-top: var(--space-2); }
+.card[data-alone] > p:last-child { margin-top: var(--space-8); }
 
 /* ── Responsive ─────────────────────────────────────────────────── */
 

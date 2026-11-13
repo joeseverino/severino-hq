@@ -15,7 +15,8 @@ from hq.platform.application.asks import Ask, Standing
 from hq.platform.application.plugin_testing import hand_drawn_tables, table_problems
 from hq.platform.application.routes import routed
 from hq.platform.application.tables import TableColumn, TableListMixin, ranked, typed
-from hq.platform.application.tests.markup import all_elements, elements, select, with_class, within
+from hq.platform.application.tests.markup import all_elements, elements, links, select, with_class, within
+from hq.platform.application.tests.reads import reads
 from hq.platform.core.stylesheets import stylesheet as whole_stylesheet
 
 from .signed_in_case import _AuthedTestCase
@@ -39,6 +40,7 @@ FITTED = {"dropped", "narrow"}
 
 
 @tag("source", "tree")
+@reads("**/templates/**", "static/css/**", "static/js/**")
 class TableContractTests(SimpleTestCase):
     maxDiff = None
 
@@ -69,6 +71,25 @@ class TableContractTests(SimpleTestCase):
         self.assertIn("a scroll region written by hand", table_problems(wrapped))
         in_region = '{% table_region "Things" %}' + bare + "{% endtable_region %}"
         self.assertEqual(table_problems(in_region), ["a heading not drawn by {% table_heading %}"])
+
+    def test_a_heading_outside_the_shared_table_is_refused(self):
+        """The heading's sort control and the region's fit are drawn by the
+        shared table's stylesheet, so a plain table there draws them as
+        page buttons."""
+
+        plain = (
+            '{% table_region "Things" %}<table><thead><tr>{% table_heading "Name" %}</tr></thead>'
+            "</table>{% endtable_region %}"
+        )
+        self.assertEqual(
+            table_problems(plain),
+            [
+                'a table in {% table_region %} without class="data-table"',
+                'a {% table_heading %} outside a table with class="data-table"',
+            ],
+        )
+        loose = '{% table_heading "Name" %}'
+        self.assertEqual(table_problems(loose), ['a {% table_heading %} outside a table with class="data-table"'])
 
     def test_a_declared_table_keeps_the_contract(self):
         source = (
@@ -200,6 +221,41 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(len(elements(html, "table")), 1)
         self.assertEqual(select(html, "data-empty-state"), [])
 
+    def test_an_empty_region_says_what_is_missing_or_that_its_filter_emptied_it(self):
+        """A region told what its empty tables mean says so with what would
+        fill them; one its own filter emptied says nothing matches, with the
+        way back, in place of the table and only there."""
+
+        table = (
+            '<table class="data-table"><thead><tr>{% table_heading "Name" "identifier" %}</tr></thead>'
+            "<tbody>{% for row in rows %}<tr><td>{{ row }}</td></tr>{% endfor %}</tbody></table>"
+        )
+        fill = {"label": "Add a run", "url": "/runs/new/"}
+        for options, says, offers in (
+            ('empty="No runs yet." remedy=fill', "No runs yet.", ("Add a run", "/runs/new/")),
+            (
+                'empty="No runs yet." action_url="/runs/new/" action_label="Add a run"',
+                "No runs yet.",
+                ("Add a run", "/runs/new/"),
+            ),
+            (
+                'empty="No runs yet." remedy=fill filtered=True clear="/runs/"',
+                "Nothing matches.",
+                ("Clear filters", "/runs/"),
+            ),
+        ):
+            source = "{% table_region " + f'"Runs" {options}' + " %}" + table + "{% endtable_region %}"
+            with self.subTest(options):
+                html = _render(source, {"rows": [], "fill": fill})
+                self.assertEqual(elements(html, "table"), [])
+                (empty,) = select(html, "data-empty-state")
+                self.assertTrue(empty.words.startswith(says), empty.words)
+                ((words, href),) = links(html)
+                self.assertEqual((words.startswith(offers[0]), href), (True, offers[1]))
+                html = _render(source, {"rows": ["a"], "fill": fill})
+                self.assertEqual(len(elements(html, "table")), 1)
+                self.assertEqual(select(html, "data-empty-state"), [])
+
     def test_a_region_names_the_room_its_identifiers_get_and_still_does_not_scroll(self):
         for room in ("shared", "snug"):
             with self.subTest(room):
@@ -209,6 +265,15 @@ class TableTagTests(SimpleTestCase):
                 self.assertNotIn("tabindex", region.attrs)
         (plain,) = with_class(_render('{% table_region "Services" %}{% endtable_region %}'), "table-scroll")
         self.assertFalse({"is-shared", "is-snug"} & set(plain.classes))
+
+    def test_a_compare_region_says_so_and_still_does_not_scroll(self):
+        (region,) = with_class(
+            _render('{% table_region "Changes" compare=True %}{% endtable_region %}'), "table-scroll"
+        )
+        self.assertIn("is-compare", region.classes)
+        self.assertNotIn("tabindex", region.attrs)
+        (plain,) = with_class(_render('{% table_region "Changes" %}{% endtable_region %}'), "table-scroll")
+        self.assertNotIn("is-compare", plain.classes)
 
     def test_a_room_no_share_is_named_for_is_refused(self):
         with self.assertRaises(ValueError):
@@ -363,6 +428,31 @@ class TableTagTests(SimpleTestCase):
         )
         kept = with_class(_render(source), "kept-line")
         self.assertEqual([each.ancestors[-1].attrs.get("data-col") for each in kept], ["short"])
+
+    def test_a_status_said_by_one_pill_alone_is_marked_to_take_its_columns_width(self):
+        """So the pills down a status column share both edges, whatever their words."""
+
+        cells = {
+            "one": '{% status "Changed" tone="attention" %}',
+            "other": '{% status "New" tone="good" %}',
+            "linked": '{% status "Open" href="/example/" %}',
+            "beside words": '{% status "Up" tone="good" %} since Nov 2',
+            "two": '{% status "Up" %}{% status "Pinned" %}',
+            "words": "Up",
+            "blank": "",
+        }
+        rows = "".join(f'<tr><td>a</td><td data-col="{name}">{cell}</td></tr>' for name, cell in cells.items())
+        prose = '<tr><td>b</td><td>x</td><td data-col="prose">{% status "Up" %}</td></tr>'
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            f'{{% table_heading "State" "status" %}}</tr></thead><tbody>{rows}</tbody></table>{{% endtable_region %}}'
+            '{% table_region "Others" %}<table class="data-table"><thead><tr>{% table_heading "Name" %}'
+            f'{{% table_heading "Kind" %}}{{% table_heading "Note" %}}</tr></thead><tbody>{prose}</tbody></table>'
+            "{% endtable_region %}"
+        )
+        cells = elements(_render("{% load status_tags %}" + source), "td")
+        marked = [each.attrs.get("data-col") for each in cells if "data-pill-only" in each.attrs]
+        self.assertEqual(marked, ["one", "other", "linked"])
 
     def test_a_row_that_holds_something_back_has_its_line_beneath(self):
         """After a row is the line its toggle opens: the blocks it keeps
@@ -549,6 +639,7 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(heading.attrs["aria-sort"], "ascending")
         (link,) = elements(html, "a")
         self.assertEqual(parse_qs(urlsplit(link.attrs["href"]).query), {"q": ["x"], "sort": ["-name"]})
+        self.assertEqual(select(html, "data-sort-local"), [])
 
     def test_pagination_links_keep_the_filters_and_set_the_page(self):
         request = RequestFactory().get("/things/", {"q": "x", "sort": "name", "page": "2"})
@@ -564,12 +655,6 @@ class TableTagTests(SimpleTestCase):
         self.assertEqual(heading.attrs["data-kind"], "control")
         self.assertEqual(heading.text.strip(), "Actions")
         self.assertTrue(any("visually-hidden" in each.classes for each in elements(html, "span")))
-
-    def test_the_select_all_heading_holds_its_tick_box(self):
-        html = _render('{% table_heading "Select all rows" select_all=True %}')
-        self.assertIn("select-column", elements(html, "th")[0].classes)
-        (box,) = select(html, "data-select-all")
-        self.assertEqual(box.attrs["aria-label"], "Select all rows")
 
     def test_rows_sort_on_the_page_only_when_there_are_two(self):
         """A heading that sorts on the page keeps its control where its table
@@ -610,6 +695,54 @@ class TableTagTests(SimpleTestCase):
         html = _render(source + "{% endtable_region %}", {"one": ["a"], "two": ["a", "b"]})
         self.assertEqual([each.attrs.get("aria-sort") for each in elements(html, "th")], [None, "none"])
 
+    def test_a_heading_sorts_on_the_page_unless_it_holds_controls(self):
+        """A heading that says nothing of its order sorts the rows on the page
+        where there are two to put in order; a column of controls, one named
+        for assistive technology alone and the tick-box column never do, nor
+        a heading told to keep the table's own order."""
+
+        headings = {
+            "name": '{% table_heading "Name" "identifier" %}',
+            "cost": '{% table_heading "Cost" "numeric" %}',
+            "kept": '{% table_heading "Step" local_sort=False %}',
+            "control": '{% table_heading "Link" "control" %}',
+            "actions": '{% table_heading "Actions" css="actions-col" %}',
+            "hidden": '{% table_heading "Note" hidden=True %}',
+            "select": '{% table_heading "Select all rows" select_all=True %}',
+        }
+        source = (
+            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+            + "".join(headings.values())
+            + "</tr></thead><tbody>{% for row in rows %}<tr>"
+            + "<td>{{ row }}</td>" * len(headings)
+            + "</tr>{% endfor %}</tbody></table>{% endtable_region %}"
+        )
+        for rows, sorting in ((["a", "b"], {"name", "cost"}), (["a"], set())):
+            with self.subTest(rows=len(rows)):
+                ready = {
+                    name
+                    for name, each in zip(headings, elements(_render(source, {"rows": rows}), "th"), strict=True)
+                    if "data-sort-ready" in each.attrs
+                }
+                self.assertEqual(ready, sorting)
+                self.assertEqual(len(select(_render(source, {"rows": rows}), "data-sort-local")), len(sorting))
+
+    def test_a_charts_table_keeps_the_charts_order(self):
+        """A chart's table is the chart read whole, in its order, so its
+        headings sort nothing, asked or not."""
+
+        for heading in ('{% table_heading "Week" "status" %}', '{% table_heading "Week" "status" local_sort=True %}'):
+            source = (
+                '{% table_region "Example sessions" chart=True %}<table class="data-table"><thead><tr>'
+                + heading
+                + "</tr></thead><tbody><tr><td>Week 1</td></tr><tr><td>Week 2</td></tr></tbody></table>"
+                "{% endtable_region %}"
+            )
+            with self.subTest(heading):
+                html = _render(source)
+                self.assertEqual(select(html, "data-sort-local"), [])
+                self.assertNotIn("data-sort-ready", elements(html, "th")[0].attrs)
+
     def test_a_figures_cells_align_as_its_heading_says(self):
         """A numeric column's cells are marked with its kind, body and totals
         alike, so the stylesheet aligns them under their heading; a cell that
@@ -641,93 +774,6 @@ class TableTagTests(SimpleTestCase):
                 "total": "numeric",
             },
         )
-
-    def test_the_gutter_column_holds_each_rows_toggle(self):
-        """Under a heading that keeps the gutter, each row's cell in that
-        column stands in the gutter and ends with the row's toggle; a folded
-        group's row keeps its own, a totals row stands in the gutter with no
-        toggle, and a cell that spans the table holds none."""
-
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Select all rows" select_all=True %}{% table_heading "Name" gutter=True %}'
-            '{% table_heading "Note" drop=1 %}</tr></thead><tbody>'
-            '<tr><td class="select-column"></td><td class="cell-data" data-probe="classed">A <b>a</b></td><td>b</td></tr>'
-            '<tr><td class="select-column"></td><th scope="row" data-probe="plain">B</th><td>c</td></tr>'
-            '<tr><td class="select-column"></td><td data-probe="folds">'
-            '{% include "partials/_row_fold.html" with label="C" only %}C</td><td>d</td></tr>'
-            '<tr><td colspan="3" data-probe="spans">Nothing else</td></tr>'
-            '</tbody><tfoot><tr><td></td><td data-probe="total">Total</td><td></td></tr></tfoot>'
-            "</table>{% endtable_region %}"
-        )
-        found = all_elements(_render(source))
-        probes = {each.attrs["data-probe"]: each for each in found if "data-probe" in each.attrs}
-        self.assertEqual(
-            {name: "row-gutter" in cell.classes for name, cell in probes.items()},
-            {"classed": True, "plain": True, "folds": True, "spans": False, "total": True},
-        )
-        self.assertIn("cell-data", probes["classed"].classes)
-        toggles = {
-            name: [
-                each.attrs.get("data-fold-toggle", "row")
-                for each in found
-                if cell in each.ancestors and "data-row-toggle" in each.attrs
-            ]
-            for name, cell in probes.items()
-        }
-        self.assertEqual(toggles, {"classed": ["row"], "plain": ["row"], "folds": [""], "spans": [], "total": []})
-        # Last in its cell, after what names the row.
-        children = [each for each in found if each.ancestors and each.ancestors[-1] is probes["classed"]]
-        self.assertIn("data-row-toggle", children[-1].attrs)
-
-    def test_a_toggle_written_in_the_gutter_is_refused(self):
-        source = (
-            '{% table_region "Things" %}<table class="data-table"><thead><tr>{% table_heading "Name" gutter=True %}'
-            "</tr></thead><tbody><tr><td>A{% row_toggle %}</td></tr></tbody></table>{% endtable_region %}"
-        )
-        with self.assertRaisesMessage(ValueError, "the region's to draw"):
-            _render(source)
-
-    def test_a_groups_heading_row_spans_every_column_its_table_declares(self):
-        html = _render(
-            '{% table_region "Records" %}<table class="data-table"><thead><tr>'
-            '{% table_heading "Name" %}{% table_heading "Type" %}{% table_heading "Value" %}</tr></thead>'
-            '<tbody>{% row_group "Policy" 2 %}<tr><td>a</td><td>b</td><td>c</td></tr></tbody>'
-            "</table>{% endtable_region %}"
-        )
-        (heading,) = select(html, "scope", "rowgroup")
-        self.assertEqual(heading.attrs["colspan"], "3")
-        self.assertEqual(heading.words, "Policy 2")
-        self.assertNotIn("data-kind", heading.attrs)
-
-    def test_a_group_in_a_table_without_headings_spans_its_widest_row(self):
-        html = _render(
-            '{% table_region "Queue" %}<table class="data-table"><tbody>{% row_group "Example" 2 %}'
-            '<tr><td>a</td><td>b</td><td>c</td></tr><tr><td colspan="2">a</td></tr></tbody>'
-            "</table>{% endtable_region %}"
-        )
-        (heading,) = select(html, "scope", "rowgroup")
-        self.assertEqual(heading.attrs["colspan"], "3")
-
-    def test_a_folded_group_starts_closed_and_names_the_row_its_rows_fold_under(self):
-        html = _render('{% row_group "Policy" folds="example-policy" %}')
-        (row,) = elements(html, "tr")
-        self.assertEqual(row.attrs["id"], "example-policy")
-        self.assertIn("data-folds", row.attrs)
-        (toggle,) = select(html, "data-fold-toggle")
-        self.assertEqual(toggle.attrs["aria-expanded"], "false")
-
-    def test_a_groups_name_links_where_its_rows_are_dealt_with_when_given_a_page(self):
-        (link,) = elements(_render('{% row_group "Policy" 2 href="/example/policy/" %}'), "a")
-        self.assertEqual((link.words, link.attrs["href"]), ("Policy", "/example/policy/"))
-        self.assertFalse(elements(_render('{% row_group "Policy" 2 %}'), "a"))
-
-    def test_a_row_toggle_starts_closed(self):
-        # Drawn by hand in a table whose rows have no heading to keep a gutter.
-        html = _render('<td class="row-gutter">a{% row_toggle %}</td>')
-        (toggle,) = select(html, "data-row-toggle")
-        self.assertEqual(toggle.attrs["aria-expanded"], "false")
-        self.assertIn("row-expand", toggle.classes)
 
 
 class TableColumnTests(SimpleTestCase):
@@ -818,6 +864,14 @@ class ListTableTests(_AuthedTestCase):
         # The frame's row block still fills the table from inside the region.
         rows = [each for each in within(page, "class", "table-scroll") if each.tag == "tr"]
         self.assertGreater(len(rows), 1)
+
+    def test_a_lists_rows_keep_the_order_its_server_gives(self):
+        """A list page holds one page of a list its server orders, so no
+        heading sorts the rows on the page, where a sort would order a page."""
+
+        page = self.client.get(reverse("expenses:list"))
+        self.assertTrue(select(page, "aria-sort"))
+        self.assertEqual(select(page, "data-sort-local"), [])
 
     def test_a_sort_mark_is_drawn_by_the_stylesheet_never_by_a_face(self):
         """A glyph is drawn by whichever face has it, at that face's size, so

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Prove an extension's check refuses a package that declares no type check,
-# whose source types a dot between two parts of a line, or whose test pins a
-# table cell's closing tag, and goes on to its environment for one that does
+# or whose test pins a table cell's closing tag, and goes on to its environment for one that does
 # none of them, and that it ends on the gate's
 # verdict, kept whole under the host's var/gate.
 set -euo pipefail
@@ -48,11 +47,6 @@ case "$(head -n 1 "$work/out")" in *" $kept") ;; *) fail "the check does not ope
 [ "$(sed -n 2p "$kept")" = "$last" ] || fail "the kept verdict is not the closing line"
 
 printf '\n[tool.mypy]\nstrict = true\n' >>"$work/package/pyproject.toml"
-printf 'LABEL = f"{1} \302\267 {2}"\n' >"$work/package/src/example_plugin/labels.py"
-if check; then fail "a package that types a dot between two parts passed"; fi
-grep -q 'dot-typed-in-text' "$work/out" || fail "the refusal does not name the rule a typed dot breaks"
-[ ! -e "$work/synced" ] || fail "a package that types a dot was synced before it was refused"
-rm "$work/package/src/example_plugin/labels.py"
 mkdir "$work/package/src/example_plugin/tests"
 printf 'def test(self, r):\n    self.assertContains(r, "<td>A</td>")\n' >"$work/package/src/example_plugin/tests/test_pages.py"
 if check; then fail "a package whose test pins a cell's closing tag passed"; fi

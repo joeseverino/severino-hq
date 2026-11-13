@@ -15,7 +15,7 @@ from hq.domains.control_plane.models import ManagedResource
 from hq.domains.docs_index.models import DocumentationRecord
 from hq.domains.expenses.models import Expense
 from hq.domains.projects.models import Project
-from hq.platform.application.tests.markup import hrefs, text, within
+from hq.platform.application.tests.markup import hrefs, text, with_class, within
 from hq.platform.core.audit import audited_labels, operation_context
 from hq.platform.core.models import AuditLog
 
@@ -127,6 +127,24 @@ class AuditDetailPageTests(_AuthedTestCase):
         # about: the Who and Operation rows say the rest.
         self.assertEqual(set(page.context["extra"]), set())
 
+    def test_the_event_and_what_it_recorded_are_sections_of_one_flow(self):
+        # Sibling sections share a row where they fit (Design, "Sibling
+        # sections flow"), so a short list of facts never crosses the page.
+        event = AuditLog.objects.create(
+            action=AuditLog.Action.UPDATED,
+            object_type="Project",
+            object_repr="Example",
+            metadata={"changes": {"name": ["Before", "After"]}, "example": "value"},
+        )
+
+        page = self.client.get(reverse("core:audit_detail", args=[event.pk]))
+
+        sections = [element for element in with_class(page, "section") if element.tag == "section"]
+        flows = [[id(a) for a in section.ancestors if "section-flow" in a.classes] for section in sections]
+        self.assertEqual(len(sections), 3, [section.words[:40] for section in sections])
+        self.assertTrue(all(flows), flows)
+        self.assertEqual(len({flow[-1] for flow in flows}), 1)
+
     def test_an_event_links_to_the_rest_of_its_operation(self):
         # The point of operation_id: one action touching several rows is one
         # thing that happened, not four events that share a timestamp.
@@ -218,7 +236,7 @@ class AuditDetailPageTests(_AuthedTestCase):
 
         page = self.client.get(reverse("core:audit_detail", args=[row.pk]))
 
-        self.assertEqual([change["field"] for change in page.context["changes"]], ["Token"])
+        self.assertEqual([change.label for change in page.context["changes"].rows], ["Token"])
         self.assertNotIn("«redacted»", text(page))
 
     def test_the_detail_page_needs_a_session(self):

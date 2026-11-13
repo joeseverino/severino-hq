@@ -41,8 +41,8 @@ class ActionLink:
     refusal: Annotated[
         str,
         Describe(
-            "Why its command would be refused if asked for now, in the command's words: set, the link is "
-            "shown unusable with it. Empty when it would run."
+            "Why its command would be refused now, in the command's words. When set, the link shows "
+            "as unusable with it. Empty when it would run."
         ),
     ] = ""
 
@@ -87,7 +87,7 @@ class WorkflowStep:
         str,
         Describe(
             "Where it stands: `recommended` to do now, `after_action` once the step before is done, "
-            "`available` at any time, `operator` for a person to do by hand, `blocked` where it cannot be done."
+            "`available` at any time, `operator` for you to do by hand, `blocked` where it cannot be done."
         ),
     ]
     actions: Annotated[
@@ -103,6 +103,6 @@ class WorkflowPlan:
     __pydantic_config__ = _OWN_CONFIG
 
     id: Annotated[str, Describe("The plan's id, the same at every read of the problem it resolves.")]
-    label: Annotated[str, Describe("The plan's heading, such as `What to do`.")]
+    label: Annotated[str, Describe("The plan's heading, such as `Next steps`.")]
     steps: Annotated[tuple[WorkflowStep, ...], Describe("Its steps, in the order they are taken.")]
     outcome: WorkflowOutcome

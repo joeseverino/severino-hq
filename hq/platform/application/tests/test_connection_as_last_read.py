@@ -15,6 +15,7 @@ from django.utils import timezone
 from hq.domains.control_plane.models import ProviderInventory
 from hq.platform.core.tests.forwarding import arrived
 
+from .. import cadence
 from ..request_connection import connection
 from ..request_path import CONTRADICTED, UNPROVEN, request_path
 from .connection_requests import A_TAILNET_ADDRESS, a_device, a_request, a_tailnet
@@ -51,7 +52,7 @@ class AsLastReadTests(TestCase):
         found = connection(a_request())
 
         self.assertFalse(found.tailnet_current)
-        self.assertIn("before HQ read the tailnet", found.handshake)
+        self.assertIn("before the read", found.handshake)
         self.assertNotIn("ago", found.handshake)
 
     def test_a_current_reading_says_the_handshake_as_an_age(self):
@@ -62,25 +63,24 @@ class AsLastReadTests(TestCase):
         self.assertTrue(found.tailnet_current)
         self.assertTrue(found.handshake.endswith("ago"))
 
-    def test_an_old_reading_says_the_path_as_last_read(self):
+    def test_an_old_reading_names_the_path_as_a_current_one_does(self):
+        """The panel's note says when the tailnet was read; the value is the path."""
+
         read(laptop(direct_endpoint="192.0.2.9:41641"), HQ_HOST, age=AWAY)
         old = connection(a_request()).path_label
         read(laptop(direct_endpoint="192.0.2.9:41641"), HQ_HOST)
         current = connection(a_request()).path_label
 
-        self.assertIn("when last read", old)
-        self.assertNotIn("when last read", current)
+        self.assertEqual(old, current)
 
-    def test_an_idle_link_is_connected_and_its_peering_no_claim_about_now(self):
+    def test_an_idle_link_is_connected_and_draws_no_connection_type(self):
         read(laptop(public_key=""), HQ_HOST, age=AWAY)
 
         found = connection(a_request())
 
-        # This request arrived over it.
+        # This request arrived over it, and the reading names no path.
         self.assertEqual(found.path_label, "Connected")
-        self.assertEqual(found.peering.id, "unknown")
-        self.assertNotIn("right now", found.peering.detail)
-        self.assertIn("last read", found.peering.detail)
+        self.assertIsNone(found.peering)
 
     def test_a_device_missing_from_an_old_reading_is_not_a_disagreement(self):
         read(HQ_HOST, age=AWAY)
@@ -95,6 +95,8 @@ class AsLastReadTests(TestCase):
 class PanelTests(TestCase):
     def setUp(self):
         self.client.force_login(get_user_model().objects.create_superuser("panel-reader"))
+        # A controller reports to this HQ, so an old reading is one it can refresh.
+        cadence.note_controller()
 
     def panel(self):
         return self.client.get(reverse("connection"), **arrived(REMOTE_ADDR=A_TAILNET_ADDRESS)).content.decode()

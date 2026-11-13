@@ -18,11 +18,14 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 )
 
 var now = time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
@@ -50,6 +53,15 @@ printf "%s\n" "${UNIT_STATE-active}"
 exit "${UNIT_EXIT:-0}"
 `
 
+// fakeBusctl answers logind's ScheduledShutdown with $SCHEDULED, as
+// busctl --json=short prints it, or fails with $BUSCTL_EXIT.
+const fakeBusctl = `#!/bin/sh
+printf '%s\n' "$*" >>"$LOG"
+[ "${BUSCTL_EXIT:-0}" = 0 ] || { echo "Failed to connect to bus" >&2; exit "$BUSCTL_EXIT"; }
+[ -n "${SCHEDULED:-}" ] || SCHEDULED='{"type":"(st)","data":["",18446744073709551615]}'
+printf '%s\n' "$SCHEDULED"
+`
+
 // edge is a receiver whose paths and programs all live in one directory.
 type edge struct {
 	Receiver
@@ -59,12 +71,12 @@ type edge struct {
 func newEdge(t *testing.T, env ...string) *edge {
 	t.Helper()
 	dir := t.TempDir()
-	for _, sub := range []string{"certs", "config", "bin"} {
+	for _, sub := range []string{"certs", "config", "bin", "run"} {
 		if err := os.Mkdir(filepath.Join(dir, sub), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	for name, body := range map[string]string{"docker": fakeDocker, "systemctl": fakeSystemctl} {
+	for name, body := range map[string]string{"docker": fakeDocker, "systemctl": fakeSystemctl, "busctl": fakeBusctl} {
 		if err := os.WriteFile(filepath.Join(dir, "bin", name), []byte(body), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -74,12 +86,15 @@ func newEdge(t *testing.T, env ...string) *edge {
 		t.Fatal(err)
 	}
 	return &edge{dir: dir,
-		CertDir:    filepath.Join(dir, "certs"),
-		RoutesFile: filepath.Join(dir, "config", "hq-routes.caddy"),
-		Owner:      account.Uid,
-		Group:      account.Gid,
-		Docker:     filepath.Join(dir, "bin", "docker"),
-		Systemctl:  filepath.Join(dir, "bin", "systemctl"),
+		CertDir:        filepath.Join(dir, "certs"),
+		RoutesFile:     filepath.Join(dir, "config", "hq-routes.caddy"),
+		Owner:          account.Uid,
+		Group:          account.Gid,
+		Docker:         filepath.Join(dir, "bin", "docker"),
+		Systemctl:      filepath.Join(dir, "bin", "systemctl"),
+		Busctl:         filepath.Join(dir, "bin", "busctl"),
+		RebootRequired: filepath.Join(dir, "run", "reboot-required"),
+		Born:           func(string) (time.Time, error) { return now.Add(-48 * time.Hour), nil },
 		Env: append([]string{
 			"PATH=/usr/bin:/bin",
 			"LOG=" + filepath.Join(dir, "log"),
@@ -132,7 +147,7 @@ type certificatePair struct {
 	chain, key, fingerprint string
 }
 
-func issue(t *testing.T, name string, notAfter time.Time) certificatePair {
+func issue(t testing.TB, name string, notAfter time.Time) certificatePair {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
@@ -248,28 +263,30 @@ func TestDeployInstallsAMatchedPairAndReloads(t *testing.T) {
 
 // A deploy that should be refused leaves the installed pair alone and never
 // reloads Caddy.
+// tarOf is a tar of these headers, each regular file holding four bytes.
+func tarOf(t testing.TB, headers ...tar.Header) []byte {
+	var buffer bytes.Buffer
+	archive := tar.NewWriter(&buffer)
+	for _, header := range headers {
+		header.Mode, header.Format = 0o600, tar.FormatUSTAR
+		if header.Typeflag == tar.TypeReg {
+			header.Size = 4
+		}
+		if err := archive.WriteHeader(&header); err != nil {
+			t.Fatal(err)
+		}
+		if header.Typeflag == tar.TypeReg {
+			_, _ = archive.Write([]byte("data"))
+		}
+	}
+	_ = archive.Close()
+	return buffer.Bytes()
+}
+
 func TestDeployRefusesWhatCaddyWouldServeWrongly(t *testing.T) {
 	good := issue(t, "new.example.test", now.Add(24*time.Hour))
 	other := issue(t, "other.example.test", now.Add(24*time.Hour))
 	expired := issue(t, "expired.example.test", now.Add(-time.Hour))
-	tarOf := func(headers ...tar.Header) []byte {
-		var buffer bytes.Buffer
-		archive := tar.NewWriter(&buffer)
-		for _, header := range headers {
-			header.Mode, header.Format = 0o600, tar.FormatUSTAR
-			if header.Typeflag == tar.TypeReg {
-				header.Size = 4
-			}
-			if err := archive.WriteHeader(&header); err != nil {
-				t.Fatal(err)
-			}
-			if header.Typeflag == tar.TypeReg {
-				_, _ = archive.Write([]byte("data"))
-			}
-		}
-		_ = archive.Close()
-		return buffer.Bytes()
-	}
 	for name, body := range map[string][]byte{
 		"a key that does not match the certificate": Bundle([]byte(good.chain), []byte(other.key)),
 		"unparseable input":                         Bundle([]byte("not a certificate\n"), []byte("not a key\n")),
@@ -277,13 +294,13 @@ func TestDeployRefusesWhatCaddyWouldServeWrongly(t *testing.T) {
 		"an expired certificate":                    Bundle([]byte(expired.chain), []byte(expired.key)),
 		"no body":                                   nil,
 		"a body that is not a tar":                  []byte("fullchain.pem privkey.pem"),
-		"a third file": tarOf(tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		"a third file": tarOf(t, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
 			tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}, tar.Header{Name: "extra.pem", Typeflag: tar.TypeReg}),
-		"a file named twice": tarOf(tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		"a file named twice": tarOf(t, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
 			tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}, tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}),
-		"a link in place of the key": tarOf(tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		"a link in place of the key": tarOf(t, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
 			tar.Header{Name: PrivateKey, Typeflag: tar.TypeSymlink, Linkname: "/etc/shadow"}),
-		"a path beside the name": tarOf(tar.Header{Name: "./" + Fullchain, Typeflag: tar.TypeReg},
+		"a path beside the name": tarOf(t, tar.Header{Name: "./" + Fullchain, Typeflag: tar.TypeReg},
 			tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}),
 		"a body past the limit": append(Bundle([]byte(good.chain), []byte(good.key)), make([]byte, MaxBody)...),
 	} {
@@ -579,6 +596,66 @@ func TestPerimeterReportsTheFirewallUnitAndPublicAddresses(t *testing.T) {
 	}
 }
 
+func TestRebootIsWhetherTheMachineWaitsOnARestart(t *testing.T) {
+	scheduled := `{"type":"(st)","data":["reboot",1780372800000000]}`
+	for name, test := range map[string]struct {
+		packages *string
+		env      []string
+		want     hostcore.RebootReading
+	}{
+		"waiting, with a restart scheduled": {
+			packages: new("linux-image-generic\nlibc6\nlinux-image-generic\n"),
+			env:      []string{"SCHEDULED=" + scheduled},
+			want: hostcore.RebootReading{ReadAt: "2026-06-01T12:00:00Z", Pending: true, Since: "2026-05-30T12:00:00Z",
+				Packages: []string{"linux-image-generic", "libc6"}, ScheduledAction: "reboot", ScheduledAt: "2026-06-02T04:00:00Z"},
+		},
+		"nothing waiting or scheduled": {
+			want: hostcore.RebootReading{ReadAt: "2026-06-01T12:00:00Z", Packages: []string{}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEdge(t, test.env...)
+			if test.packages != nil {
+				if err := os.WriteFile(e.RebootRequired, []byte("*** System restart required ***\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(e.RebootRequired+".pkgs", []byte(*test.packages), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			code, out, said := e.run(t, nil, OperationReboot)
+			if code != 0 {
+				t.Fatalf("exit %d: %s", code, said)
+			}
+			var reading hostcore.RebootReading
+			if err := json.Unmarshal([]byte(out), &reading); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(reading, test.want) {
+				t.Fatalf("reading %+v, want %+v", reading, test.want)
+			}
+			// logind is asked for the one property, and nothing else runs.
+			if calls := e.calls(); !slices.Equal(calls, []string{strings.Join(hostcore.ScheduledShutdown[1:], " ")}) {
+				t.Fatalf("started %v", calls)
+			}
+		})
+	}
+}
+
+func TestRebootFailsWhenLogindDoesNotAnswer(t *testing.T) {
+	e := newEdge(t, "BUSCTL_EXIT=1")
+	if err := os.WriteFile(e.RebootRequired, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, out, said := e.run(t, nil, OperationReboot)
+	if code == 0 || out != "" {
+		t.Fatalf("exit %d, printed %q", code, out)
+	}
+	if !strings.Contains(said, "bus") {
+		t.Fatalf("busctl's reason was not passed on: %q", said)
+	}
+}
+
 func TestOwnerIsANameOrANumber(t *testing.T) {
 	account, err := user.Current()
 	if err != nil {
@@ -596,4 +673,37 @@ func TestOwnerIsANameOrANumber(t *testing.T) {
 	if _, err := id("nobody-here", missing); err == nil {
 		t.Fatal("an unknown name resolved")
 	}
+}
+
+// A deploy's body is whatever the caller sent. It is refused with one of the
+// bundle's own errors, or it is exactly a chain and a key, the two the
+// bundle the edge would build from them holds again.
+func FuzzReadBundle(f *testing.F) {
+	pair := issue(f, "new.example.test", now.Add(24*time.Hour))
+	f.Add(Bundle([]byte(pair.chain), []byte(pair.key)))
+	f.Add(Bundle(nil, nil))
+	f.Add([]byte("fullchain.pem privkey.pem"))
+	f.Add(tarOf(f, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}, tar.Header{Name: "extra.pem", Typeflag: tar.TypeReg}))
+	f.Add(tarOf(f, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}, tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}))
+	f.Add(tarOf(f, tar.Header{Name: Fullchain, Typeflag: tar.TypeReg},
+		tar.Header{Name: PrivateKey, Typeflag: tar.TypeSymlink, Linkname: "/etc/shadow"}))
+	f.Add(tarOf(f, tar.Header{Name: "./" + Fullchain, Typeflag: tar.TypeReg}, tar.Header{Name: PrivateKey, Typeflag: tar.TypeReg}))
+	f.Fuzz(func(t *testing.T, payload []byte) {
+		fullchain, privateKey, err := ReadBundle(payload)
+		if err != nil {
+			if !errors.Is(err, ErrBundleInvalid) && !errors.Is(err, ErrBundleUnexpected) && !errors.Is(err, ErrBundleIncomplete) {
+				t.Fatalf("an untyped refusal: %v", err)
+			}
+			return
+		}
+		if len(fullchain)+len(privateKey) > len(payload) {
+			t.Fatal("read more than the payload holds")
+		}
+		again, key, err := ReadBundle(Bundle(fullchain, privateKey))
+		if err != nil || !bytes.Equal(again, fullchain) || !bytes.Equal(key, privateKey) {
+			t.Fatalf("the pair read does not bundle back to itself: %v", err)
+		}
+	})
 }

@@ -19,6 +19,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.application.routes import reverse
 lazy from hq.domains.control_plane.names import in_zone
 
+from .card_items import Insight, Kpi
 from .connection_lifecycle import Lifecycle, probed, standing
 from .derivations import reached
 from .drawings import Dot, Dots
@@ -26,12 +27,12 @@ from .entity_links import entity_link
 from .expiry import DEFAULT_RENEWAL_WINDOW_DAYS, days_until, renewal_window
 from .first_seen import dated
 from .item_help import cannot_help, remedy_link
-from .moments import ago, when_day
+from .moments import ago, expiry_words, when_day
 from .projection import read_once
 from .security import Principal
 from .service_health import UNKNOWN
 from .timestamps import moment
-from .ui import DomainOverview, Insight, Kpi, counted, ended
+from .ui import DomainOverview, counted, ended
 from .workflow_contracts import ActionLink
 lazy from . import connections, services, zones
 lazy from .connection_catalog import connection_total
@@ -225,20 +226,29 @@ def _certificates(domains: tuple[str, ...], hostnames: set[str]) -> tuple[Expiry
 
 
 def _edge_certificates(domains: tuple[str, ...], hostnames: set[str]) -> list[Expiry]:
-    """Each certificate read under the domains that says when it expires,
-    linked to its service when HQ serves the name, else to its zone."""
+    """Each name a reading holds a certificate for that says when it expires,
+    linked to its service when HQ serves the name, else to its zone.
+
+    A reading can hold several for one name (an edge certificate beside the
+    older one it replaced), and the name is served by the one that runs out
+    last, so that one is the name's expiry.
+    """
 
     if not domains:
         return []
-    found = []
+    found: dict[tuple[str, str], Expiry] = {}
     for item in readings().about(Subject.of(zones=domains), facets=("certificate",)):
         if (when := moment(item.expires)) is None:
             continue
         name = next(iter(item.hostnames), "") or item.title
+        source = item.spec.short or item.label
+        held = found.get((source, name))
+        if held is not None and held.expires >= when:
+            continue
         zone = next((domain for domain in domains if in_zone(name, domain)), "")
         link = subject_link("service", name) if name in hostnames else subject_link("zone", zone)
-        found.append(Expiry(name, item.spec.short or item.label, when, link))
-    return found
+        found[source, name] = Expiry(name, source, when, link)
+    return list(found.values())
 
 
 def _managed_certificates() -> list[Expiry]:
@@ -506,11 +516,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
         days = max(expiry.days, 0)
         if expiry.managed:
             key = f"estate-certificate:{expiry.resource_key}"
-            body = (
-                f"Expires {ended(expiry.phrase)} Renewal opens at "
-                f"{counted(expiry.renewal_window_days, 'day')}; renew it or check why "
-                "renewal did not run."
-            )
+            body = f"Expires {ended(expiry.phrase)} Renewal has not run; renew it."
             action = "Open certificate"
             renew = remedy_link("certificate.renew", expiry.resource_key)
             offered: dict[str, Any] = (
@@ -520,16 +526,12 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
             )
         else:
             key = f"estate-certificate:{expiry.source}:{expiry.subject}"
-            body = (
-                f"Expires {ended(expiry.phrase)} Its issuer renews it automatically and "
-                f"should have by now; check the {expiry.source.lower()} certificate "
-                "settings."
-            )
+            body = f"Expires {ended(expiry.phrase)} {expiry.source} renews it; check its settings."
             action = "Open"
             offered = {
                 "workflow": cannot_help(
                     key,
-                    f"{expiry.source} holds and renews it. HQ only reads it and cannot change its settings.",
+                    f"{expiry.source} renews it. HQ cannot change its settings.",
                 )
             }
         items.append(
@@ -537,11 +539,7 @@ def _expiring(estate: Estate) -> tuple[Insight, ...]:
                 status="serious" if days <= CERTIFICATE_SERIOUS_DAYS else "attention",
                 eyebrow="Certificates",
                 key=key,
-                title=(
-                    f"{expiry.subject} expires in {counted(days, 'day')}"
-                    if expiry.days >= 0
-                    else f"{expiry.subject} has expired"
-                ),
+                title=f"{expiry.subject} {expiry_words(expiry.days)}",
                 value=str(days),
                 body=body,
                 action=action,

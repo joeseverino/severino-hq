@@ -64,7 +64,7 @@ def _check(app: str, migration: str, position: int, operation: AddConstraint, mo
         name=operation.constraint.name,
         table=model._meta.db_table,
         key=model._meta.pk.column,
-        condition=operation.constraint._get_check_sql(model, editor),  # noqa: SLF001 - the CHECK's SQL, which Django has no public name for
+        condition=operation.constraint._get_check_sql(model, editor),
     )
 
 
@@ -170,7 +170,7 @@ def _migrate(found: list[Counted]) -> list[tuple[str, str]]:
         for index, operation in enumerate(migration.operations):
             if _adds_a_check(operation):
                 migration.operations[index] = _CountFirst(operation, migration.name, index + 1, found)
-    state = executor._create_project_state(with_applied_migrations=True)  # noqa: SLF001 - migrate's own state, which Django has no public name for
+    state = executor._create_project_state(with_applied_migrations=True)
     try:
         executor.migrate(targets, plan=plan, state=state)
     except Exception as failed:

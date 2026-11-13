@@ -157,7 +157,7 @@ class ProjectionTests(TestCase):
             (found.release.short, found.release.behind, found.release.runs_deployed), (HEAD[:7], False, True)
         )
         (timer,) = (job for job in found.work.jobs if job.unit.endswith(".timer"))
-        self.assertEqual((timer.runs, timer.result), ("Delete old routine log entries", "Done"))
+        self.assertEqual((timer.runs, timer.result), ("Delete old routine log entries and scan results", "Done"))
         (web,) = (job for job in found.work.jobs if job.unit.endswith("-web.service"))
         self.assertEqual((web.runs, web.runs_unit), ("", False))
         self.assertEqual([job.unit for job in found.work.services], ["severino-hq-example-web.service"])
@@ -185,6 +185,22 @@ class ProjectionTests(TestCase):
             [(jobs[unit].runs, jobs[unit].result) for unit in ("severino-hq-example.socket", "run-example.mount")],
             [("", "Listening"), ("", "Mounted")],
         )
+
+    def test_a_service_hq_does_not_ship_is_not_one_of_its_jobs(self):
+        """The reading holds another package's service for its restarts;
+        HQ's jobs are the units it ships."""
+
+        estate()
+        store(
+            UNIT_KIND,
+            *units(),
+            {
+                "unit": "example-upload.service", "load": "loaded", "active": "activating",
+                "sub": "auto-restart", "restarts": 40, "foreign": True, "read_at": stamp(),
+            },
+        )  # fmt: skip
+
+        self.assertNotIn("example-upload.service", [job.unit for job in self.context().work.jobs])
 
     def test_a_trigger_names_what_it_starts_and_only_in_words_the_cell_beside_it_lacks(self):
         estate()
@@ -346,7 +362,7 @@ class PageTests(TestCase):
         self.assertEqual(response.status_code, 200)
         for words in ("Release", "Runs on", "Reached through", "Jobs", "Readings"):
             self.assertContains(response, words)
-        self.assertContains(response, "Delete old routine log entries")
+        self.assertContains(response, "Delete old routine log entries and scan results")
 
     def test_a_problem_is_drawn_under_the_part_it_is_about_and_the_status_leads_to_it(self):
         estate()
@@ -374,7 +390,7 @@ class PageTests(TestCase):
         self.assertIn("1 urgent problem", text(response))
         page = all_elements(response)
         framed = next(index for index, element in enumerate(page) if element.attrs.get("id") == "problems-here")
-        facts = next(index for index, element in enumerate(page) if "fact-band" in element.classes)
+        facts = next(index for index, element in enumerate(page) if "facts-band" in element.classes)
         self.assertLess(framed, facts)
         rows = [element for element in page if "data-attention-item" in element.attrs]
         self.assertTrue(rows)
@@ -439,7 +455,9 @@ class ResourceTests(TestCase):
             self.assertEqual(found["release"]["revision"], HEAD)
             self.assertFalse(found["release"]["behind"])
             self.assertEqual(found["where"]["container"], "example-box:app")
-            self.assertIn("Delete old routine log entries", [job["runs"] for job in found["work"]["jobs"]])
+            self.assertIn(
+                "Delete old routine log entries and scan results", [job["runs"] for job in found["work"]["jobs"]]
+            )
             self.assertIsNone(found["reached"])  # no request to describe
 
     def test_an_image_the_registry_refused_is_not_called_clean_and_says_why(self):

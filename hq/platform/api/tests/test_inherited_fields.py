@@ -1,11 +1,12 @@
 """A type that extends another says each field it inherits once, where the
 base declares it, and stays as closed as its declaration."""
 
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Literal, TypedDict
 
 from django.test import SimpleTestCase
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
+from pydantic import Field
 from referencing import Registry, Resource
 from referencing.jsonschema import DRAFT202012
 
@@ -13,6 +14,7 @@ from hq.platform.application.command_fields import Describe
 from hq.platform.application.json_schemas import json_schemas
 
 from .. import openapi
+from ..components import Components
 from .test_described_once import described_once
 
 _URI = "urn:example:document"
@@ -94,11 +96,38 @@ class InheritedFieldTests(SimpleTestCase):
         self.assertEqual(definitions["ExampleSameRow"]["properties"]["count"], {"type": "integer"})
 
 
+class ExampleHealth(TypedDict):
+    state: str
+    label: str
+
+
+class ExampleCat(TypedDict):
+    kind: Literal["cat"]
+    name: str
+
+
+class ExampleDog(TypedDict):
+    kind: Literal["dog"]
+    name: str
+
+
+class ExampleHealthyRecord(ExampleRow):
+    health: ExampleHealth
+    checks: list[ExampleHealth]
+    by_name: dict[str, ExampleHealth]
+    last: ExampleHealth | None
+    pet: Annotated[ExampleCat | ExampleDog, Field(discriminator="kind")]
+
+
+class ExampleUnmasked(TypedDict):
+    label: str
+
+
 class FieldMaskTests(SimpleTestCase):
     def test_a_masked_component_promises_no_field_whichever_schema_writes_it_first(self):
         for first in ("record", "row"):
             with self.subTest(first=first):
-                components = openapi._Components()
+                components = Components()
                 if first == "record":
                     components.typed({"ExampleRecord": ExampleRecord})
                     components.mask("ExampleRow")
@@ -107,5 +136,45 @@ class FieldMaskTests(SimpleTestCase):
                     components.mask("ExampleRow")
                     components.typed({"ExampleRecord": ExampleRecord})
 
-                self.assertNotIn("required", components.schemas["ExampleRow"])
-                _validator(components.schemas, "ExampleRow").validate({"slug": "example"})
+                schemas = components.sparse()
+                self.assertNotIn("required", schemas["ExampleRow"])
+                _validator(schemas, "ExampleRow").validate({"slug": "example"})
+
+    def test_every_part_a_mask_reaches_promises_no_field_and_a_whole_answer_still_validates(self):
+        components = Components()
+        components.mask("ExampleHealthyRecord")
+        components.typed({"ExampleHealthyRecord": ExampleHealthyRecord, "ExampleUnmasked": ExampleUnmasked})
+        validator = _validator(components.sparse(), "ExampleHealthyRecord")
+        health = {"state": "healthy", "label": "Working"}
+
+        validator.validate(
+            {
+                "slug": "example",
+                "count": 1,
+                "health": health,
+                "checks": [health],
+                "by_name": {"example": health},
+                "last": health,
+                "pet": {"kind": "cat", "name": "example"},
+            }
+        )
+        for mask, answer in {
+            "health.state": {"health": {"state": "healthy"}},
+            "checks.state": {"checks": [{"state": "healthy"}]},
+            "by_name.example.state": {"by_name": {"example": {"state": "healthy"}}},
+            "last.state": {"last": {"state": "healthy"}},
+            "pet.name": {"pet": {"name": "example"}},
+        }.items():
+            with self.subTest(mask):
+                validator.validate(answer)
+        with self.assertRaises(ValidationError):
+            validator.validate({"health": {"state": 1}})
+
+    def test_a_part_no_mask_reaches_keeps_its_fields_required(self):
+        components = Components()
+        components.mask("ExampleRow")
+        components.typed({"ExampleRow": ExampleRow, "ExampleUnmasked": ExampleUnmasked})
+        schemas = components.sparse()
+
+        self.assertEqual(schemas["ExampleUnmasked"]["required"], ["label"])
+        self.assertIn("required", components.schemas["ExampleRow"], "the components as written are left whole")

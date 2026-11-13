@@ -1,6 +1,7 @@
 """Each lint:drift-* gate's failure names the command that rewrites its own file,
 and that command, run as named, brings the gate back to passing: one file in
-seconds, where `mise run fix` rewrites every derived file."""
+seconds, where `mise run fix` rewrites every derived file. The gate's own fix
+mode, which fast runs first, writes the same file."""
 
 import os
 import re
@@ -21,6 +22,7 @@ HELD = {
     "lint:drift-api-document": "hq/platform/api/hq-api.openapi.json",
     "lint:drift-bridge-contract": "controller/api/hq-controller.openapi.json",
     "lint:drift-connections-reference": "docs/Connections.md",
+    "lint:drift-procedure-schema": "hq/platform/application/hq-procedure.schema.json",
     "lint:drift-font": "static/fonts/inter/inter-variable-latin.woff2",
 }
 # How a failure names its rewrite: "...; run `<command>` and ...".
@@ -98,3 +100,9 @@ class DriftGateTests(SimpleTestCase):
                     self.assertEqual(held.read_bytes(), Path(ROOT, HELD[name]).read_bytes(), command)
                     passed = run(["mise", "run", name])
                     self.assertEqual(passed.returncode, 0, f"{name} after {command}:\n{passed.stdout}{passed.stderr}")
+
+                    # Its fix mode, which fast runs before it judges, writes the same file.
+                    held.unlink()
+                    fixed = run(["mise", "run", name, "--fix"])
+                    self.assertEqual(fixed.returncode, 0, f"{name} --fix:\n{fixed.stdout}{fixed.stderr}")
+                    self.assertEqual(held.read_bytes(), Path(ROOT, HELD[name]).read_bytes(), f"{name} --fix")

@@ -36,8 +36,7 @@ class FormPartialTests(SimpleTestCase):
         self.assertNotIn("enctype", drawn.attrs)
         self.assertIn("data-submit-busy", drawn.attrs)
         inside = [e for e in elements(html, "input") + elements(html, "textarea") if drawn in e.ancestors]
-        self.assertEqual({e.attrs.get("name") for e in inside}, {"name", "notes"})
-        self.assertIn(RETRY_KEY_FIELD, html)
+        self.assertEqual({e.attrs.get("name") for e in inside}, {"name", "notes", RETRY_KEY_FIELD})
         (error,) = select(html, "role", "alert")
         self.assertEqual(error.words, "Example names are taken.")
         (row,) = with_class(html, "form-actions")
@@ -54,6 +53,20 @@ class FormPartialTests(SimpleTestCase):
         (drawn,) = elements(html, "form")
         self.assertEqual(drawn.attrs["action"], "/example/upload/")
         self.assertEqual(drawn.attrs["enctype"], "multipart/form-data")
+
+    def test_a_form_that_asks_sends_its_fields_as_a_query_with_no_write_token(self):
+        html = render_to_string(
+            FORM, {"form": ExampleUpload(), "verb": "Look up", "action": "/example/lookup/", "method": "get"}
+        )
+
+        (drawn,) = elements(html, "form")
+        self.assertEqual((drawn.attrs["method"], drawn.attrs["action"]), ("get", "/example/lookup/"))
+        self.assertNotIn("enctype", drawn.attrs)
+        self.assertNotIn(RETRY_KEY_FIELD, html)
+        (row,) = with_class(html, "form-actions")
+        self.assertIn(drawn, row.ancestors)
+        (button,) = elements(html, "button")
+        self.assertEqual(button.words, "Look up")
 
     def test_a_page_draws_its_own_fields_inside_it(self):
         html = render_to_string(
@@ -76,6 +89,53 @@ class FormPartialTests(SimpleTestCase):
 
         (row,) = with_class(html, "form-actions")
         self.assertIn("save-bar", row.classes)
+
+
+class OneQuestionTests(SimpleTestCase):
+    """A form of one line to fill and its verb alone asks one question, laid
+    out on its button's line; any more asks more."""
+
+    def asks_one(self, declared, **context):
+        form = type("ExampleQuestion", (forms.Form,), declared)()
+        (drawn,) = elements(render_to_string(FORM, {"form": form, "verb": "Look up", **context}), "form")
+        return "is-question" in drawn.classes
+
+    def test_a_line_of_words_a_number_a_date_or_one_choice_asks_one(self):
+        hidden = {"action": forms.CharField(widget=forms.HiddenInput)}
+        for field in (
+            forms.CharField(),
+            forms.DecimalField(),
+            forms.DateField(widget=forms.DateInput(attrs={"type": "date"})),
+            forms.ChoiceField(choices=[("a", "A")]),
+        ):
+            with self.subTest(field=type(field).__name__):
+                self.assertTrue(self.asks_one({"name": field, **hidden}))
+        self.assertTrue(self.asks_one({"name": forms.CharField()}, method="get"))
+
+    def test_a_field_of_more_than_a_line_or_more_fields_asks_more(self):
+        for fields in (
+            {"notes": forms.CharField(widget=forms.Textarea)},
+            {"agree": forms.BooleanField()},
+            {"kinds": forms.MultipleChoiceField(choices=[("a", "A")])},
+            {"kind": forms.ChoiceField(choices=[("a", "A")], widget=forms.RadioSelect)},
+            {"file": forms.FileField()},
+            {"when": forms.SplitDateTimeField()},
+            {"name": forms.CharField(), "reason": forms.CharField()},
+            {},
+        ):
+            with self.subTest(fields=sorted(fields)):
+                self.assertFalse(self.asks_one(fields))
+
+    def test_a_closing_row_of_more_than_its_verb_asks_more(self):
+        for context in (
+            {"cancel_url": "/example/"},
+            {"note": "Example note."},
+            {"choices": [("a", "Example")], "choice_field": "pick"},
+            {"bar": True},
+            {"fields": "partials/_form_errors.html"},
+        ):
+            with self.subTest(context=sorted(context)):
+                self.assertFalse(self.asks_one({"name": forms.CharField()}, **context))
 
 
 class ExampleRowsForm(forms.Form):

@@ -12,6 +12,7 @@ from django.utils import timezone
 from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.tests.writers import keyed
 from hq.platform.core.models import ActionItemRead, AuditLog
+from hq_sdk.testing import plain
 
 from ..action_items import (
     FORGET_AFTER,
@@ -27,8 +28,8 @@ from ..action_items import (
     with_aside_state,
 )
 from ..capabilities import execute_capability
+from ..card_items import Insight
 from ..security import OPERATOR_CAPABILITIES, Capability, Principal, cli_principal, internal_principal
-from ..ui import Insight
 from .markup import select
 
 ITEM = {
@@ -167,6 +168,19 @@ class AsideStateTests(TestCase):
         )
         self.assertEqual([item["key"] for item in groups[0]["items"]], [ITEM["key"], OTHER["key"]])
 
+    def test_only_a_named_family_folds(self):
+        # Items that share no family each stand on their own row, whatever
+        # else they share; a fold is drawn under its family's name.
+        twin = {**ITEM, "label": "Another widget"}
+        named = [{**ITEM, "key": f"example:{n}", "family": "Widgets"} for n in range(2)]
+
+        (group,) = by_source([ITEM, twin, *named])
+
+        self.assertEqual(
+            [(entry["folded"], entry["family"], len(entry["items"])) for entry in group["entries"]],
+            [(False, "", 1), (False, "", 1), (True, "Widgets", 2)],
+        )
+
 
 class PageTests(TestCase):
     def setUp(self):
@@ -202,7 +216,7 @@ class PageTests(TestCase):
         self.assertEqual(expected, 1)
         self.assertEqual(page.context["action_queue_count"], expected)
         self.assertEqual(page.context["profile_action_count"], expected)
-        self.assertContains(page, "1 thing needs you")
+        self.assertIn("1 thing needs you", plain(page.content))
 
     def test_a_row_button_posts_its_key_to_a_route_that_names_the_state(self):
         page = self.client.get(reverse("action_items"))
@@ -307,8 +321,8 @@ class PageTests(TestCase):
 
         with mock.patch("hq.platform.application.dashboard.work_queue", return_value=[ITEM, told]):
             dashboard = self.client.get(reverse("dashboard"))
-        self.assertContains(dashboard, "1 thing needs you")
-        self.assertContains(dashboard, "1 notice")
+        self.assertIn("1 thing needs you", plain(dashboard.content))
+        self.assertIn("1 notice", plain(dashboard.content))
 
     def test_the_page_is_one_section_per_domain(self):
         page = self.client.get(reverse("action_items"))

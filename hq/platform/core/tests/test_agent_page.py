@@ -3,6 +3,7 @@ calls from, the person's devices, and what an agent finds at the MCP endpoint,
 asked of the server only when opened."""
 
 import re
+from dataclasses import replace
 from pathlib import Path
 from unittest import mock
 
@@ -13,8 +14,9 @@ from django.utils import timezone
 
 from hq.platform.application import agent_access, agent_registry, denials, roles
 from hq.platform.application.linked_accounts import SIGN_IN
+from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.application.security import Capability, Principal, agent_grant, agent_grantable, agent_principal
-from hq.platform.application.tests.markup import select, text, within
+from hq.platform.application.tests.markup import elements, select, text, within
 from hq.platform.application.tokens import DEVICE_SCOPE
 from hq.platform.core.audit import operation_context
 from hq.platform.core.models import AgentDevice, AgentIdentity, AuditLog, LinkedAccount, OwnDevice
@@ -55,6 +57,38 @@ def _submit(client, response, attribute: str, value: str, pressing: str = ""):
         and any(ancestor is form for ancestor in element.ancestors)
     }
     return client.post(form.attrs["action"], fields)
+
+
+class AccessTests(TestCase):
+    """Access says whether agents may act as a state led by a steady dot,
+    beside the one button that switches it."""
+
+    def setUp(self):
+        self.person = get_user_model().objects.create_user("op", password="x" * 20)
+        self.client.force_login(self.person)
+
+    def state(self):
+        inside = within(self.client.get(reverse("agent_policy")), "id", "agent-access")
+        (said,) = [element for element in inside if "toned-dot" in element.classes]
+        (button,) = [element for element in inside if element.tag == "button"]
+        return said, button
+
+    def press(self, button):
+        self.client.post(button.attrs["formaction"], form_keyed({button.attrs["name"]: button.attrs["value"]}))
+
+    def test_it_reads_allowed_then_paused_with_the_button_that_switches_it(self):
+        said, button = self.state()
+        self.assertEqual((said.words, "toned-good" in said.classes), ("Allowed", True))
+        self.assertEqual(button.words, "Pause all agents")
+
+        self.press(button)
+        self.assertTrue(agent_access.agents_paused())
+        said, button = self.state()
+        self.assertEqual((said.words, "toned-attention" in said.classes), ("Paused", True))
+        self.assertEqual(button.words, "Resume agents")
+
+        self.press(button)
+        self.assertFalse(agent_access.agents_paused())
 
 
 class AgentRowTests(TestCase):
@@ -292,6 +326,13 @@ class AgentDeviceTests(TestCase):
 
         self.assertEqual(self.standing(device), "approved")
 
+    def test_a_device_s_control_returns_to_its_row(self):
+        device = self.device(approved_at=timezone.now(), approved_by=self.person)
+
+        response = _submit(self.client, self.page(), "id", f"device-{device.pk}", pressing="blocked")
+
+        self.assertEqual(response.url, f"{reverse('agent_policy')}#device-{device.pk}")
+
     def retry_key(self, page):
         key = select(page, "name", "__retry_key")[0]
         return {"__retry_key": key.attrs["value"]}
@@ -330,14 +371,13 @@ class AgentDeviceTests(TestCase):
             "nothing can be approved",
         )
 
-    def test_the_page_says_where_calls_are_placed(self):
+    def test_the_page_says_only_when_calls_are_tied_to_no_device(self):
         (none,) = select(self.page(), "data-placement")
         with override_settings(SEVERINO_TAILSCALED_SOCKET="/run/tailscale/tailscaled.sock"):
-            (placed,) = select(self.page(), "data-placement")
+            placed = select(self.page(), "data-placement")
 
         self.assertEqual(none.attrs["data-placement"], "none")
-        self.assertEqual(placed.attrs["data-placement"], "tailscaled")
-        self.assertIn("/run/tailscale/tailscaled.sock", placed.words)
+        self.assertEqual(placed, [], "a tailnet device placing each call is the normal case, said by the Devices table")
 
     def test_a_devices_calls_are_counted_on_its_row(self):
         device = self.device(approved_at=timezone.now(), approved_by=self.person)
@@ -421,3 +461,20 @@ class EndpointTests(TestCase):
             part = self.client.get(reverse("agent_policy"), **PART)
 
         self.assertIn("cannot connect", text(part))
+
+    def test_the_server_s_instructions_open_from_their_button_and_nowhere_else(self):
+        told = replace(ENDPOINT, instructions="Start with `hq://hq`.\n\nThen `example_next`.")
+        with mock.patch("hq.platform.mcp.listing.endpoint", return_value=told):
+            part = self.client.get(reverse("agent_policy"), **PART)
+
+        (opener,) = select(part, "command", "show-modal")
+        (dialog,) = select(part, "id", opener.attrs["commandfor"])
+        self.assertEqual((opener.tag, dialog.tag), ("button", "dialog"))
+        self.assertIn("aria-labelledby", dialog.attrs)
+        inside = within(part, "id", dialog.attrs["id"])
+        self.assertLessEqual(
+            {"hq://hq", "example_next"}, {element.words for element in inside if element.tag == "code"}
+        )
+        paragraphs = [element for element in elements(part, "p") if "example_next" in element.words]
+        self.assertTrue(paragraphs)
+        self.assertTrue(all(dialog in element.ancestors for element in paragraphs))

@@ -11,7 +11,7 @@ from django.test import SimpleTestCase, TestCase
 
 from hq.platform.core.tests.browser.estate import Redirected, ask_as_production, landing, owner_client
 from tools.perf import report
-from tools.perf.tests.test_runs import PLAN, REFUSED_LOG, FakeTarget, Measured
+from tools.perf.tests.test_runs import PLAN, SET, SET_REFUSALS, Checks, FakeTarget, Measured
 
 
 class AnsweredTests(Measured):
@@ -32,6 +32,53 @@ class AnsweredTests(Measured):
             ["here page estate/contacts: /contacts/ answered 404, not 200"],
         )
         self.assertIn("/contacts/ answered 404", said)
+
+    def beside_a_base_answering(self, base_answers: dict[str, int], here_answers: dict[str, int]):
+        """A run beside a base whose first passes answer as given, every other page 200, and its closing line."""
+
+        base = FakeTarget()
+        base.url = "http://127.0.0.1:8"
+
+        def one_pass(url, _cookie, pages):
+            answers = base_answers if url == base.url else here_answers
+            return {page: answers.get(page, 200) for page in pages}
+
+        with mock.patch.object(report.measure, "one_pass", one_pass):
+            kept, _ = self.measure(FakeTarget(), base=base)
+        with mock.patch.object(report, "ROOT", self.out):
+            said = report.closing(kept, kept.doc["here"], kept.doc["base"])
+        return kept, said
+
+    def test_a_page_the_base_answers_404_and_this_tree_serves_is_measured_here_alone_and_fails_nothing(self):
+        kept, said = self.beside_a_base_answering({"/contacts/": 404}, {})
+
+        self.assertEqual([failure for failure in report.failures(kept.doc) if "answered" in failure], [])
+        self.assertEqual(self.server_times.pages, {"base": ["/"], "here": ["/", "/contacts/"]})
+        contacts = kept.doc["here"]["pages"][1]["server"]
+        self.assertEqual(contacts["p50_ms"], 6.0, "this tree measures the page")
+        self.assertNotIn("moved_ms", contacts, "a page the base lacks has no move from it")
+        self.assertNotIn("queries", kept.doc["base"]["pages"][1]["server"], "the base measures nothing of it")
+        self.assertRegex(said, r"\bof 1 pages moved past their spread", "only the page on both sides is compared")
+        self.assertRegex(said, r"estate/contacts[^;]*not at the base")
+
+    def test_a_page_that_answers_404_on_both_sides_fails_on_both(self):
+        kept, _ = self.beside_a_base_answering({"/contacts/": 404}, {"/contacts/": 404})
+
+        self.assertEqual(
+            [failure for failure in report.failures(kept.doc) if "answered" in failure],
+            [
+                "base page estate/contacts: /contacts/ answered 404, not 200",
+                "here page estate/contacts: /contacts/ answered 404, not 200",
+            ],
+        )
+
+    def test_a_base_page_that_answers_an_error_other_than_404_still_fails(self):
+        kept, _ = self.beside_a_base_answering({"/contacts/": 500}, {})
+
+        self.assertEqual(
+            [failure for failure in report.failures(kept.doc) if "answered" in failure],
+            ["base page estate/contacts: /contacts/ answered 500, not 200"],
+        )
 
 
 class AskedTests(TestCase):
@@ -109,6 +156,46 @@ class AskedTests(TestCase):
         self.assertIn(f"estate/domains lands on {report.estate_name(page)}", said.getvalue())
 
 
+class EarlyRefusalTests(SimpleTestCase):
+    """The task checks the set and the pages asked before it waits for the heavy turn, with no
+    database: a test case that refuses every query proves it."""
+
+    def refused(self, **asked) -> str:
+        """What the early check prints for ``asked``, or "" where it lets the run go on."""
+
+        environment = {"usage_seed": "showcase", **{f"usage_{key}": value for key, value in asked.items()}}
+        with (
+            mock.patch.dict("os.environ", environment),
+            mock.patch("sys.stderr", new_callable=io.StringIO) as err,
+            redirect_stdout(io.StringIO()) as out,
+        ):
+            try:
+                report.refuse_early()
+            except SystemExit as exited:
+                self.assertEqual(exited.code, 2)
+                return err.getvalue()
+        self.assertEqual(out.getvalue(), "", "a page left out is the run's to name")
+        return ""
+
+    def test_a_page_that_is_none_is_refused_naming_the_nearest_route(self):
+        said = self.refused(pages="control_plane:containrs")
+
+        self.assertIn("No page control_plane:containrs", said)
+        self.assertIn("\n  estate/infrastructure/containers (the estate's control_plane:containers)", said)
+
+    def test_a_set_no_server_can_be_seeded_with_is_refused(self):
+        self.assertIn("example-no-such-set", self.refused(pages="estate/all", seed="example-no-such-set"))
+
+    def test_pages_perf_serves_or_is_asked_to_skip_go_on_to_the_run(self):
+        for asked in (
+            {"pages": "/infrastructure/containers/ control_plane:containers estate/all"},
+            {"pages": "connections /infrastructure/containers/", "skip_unservable": "true"},
+            {"pages": "connections", "skip_unservable": "true"},
+        ):
+            with self.subTest(**asked):
+                self.assertEqual(self.refused(**asked), "")
+
+
 class ComposedTests(Measured):
     """--image measures what production runs: the host image composed with the checkout's set."""
 
@@ -142,13 +229,22 @@ class ComposedTests(Measured):
         composed.assert_not_called()
         self.assertEqual(image, "severino-hq:perf-ba9876543210")
 
-    def test_a_composition_refused_for_its_plugin_api_starts_the_run_again_alone(self):
-        # The refusal is the collect step's, with the build's own report of the failure after it.
+    def test_a_composition_its_tree_cannot_load_starts_the_run_again_alone(self):
+        # The build's own report of the failure buries the refusal; the tree's check names it.
         build_tail = "".join(f" {line} | RUN collectstatic\n" for line in range(40))
-        self.compose(1, said=REFUSED_LOG + build_tail + "ERROR: failed to solve: exit code: 1\n")
-        asked = report.Plan(**{**PLAN.__dict__, "image": True, "extensions": ["example.ledger.plugin:plugin"]})
+        failed = subprocess.CompletedProcess([], 1, stdout="", stderr=build_tail + "ERROR: failed to solve\n")
+        checks = Checks(composed=SET_REFUSALS[0])
 
-        with mock.patch.object(report, "run"), self.assertRaisesRegex(report.SetRefused, r"requires API 5"):
+        def ran(command, **kwargs):
+            return failed if "image:compose" in command else checks(command, **kwargs)
+
+        asked = report.Plan(**{**PLAN.__dict__, "image": True, "extensions": [SET]})
+        with (
+            mock.patch.dict("os.environ", {"HQ_LOCAL_PLUGINS": SET}),
+            mock.patch.object(report.subprocess, "run", ran),
+            mock.patch.object(report, "run"),
+            self.assertRaisesRegex(report.SetRefused, r"requires API 5"),
+        ):
             self.measure(FakeTarget(), asked)
 
     def test_a_composed_image_is_kept_apart_from_the_host_image_s(self):

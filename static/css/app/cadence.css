@@ -6,14 +6,17 @@
 /* ── Planning timeline ─────────────────────────────────────────────
    One chronological primitive for every domain. A two-column horizon uses the
    desktop canvas without turning eight dates into a full page of vertical rail;
-   source order remains chronological and collapses to one column on phones. */
+   source order remains chronological and collapses to one column on phones.
+   The list reaches its frame's sides (surfaces.css) and each item keeps the
+   frame's inset, so two columns' dividers meet as one rule across the frame
+   and the inset on either side of their seam is the columns' gap. */
 .timeline-list {
   list-style: none;
   margin: var(--space-2) 0 0;
   padding: 0;
   display: grid;
+  /* stylelint-disable-next-line declaration-property-value-disallowed-list -- a timeline's entries, in reading order down and across */
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  column-gap: var(--space-14);
   /* Each item draws the rule above it and the list clips the first row's, so
      the dividers are right in one column or two without counting items. */
   /* stylelint-disable-next-line declaration-property-value-disallowed-list -- the list clips its first row's divider, not text */
@@ -25,10 +28,11 @@
   align-items: center;
   column-gap: var(--space-6);
   min-height: 62px;
-  padding: var(--space-3) 0;
+  padding: var(--space-3) var(--frame-inset, 0);
   box-shadow: 0 -1px 0 var(--line-2);
 }
 .timeline-item time { display: flex; flex-direction: column; align-items: center; font-feature-settings: "tnum"; }
+/* stylelint-disable-next-line property-disallowed-list -- a kicker: the month over a timeline's entries */
 .timeline-month { color: var(--muted); font-size: var(--text-3xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .timeline-day { color: var(--ink); font-size: var(--text-2xl); font-weight: 650; line-height: 1.1; }
 .timeline-year { color: var(--muted-2); font-size: var(--text-3xs); font-weight: 600; letter-spacing: .04em; }
@@ -37,37 +41,20 @@
 .timeline-copy a:hover { color: var(--accent); }
 
 
-/* ── Notice pages (404 / 500) ───────────────────────────────────────
+/* ── Error pages (partials/_error_page.html) ────────────────────────
    Deliberately plain: the operator is here by accident, so the page
    orients and offers one way out rather than decorating the mistake. */
 
-.notice-page { max-width: 44ch; margin: 12vh auto 0; text-align: center; }
-.notice-code {
+/* stylelint-disable-next-line declaration-property-value-disallowed-list -- the whole page is one centered box, sized as a dialog is, with its search field in it */
+.error-page { max-width: 44ch; margin: 12vh auto 0; text-align: center; }
+.error-page-code {
   margin: 0 0 var(--space-3); font-size: var(--text-xs); font-weight: 650; letter-spacing: .1em;
   color: var(--muted-2); font-feature-settings: "tnum";
 }
-.notice-page h1 { margin: 0 0 var(--space-5); font-size: var(--text-4xl); letter-spacing: -.02em; }
-.notice-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
-.notice-page .page-actions { justify-content: center; display: flex; }
-
-/* In a narrow box (tables.js) the cadence matrix drops its oldest
-   periods rather than scrolling. A
-   sideways scrollbar under a five-column grid of dots is both ugly and
-   useless: the columns only mean anything lined up against each other, and
-   half of them parked off-screen are not lined up against anything. The
-   three most recent survive, which is the end of the row an eye goes to
-   first and the part a decision is made from; the full history is a tap away
-   on the page this panel links to.
-   Counted from the end, so it is "the last three" whatever the window
-   length happens to be, rather than a fixed set of column numbers. */
-@container style(--box: narrow) {
-  .cadence-matrix th:nth-child(n+2):nth-last-child(n+5),
-  .cadence-matrix td:nth-child(n+2):nth-last-child(n+5) { display: none; }
-  /* The "last trained" line is what pushes the label column past a narrow box.
-     The dots are the reading; the exact recency is on the split page. */
-  .cadence-matrix .cadence-detail { display: none; }
-  .cadence-matrix th, .cadence-matrix td { padding: var(--space-3) var(--space-1); }
-}
+.error-page h1 { margin: 0 0 var(--space-5); font-size: var(--text-4xl); letter-spacing: -.02em; }
+.error-page-body { margin: 0 0 var(--space-10); color: var(--muted); line-height: 1.6; }
+.error-page .filter-bar { justify-content: center; margin: 0 0 var(--space-8); }
+.error-page .page-actions { justify-content: center; display: flex; }
 
 /* ── Cadence strip ──────────────────────────────────────────────────
    Whether a thing happened, period by period. A filled mark is a period it
@@ -99,9 +86,11 @@
 /* Anchored at the top-left of its containing block. At its static position, a
    label in the last column of a wide table would sit past the page edge,
    outside both the table's scroll box and main's clip, and scroll the whole
-   page sideways. */
+   page sideways. Each declaration is important, as Bootstrap's is, so no
+   part's own rule (a tight table's wrapping pill, a mark's padding) reopens
+   the pixel and lays the text out a letter a line. */
 /* stylelint-disable-next-line declaration-property-value-disallowed-list -- text for a screen reader alone, clipped to a pixel on purpose */
-.visually-hidden { position: absolute; inset-block-start: 0; inset-inline-start: 0; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.visually-hidden { position: absolute !important; inset-block-start: 0 !important; inset-inline-start: 0 !important; width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; border: 0 !important; overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap !important; }
 /* Text only a screen reader hears has no lines for a name to hold, and no
    part of it draws a box past the one pixel that clips it. A mark hidden from
    the reader (a dot between parts) is then neither seen nor heard, so it is
@@ -113,23 +102,13 @@
    rows can be read against each other. Deliberately not stacked on a phone: a
    matrix that becomes a list of lists loses the alignment it exists for, and a
    row of five dots fits a narrow screen comfortably. */
-.cadence-matrix th[scope="col"] { text-align: center; }
-.cadence-matrix th[scope="col"]:first-child { text-align: left; }
-.cadence-matrix th[scope="row"] { text-align: left; font-weight: 650; }
-.cadence-matrix th[scope="row"] a { color: var(--ink); }
-.cadence-matrix th[scope="row"] a:hover { color: var(--accent); }
 .cadence-detail { display: block; font-weight: 400; font-size: var(--text-2xs); }
-.cadence-cell { text-align: center; }
 .cadence-cell .cadence-mark { margin: 0 auto; }
 .cadence-period { font-size: var(--text-2xs); color: var(--muted-2); font-weight: 500; white-space: nowrap; }
-.cadence-total { text-align: center; font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }
+.cadence-total { font-feature-settings: "tnum"; color: var(--muted); white-space: nowrap; }
 /* Compact: for a matrix sharing a row with a chart, where the default cell
-   padding would push eight columns past a half-width card. */
-.cadence-matrix.is-compact th,
-.cadence-matrix.is-compact td { padding: var(--space-3) var(--space-2); }
-.cadence-matrix.is-compact .cadence-period { font-size: var(--text-3xs); }
-.cadence-matrix.is-compact th[scope="row"] { font-size: var(--text-sm); }
-.cadence-matrix.is-compact .cadence-detail { font-size: var(--text-3xs); }
+   padding and type would push eight columns past a half-width card. */
+[data-marks="compact"] :is(.cadence-period, .cadence-detail) { font-size: var(--text-3xs); }
 
 /* Tabbed charts. Several drawings of one thing in the space of one, built from
    radios so the panel works with no JavaScript and the arrow keys move between
@@ -169,15 +148,27 @@
    colored by which way it went, with the sign and the number carrying the
    meaning, so the color is never the only thing saying it. */
 .toned { font-variant-numeric: tabular-nums; }
-.toned-good { color: var(--ok); }
-.toned-attention { color: var(--warn); }
-.toned-serious { color: var(--danger); }
-.toned-neutral { color: var(--ink-2); }
+.toned:where(:not(.toned-ink-context)) { color: var(--toned); }
+.toned-good { --toned: var(--ok); }
+.toned-attention { --toned: var(--warn); }
+.toned-serious { --toned: var(--danger); }
+.toned-neutral { --toned: var(--ink-2); }
+/* A standing state (`dot=True`): a dot in the state's tone leads its words,
+   which take that tone too, or with `ink="context"` the ink around them, as a
+   heading's or a menu's own words do. It never moves, since a moving dot says
+   a thing is live. */
+.toned-dot { display: inline-flex; align-items: center; gap: var(--space-3); }
+.toned-dot::before { content: "" / ""; inline-size: 8px; block-size: 8px; flex: none; border-radius: 50%; background: var(--toned); }
+/* A state led by its mark (`icon=`) in place of the dot: inline, so a cell
+   still cuts its words beside it, set on the words' baseline, and in the
+   state's tone even where the words take the ink around them. */
+.toned > .icon { vertical-align: -0.15em; color: var(--toned); }
+/* Its words are a state or a name, never a figure in a column of figures, so
+   they keep the face's own digits and the cell no wider than they need. */
+.toned:has(> .icon) { font-variant-numeric: normal; }
 
-/* A finding stated once, with its arithmetic underneath. The claim is what
-   gets read; the numbers are what make it checkable. */
+/* A finding: the one claim a reading makes, stated once. */
 .finding { margin: var(--space-1) 0 var(--space-1); font-size: var(--text-lg); font-weight: 600; line-height: 1.4; }
-.finding-evidence { margin: 0 0 var(--space-7); font-size: var(--text-xs); }
 
 /* A route, drawn from its own points. No basemap, so the line carries
    everything: shape for where, color for how fast. */
@@ -281,11 +272,10 @@
   .page-nav,
   .table-filter-menu, .table-selection,
   .btn, button, .job-progress, .page-actions, form,
-  /* `.pill` in a page head is a link ("Markdown", "Care →"). Status pills
-     inside a table are content and are kept. */
-  .page-head .pill, .section-head .pill,
-  /* The app's warning banner addresses whoever is at the screen. Printed
-     under a page of gait measurements it reads as an accusation. */
+  /* `.pill` in a page head is a link ("Markdown", "Care →"), as one in a
+     section's head is (surfaces.css). Status pills inside a table are content
+     and are kept. */
+  .page-head .pill { display: none !important; }
 
   /* Cards become ruled sections: backgrounds are dropped, so the separation
      has to be drawn in ink rather than in a tint. */

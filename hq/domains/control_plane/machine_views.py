@@ -1,5 +1,6 @@
 """Machines and the tailnet: the list, one machine's page, and what a change to either would reach."""
 
+from functools import cached_property
 from typing import override
 from urllib.parse import urlencode
 
@@ -18,7 +19,7 @@ from hq.platform.application.machine_context import (
     sections_for as machine_sections,
 )
 from hq.platform.application.machines import declaration_seed, machine
-from hq.platform.application.pages import PageAction, PageDialog, PageMixin, PageVisit
+from hq.platform.application.pages import PageAction, PageDialog, PageMixin
 from hq.platform.application.resource_capabilities import (
     UPDATE_CAPABILITY,
     Offered,
@@ -27,8 +28,11 @@ from hq.platform.application.resource_capabilities import (
 )
 from hq.platform.application.routes import reverse
 from hq.platform.application.security import web_principal
+from hq.platform.application.service_context import RUNS_SECTION
 from hq.platform.application.tailnet_context import tailnet_context
+from hq.platform.application.visit_refresh import page_visit
 lazy from hq.platform.application import tailnet
+lazy from hq.platform.application.automation_runs import playbooks_on
 lazy from hq.platform.application.containers import on_machine
 lazy from hq.platform.application.docker_sections import docker_line
 lazy from hq.platform.application.page_relations import for_machine
@@ -36,6 +40,7 @@ lazy from hq.platform.application.request_channel import displayed_client_ip
 lazy from hq.platform.application.tailnet import declaration, may_reach, ports, proposed_grant
 
 from .models import ManagedResource
+from .names import normalized_hostname
 from .provider_adapters.declarations import MACHINE_KIND
 from .provider_adapters.portainer import CONTAINER_KIND
 
@@ -206,7 +211,24 @@ class MachineDetailView(PageMixin, TemplateView):
                     f"{reverse('control_plane:create')}?{seeded}",
                 ),
             ]
-        return tuple(actions)
+        return (*self._run_here(), *actions)
+
+    @cached_property
+    def playbooks_here(self) -> tuple[tuple[str, str], ...]:
+        """Each playbook its reader may run on this machine, by title and its Run page."""
+
+        return playbooks_on(normalized_hostname(self.found.name), web_principal(self.request.user))
+
+    def _run_here(self) -> tuple[PageAction, ...]:
+        """One playbook's Run page with this machine chosen, or a dialog of several, Playbooks without script."""
+
+        label = "Run a playbook here"
+        if not self.playbooks_here:
+            return ()
+        if len(self.playbooks_here) == 1:
+            return (PageAction(label, self.playbooks_here[0][1]),)
+        dialog = PageDialog("run-playbook", label, "control_plane/_run_playbook.html")
+        return (PageAction(label, reverse("control_plane:playbooks"), modal=dialog),)
 
     @override
     def get_context_data(self, **kwargs):
@@ -223,16 +245,20 @@ class MachineDetailView(PageMixin, TemplateView):
         # What else HQ can say about this machine, from a registry rather than
         # from this view. A band appears because a resolver produced one, so
         # what HQ learns next reaches the page without either being edited.
-        sections = machine_sections(found)
-
         principal = web_principal(self.request.user)
+        sections = machine_sections(found, principal=principal)
         whole, context["relationships"] = for_machine(found, sections, principal=principal)
         # One Docker environment is a line under the containers heading. Its
         # table is left for a machine that has several.
         context["docker"] = docker_line(found) if found.containers else None
+        # Its runs are drawn under its load, where an operator looks first.
+        context["runs"] = tuple(section for section in sections if section.id == RUNS_SECTION)
         context["sections"] = tuple(
-            section for section in sections if not (context["docker"] and section.id == "docker-environment")
+            section
+            for section in sections
+            if section.id != RUNS_SECTION and not (context["docker"] and section.id == "docker-environment")
         )
+        context["playbooks_here"] = self.playbooks_here
         # How many names the page's own table lists, which the band then counts.
         context["names_listed"] = next(
             (len(section.records) for section in context["sections"] if section.id == "names"), 0
@@ -253,7 +279,7 @@ class MachineDetailView(PageMixin, TemplateView):
         context["is_this_device"] = displayed_client_ip(self.request) in found.addresses
         context["hq_label"] = HQ_LABEL
         context["page_aside"] = "control_plane/_machine_status.html"
-        context["page_visit"] = PageVisit("machine", found.name)
+        context["page_visit"] = page_visit("machine", found.name)
         context["container_kind"] = CONTAINER_KIND
 
         # Whether what each container runs is current and safe, as the

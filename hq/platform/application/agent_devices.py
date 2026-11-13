@@ -285,7 +285,9 @@ def set_device_approved(
     with transaction.atomic():
         row = _locked(current_key)
         if row.person_id is not None and row.person_id != user.pk:
-            raise AuthorizationError("Only the person this agent acts for approves the devices it calls from.")
+            raise AuthorizationError(
+                "This agent acts for another account, so only that account can approve its devices."
+            )
         if (row.approved_at is not None) == approving:
             return {"ok": True, "device": str(row.pk), "approved": approving}
         row.approved_at = timezone.now() if approving else None

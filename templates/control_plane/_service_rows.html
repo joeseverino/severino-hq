@@ -10,7 +10,7 @@ the last one back.
 favorites, where the order is something the operator chose; among the rest,
 alphabetical is the order and there is nothing to move.
 {% endcomment %}
-{% table_region "Services" room="snug" %}
+{% table_region "Services" room="snug" empty=empty_message action_url=start_url action_label="Publish a service" %}
   <table class="data-table">
     <thead>
       <tr>
@@ -28,29 +28,10 @@ alphabetical is the order and there is nothing to move.
       {% for service in rows %}
         <tr>
           <td>
-            <div class="service-name name-line">
-              {% url 'control_plane:service_pin' service.hostname as pin_url %}
-              {% if service.pinned %}
-                {% post_button "★" pin_url css="pin-toggle pinned" title="Remove "|add:service.hostname|add:" from favorites" %}
-              {% else %}
-                {% post_button "☆" pin_url css="pin-toggle" title="Add "|add:service.hostname|add:" to favorites" %}
-              {% endif %}
-              <strong>{% entity "service"|entity_of:service.hostname %}</strong>
-              {% if reorderable %}
-                <span class="pin-move">
-                  {% url 'control_plane:service_move' service.hostname as move_url %}
-                  {% if not forloop.first %}
-                    {% post_button "↑" move_url name="direction" value="up" css="" title="Move "|add:service.hostname|add:" up" %}
-                  {% endif %}
-                  {% if not forloop.last %}
-                    {% post_button "↓" move_url name="direction" value="down" css="" title="Move "|add:service.hostname|add:" down" %}
-                  {% endif %}
-                </span>
-              {% endif %}
-            </div>
+            {% include "control_plane/_service_pin.html" with service=service reorderable=reorderable first=forloop.first last=forloop.last only %}
           </td>
           {% with exposure=service.exposure %}
-            <td><span class="exposure exposure-{{ exposure.level }}" title="{{ exposure.sentence }}">{{ exposure.short|breakable }}</span></td>
+            <td>{% status exposure.short tone=exposure.tone title=exposure.sentence pill=False data_exposure=exposure.level %}</td>
           {% endwith %}
           {% for facet in service.facets %}
             {% if facet.id != runtime_facet %}
@@ -73,7 +54,7 @@ alphabetical is the order and there is nothing to move.
                   {% for line in facet.reading_lines %}
                     <span title="{{ line.hint }}">{{ line.label|breakable }}{% if line.detail %}<span class="muted">{% dot %}{{ line.detail|breakable }}</span>{% endif %}</span>{% if not forloop.last %}<br>{% endif %}
                   {% endfor %}
-                  {% if not facet.claims and not facet.readings %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}<span class="muted">No record</span>{% else %}{% empty_value %}{% endif %}{% endif %}
+                  {% if not facet.claims and not facet.readings %}{% if service.is_observed and facet.id == dns_facet and service.path.gaps %}{% include "partials/_empty_state.html" with message="No record" inline=True only %}{% else %}{% empty_value %}{% endif %}{% endif %}
                 {% endif %}
               </td>
             {% endif %}
@@ -105,10 +86,6 @@ alphabetical is the order and there is nothing to move.
           <td>{% status service.status_label tone=service.status title=service.health.detail %}</td>
         </tr>
       {% endfor %}
-    </tbody>
-    {% empty %}
-    <tbody>
-      <tr><td colspan="{% if show_service_projects %}{{ facets|length|add:5 }}{% else %}{{ facets|length|add:4 }}{% endif %}">{% include "partials/_empty_state.html" with message=empty_message action_url=start_url action_label="Publish a service" %}</td></tr>
     </tbody>
     {% endfor %}
   </table>

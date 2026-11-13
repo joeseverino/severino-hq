@@ -44,8 +44,9 @@ if ! grep -q '^\[tool\.mypy\]' pyproject.toml; then
     exit 1
 fi
 
-# The host's structural rules for text a person reads and for a test's read
-# of a table cell or of a word a page lacks hold the package's source as they
+# The host's structural rules for a test's read
+# of a table cell or of a word a page lacks, and the shapes a shared part draws
+# drawn by hand in a template (hand-drawn-*), hold the package's source as they
 # hold the host's: each rule's scope reaches src/, read from the package root. The ast-grep is the
 # host's pin, which mise installs where it is missing (an extension's CI sets
 # up only uv), or the one on the PATH where mise has no pin. It runs here,
@@ -56,7 +57,8 @@ ast_grep=$(pinned) || { mise -C "$hq_root" install --quiet ast-grep 2>/dev/null 
     echo "ast-grep is not installed: \`mise -C $hq_root install ast-grep\` installs the host's pin, or says why it cannot." >&2
     exit 1
 }
-"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(dot-typed-in-text|cell-read-by-its-text|absent-text-read-from-the-text)$' --report-style medium src
+"$ast_grep" scan -c "$hq_root/tools/lint/ast-grep/sgconfig.yml" --filter '^(cell-read-by-its-text|absent-text-read-from-the-text|hand-drawn-.+)$' \
+    --error=unused-suppression --report-style medium src
 
 work=$(mktemp -d "${TMPDIR:-/tmp}/hq-plugin-check.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT HUP INT TERM
@@ -76,6 +78,8 @@ uv pip install --quiet --python "$python" --require-hashes -r "$host_requirement
 PYTHONPATH="$hq_root" "$python" -m hq_sdk.validation src
 
 export DJANGO_DEBUG=true
+# Each template read once, as the host's gates and production read them.
+export DJANGO_TEMPLATE_CACHE=1
 export DJANGO_SETTINGS_MODULE=hq.config.settings
 # A check never opens the host checkout's own database.
 export SEVERINO_DATABASE_PATH="$work/check.sqlite3"
@@ -90,7 +94,9 @@ export SEVERINO_HQ_PLUGINS="$plugin_reference"
 # django-stubs keys mypy's cache on INSTALLED_APPS alone, so a cache kept
 # beside the package still names a host model module that has since moved;
 # a cache of this run's own costs what a warm one does.
-MYPYPATH="$hq_root" "$python" -m mypy --cache-dir "$work/mypy"
+# django-stubs loads the settings while mypy starts, and mypy reports an
+# error there only as its own crash; the traceback names the real cause.
+MYPYPATH="$hq_root" "$python" -m mypy --show-traceback --cache-dir "$work/mypy"
 "$python" "$hq_root/manage.py" check
 "$python" "$hq_root/manage.py" makemigrations --check --dry-run "$django_app"
 # The template checks read every template Django loads, so they hold the
@@ -105,7 +111,7 @@ MYPYPATH="$hq_root" "$python" -m mypy --cache-dir "$work/mypy"
     hq.platform.application.tests.test_architecture_pages.PageTitleTests hq.platform.application.tests.test_architecture_primitives.OnePrimitiveTests \
     hq.platform.application.tests.test_architecture_primitives.FragmentPrimitiveTests \
     hq.platform.application.tests.test_shared_markup.SharedMarkupTemplateTests \
-    hq.platform.core.tests.test_template_values.TemplateValueTests hq.platform.core.tests.test_row_groups.RowGroupTests \
+    hq.platform.core.tests.test_template_values.TemplateValueTests \
     hq.platform.core.tests.test_template_separators.TemplateSeparatorTests \
     hq.platform.application.tests.test_action_words.CallSiteWordsTests \
     hq.platform.application.tests.test_architecture_styles.StyleContractTests.test_a_rows_block_detail_opens_beneath_the_row \

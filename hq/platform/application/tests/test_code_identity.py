@@ -95,5 +95,20 @@ class CodeIdentityTests(SimpleTestCase):
         with self.assertRaises(ImproperlyConfigured):
             code_identity.code_identity(["example_absent"])
 
-    def test_the_derived_cache_is_keyed_on_the_running_code(self):
-        self.assertEqual(settings.CACHES["derived"]["KEY_PREFIX"], code_identity.running_code())
+    def test_the_derived_cache_is_keyed_on_the_code_the_process_started_with(self):
+        self.assertEqual(settings.CACHES["derived"]["KEY_PREFIX"], code_identity.booted_code())
+
+    def test_the_process_records_the_running_code_once(self):
+        """Taken on a tree held still, then kept when the files move under it."""
+
+        with (
+            importable({"plugin.py": FIRST}) as root,
+            mock.patch.object(code_identity, "HOST", (PACKAGE,)),
+            mock.patch.object(code_identity, "installed_plugins", return_value=()),
+            mock.patch.object(code_identity, "recorded", None),
+        ):
+            recorded = code_identity.booted_code()
+            self.assertEqual(recorded, code_identity.running_code())
+            (root / "plugin.py").write_text(SECOND)
+            self.assertNotEqual(code_identity.running_code(), recorded)
+            self.assertEqual(code_identity.booted_code(), recorded)

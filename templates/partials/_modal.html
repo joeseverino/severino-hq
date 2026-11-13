@@ -16,20 +16,42 @@ make it a button. The close button is the platform's own `command="close"`
 invoker, which needs no script. Opening fires the dialog's `toggle` event,
 where fragment.js fetches what the dialog holds back.
 
-`body_template` is rendered with the surrounding context. Escape and the
-backdrop close the dialog; both are handled by the host, not by the caller.
+An opener is one of four controls, each naming the dialog: a link with
+`data-modal-open="<id>"`, a control with `aria-haspopup="dialog"` and
+`aria-controls="modal-<id>"`, the platform's invoker,
+`command="show-modal" commandfor="modal-<id>"` (partials/_about.html), or a
+popover's status with `data-origin="modal-<id>"`. The
+browser gates and dev:look find a dialog's opener by those four alone
+(SELECTORS["dialog_opener"]), so a dialog opened any other way counts as one
+nobody can open.
+
+`body_template` is rendered with the surrounding context, a section in it
+heading itself under the dialog's title. Escape and the backdrop close the
+dialog; both are handled by the host, not by the caller.
+
+`size="wide"` draws a page in a dialog: two panels side by side, the window
+showing around it, scrolling inside itself under a title that stays put, and
+the whole screen on a phone. Without it the dialog is a form's width.
+`modal_class` names a dialog a sheet styles of its own (Command Center, an
+urgency's origin).
+
+`popover` draws it as a popover rather than a modal dialog, for a panel a
+script shows beside what opened it (`showPopover()`, partials/_urgency_pill.html),
+which a press elsewhere dismisses; its close button hides the popover.
 {% endcomment %}
-<dialog class="modal {{ modal_class }}" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title">
+<dialog class="modal{% if size %} modal-{{ size }}{% endif %}{% if modal_class %} {{ modal_class }}{% endif %}" id="modal-{{ id }}" aria-labelledby="modal-{{ id }}-title"{% if popover %} popover{% endif %}>
   {% comment %}
   tabindex and autofocus together: the dialog moves focus inside itself on open,
   and without a target it lands on the close button and rings it.
   {% endcomment %}
   <div class="modal-panel" tabindex="-1" autofocus>
     <div class="modal-head">
-      <h2 id="modal-{{ id }}-title">{{ title|breakable }}</h2>
-      <button class="modal-close" type="button" command="close" commandfor="modal-{{ id }}" aria-label="Close">&times;</button>
+      {% comment %}
+      <!-- ast-grep-ignore: hand-drawn-heading --> a dialog's title, which labels the dialog
+      {% endcomment %}<h2 id="modal-{{ id }}-title">{{ title|breakable }}</h2>
+      <button class="modal-close" type="button" command="{% if popover %}hide-popover{% else %}close{% endif %}" commandfor="modal-{{ id }}" aria-label="Close">&times;</button>
     </div>
     {% if lede %}<p class="modal-lede">{{ lede|breakable }}</p>{% endif %}
-    {% if body_template %}{% include body_template %}{% endif %}
+    {% if body_template %}{% headed %}{% include body_template %}{% endheaded %}{% endif %}
   </div>
 </dialog>

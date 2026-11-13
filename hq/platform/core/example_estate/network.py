@@ -5,7 +5,6 @@ import json
 from datetime import timedelta
 
 from hq.domains.control_plane.models import ManagedResource
-from hq.platform.application.inventory_testing import store
 
 from .names import (
     ADGUARD,
@@ -34,6 +33,7 @@ from .names import (
     tailnet_v4,
     tailnet_v6,
 )
+from .sweep import store
 
 # The tailnet: the owner reaches the server on 443, and nothing else is granted.
 POLICY = {
@@ -93,6 +93,9 @@ PUBLIC_RECORDS = (
         False,
     ),
 )
+# A rewrite made in AdGuard's own screen for the printer, which no declaration
+# claims: the one name HQ offers to take under its management.
+HAND_MADE = {"domain": "printer.example.com", "answer": "10.100.200.47", "connection_ref": ADGUARD}
 RENEWS_IN = timedelta(days=200)
 # The zone's declaration, keyed by its name the way a key is written.
 ZONE_KEY = ZONE.replace(".", "-")
@@ -182,7 +185,7 @@ def zone():
 def adguard():
     """The rewrites as AdGuard holds them, its settings, clients and lookups."""
 
-    store("adguard.rewrite", *(_rewrite(hostname) for hostname, *_rest in SERVICES))
+    store("adguard.rewrite", *(_rewrite(hostname) for hostname, *_rest in SERVICES), HAND_MADE)
     store(
         "adguard.dns",
         {

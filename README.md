@@ -86,7 +86,7 @@ names them.
   anything of the host's but `hq_sdk`, and `hq/platform/application/tests/test_plugins.py` fails when a
   host file names an installed extension.
 - Architecture rules (no view writes a model, MCP reads no model, one table
-  engine, function complexity) are tests in
+  engine) are tests in
   `hq/platform/application/tests/test_architecture.py`, listed in
   [New Domain](docs/New-Domain.md).
 - A composition's signature checks against Compose on `main`, the identity

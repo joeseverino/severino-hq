@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Any
 
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Case, F, JSONField, Q, Value, When
 from django.utils import timezone
@@ -21,7 +22,7 @@ from hq.domains.control_plane.providers import (
     enabled_controller_actions,
 )
 from hq.platform.core.attribution import bound
-from hq.platform.core.audit import audit_events, audit_operation, audited_labels
+from hq.platform.core.audit import audit_events, audit_operation, audited_labels, record_event
 from hq.platform.core.models import AuditLog
 lazy from hq.domains.control_plane.provider_adapters.declarations import DELIVERY_TARGET_KIND
 
@@ -32,6 +33,7 @@ from .infrastructure import controller_contract, resolved_spec, serialize_resour
 from .inventory import strike_removed
 from .plugin_admission import admitted_sources
 from .resource_operations import enqueue, serialize_operation
+lazy from .automation_sources import propose
 lazy from .cadence import request_reading, swept
 lazy from .dependency_updates import plan as dependency_updates
 lazy from .derivations import present
@@ -50,6 +52,10 @@ class ControllerReport:
     status: dict[str, Any] = field(default_factory=dict)
     conditions: list[dict[str, Any]] = field(default_factory=list)
     message: str = ""
+    # A run's task outcomes (``RunEvent``); no other operation reports any.
+    events: list[dict[str, Any]] = field(default_factory=list)
+    # What a scan found (``SourceCatalog``); no other operation reports one.
+    catalog: dict[str, Any] | None = None
 
 
 def _confirm_delivery_targets(resource: ManagedResource, status: dict[str, Any]) -> None:
@@ -108,15 +114,69 @@ def _as_its_own(operation: OperationRequest) -> AbstractContextManager[None]:
     )
 
 
-def _release_lapsed(now) -> None:
+# The reason a run ended without a known outcome carries: its lease lapsed,
+# or its worker stopped before it reported (``hq_runner``).
+OUTCOME_UNKNOWN = "OutcomeUnknown"
+# Why a run whose lease lapsed is ended rather than queued again, by the
+# retry its manifest declares (``OperationManifest.retry``), pinned in its
+# record's spec when it was asked for. ``safe`` alone queues it again.
+_UNKNOWN_OUTCOME = {
+    "never": "It stopped reporting before finishing, so what it changed is unknown, and it is not run again.",
+    "observe_first": (
+        "It stopped reporting before finishing, so what it changed is unknown; "
+        "its playbook checks the machines before running again."
+    ),
+}
+
+
+def _fail_lapsed_runs(now) -> None:
+    """End each lapsed run its manifest does not call safe to repeat.
+
+    A run may have changed machines before its worker stopped renewing, and
+    HQ cannot tell, so running it again could act twice. It ends cancelled,
+    the state that reads "Stopped early", as a run still claimed with its
+    lease run out already reads, so the one cause reads one way before and
+    after this ends it. Saved one by one
+    under the run's own id, so each ending is an audited row that leads back
+    to the ask. At most one run per procedure is active, so these are few.
+    """
+
+    lapsed = (
+        OperationRequest.objects.select_for_update()
+        .select_related("resource")
+        .filter(state=OperationRequest.State.CLAIMED, lease_expires_at__lte=now, action=OperationRequest.Action.RUN)
+        .exclude(resource__spec__retry="safe")
+    )
+    for operation in lapsed:
+        retry = str(operation.resource.spec.get("retry") or "never")
+        message = _UNKNOWN_OUTCOME.get(retry, _UNKNOWN_OUTCOME["never"])
+        operation.state = OperationRequest.State.CANCELLED
+        operation.completed_at = now
+        operation.lease_expires_at = None
+        operation.claim_attempt = ""
+        operation.result = {"ok": False, "message": message, "reason": OUTCOME_UNKNOWN, "retry": retry}
+        operation.audit_said = message
+        with _as_its_own(operation):
+            operation.save(
+                update_fields=("state", "completed_at", "lease_expires_at", "claim_attempt", "result", "updated_at")
+            )
+
+
+def release_lapsed(now) -> None:
     """Put back the work whose lease ran out, or end it if its record is off.
+
+    The one rule for a lease that ran out: a claim asks it before it leases,
+    and a run's ask before it looks for the run in its way, so work nobody
+    is doing never holds a playbook or a machine.
 
     Switching a record off cancels its queued work (``save_managed_resource``)
     and leaves claimed work to finish. Claimed work whose lease lapses would
     otherwise queue again for a record HQ was told to leave alone, so it ends
     cancelled instead, all but a removal, in the one statement that releases it.
+    A run is never put back blindly (``_fail_lapsed_runs``).
     """
 
+    _fail_lapsed_runs(now)
     switched_off = Q(
         resource__in=ManagedResource.objects.filter(enabled=False).values("pk"),
     ) & ~Q(action=OperationRequest.Action.DELETE)
@@ -135,7 +195,7 @@ def _release_lapsed(now) -> None:
                 then=Value(
                     {
                         "ok": False,
-                        "message": "The record was switched off in HQ, and its lease ran out before it reported.",
+                        "message": "The record was switched off in HQ before its controller finished.",
                         "reason": "SwitchedOff",
                     },
                     output_field=JSONField(),
@@ -146,12 +206,17 @@ def _release_lapsed(now) -> None:
         claimed_by="",
         claimed_at=None,
         lease_expires_at=None,
+        claim_attempt="",
     )
 
 
 def _compatible_operations(operations, capabilities: tuple[tuple[str, str], ...]):
+    """The operations one of ``capabilities`` performs. A caller naming none
+    is offered none: a claim says what it can do, so a worker never takes
+    work only another worker has a handler for."""
+
     if not capabilities:
-        return operations
+        return operations.none()
     predicate = Q()
     for kind, action in capabilities:
         predicate |= Q(resource__kind=kind, action=action)
@@ -177,11 +242,16 @@ def _verification(operation: OperationRequest) -> dict[str, int] | None:
     }
 
 
-def _pending(operation: OperationRequest) -> dict[str, Any]:
+def _pending(operation: OperationRequest, *, claimed: bool = False) -> dict[str, Any]:
     pending: dict[str, Any] = {"ok": True, "operation": serialize_operation(operation)}
     verification = _verification(operation)
     if verification is not None:
         pending["verification"] = verification
+    # A run's worker learns what to run from its claim alone: the parameters
+    # and hosts it was asked and approved for. A peek leases nothing, so it
+    # is told none of it.
+    if claimed and operation.action == OperationRequest.Action.RUN:
+        pending["input"] = operation.input
     return pending
 
 
@@ -341,19 +411,53 @@ def schedule_automatic_operations(controller_id: str) -> dict[str, Any]:
     return {"ok": True, "scheduled": scheduled, "repaired": repaired}
 
 
+_ATTEMPT_LENGTH = 64
+
+
+def _check_lease(lease_seconds: int) -> None:
+    if not 30 <= lease_seconds <= 3600:
+        raise ValueError("Lease duration must be between 30 and 3600 seconds.")
+
+
 @transaction.atomic
 def claim_next_operation(
     controller_id: str,
     *,
     lease_seconds: int = 300,
-    capabilities: tuple[tuple[str, str], ...] = (),
+    capabilities: tuple[tuple[str, str], ...],
+    attempt: str = "",
 ) -> dict[str, Any]:
-    if not 30 <= lease_seconds <= 3600:
-        raise ValueError("Lease duration must be between 30 and 3600 seconds.")
+    """Lease the oldest queued operation one of ``capabilities`` performs.
+
+    ``attempt`` names this claim, so a claim retried after its answer was
+    lost is answered the operation it already leased rather than a second
+    one, as Amazon SQS's receive attempt id does. A run whose lease lapses
+    ends rather than queuing again, so a lost answer would otherwise fail a
+    run nothing ever started.
+    """
+
+    _check_lease(lease_seconds)
     if not controller_id:
         raise ValueError("A claim names the controller making it.")
+    if len(attempt) > _ATTEMPT_LENGTH:
+        raise ValueError(f"A claim attempt is at most {_ATTEMPT_LENGTH} characters.")
     now = timezone.now()
-    _release_lapsed(now)
+    release_lapsed(now)
+    if attempt:
+        held = (
+            OperationRequest.objects.select_related("resource")
+            .filter(
+                state=OperationRequest.State.CLAIMED,
+                claimed_by=controller_id,
+                claim_attempt=attempt,
+                lease_expires_at__gt=now,
+            )
+            .first()
+        )
+        if held is not None:
+            result = _pending(held, claimed=True)
+            result.update(controller_contract(held.resource))
+            return result
     operations = (
         OperationRequest.objects.select_for_update(skip_locked=True)
         .select_related("resource")
@@ -371,6 +475,7 @@ def claim_next_operation(
     operation.claimed_by = controller_id
     operation.claimed_at = now
     operation.lease_expires_at = now + timedelta(seconds=lease_seconds)
+    operation.claim_attempt = attempt
     operation.attempt_count += 1
     with _as_its_own(operation):
         operation.save(
@@ -379,11 +484,12 @@ def claim_next_operation(
                 "claimed_by",
                 "claimed_at",
                 "lease_expires_at",
+                "claim_attempt",
                 "attempt_count",
                 "updated_at",
             )
         )
-    result = _pending(operation)
+    result = _pending(operation, claimed=True)
     result.update(contract)
     return result
 
@@ -415,6 +521,56 @@ def _next_resolvable(operations, now):
     return None, {}
 
 
+def _stop(reason: str, lease_expires_at=None) -> dict[str, Any]:
+    return {
+        "ok": True,
+        "continue": False,
+        "reason": reason,
+        "lease_expires_at": lease_expires_at.isoformat() if lease_expires_at else None,
+    }
+
+
+@transaction.atomic
+def renew_operation(operation_id: str, *, controller_id: str, lease_seconds: int = 300) -> dict[str, Any]:
+    """Extend the lease the claimant holds, and say whether it may go on.
+
+    A worker running long work renews while it runs, so its lease lapses only
+    when it stops renewing. Only the claimant renews, and only before its
+    lease runs out: a lapsed lease is released by the next claim, and a run's
+    outcome is then unknown (``_fail_lapsed_runs``). ``continue`` is false
+    once its asker is held by the pause or a block, or the operation was
+    cancelled, and the worker stops. A held lease is still extended, so the
+    worker has time to stop and report what it did.
+
+    The renewal itself is lease bookkeeping, written with no audit row: the
+    claim and the outcome are the operation's events, and a row per renewal
+    would bury them.
+    """
+
+    _check_lease(lease_seconds)
+    if not controller_id:
+        raise ValueError("A renewal names the controller making it.")
+    now = timezone.now()
+    try:
+        operation = OperationRequest.objects.select_for_update().get(pk=operation_id)
+    except (OperationRequest.DoesNotExist, ValueError, ValidationError) as exc:
+        raise ValueError(f"Operation {operation_id!r} was not found.") from exc
+    if operation.claimed_by and operation.claimed_by != controller_id:
+        raise ValueError("Operation is leased by a different controller.")
+    if operation.state == OperationRequest.State.CANCELLED:
+        return _stop("Cancelled")
+    if operation.state != OperationRequest.State.CLAIMED:
+        raise ValueError(f"Operation is {operation.state!r}, not claimed.")
+    if operation.lease_expires_at is None or operation.lease_expires_at <= now:
+        raise ValueError("Operation lease has expired.")
+    expires = now + timedelta(seconds=lease_seconds)
+    OperationRequest.objects.filter(pk=operation.pk).update(lease_expires_at=expires, updated_at=now)
+    held = OperationRequest.objects.filter(pk=operation.pk).filter(agent_access.held_askers()).exists()
+    if held:
+        return _stop("Held", expires)
+    return {"ok": True, "continue": True, "reason": "", "lease_expires_at": expires.isoformat()}
+
+
 @transaction.atomic
 def _read_back_lifecycle(operation: OperationRequest) -> None:
     """Ask for a lifecycle operation's kind to be read once it is reported
@@ -436,7 +592,7 @@ def report_operation(
     # Held to the bridge's secret door (``secret_shapes``) before it arrives.
     try:
         operation = OperationRequest.objects.select_for_update().select_related("resource").get(pk=operation_id)
-    except (OperationRequest.DoesNotExist, ValueError) as exc:
+    except (OperationRequest.DoesNotExist, ValueError, ValidationError) as exc:
         raise ValueError(f"Operation {operation_id!r} was not found.") from exc
     if operation.state != OperationRequest.State.CLAIMED:
         raise ValueError(f"Operation is {operation.state!r}, not claimed.")
@@ -448,23 +604,42 @@ def report_operation(
     requested_generation = operation.input.get("generation")
     if report.observed_generation != requested_generation:
         raise ValueError("Report generation does not match the operation's requested generation.")
+    run = operation.action == OperationRequest.Action.RUN
+    if run and report.status:
+        raise ValueError("A run reports what its tasks did as events, never a status for its record.")
+    if report.events and not run:
+        raise ValueError("Only a run reports events.")
+    scan = operation.action == OperationRequest.Action.SCAN
+    if report.catalog is not None and not scan:
+        raise ValueError("Only a scan reports the playbooks it found.")
+    if scan and report.status:
+        raise ValueError("A scan reports the playbooks it found, never a status for its record.")
+    if scan and report.success and report.catalog is None:
+        raise ValueError("A scan that succeeded reports the playbooks it found.")
 
     with _as_its_own(operation):
+        if run:
+            return _settle_run(operation, report)
+        if scan:
+            return _settle_scan(operation, report)
         return _settle_report(operation, report)
 
 
-def _settle_report(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
-    """Record what the controller reports of ``operation`` and of its resource."""
-
-    resource = operation.resource
-    operation.result = {
-        "message": report.message,
-        "status": report.status,
-        "conditions": report.conditions,
-    }
+def _finish(
+    operation: OperationRequest, report: ControllerReport, result: dict[str, Any], *, unknown: bool = False
+) -> None:
+    operation.result = result
     operation.completed_at = timezone.now()
     operation.lease_expires_at = None
-    operation.state = OperationRequest.State.SUCCEEDED if report.success else OperationRequest.State.FAILED
+    operation.claim_attempt = ""
+    operation.state = (
+        OperationRequest.State.SUCCEEDED
+        if report.success
+        # Stopped early, as a run whose lease lapsed ends (``_fail_lapsed_runs``).
+        else OperationRequest.State.CANCELLED
+        if unknown
+        else OperationRequest.State.FAILED
+    )
     # The finishing row says what the controller said.
     operation.audit_said = report.message
     operation.save(
@@ -472,9 +647,72 @@ def _settle_report(operation: OperationRequest, report: ControllerReport) -> dic
             "result",
             "completed_at",
             "lease_expires_at",
+            "claim_attempt",
             "state",
             "updated_at",
         )
+    )
+
+
+# The task outcomes a run's audit trail records one row each: what changed a
+# machine or went wrong. Every outcome stays in the run's result.
+_AUDITED_OUTCOMES = {
+    "changed": AuditLog.Action.DONE,
+    "failed": AuditLog.Action.FAILED,
+    "unreachable": AuditLog.Action.FAILED,
+}
+
+
+def _settle_run(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
+    """Record how a run ended, as evidence on the run alone.
+
+    A procedure's record holds the manifest it is pinned to, never what a run
+    found, so nothing here writes it. The events arrive bounded by the bridge
+    contract (``RunEvent``) and struck of secrets at its door
+    (``secret_shapes``).
+    """
+
+    events = [dict(event) for event in report.events]
+    _finish(
+        operation,
+        report,
+        {"message": report.message, "conditions": report.conditions, "events": events},
+        unknown=any(condition.get("reason") == OUTCOME_UNKNOWN for condition in report.conditions),
+    )
+    for event in events:
+        action = _AUDITED_OUTCOMES.get(event["outcome"])
+        if action is None:
+            continue
+        record_event(
+            action=action,
+            obj=operation,
+            type_label=audited_labels()[OperationRequest],
+            message=f"{event['host']}: {event['task']} {event['outcome']}",
+            metadata={"event": {name: event[name] for name in ("host", "task", "outcome")}},
+            required=True,
+        )
+    return {"ok": True, "operation": serialize_operation(operation)}
+
+
+def _settle_scan(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
+    """Record how a scan ended and, when it read the repository, what it
+    proposes. The source's record holds nothing a scan found."""
+
+    result: dict[str, Any] = {"message": report.message, "conditions": report.conditions}
+    if report.catalog is not None:
+        result["proposal"] = propose(operation, report.catalog).pk
+    _finish(operation, report, result)
+    return {"ok": True, "operation": serialize_operation(operation)}
+
+
+def _settle_report(operation: OperationRequest, report: ControllerReport) -> dict[str, Any]:
+    """Record what the controller reports of ``operation`` and of its resource."""
+
+    resource = operation.resource
+    _finish(
+        operation,
+        report,
+        {"message": report.message, "status": report.status, "conditions": report.conditions},
     )
 
     resource.conditions = stamped(resource.conditions, report.conditions)

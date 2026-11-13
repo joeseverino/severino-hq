@@ -457,16 +457,16 @@ class LinkTests(TestCase):
 
         self.assertEqual(connection(a_request()).handshake, MISSING)
 
-    def test_no_device_is_said_as_why(self):
-        unread = connection(a_request()).peer_label
+    def test_no_device_leaves_the_name_out(self):
+        """The address stands alone: no sentence fills the place of a name HQ
+        does not have, whether it read the tailnet or not."""
 
+        unread = connection(a_request())
         a_tailnet(a_device("hq-host", "100.64.0.9", observer=True))
-        absent = connection(a_request()).peer_label
+        absent = connection(a_request())
 
-        # Two reasons, told apart: nothing read, and nothing at this address.
-        self.assertTrue(unread)
-        self.assertTrue(absent)
-        self.assertNotEqual(unread, absent)
+        self.assertEqual((unread.peer_label, absent.peer_label), ("", ""))
+        self.assertEqual(absent.peer_address, A_TAILNET_ADDRESS)
 
 
 @override_settings(ALLOWED_HOSTS=["hq.example.test", "testserver"])
@@ -489,7 +489,7 @@ class ConnectionPageTests(TestCase):
         for header in response.context["request_path"].headers:
             with self.subTest(header=header.name):
                 self.assertTrue(any(text.startswith(f"{header.name}:") for text in shown))
-        self.assertTrue(any(text.startswith("One address from the proxy.") for text in shown))
+        self.assertTrue(any(text.startswith("HQ reads X-Forwarded-For.") for text in shown))
 
     def test_the_panel_the_dialog_lifts_out_is_on_the_page(self):
         """The dialog finds the panel by this hook, so its absence is a break."""
@@ -513,6 +513,23 @@ class ConnectionPageTests(TestCase):
         # Folded until opened, which is when the response is read back.
         (protocol,) = select(response, "data-connection-protocol")
         self.assertNotIn("open", protocol.attrs)
+
+    def test_each_response_check_is_a_row_the_browser_fills_with_both_answers_ready(self):
+        """The server draws every row the browser reads back, each holding
+        both states it can show, so the script only chooses one."""
+
+        from ..request_headers import RESPONSE_CHECKS
+
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("connection"))
+
+        rows = {row.attrs["data-response-check"]: row for row in select(response, "data-response-check")}
+        self.assertEqual(list(rows), [check.name for check in RESPONSE_CHECKS])
+        states = {element.attrs["data-response-state"] for element in select(response, "data-response-state")}
+        self.assertEqual(states, {"waiting", "present", "absent"})
+        directives = {name for name, row in rows.items() if "data-response-directive" in row.attrs}
+        self.assertEqual(directives, {check.name for check in RESPONSE_CHECKS if check.directive})
 
     def test_identity_dates_use_hqs_normal_date_format(self):
         self.client.force_login(self.user)
@@ -582,21 +599,19 @@ class DashboardConnectionTileTests(SimpleTestCase):
     def test_a_failed_check_takes_the_attention_tone(self):
         self.assertIn("is-attention", self.tile(failing=("a layer",)))
 
-    def test_the_dot_says_the_verdict_not_only_the_network(self):
-        self.assertIn("conn-verdict-unconfirmed", self.tile(failing=()))
-
 
 class VerdictTests(SimpleTestCase):
     """Green only when every check on the way in is confirmed."""
 
-    def connection(self, *layers):
+    def connection(self, *layers, channel=None):
         from types import SimpleNamespace
 
+        from ..request_channel import TAILNET_CHANNEL
         from ..request_connection import Connection
 
         return Connection(
             address="100.64.0.20",
-            channel=SimpleNamespace(id="tailnet"),
+            channel=channel or TAILNET_CHANNEL,
             device=None,
             serves=None,
             observer=None,
@@ -621,3 +636,25 @@ class VerdictTests(SimpleTestCase):
 
     def test_one_failed_check_is_failing(self):
         self.assertEqual(self.verdict((False, True), (True, False)), "failing")
+
+    def test_the_dot_takes_the_tailnets_tone_only_once_every_check_is_confirmed(self):
+        for layers, tone in (
+            (((True, True),), "good"),
+            (((True, False),), "neutral"),
+            (((False, True),), "attention"),
+        ):
+            with self.subTest(layers):
+                self.assertEqual(self.connection(*layers).tone, tone)
+
+    def test_any_other_network_keeps_its_own_tone_whatever_the_checks_say(self):
+        from ..request_channel import ELSEWHERE_CHANNEL, LOOPBACK_CHANNEL, NETWORK_CHANNEL, OPAQUE_CHANNEL
+
+        for channel, tone in (
+            (NETWORK_CHANNEL, "attention"),
+            (LOOPBACK_CHANNEL, "attention"),
+            (OPAQUE_CHANNEL, "serious"),
+            (ELSEWHERE_CHANNEL, "serious"),
+        ):
+            for layers in (((True, True),), ((True, False),), ((False, True),)):
+                with self.subTest(channel.id, layers=layers):
+                    self.assertEqual(self.connection(*layers, channel=channel).tone, tone)

@@ -1,5 +1,9 @@
-"""How each interface a principal comes through is named: alone, and in a sentence beside who came through it."""
+"""How each interface a principal comes through is named: alone, and in a sentence beside who came through it,
+and who did something said whole (``Attribution``)."""
 
+from dataclasses import dataclass
+
+from .labels import dotted
 from .security import (
     API_INTERFACE,
     CLI_INTERFACE,
@@ -51,3 +55,60 @@ def door_words(interface: str) -> str:
     if not interface:
         return ""
     return DOORS.get(interface, f"through {interface_label(interface)}")
+
+
+def approved_words(approver: str) -> str:
+    """Who agreed to something, as every page says it: "approved by joe"; nothing for nobody."""
+
+    return f"approved by {approver}" if approver else ""
+
+
+@dataclass(frozen=True, slots=True)
+class Attribution:
+    """Who did something, as every page and read says it: the actor, the door
+    they came through, whom they acted as, and who approved it.
+
+    Built from the record that holds the act (``AuditLog.who``,
+    ``OperationRequest.who``, ``ApprovalRequest.who``, ``Job.who``), so one
+    act reads alike on Jobs, its run, its audit entry and its approval. Whom
+    they acted as, and who approved it, are said only where that is someone
+    other than the actor.
+    """
+
+    actor: str
+    interface: str = ""
+    acting_as: str = ""
+    approved_by: str = ""
+
+    def __post_init__(self) -> None:
+        for name in ("acting_as", "approved_by"):
+            if getattr(self, name) == self.actor:
+                object.__setattr__(self, name, "")
+
+    def __bool__(self) -> bool:
+        return bool(self.actor)
+
+    @property
+    def door(self) -> str:
+        return door_words(self.interface)
+
+    @property
+    def asker(self) -> str:
+        """Who acted and through which door: "example-agent, over MCP"."""
+
+        said = f"{self.actor}, {self.door}" if self.door else self.actor
+        return f"{said} as {self.acting_as}" if self.acting_as else said
+
+    @property
+    def approval(self) -> str:
+        return approved_words(self.approved_by)
+
+    @property
+    def words(self) -> str:
+        """The whole of it on one line: "example-agent, over MCP · approved by joe"."""
+
+        return dotted(self.asker, self.approval)
+
+
+# Who did something no audit row records.
+NOBODY = Attribution("")

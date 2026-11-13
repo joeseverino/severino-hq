@@ -29,7 +29,7 @@ from pathlib import Path
 
 # Bound here, so a test that patches time.monotonic moves its own clock and never the stall watch's.
 from time import monotonic
-from typing import TYPE_CHECKING, override
+from typing import override
 lazy import inspect
 lazy import pdb
 
@@ -51,14 +51,12 @@ lazy from django.test import TransactionTestCase
 
 from hq.config.imports import lazily
 from hq.config.sandbox import shared_tempdir
+from hq.platform.core.coverage_contexts import ModuleContexts
+from hq.platform.core.isolation_testing import CompositionIsolation, own_markers, patches_leave_no_copy
 from hq.platform.core.live_objects import live
-lazy from hq.platform.application import agent_limits, plugins, roles
-lazy from hq.platform.application.plugins import clear_plugin_composition_cache
+lazy from hq.platform.application import plugins, roles
 lazy from hq.platform.core import append_only
 lazy from hq.platform.core.attribution import bind_this_thread, bound, command_operation, from_the_shell
-
-if TYPE_CHECKING:
-    from hq.platform.application.agent_limits import Limits
 
 
 def performance_cores() -> int | None:
@@ -136,7 +134,7 @@ def flush_through_the_audit_guard() -> None:
     """
 
     # Django offers no hook before a test's flush, so the flush itself is wrapped.
-    flush = TransactionTestCase._fixture_teardown  # noqa: SLF001 - the one place a test flushes
+    flush = TransactionTestCase._fixture_teardown
     if getattr(flush, "through_the_audit_guard", False):
         return
 
@@ -147,7 +145,7 @@ def flush_through_the_audit_guard() -> None:
             flush(self)
 
     _fixture_teardown.through_the_audit_guard = True
-    TransactionTestCase._fixture_teardown = _fixture_teardown  # noqa: SLF001 - as above
+    TransactionTestCase._fixture_teardown = _fixture_teardown
 
 
 def commands_from_the_shell() -> None:
@@ -194,9 +192,9 @@ def hypothesis_profiles() -> None:
     """
 
     try:
-        from hypothesis import settings as hypothesis  # noqa: PLC0415 - a tools-group dependency the image lacks
-        from hypothesis.configuration import set_hypothesis_home_dir  # noqa: PLC0415 - as above
-        from hypothesis.database import DirectoryBasedExampleDatabase  # noqa: PLC0415 - as above
+        from hypothesis import settings as hypothesis
+        from hypothesis.configuration import set_hypothesis_home_dir
+        from hypothesis.database import DirectoryBasedExampleDatabase
     except ImportError:
         return
     set_hypothesis_home_dir(HYPOTHESIS_HOME)
@@ -210,48 +208,6 @@ def hypothesis_profiles() -> None:
     hypothesis.register_profile("ci", hypothesis.get_profile("ci"), max_examples=200, stateful_step_count=50)
     ci = hypothesis.get_current_profile_name() == "ci"
     hypothesis.load_profile(os.environ.get("HYPOTHESIS_PROFILE") or ("ci" if ci else "dev"))
-
-
-class _CompositionIsolation:
-    """Make process caches, and the agent limits every request shares, obey the
-    same per-test isolation as the database.
-
-    The limits are isolated as ``setUpTestData`` rows are: each class sets up
-    on a new set, and each of its tests gets a copy of what that setup left, so
-    a stream an estate opens in ``setUpClass`` reaches every test of the class
-    and nothing one test takes reaches the next.
-    """
-
-    _class: type | None = None
-    _class_limits: Limits | None = None
-
-    def startTest(self, test):
-        clear_plugin_composition_cache()
-        if type(test) is not self._class:
-            # The first of its class: what the set holds is what its setup left.
-            self._class, self._class_limits = type(test), agent_limits.LIMITS
-        agent_limits.LIMITS = _copied(self._class_limits)
-        return super().startTest(test)
-
-    def stopTest(self, test):
-        # The next class sets up on a new set. A new set rather than an
-        # emptied one: a call a test left running gives its slot back to the
-        # set it took it from.
-        agent_limits.LIMITS = agent_limits.Limits()
-        return super().stopTest(test)
-
-
-def _copied(limits: agent_limits.Limits) -> agent_limits.Limits:
-    """A set holding what ``limits`` holds, each count its own and behind a lock of its own."""
-
-    copied = agent_limits.Limits.__new__(agent_limits.Limits)
-    with limits._lock:  # noqa: SLF001 - the copy is the set's whole state, which it offers no way to read
-        held = vars(limits)
-        copied.__dict__.update(
-            {name: dict(value) if isinstance(value, dict) else value for name, value in held.items()}
-        )
-    copied._lock = threading.Lock()  # noqa: SLF001 - a lock of its own, not the original's
-    return copied
 
 
 # A gate names a folder here, and the run writes each test that failed into
@@ -575,7 +531,7 @@ class _StallMarks:
         return super().addSubTest(test, subtest, err)
 
 
-class CompositionTextResult(FailureRecord, _StallMarks, _CompositionIsolation, _ClassTimes, unittest.TextTestResult):
+class CompositionTextResult(FailureRecord, _StallMarks, CompositionIsolation, _ClassTimes, unittest.TextTestResult):
     def printErrors(self):
         block_on_output()
         super().printErrors()
@@ -641,7 +597,7 @@ def _pickles(value) -> bool:
     return True
 
 
-class CompositionRemoteResult(_StallMarks, _CompositionIsolation, RemoteTestResult):
+class CompositionRemoteResult(_StallMarks, CompositionIsolation, RemoteTestResult):
     def addError(self, test, err):
         super().addError(test, sendable(test, err))
 
@@ -660,7 +616,7 @@ class CompositionRemoteResult(_StallMarks, _CompositionIsolation, RemoteTestResu
         self.events.append(("addClassTime", self.test_index, seconds))
 
 
-class ClassTimedSuite(unittest.TestSuite):
+class ClassTimedSuite(ModuleContexts):
     """A suite that tells its result how long each class took, from its
     ``setUpClass`` to the end of its ``tearDownClass``, and keeps the stall
     watch on while it runs.
@@ -744,6 +700,8 @@ def _init_worker_on_file_databases(counter, *args, **kwargs):
     DatabaseCreation.setup_worker_connection = _use_the_file_clone
     stall_watch.workers = counter
     started = _init_worker(counter, *args, **kwargs)
+    own_markers()
+    patches_leave_no_copy()
     default_people_to_operator()
     flush_through_the_audit_guard()
     commands_from_the_shell()
@@ -886,6 +844,8 @@ class SeverinoTestRunner(DiscoverRunner):
         settings.SEVERINO_SITE_HOST = ""
         super().setup_test_environment(**kwargs)
         sys.breakpointhook = breakpoint_on_the_terminal
+        own_markers()
+        patches_leave_no_copy()
         default_people_to_operator()
         flush_through_the_audit_guard()
         commands_from_the_shell()
@@ -904,6 +864,9 @@ class SeverinoTestRunner(DiscoverRunner):
             if self.installed_plugins and not modules:
                 raise RuntimeError("--installed-plugins: no plugin is installed.")
             suite = super().build_suite([*modules] if self.installed_plugins else [".", *modules], **kwargs)
+            # Discovery loads a package's __init__ as well as its test files, so a
+            # browser gate declared there is found; the browser gates run by name.
+            suite = self.test_suite(test for test in tests_in(suite) if not drives_a_browser(test))
             require_tests_from(suite, modules)
         if any(drives_a_browser(test) for test in tests_in(suite)):
             # Here, in the process that starts the run and before any worker

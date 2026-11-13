@@ -14,6 +14,7 @@ set -eu
 # above it fails. A template is scored as an instance of it. Reads name.
 bar() {
     case "${name}" in
+        severino-hq-automation.service) echo 19 ;;
         severino-hq-backup.service) echo 12 ;;
         severino-hq-controller.service) echo 19 ;;
         severino-hq-glance.service) echo 12 ;;

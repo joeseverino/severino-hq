@@ -1,7 +1,6 @@
 """The controller's own page: what HQ knows of it, from what it left behind."""
 
 import os
-import re
 import tempfile
 import time
 from dataclasses import replace
@@ -171,11 +170,3 @@ class HostLayoutTests(SimpleTestCase):
         layout = (Path(__file__).resolve().parents[4] / "controller" / "host" / "layout.go").read_text()
 
         self.assertIn(f'ControllerUnit = "{CONTROLLER_UNIT}"', layout)
-
-    def test_the_upgrade_helper_is_in_the_tree_the_host_installs(self):
-        from ..upgrades import HELPER
-
-        layout = (Path(__file__).resolve().parents[4] / "controller" / "host" / "layout.go").read_text()
-        (lib,) = re.findall(r'^\tLib = "([^"]+)"$', layout, re.MULTILINE)
-
-        self.assertEqual(HELPER, f"{lib}/deploy/bin/hq-host")

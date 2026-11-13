@@ -11,86 +11,70 @@ and leads to the first.
 
 {% include "partials/_problems.html" with problems=hq.problems|urgent only %}
 
-<div class="fact-band">
+{% facts layout="band" %}
   {% for tile in hq.tiles %}
-  {% band_fact icon=tile.icon label=tile.label tone=tile.tone %}
-    <strong>{% if tile.url %}<a href="{{ tile.url }}">{{ tile.value|breakable }}</a>{% else %}{{ tile.value|breakable }}{% endif %}</strong>
-    {% if tile.detail %}<small>{{ tile.detail|breakable }}</small>{% endif %}
-  {% endband_fact %}
+  {% fact tile.label value=tile.value url=tile.url detail=tile.detail icon=tile.icon tone=tile.tone %}
   {% endfor %}
-</div>
+{% endfacts %}
 
 {% comment %}
-Release is a list of facts, so it takes the width and its facts flow into
-columns. Where HQ runs and how it was reached are about the same height, so
-they share a row at one height; either alone takes it. A card says only what
-the band above does not: the band names the commit, the machine, the
-container's uptime and how the request came.
+Where HQ runs, how it was reached and its release are each a few short
+lines, so they share rows. The release goes last: alone on its row, its facts
+go across it, which a route down its start cannot. A card says only what the band
+above does not: the band names the commit, the machine, the container's
+uptime and how the request came.
 {% endcomment %}
-{% section "Release" id="hq-release" %}
-  {% include "partials/_problems.html#rest" with rest=hq.problems_in.release|not_urgent only %}
-  <dl class="kv">
-        {% if release.repository %}{% with repository=release.repository %}
-        <dt>{{ repository.default_branch|default:"Branch"|capfirst|breakable }}</dt>
-          <dd class="prose">
-            {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
-            {% elif release.behind is False %}Production runs its head, <code>{{ release.head|slice:":7"|breakable }}</code>
-            {% else %}<span class="muted">Its head or its production deploy has not been read.</span>{% endif %}
-            {% if release.runs_deployed is False %}<br><strong>This process is not the commit production last deployed.</strong>{% endif %}
-            <br>{% entity repository.url|outside label=repository.name %}<span class="muted">{% dot %}{% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
-          </dd>
-        {% endwith %}{% endif %}
-        {% if release.image %}
-        <dt>Image</dt>
-          <dd>
-            <code title="{{ release.image }}">{{ container.standing.image.short|breakable }}</code>{% if release.digest %} <span class="muted" tabindex="0" data-tip="{{ release.digest }}">locked to an exact build</span>{% endif %}
-            {% if release.built %}<br><span class="muted">Built {{ release.built|when:"ago" }}</span>{% endif %}
-          </dd>
-        <dt>Signature</dt>
-          <dd>{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}</dd>
-        <dt>Vulnerabilities</dt>
-          <dd class="prose">{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</dd>
-        {% endif %}
-        <dt>Extensions</dt>
-          <dd>{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% empty %}<span class="muted">None composed into this build</span>{% endfor %}</dd>
-      </dl>
-{% endsection %}
-{% if machine or hq.request_path %}
 <div class="section-flow">
 {% if machine %}
 {% section "Runs on" id="hq-where" %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.where|not_urgent only %}
-  <dl class="kv">
-        {% if container %}{% with runtime=container.runtime %}
-        <dt>Container</dt>
-          <dd><a href="{{ container.url }}">{{ container.running.name|breakable }}</a></dd>
-        <dt>Health</dt>
-          <dd>{{ runtime.health|default:container.running.check|default:container.running.status|capfirst|breakable }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}</dd>
-        {% with posture=container.posture %}
-        <dt>How it is run</dt>
-          <dd>{{ posture.met|breakable }} of {{ posture.measured|breakable }} checks met{% for result in posture.unmet %}<br><span class="muted">{{ result.check.unmet|breakable }}</span>{% endfor %}</dd>
-        {% endwith %}
-        {% endwith %}{% else %}
-        <dt>Container</dt>
-          <dd><span class="muted">No container HQ reads is known to be HQ's.</span></dd>
-        {% endif %}
-        {% if work.services %}
-        <dt>Kept running by</dt>
-          <dd>{% for job in work.services %}{% include "partials/_unit.html" with title=job.title unit=job.name only %}{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd>
-        {% endif %}
-      </dl>
+  {% facts %}
+    {% if container %}{% with runtime=container.runtime %}
+    {% fact "Container" %}<a href="{{ container.url }}">{{ container.running.name|breakable }}</a>{% endfact %}
+    {% fact "Health" %}{{ runtime.health|default:container.running.check|default:container.running.status|capfirst|breakable }}{% if runtime %}{% dot %}{{ runtime.restart_count|default:0|counted:"restart" }}{% endif %}{% endfact %}
+    {% with posture=container.posture %}
+    {% fact "How it is run" %}{{ posture.met|breakable }} of {{ posture.measured|counted:"check met,checks met" }}{% for result in posture.unmet %}<br><span class="muted">{{ result.check.unmet|breakable }}</span>{% endfor %}{% endfact %}
+    {% endwith %}
+    {% endwith %}{% else %}
+    {% fact "Container" %}{% include "partials/_empty_state.html" with message="No container HQ reads is known to be HQ's." inline=True %}{% endfact %}
+    {% endif %}
+    {% if work.services %}
+    {% fact "Kept running by" %}{% for job in work.services %}{% include "partials/_unit.html" with title=job.title unit=job.name only %}{% if job.last_run %} <span class="muted">since {{ job.last_run|when:"ago" }}</span>{% endif %}{% if not forloop.last %}<br>{% endif %}{% endfor %}{% endfact %}
+    {% endif %}
+  {% endfacts %}
 {% endsection %}
 {% endif %}
 {% if hq.request_path %}{% with found=hq.request_path %}
 {% section "Reached through" id="hq-reach" %}
   {% include "partials/_example_connection.html" with notice=True %}
   {% include "partials/_problems.html#rest" with rest=hq.problems_in.reach|not_urgent only %}
-  {% include "control_plane/_path_hops.html" with route=found.route label="How this page reached you" %}
-  {% for hop in found.findings %}<p class="notice notice-attention"><strong>{{ hop.label|breakable }}</strong> {{ hop.check.detail|breakable }} {{ hop.check.step|breakable }}</p>{% endfor %}
+  {% include "control_plane/_path_hops.html" with route=found.route label="Request path" %}
+  {% if found.findings %}{% include "partials/_work_queue.html" with items=found.finding_rows grouped=True here=True dense=True only %}{% endif %}
 {% endsection %}
 {% endwith %}{% endif %}
+{% section "Release" id="hq-release" %}
+  {% include "partials/_problems.html#rest" with rest=hq.problems_in.release|not_urgent only %}
+  {% facts %}
+    {% if release.repository %}{% with repository=release.repository %}
+    {% fact repository.default_branch|default:"Branch"|capfirst %}<span class="prose">
+        {% if release.behind %}<strong>Ahead of production</strong>: <code>{{ release.head|slice:":7"|breakable:"," }}</code> production runs <code>{{ release.deployed|slice:":7"|breakable }}</code>
+        {% elif release.behind is False %}In production: <code>{{ release.head|slice:":7"|breakable }}</code>
+        {% else %}<span class="muted">Not read</span>{% endif %}
+        <br>{% entity repository.url|outside label=repository.name %}<span class="muted">{% dot %}{% include "partials/_reading_age.html" with reading=repository.reading only %}</span>
+      </span>{% endfact %}
+    {% endwith %}{% endif %}
+    {% if release.image %}
+    {% fact "Image" %}
+        <code title="{{ release.image }}">{{ container.standing.image.short|breakable }}</code>{% if release.digest %} <span class="muted" tabindex="0" data-tip="{{ release.digest }}">pinned by digest</span>{% endif %}
+        {% if release.built %}<br><span class="muted">Built {{ release.built|when:"ago" }}</span>{% endif %}
+    {% endfact %}
+    {% fact "Signature" %}{% if release.signed %}Signed{% elif release.signed is False %}<strong>Not signed</strong>{% else %}<span class="muted">Not read</span>{% endif %}{% endfact %}
+    {% fact "Vulnerabilities" %}<span class="prose">{{ release.vulnerabilities|capfirst|breakable }}{% if release.vulnerabilities_note %} <span class="muted">{{ release.vulnerabilities_note|breakable }}</span>{% endif %}{% if release.repository %}{% with repository=release.repository %}{% if repository.url|web_url %}{% dot %}{% if repository.open_alerts %}{% entity repository.alerts_url|outside label=repository.open_alerts|counted:"open alert,open alerts" %}{% else %}{% entity repository.alerts_url|outside label="no open alerts" %}{% endif %}{% endif %}{% endwith %}{% endif %}</span>{% endfact %}
+    {% endif %}
+    {% fact "Extensions" %}{% for name, version in release.extensions %}{{ name|breakable }} <span class="muted">{{ version|breakable }}</span>{% if not forloop.last %}{% dot %}{% endif %}{% empty %}{% include "partials/_empty_state.html" with message="None composed into this build" inline=True %}{% endfor %}{% endfact %}
+  {% endfacts %}
+{% endsection %}
 </div>
-{% endif %}
 
 {% comment %}
 Each closing section is a table of four columns or more, so each takes its
@@ -121,7 +105,7 @@ row in the flow.
   {% if work.scheduled %}
     {% table_region "Scheduled work" %}
       <table class="data-table">
-        <thead><tr>{% table_heading "Scheduled work" local_sort=True gutter=True %}{% table_heading "How often" "status" css="optional-col" local_sort=True drop=2 %}{% table_heading "Recent runs" "status" local_sort=True drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=True %}{% table_heading "Next due" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
+        <thead><tr>{% table_heading "Scheduled work" local_sort=True gutter=True %}{% table_heading "Schedule" "status" css="optional-col" local_sort=True drop=2 %}{% table_heading "Recent runs" "status" local_sort=True drop=3 %}{% table_heading "Last result" "status" css="key-col" local_sort=True %}{% table_heading "Next due" "status" css="optional-col" local_sort=True drop=1 %}</tr></thead>
         <tbody>
           {% for item in work.scheduled %}
             <tr>
@@ -175,7 +159,7 @@ row in the flow.
           <tr>
             <td>
               {{ row.label|breakable }}
-              {% if row.reasons %}<ul class="cell-notes">{% for reason in row.reasons %}<li class="muted">{{ reason|breakable }}</li>{% endfor %}</ul>{% elif row.remedy %}<br><span class="muted">{{ row.remedy|breakable }}</span>{% elif row.error and not row.read %}<br><span class="muted">{{ row.error|breakable }}</span>{% endif %}
+              {% if row.reasons %}{% stack_list %}{% for reason in row.reasons %}<li class="muted">{{ reason|breakable }}</li>{% endfor %}{% endstack_list %}{% elif row.remedy %}<br><span class="muted">{{ row.remedy|breakable }}</span>{% elif row.error and not row.read %}<br><span class="muted">{{ row.error|breakable }}</span>{% endif %}
             </td>
             <td>{% if row.stale %}<strong>Out of date</strong>{% elif row.read and row.state == "readable" %}{{ row.state_label|breakable }}{% else %}<strong>{{ row.state_label|breakable }}</strong>{% endif %}</td>
             <td>{% if row.read %}{{ row.records|breakable }}{% else %}{% empty_value %}{% endif %}</td>

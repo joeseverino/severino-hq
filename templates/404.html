@@ -1,18 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Not found{% endblock %}
 {% block content %}
-<div class="notice-page">
-  <p class="notice-code">404</p>
-  <h1>That page isn't here</h1>
-  <p class="notice-body">The link may be old, or what it pointed to was deleted.</p>
-  {% if user.is_authenticated %}
-  <search><form class="filter-bar notice-search" action="{% url 'search' %}" method="get">
-    <input type="search" name="q" placeholder="Find anything" aria-label="Find anything">
-    <button type="submit">Search</button>
-  </form></search>
-  {% endif %}
-  <p class="page-actions">
-    <a class="btn primary" href="{% url 'dashboard' %}">Back to the dashboard</a>
-  </p>
-</div>
+{% include "partials/_error_page.html" with code="404" title="Page not found" body="The link may be old, or what it pointed to was deleted." search=user.is_authenticated only %}
 {% endblock %}

@@ -1,0 +1,9 @@
+id: hand-drawn-list-rows
+valid:
+  - '{% include "partials/_record_list.html" with rows=rows %}'
+  - '<ul class="list-rows-wide"></ul>'
+  - '<ul class="prose-list"></ul>'
+invalid:
+  - '<ul class="list-rows"></ul>'
+  - '<ul class="compact list-rows"><li>A</li></ul>'
+  - '<ul class="{{ extra }} list-rows"></ul>'

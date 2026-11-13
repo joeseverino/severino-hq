@@ -3,33 +3,24 @@
 {% if not_read %}
 {% include "partials/_empty_state.html" with message="No messages read yet." remedy=page.remedy %}
 {% else %}
-{% if problem %}<div class="msg msg-warning">{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}</div>{% endif %}
-{% if waiting_note %}<div class="msg msg-info">{{ waiting_note|breakable }}</div>{% endif %}
-<div class="status-tabs">
-  <a class="status-tab"{% if not selected_status %} aria-current="page"{% endif %}
-     href="{% url 'contacts:list' %}{% if q %}?q={{ q|urlencode }}{% endif %}">
-    All <span class="count">{{ total_count|breakable }}</span>
-  </a>
+{% if problem %}{% notice tone="warning" %}{{ problem|breakable }}{% if observed_at %} Showing the read from {{ observed_at|when }}.{% endif %}{% endnotice %}{% endif %}
+{% if waiting_note %}{% notice tone="info" %}{{ waiting_note|breakable }}{% endnotice %}{% endif %}
+{% switch label="Message status" %}
   {% for tab in status_tabs %}
-    <a class="status-tab"{% if tab.value == selected_status %} aria-current="page"{% endif %}
-       href="?status={{ tab.value }}{% if q %}&q={{ q|urlencode }}{% endif %}">
-      {{ tab.label|breakable }} <span class="count">{{ tab.count|breakable }}</span>
-    </a>
+    {% querystring status=tab.value page=None as href %}
+    {% choice url=href current=tab.current count=tab.count %}{{ tab.label|breakable }}{% endchoice %}
   {% endfor %}
-</div>
+{% endswitch %}
 
-<form class="filter-bar" method="get">
+{% filter_bar filtered=q clear=search_cleared shown=submissions|length total=status_total %}
+  <input type="search" name="q" value="{{ q }}" placeholder="Filter by name, email, or message" aria-label="Filter by name, email, or message">
   {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
-  <input type="search" name="q" value="{{ q }}" placeholder="Search name, email, or message…" aria-label="Search name, email, or message">
-  <button type="submit">Search</button>
-  {% if q %}<a class="btn" href="{% url 'contacts:list' %}{% if selected_status %}?status={{ selected_status }}{% endif %}">Clear search</a>{% endif %}
-</form>
+{% endfilter_bar %}
 
 {% comment %}With nothing received, one sentence says so; the tabs, the count and an empty table would say it three more times.{% endcomment %}
 {% if not total_count and not q %}
   {% include "partials/_empty_state.html" with message="No messages yet." only %}
 {% else %}
-<p class="muted">{{ submissions|length|counted:"message" }}{% if selected_status or q %} match{% endif %}.</p>
 
 {% table_region "Messages" %}
 <table class="data-table">
@@ -46,22 +37,17 @@
   </thead>
   <tbody>
     {% for s in submissions %}
-      <tr {% if s.status == "unread" %}class="row-unread"{% endif %}>
+      <tr{% row_state emphasized=s.unread %}>
         <td>{{ s.id|breakable }}</td>
         <td class="muted">{{ s.created_at|when }}</td>
         <td>
           <a href="{% url 'contacts:detail' s.id %}"><strong>{{ s.name|breakable }}</strong></a>
           <div class="muted">{% cell_line s.email %}</div>
         </td>
-        <td class="msg-preview">{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
+        <td>{% url 'contacts:detail' s.id as message_url %}{% cell_line s.message_preview message_url %}</td>
         <td>{% status s.status tone=s.status %}{% if s.pending %} {% status "Waiting" tone="attention" %}{% endif %}</td>
         <td class="muted">{{ s.country|or_empty }}</td>
-        <td class="actions-col row-actions">
-          {% url 'contacts:set_status' s.id as status_url %}
-          {% if s.status == "unread" %}{% post_button "Mark read" status_url name="status" value="read" css="icon-link" %}{% endif %}
-          {% if s.status != "spam" %}{% post_button "Spam" status_url name="status" value="spam" css="icon-link" %}{% endif %}
-          <a class="icon-link danger-link" href="{% url 'contacts:delete' s.id %}">Delete</a>
-        </td>
+        {% row_actions s.actions gap=gap %}
       </tr>
     {% empty %}
       <tr><td colspan="7" class="muted">{% if selected_status or q %}Nothing matches.{% else %}No messages yet.{% endif %}</td></tr>

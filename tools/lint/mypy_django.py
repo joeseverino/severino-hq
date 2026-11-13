@@ -26,7 +26,7 @@ class DjangoPlugin(NewSemanalDjangoPlugin):
         dependencies = {}
         for module in self.django_context.model_modules:
             file = MypyFile([], [])
-            file._fullname = module  # noqa: SLF001 - MypyFile has no setter, and the plugin reads only the name
+            file._fullname = module
             dependencies[module] = sorted(name for _, name, _ in self.get_additional_deps(file))
         return dict(sorted(dependencies.items()))
 
@@ -35,5 +35,5 @@ class DjangoPlugin(NewSemanalDjangoPlugin):
         return {**super().report_config_data(ctx), "model_dependencies": self._model_dependencies}
 
 
-def plugin(version: str) -> type[Plugin]:  # noqa: ARG001 - mypy's entry point passes its version
+def plugin(version: str) -> type[Plugin]:
     return DjangoPlugin

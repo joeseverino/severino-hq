@@ -17,19 +17,12 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.domains.projects.models import Project
+from hq.platform.application.card_items import Insight, Kpi
 from hq.platform.application.drawings import Dot, Dots
 from hq.platform.application.report_testing import report_connections
 from hq.platform.application.security import cli_principal
 from hq.platform.application.services import CONTAINER_KIND
-from hq.platform.application.ui import (
-    ActivityCalendar,
-    CalendarDay,
-    ChartSeries,
-    DomainOverview,
-    Insight,
-    Kpi,
-    stacked_bar_chart,
-)
+from hq.platform.application.ui import ActivityCalendar, CalendarDay, ChartSeries, DomainOverview, stacked_bar_chart
 from hq.platform.core import seeds
 from hq.platform.core.network import SOCKET_PEER
 from hq.platform.core.tests.browser.gate import answered
@@ -312,7 +305,20 @@ def _highlights():
                 "overview": DomainOverview("Example", "/example/", long, (chart,), (calendar,)),
             },
         ],
-        "compact": [{"label": "Example count", "value": 3, "url": "/example/"}],
+        # A strip of counts as an installation fills it, some with a detail
+        # after their words, wide enough to wrap on a phone.
+        "compact": [
+            {"label": "Example count", "value": 3, "url": "/example/"},
+            {"label": "Example open updates", "value": 2, "url": "/example/updates/"},
+            {"label": "Example new security advisories", "value": 15, "url": "/example/advisories/"},
+            {"label": "Example drafts", "value": 1, "url": "/example/drafts/", "detail": "22 published"},
+            {
+                "label": "Example expenses",
+                "value": "$1,204.50",
+                "url": "/example/expenses/",
+                "detail": "All deductible est.",
+            },
+        ],
     }
 
 

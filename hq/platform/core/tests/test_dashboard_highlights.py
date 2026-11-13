@@ -8,6 +8,7 @@ from django.template.loader import render_to_string
 from django.test import SimpleTestCase, TestCase
 from django.test.utils import CaptureQueriesContext
 
+from hq.platform.application.card_items import Kpi
 from hq.platform.application.dashboard import dashboard_highlights
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.domains import Domain, domain_dashboard_cards
@@ -16,7 +17,7 @@ from hq.platform.application.plugins import NavigationItem, PluginIntegration
 from hq.platform.application.projection import projection_scope
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.markup import all_elements, elements, hrefs, links, select, text, with_class
-from hq.platform.application.ui import ChartSeries, DomainOverview, Kpi, stacked_bar_chart
+from hq.platform.application.ui import ChartSeries, DomainOverview, stacked_bar_chart
 
 SHAPES = frozenset({"circle", "line", "path", "polyline", "rect"})
 

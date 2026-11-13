@@ -1,4 +1,4 @@
-"""Plugin declaration contract."""
+"""For declaring an extension: its manifest, navigation, and the integration HQ calls for each surface."""
 
 from hq.platform.application.plugins import (
     PLUGIN_API_VERSION,

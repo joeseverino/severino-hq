@@ -60,9 +60,12 @@ def sentence(text: str) -> str:
     """A label in sentence case, as every status reads: "exited" → "Exited",
     "Changed outside HQ" as it is. The rest of the words keep their own case,
     so a name or an acronym inside it survives; an acronym first ("iOS",
-    "HQ") is left alone, as ``lower_first`` leaves it."""
+    "HQ") is left alone, as ``lower_first`` leaves it, and so is a first word
+    holding a digit, a version or a name ("v1.2.3", "k3s"), which reads as
+    written."""
 
-    if text[1:2].isupper():
+    first = text.split(maxsplit=1)[0] if text.strip() else ""
+    if text[1:2].isupper() or any(character.isdigit() for character in first):
         return text
     return text[:1].upper() + text[1:]
 

@@ -1,9 +1,18 @@
 {% extends "page.html" %}
 {% block page %}
-{% card id="example-notes" heading="example-notes-heading" %}
-  {% section_head id="example-notes-heading" %}Notes{% aside %}<span class="count">{{ notes|length }}</span>{% endsection_head %}
-  <ul>
-    {% for note in notes %}<li><a href="{% url 'example_extension:note' note.slug %}">{{ note.title|breakable }}</a></li>{% endfor %}
-  </ul>
-{% endcard %}
+{% section "Notes" id="example-notes" count=notes|length %}
+  {% table_region "Notes" %}
+    <table class="data-table">
+      <thead><tr>{% table_heading "Note" gutter=True %}{% table_heading "Written" %}</tr></thead>
+      <tbody>
+        {% for note in notes %}
+        <tr>
+          <td><a href="{% url 'example_extension:note' note.slug %}">{{ note.title|breakable }}</a></td>
+          <td><span class="row-less">{{ note.written_on|day }}</span><span class="row-more">Written {{ note.written_on|day }}, filed as {{ note.slug|breakable }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endtable_region %}
+{% endsection %}
 {% endblock %}

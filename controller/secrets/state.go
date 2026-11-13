@@ -56,7 +56,7 @@ func digest(salt string, parts ...[]byte) string {
 	hash.Write([]byte(salt))
 	for _, part := range parts {
 		// Length-prefixed, so two inputs cannot be re-split into two others.
-		hash.Write([]byte{byte(len(part) >> 24), byte(len(part) >> 16), byte(len(part) >> 8), byte(len(part))})
+		hash.Write([]byte{byte(len(part) >> 24), byte(len(part) >> 16), byte(len(part) >> 8), byte(len(part))}) //nolint:gosec // G115: each byte of the length is taken on purpose
 		hash.Write(part)
 	}
 	return hex.EncodeToString(hash.Sum(nil))

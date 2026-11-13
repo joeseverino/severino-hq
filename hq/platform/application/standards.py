@@ -10,6 +10,10 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+lazy from .card_items import Insight
+lazy from .dashboard import queue_item
+lazy from .workflow_contracts import ActionLink
+
 MET = "met"
 UNMET = "unmet"
 UNAVAILABLE = "unavailable"
@@ -82,6 +86,24 @@ class Measurement:
     def serious(self) -> bool:
         return any(result.check.serious for result in self.unmet)
 
+    @property
+    def serious_unmet(self) -> str:
+        """What is wrong in each serious check it fails, a line each: what a
+        mark that it is serious says on hover."""
+
+        return "\n".join(result.check.unmet for result in self.unmet if result.check.serious)
+
+    @property
+    def gaps(self) -> tuple[dict[str, Any], ...]:
+        """What it does not meet, as the queue's rows: serious first, then the
+        rest, then each it fails by design with why."""
+
+        unmet = sorted(self.unmet, key=lambda result: not result.check.serious)
+        return tuple(gap(result.check) for result in unmet) + tuple(
+            _row(f"{result.check.unmet} by design", result.reason, status="good", key=result.check.id)
+            for result in self.intended
+        )
+
     def state_of(self, check_id: str) -> str:
         """``met``, ``unmet``, ``intended``, ``unavailable``, or blank for a check that does not apply."""
 
@@ -106,3 +128,24 @@ def measure(subject: Any, standard: tuple[Check, ...], intended: Mapping[str, st
         else:
             results.append(CheckResult(check, UNMET))
     return Measurement(subject, tuple(results))
+
+
+def gap(check: Check, *, facts: tuple[tuple[str, str], ...] = (), links: tuple[ActionLink, ...] = ()) -> dict[str, Any]:
+    """A check not met, as the queue's row: what is wrong, why it matters, and
+    the fix as what to do; ``facts`` and ``links`` say where it fails."""
+
+    return _row(
+        check.unmet,
+        check.why,
+        status="serious" if check.serious else "attention",
+        key=check.id,
+        action=check.fix,
+        facts=facts,
+        links=links,
+    )
+
+
+def _row(title: str, body: str, *, status: str, key: str, **more: Any) -> dict[str, Any]:
+    return queue_item(
+        "standards", "Standards", Insight(status=status, eyebrow="", title=title, value="", body=body, key=key, **more)
+    )

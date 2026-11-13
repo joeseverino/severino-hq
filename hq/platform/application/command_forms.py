@@ -10,7 +10,7 @@ from django.core.validators import RegexValidator
 from django.utils.datastructures import MultiValueDict
 
 from .capabilities import CapabilitySpec
-from .command_fields import is_upload, named_records, referred
+from .command_fields import among_now, for_agents, is_upload, named_records, referred
 from .command_targets import CommandTargetOption
 from .describe import meanings
 from .forms import LinesField, UploadField
@@ -21,6 +21,9 @@ from .records import as_its_model_declares
 from .references import keeping_held, leave_off_unoffered
 from .ui import ended
 from .web_writes import RETRY_KEY_FIELD
+
+# What a choice of records offers when there are none to choose.
+NOTHING_TO_CHOOSE = "Nothing to choose from yet"
 
 
 class PrimitiveListField(LinesField):
@@ -66,6 +69,58 @@ def _one_type(schema: dict[str, Any]) -> dict[str, Any]:
     return {**schema, **concrete[0], "anyOf": choices}
 
 
+class JSONText(forms.JSONField):
+    """A value of no declared shape, written as JSON; blank while it holds none."""
+
+    widget = forms.Textarea(attrs={"rows": 10, "spellcheck": "false", "class": "code"})
+
+    @override
+    def prepare_value(self, value):
+        return "" if value is None else super().prepare_value(value)
+
+
+def _is_closed(schema: dict[str, Any]) -> bool:
+    """Whether an object's schema names every field it takes, so each is drawn
+    as a field of its own rather than as JSON. A file is an object too, picked
+    whole."""
+
+    effective = _one_type(schema)
+    return (
+        effective.get("type") == "object"
+        and isinstance(effective.get("properties"), dict)
+        and not effective.get("additionalProperties")
+        and not is_upload(schema)
+    )
+
+
+# What a field left blank holds: a closed object's, when every field it holds was.
+_BLANK = (None, "", [], {})
+
+# Between a closed object's name and each of its fields' names in the form,
+# so ``parameters.cache`` is the ``cache`` the ``parameters`` object holds.
+_INSIDE = "."
+
+
+def _inside(
+    name: str, schema: dict[str, Any], definitions: Mapping[str, Any], *, required: bool, nested: dict
+) -> dict[str, forms.Field]:
+    """The fields a closed object is drawn as, each named under ``name``, and
+    each object among them in turn; ``nested`` gains what each object holds."""
+
+    effective = _one_type(schema)
+    held = frozenset(effective.get("required", ())) if required else frozenset()
+    children = whole_fields({"properties": effective["properties"], "$defs": definitions})
+    nested[name] = tuple((child, child in held) for child in children)
+    drawn: dict[str, forms.Field] = {}
+    for child, field in children.items():
+        path = f"{name}{_INSIDE}{child}"
+        if _is_closed(field):
+            drawn |= _inside(path, field, definitions, required=child in held, nested=nested)
+        else:
+            drawn[path] = _field_for_schema(child, field, required=child in held)
+    return drawn
+
+
 def _record_choice(
     effective: dict[str, Any], offered: tuple[CommandTargetOption, ...], options: dict[str, Any]
 ) -> forms.Field:
@@ -77,10 +132,16 @@ def _record_choice(
 
     if effective.get("type") == "array":
         coerce = int if effective.get("items", {}).get("type") == "integer" else str
-        return forms.TypedMultipleChoiceField(choices=grouped_choices(offered), coerce=coerce, **options)
+        if not offered:
+            options["help_text"] = " ".join(part for part in (options["help_text"], ended(NOTHING_TO_CHOOSE)) if part)
+        # Every choice in sight at once, a box to each, as the form draws a
+        # group of choices (forms.css): a list box hides those past its edge.
+        return forms.TypedMultipleChoiceField(
+            choices=grouped_choices(offered), coerce=coerce, widget=forms.CheckboxSelectMultiple, **options
+        )
     empty = "Choose one…" if options["required"] else "None"
     if not offered:
-        empty = "Nothing to choose from yet"
+        empty = NOTHING_TO_CHOOSE
     return forms.TypedChoiceField(
         choices=(("", empty), *grouped_choices(offered)),
         coerce=int if effective.get("type") == "integer" else str,
@@ -133,15 +194,9 @@ def _field_for_schema(
         item_type = item_schema.get("type")
         if item_type in {"string", "integer", "number", "boolean"}:
             return PrimitiveListField(item_type=item_type, **options)
-        return forms.JSONField(
-            widget=forms.Textarea(attrs={"rows": 10, "spellcheck": "false", "class": "code"}),
-            **options,
-        )
+        return JSONText(**options)
     if kind == "object":
-        return forms.JSONField(
-            widget=forms.Textarea(attrs={"rows": 10, "spellcheck": "false", "class": "code"}),
-            **options,
-        )
+        return JSONText(**options)
     if effective.get("format") == "date":
         return forms.DateField(widget=forms.DateInput(attrs={"type": "date"}), **options)
     if effective.get("format") == "date-time":
@@ -199,6 +254,9 @@ class CapabilityCommandForm(forms.Form):
     effect = "read"
     # The fields offered as a choice of the records they name.
     record_names: tuple[str, ...] = ()
+    # Each closed object drawn as its own fields: its name, to each field it
+    # holds and whether that is asked for (``_INSIDE``).
+    nested: ClassVar[Mapping[str, tuple[tuple[str, bool], ...]]] = {}
     # The field a switch sets, which its buttons post instead of a checkbox.
     switch = ""
 
@@ -251,13 +309,26 @@ class CapabilityCommandForm(forms.Form):
             return cleaned
         self.command_payload = {}
         for name in self.payload_names:
-            value = cleaned.get(name)
+            value = self._gathered(name, cleaned) if name in self.nested else cleaned.get(name)
             # A blank the command may be sent without is left out, as a caller
             # leaves it out: it takes its default, or an update keeps it.
-            if value in (None, "", []) and name not in self.payload_schema["required"]:
+            if value in _BLANK and name not in self.payload_schema["required"]:
                 continue
             self.command_payload[name] = value
         return cleaned
+
+    def _gathered(self, name: str, cleaned: Mapping[str, Any]) -> dict[str, Any]:
+        """A closed object as its fields were filled, leaving out a blank one
+        it may be sent without."""
+
+        value = {}
+        for child, asked in self.nested[name]:
+            path = f"{name}{_INSIDE}{child}"
+            held = self._gathered(path, cleaned) if path in self.nested else cleaned.get(path)
+            if held in _BLANK and not asked:
+                continue
+            value[child] = held
+        return value
 
 
 def grouped_choices(options: tuple[CommandTargetOption, ...]) -> tuple:
@@ -275,6 +346,37 @@ def _title(used: Mapping[str, Any]) -> dict[str, Any]:
     return {"title": used["title"]} if "title" in used else {}
 
 
+def _own_controls(
+    spec: CapabilitySpec,
+    schema: dict[str, Any],
+    properties: Mapping[str, dict[str, Any]],
+    *,
+    required: frozenset[str],
+    offered: Mapping[str, tuple[CommandTargetOption, ...] | None],
+    nested: dict,
+) -> dict[str, forms.Field]:
+    """The fields a command's own properties are drawn as, a closed object's as its fields."""
+
+    said = meanings(spec.command_type)
+    # A field is labeled from its name or the title its own use declares: the
+    # title a shared alias's definition carries names the alias, for a viewer
+    # offering its branches (``json_schemas``), never this field.
+    used = schema.get("properties", {})
+    fields: dict[str, forms.Field] = {}
+    for name, field in properties.items():
+        if name not in offered and _is_closed(field):
+            fields |= _inside(name, field, schema.get("$defs", {}), required=name in required, nested=nested)
+            continue
+        fields[name] = _field_for_schema(
+            name,
+            {key: value for key, value in field.items() if key != "title"} | _title(used.get(name, {})),
+            required=name in required,
+            offered=offered.get(name),
+            meaning=said.get(name),
+        )
+    return fields
+
+
 def command_form_class(
     spec: CapabilitySpec,
     *,
@@ -288,38 +390,36 @@ def command_form_class(
     """
 
     schema = as_its_model_declares(spec.command_type, command_schema(spec.command_type))
-    # A command that keeps its retry key is handed the one key the form
-    # posts, which ``{% write_token %}`` draws (``web_writes``).
-    properties = {name: field for name, field in whole_fields(schema).items() if name != IDEMPOTENCY_FIELD}
     # What the command must be sent, which for an update is no field it keeps.
     required = frozenset(capability_schema(spec).get("required", ()))
+    agents_only = for_agents(spec.command_type)
+    if asked := sorted(agents_only & required):
+        raise ValueError(f"{spec.name} must be sent {', '.join(asked)}, so a person's form cannot leave it out.")
+    # A command that keeps its retry key is handed the one key the form
+    # posts, which ``{% write_token %}`` draws (``web_writes``).
+    properties = {
+        name: field
+        for name, field in whole_fields(schema).items()
+        if name != IDEMPOTENCY_FIELD and name not in agents_only
+    }
     offered = {
         name: (record_choices or {}).get(name)
         for name, field in properties.items()
         if named_records(field) is not None or referred(field) is not None
     }
-    said = meanings(spec.command_type)
-    # A field is labeled from its name or the title its own use declares: the
-    # title a shared alias's definition carries names the alias, for a viewer
-    # offering its branches (``json_schemas``), never this field.
-    used = schema.get("properties", {})
-    fields = {
-        name: _field_for_schema(
-            name,
-            {key: value for key, value in field.items() if key != "title"} | _title(used.get(name, {})),
-            required=name in required,
-            offered=offered.get(name),
-            meaning=said.get(name),
-        )
-        for name, field in properties.items()
-    }
+    for name, answer in among_now(spec.command_type).items():
+        if (listed := offered.get(name)) is not None:
+            allowed = frozenset(answer())
+            offered[name] = tuple(option for option in listed if option.value in allowed)
+    nested: dict[str, tuple[tuple[str, bool], ...]] = {}
+    fields = _own_controls(spec, schema, properties, required=required, offered=offered, nested=nested)
     if spec.target_kind:
         options = {"label": spec.target_label or "Which one", "help_text": spec.target_help}
         if target_options is None:
             target_field = forms.IntegerField if spec.target_kind == "integer" else forms.CharField
             fields["__target"] = target_field(**options)
         else:
-            empty_label = "Choose one…" if target_options else "Nothing to choose from yet"
+            empty_label = "Choose one…" if target_options else NOTHING_TO_CHOOSE
             fields["__target"] = forms.ChoiceField(
                 choices=(("", empty_label), *grouped_choices(target_options)),
                 **options,
@@ -347,6 +447,7 @@ def command_form_class(
             "payload_schema": {**properties, "required": tuple(required)},
             "effect": spec.effect,
             "record_names": tuple(name for name, choices in offered.items() if choices is not None),
+            "nested": nested,
             "switch": switch_field(spec),
             **fields,
         },

@@ -16,4 +16,10 @@ set -eu
 seed="${usage_seed:?}"
 out=var/demo
 [ "$seed" = showcase ] || out="var/demo-$seed"
-HQ_DEMO_SEED="$seed" HQ_DEMO_OUT="$PWD/$out" uv run python manage.py test demo.build --noinput --parallel 1
+# Built beside the site and moved into place only once the build passes: mise
+# counts a site as current when its output is newer than every source, so a
+# failed build that wrote into the site would be served as current next time.
+staged="$out.building"
+HQ_DEMO_SEED="$seed" HQ_DEMO_OUT="$PWD/$staged" uv run python manage.py test demo.build --noinput --parallel 1
+rm -rf "$out"
+mv "$staged" "$out"

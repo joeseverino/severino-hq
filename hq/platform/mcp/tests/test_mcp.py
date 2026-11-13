@@ -388,7 +388,9 @@ class ServiceTests(SentinelMixin, TestCase):
 
         from ..identity import set_principal
 
-        instance = ConnectionInstance("example-infra", "Example infrastructure", "example", "good", "healthy")
+        instance = ConnectionInstance(
+            "example-infra", "Example infrastructure", "example", "good", "healthy", credential_model="none"
+        )
         spec = ConnectionSpec(
             "example.infrastructure",
             "Infrastructure authority",

@@ -16,7 +16,10 @@ from hq.domains.analytics.models import AnalyticsSite, RumDaily
 from hq.domains.control_plane.models import ManagedResource
 
 from ..machine_context import SECTIONS, sections_for
+from ..security import Capability, Principal
 from ..ui import MISSING
+
+OPERATOR = Principal("example-operator", "web", frozenset({Capability.READ}))
 
 
 def a_machine(*hostnames, resources=(), name="probe", declaration="", device=""):
@@ -56,7 +59,7 @@ def declare(key, kind, **spec):
 
 
 def by_id(machine):
-    return {section.id: section for section in sections_for(machine)}
+    return {section.id: section for section in sections_for(machine, principal=OPERATOR)}
 
 
 def row_for(machine, hostname):
@@ -203,12 +206,13 @@ class RegistryTests(TestCase):
                 "_networks",
                 "_data",
                 "_images",
+                "_runs",
                 "_activity",
             ],
         )
 
     def test_a_section_with_nothing_to_say_does_not_appear(self):
-        self.assertEqual(sections_for(a_machine()), ())
+        self.assertEqual(sections_for(a_machine(), principal=OPERATOR), ())
 
 
 class ReachedThroughTests(TestCase):

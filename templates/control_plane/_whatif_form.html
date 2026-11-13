@@ -6,27 +6,27 @@ Submits to the tailnet page rather than to itself, so the no-JavaScript path
 answer. Defaults come from whoever included it; on a machine's page both ends
 start as that machine, which is the question most often being asked.
 {% endcomment %}
-<form method="get" class="filter-bar" data-fragment-target="whatif-result" action="{% url 'control_plane:tailnet' %}">
-  <label class="control-label" for="whatif-source">From</label>
+{% url 'control_plane:tailnet' as tailnet_url %}
+{% filter_bar verb="Check" action=tailnet_url data_fragment_target="whatif-result" %}
+  {% control_label "From" control="whatif-source" %}
   <select id="whatif-source" name="source">
     {% for name in device_names %}
       <option value="{{ name }}" {% if name == asked.source %}selected{% endif %}>{{ name }}</option>
     {% endfor %}
   </select>
-  <label class="control-label" for="whatif-target">To</label>
+  {% control_label "To" control="whatif-target" %}
   <select id="whatif-target" name="target">
     {% for name in device_names %}
       <option value="{{ name }}" {% if name == asked.target %}selected{% endif %}>{{ name }}</option>
     {% endfor %}
   </select>
-  <label class="control-label" for="whatif-port">Port</label>
+  {% control_label "Port" control="whatif-port" %}
   <select id="whatif-port" name="port">
     {% for port in ports %}
       <option value="{{ port }}" {% if port|stringformat:"s" == asked.port %}selected{% endif %}>{{ port }}</option>
     {% endfor %}
   </select>
-  <button type="submit" class="btn primary">Check</button>
-</form>
+{% endfilter_bar %}
 
 {% include "control_plane/_whatif_result.html" %}
 <p class="muted">

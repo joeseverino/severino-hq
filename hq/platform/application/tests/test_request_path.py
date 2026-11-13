@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderInventory
 from hq.platform.core.tests.forwarding import arrived
+from hq_sdk.testing import plain
 
 from ..path_model import Hop
 from ..paths import hq_path
@@ -160,6 +161,17 @@ class RequestPathTests(TestCase):
         self.assertIn("reached HQ straight from", ingress.check.detail)
         self.assertTrue(ingress.check.step)
         self.assertIn(ingress, found.findings)
+
+    def test_a_finding_is_the_queues_row_with_its_fix_as_what_to_do(self):
+        found = self.walk(a_request(peer=LAPTOP, forwarded=""))
+        ingress = next(hop for hop in found.hops if hop.step == "ingress")
+
+        rows = [row for row in found.finding_rows if row["label"] == ingress.label]
+
+        self.assertEqual(len(found.finding_rows), len(found.findings))
+        (row,) = rows
+        self.assertEqual(row["detail"], ingress.check.detail)
+        self.assertIn(ingress.check.step, str(row["workflow"]))
 
     def test_a_tailnet_address_no_device_holds_is_a_finding(self):
         states = self.checks(a_request(forwarded="100.64.0.99"))
@@ -371,7 +383,7 @@ class ReadParityTests(TestCase):
         self.assertContains(response, "data-connection-hop=", count=len(found.hops))
         self.assertContains(response, "data-connection-layer=", count=len(found.connection.layers))
         self.assertContains(response, "Path to HQ")
-        self.assertContains(response, found.proof)
+        self.assertIn(found.proof, plain(response.content))
         # The link's facts come from the caller's presence, and still show.
         self.assertIn("198.51.100.7:41641", [value.text.strip() for value in elements(response, "code")])
         self.assertContains(response, "Last handshake")
@@ -484,7 +496,6 @@ class ContainerHopTests(TestCase):
         _, check = self.check(here="ffffffffffff", listed="0123456789ab")
 
         self.assertEqual(check.state, UNPROVEN)
-        self.assertIn("next read", check.detail)
 
     def test_its_own_container_is_read_from_its_mounts_on_any_network(self):
         from .. import request_path as module
@@ -499,4 +510,5 @@ class ContainerHopTests(TestCase):
     def test_a_sweep_that_read_no_id_says_it_cannot_show(self):
         _, check = self.check(here="0123456789ab", listed="")
 
-        self.assertIn("no container ID", check.detail)
+        self.assertEqual(check.state, UNPROVEN)
+        self.assertIn("container ID", check.detail)

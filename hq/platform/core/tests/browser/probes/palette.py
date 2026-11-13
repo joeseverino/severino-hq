@@ -1,6 +1,9 @@
 """Probes of color: field and button edges, the fills a theme paints, and the tokens that paint them."""
 
+from hq.platform.core.tests.browser.probes import Check
 from hq.platform.core.tests.browser.probes.describe import DESCRIBE
+from hq.platform.core.tests.browser.probes.settle import settled
+from hq.platform.core.tests.browser.selectors import SELECTORS
 
 # The least a fill may differ from the surface it sits on to show at all:
 # below this it is the surface's own color.
@@ -152,7 +155,7 @@ _PAINTED_BY = """
 # from what is behind the frame. A disabled field is exempt, as WCAG exempts it,
 # and so is one framed by a control that is pressed (`pressed`: the sort's
 # label around its select), which its label identifies, as a button's does.
-FIELD_EDGES = (
+FIELD_EDGES = settled(
     "([fillable, least, pressed]) => {"
     + DESCRIBE
     + _COLOR
@@ -185,7 +188,7 @@ FIELD_EDGES = (
 # a checkbox) is identified by its label and wears a button's edge, so no
 # side of its border is drawn in the field's. The token is resolved where the
 # control sits, in the palette the page is in.
-BUTTON_EDGES = (
+BUTTON_EDGES = settled(
     "(pressed) => {"
     + DESCRIBE
     + """
@@ -327,3 +330,10 @@ PAINT = (
   });
 }"""
 )
+
+
+# The survey checks these probes answer (`probes/__init__.py`).
+CHECKS = {
+    "fields": Check((FIELD_EDGES, [SELECTORS["fillable"], FIELD_CONTRAST, SELECTORS["pressed"]]), palette=True),
+    "button edges": Check((BUTTON_EDGES, SELECTORS["pressed"]), palette=True),
+}

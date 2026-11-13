@@ -428,6 +428,18 @@ TEMPLATES = [
                 "hq.platform.core.templatetags.write_tags",
                 "hq.platform.core.templatetags.status_tags",
                 "hq.platform.core.templatetags.part_tags",
+                "hq.platform.core.templatetags.patch_tags",
+                "hq.platform.core.templatetags.change_tags",
+                "hq.platform.core.templatetags.notice_tags",
+                "hq.platform.core.templatetags.filter_tags",
+                "hq.platform.core.templatetags.facts_tags",
+                "hq.platform.core.templatetags.stack_tags",
+                "hq.platform.core.templatetags.title_tags",
+                "hq.platform.core.templatetags.label_tags",
+                "hq.platform.core.templatetags.switch_tags",
+                "hq.platform.core.templatetags.select_tags",
+                "hq.platform.core.templatetags.ladder_tags",
+                "hq.platform.core.templatetags.run_tags",
             ],
         },
     },
@@ -455,7 +467,7 @@ CACHES = {
         # A value is pickled, and the table outlives the process, so it is
         # served only to the code that stored it: every key starts with the
         # identity of the host and extensions this process runs.
-        "KEY_PREFIX": import_module("hq.platform.application.code_identity").running_code(),
+        "KEY_PREFIX": import_module("hq.platform.application.code_identity").booted_code(),
         # A fact is stored once per revision it was derived at, and an old
         # revision is never asked for again: a small table, culled by halves.
         "OPTIONS": {"MAX_ENTRIES": 120, "CULL_FREQUENCY": 2},

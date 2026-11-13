@@ -1,0 +1,8 @@
+# A sidecar whose playbook has not been written, with a declaration HQ
+# refuses: no id, and an effect that is none of the capability effects.
+target_kinds: [machine]
+effect: sometimes
+timeout_seconds: 60
+retry: never
+recovery:
+  - None yet.

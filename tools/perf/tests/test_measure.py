@@ -123,6 +123,24 @@ class AlternationTests(SimpleTestCase):
         self.assertEqual(found["here"]["/"]["rows"], 5)
         self.assertEqual(found["base"]["/"]["rows"], 3)
 
+    def test_a_page_a_server_lacks_is_never_asked_of_it_nor_in_its_answer(self):
+        asked: dict[str, list[str]] = {"base": [], "here": []}
+
+        class Asked(FakeServer):
+            def get(self, page: str) -> measure.Answer:
+                asked[self.name].append(page)
+                return super().get(page)
+
+        servers = {name: Asked(name, 1, [1.0] * 20, []) for name in asked}
+        with mock.patch.object(measure, "Server", lambda url, _cookie: servers[url]):
+            found = measure.server_times(
+                {name: (name, ("s", "k")) for name in servers}, ["/", "/new/"], 2, lacks={"base": {"/new/"}}
+            )
+
+        self.assertNotIn("/new/", asked["base"])
+        self.assertIn("/new/", asked["here"])
+        self.assertEqual((list(found["base"]), list(found["here"])), (["/"], ["/", "/new/"]))
+
 
 class MovedTests(SimpleTestCase):
     def test_a_difference_past_its_spread_is_marked_and_one_inside_it_is_not(self):

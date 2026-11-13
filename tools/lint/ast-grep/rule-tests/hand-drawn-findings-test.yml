@@ -1,0 +1,8 @@
+id: hand-drawn-findings
+valid:
+  - '{% include "partials/_work_queue.html" with items=items %}'
+  - '<ul class="attention"></ul>'
+invalid:
+  - '<ul class="attention-list"></ul>'
+  - '<li class="attention-row">A</li>'
+  - '<ul class="posture-gaps"></ul>'

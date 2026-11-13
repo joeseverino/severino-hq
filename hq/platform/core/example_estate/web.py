@@ -10,13 +10,13 @@ from django.utils import timezone
 from hq.domains.analytics.contracts import BACKFILL_DAYS, completed_window
 from hq.domains.control_plane.observations.cloudflare import CONTACT_SUBMISSION_KIND
 from hq.platform.application.analytics import record_analytics
-from hq.platform.application.inventory_testing import store
 from hq.platform.application.security import cli_principal
 lazy from hq.domains.content.models import ContentItem
 lazy from hq.domains.docs_index.models import DocumentationRecord
 
 from .names import CLOUDFLARE, ZONE, hexed, iso
 from .records import WRITEUPS
+from .sweep import store
 
 SITE = f"https://{ZONE}"
 # The runbook the site's pages cite.

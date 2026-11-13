@@ -77,11 +77,6 @@ class RecordsLedeTests(SimpleTestCase):
         self.assertEqual(_records_lede(many), "17 records, all managed by HQ")
         self.assertEqual(_records_lede(unmanaged), "2 records, none managed by HQ")
 
-    def test_the_count_says_how_many_are_folded_under_it(self):
-        zone = SimpleNamespace(managed=True, adoptable=(), managed_count=4, records=(), policy=(1, 2, 3))
-
-        self.assertEqual(_records_lede(zone), "4 records, all managed by HQ, 3 of them policy and verification records")
-
 
 class RecordTableTests(SimpleTestCase):
     def record(self, **fields):
@@ -104,9 +99,9 @@ class RecordTableTests(SimpleTestCase):
         return render_to_string(
             "control_plane/_zone_records.html",
             {
-                "routing": rows,
-                "policy": policy,
-                "zone": SimpleNamespace(managed=True),
+                "routing": [(row, ()) for row in rows],
+                "policy": [(row, ()) for row in policy],
+                "zone": SimpleNamespace(managed=True, ttl_set=any(row.ttl != 1 for row in (*rows, *policy))),
                 "public_dns_enabled": True,
                 "request": SimpleNamespace(get_full_path=lambda: "/domains/example.com/"),
                 **context,
@@ -128,9 +123,21 @@ class RecordTableTests(SimpleTestCase):
         self.assertNotIn("Auto", text(html))
         self.assertIn("300 s", texts(html, "td"))
 
+    def test_a_zone_whose_every_ttl_is_automatic_has_no_ttl_column(self):
+        html = self.table(self.record(), self.record(name="www.example.com"))
+
+        self.assertNotIn("TTL", texts(html, "th"))
+
+    def test_a_zone_says_whether_any_record_set_its_own_ttl(self):
+        automatic = ZoneRecord("app.example.com", "A", "192.0.2.10")
+        slow = ZoneRecord("slow.example.com", "A", "192.0.2.11", ttl=300)
+
+        self.assertFalse(Zone("example.com", records=(automatic,)).ttl_set)
+        self.assertTrue(Zone("example.com", records=(automatic, slow)).ttl_set)
+
     def test_an_empty_half_says_where_the_records_are(self):
         self.assertIn("No records.", self.table())
-        self.assertIn("They are all below.", self.table(policy=(self.record(record_type="CAA"),)))
+        self.assertIn("No routing records.", self.table(policy=(self.record(record_type="CAA"),)))
 
     def test_policy_records_are_a_group_of_the_same_table_folded_away(self):
         html = self.table(self.record(), policy=(self.record(name="example.com", record_type="CAA"),))

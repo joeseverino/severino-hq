@@ -1,0 +1,9 @@
+{% comment %}
+A notice, drawn by {% notice %}: {% notice tone="warning" title="2 jobs failed" %}<p>What to do.</p>{% endnotice %}.
+tone is one of info, success, warning and error, or none for a neutral
+notice; title is its first line, in bold, given as the option or, when the
+page composes it, as the {% title %} part after the body; css a class of the
+page's beside the part's; each data_* option a data- attribute (True draws it
+bare). An error is an alert, any other a status. Drawn with no body it is the
+frame a script fills (notice_tags.py).
+{% endcomment %}<div class="{{ classes }}" role="{{ role }}"{{ data }}>{% if title %}<strong>{{ title|breakable }}</strong>{% endif %}{{ content|safe }}</div>

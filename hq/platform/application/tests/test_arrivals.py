@@ -234,5 +234,4 @@ class ArrivalTests(TestCase):
         with override_settings(SEVERINO_REQUEST_PATH_SECONDS=0):
             response = self.client.get(reverse("control_plane:machine", kwargs={"name": "a-laptop"}))
 
-        self.assertContains(response, "This is HQ's own machine.")
-        self.assertNotContains(response, "over the tailnet")
+        self.assertNotContains(response, "Last reached HQ")

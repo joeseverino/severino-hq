@@ -1,17 +1,17 @@
 """The section part: one look whether a template writes it or code builds it."""
 
-import ast
 import inspect
 import re
 from datetime import date
-from pathlib import Path
 
 from django.template import Context, Template, TemplateSyntaxError
 from django.test import SimpleTestCase, tag
+from django.utils.functional import SimpleLazyObject
 
 from hq.platform.application.page_parts import SectionPart
 from hq.platform.application.tests.markup import all_elements, elements, select, with_class
 from hq.platform.core.templatetags.part_tags import SECTION
+lazy from hq.platform.core.tests.browser.catalog import CATALOG
 
 MONTH = date(2026, 11, 1)
 
@@ -139,6 +139,28 @@ class SectionTagTests(SimpleTestCase):
         self.assertEqual(frame.attrs["data-fragment"], "hosts")
         self.assertNotEqual(elements(html, "h2")[0].attrs["id"], "hosts")
 
+    def test_a_lazy_flag_is_a_flag_on_every_part_that_takes_data_options(self):
+        # A context processor hands its values over lazily (agents_paused):
+        # off is no attribute, never ="False", on every part drawing data-.
+        parts = {
+            "card": "{% card data_example=flag %}A{% endcard %}",
+            "notice": "{% notice data_example=flag %}A{% endnotice %}",
+            "section": '{% section "Hosts" data_example=flag %}<p>A</p>{% endsection %}',
+            "status": '{% status "Online" data_example=flag %}',
+        }
+        for name, source in parts.items():
+            for value in (False, None):
+                with self.subTest(part=name, value=value):
+                    self.assertEqual(
+                        select(_render(source, flag=SimpleLazyObject(lambda value=value: value)), "data-example"), []
+                    )
+            with self.subTest(part=name, value=True):
+                (drawn,) = select(_render(source, flag=SimpleLazyObject(lambda: True)), "data-example")
+                self.assertEqual(drawn.attrs["data-example"], "")
+            with self.subTest(part=name, value=0):
+                (drawn,) = select(_render(source, flag=0), "data-example")
+                self.assertEqual(drawn.attrs["data-example"], "0")
+
     def test_a_folded_section_s_heading_is_its_toggle(self):
         html = _render(
             '{% section "Dismissed" count=2 fold=True open=True %}{% for x in items %}{{ x }}{% empty %}<p>None</p>'
@@ -180,6 +202,23 @@ class SectionTagTests(SimpleTestCase):
     def test_a_head_that_stands_neither_above_nor_inside_is_refused(self):
         with self.assertRaises(ValueError):
             _render('{% section "Hosts" head="beside" %}<p>Body</p>{% endsection %}')
+
+    def test_an_edged_section_wears_its_tone_and_keeps_its_head_and_body(self):
+        source = '{% section "Request" EDGE%}<p>Body</p>{% endsection %}'
+        plain = _render(source.replace("EDGE", ""))
+        edged = _render(source.replace("EDGE", 'edge="attention" '))
+
+        (landmark,) = elements(edged, "section")
+        self.assertIn("section-edge", landmark.classes)
+        self.assertIn("toned-attention", landmark.classes)
+        self.assertNotIn("section-edge", elements(plain, "section")[0].classes)
+        self.assertEqual(
+            [(e.tag, e.words) for e in all_elements(edged)[1:]], [(e.tag, e.words) for e in all_elements(plain)[1:]]
+        )
+
+    def test_an_edge_in_no_status_tone_is_refused(self):
+        with self.assertRaises(ValueError):
+            _render('{% section "Request" edge="pending" %}<p>Body</p>{% endsection %}')
 
     def test_its_foot_says_how_to_read_the_body_in_the_frame_after_it(self):
         html = _render(
@@ -345,24 +384,10 @@ class SectionPartTests(SimpleTestCase):
                 SectionPart(heading="Hosts", level=level)
 
 
-CATALOG = Path(__file__).resolve().parent / "browser" / "catalog.py"
-
-
 def _catalog_templates() -> dict[str, str]:
-    """Each catalog entry's template, read from the module's source, which a
-    source run reads without the browser group the module imports."""
+    """Each catalog entry's template, by its name."""
 
-    tree = ast.parse(CATALOG.read_text(encoding="utf-8"))
-    (catalog,) = [
-        node.value
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Assign) and [getattr(t, "id", "") for t in node.targets] == ["CATALOG"]
-    ]
-    return {
-        ast.literal_eval(key): entry.args[0].value
-        for key, entry in zip(catalog.keys, catalog.values, strict=True)
-        if isinstance(entry, ast.Call) and entry.args and isinstance(entry.args[0], ast.Constant)
-    }
+    return {name: entry.template for name, entry in CATALOG.items()}
 
 
 @tag("source")
@@ -392,5 +417,7 @@ class SectionCatalogTests(SimpleTestCase):
             )
         }
         self.assertEqual(
-            sorted(set(taken) - drawn), [], "add a part/section-* entry to browser/catalog.py that draws it"
+            sorted(set(taken) - drawn),
+            [],
+            "add a part/section-* entry to browser/catalog/families/part.py that draws it",
         )

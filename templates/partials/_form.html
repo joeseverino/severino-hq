@@ -15,17 +15,25 @@ partials/_row_field.html) as `table_body`: the form draws its hidden fields
 and lays out no fields of its own (no `.form`), so the table reaches its
 frame's sides as a table section's does, and its closing row sits under the
 table. `action` is where it posts, the page itself unless given; it takes a
-file when the form does. `verb`, `cancel_url`, `note`, `choices` and
-`choice_field` are the closing row's, and `bar` pins that row to the bottom
-of the screen once something has changed, for a long form. `next` is the
-page to come back to once it is saved. A form answered in place (`in_place`)
-is sent to the region it stands in and says how it went in its closing row,
-whose Cancel is answered there too.
+file when the form does. `verb`, `cancel_url`, `note`, `choices`,
+`choice_field` and `gap` are the closing row's, and `bar` pins that row to
+the bottom of the screen once something has changed, for a long form. `next`
+is the page to come back to once it is saved. A form answered in place
+(`in_place`) is sent to the region it stands in, or to the region whose id
+`in_place` names, and says how it went in its closing row, whose Cancel is
+answered there too. `hooks` names the `data-` attributes a script or a test
+finds the form by, space-separated. A form that asks rather than writes (a
+lookup) is `method="get"`: it carries no write token, since sending it twice
+changes nothing, and it never takes a file. A form that asks one question,
+one line of words to fill (`asks_one_question`) and its verb alone, draws its
+button on the field's line where there is room (`is-question`, forms.css).
 {% endcomment %}
-<form method="post"{% if action %} action="{{ action }}"{% endif %}{% if form.is_multipart %} enctype="multipart/form-data"{% endif %}{% if not table_body %} class="form"{% endif %}{% if in_place %} data-fragment-target="" data-fragment-busy="Working…"{% else %} data-submit-busy data-submit-label="Working…"{% endif %}>
-  {% write_token %}
+{% comment %}
+<!-- ast-grep-ignore: hand-drawn-form --> the form part itself
+{% endcomment %}<form{% if method == "get" %} method="get"{% else %} method="post"{% endif %}{% if action %} action="{{ action }}"{% endif %}{% if form.is_multipart and method != "get" %} enctype="multipart/form-data"{% endif %}{% if not table_body %} class="form{% if not fields and not cancel_url and not choices and not note and not bar and form|asks_one_question %} is-question{% endif %}"{% endif %}{% if in_place %} data-fragment-target="{% if in_place is not True %}{{ in_place }}{% endif %}" data-fragment-busy="Working…"{% else %} data-submit-busy data-submit-label="Working…"{% endif %}{% if hooks %}{% for hook in hooks.split %} {{ hook }}{% endfor %}{% endif %}>
+  {% if method != "get" %}{% write_token %}{% endif %}
   {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
   {% include "partials/_form_errors.html" %}
   {% if table_body %}{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}{% include table_body %}{% elif fields %}{% include fields %}{% else %}{{ form }}{% endif %}
-  {% if in_place %}{% include "partials/_form_actions.html" with verb=verb cancel_url=cancel_url note=note choices=choices choice_field=choice_field bar=bar live=True in_place=True only %}{% else %}{% include "partials/_form_actions.html" with verb=verb cancel_url=cancel_url note=note choices=choices choice_field=choice_field bar=bar only %}{% endif %}
+  {% if in_place %}{% include "partials/_form_actions.html" with verb=verb cancel_url=cancel_url note=note choices=choices choice_field=choice_field bar=bar gap=gap|default:None live=True in_place=in_place only %}{% else %}{% include "partials/_form_actions.html" with verb=verb cancel_url=cancel_url note=note choices=choices choice_field=choice_field bar=bar gap=gap|default:None only %}{% endif %}
 </form>

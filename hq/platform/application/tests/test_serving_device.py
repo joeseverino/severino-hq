@@ -211,16 +211,15 @@ class CarriageTests(TestCase):
         self.assertEqual(found.peering.id, "relay")
         self.assertFalse(found.peering.public)
 
-    def test_no_answer_is_three_different_sentences(self):
-        """Conflating them blamed the network for a limit on HQ's own view."""
+    def test_no_device_draws_no_connection_type(self):
+        """Unread, or read without this address: the row is left out."""
 
         a_tailnet()
-        found = connection(a_request())
-        self.assertEqual(found.peering.id, "unobserved")
-
+        unread = connection(a_request())
         a_tailnet(a_device("hq-host", "100.64.0.9", observer=True))
-        found = connection(a_request())
-        self.assertEqual(found.peering.id, "unlisted")
+        unlisted = connection(a_request())
+
+        self.assertEqual((unread.peering, unlisted.peering), (None, None))
 
     def test_the_address_panel_is_offered_only_where_there_is_one_to_ask_about(self):
         """The wiring, asserted at the template rather than by hand.

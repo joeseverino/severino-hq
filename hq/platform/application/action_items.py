@@ -138,8 +138,7 @@ def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     Derived from what every item already carries, so a domain that starts
     raising items has its section, and a family its fold, without anybody
     listing either. The queue's own order is kept: a domain appears where its
-    first (and so its worst) item does, and so does a family within it. A
-    family of one is that item alone. A domain that declares where its items
+    first (and so its worst) item does. A domain that declares where its items
     are decided together (``PluginIntegration.attention_url``) gives its group
     that page as ``url``.
     """
@@ -147,32 +146,34 @@ def by_source(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     urls = attention_urls() if items else {}
     groups: dict[str, dict[str, Any]] = {}
     for item in items:
-        group = groups.setdefault(
+        groups.setdefault(
             item["source_id"],
-            {
-                "id": item["source_id"],
-                "label": item["source"],
-                "url": urls.get(item["source_id"], ""),
-                "items": [],
-                "entries": {},
-            },
-        )
-        group["items"].append(item)
-        family = item.get("family", "")
-        entry = group["entries"].setdefault(
-            ("family", family) if family else ("item", item["key"]),
-            {"family": family, "id": family_id(item) if family else "", "items": []},
+            {"id": item["source_id"], "label": item["source"], "url": urls.get(item["source_id"], ""), "items": []},
+        )["items"].append(item)
+    return [{**group, "entries": families(group["items"])} for group in groups.values()]
+
+
+def families(items: list[dict[str, Any]], *, fold: bool = True) -> list[dict[str, Any]]:
+    """``items`` as the queue's entries: each family of more than one folded
+    under its name where the first (and so its worst) of it stands, any other
+    item an entry of its own. A fold is drawn under its family's name, so only
+    a named family folds; with ``fold`` false every item stands alone."""
+
+    entries: dict[tuple[str, Any], dict[str, Any]] = {}
+    for item in items:
+        named = fold and bool(item.get("family"))
+        entry = entries.setdefault(
+            ("family", family_id(item)) if named else ("item", len(entries)),
+            {"family": item.get("family", "") if named else "", "id": family_id(item) if named else "", "items": []},
         )
         entry["items"].append(item)
     return [
         {
-            **group,
-            "entries": [
-                {**entry, "folded": len(entry["items"]) > 1, "status": entry["items"][0]["status"]}
-                for entry in group["entries"].values()
-            ],
+            **entry,
+            "folded": bool(entry["family"]) and len(entry["items"]) > 1,
+            "status": entry["items"][0].get("status", ""),
         }
-        for group in groups.values()
+        for entry in entries.values()
     ]
 
 

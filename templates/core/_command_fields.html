@@ -1,0 +1,29 @@
+{% comment %}
+A command's fields (command.html), drawn in partials/_form.html: its hidden
+fields, where a switch stands, what it acts on, and the confirmation last.
+What the page was opened for and where a switch stands are facts the form
+names, not fields to fill, so they are drawn as facts.
+{% endcomment %}
+{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+{% comment %}A switch on no record says where it stands first.{% endcomment %}
+{% if switch.state and not command.target_kind %}
+  {% facts %}{% fact switch.label value=switch.state %}{% endfacts %}
+{% endif %}
+{% for field in form.primary_fields %}
+  {% comment %}
+  The record the page was opened for is named, its control kept out of sight
+  so it posts as it would shown. A switch says where it stands for the record
+  chosen, beside it, and is pressed as the words that change it.
+  {% endcomment %}
+  {% if chosen_target and field.name == "__target" %}{{ field }}{% else %}{{ field.as_field_group }}{% endif %}
+  {% if field.name == "__target" %}
+    {% if chosen_target or switch.state %}
+      {% facts %}
+        {% if chosen_target %}{% fact chosen_target.field %}{{ chosen_target.label|breakable }} <a class="subtle-link" href="{{ chosen_target.change_url }}">Change</a>{% endfact %}{% endif %}
+        {% if switch.state %}{% fact switch.label value=switch.state %}{% endif %}
+      {% endfacts %}
+    {% endif %}
+    {% if chosen_target %}{{ field.errors }}{% endif %}
+  {% endif %}
+{% endfor %}
+{% for field in form.confirmation_fields %}{{ field.as_field_group }}{% endfor %}

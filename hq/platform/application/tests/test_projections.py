@@ -17,7 +17,9 @@ from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.host_only import host_only
 
 from ..cadence_chart import Cadence, CadenceMatrix, CadenceRow, CadenceWeek
+from ..card_items import Timeline, TimelineItem
 from ..dashboard import operating_snapshot
+from ..doors import Attribution
 from ..money import money
 from ..projection import projection_scope, read_once
 from ..resource_context import get_managed_resource
@@ -33,8 +35,6 @@ from ..ui import (
     PageNavigation,
     PageSection,
     PlannedDay,
-    Timeline,
-    TimelineItem,
     WeekPlan,
     line_chart,
     stacked_bar_chart,
@@ -558,6 +558,23 @@ class ChartAxisSpanTests(TestCase):
         self.assertTrue(any("202" in label for label in labels), labels)
 
 
+class ChartDensityTests(SimpleTestCase):
+    """An axis whose labels would touch in the narrowest card says so."""
+
+    def _bars(self, labels):
+        return stacked_bar_chart("Share", "", labels, (ChartSeries("Done", (1.0,) * len(labels), 1),), unit="m")
+
+    def test_six_months_with_their_years_are_dense(self):
+        # Each "Aug 2026" is about fifty pixels at the axis' size, and a
+        # phone's card leaves six of them less than that apart.
+        months = ("Jun 2026", "Jul 2026", "Aug 2026", "Sep 2026", "Oct 2026", "Nov 2026")
+
+        self.assertTrue(self._bars(months).dense)
+
+    def test_a_few_short_days_are_not(self):
+        self.assertFalse(self._bars(("Aug 3", "Aug 10", "Aug 17", "Aug 24")).dense)
+
+
 # What the host's own dashboard is allowed to cost, and what each installed
 # extension may add on top. Two numbers because the dashboard composes every
 # domain: a single fixed budget is wrong the moment an extension is installed.
@@ -755,7 +772,7 @@ class OperationProjectionTests(TestCase):
             },
         )
 
-        result = operation_summary(operation)
+        result = operation_summary(operation, Attribution("example-controller", "controller"))
 
         self.assertEqual(result["headline"], "One consumer serves the previous certificate.")
         self.assertEqual(result["condition"]["reason"], "VerificationFailed")

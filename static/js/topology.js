@@ -5,7 +5,7 @@
 // enhancement filters, isolates a node's immediate neighborhood, and loads
 // the selected node's details into the one panel beside the lanes, creating
 // no client-side topology state of its own.
-document.querySelectorAll("[data-topology]").forEach((workspace) => {
+hqFragment.each("[data-topology]", (workspace) => {
   const nodes = [...workspace.querySelectorAll("[data-topology-node]")];
   const lanes = [...workspace.querySelectorAll("[data-topology-lane]")];
   const map = workspace.querySelector(".topology-map");
@@ -13,11 +13,10 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
   const ledger = document.getElementById(workspace.dataset.topologyLedger);
   const edges = [...(ledger?.querySelectorAll("[data-topology-edge]") || [])];
   const search = workspace.querySelector("[data-topology-search]");
-  const kindControls = [...workspace.querySelectorAll("[data-topology-kind]")];
-  const status = workspace.querySelector("[data-topology-status]");
+  const kindControls = [...workspace.querySelectorAll('[data-toggle-set="kind"] input')];
+  // The bar's count says its own words; this rewrites only the number shown.
+  const shown = workspace.querySelector("[data-filter-bar-shown]");
   const reset = workspace.querySelector("[data-topology-reset]");
-  // The total counts every card, including those hidden until asked for.
-  const total = Number(workspace.dataset.topologyTotal) || nodes.length;
   let focused = nodes.some((node) => node.dataset.topologyNode === workspace.dataset.focus)
     ? workspace.dataset.focus : "";
 
@@ -74,9 +73,7 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
     }
   };
 
-  // `said`: whether the status line speaks for the view. The server draws it
-  // for the page as it loads, so the first pass leaves it standing.
-  const render = ({ said = true } = {}) => {
+  const render = () => {
     const selected = nodes.find((node) => node.dataset.topologyNode === focused);
     const related = new Set(selected?.dataset.topologyNeighbors.split(" ").filter(Boolean) || []);
     workspace.classList.toggle("has-focus", Boolean(selected));
@@ -95,7 +92,7 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       const visible = [...lane.querySelectorAll("[data-topology-node]")]
         .filter((node) => !node.hidden);
       lane.hidden = visible.length === 0;
-      const count = lane.querySelector("[data-topology-count]");
+      const count = lane.querySelector(".section-head .count");
       if (count) {
         count.textContent = visible.length;
         const label = `${visible.length} shown`;
@@ -107,15 +104,10 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       const ends = edge.dataset.topologyEdge.split(" ");
       const touchesFocus = Boolean(selected) && ends.includes(focused);
       edge.hidden = Boolean(selected) && !touchesFocus;
-      edge.classList.toggle("is-related", touchesFocus);
+      edge.toggleAttribute("data-emphasized", touchesFocus);
     });
     if (ledger) ledger.hidden = edges.length > 0 && edges.every((edge) => edge.hidden);
-    if (status && said) {
-      const visible = nodes.filter((node) => !node.hidden).length;
-      status.textContent = selected
-        ? `${selected.querySelector("strong")?.textContent || "Selected"}: ${related.size} direct relationship${related.size === 1 ? "" : "s"}.`
-        : `${visible} of ${total} shown. Press a count of links to see only what it connects to.`;
-    }
+    if (shown) shown.textContent = nodes.filter((node) => !node.hidden).length.toLocaleString("en-US");
   };
 
   // Isolating a node shrinks the lanes under whatever the page was scrolled
@@ -174,6 +166,9 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       search.value = "";
       filter();
     } else if (event.key === "Enter") {
+      // The field is in the view's form, whose Filter Enter would send: here
+      // Enter opens the first card the words find instead.
+      event.preventDefault();
       const first = nodes.find((node) => !node.hidden);
       if (first) {
         focus(first.dataset.topologyNode);
@@ -181,7 +176,7 @@ document.querySelectorAll("[data-topology]").forEach((workspace) => {
       }
     }
   });
-  render({ said: false });
+  render();
   if (focused) {
     showDetail(Boolean(detail?.childElementCount));
     map?.scrollTo({ top: 0, behavior: "auto" });

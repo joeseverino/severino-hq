@@ -63,11 +63,6 @@ func configure(args []string, getenv func(string) string, stderr io.Writer) (sec
 			return secrets.Config{}, "", configError("Remove " + name + " from the environment; the token is read from the unit's credentials.")
 		}
 	}
-	// The renderer reads through Connect and nothing else. A host still
-	// configured for another backend is refused, not quietly switched.
-	if backend := getenv("SEVERINO_SECRETS_BACKEND"); backend != "" && backend != "connect" {
-		return secrets.Config{}, "", configError("SEVERINO_SECRETS_BACKEND names a backend that no longer exists; the renderer reads through Connect.")
-	}
 	if getenv("SEVERINO_CONTROLLER_ENV") != "" {
 		return secrets.Config{}, "", configError("Remove SEVERINO_CONTROLLER_ENV; configure SEVERINO_CONTROLLER_SECRET_DIR consistently instead.")
 	}

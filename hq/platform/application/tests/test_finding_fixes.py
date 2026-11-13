@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.provider_adapters.portainer import CONTAINER_KIND
+from hq_sdk.testing import plain
 
 from ..capabilities import execute_capability
 from ..finding_model import FindingRule
@@ -83,7 +84,7 @@ class PolicyAmendmentTests(TestCase):
         )
 
     def test_a_group_named_elsewhere_is_refused(self):
-        with self.assertRaisesRegex(PolicyError, "also named outside its rules"):
+        with self.assertRaisesRegex(PolicyError, "also named outside the rules"):
             policy_without_empty_groups(document(tagOwners={"tag:server": ["group:empty"]}))
 
     def test_a_prefix_of_another_name_is_not_a_reference(self):
@@ -364,7 +365,7 @@ class CleanPageTests(TestCase):
         response = self.page(timezone.now())
 
         self.assertContains(response, "The checks found no problems.")
-        self.assertContains(response, f"{len(RULES)} checks over 1 machine and 0 services, from readings")
+        self.assertIn(f"{len(RULES)} checks over 1 machine and 0 services, from readings", plain(response.content))
 
     def test_a_clean_page_names_what_else_waits_on_the_reader(self):
         from unittest import mock

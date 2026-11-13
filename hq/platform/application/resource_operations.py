@@ -5,6 +5,7 @@ each is checked against the provider's policy, queued atomically and audited
 before the controller runs it.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypedDict
@@ -15,13 +16,15 @@ from hq.domains.control_plane.desired_state import advance_dependents
 from hq.domains.control_plane.models import ManagedResource, OperationRequest
 from hq.domains.control_plane.provider_adapters.tls import CERTIFICATE_KIND
 from hq.domains.control_plane.providers import PROVIDERS, controller_action_policy
-from hq.platform.core.audit import audit_operation
+from hq.platform.core.audit import audit_operation, audited_labels
+lazy from hq.platform.core.models import AuditLog
 
-from .adoption import OBSERVES_ONLY, keep_out_declaration, observes_only
+from .adoption import keep_out_declaration, observes_only, require_writable
 from .asks import WAITING
 from .cadence import request_reading, ring_doorbell, swept
 from .command_fields import Describe
 from .default_hold import consent_gap
+from .doors import NOBODY, Attribution
 from .expiry import certificate_expiry, days_until, renewal_opens_at, renewal_window
 from .infrastructure import (
     ManagedResourceCommand,
@@ -45,10 +48,11 @@ from .resource_records import (
     RequestedActor,
     RequestedInterface,
 )
-from .security import CONTROLLER_INTERFACE, Principal, is_agent
+from .security import CONTROLLER_INTERFACE, Principal
 from .ui import counted, ended
 lazy from . import tailnet
 lazy from .containers import Running
+lazy from .history import who_did
 lazy from .inventory import live_spec
 lazy from .machines import Machine, container_context
 lazy from .moments import when_day
@@ -81,6 +85,7 @@ class OperationItem(TypedDict):
     ]
     attempt_count: AttemptCount
     result: Annotated[dict[str, Any], Describe("What the controller reported of its run; empty until it has run.")]
+    correlation: Annotated[str, Describe("The asker's own id for finding it later; empty for none.")]
 
 
 # The reconcile a save queues, which every answer built on a save carries.
@@ -155,6 +160,7 @@ def serialize_operation(operation: OperationRequest) -> OperationItem:
         "lease_expires_at": (operation.lease_expires_at.isoformat() if operation.lease_expires_at else None),
         "attempt_count": operation.attempt_count,
         "result": operation.result,
+        "correlation": str((operation.input or {}).get("correlation", "")),
     }
 
 
@@ -192,24 +198,35 @@ def _outcome(operation: OperationRequest) -> tuple[str, str, str]:
     if operation.state == OperationRequest.State.FAILED:
         headline = (active[0].get("message") if active else "") or said or "It failed."
         return "serious", state, headline
+    if operation.state == OperationRequest.State.CANCELLED:
+        # Stopped early: something to look at, never a success.
+        return "attention", state, said or ended(state)
     problem = _problem(result)
     if problem is not None:
         return "attention", "Problem found", problem.get("message") or said or "It found a problem."
     return "good", state, said or ended(state)
 
 
-def requested_by(operation: OperationRequest) -> str:
-    """Who asked, as a person reads it."""
+def headline(operation: OperationRequest) -> str:
+    """How one operation ended, or where it stands, in a sentence."""
 
-    if operation.requested_interface == CONTROLLER_INTERFACE:
-        return "Automatic"
-    if is_agent(operation.requested_interface):
-        return f"{operation.requested_actor} (agent)"
-    return operation.requested_actor
+    return _outcome(operation)[2]
 
 
-def operation_summary(operation: OperationRequest) -> OperationSummary:
-    """Project one operation into one sentence and its structured evidence."""
+def asked_by(operations: Iterable[OperationRequest]) -> dict[str, Attribution]:
+    """Who asked for each of ``operations``, by id, from the audit row that
+    queued it (``history.who_did``); nobody for one no row records."""
+
+    return who_did(
+        (audited_labels()[OperationRequest],),
+        (operation.pk for operation in operations),
+        action=AuditLog.Action.CREATED,
+    )
+
+
+def operation_summary(operation: OperationRequest, who: Attribution) -> OperationSummary:
+    """Project one operation into one sentence and its structured evidence,
+    asked for by ``who`` (``asked_by``)."""
     result = operation.result or {}
     status = result.get("status") or {}
     evidence = status.get("consumers") or []
@@ -224,13 +241,13 @@ def operation_summary(operation: OperationRequest) -> OperationSummary:
         "state_label": label,
         "tone": tone,
         "headline": headline,
-        "automatic": operation.requested_interface == CONTROLLER_INTERFACE,
-        "requested_actor": operation.requested_actor,
-        "requested_interface": operation.requested_interface,
-        "by": requested_by(operation),
+        "automatic": who.interface == CONTROLLER_INTERFACE,
+        "requested_actor": who.actor,
+        "requested_interface": who.interface,
+        "by": who.words,
         # Blank for almost everything, and the point when it is not: this is the
         # person who agreed to a change a credential asked for.
-        "approved_by": (operation.input or {}).get("approved_by", ""),
+        "approved_by": who.approved_by,
         "created_at": operation.created_at.isoformat(),
         "completed_at": (operation.completed_at.isoformat() if operation.completed_at else None),
         "attempt_count": operation.attempt_count,
@@ -286,7 +303,9 @@ def changes(operations: Any, limit: int) -> list[OperationRequest]:
 def resource_history(resource: ManagedResource, limit: int = 20) -> list[OperationSummary]:
     """One record's history: each operation that changed something, newest first."""
 
-    return [operation_summary(operation) for operation in changes(resource.operations.all()[:HISTORY_WINDOW], limit)]
+    kept = changes(resource.operations.all()[:HISTORY_WINDOW], limit)
+    who = asked_by(kept)
+    return [operation_summary(operation, who.get(str(operation.pk), NOBODY)) for operation in kept]
 
 
 def refuse_while_drifted(resource: ManagedResource) -> None:
@@ -341,8 +360,7 @@ def _queue_operation(
 ) -> OperationQueued:
     if require_enabled and not resource.enabled:
         raise PolicyError("This record is switched off in HQ.")
-    if observes_only(resource.kind, resource.spec):
-        raise PolicyError(OBSERVES_ONLY)
+    require_writable(resource.kind, resource.spec)
     # Nothing enters the queue for a gated kind without a person behind it. The
     # controller's own automatic work does not pass through here (it writes its
     # rows directly, as itself, converging toward a declaration somebody has
@@ -361,6 +379,7 @@ def _queue_operation(
         requested_actor=principal.actor,
         requested_interface=principal.interface,
         requested_device=principal.device,
+        requested_person_key=principal.person_key,
         reason=command.reason,
         # Who asked stays who asked. Where a person had to agree before this
         # could be queued, that is recorded beside the request rather than in
@@ -563,7 +582,8 @@ def request_stop(command: OperationCommand, *, principal: Principal, current_key
 
 
 # The capability that asks for each verb, so a page asks for one by its verb
-# and runs it through the capability runner like every other caller.
+# and runs it through the capability runner like every other caller. A run is
+# asked through its procedure's own command (``automation_runs.capability_name``).
 ACTION_CAPABILITY = {
     OperationRequest.Action.RECONCILE: "infrastructure.resource.reconcile",
     OperationRequest.Action.RENEW: "certificate.renew",

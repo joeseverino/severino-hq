@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -61,4 +62,78 @@ func TestAComposeCommandThatNamesServicesStartsOnlyTheirs(t *testing.T) {
 			t.Errorf("%s: %v", name, !want)
 		}
 	}
+}
+
+// subsequence is whether every word of part appears in whole, in order.
+func subsequence(part, whole []string) bool {
+	for _, word := range whole {
+		if len(part) > 0 && part[0] == word {
+			part = part[1:]
+		}
+	}
+	return len(part) == 0
+}
+
+// A unit's command, read the way docker's flag parser reads it: the operands
+// are words of the command, never an option or an option's value, and a
+// command holding an option the table does not know names nothing. The words
+// arrive NUL-separated, as no argument can hold a NUL.
+func FuzzOperands(f *testing.F) {
+	tables := []options{dockerOptions, startOptions, stopOptions, runOptions, composeOptions}
+	for _, each := range []string{
+		"--context default start --detach-keys ctrl-x hermes",
+		"-H unix:///run/docker.sock container stop -t 10 hermes",
+		"--attach hermes", "-ai hermes twin", "--detach-keys ctrl-x hermes",
+		"--signal=TERM -- hermes", "-t", "-- -t hermes",
+		"--rm -it --name hermes example/hermes start", "-e A=1 --name hermes example/hermes",
+		"--compatibility --project-directory /opt/apps/pocket-id up -d",
+		"-f /opt/apps/example/compose.yml up -d web db", "--unknown hermes", "-",
+	} {
+		for table := range tables {
+			f.Add(uint8(table), table != 0 && table != 4, strings.ReplaceAll(each, " ", "\x00"))
+		}
+	}
+	f.Fuzz(func(t *testing.T, table uint8, interspersed bool, joined string) {
+		o := tables[int(table)%len(tables)]
+		args := strings.Split(joined, "\x00")
+		operands, ok := o.operands(args, interspersed)
+		// A run's name is the value of its --name, and nothing else.
+		if named := runName(args); len(named) > 0 {
+			given := slices.Contains(args, "--name="+named[0])
+			for i := range len(args) - 1 {
+				given = given || args[i] == "--name" && args[i+1] == named[0]
+			}
+			if len(named) > 1 || !given {
+				t.Fatalf("run names %q from %q", named, args)
+			}
+		}
+		if !ok {
+			return
+		}
+		if !subsequence(operands, args) || !interspersed && !slices.Equal(operands, args[len(args)-len(operands):]) {
+			t.Fatalf("operands %q are not %q's own", operands, args)
+		}
+		if !slices.Contains(args, "--") {
+			for i, operand := range operands {
+				if (interspersed || i == 0) && len(operand) > 1 && strings.HasPrefix(operand, "-") {
+					t.Fatalf("option %q read as an operand of %q", operand, args)
+				}
+			}
+		}
+		// An option the table knows, and a value after one that takes it,
+		// change nothing of what the rest names.
+		var known [][]string
+		if len(o.flags) > 0 {
+			known = append(known, []string{o.flags[0]})
+		}
+		if len(o.values) > 0 {
+			known = append(known, []string{o.values[0], "hq-fuzz-value"}, []string{o.values[len(o.values)-1] + "=hq-fuzz-value"})
+		}
+		for _, prefix := range known {
+			again, stillOK := o.operands(append(slices.Clone(prefix), args...), interspersed)
+			if !stillOK || !slices.Equal(again, operands) {
+				t.Fatalf("%q before %q changed its operands from %q to %q", prefix, args, operands, again)
+			}
+		}
+	})
 }

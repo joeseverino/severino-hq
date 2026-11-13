@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, tag
 from hq.domains.control_plane import bridge_contract
 from hq.domains.control_plane.management.commands.connections_reference import reference_path
 from hq.platform.api.openapi import DOCUMENT_PATH, EXAMPLES_PATH
+from hq.platform.application.procedure_schema import SCHEMA_PATH
 from hq_sdk.contract import CONTRACT_PATH
 from hq_sdk.text_contract import EXAMPLES_PATH as TEXT_EXAMPLES_PATH
 from tests.mise_tasks import ROOT
@@ -32,6 +33,7 @@ class GeneratedAttributeTests(SimpleTestCase):
             DOCUMENT_PATH,
             EXAMPLES_PATH,
             reference_path(),
+            SCHEMA_PATH,
             SERVED,
             *bridge_contract.emitted(),
         }

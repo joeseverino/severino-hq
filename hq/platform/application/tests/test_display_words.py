@@ -7,9 +7,9 @@ from django.test import SimpleTestCase
 
 import hq_sdk.ui
 
+from ..card_items import Insight, Kpi, ListRow
 from ..display_words import in_words
 from ..service_context import Cell
-from ..ui import Insight, Kpi, ListRow
 
 
 class InWordsTests(SimpleTestCase):

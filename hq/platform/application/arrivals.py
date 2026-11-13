@@ -23,10 +23,10 @@ lazy from hq.domains.control_plane.models import ProviderInventory
 lazy from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer
 
 from .derivations import passed, present
+from .reach import NETWORKS, network_of
 lazy from . import tailnet
 lazy from .inventory import record_inventory
 lazy from .moments import ago
-lazy from .reach import network_of
 lazy from .request_channel import channel_for_request, forwarded_chain
 lazy from .security import internal_principal
 lazy from .tailnet_presence import tailnet_presence
@@ -200,7 +200,7 @@ _CARRIED = {
 }
 _CHANNELS = {
     "tailnet": "over the tailnet",
-    "network": "from the local network",
+    "network": f"from the {NETWORKS['network'].lower()}",
     "loopback": "from HQ's own machine",
 }
 

@@ -13,6 +13,8 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.tree import SUITE
+
 ROOT = Path(__file__).resolve().parents[3]
 CONFIG = ROOT / "tools" / "pipeline" / "extension-imports.toml"
 
@@ -88,9 +90,4 @@ class ExtensionImportTests(SimpleTestCase):
 
     def test_the_banned_packages_are_the_packages_of_the_host_tree(self):
         banned = tomllib.loads(CONFIG.read_text(encoding="utf-8"))["lint"]["flake8-tidy-imports"]["banned-api"]
-        packages = {
-            entry.name
-            for entry in ROOT.iterdir()
-            if entry.is_dir() and (entry / "__init__.py").exists() and entry.name != "hq_sdk"
-        }
-        self.assertEqual({name for name in banned if "." not in name}, packages)
+        self.assertEqual({name for name in banned if "." not in name}, set(SUITE) - {"hq_sdk"})

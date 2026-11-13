@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"encoding/pem"
 	"errors"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -886,6 +888,52 @@ func TestTheShippedRegistryParses(t *testing.T) {
 	if bytes.Contains(data, []byte(`"connections"`)) {
 		t.Fatal("the registry names connections; the vault is the inventory")
 	}
+}
+
+// A registry is read strictly whatever it holds: a refusal is ErrRegistry,
+// and a registry read is the one its own encoding reads back as.
+func FuzzParseRegistry(f *testing.F) {
+	data, err := os.ReadFile(shipped)
+	if err != nil {
+		f.Fatal(err)
+	}
+	good := `{"schema_version":2,"projections":{"p":{"CONNECTION_REF":{"source":"connection_ref"},"URL":{"source":"field","label":"website"}}},"required_app_variables":["EXAMPLE_KEY"]}`
+	for _, seed := range []string{
+		string(data), good, good + `{}`,
+		strings.Replace(good, `"URL"`, `"STORE_ITEM"`, 1),
+		strings.Replace(good, `{"source":"field","label":"website"}`, `{"source":"url","index":0}`, 1),
+		strings.Replace(good, `{"source":"field","label":"website"}`, `{"source":"field","id":"x","optional":true,"default":"d"}`, 1),
+		strings.Replace(good, `{"source":"field","label":"website"}`, `{"source":"constant","value":"v"}`, 1),
+		strings.Replace(good, `"projections":{`, `"projections":{"p":{"CONNECTION_REF":{"source":"connection_ref"}},`, 1),
+	} {
+		f.Add([]byte(seed))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		read, err := parse(data)
+		if err != nil {
+			if !errors.Is(err, ErrRegistry) {
+				t.Fatalf("an untyped refusal: %v", err)
+			}
+		} else {
+			encoded, err := jsonv2.Marshal(read)
+			if err != nil {
+				t.Fatalf("read a registry that does not encode: %v", err)
+			}
+			again, err := parse(encoded)
+			if err != nil || !reflect.DeepEqual(again, read) {
+				t.Fatalf("the registry read does not read back as itself: %v", err)
+			}
+		}
+		registry, err := ParseRegistry(data)
+		switch {
+		case err != nil && !errors.Is(err, ErrRegistry):
+			t.Fatalf("an untyped refusal: %v", err)
+		case err == nil && (read.SchemaVersion == 0 || !reflect.DeepEqual(registry, read)):
+			t.Fatal("ParseRegistry read what its strict reading refused")
+		case err == nil && registry.matchesShapes() != nil:
+			t.Fatal("read a registry that is not the document's shapes")
+		}
+	})
 }
 
 func FuzzProject(f *testing.F) {

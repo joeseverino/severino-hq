@@ -10,6 +10,7 @@ form written inside another silently detaches every control after it.
 lazy from dataclasses import asdict, is_dataclass
 
 from django import template
+from django.middleware.csrf import get_token
 from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
@@ -18,7 +19,8 @@ lazy from hq.platform.application.asks import Ask
 lazy from hq.platform.application.capabilities import capability_words
 lazy from hq.platform.application.dashboard import queue_item
 lazy from hq.platform.application.pages import PageAction, offered_now
-lazy from hq.platform.core.templatetags.value_tags import breakable, is_this_page
+lazy from hq.platform.core.templatetags.value_tags import _request, breakable, is_this_page
+lazy from hq.platform.core.templatetags.write_tags import write_token
 
 register = template.Library()
 
@@ -30,6 +32,13 @@ def row_value(item):
     """``{{ item|row_value }}``: what a queue row's own button names, from its one owner."""
 
     return action_items.row_value(item)
+
+
+@register.filter
+def families(items, fold):
+    """``{{ items|families:fold }}``: the queue's entries, a family folded under its name when ``fold``."""
+
+    return action_items.families(list(items or ()), fold=bool(fold))
 
 
 @register.filter
@@ -95,24 +104,59 @@ def remedies(context, actions):
 
 
 @register.simple_tag
-def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False):
+def post_button(label, url, *, name="action", value="", css="btn", title="", disabled=False, pressed=None, hit=False):
     # A button of words is named by them, so its title only describes it; a
     # glyph (an arrow, a star) says nothing aloud and is named by its title.
+    # A toggle (`pressed`, true or false) says aloud which way it stands. A
+    # control drawn smaller than a target asks for its hit area (`hit`,
+    # page.css).
     glyph = not any(character.isalnum() for character in str(label))
     attributes = {"name": name, "value": value, "title": title, "aria-label": title if glyph else ""}
+    if pressed is not None:
+        attributes["aria-pressed"] = "true" if pressed else "false"
     return format_html(
-        '<button type="submit" form="{}" formaction="{}" class="{}"{}{}>{}</button>',
+        '<button type="submit" form="{}" formaction="{}" class="{}"{}{}{}>{}</button>',
         POST_FORM_ID,
         url,
         css,
         format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
+        mark_safe(" data-hit") if hit else "",
         mark_safe(" disabled") if disabled else "",
         breakable(label),
     )
 
 
-# How many controls a head draws beside its title; the rest wait in its menu.
+@register.simple_tag(takes_context=True)
+def post_form(context, action, extra=""):
+    """A POST ``PageAction`` that sends ``fields`` besides its button's own: a
+    form of its own, since the shared form carries only the button's field.
+    It returns to the page it was pressed on unless its fields name a
+    ``next``. Its token is the request's, which an ``{% include ... only %}``
+    keeps when it drops the context processors' values."""
+
+    request = _request(context)
+    sent = {"next": request.get_full_path(), **action.fields}
+    with context.push(csrf_token=get_token(request)):
+        token = write_token(context)
+    attributes = {"name": action.field, "value": action.value, "title": action.title}
+    return (
+        format_html('<form method="post" action="{}" class="post-form">', action.url)
+        + token
+        + format_html_join("", '<input type="hidden" name="{}" value="{}">', sent.items())
+        + format_html(
+            '<button type="submit" class="{}"{}>{}</button></form>',
+            " ".join(part for part in (action.css, extra) if part),
+            format_html_join("", ' {}="{}"', ((key, val) for key, val in attributes.items() if val)),
+            breakable(action.label),
+        )
+    )
+
+
+# How many controls a head draws beside its title; the rest wait in its
+# menu. A page names more (``page_beside``) where a decision takes several
+# controls side by side, up to ``MOST_BESIDE``.
 BESIDE_THE_TITLE = 2
+MOST_BESIDE = 4
 
 
 def _ranked(actions):
@@ -131,19 +175,32 @@ def _ranked(actions):
     ]
 
 
-@register.filter
-def head_actions(actions):
-    """``(beside, menu)``: the controls a head draws beside its title, the
-    first two it reaches for, and every one but the lead for its menu, the
-    second first. The stylesheet leaves out the menu's copy of a control drawn
-    beside the title, and folds the second in where the head is narrow."""
+@register.simple_tag(takes_context=True)
+def head_split(context, actions):
+    """``{% head_split page.actions as split %}``: ``head_actions`` with as
+    many beside the title as the page names (``page_beside``), two where it
+    names none."""
 
+    return head_actions(actions, context.get("page_beside", ""))
+
+
+def head_actions(actions, beside=""):
+    """``(beside, copies, rest)``: the controls a head draws beside its
+    title, the first it reaches for (``BESIDE_THE_TITLE``, or ``beside`` where
+    the page names more); the menu's copies of each of those but the lead;
+    and every other control, for the menu. The stylesheet shows the copies
+    only where the head is too narrow for the controls beside its title, and
+    folds those in."""
+
+    most = int(beside) if beside else BESIDE_THE_TITLE
+    if not BESIDE_THE_TITLE <= most <= MOST_BESIDE:
+        raise ValueError(f"A head keeps {BESIDE_THE_TITLE} to {MOST_BESIDE} controls beside its title, not {most}.")
     actions = tuple(actions or ())
-    beside = tuple(_ranked(actions)[:BESIDE_THE_TITLE])
-    if not beside:
-        return (), ()
-    rest = tuple(action for action in actions if all(action is not shown for shown in beside))
-    return beside, (*beside[1:], *rest)
+    shown = tuple(_ranked(actions)[:most])
+    if not shown:
+        return (), (), ()
+    rest = tuple(action for action in actions if all(action is not drawn for drawn in shown))
+    return shown, shown[1:], rest
 
 
 @register.filter
@@ -179,10 +236,25 @@ def refreshing():
 
 
 @register.simple_tag
-def applies_shortly():
-    """``{% applies_shortly %}``: what a saved change says of when it goes live."""
+def refreshed():
+    """``{% refreshed %}``: what a reading says once it is in."""
 
-    return asks.APPLIES_SHORTLY
+    return asks.REFRESHED
+
+
+@register.simple_tag
+def newer_reading():
+    """``{% newer_reading %}``: what a page says of a newer reading it could
+    not draw in place, before the link that loads it."""
+
+    return asks.NEWER_READING
+
+
+@register.simple_tag
+def show_newer():
+    """``{% show_newer %}``: the link that loads a newer reading."""
+
+    return asks.SHOW_NEWER
 
 
 @register.simple_tag

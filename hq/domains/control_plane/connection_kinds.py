@@ -2,6 +2,8 @@
 
 from collections.abc import Mapping
 
+from hq.platform.application.connection_contracts import UNKNOWN_CREDENTIAL
+
 from .provider_adapters import CONNECTIONS
 from .provider_spec import ConnectionKind
 
@@ -18,6 +20,7 @@ CONNECTION_LABELS: Mapping[str, str] = frozendict({provider: kind.label for prov
 
 
 def connection_credential(provider: str) -> str:
-    """The credential model of one connection provider; blank when unnamed."""
+    """The credential model of one connection provider; unknown for a provider
+    HQ does not model, whose credential it still holds."""
 
-    return CONNECTION_CREDENTIALS.get(provider, "")
+    return CONNECTION_CREDENTIALS.get(provider, UNKNOWN_CREDENTIAL)

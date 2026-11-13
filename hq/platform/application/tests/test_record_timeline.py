@@ -36,10 +36,13 @@ ABOUT_THEMSELVES = frozenset(
 )
 
 
+ADGUARD = [f"adguard.rewrite:{action}" for action in ("reconcile", "delete")]
+
+
 def claim_and_report(*, success: bool = True) -> str:
     """The controller claims the queued request and reports it done, through the bridge."""
 
-    operation = bridge_client.call("claim", controller_id=CONTROLLER)["operation"]
+    operation = bridge_client.call("claim", controller_id=CONTROLLER, capability=ADGUARD)["operation"]
     bridge_client.call(
         "report",
         {

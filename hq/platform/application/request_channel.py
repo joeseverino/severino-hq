@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from hq.platform.core.network import client_ip, is_trusted_proxy, socket_peer, split_host_port
 
-from .reach import network_of
+from .reach import NETWORKS, network_of
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,23 +23,32 @@ class Channel:
     def private(self) -> bool:
         return self.id in {"tailnet", "network", "loopback"}
 
+    @property
+    def tone(self) -> str:
+        """The tone of the network a caller is on: the tailnet the private way
+        in, a private network the one to notice, any other the exposed one."""
+
+        return _TONES.get(self.id, "serious")
+
+
+_TONES = {"tailnet": "good", "network": "attention", "loopback": "attention"}
+
 
 TAILNET_CHANNEL = Channel(
     "tailnet",
-    "Tailnet",
-    "This request came from an address only Tailscale issues, so it came over the tailnet.",
+    NETWORKS["tailnet"],
+    "This request came from a tailnet address.",
 )
 NETWORK_CHANNEL = Channel(
     "network",
-    "Local network",
+    NETWORKS["network"],
     "This request came from a private address on the network HQ is on.",
 )
-LOOPBACK_CHANNEL = Channel("loopback", "Loopback", "This request never left the machine HQ runs on.")
+LOOPBACK_CHANNEL = Channel("loopback", NETWORKS["loopback"], "This request never left the machine HQ runs on.")
 OPAQUE_CHANNEL = Channel(
     "opaque",
     "Address not passed through",
-    "Every address this request passed through is a proxy HQ trusts, so HQ "
-    "has the proxy's address and cannot tell where the caller is.",
+    "Every hop is a trusted proxy, so HQ has only the proxy's address.",
 )
 ELSEWHERE_CHANNEL = Channel(
     "elsewhere",

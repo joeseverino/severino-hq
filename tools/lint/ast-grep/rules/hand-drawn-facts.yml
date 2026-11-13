@@ -1,0 +1,19 @@
+# Label and value facts are the facts part. The classes are the bands each
+# page drew its facts in before the part. No fix: each fact takes its value
+# as an expression.
+id: hand-drawn-facts
+language: html
+severity: error
+message: Label and value facts drawn by hand, where the facts part draws them.
+note: Write {% facts %} around each {% fact "Label" value=... %}, or {% facts layout="band" %} for a band.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    has:
+      kind: attribute
+      regex: '(?:^|\})class=["''](?:[^"'']*[\s}])?(?:fact-band|service-band|control-summary|control-metric|vitals-strip|glance-metrics|agent-state-facts|attention-facts)(?:[^\w-]|$)'

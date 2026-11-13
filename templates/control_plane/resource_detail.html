@@ -7,10 +7,9 @@ about to stop existing, and to queue a convergence racing the deletion already
 waiting for the same controller.
 {% endcomment %}
 {% if removal_pending %}
-  <div class="notice notice-attention">
-    <strong>Removal in progress</strong>
+  {% notice tone="warning" title="Removal in progress" %}
     <p>HQ forgets this record once it is confirmed gone.</p>
-  </div>
+  {% endnotice %}
 {% endif %}
 
 {% comment %}
@@ -20,11 +19,10 @@ this and nobody has answered" is the answer: invisible otherwise, because a
 held request writes nothing and queues nothing by design.
 {% endcomment %}
 {% if awaiting_approval %}
-  <div class="notice notice-attention">
-    <strong>{{ awaiting_approval|length|counted:"change waiting for your approval,changes waiting for your approval" }}</strong>
-    <p>Requested by {% for held in awaiting_approval %}<code>{{ held.requested_actor|breakable }}</code> {% with mark=forloop.last|then:".|," %}{{ held.requested_interface|door_words|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
+  {% notice tone="warning" title=awaiting_approval|length|counted:"change waiting for your approval,changes waiting for your approval" %}
+    <p>Requested by {% for who in awaiting_approval %}{% with mark=forloop.last|then:".|;" %}{{ who.words|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Nothing is written or queued yet.</p>
     <p><a class="btn compact primary" href="{% url 'core:audit_list' %}?awaiting=1">Review and decide</a></p>
-  </div>
+  {% endnotice %}
 {% endif %}
 
 {% problems_about as problems %}{% include "partials/_problems.html" %}
@@ -44,18 +42,17 @@ declaration's machinery: the controller's actions are the buttons above, and
   <div class="two-col">
     {% section "Certificate" %}
       {% include "control_plane/_record_says.html" %}
-      <dl class="kv compact">
-        <dt>Name</dt><dd>{{ resolved_spec.certificate_name|breakable }}</dd>
-        <dt>Issuer</dt><dd>{{ resource.status.issuer|default:"Not read yet"|breakable }}</dd>
-        <dt>Expires</dt><dd>{% if resource.status.not_after %}{{ resource.status.not_after|expiry }}{% else %}Not read yet{% endif %}</dd>
-        <dt>Renews</dt><dd>{% if renewal_at %}From {{ renewal_at|when:"day" }}, {% endif %}{{ resolved_spec.renewal_window_days|counted:"day" }} before it expires</dd>
-      </dl>
-      <h3>Names</h3>
-      <p>{% for domain in resolved_spec.domains %}<span class="tag">{{ domain|breakable }}</span>{% endfor %}</p>
+      {% facts %}
+        {% fact "Name" value=resolved_spec.certificate_name %}
+        {% fact "Issuer" value=resource.status.issuer|default:"Not read yet" %}
+        {% fact "Expires" %}{% if resource.status.not_after %}{{ resource.status.not_after|expiry }}{% else %}Not read yet{% endif %}{% endfact %}
+        {% fact "Renews" %}{% if renewal_at %}From {{ renewal_at|when:"day" }}, {% endif %}{{ resolved_spec.renewal_window_days|counted:"day" }} before it expires{% endfact %}
+      {% endfacts %}
+      {% section "Names" %}<p>{% for domain in resolved_spec.domains %}{% status domain chip=True %}{% endfor %}</p>{% endsection %}
     {% endsection %}
-    {% section "Where it is installed" %}
+    {% section "Installed on" %}
       {% if display_consumers %}
-      {% table_region "Where it is installed" %}
+      {% table_region "Installed on" %}
       <table class="data-table compact-table">
         <thead><tr>{% table_heading "Place" "identifier" gutter=True local_sort=True %}{% table_heading "Names checked" "identifier" local_sort=True %}</tr></thead>
         <tbody>
@@ -73,21 +70,20 @@ declaration's machinery: the controller's actions are the buttons above, and
       {% endtable_region %}
       {% elif resolution_error %}
         {% comment %}Why it is installed nowhere, where the list would be.{% endcomment %}
-        <div class="notice notice-attention"><strong>Not installed</strong><p>{{ resolution_error|breakable }}</p></div>
+        {% notice tone="warning" title="Not installed" %}<p>{{ resolution_error|breakable }}</p>{% endnotice %}
       {% endif %}
       {% comment %}
       Named beside the consumers that answered. A reading that covers six of
       seven is still a reading, and this is the part it does not cover.
       {% endcomment %}
       {% if resource.status.unreachable_consumers %}
-        <details class="operation-evidence" open>
-          <summary>{{ resource.status.unreachable_consumers|length }} could not be checked</summary>
+        {% section "Unchecked" count=resource.status.unreachable_consumers|length fold=True open=True %}
           <ul>
             {% for item in resource.status.unreachable_consumers %}
               <li>{% if item.domain %}<strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable:":" }}{% else %}<strong>{{ item.consumer|breakable:":" }}</strong>{% endif %} {{ item.reason|breakable }}</li>
             {% endfor %}
           </ul>
-        </details>
+        {% endsection %}
       {% endif %}
     {% empty %}Not installed anywhere yet.
     {% endsection %}
@@ -108,7 +104,7 @@ stretches across the page.
   The certificate keeps its own section above: renewal, topology and consumers
   are machinery, not a description, and no readout expresses them.
   {% endcomment %}
-  {% comment %}A running container says all of this in its Upgrade and How it runs sections.{% endcomment %}
+  {% comment %}A running container says all of this in its Upgrade and Runtime sections.{% endcomment %}
   {% if not container.item and not resolved_spec and not resolution_error %}
   {% section label %}
     {% include "control_plane/_record_says.html" %}
@@ -143,49 +139,35 @@ stretches across the page.
     ports a container publishes.
     {% endcomment %}
     {% if container %}
-      <dl class="kv compact">
+      {% facts %}
         {% if container.machine and not container.standing %}
-          <dt>Runs on</dt>
-          <dd>{% entity container.machine.link %}{% if container.machine.role %} <span class="muted">{{ container.machine.role|breakable }}</span>{% endif %}</dd>
+          {% fact "Runs on" %}{% entity container.machine.link %}{% if container.machine.role %} <span class="muted">{{ container.machine.role|breakable }}</span>{% endif %}{% endfact %}
         {% endif %}
         {% if container.running and container.standing %}
-          {% if container.running.published %}<dt>Publishes</dt><dd>{{ container.running.published|breakable }}</dd>{% endif %}
-          <dt>Seen</dt><dd>{{ container.running.observed_at|when:"ago" }}</dd>
+          {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
+          {% fact "Seen" %}{{ container.running.observed_at|when:"ago" }}{% endfact %}
         {% elif container.running %}
-          <dt>State</dt>
-          <dd>
-            {% status container.running.state|default:"unknown" tone=container.running.healthy|yesno:"reachable,unreachable" %}
-            {% if container.running.status %}<span class="muted">{{ container.running.status|breakable }}</span>{% endif %}
-          </dd>
-          <dt>Image</dt><dd><code>{{ container.running.image_label|breakable }}</code></dd>
-          {% if container.running.published %}<dt>Publishes</dt><dd>{{ container.running.published|breakable }}</dd>{% endif %}
-          <dt>Seen</dt><dd>{{ container.running.observed_at|when:"ago" }}</dd>
+          {% fact "State" %}{% status container.running.state|default:"unknown" tone=container.running.healthy|yesno:"reachable,unreachable" %}{% if container.running.status %} <span class="muted">{{ container.running.status|breakable }}</span>{% endif %}{% endfact %}
+          {% fact "Image" %}<code>{{ container.running.image_label|breakable }}</code>{% endfact %}
+          {% if container.running.published %}{% fact "Publishes" value=container.running.published %}{% endif %}
+          {% fact "Seen" %}{{ container.running.observed_at|when:"ago" }}{% endfact %}
         {% else %}
-          <dt>State</dt>
-          <dd><span class="muted">Not read yet.</span></dd>
+          {% fact "State" %}<span class="muted">Not read yet.</span>{% endfact %}
         {% endif %}
         {% if container.running.unit %}
-          <dt>Run by</dt>
-          <dd data-run-by-unit="{{ container.running.unit }}"><code>{{ container.running.unit|breakable }}</code> <span class="muted">Start, Stop and Restart go through this systemd unit.</span></dd>
+          {% fact "Run by" %}<code data-run-by-unit="{{ container.running.unit }}">{{ container.running.unit|breakable }}</code>{% detail %}Start, Stop and Restart go through this systemd unit.{% endfact %}
         {% endif %}
         {% if container.serves %}
-          <dt>Serves</dt>
-          <dd>{% for hostname in container.serves %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</dd>
+          {% fact "Serves" %}{% for hostname in container.serves %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}{% endfact %}
         {% endif %}
-      </dl>
+      {% endfacts %}
     {% endif %}
     {% if readout_rows %}
-      <dl class="kv compact">
+      {% facts %}
         {% for row_label, desired, observed, links in readout_rows %}
-          <dt>{{ row_label|breakable }}</dt>
-          <dd>
-            {% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %} {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}{{ value|readout }}{% endif %}{% endwith %}{% endif %}
-            {% if desired and observed and desired != observed %}
-              {% status "HQ expects" desired tone="serious" %}
-            {% endif %}
-          </dd>
+          {% fact row_label %}{% if links %}{% for link in links %}{% entity link code=True %}{% if not forloop.last %} {% endif %}{% endfor %}{% else %}{% with value=observed|default:desired %}{% if value is None or value == "" %}{% empty_value %}{% else %}{{ value|readout }}{% endif %}{% endwith %}{% endif %}{% if desired and observed and desired != observed %} {% status "HQ expects" desired tone="serious" %}{% endif %}{% endfact %}
         {% endfor %}
-      </dl>
+      {% endfacts %}
     {% endif %}
     {% comment %}
     Only what the readout above has not already said. On a declaration with a
@@ -193,17 +175,16 @@ stretches across the page.
     under a heading promising more says nothing.
     {% endcomment %}
     {% if spec_rows.primary or spec_rows.advanced %}
-      <details class="control-diagnostics">
-        <summary>Other settings</summary>
-        <dl class="kv compact">
+      {% section "Other settings" fold=True %}
+        {% facts %}
           {% for row_label, value in spec_rows.primary %}
-            <dt>{{ row_label|breakable }}</dt><dd>{{ value|readout }}</dd>
+            {% fact row_label %}{{ value|readout }}{% endfact %}
           {% endfor %}
           {% for row_label, value in spec_rows.advanced %}
-            <dt>{{ row_label|breakable }}</dt><dd>{{ value|readout }}</dd>
+            {% fact row_label %}{{ value|readout }}{% endfact %}
           {% endfor %}
-        </dl>
-      </details>
+        {% endfacts %}
+      {% endsection %}
     {% endif %}
   {% endsection %}
   {% endif %}
@@ -217,7 +198,7 @@ certificate, so the relation reads from both ends.
     {% if certificate_use.used_by %}
       <p>{{ certificate_use.used_by|length|counted:"service" }}: {% for hostname in certificate_use.used_by %}{% entity "service"|entity_of:hostname mark=forloop %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
       {% if certificate_use.unused %}
-        <p class="muted">Nothing is served under {% for name in certificate_use.unused %}{% with mark=forloop.last|then:"." %}<code>{{ name|breakable:mark }}</code>{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %}</p>
+        {% facts %}{% fact "Not served" %}<span class="code-list">{% for name in certificate_use.unused %}<code>{{ name|breakable }}</code>{% if not forloop.last %} {% endif %}{% endfor %}</span>{% endfact %}{% endfacts %}
       {% endif %}
     {% endif %}
   {% empty %}No service is served with this certificate.
@@ -262,8 +243,8 @@ certificate, so the relation reads from both ends.
 </div>
 
 {% section "Raw data" fold=True %}
-  <h3>HQ's config</h3><pre tabindex="0">{{ spec_json|breakable }}</pre>
-  <h3>Last reading</h3><pre tabindex="0">{{ diagnostic_status|breakable }}</pre>
+  {% section "HQ's config" %}<pre tabindex="0">{{ spec_json|breakable }}</pre>{% endsection %}
+  {% section "Last reading" %}<pre tabindex="0">{{ diagnostic_status|breakable }}</pre>{% endsection %}
 {% endsection %}
 
 {% comment %}
@@ -273,7 +254,7 @@ one thing worth doing then is reading what it was. The certificate's link only w
 saying a thing cannot be done yet is a status report filed in the wrong place.
 {% endcomment %}
 <p class="muted">
-  <a class="subtle-link" href="{% url 'core:audit_list' %}?about={{ resource.key|urlencode }}">Everything that happened to it</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download this record (JSON)</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download public certificate (.pem)</a>
+  <a class="subtle-link" href="{% url 'core:audit_list' %}?about={{ resource.key|urlencode }}">Audit log</a>{% dot %}<a class="subtle-link" href="{% url 'control_plane:report_download' resource.key %}">Download JSON</a>{% if resource.status.certificate_pem %}{% dot %}<a class="subtle-link" href="{% url 'control_plane:certificate_download' resource.key %}">Download PEM</a>
   {% endif %}
 </p>
 
@@ -285,26 +266,26 @@ above it found is not a row.
 {% section "History" %}
 {% table_region "History" %}
   <table class="data-table">
-    <thead><tr>{% table_heading "What" gutter=True local_sort=True %}{% table_heading "Result" local_sort=True %}{% table_heading "By" drop=1 local_sort=True %}{% table_heading "When" "status" local_sort=True %}</tr></thead>
+    <thead><tr>{% table_heading "Action" gutter=True local_sort=True %}{% table_heading "Result" local_sort=True %}{% table_heading "By" drop=1 local_sort=True %}{% table_heading "Time" "status" local_sort=True %}</tr></thead>
     <tbody>
       {% for operation in operations %}
         <tr>
           <td>{{ operation.action_label|breakable }}</td>
-          <td class="operation-result">
-            {% status operation.state_label tone=operation.tone %}
-            <strong class="cell-data">{{ operation.headline|breakable }}</strong>
+          <td class="cell-data">
+            {% status operation.state_label tone=operation.tone %}<br>
+            <strong>{{ operation.headline|breakable }}</strong>
             {% if operation.affected %}
               <span class="muted">{{ operation.affected|length|counted:"name serves a different certificate,names serve a different certificate" }}</span>
-              <ul class="operation-evidence row-below" data-label="Affected">
+              {% stack_list below="Affected" %}
                 {% for item in operation.affected %}
                   <li><strong>{{ item.consumer|breakable }}</strong>{% dot %}{{ item.domain|breakable }}<br><span class="muted">Expected <code title="{{ operation.expected_fingerprint_sha256 }}">{{ operation.expected_fingerprint_sha256|slice:":12"|breakable }}…</code>, found <code title="{{ item.fingerprint_sha256 }}">{{ item.fingerprint_sha256|slice:":12"|breakable }}…</code></span></li>
                 {% endfor %}
-              </ul>
+              {% endstack_list %}
             {% elif operation.matched %}
               <p class="muted">{{ operation.matched|counted:"name serves,names serve" }} this certificate<span title="{{ operation.expected_fingerprint_sha256 }}"> ({{ operation.expected_fingerprint_sha256|slice:":8"|breakable }}…)</span>.</p>
             {% endif %}
             {% if operation.raw_result %}
-              <div class="operation-evidence row-below" data-label="Raw result"><pre tabindex="0">{{ operation.raw_result|breakable }}</pre></div>
+              <div class="row-below" data-label="Raw result"><pre tabindex="0">{{ operation.raw_result|breakable }}</pre></div>
             {% endif %}
           </td>
           <td>{{ operation.by|or_empty }}{% if operation.attempt_count > 1 %}<br><span class="muted">Attempt {{ operation.attempt_count|breakable }}</span>{% endif %}</td>

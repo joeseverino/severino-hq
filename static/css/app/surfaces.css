@@ -1,5 +1,6 @@
 /* Surfaces: the one frame every container of content wears, stats inside a
-   card, the disclosure marker, and how a head, a row and a band give way when narrow. */
+   card, the disclosure marker, how a head, a row and a band give way when
+   narrow, and the section part: its head, its body and what reaches its sides. */
 
 @layer components {
   /* ── Surface: the one frame ─────────────────────────────────────────────
@@ -18,22 +19,22 @@
      body draws no second frame inside. One whose body is a table region and
      nothing else, or one written head="above", is framed by its body instead,
      its head above the frame, so the table reaches the frame's edges (the
-     same selector in cards.css draws the head). Beside a section whose body
+     same selector below draws the head). Beside a section whose body
      is anything else in a pair's row (.two-col), or in a section flow, where
      the parts of a thing's page are cards alike, it is framed whole, so the
      frames in a row start together. A section inside a section
-     is part of the outer frame. */
+     is part of the outer frame. `--surface-edge` is the frame's starting
+     edge, which an edged section sets (below), so whichever box frames
+     it draws the edge. */
   :where(
-  .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section), .control-card,
-  .control-metric, .control-summary, .service-band, .fact-band,
-  .filter-bar, .table-toolbar, .kpi-grid, .insight-grid,
-  .kv, .form,
-  .auth-card, .mail-stage,
-  .topology-workspace, .github-list,
-  .boxed-facts, .relation-list,
-  .posture-gaps, .posture-repos, .machine-telemetry-metrics, .route,
-  .dashboard-counts) {
+  .table-scroll:has(> .data-table), .card, .section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)), .two-col > section:not(.section), .two-col > div, .section-flow > section:not(.section),
+  .facts-band,
+  .filter-bar, .kpi-grid, .insight-grid,
+  .form,
+  .topology-workspace,
+  .posture-repos, .route) {
     border: var(--surface-border, 1px solid var(--line));
+    border-inline-start: var(--surface-edge, var(--surface-border, 1px solid var(--line)));
     border-radius: var(--surface-radius, var(--radius));
     background: var(--surface-bg, var(--surface));
     box-shadow: var(--surface-shadow, var(--shadow-sm));
@@ -41,6 +42,7 @@
 
     & > * {
       --surface-border: 0 none;
+      --surface-edge: 0 none;
       --surface-radius: 0;
       --surface-bg: transparent;
       --surface-shadow: none;
@@ -49,7 +51,7 @@
   }
   /* Stats inside a card are the card's content: an even grid with real gaps,
      no tile padding doubling the card's own. */
-  :is(.card, .highlight-card > .section-body) > .kpi-grid {
+  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) {
     display: grid;
     /* Exactly the card's --kpi-columns, which the card sets from how many
        stats it holds and how wide it is (4 or 2+2, 6 or 3+3, never 3+1). A
@@ -64,13 +66,18 @@
   /* A row of stats shares its lines. Each stat takes the row's three tracks
      (label, value, note), so the labels start level and the values stand
      level, however many lines one label wraps to. */
-  :is(.card, .highlight-card > .section-body) > .kpi-grid > .kpi {
+  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) > .kpi {
     padding: 0;
-    background: none;
     display: grid;
     grid-row: span 3;
     grid-template-rows: subgrid;
     row-gap: var(--space-2);
+  }
+  /* A stat here has no padding of its own, so a linked one's tint (cards.css)
+     reaches into the gap around it as a shadow, which moves nothing. */
+  :is(.card > .kpi-grid, .section-body > .kpi-grid.is-featured) > :is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
+    border-radius: var(--radius-sm);
+    box-shadow: 0 0 0 var(--space-3) var(--surface-2);
   }
   /* What a figure looks like, beside it: dots for a part of a whole, a line
      for a direction. A filled dot is solid and an empty one is a ring, so the
@@ -99,8 +106,7 @@
      so dots that lead somewhere are set a square apart. */
   .kpi-dots:has(> a) { gap: calc(var(--target-min) - 10px); }
   a.kpi-dot:hover { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .kpi a.value { color: inherit; text-decoration: none; }
-  .kpi a.value:hover { text-decoration: underline; }
+  .kpi a.value, .kpi a.value:hover { color: inherit; text-decoration: none; }
   .kpi-trend { flex: 1 1 6rem; min-width: 0; max-width: 260px; height: 28px; margin-left: auto; overflow: visible; }
   .kpi-trend polyline { fill: none; stroke: var(--accent); stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
   .kpi-trend-hit { fill: transparent; }
@@ -128,13 +134,24 @@
     margin-inline: calc(-1 * var(--section-side));
     padding-inline: var(--section-side);
   }
+  /* A linked lead reaching the frame's sides tints a band across it, its
+     shadow above only, so nothing is drawn past the frame. */
+  .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child:is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
+    border-radius: 0;
+    box-shadow: 0 calc(-1 * var(--space-3)) 0 0 var(--surface-2);
+  }
   .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child .value {
     font-size: var(--text-display);
     letter-spacing: -.04em;
     overflow-wrap: anywhere;
   }
+  /* A figure's token never breaks, so on a phone three supporting figures
+     would run into each other: each sizes its value to its own column, a
+     nine-character amount taking nine tenths of it, the rest for the pixel or
+     two one engine's text runs wider than another's. */
+  .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) { container: figure / inline-size; }
   .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :not(:first-child) .value {
-    font-size: var(--text-2xl);
+    font-size: clamp(var(--text-sm), 18cqi, var(--text-2xl));
     color: var(--ink);
     overflow-wrap: anywhere;
   }
@@ -145,30 +162,39 @@
     .kpi-grid.is-featured:has(> :nth-child(4):last-child) { grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; }
     .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { grid-column: auto; padding-bottom: 0; border-bottom: 0; }
     .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child { margin-inline: 0; padding-inline: 0; }
+    .section-body > .kpi-grid.is-featured:has(> :nth-child(4):last-child) > :first-child:is(a.kpi:is(:hover, :focus-visible), .kpi:has(> .kpi-figure > a.value:is(:hover, :focus-visible))) {
+      border-radius: var(--radius-sm);
+      box-shadow: 0 0 0 var(--space-3) var(--surface-2);
+    }
   }
 
   /* The last thing in a card ends the card: its own bottom margin would be
      dead space inside the card's padding. */
   /* A frame's own padding is its edge: the first and last thing in it keep no
      margin of their own, or a heading's top margin doubles the padding above it. */
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > section) > :last-child { margin-bottom: 0; }
-  :is(.card, .control-card, .boxed-facts, .two-col > section, .two-col > div, .section-flow > section) > :first-child { margin-top: 0; }
+  :is(.card, .two-col > section, .two-col > div, .section-flow > section) > :last-child { margin-bottom: 0; }
+  :is(.card, .two-col > section, .two-col > div, .section-flow > section) > :first-child { margin-top: 0; }
+  /* A card holding only a table region (and words for a screen reader
+     alone) has no inset at its sides: its rows keep their own, so they
+     reach the card's sides as a section's table does (a section's body
+     reaches them by its own rules, below). */
+  .card:not(.section-body):has(> .table-scroll):not(:has(> :not(.table-scroll, .visually-hidden))) { padding-inline: 0; }
 
 
   /* ── Disclosure: one marker for everything that opens in place ─────────
      Every details shows the same mark, turned when open, so "this opens"
      looks the same everywhere: a folded section, raw readings, a list behind
-     "+5 more", a table's own row toggle. A connection's hops and layers show
-     their state with their own tick, in a fixed grid an extra mark would
-     shift, so they carry none. */
-  main details:not([data-connection-layer]):not([data-connection-hop]) > summary { list-style: none; cursor: pointer; }
-  main details:not([data-connection-layer]):not([data-connection-hop]) > summary::before {
+     "+5 more", a table's own row toggle. A check ladder's rungs show their
+     state with their own tick, in a fixed grid an extra mark would shift,
+     so they carry none. */
+  :is(main, dialog) details:not(.ladder-rung > details) > summary { list-style: none; cursor: pointer; }
+  :is(main, dialog) details:not(.ladder-rung > details) > summary::before {
     content: "\203A" / ""; display: inline-block; width: 1em; margin-inline-end: var(--space-1);
     color: var(--muted); font-size: 1.05em; line-height: 1; text-align: center;
     transition: transform .12s ease;
   }
-  main details:not([data-connection-layer]):not([data-connection-hop])[open] > summary::before { transform: rotate(90deg); }
-  @media (prefers-reduced-motion: reduce) { main details:not([data-connection-layer]):not([data-connection-hop]) > summary::before { transition: none; } }
+  :is(main, dialog) details:not(.ladder-rung > details)[open] > summary::before { transform: rotate(90deg); }
+  @media (prefers-reduced-motion: reduce) { :is(main, dialog) details:not(.ladder-rung > details) > summary::before { transition: none; } }
 
   /* A section that folds: its heading is the toggle. */
   .section-fold > summary { display: flex; align-items: baseline; }
@@ -176,26 +202,26 @@
   .section-fold > summary :is(h2, h3) { margin: 0; }
   .section-fold[open] > summary { margin-bottom: var(--space-5); }
 
-  /* The topology's view picker, first in its own filter row. */
-  .topology-view { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin: 0; }
-  /* A view's name is a sentence: the picker takes the row and never more. */
-  .topology-view, .topology-view select { min-width: 0; max-width: 100%; }
-
-  /* What the filter bar currently shows, at its far end. */
-  .filter-bar-summary { margin: 0 0 0 auto; align-self: center; color: var(--muted); font-size: var(--text-sm); }
-  .filter-bar-summary strong { color: var(--ink); }
-
-  /* A head's controls: the lead and the next beside the title, the menu
-     holding every other. Its copy of the second is left out wherever the
-     second stands beside the title, and a menu holding nothing else with it.
-     A head too narrow for three controls folds the second in as well, so it
-     keeps the lead and the menu (the head is the container, page.css). */
-  .page-head .overflow-menu-panel > :first-child { display: none; }
-  .page-head .overflow-menu:not(:has(.overflow-menu-panel > :nth-child(2))) { display: none; }
+  /* A head's controls: the lead and the next beside the title (more where
+     the page names them, data-many), the menu holding a copy of each of those
+     but the lead, then every other. The copies are left out wherever their
+     controls stand beside the title, and a menu holding nothing else with
+     them. A head too narrow for its controls folds them in: one holding more
+     than two keeps two, and one too narrow for three keeps the lead and the
+     menu (the head is the container, page.css). */
+  .page-head .overflow-menu-copies { display: none; }
+  .page-head .overflow-menu:not(:has(.overflow-menu-panel > :not(.overflow-menu-copies))) { display: none; }
+  @container page-head (width < 48rem) {
+    .page-head .page-actions:where([data-many]) > :nth-child(n + 3):not(.overflow-menu) { display: none; }
+    .page-head .page-actions:where([data-many]) .overflow-menu-copies { display: contents; }
+    .page-head .page-actions:where([data-many]) .overflow-menu-copies > :first-child { display: none; }
+    .page-head .page-actions:where([data-many]) .overflow-menu:not(:has(.overflow-menu-panel > :not(.overflow-menu-copies))) { display: flex; }
+  }
   @container page-head (width < 30rem) {
-    .page-head .page-actions > :nth-child(2):not(.overflow-menu) { display: none; }
-    .page-head .overflow-menu-panel > :first-child { display: revert; }
-    .page-head .overflow-menu:not(:has(.overflow-menu-panel > :nth-child(2))) { display: flex; }
+    .page-head .page-actions > :nth-child(n + 2):not(.overflow-menu) { display: none; }
+    .page-head .page-actions .overflow-menu-copies { display: contents; }
+    .page-head .page-actions .overflow-menu-copies > :first-child { display: revert; }
+    .page-head .overflow-menu:not(:has(.overflow-menu-panel > :not(.overflow-menu-copies))) { display: flex; }
   }
 
   /* A row's toggle, drawn by the server where a row holds something back or heads rows folded under it: the one disclosure a row has, sized to be hit, turned when open. */
@@ -214,6 +240,8 @@
   :is(.row-expand, .row-fold) > .icon { width: 7px; height: 11px; transition: transform .12s ease; }
   :is(.row-expand, .row-fold)[aria-expanded="true"] > .icon { transform: rotate(90deg); }
   @media (prefers-reduced-motion: reduce) { :is(.row-expand, .row-fold) > .icon { transition: none; } }
+  /* With no script a fold cannot open or close, and every row it would fold shows (tables.css), so it is not drawn. */
+  @media (scripting: none) { .row-fold { display: none; } }
   /* What holds a value to its line, lifted with its cut (cuts.css) in an open row and the line beneath it, and in a panel a cell shows; outranking each column's own rule on purpose. */
   .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th),
   .data-table :is(tr.is-expanded, tr.is-expanded + tr.row-detail) :is(td, th) *:not(.visually-hidden, .visually-hidden *),
@@ -241,25 +269,126 @@
   /* A band too narrow for two cells is a list, like every other summary:
      each fact one row, its label and its value at the right edge, the detail
      under both. Asked of the band's own width, so a band in a narrow card
-     reads the same as one on a phone. 27.5rem is two 220px cells. */
-  :is(.service-band, .fact-band, .control-summary) { container: band / inline-size; }
-  @container band (max-width: 27.5rem) {
-    .band-fact { gap: var(--space-4); padding: var(--space-5) var(--space-6); align-items: center; }
-    .band-icon { width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
-    /* The label keeps its words; a long value wraps at the right instead of
-       squeezing the label to a letter a line. */
-    .band-fact > div { flex: 1 1 auto; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; column-gap: var(--space-4); }
-    .band-fact > div > .band-label { grid-column: 1; grid-row: 1; font-size: var(--text-sm); }
-    .band-fact > div > strong { grid-column: 2; grid-row: 1; text-align: right; font-size: var(--text-md); }
-    .band-fact > div > :not(.band-label):not(strong) { grid-column: 1 / -1; }
-    .control-summary > .control-metric {
-      flex-direction: row;
-      flex-wrap: wrap;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--space-1) var(--space-5);
-      padding: var(--space-5) var(--space-6);
-    }
-    .control-summary > .control-metric > :not(.control-label):not(strong) { flex: 1 1 100%; }
+     reads the same as one on a phone. 27.5rem is two 220px cells; under it,
+     never at it, as the facts' own tracks switch (`--fact-min`), so a band
+     exactly that wide is laid out one way by both. */
+  @container band (width < 27.5rem) {
+    /* The label keeps its words up to three fifths of the row and wraps past
+       that, and the value never narrows past its longest run that cannot
+       break (`min-content`, a count bound to its noun), so a long label never
+       squeezes its value to a letter a line or parts a number from its unit. */
+    /* One fact to a row has no neighbor to share its lines with, so it lays out its own rows: rows the band sized would be asked of the fact before its columns have widths, a letter a line. */
+    .facts-band > .fact { grid-row: auto; grid-template-rows: none; grid-template-columns: auto fit-content(60%) minmax(min-content, 1fr); align-items: baseline; column-gap: var(--space-4); }
+    .facts-band > .fact:not(:has(.band-icon)) { grid-template-columns: fit-content(60%) minmax(min-content, 1fr); }
+    /* The icon stands on the label's row, beside the words it marks; across the fact's rows it would center below them. */
+    .facts-band .band-icon { grid-row: 1; align-self: center; width: 24px; height: 24px; font-size: var(--text-lg); border-radius: var(--radius-sm); }
+    .facts-band .fact-label { grid-row: 1; grid-column: -3; font-size: var(--text-sm); }
+    .facts-band .fact-value { grid-row: 1; grid-column: -2; text-align: right; font-size: var(--text-md); }
+    .facts-band .fact-detail { grid-row: 2; grid-column: -3 / -1; }
   }
+
+  /* On paper a pill in a section's head is a link, which cannot be followed
+     there, so it goes with the rest of the chrome (cadence.css). */
+  @media print { .section-head .pill { display: none !important; } }
+
+/* A section ({% section %}): its head inside its frame, over a rule, or,
+   when its body is one table region (or head="above" says so), its head on
+   the page and its body the frame. What
+   draws its own edges, cells or fill reaches the frame's sides, as a card's
+   flush list group does in Bootstrap: the frame names each such part, and the
+   survey's "inset in the frame" finds one it does not name. Anything else
+   sits in the frame's padding. A section inside a section is part of the
+   outer frame: its body adds no inset, and what fills it reaches the outer
+   frame's sides, and its foot when it ends the outer frame. */
+/* The landmark never pads itself: whatever a page's css= names on it, its
+   head starts at the column's edge and its frame spans the column. */
+:is(section, details, figure).section { padding: 0; }
+/* Inside any other frame (a section's body, a card, a form, a band) a section
+   is part of that frame. The frame rule sets --surface-inset
+   to 0 for all it holds and leaves it unset elsewhere, so the value the
+   landmark inherits is the test: in a frame, its head draws no rule and no
+   inset of its own and its body adds none. */
+.section {
+  --section-head-pad: var(--surface-inset) 0 var(--space-5);
+  --section-head-rule: var(--surface-inset);
+  --section-inset: var(--surface-inset);
+}
+/* An edged section (`edge=`) wears its tone down its frame's starting edge,
+   drawn by whichever box frames it: the section framed whole,
+   or its body under a head that stands above. */
+.section-edge { --surface-edge: 3px solid var(--toned); }
+/* A figure's own margin is the browser's; the page's stacking gives it its room. */
+:where(figure.section) { margin: 0; }
+/* A heading is never left alone at the foot of a column or a printed page:
+   Chromium keeps the break after a flex head only when the head is whole. */
+.section > .section-head { margin-bottom: var(--space-5); break-inside: avoid; break-after: avoid; }
+/* A head inside the frame stands at the inset the body's words stand at. */
+.section:not(.section .section, [data-head="above"], :not([data-head="inside"], .two-col:has(> .section > .section-body > :not(.table-scroll:only-child)) > *, .section-flow > *):has(> .section-body > .table-scroll:only-child)) > .section-head {
+  margin: 0; padding: var(--section-head-pad, var(--space-4) var(--space-9));
+  border-block-end: var(--section-head-rule, 1px solid var(--line));
+}
+/* A section's heading line is one control tall, its words centered in it, so
+   a control beside it (a button, a month's arrows) adds no height, and heads
+   that share a row are one height and start their frames together. */
+.section > .section-head > :is(h2, h3, h4, h5, h6) { min-block-size: var(--control-size); align-content: center; }
+.section > .section-body {
+  --section-start: var(--section-inset, var(--space-8));
+  --section-end: var(--space-8);
+  --section-side: var(--space-9);
+  padding: var(--section-inset, var(--section-start) var(--section-side) var(--section-end));
+}
+/* A heading inside a frame heads part of the section above it, so it reads
+   quieter than that section's, never as its sibling. */
+.section .section > .section-head :is(h3, h4, h5, h6) { color: var(--muted); font-size: var(--text-sm); font-weight: 600; }
+.section-body > .section:not(:last-child) > .section-body { --section-end: 0; }
+/* Each part that reaches the sides. Its rows, where they draw no edge of
+   their own at the frame's side, keep the frame's inset as their padding
+   (`--frame-inset`), so their words stand where the frame's prose does. */
+/* A form in the body that lays out no fields of its own (not .form) adds no
+   box, and neither does a region (`data-fragment`), which only says where its
+   parts come from: what either holds reaches the sides as the body's own part
+   would. A flow of sections in the body reaches them too. */
+:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
+  .insight-grid, .sweep-grid,
+  .month-grid, .list-rows, .section-flow, .timeline-list) {
+  --frame-inset: var(--section-side);
+  margin-inline: calc(-1 * var(--section-side));
+  max-inline-size: calc(100% + 2 * var(--section-side));
+  /* A table is as wide as it is told, never as wide as its block's room. */
+  &:where(table) { inline-size: calc(100% + 2 * var(--section-side)); }
+}
+/* A section in that flow stands beside others: its words keep the frame's
+   inset, and what reaches the sides reaches its own, so two tables side by
+   side meet only across the flow's gap. */
+.section-body > .section-flow > .section > :is(.section-head, .section-body) { padding-inline: var(--section-side); }
+/* What also draws its first and last rows reaches the frame's top and foot
+   when it starts or ends the frame, its corners the frame's. A list of rows
+   or a month, whose outer rows draw no edge there, keeps the frame's padding
+   above and below it. */
+:is(.section > .section-body, .section > .section-body > :is(form:not(.form), [data-fragment])) > :is(.table-scroll, .posture-repos,
+  .insight-grid, .sweep-grid) {
+  --section-corner: calc(var(--radius) - 1px);
+  /* In a form that starts the body, its hidden fields draw nothing, so they
+     do not count. */
+  &:where(.section-body > *):first-child,
+  &:where(.section-body > :is(form, [data-fragment]):first-child > *):nth-child(1 of :not(input[type="hidden"])) {
+    margin-block-start: calc(-1 * var(--section-start));
+    border-start-start-radius: min(var(--section-start), var(--section-corner));
+    border-start-end-radius: min(var(--section-start), var(--section-corner));
+  }
+  &:where(.section-body > *):last-child,
+  &:where(.section-body > :is(form, [data-fragment]):last-child > *):last-child {
+    margin-block-end: calc(-1 * var(--section-end));
+    border-end-start-radius: min(var(--section-end), var(--section-corner));
+    border-end-end-radius: min(var(--section-end), var(--section-corner));
+  }
+}
+.section-body > * + .section, .section-body > .section + * { margin-block-start: var(--stack-gap); }
+/* A reading a section holds (raw JSON, a provider's readout) has paths of any
+   length: wrapped, so only its height scrolls and never the page sideways. */
+.section-body > pre { max-block-size: 18rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* A folded section's mark hangs before its heading, so the heading starts
+   where every other section's does. */
+details.section.section-fold > summary.section-head::before { margin-inline: calc(-1em - var(--space-1)) calc(var(--space-1) - var(--space-6)); }
+
 }

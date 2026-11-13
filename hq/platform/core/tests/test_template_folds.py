@@ -14,11 +14,12 @@ from typing import override
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
 from hq.platform.application.tests.source import template_files
 
 # What draws a surface: the card tag, and the frames a few parts draw for
 # themselves (a fact's metric, a command's form). A child of a section flow or a column pair is framed by its parent.
-FRAMES = frozenset(("card", "control-card", "control-metric", "form"))
+FRAMES = frozenset(("card", "form"))
 FRAMING_PARENTS = frozenset(("section-flow", "two-col"))
 CARD_TAG = "hq-card"
 
@@ -192,6 +193,7 @@ class FoldRuleTests(SimpleTestCase):
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class TemplateFoldTests(SimpleTestCase):
     def test_every_page_level_fold_sits_on_a_surface(self):
         sources = {name: path.read_text(encoding="utf-8") for name, path in template_files()}

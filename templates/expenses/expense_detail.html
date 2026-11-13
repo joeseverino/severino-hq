@@ -1,18 +1,19 @@
 {% extends "page.html" %}
 {% block page %}
-<dl class="kv">
-  <dt>Cost</dt><dd>{{ expense.total_cost|money }}</dd>
-  <dt>Business use</dt><dd>{{ expense.business_use_percentage|breakable }}%</dd>
-  <dt>Deductible (est.)</dt><dd>{{ expense.estimated_deductible_amount|money }} <span class="muted">(estimate, not tax advice)</span></dd>
-  {% if expense.payment_method %}<dt>Payment method</dt><dd>{{ expense.get_payment_method_display|breakable }}</dd>{% endif %}
-  {% if account %}<dt>Paid from</dt><dd>{% entity account %}</dd>{% endif %}
-  {% if expense.business_purpose %}<dt>Business purpose</dt><dd>{{ expense.business_purpose|breakable }}</dd>{% endif %}
-  {% if expense.related_project %}<dt>Project</dt><dd>{% entity "project"|entity_of:expense.related_project.slug label=expense.related_project.name %}</dd>{% endif %}
-  {% if expense.related_asset %}<dt>Asset</dt><dd>{% entity "asset"|entity_of:expense.related_asset.slug label=expense.related_asset.item_name %}</dd>{% endif %}
-  {% if expense.related_content %}<dt>Writeup or page</dt><dd>{% entity "writeup"|entity_of:expense.related_content.slug label=expense.related_content.title %}</dd>{% endif %}
-  {% if document %}<dt>Document</dt><dd>{% entity document %}</dd>{% endif %}
-  {% if about %}<dt>For</dt><dd class="prose">{{ about.kind_label|breakable }} {% entity about %}</dd>{% endif %}
-</dl>
+<div class="section-flow">
+{% card label="Expense" %}{% facts %}
+  {% fact "Cost" %}{{ expense.total_cost|money }}{% endfact %}
+  {% fact "Business use" %}{{ expense.business_use_percentage|breakable }}%{% endfact %}
+  {% fact "Deductible (est.)" %}{{ expense.estimated_deductible_amount|money }}{% endfact %}
+  {% if expense.payment_method %}{% fact "Payment method" value=expense.get_payment_method_display %}{% endif %}
+  {% if account %}{% fact "Paid from" %}{% entity account %}{% endfact %}{% endif %}
+  {% if expense.business_purpose %}{% fact "Business purpose" value=expense.business_purpose %}{% endif %}
+  {% if expense.related_project %}{% fact "Project" %}{% entity "project"|entity_of:expense.related_project.slug label=expense.related_project.name %}{% endfact %}{% endif %}
+  {% if expense.related_asset %}{% fact "Asset" %}{% entity "asset"|entity_of:expense.related_asset.slug label=expense.related_asset.item_name %}{% endfact %}{% endif %}
+  {% if expense.related_content %}{% fact "Writeup or page" %}{% entity "writeup"|entity_of:expense.related_content.slug label=expense.related_content.title %}{% endfact %}{% endif %}
+  {% if document %}{% fact "Document" %}{% entity document %}{% endfact %}{% endif %}
+  {% if about %}{% fact "For" %}<span class="prose">{{ about.kind_label|breakable }} {% entity about %}</span>{% endfact %}{% endif %}
+{% endfacts %}{% endcard %}
 
 {% if expense.notes %}{% section "Notes" %}<p>{{ expense.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
 
@@ -22,5 +23,6 @@
   {% section "Receipts" remedy_label="Upload one" remedy_url=upload_url|add:"?related_expense="|add:expense_pk %}{% empty %}No receipts.{% endsection %}
   {% endwith %}
 {% endif %}
-<div class="section-flow">{% include "partials/_related.html" with groups=related %}</div>
+{% include "partials/_related.html" with groups=related %}
+</div>
 {% endblock %}

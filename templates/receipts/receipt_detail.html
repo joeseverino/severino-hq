@@ -1,13 +1,32 @@
 {% extends "page.html" %}
 {% block page %}
-<dl class="kv">
-  <dt>Date</dt><dd>{{ receipt.date|when }}</dd>
-  <dt>Amount</dt><dd>{{ receipt.amount|money }}</dd>
-  {% if receipt.file_type %}<dt>File type</dt><dd>{{ receipt.file_type|breakable }}</dd>{% endif %}
-  {% if receipt.size_bytes %}<dt>Size</dt><dd>{{ receipt.size_bytes|bytes }}</dd>{% endif %}
-  {% if receipt.related_expense %}<dt>Expense</dt><dd class="prose">{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label %} <span class="muted">{{ receipt.related_expense.date|when:"day" }}</span></dd>{% endif %}
-  {% if receipt.related_asset %}<dt>Asset</dt><dd>{% entity "asset"|entity_of:receipt.related_asset.slug label=receipt.related_asset.item_name %}</dd>{% endif %}
-</dl>
+{% comment %}
+The receipt's facts, its notes and a file that is a line share rows. A
+picture of it is far taller than they are, so it stands on a row of its own
+under them.
+{% endcomment %}
+{% url "receipts:edit" receipt.pk as edit_url %}
+<div class="section-flow">
+{% card label="Receipt" %}{% facts %}
+  {% fact "Date" %}{{ receipt.date|when }}{% endfact %}
+  {% fact "Amount" %}{{ receipt.amount|money }}{% endfact %}
+  {% if receipt.related_expense %}{% fact "Expense" %}<span class="prose">{% entity "expense"|entity_of:receipt.related_expense.pk label=receipt.related_expense.label %} <span class="muted">{{ receipt.related_expense.date|when:"day" }}</span></span>{% endfact %}{% endif %}
+  {% if receipt.related_asset %}{% fact "Asset" %}{% entity "asset"|entity_of:receipt.related_asset.slug label=receipt.related_asset.item_name %}{% endfact %}{% endif %}
+{% endfacts %}{% endcard %}
+
+{% if file_picture %}{% comment %}Under the flow.{% endcomment %}
+{% elif file_stored %}
+{% section "File" data_receipt_file="link" %}<p><a href="{% url 'receipts:file' receipt.pk %}">{{ receipt.original_filename|default:"The receipt's file"|breakable }}</a>{% if file_line %} <span class="muted">{{ file_line|breakable }}</span>{% endif %}</p>{% endsection %}
+{% elif file_missing %}
+{% section "File" data_receipt_file="missing" remedy_label="Replace the file" remedy_url=edit_url %}{% empty %}{{ receipt.original_filename|default:"This receipt's file"|breakable }} is no longer in HQ's storage.{% endsection %}
+{% else %}
+{% section "File" data_receipt_file="none" remedy_label="Add a file" remedy_url=edit_url %}{% empty %}No file is stored for this receipt.{% endsection %}
+{% endif %}
 
 {% if receipt.notes %}{% section "Notes" %}<p>{{ receipt.notes|breakable|linebreaksbr }}</p>{% endsection %}{% endif %}
+</div>
+
+{% if file_picture %}
+{% section "File" figure=True lede=file_line data_receipt_file="picture" %}{% url 'receipts:picture' receipt.pk as picture_url %}{% firstof receipt.original_filename "as uploaded" as named %}{% include "partials/_document_picture.html" with src=picture_url alt="The receipt, "|add:named only %}{% endsection %}
+{% endif %}
 {% endblock %}

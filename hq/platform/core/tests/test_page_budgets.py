@@ -21,7 +21,7 @@ from hq.platform.application.projection import projection_scope, years_of
 from hq.platform.application.services import service_catalog
 from hq.platform.application.tests.host_only import host_only
 from hq.platform.core.bench import Seeded, seed
-from hq.platform.core.management.commands.bench_pages import SAMPLES, _pages
+from hq.platform.core.management.commands.bench_pages import ALSO, SAMPLES, _pages
 
 from .estate_sizes import SMALL, assert_estate_cost_does_not_grow, at_both_sizes
 
@@ -115,6 +115,8 @@ STORED_PAGES = (
     "control_plane:tailnet",
     "control_plane:machine",
     "control_plane:detail",
+    "jobs:list",
+    "command:run",
     "control_plane:services",
     "control_plane:service",
     "zones:detail",
@@ -126,7 +128,12 @@ READERS = 2
 
 
 class StoredPageBudgetTests(TestCase):
-    """A page between two changes of the estate derives nothing, at any size."""
+    """A page between two changes of the estate derives nothing, at any size.
+
+    The estate adopts the example procedures, so it holds automation runs in
+    every state at both sizes, which Jobs, the machine's page and the
+    procedure's command list.
+    """
 
     def _costs(self, seeded: Seeded) -> tuple[dict[str, tuple[int, int]], Counter, Counter]:
         self.client.force_login(seeded.user)
@@ -155,9 +162,8 @@ class StoredPageBudgetTests(TestCase):
 class BenchPagesTests(TestCase):
     def test_every_sample_names_a_route_and_a_seeded_record(self):
         seeded = seed(SMALL)
-
         pages, left = _pages(seeded)
 
         benched = {name.split("?")[0] for name, _ in pages}
-        self.assertLessEqual(set(SAMPLES), benched)
+        self.assertLessEqual(set(SAMPLES) | set(ALSO), benched)
         self.assertNotIn("dashboard", dict(left))

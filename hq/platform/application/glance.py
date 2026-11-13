@@ -25,7 +25,9 @@ from . import readings
 from .cadence import ring_glance_doorbell
 from .command_fields import Describe
 from .connections import ConnectionAbility, ConnectionInstance, ConnectionLink, ConnectionSpec, machines_once
+from .drawings import StripTile
 from .freshness import DASHBOARD_GLANCE, freshness
+from .labels import dotted
 from .record_errors import InputError, PolicyError
 from .security import Capability, Principal
 from .timestamps import moment
@@ -361,8 +363,22 @@ def _panel(
         "refreshing": refreshing,
         "refreshable": refreshable,
         "readings": shown,
+        "hours": tuple(_hour_tile(hour) for hour in payload.get("hours") or ()),
         **_head(shown, spec),
     }
+
+
+def _hour_tile(hour: dict[str, str]) -> StripTile:
+    """A forecast hour as a tile: its time, its temperature, and a chance of
+    rain said only when there is one."""
+
+    chance = hour.get("precipitation", "")
+    return StripTile(
+        hour.get("time", ""),
+        hour.get("temperature", ""),
+        note="" if chance in {"", "0%"} else chance,
+        tip=hour.get("forecast", ""),
+    )
 
 
 def _head(shown: tuple[dict[str, Any], ...], spec: DashboardPanelSpec) -> dict[str, Any]:
@@ -489,6 +505,10 @@ def _glance_reading(metric: dict[str, str], spec: DashboardPanelSpec) -> dict[st
         **metric,
         "label": label,
         "short_label": short_label,
+        # What pointing at the reading says: its name, and its detail when it has one.
+        "tip": dotted(label, metric.get("detail")),
+        # The words drawn after its value, for a panel that names its readings.
+        "unit": short_label if spec.head_labels else "",
         "alert": bool(spec.alert_metric) and reported == spec.alert_metric,
     }
 
@@ -625,7 +645,7 @@ def dashboard_refresh_plan(controller_id: str) -> dict[str, Any]:
 
 def _clean_metric(metric: Any) -> dict[str, str]:
     if not isinstance(metric, dict):
-        raise ValueError("Dashboard metrics must be objects.")  # noqa: TRY004 - a payload is refused with ValueError, whatever is wrong with it
+        raise ValueError("Dashboard metrics must be objects.")
     label = str(metric.get("label", "")).strip()[:40]
     value = str(metric.get("value", "")).strip()[:80]
     detail = str(metric.get("detail", "")).strip()[:120]

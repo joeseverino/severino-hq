@@ -250,7 +250,7 @@ func portainerGet[T any](ctx context.Context, r *Registry, ref, path, cacheKey, 
 
 // anAddress is a name resolved to the address it answers at, or the name when
 // it does not resolve: an address is what every other source of a machine reports.
-func (r *Registry) anAddress(host string) string {
+func (r *Registry) anAddress(ctx context.Context, host string) string {
 	if host == "" || isIPAddress(host) {
 		return host
 	}
@@ -258,14 +258,14 @@ func (r *Registry) anAddress(host string) string {
 	if resolve == nil {
 		resolve = lookupIPv4
 	}
-	if address, err := resolve(host); err == nil && address != "" {
+	if address, err := resolve(ctx, host); err == nil && address != "" {
 		return address
 	}
 	return host
 }
 
-func lookupIPv4(host string) (string, error) {
-	addresses, err := net.LookupIP(host)
+func lookupIPv4(ctx context.Context, host string) (string, error) {
+	addresses, err := net.DefaultResolver.LookupIP(ctx, "ip4", host)
 	if err != nil {
 		return "", err
 	}
@@ -310,7 +310,7 @@ func (r *Registry) portainerEnvironments(ctx context.Context, ref string) ([]Por
 	if err != nil {
 		return nil, err
 	}
-	portainerAt := r.anAddress(urlHostname(base))
+	portainerAt := r.anAddress(ctx, urlHostname(base))
 	found := make([]PortainerEnvironment, 0, len(listed))
 	for _, endpoint := range listed {
 		address := ""

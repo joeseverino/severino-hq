@@ -1,9 +1,9 @@
-{% comment %}Runtime contributors own names, figures, windows, and visuals. Each overview is a tile that stands on its own, its head inside its frame.{% endcomment %}
+{% comment %}Runtime contributors own names, figures, windows, and visuals. Each overview is a tile that stands on its own, its head inside its frame, as many to a row as fit.{% endcomment %}
 {% if dashboard_highlights %}
-<div class="dashboard-highlights">
+<div class="section-flow">
   {% for section in dashboard_highlights %}
     {% firstof section.overview.url section.cards.0.url as overview_url %}
-    {% section section.label css="highlight-card" more_label="View "|add:section.label more_url=overview_url %}
+    {% section section.label more_label="View "|add:section.label more_url=overview_url %}
       {% if section.overview.kpis %}
         {% include "partials/_kpi_grid.html" with items=section.overview.kpis featured=True %}
       {% else %}

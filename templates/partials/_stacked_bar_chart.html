@@ -19,7 +19,9 @@
         it, so it stays 11px however far the drawing has been scaled to fit.
         The table below says every label too.
         {% endcomment %}
-        <svg class="chart-labels" aria-hidden="true">
+        {% comment %}
+        <!-- ast-grep-ignore: hand-drawn-icon --> a chart part's own drawing
+        {% endcomment %}<svg class="chart-labels" aria-hidden="true">
           {% for tick in chart.axis_y %}<text class="chart-axis chart-tick" x="{{ chart.gutter }}%" y="{{ tick.at }}%">{{ tick.label }}</text>{% endfor %}
           <g class="chart-cats">{% for category in chart.axis_x %}<text class="chart-axis chart-category" x="{{ category.at }}%" y="100%">{{ category.label }}</text>{% endfor %}</g>
         </svg>

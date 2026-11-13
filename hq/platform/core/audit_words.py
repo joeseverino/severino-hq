@@ -10,7 +10,7 @@ said anything reads the same way.
 from dataclasses import dataclass
 from typing import Any
 
-from hq.platform.application.payload_words import STEP, path_words, value_words
+from hq.platform.application.payload_words import STEP, ChangeRow, path_words, value_words
 from hq.platform.application.ui import counted
 lazy from hq.domains.control_plane.bridge_actions import ACTIONS
 lazy from hq.platform.application.capabilities import capability_registry
@@ -26,8 +26,8 @@ VALUE_WORDS = 40
 MESSAGE_CHARS = 160
 
 
-def change_rows(changes: Any) -> list[dict[str, str]]:
-    """Each field a row changed, as ``field``, ``before`` and ``after`` in words.
+def change_rows(changes: Any) -> tuple[ChangeRow, ...]:
+    """Each field a row changed, named and valued in words.
 
     A plain field is stored as its pair of values; a record or list as the
     values in it that moved, each already in words, by where it is. A field
@@ -36,8 +36,8 @@ def change_rows(changes: Any) -> list[dict[str, str]]:
     """
 
     if not isinstance(changes, dict):
-        return []
-    rows = []
+        return ()
+    rows: list[ChangeRow] = []
     for field, change in changes.items():
         named = path_words((str(field),))
         if isinstance(change, dict):
@@ -48,14 +48,15 @@ def change_rows(changes: Any) -> list[dict[str, str]]:
             )
         elif isinstance(change, list) and len(change) == 2:
             rows.append(_row(named, [value_words(change[0]), value_words(change[1])]))
-    return rows
+    return tuple(rows)
 
 
-def _row(field: str, pair: list[Any]) -> dict[str, str]:
+def _row(field: str, pair: list[Any]) -> ChangeRow:
     before, after = (str(value) for value in pair)
     if REDACTED in (before, after):
-        return {"field": field, "before": "", "after": "", "redacted": "yes"}
-    return {"field": field, "before": before, "after": after}
+        return ChangeRow(label=field, before="", after="", change="changed", redacted=True)
+    change = "added" if not before else "removed" if not after else "changed"
+    return ChangeRow(label=field, before=before, after=after, change=change)
 
 
 def changes_said(changes: Any) -> str:
@@ -68,11 +69,11 @@ def changes_said(changes: Any) -> str:
     return _cut("; ".join(said), MESSAGE_CHARS)
 
 
-def _said(row: dict[str, str]) -> str:
-    field = row["field"]
-    if row.get("redacted") or not (row["before"] or row["after"]):
+def _said(row: ChangeRow) -> str:
+    field = row.label
+    if row.redacted or not (row.before or row.after):
         return f"{field} changed"
-    before, after = _cut(row["before"], VALUE_WORDS), _cut(row["after"], VALUE_WORDS)
+    before, after = _cut(row.before, VALUE_WORDS), _cut(row.after, VALUE_WORDS)
     if not before:
         return f"{field}: {after}"
     if not after:
@@ -94,6 +95,7 @@ TITLES: dict[str, str] = {
     "infrastructure.start.request": "Asked the controller for a start",
     "infrastructure.stop.request": "Asked the controller for a stop",
     "infrastructure.restart.request": "Asked the controller for a restart",
+    "automation.run.request": "Asked to run a playbook",
     "infrastructure.resource.forget": "Stopped managing a record",
     "tailnet.routes.approve.request": "Asked to approve a machine's routes",
     "certificate.renew.request": "Asked to renew a certificate",

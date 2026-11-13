@@ -1,9 +1,7 @@
 {% comment %}
-What was read that shows a problem, from `application.decisions`: each label
-once, with every value it was given; a value that is a web address is a link.
-{% endcomment %}
-<dl class="attention-facts">
-  {% for fact in facts %}
-  <div><dt>{{ fact.label|breakable }}</dt><dd><ul class="dot-list">{% for value in fact.values %}<li>{% if value.url %}{% entity value.url|outside label=value.text %}{% else %}{{ value.text|readable }}{% endif %}</li>{% endfor %}</ul></dd></div>
-  {% endfor %}
-</dl>
+Facts, drawn by {% facts %}: {% facts layout="band" label="Controller status" %}{% fact ... %}{% endfacts %}.
+A band is a row of cells; a list, the default, is each label beside its
+value; a line (inline) is a card's summary, each fact its value then its words
+(facts_tags.py). label names the whole for a reader when nothing on the page
+heads it.
+{% endcomment %}<dl class="{% if layout == 'band' %}facts-band{% elif layout == 'inline' %}facts-inline{% else %}facts-list{% endif %}"{% if label %} aria-label="{{ label }}"{% endif %}>{{ content|safe }}</dl>

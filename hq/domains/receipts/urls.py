@@ -12,4 +12,5 @@ urlpatterns = [
     path("<int:pk>/match/", views.ReceiptMatchView.as_view(), name="match"),
     path("<int:pk>/delete/", views.ReceiptDeleteView.as_view(), name="delete"),
     path("<int:pk>/file/", views.ReceiptFileView.as_view(), name="file"),
+    path("<int:pk>/picture/", views.ReceiptPictureView.as_view(), name="picture"),
 ]

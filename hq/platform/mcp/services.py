@@ -54,8 +54,8 @@ type PageSize = Annotated[
     int | None,
     Field(
         description=(
-            f"How many records a page holds, at most {MAX_PAGE_SIZE} unless `describe_resources` names a kind's "
-            f"lower most; absent, the kind's own default, or {ACTION_ITEMS_PAGE} for `{QUEUE}`."
+            f"How many records a page holds: at most {MAX_PAGE_SIZE}, or the lower cap `describe_resources` "
+            f"names for a kind. Without it, the kind's default, or {ACTION_ITEMS_PAGE} for `{QUEUE}`."
         )
     ),
 ]
@@ -63,13 +63,13 @@ type PageSize = Annotated[
 
 @tool("Capability catalog", requires=ANYONE, budget=Budget(15_800))
 def describe_capabilities(name: str = "", resource: str = "") -> CapabilityIndex | CapabilityDetail:
-    """Describe JSON-executable HQ capabilities: with no argument, an index
-    without schemas; narrow by `name` or `resource` for each capability in
-    full with its `input_schema`, whose `#/$defs/<name>` read the answer's
-    root `$defs`.
+    """The capabilities `execute_capability` runs. With no argument, an
+    index without schemas. Narrowed by `name` or `resource`, each capability
+    in full with its `input_schema`, whose `#/$defs/<name>` refer to the
+    answer's root `$defs`.
 
-    `name` is a capability name or a prefix of whole dotted segments
-    (`infrastructure` returns every `infrastructure.*`); `resource` keeps the
+    `name` is a capability's name or a prefix of whole dotted segments:
+    `infrastructure` returns every `infrastructure.*`. `resource` keeps the
     capabilities that act on that resource, as `describe_resources` names it.
     """
 
@@ -103,18 +103,16 @@ def execute_capability(
     target: SkipValidation[str | int | None] = None,
     expected_updated_at: SkipValidation[str | None] = None,
 ) -> Performed | HeldCall:
-    """Execute one allowlisted capability from a schema-validated JSON payload.
+    """Run one capability with a JSON payload its schema checks.
 
-    Some changes are held for a person. A result carrying
-    `status: "awaiting_approval"` is not a failure and not something to retry:
-    the request is recorded, nothing has been written, and an operator has to
-    approve it in HQ's web interface, which this interface cannot do. Report the
-    approval id from `approval.id` to whoever asked, and stop.
+    A result with `status: "awaiting_approval"` is not a failure, and not
+    one to retry. Nothing was written, and an operator approves or rejects
+    it in HQ's web interface. Report `approval.id` to the user you act for,
+    and stop.
 
-    Every capability whose effect is not `read` requires an `idempotency_key`
-    in its payload, new for each change: a repeat carrying the same key
-    returns the first result instead of acting a second time. A `read` takes
-    none.
+    Every capability whose effect is not `read` requires an
+    `idempotency_key` in its payload, new for each change. A retry with the
+    same key returns the first result instead of acting twice.
     """
 
     answer = execute_application_capability(
@@ -131,12 +129,11 @@ def execute_capability(
 
 @tool("Resource catalog", requires=ANYONE, budget=Budget(12_800))
 def describe_resources(name: str | None = None) -> ResourceCatalog:
-    """Describe every readable HQ resource, its supported operations, and whether you are permitted each.
+    """Every resource HQ can read, the operations each supports, and whether you may use each.
 
-    Each list names the `filters` it narrows by. Pass a kind as `name` for
-    that one resource with its list's `query_schema`, each filter's type and
-    the values it takes, and its `paging`: the most `limit` may ask for, and
-    `cursor` where the list pages.
+    Each list names the `filters` it takes. Pass a kind as `name` to get its
+    `query_schema`, with each filter's type and values, and its `paging`:
+    the largest `limit`, and `cursor` where the list pages.
     """
 
     return describe_application_resources(principal=current_principal(), name=name or "")
@@ -144,25 +141,26 @@ def describe_resources(name: str | None = None) -> ResourceCatalog:
 
 @tool("Connection catalog", requires=ANYONE, budget=Budget(16_000))
 def describe_connections() -> ConnectionCatalog:
-    """Describe installed connection families, abilities, scopes, routes, and whether you are permitted each."""
+    """The installed connection families, with their abilities, scopes and routes, and whether you may use each."""
 
     return describe_application_connections(principal=current_principal())
 
 
 @tool("Open findings", requires=holding(Capability.READ), arguments=FindingsQuery, budget=Budget(5_000))
 def get_findings(**narrowing: Any) -> AgentFindings:
-    """What HQ currently claims is wrong, with evidence and suggested remedies.
+    """The open problems HQ found, most severe first, each with its evidence and remedies.
 
-    Pick it for the open problems themselves; `system_health` says only whether
-    HQ answers, and the `status-brief` prompt puts both before a person.
+    `system_health` says only whether HQ answers. The `status-brief` prompt
+    returns health and problems together.
 
     Every action a finding carries (a remedy, an offer, an investigation, a
-    workflow step's call) is a tool call: send its `arguments` to its `tool`.
-    A remedy absent means this principal cannot run it.
-    `severity` is a floor (`attention` also returns `serious`) and
-    `limit` caps how many come back, most severe first, the few most severe
-    when absent; `summary` still counts them all and says whether any were
-    held back, which a higher `limit` or a `rule` reads.
+    step of its plan) is a tool call: send its `arguments` to its `tool`. A
+    finding lists only the remedies you may run.
+
+    `severity` is a floor: `attention` also returns `serious`. `limit` caps
+    how many come back, and without it only the few most severe do.
+    `summary` counts them all and says whether any were left out; a higher
+    `limit` or a `rule` reads those.
     """
 
     return agent_findings(principal=current_principal(), **narrowing)
@@ -170,13 +168,12 @@ def get_findings(**narrowing: Any) -> AgentFindings:
 
 @tool("Infrastructure topology", requires=holding(Capability.READ), arguments=TopologyQuery, budget=Budget(1_300))
 def get_topology(**narrowing: Any) -> TopologyAnswer:
-    """Return the live infrastructure graph with safe canonical actions.
+    """The live infrastructure graph, each node with the safe actions it offers.
 
-    With no lens and no focus it answers the counts by kind and the lenses
-    that narrow it; pass a lens name for a standing question, or a node id as
-    `focus` to trace `inbound`, `outbound` or `both` up to five hops. An
-    unknown focus or depth is refused with the valid choices.
-    Every node retains its canonical safe actions.
+    With no lens and no focus, it returns the counts by kind and the lenses
+    you can pass. A lens answers one standing question. A node id as `focus`
+    traces `inbound`, `outbound` or `both`, up to five hops. An unknown
+    focus or depth is refused with the valid choices.
     """
 
     return application_topology(principal=current_principal(), **narrowing)
@@ -194,20 +191,19 @@ def list_resource(
     limit: PageSize = None,
     cursor: Cursor = None,
 ) -> ResourceCollection:
-    """List any registered resource with schema-validated filters.
+    """One page of records of a kind, narrowed by the filters its schema checks.
 
-    `name` is one of the kinds the schema lists, and `filters` what its list
-    narrows by, named for each kind below; `describe_resources` says what
-    each holds and each filter's type and choices.
+    `name` is one of the kinds the schema lists. `filters` are the ones that
+    kind takes, named for each kind below. `describe_resources` says what
+    each kind holds, with each filter's type and choices.
 
-    Each item holds the fields its kind lists, as `describe_resources`
-    names them, or every field where it names none; `fields` says which
-    instead.
+    Each item holds the fields `describe_resources` lists for its kind, or
+    every field where it lists none. `fields` picks others.
 
-    A page is bounded by `limit`: `truncated` says more follow it, `total`
-    how many matched where HQ counts them, and `next.cursor`, sent back as
-    `cursor` beside the same filters, reads the page after; `next` is null on
-    the last page and on a list that does not page.
+    `limit` bounds the page. `truncated` says more follow, and `total` says
+    how many matched, where HQ counts them. Send `next.cursor` back as
+    `cursor`, with the same filters, for the next page. `next` is null on
+    the last page, and on a list that does not page.
     """
 
     query = dict(filters or {})
@@ -228,11 +224,11 @@ def list_resource(
 def get_resource(
     name: str, identifier: str | int, fields: Annotated[list[str] | None, Field(description=FIELD_MASK)] = None
 ) -> dict[str, Any]:
-    """Get one record from any registered addressable resource.
+    """One record of a kind, by its identifier.
 
     `name` is one of the kinds the schema lists, and `describe_resources`
-    says what each holds; `identifier` is the record's value of the field
-    its kind is addressed by, listed below.
+    says what each holds. `identifier` is the record's value of the field
+    its kind is found by, listed below.
     """
 
     return get_application_resource(name, identifier, principal=current_principal(), strict=True, fields=fields)
@@ -240,22 +236,21 @@ def get_resource(
 
 @tool("Undocumented projects and assets", requires=holding(Capability.READ), budget=Budget(120))
 def audit_registry() -> RegistryAudit:
-    """The Project and Asset records no documentation points to.
+    """The projects and assets that no doc covers yet.
 
-    Pick it to find what still needs a doc written; `documentation_status`
-    says what the docs that do exist cover.
+    `documentation_status` covers the docs that exist.
     """
 
     return audit_application_registry(principal=current_principal())
 
 
 @tool("Export a year summary", requires=holding(Capability.READ), budget=Budget(4_700, frozendict({"year": 2026})))
-def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary:  # noqa: A002 - the MCP tool's parameter, by name
-    """One year's summary as text: its expenses, projects, writeups,
-    documentation pointers and assets bought, as Markdown or JSON.
+def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary:
+    """One year's summary, as Markdown or JSON: its expenses, projects,
+    writeups, docs and the assets bought.
 
-    Pick it for a report to keep or file. Each export is recorded in the
-    audit log. For the live state of HQ, `dashboard_snapshot` is the read.
+    It suits a report to keep or file, and each export is recorded in the
+    audit log. `dashboard_snapshot` reads HQ's live state.
     """
 
     return export_application_year_summary(year, format, principal=current_principal())
@@ -263,14 +258,13 @@ def export_year_summary(year: int, format: ExportFormat = "md") -> YearSummary: 
 
 @tool("Documentation coverage", requires=holding(Capability.READ), budget=Budget(1_200))
 def documentation_status() -> DocumentationStatus:
-    """The documentation HQ points to: counts by status and type, and the
-    first page of records, each with its title, system and where it lives.
-    Sensitive records are left out.
+    """The docs HQ knows of: counts by status and type, and the first page
+    of docs, each with its title, system and location. Sensitive docs are
+    left out.
 
-    `next.cursor`, sent as the `cursor` of `list_resource` with name
-    `documentation`, reads the page after; `next` is null when this page holds
-    them all. Pick it to find where a doc lives or which need review;
-    `audit_registry` names the records with no doc at all.
+    For the next page, send `next.cursor` as the `cursor` of
+    `list_resource` with the name `documentation`. `next` is null when this
+    page holds them all. `audit_registry` names the records no doc covers.
     """
     return read_models.documentation_status(principal=current_principal())
 
@@ -278,40 +272,39 @@ def documentation_status() -> DocumentationStatus:
 @tool("What changed lately", requires=holding(Capability.READ_AUDIT_LOG), budget=Budget(12_500))
 def recent_activity(*, limit: int = 25) -> RecentActivity:
     """The newest audit-log events, newest first: who did what to which
-    record, and when, without the events' metadata.
+    record, and when.
 
-    Needs the audit-log read permission (`read_audit_log`); a caller without it
-    is refused. Pick it for what changed lately; `dashboard_snapshot` is what
-    needs doing.
+    It needs the `read_audit_log` permission. `dashboard_snapshot` reads
+    what needs doing.
     """
     return read_models.recent_activity(principal=current_principal(), limit=limit)
 
 
 @tool("HQ health check", requires=holding(Capability.READ), budget=Budget(200))
 def system_health() -> SystemHealth:
-    """Whether HQ answers: its database is checked, and the record count of each domain returned.
+    """Whether HQ and its database answer, with the record count of each domain.
 
-    Pick it first to see that HQ is up. `get_findings` holds what is wrong,
-    `dashboard_snapshot` what needs doing, and the `status-brief` prompt is
-    health and open problems together for a person.
+    `get_findings` reads what is wrong, and `dashboard_snapshot` what needs
+    doing. The `status-brief` prompt returns health and open problems
+    together.
     """
     return read_models.system_health(principal=current_principal())
 
 
-@tool("HQ at a glance", requires=holding(Capability.READ), budget=Budget(7_400))
+@tool("HQ at a glance", requires=holding(Capability.READ), budget=Budget(7_600))
 def dashboard_snapshot() -> AgentSnapshot:
-    """HQ at a glance: its figures, the priority queue's most urgent items and the docs due a review.
+    """What needs doing in HQ: its figures, the most urgent items in the queue and the docs due a review.
 
-    Pick it first for what needs doing. `system_health` says whether HQ
-    answers, `get_findings` what is wrong, and the `status-brief` prompt is
-    both for a person.
+    Call it first for what needs doing. `system_health` says whether HQ
+    answers, and `get_findings` what is wrong. The `status-brief` prompt
+    returns both together.
 
-    `priority` is the queue's first page and `priority_count` counts the
-    whole queue. `lists` names the call that reads each of HQ's other lists
-    (the whole queue, the recent activity, the active projects, the draft
-    and published content): send its `arguments` to its `tool`. A part this caller may not read is named
-    in `unread`. Each queue item's `steps` are the plan that resolves it, in
-    order.
+    `priority` is the queue's first page, and `priority_count` counts the
+    whole queue. Each queue item's `steps` are the plan that resolves it,
+    in order. `lists` names the call for each of HQ's other lists (the
+    whole queue, recent activity, active projects, draft and published
+    content): send its `arguments` to its `tool`. `unread` names each part
+    you may not read.
     """
 
     return agent_snapshot(principal=current_principal())

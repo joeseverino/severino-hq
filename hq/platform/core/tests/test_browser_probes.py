@@ -1,98 +1,28 @@
 """What the browser gate hands the page, held without a browser."""
 
+import ast
+import importlib
+import pkgutil
 import re
+from collections import Counter
+from pathlib import Path
+from unittest import mock
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from hq.platform.core.stylesheets import SHEETS
-from hq.platform.core.tests.browser import (
-    accessibility,
-    agent_devices,
-    catalog,
-    command_forms,
-    components,
-    current_state,
-    estate,
-    folds,
-    fragments,
-    gate,
-    in_flight,
-    layout,
-    page_errors,
-    planted,
-    reading,
-    reference,
-    reports,
-    selectors,
-    serving,
-    shots,
-    stress,
-    survey,
-    sweeps,
-    table_fit,
-    uncaught,
-    widths,
-)
-from hq.platform.core.tests.browser.probes import (
-    axe,
-    boxes,
-    controls,
-    describe,
-    headings,
-    palette,
-    parts,
-    settle,
-    shifts,
-    tables,
-    text,
-)
+from hq.platform.core.tests.browser import planted, probes as probe_package, survey
+from hq.platform.core.tests.browser.probes import axe, settle
+from hq.platform.core.tests.browser.probes.audit import AUDIT
 from hq.platform.core.tests.browser.probes.palette import LINE_CONTRAST, losses, lost_fills
 from hq.platform.core.tests.browser.serving import static_file
-from hq.platform.core.tests.browser.survey import AUDIT, survey_checks
+from hq.platform.core.tests.browser.survey import palette_probes, survey_checks
 from hq.platform.core.tests.browser.widths import WIDE
 from hq.platform.core.tests.browser_modules import browser_modules
 
-# Imported by name rather than found, so a change to any of them selects these
-# tests in the fast gate; test_every_browser_module_is_read holds the list whole.
-MODULES = (
-    accessibility,
-    agent_devices,
-    catalog,
-    command_forms,
-    components,
-    current_state,
-    estate,
-    folds,
-    fragments,
-    gate,
-    in_flight,
-    layout,
-    page_errors,
-    planted,
-    reading,
-    reference,
-    reports,
-    selectors,
-    serving,
-    shots,
-    stress,
-    survey,
-    sweeps,
-    table_fit,
-    uncaught,
-    widths,
-    axe,
-    boxes,
-    controls,
-    describe,
-    headings,
-    palette,
-    parts,
-    settle,
-    shifts,
-    tables,
-    text,
-)
+# Every module of the browser package, found rather than listed, so a new
+# probe is read without an edit here.
+MODULES = tuple(importlib.import_module(name) for name in browser_modules())
 
 _WALK = re.compile(r"\bcreate(?:TreeWalker|NodeIterator)\(")
 
@@ -141,13 +71,6 @@ def probes() -> dict[str, str]:
 
 
 class ProbeTests(SimpleTestCase):
-    def test_every_browser_module_is_read(self):
-        self.assertEqual(
-            sorted(module.__name__ for module in MODULES),
-            sorted(browser_modules()),
-            "a browser module is imported and listed in MODULES above",
-        )
-
     def test_no_probe_walks_the_page_with_a_callback(self):
         """An engine with script off refuses to call a page function back, so
         a walk with a filter throws there instead of reading the page."""
@@ -170,6 +93,59 @@ class PlantTests(SimpleTestCase):
         self.assertEqual(sorted(set(checks) - set(planted.PLANTS)), [], "a check with no plant in planted.PLANTS")
         self.assertEqual(sorted(set(planted.PLANTS) - set(checks)), [], "a plant for no check the survey runs")
         self.assertEqual(sorted(set(planted.PASSES) - set(checks)), [], "a near miss for no check the survey runs")
+
+    def test_every_palette_check_reads_the_page_settled(self):
+        """A color caught mid-transition is one the page never settles on,
+        so each check of the colors a page paints finishes its transitions
+        first; the near miss of PASSES["contrast"] shows one caught so."""
+
+        first = f"async (arg) => {{ ({settle.FINISH_TRANSITIONS})(); return "
+        axe.axe_probe.cache_clear()
+        try:
+            with mock.patch.object(axe, "axe_core", return_value=""):
+                sources = {check: source for check, (source, _arg) in palette_probes().items()}
+                sources["axe"] = axe.rules_read()[0]
+        finally:
+            axe.axe_probe.cache_clear()
+        self.assertIn("contrast", sources)
+        self.assertEqual(sorted(check for check, source in sources.items() if not source.startswith(first)), [])
+
+
+def _declared_names(path: Path) -> list[str]:
+    """The check names a module's ``CHECKS`` literal declares, a repeated key
+    included, which the dict it builds keeps once."""
+
+    for node in ast.parse(path.read_text(encoding="utf-8")).body:
+        if isinstance(node, ast.Assign) and [getattr(t, "id", None) for t in node.targets] == ["CHECKS"]:
+            if not isinstance(node.value, ast.Dict):
+                raise AssertionError(f"{path.name}'s CHECKS is not a dict literal")
+            return [key.value for key in node.value.keys if isinstance(key, ast.Constant)]
+    return []
+
+
+@tag("source")
+class CheckRegistryTests(SimpleTestCase):
+    """A check is declared once, beside its probe, so a new one is an edit to
+    its probe module and planted.py and never to the survey."""
+
+    def test_no_check_is_declared_twice(self):
+        folder = Path(probe_package.__file__).parent
+        declared = Counter(
+            name
+            for module in pkgutil.iter_modules(probe_package.__path__)
+            for name in _declared_names(folder / f"{module.name}.py")
+        )
+        self.assertIn("sideways", declared)
+        self.assertEqual(sorted(name for name, times in declared.items() if times > 1), [])
+
+    def test_the_survey_names_no_check(self):
+        source = Path(survey.__file__).read_text(encoding="utf-8")
+        named = {
+            node.value
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        self.assertEqual(sorted(named & set(survey.CHECKS)), [])
 
 
 class LostFillTests(SimpleTestCase):

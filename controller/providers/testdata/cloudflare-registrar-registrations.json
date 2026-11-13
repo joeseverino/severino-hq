@@ -1,0 +1,44 @@
+[
+  {
+    "errors": [],
+    "messages": [],
+    "result": [
+      {
+        "auto_renew": true,
+        "created_at": "2025-01-15T10:00:00Z",
+        "domain_name": "example.com",
+        "expires_at": "2026-01-15T10:00:00Z",
+        "locked": true,
+        "privacy_mode": "redaction",
+        "status": "active"
+      }
+    ],
+    "result_info": {
+      "count": 1,
+      "cursor": "eyJhZnRlciI6ImV4YW1wbGUuY29tIn0",
+      "per_page": 1
+    },
+    "success": true
+  },
+  {
+    "errors": [],
+    "messages": [],
+    "result": [
+      {
+        "auto_renew": false,
+        "created_at": "2025-03-01T08:30:00Z",
+        "domain_name": "example.org",
+        "expires_at": null,
+        "locked": false,
+        "privacy_mode": "off",
+        "status": "transfer_pending"
+      }
+    ],
+    "result_info": {
+      "count": 1,
+      "cursor": "",
+      "per_page": 1
+    },
+    "success": true
+  }
+]

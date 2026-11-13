@@ -3,81 +3,57 @@
 A fragment region (static/js/fragment.js): while a reading is on its way the
 server draws `data-fragment-poll` and the strip is asked again; each panel is a
 part, so only a panel that changed is replaced, and its popover, found by its
-id, is shown again if it was open.
+id, is shown again if it was open. The region lays nothing out: its readings
+are the row's own (partials/_readings.html).
 {% endcomment %}
-<div class="dashboard-glance" data-fragment="{% url 'dashboard_glance' %}"{% if dashboard_refreshing %} data-fragment-poll="3"{% endif %}>
+<div data-fragment="{% url 'dashboard_glance' %}"{% if dashboard_refreshing %} data-fragment-poll="3"{% endif %}>
   {% comment %}
   The strip refreshes itself when a reading is due: the second form is sent
   once when the page is showing. Asking by hand is in each panel's popover,
   and posts through the first.
   {% endcomment %}
-  <form id="glance-refresh" method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-failure="Could not read it." hidden>{% write_token %}</form>
-  {% if dashboard_due %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% write_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
-  <div class="glance-panels">
-    {% for panel in dashboard_panels %}
-      <div data-fragment-part="{{ panel.id }}" class="glance-panel status-{{ panel.payload.status|default:'neutral' }}{% if panel.due %} is-due{% endif %}{% if panel.outdated %} is-outdated{% endif %}" data-menu{% if panel.refreshing %} data-refreshing{% endif %}>
-        <button type="button" class="glance-panel-head" id="glance-{{ panel.id }}-head" popovertarget="glance-{{ panel.id }}">
-          <span class="glance-symbol">{% include "partials/_icon.html" with name=panel.icon %}</span>
-          {% if panel.lead %}
-            <span class="glance-lead" title="{{ panel.lead.label }}{% if panel.lead.detail %} · {{ panel.lead.detail }}{% endif %}"><strong>{{ panel.lead.value|breakable }}</strong>{% if panel.head_labels %} {{ panel.lead.short_label|breakable }}{% endif %}</span>
-            <span class="glance-caption">
-              {% if panel.subject %}<span>{{ panel.subject|breakable }}</span>{% endif %}
-              {% if panel.alert %}<span class="glance-alert">{{ panel.alert|breakable }}</span>{% endif %}
-              {% for metric in panel.caption %}<span title="{{ metric.label }}{% if metric.detail %} · {{ metric.detail }}{% endif %}">{% if panel.head_labels %}{{ metric.short_label|breakable }} {% endif %}{{ metric.value|breakable }}</span>{% endfor %}
-            </span>
-          {% else %}
-            <span class="glance-lead glance-lead-empty">{{ panel.label|breakable }}</span>
-            <span class="glance-caption">{% if panel.refreshing %}{% refreshing %}{% else %}No reading yet{% endif %}</span>
-          {% endif %}
-          {% comment %}Said only when it is news: a current reading needs no age.{% endcomment %}
-          {% if panel.refreshing or panel.outdated or panel.payload.refresh_failed %}
-            <span class="glance-freshness">
-              {% if panel.refreshing %}{% refreshing %}{% elif panel.payload.refresh_failed %}Refresh failed{% else %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
-            </span>
-          {% endif %}
-        </button>
-        <div class="glance-expanded" id="glance-{{ panel.id }}" popover>
-          <header class="glance-expanded-head">
-            <strong>{{ panel.label|breakable }}</strong>
-            {% if panel.payload.summary %}<span>{{ panel.payload.summary|breakable }}</span>{% endif %}
-            {% if panel.observed_at %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
-          </header>
-          {% if panel.payload.refresh_failed and panel.payload.metrics %}<p class="glance-note">The last reading failed ({{ panel.payload.refresh_failed|breakable:")." }} This is the one before it.</p>{% endif %}
-          {% if panel.payload.metrics %}
-            <dl class="glance-metrics">
-              {% for metric in panel.readings %}
-                <div>
-                  <dt>{{ metric.label|breakable }}</dt>
-                  <dd>{{ metric.value|breakable }}</dd>
-                  {% if metric.detail %}<dd class="glance-metric-detail">{{ metric.detail|breakable }}</dd>{% endif %}
-                </div>
-              {% endfor %}
-            </dl>
-          {% else %}
-            <p class="glance-note">{% if panel.refreshing %}{% refreshing %}{% elif panel.payload.summary %}{{ panel.payload.summary|breakable }}{% else %}{{ panel.empty|breakable }}{% endif %}</p>
-          {% endif %}
-          {% if panel.payload.hours %}
-            <ol class="glance-hours" aria-label="The hours ahead">
-              {% for hour in panel.payload.hours %}
-                <li title="{{ hour.forecast }}">
-                  <span>{{ hour.time|breakable }}</span>
-                  <strong>{{ hour.temperature|breakable }}</strong>
-                  {% comment %}A chance of rain is said only when there is one.{% endcomment %}
-                  <small{% if hour.precipitation != "0%" %} class="is-wet"{% endif %}>{% if hour.precipitation != "0%" %}{{ hour.precipitation|breakable }}{% endif %}</small>
-                </li>
-              {% endfor %}
-            </ol>
-          {% endif %}
-          <footer class="glance-expanded-foot">
-            {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label|breakable }}{% arrow %}</a>{% endif %}
-            <span>
-              {% if dashboard_can_refresh %}<button class="glance-refresh" type="submit" form="glance-refresh">Refresh</button>{% endif %}
-              <a href="{% url 'dashboard_glance_settings' %}">Settings</a>
-            </span>
-          </footer>
-        </div>
-      </div>
-    {% endfor %}
-  </div>
+  {% comment %}
+  <!-- ast-grep-ignore: hand-drawn-form --> hidden forms the page's script submits, with no fields
+  {% endcomment %}<form id="glance-refresh" method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-failure="Could not read it." hidden>{% write_token %}</form>
+  {% if dashboard_due %}{% comment %}
+  <!-- ast-grep-ignore: hand-drawn-form --> hidden forms the page's script submits, with no fields
+  {% endcomment %}<form method="post" action="{% url 'dashboard_glance' %}" data-fragment-target data-fragment-auto hidden>{% write_token %}<input type="hidden" name="scope" value="stale"></form>{% endif %}
+  {% for panel in dashboard_panels %}
+    {% with menu="glance-"|add:panel.id %}
+    {% comment %}Its age is said only when it is news: a current reading needs no age.{% endcomment %}
+    {% reading icon=panel.icon id=menu tone=panel.payload.status title=panel.lead.tip unit=panel.lead.unit note_tone=panel.refreshing|yesno:",stale" data_fragment_part=panel.id data_refreshing=panel.refreshing %}
+      {% if panel.lead %}{{ panel.lead.value|breakable }}{% else %}{{ panel.label|breakable }}{% endif %}
+    {% lines %}
+      {% if panel.lead %}
+        {% if panel.subject %}<span>{{ panel.subject|breakable }}</span>{% endif %}
+        {% if panel.alert %}<strong>{{ panel.alert|breakable }}</strong>{% endif %}
+        {% for metric in panel.caption %}<span title="{{ metric.tip }}">{% if metric.unit %}{{ metric.unit|breakable }} {% endif %}{{ metric.value|breakable }}</span>{% endfor %}
+      {% elif panel.refreshing %}<span>{% refreshing %}</span>
+      {% else %}<span>No reading yet</span>{% endif %}
+    {% note %}
+      {% if panel.refreshing %}{% refreshing %}{% elif panel.payload.refresh_failed %}Refresh failed{% elif panel.outdated %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
+    {% heading %}
+      <strong>{{ panel.label|breakable }}</strong>
+      {% if panel.payload.summary %}<span>{{ panel.payload.summary|breakable }}</span>{% endif %}
+      {% if panel.observed_at %}{% include "partials/_reading_age.html" with reading=panel.freshness only %}{% endif %}
+    {% panel %}
+      {% if panel.payload.refresh_failed and panel.payload.metrics %}<p>The last reading failed ({{ panel.payload.refresh_failed|breakable:")." }} This is the one before it.</p>{% endif %}
+      {% if panel.payload.metrics %}
+        {% facts %}
+          {% for metric in panel.readings %}{% fact metric.label value=metric.value detail=metric.detail %}{% endfor %}
+        {% endfacts %}
+      {% else %}
+        <p>{% if panel.refreshing %}{% refreshing %}{% elif panel.payload.summary %}{{ panel.payload.summary|breakable }}{% else %}{{ panel.empty|breakable }}{% endif %}</p>
+      {% endif %}
+      {% if panel.hours %}{% include "partials/_tile_strip.html" with tiles=panel.hours label="The hours ahead" only %}{% endif %}
+    {% foot %}
+      {% if panel.link %}<a href="{{ panel.link.url }}">{{ panel.link.label|breakable }}{% arrow %}</a>{% endif %}
+      <span>
+        {% if dashboard_can_refresh %}<button type="submit" form="glance-refresh">Refresh</button>{% endif %}
+        <a href="{% url 'dashboard_glance_settings' %}">Settings</a>
+      </span>
+    {% endreading %}
+    {% endwith %}
+  {% endfor %}
   <span class="visually-hidden" data-fragment-status role="status"></span>
 </div>

@@ -30,7 +30,7 @@ runs:
         path: ~/.cache/mise/downloads-cas
         key: mise-downloads-${{ inputs.tool }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(format('{0}/mise.lock', inputs.host)) }}
     # Only the named tool: the host's other tools and its [env] are not this job's.
-    - uses: jdx/mise-action@f5be966e4a917d54244728e6a5fdcd1d93a35e6c # v5.2.6
+    - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
       env:
         MISE_LOCKED_VERIFY_PROVENANCE: "1"
       with:

@@ -27,13 +27,13 @@ lazy from hq.domains.control_plane.providers import PROVIDERS, read_record, reco
 lazy from hq.platform.application.resource_capabilities import offered_changes
 
 from .adoption import AdoptCommand, unmanaged
+from .card_items import ListRow
 from .command_fields import Describe
 from .entity_links import entity_link
 from .infrastructure import enabled_resources, resource_health
 from .record_errors import PolicyError, RecordNotFound
 from .resource_records import ManagedResourceItem
 from .security import Principal
-from .ui import ListRow
 lazy from . import adoption, plugins
 lazy from .facts import snapshots_of
 lazy from .projection import read_once
@@ -293,6 +293,16 @@ class Zone:
         """
 
         return tuple(record for record in self.records if not record.ephemeral)
+
+    @property
+    def ttl_set(self) -> bool:
+        """Whether a listed record has a TTL of its own.
+
+        1 leaves it to the DNS service (Cloudflare's "Auto"), which the table
+        leaves blank, so a zone where every record does has no TTL column.
+        """
+
+        return any(record.ttl != 1 for record in self.listed)
 
     @property
     def routing(self) -> tuple[ZoneRecord, ...]:

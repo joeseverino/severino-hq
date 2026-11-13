@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/joeseverino/severino-hq/controller/internal/hostcore"
 	"os"
@@ -112,8 +113,8 @@ func (d *drill) upgrader() *Upgrader {
 	}
 }
 
-// upgrade runs one upgrade of app to the target, extra arguments after the
-// usual ones winning.
+// upgrade runs one upgrade of app to the target, a flag among the extra
+// arguments with its value taking the usual one's place.
 func (d *drill) upgrade(extra ...string) map[string]any {
 	d.t.Helper()
 	return d.upgradeAs(d.upgrader(), extra...)
@@ -127,6 +128,15 @@ func (d *drill) upgradeAs(u *Upgrader, extra ...string) map[string]any {
 	d.out.Reset()
 	args := []string{"--operation", "op-1", "--project-dir", d.stack, "--service", "app",
 		"--from", from, "--to", to, "--tag", "1.2.1", "--wait", "20"}
+	replaced := map[string]bool{}
+	for len(extra) >= 2 && !replaced[extra[0]] {
+		usual := slices.Index(args, extra[0])
+		if usual < 0 {
+			break
+		}
+		replaced[extra[0]] = true
+		args[usual+1], extra = extra[1], extra[2:]
+	}
 	d.code = u.Upgrade(ctx, append(args, extra...))
 	var result map[string]any
 	if err := json.Unmarshal(d.out.Bytes(), &result); err != nil {
@@ -607,6 +617,7 @@ func TestWhatTheArgumentsAndFilesSayIsRefusedWithoutDocker(t *testing.T) {
 		"an unknown argument":        {args("--force", "yes"), "unknown argument"},
 		"an argument with no value":  {args("--tag"), "an argument has no value"},
 		"a service with a newline":   {args("--service", "app\nother"), "service is not a name"},
+		"an argument given twice":    {args("--service", "app", "--service", "other"), "an argument is given twice"},
 		"a stack outside the root": {func(d *drill) []string {
 			if err := os.MkdirAll(filepath.Join(d.root, "elsewhere", "app"), 0o755); err != nil {
 				d.t.Fatal(err)
@@ -776,4 +787,48 @@ func TestARepositoryKeepsARegistryPort(t *testing.T) {
 			t.Errorf("repository(%q) = %q, want %q", ref, got, want)
 		}
 	}
+}
+
+// The arguments are the caller's, through a sudo rule that admits any. A
+// refusal is the package's own; a request read holds every pattern root
+// checks, and is the request its own arguments read back as. The arguments
+// arrive NUL-separated, as no argument can hold a NUL.
+func FuzzParse(f *testing.F) {
+	usual := []string{"--operation", "op-1", "--project-dir", "/opt/apps/app", "--service", "app",
+		"--from", from, "--to", to, "--tag", "1.2.1", "--wait", "20"}
+	digest := "@sha256:" + strings.Repeat("a", 64)
+	for _, extra := range [][]string{
+		nil, {"--to", "ghcr.io/example/app:1.2.1"}, {"--to", "registry.example.com:5000/example/app" + digest},
+		{"--data", "app_data:/data"}, {"--force", "yes"}, {"--tag"}, {"--service", "app\nother"},
+		{"--service", "other"}, {"-wait=9999"}, {"--", "extra"}, {"--project-dir", "--service"},
+	} {
+		f.Add(strings.Join(append(slices.Clone(usual), extra...), "\x00"))
+	}
+	f.Fuzz(func(t *testing.T, joined string) {
+		request, err := Parse(strings.Split(joined, "\x00"))
+		if err != nil {
+			if _, typed := errors.AsType[refusal](err); !typed {
+				t.Fatalf("an untyped refusal: %v", err)
+			}
+			return
+		}
+		for name, value := range map[string]string{"operation": request.Operation, "service": request.Service, "from": request.From, "to": request.To} {
+			if !patterns[name].MatchString(value) {
+				t.Fatalf("read %s %q", name, value)
+			}
+		}
+		if request.Tag != "" && !patterns["tag"].MatchString(request.Tag) || repository(request.To) != repository(request.From) ||
+			request.Wait < 0 || request.Wait > 9999*time.Second || request.Wait%time.Second != 0 {
+			t.Fatalf("read %+v", request)
+		}
+		again, err := Parse([]string{"--operation=" + request.Operation, "--project-dir=" + request.ProjectDir,
+			"--service=" + request.Service, "--from=" + request.From, "--to=" + request.To, "--tag=" + request.Tag,
+			"--wait=" + strconv.Itoa(int(request.Wait/time.Second))})
+		if err != nil || again != request {
+			t.Fatalf("%+v does not read back as itself: %+v (%v)", request, again, err)
+		}
+		if _, err := Parse(append(strings.Split(joined, "\x00"), "--operation="+request.Operation)); err == nil {
+			t.Fatal("a flag given twice was read")
+		}
+	})
 }

@@ -22,12 +22,12 @@ from hq.platform.application.calendar_entries import (
     when_label,
 )
 from hq.platform.application.capabilities import capability_title, capability_words
+from hq.platform.application.card_items import ListRow
 from hq.platform.application.deletion import delete_calendar_entry
 from hq.platform.application.moments import when_day
 from hq.platform.application.pages import PageAction, PageMixin
 from hq.platform.application.references import ReferencePickerMixin, reference_of
 from hq.platform.application.security import Capability, safe_next, web_principal
-from hq.platform.application.ui import ListRow
 from hq.platform.application.web_writes import execute_posted, refusal_response
 from hq.platform.application.writes import CommandFormPage, ServiceCreateMixin, ServiceDeleteMixin, ServiceUpdateMixin
 
@@ -206,11 +206,16 @@ class EntryWrite:
     identity_kwarg = "current_key"
 
 
+# The fields its form page draws beyond the form's own loop.
+FORM_PAGE = {"form_fields": "calendars/_entry_fields.html"}
+
+
 class EntryFormPage(CommandFormPage):
     """An event's form, said as its command's page says it."""
 
     creates = CREATE
     listed_route = "calendar:month"
+    extra_context = FORM_PAGE
 
 
 class EntryDetailView(RedirectView):
@@ -225,7 +230,6 @@ class EntryDetailView(RedirectView):
 
 class EntryCreateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin, ServiceCreateMixin, CreateView):
     form_class = EntryForm
-    template_name = "calendars/entry_form.html"
     service = staticmethod(save_entry)
     command_from_cleaned_data = staticmethod(entry_command)
 
@@ -242,7 +246,6 @@ class EntryCreateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin
 class EntryUpdateView(EntryWrite, EntryFormPage, EntryPage, ReferencePickerMixin, ServiceUpdateMixin, UpdateView):
     page_title = "Edit event"
     form_class = EntryForm
-    template_name = "calendars/entry_form.html"
     service = staticmethod(save_entry)
     command_from_cleaned_data = staticmethod(entry_command)
 

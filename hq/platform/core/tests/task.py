@@ -13,7 +13,8 @@ plain path (``/infrastructure/containers/``), a route name
 can draw its estate (:class:`Records`), a record's page is named too: by a
 route that takes a record (``control_plane:detail``), its first record the
 estate's pages link to, or by a template (``template:<name>``), the first
-estate page that draws it. Django's ``resolve`` and ``reverse`` say whether a
+page that draws it: one the estate links to, a component catalog entry, one
+``all`` or a bare route name reaches, or a record's page those lead to. Django's ``resolve`` and ``reverse`` say whether a
 name is a page; ``difflib`` names the nearest to one that is not, each as the
 name to type.
 
@@ -96,7 +97,20 @@ def usage() -> Usage:
 
 
 class PageRefused(Exception):
-    """A page asked for that is none, with the names it would take instead."""
+    """A page asked for that is none, with the names it would take instead:
+    ``instead`` holds each refused name's nearest, as it is typed, or "" for
+    one with none, so a tool can say the command that reruns with them."""
+
+    def __init__(self, said: str, instead: Mapping[str, str]):
+        super().__init__(said)
+        self.instead = dict(instead)
+
+
+def _refused(name: str, said: str, offers: Sequence[str]) -> PageRefused:
+    """``name`` refused with ``said`` and the names it would take, the nearest first."""
+
+    head = said + ("; type one of these instead:" if offers else "")
+    return PageRefused(head + _offered(offers), {name: offers[0].split(" (", 1)[0] if offers else ""})
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +134,15 @@ class Records(Protocol):
 
     def at(self, address: str) -> Drawn | None:
         """The page ``address`` lands on, or None where the estate answers it with anything but a page."""
+
+    def entries(self) -> Iterable[tuple[str, Drawn]]:
+        """Each page the tool draws from a part alone, by the name it is asked by, with what it drew,
+        read as it is asked for: the component catalog's entries, which draw what no seeded page does."""
+
+    def followed(self) -> Iterable[str]:
+        """A record's page of each route no page ``linked`` names is of, that those pages and these lead
+        to, by address, read as it is asked for: the pages a record's page alone leads to, such as its
+        delete form."""
 
 
 def is_estate(name: str) -> bool:
@@ -208,10 +231,22 @@ def _route(address: str) -> str:
     return resolve(urlsplit(address).path).view_name
 
 
-def _drawn(records: Records) -> Iterator[tuple[str, Drawn]]:
-    """Each page of the estate the server draws, with its address."""
+def _drawn(records: Records, every: Sequence[str]) -> Iterator[tuple[str, Drawn]]:
+    """Each page the tool draws, with the name it is asked by, cheapest first, so a
+    template on a page linked early waits on no more: the pages the estate links,
+    then the catalog's entries, then the rest of ``every`` (the pages ``all``
+    stands for) and of the routes a bare route name reaches, which no link leads
+    to, then the records' pages those pages lead to."""
 
     for address in records.linked():
+        if page := records.at(address):
+            yield address, page
+    yield from records.entries()
+    linked = set(records.linked())
+    for address in dict.fromkeys([*every, *_routes().values()]):
+        if address not in linked and (page := records.at(address)):
+            yield address, page
+    for address in records.followed():
         if page := records.at(address):
             yield address, page
 
@@ -227,50 +262,71 @@ def _takes_a_record(address: str) -> bool:
     return bool(match.args or match.kwargs)
 
 
-def _record(name: str, records: Records | None) -> str:
-    """The address of the estate page a record's name reaches: a route that
-    takes a record, its first one the estate links to, or ``template:<name>``,
-    the first estate page that draws it."""
+def _names_a_record(name: str, record_routes: set[str]) -> bool:
+    """Whether ``name`` is found only in the estate drawn: a route that takes a record, or ``template:<name>``."""
+
+    return name.startswith(TEMPLATE) or name in record_routes
+
+
+def naming_records(asked: Sequence[str]) -> list[str]:
+    """The names of ``asked`` that only the estate drawn can resolve, so a tool
+    checking names before it draws one leaves these to the run that does."""
+
+    record_routes = _record_routes()
+    return [name for name in asked if _names_a_record(name, record_routes)]
+
+
+def _record(name: str, records: Records | None, every: Sequence[str]) -> str:
+    """The page a record's name reaches: a route that takes a record, the
+    address of its first one the estate links to, or ``template:<name>``, the
+    first page ``_drawn`` finds that draws it, an address or a catalog entry's name."""
 
     if records is None:
-        raise PageRefused(f"No page {name}: here a record's page is named by its path, estate/<path>")
+        raise _refused(name, f"No page {name}: here a record's page is named by its path, estate/<path>", [])
     if name.startswith(TEMPLATE):
         template = name.removeprefix(TEMPLATE)
-        if address := next((address for address, page in _drawn(records) if page.draws(template)), None):
-            return address
+        if found := next((found for found, page in _drawn(records, every) if page.draws(template)), None):
+            return found
         by_last: dict[str, list[str]] = {}
-        for known in sorted({known for _, page in _drawn(records) for known in page.templates}):
+        for known in sorted({known for _, page in _drawn(records, every) for known in page.templates}):
             by_last.setdefault(known.rsplit("/", 1)[-1], []).append(known)
         close = difflib.get_close_matches(template.rsplit("/", 1)[-1], by_last, n=_NEAREST, cutoff=0.6)
         offers = [f"{TEMPLATE}{known}" for match in close for known in by_last[match]]
-        said = f"No estate page draws {template}" + ("; type one of these instead:" if offers else "")
-        raise PageRefused(said + _offered(offers[:_NEAREST]))
+        raise _refused(name, f"No page or catalog entry draws {template}", offers[:_NEAREST])
     if address := next(_of_route(name, records), None):
         return address
     linked = sorted({_route(address) for address in records.linked()} & _record_routes())
     offers = difflib.get_close_matches(name, linked, n=_NEAREST, cutoff=0.5)
-    said = f"No record of {name} is linked from the estate's pages" + ("; type one of these instead:" if offers else "")
-    raise PageRefused(said + _offered([f"{offer} (its first record)" for offer in offers]))
+    said = f"No record of {name} is linked from the estate's pages"
+    raise _refused(name, said, [f"{offer} (its first record)" for offer in offers])
 
 
-def _no_record(address: str, records: Records) -> str:
+def _no_record(name: str, address: str, records: Records) -> PageRefused:
     """A record's address the estate does not answer, refused with that route's records it does."""
 
     route = _route(address)
     theirs = [estate_name(known) for known in islice(_of_route(route, records), _RECORDS_OFFERED)]
     offers = [f"{route} (its first record)", *theirs] if theirs else []
-    said = f"No record at {estate_name(address)} in the estate" + ("; type one of these instead:" if offers else "")
-    return said + _offered(offers)
+    return _refused(name, f"No record at {estate_name(address)} in the estate", offers)
 
 
-def _address(name: str) -> str | None:
-    """The estate address ``name`` names, or None for a name that is no route."""
+def _address(name: str, every: Sequence[str]) -> str | None:
+    """The estate address ``name`` names, its query kept as an address keeps
+    it, or None for a name that is no route: a route name (``search?q=hq``),
+    a path, its leading slash optional once it holds one (``search/?q=hq``),
+    the last word of exactly one path of ``every``, the estate's pages
+    (``contacts``), or ``estate/<path>``. A word that ends no such path or
+    several is None, so its refusal offers the nearest."""
 
     if not (is_estate(name) or name.startswith("/")):
-        try:
-            return reverse(name)
-        except NoReverseMatch:
-            return None
+        route, mark, query = name.partition("?")
+        with suppress(NoReverseMatch):
+            return reverse(route) + mark + query
+        if "/" not in route:
+            paths = {urlsplit(page).path for page in every}
+            ending = {path for path in paths if _last(path) == route}
+            return f"{ending.pop()}{mark}{query}" if len(ending) == 1 else None
+        name = f"/{name}"
     address = estate_path(name if is_estate(name) else f"{ESTATE}{name}")
     try:
         resolve(urlsplit(address).path)
@@ -279,22 +335,45 @@ def _address(name: str) -> str | None:
     return address
 
 
-def _one_page(name: str, named: Sequence[str], records: Records | None, record_routes: set[str]) -> str:
+def _one_page(
+    name: str,
+    every: Sequence[str],
+    named: Sequence[str],
+    records: Records | None,
+    record_routes: set[str],
+    *,
+    by_word: bool,
+) -> str:
     """The address of the one page ``name`` asks for, a record's or the
-    estate's, or PageRefused saying why it is none, with the names it would take."""
+    estate's, or a catalog entry's name for a template only the catalog draws,
+    or PageRefused saying why it is none, with the names it would take."""
 
-    if name.startswith(TEMPLATE) or name in record_routes:
-        return _record(name, records)
-    if (address := _address(name)) is None:
+    if _names_a_record(name, record_routes):
+        return _record(name, records, every)
+    if (address := _address(name, every if by_word else ())) is None:
         offers = nearest(urlsplit(estate_path(name)).path if is_estate(name) else name, named)
-        raise PageRefused(f"No page {name}" + ("; type one of these instead:" if offers else "") + _offered(offers))
+        raise _refused(name, f"No page {name}", offers)
     if records is not None and _takes_a_record(address) and records.at(address) is None:
-        raise PageRefused(_no_record(address, records))
+        raise _no_record(name, address, records)
     return address
 
 
+def _kinds(*, by_word: bool, named: bool, records: bool) -> str:
+    """The kinds of name a page is, as the caller of ``pages`` takes them."""
+
+    kinds = "estate/<path>, a path" + (", the last word of one estate page's path" if by_word else "")
+    kinds += ", a route name" + (", a page by name" if named else "")
+    kinds += ", a route that takes a record, template:<name>" if records else ""
+    return f"A page is {kinds}, estate/all or all."
+
+
 def pages(
-    asked: Sequence[str], every: Sequence[str], named: Sequence[str] = (), records: Records | None = None
+    asked: Sequence[str],
+    every: Sequence[str],
+    named: Sequence[str] = (),
+    records: Records | None = None,
+    *,
+    by_word: bool = True,
 ) -> list[str]:
     """The pages ``asked`` names, in order and once each: an estate page as its
     address, a page known by name (``named``, dev:look's gate pages) as its
@@ -302,10 +381,12 @@ def pages(
     ``estate/all`` and nothing asked stand for; ``all`` is those and ``named``.
     ``records`` is the estate drawn, which a record's page is found in and
     checked against, and a record's page of ``every`` it does not hold is left
-    out of both. Every name that is no page is refused together, each with the
-    names it would take."""
+    out of both. A bare word is the page of ``every`` whose path it ends unless
+    ``by_word`` is false, for a caller that cannot tell it from a page another
+    tool knows by name. Every name that is no page is refused together, each
+    with the names it would take."""
 
-    found, refused = [], []
+    found, refused, instead = [], [], {}
     record_routes = _record_routes()
 
     def estate() -> list[str]:
@@ -322,13 +403,14 @@ def pages(
             found.append(name)
         else:
             try:
-                found.append(_one_page(name, named, records, record_routes))
+                found.append(_one_page(name, every, named, records, record_routes, by_word=by_word))
             except PageRefused as said:
                 refused.append(str(said))
+                instead |= said.instead
     if refused:
-        kinds = "estate/<path>, a path, a route name" + (", a page by name" if named else "")
-        kinds += ", a route that takes a record, template:<name>" if records is not None else ""
-        raise PageRefused("\n".join([*refused, f"A page is {kinds}, estate/all or all."]))
+        raise PageRefused(
+            "\n".join([*refused, _kinds(by_word=by_word, named=bool(named), records=records is not None)]), instead
+        )
     return list(dict.fromkeys(found))
 
 

@@ -1,0 +1,23 @@
+# A decorative drawing is the icon part, which sizes it to the text and keeps
+# it from the accessibility tree; a drawing that says something is
+# role="img". No fix: the part names its icon, which the path does not.
+id: hand-drawn-icon
+language: html
+severity: error
+message: An icon drawn by hand, where the icon part draws it.
+note: Write {% include "partials/_icon.html" with name="..." %}; a drawing that says something is role="img".
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    any:
+      - kind: start_tag
+      - kind: self_closing_tag
+    all:
+      - has:
+          kind: tag_name
+          regex: ^svg$
+      - has:
+          kind: attribute
+          regex: '^aria-hidden="true"$'

@@ -6,7 +6,7 @@
 Columns come from SERVICE_FACETS, not from this markup: minus the runtime one,
 which shares the "Runs on" column with the origin it would duplicate.
 {% endcomment %}
-{% include "control_plane/_service_rows.html" with groups=service_groups row_count=service_count show_service_projects=service_projects empty_message="No services. Add a DNS record or a proxy host to create one." %}
+{% include "control_plane/_service_rows.html" with groups=service_groups row_count=service_count show_service_projects=service_projects empty_message="No services yet." %}
 
 {% if unmanaged %}
   {% comment %}
@@ -14,8 +14,8 @@ which shares the "Runs on" column with the origin it would duplicate.
   read through a connection that only observes, in a domain HQ does not
   manage, kept out by an operator, or a spec HQ could not validate.
   {% endcomment %}
-  {% section "Names HQ does not manage" count=unmanaged|length fold=True lede="Each came through a read-only connection, is in a domain HQ does not manage, or has settings HQ could not read." %}
-    {% table_region "Names HQ does not manage" %}
+  {% section "Unmanaged names" count=unmanaged|length fold=True lede="From a read-only connection, an unmanaged domain, or settings HQ could not read." %}
+    {% table_region "Unmanaged names" %}
       <table class="data-table">
         <thead>
           <tr>
@@ -25,20 +25,13 @@ which shares the "Runs on" column with the origin it would duplicate.
           </tr>
         </thead>
         <tbody>
-          {% for service in unmanaged %}
+          {% for service, actions in unmanaged_rows %}
             <tr>
               <td><strong>{{ service.hostname|breakable }}</strong></td>
               {% for id, label, value in service.facets %}
                 <td>{% if value %}<code>{{ value|breakable }}</code>{% else %}{% empty_value %}{% endif %}</td>
               {% endfor %}
-              <td>
-                {% if service.observed_only %}
-                  <span class="muted">Read only</span>
-                {% else %}
-                  {% url 'control_plane:adopt' service.hostname as retry_url %}
-                  {% post_button "Manage in HQ" retry_url %}
-                {% endif %}
-              </td>
+              {% if actions %}{% row_actions actions %}{% else %}<td><span class="muted">Read only</span></td>{% endif %}
             </tr>
           {% endfor %}
         </tbody>

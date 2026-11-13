@@ -261,7 +261,7 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         self.assertContains(response, AUTHORITY_LABELS["whole_account"])
 
     def test_the_reads_column_names_what_the_tally_counts_and_nothing_it_only_changes(self):
-        """The row's three, its "Also reads" and its tally are one list: each
+        """The row's reads and its tally are one list: each
         reading the sweep counts is named once, in one set of words, and a kind
         the credential may change but no sweep reads is under "Changes"."""
 
@@ -278,16 +278,24 @@ class ConnectionPageTests(SentinelMixin, TestCase):
         page = all_elements(response)
         (tr,) = [element for element in page if element.tag == "tr" and "a-portainer" in element.attrs.get("id", "")]
         reads_cell = [element for element in page if element.tag == "td" and element.ancestors[-1:] == (tr,)][1]
+
+        # Every item of the cell's lists, a read past the first few in the
+        # list's rest included. Elements compare by their markup, so the cell
+        # is matched by identity.
         items = [
-            element for element in page if element.tag == "li" and element.ancestors[-1].ancestors[-1:] == (reads_cell,)
+            element
+            for element in page
+            if element.tag == "li"
+            and "line-rest" not in element.attrs.get("class", "").split()
+            and any(ancestor is reads_cell for ancestor in element.ancestors)
         ]
-        # Each item's name is its first element; a state word may follow it.
+        changes = [item.words for item in items if any(a.attrs.get("data-label") == "Changes" for a in item.ancestors)]
+        # Each read's name is its first element; a state word may follow it.
         named = [
             next(element for element in page if element.ancestors[-1:] == (item,)).words
             for item in items
-            if item.ancestors[-1].attrs.get("data-label") != "Changes"
+            if item.words not in changes
         ]
-        changes = [item.words for item in items if item.ancestors[-1].attrs.get("data-label") == "Changes"]
 
         self.assertTrue(named)
         self.assertEqual(sorted(named), sorted(sight.label for sight in row.sight.sights))

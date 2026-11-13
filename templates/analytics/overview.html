@@ -2,38 +2,21 @@
 {% block page %}
   {% comment %}A window is chosen over readings; with none there is nothing to window.{% endcomment %}
   {% if latest %}
-  <div>
-    <nav class="window-switch" aria-label="Reporting window">
-      {% for option in windows %}
-        <a class="chip"
-           href="?days={{ option.days }}"
-           {% if option.current %}aria-current="page"{% endif %}>{{ option.label|breakable }}</a>
-      {% endfor %}
-    </nav>
-  </div>
+  {% switch label="Reporting window" %}
+    {% for option in windows %}
+      {% querystring days=option.days as href %}
+      {% choice url=href current=option.current %}{{ option.label|breakable }}{% endchoice %}
+    {% endfor %}
+  {% endswitch %}
   {% endif %}
 
   {% if latest %}
     {% include "partials/_kpi_grid.html" with label="Traffic" items=kpis %}
 
-    <p class="muted reading-note">
-      {{ totals.start|when:"day" }}{% if totals.start != totals.end %} – {{ totals.end|when:"day" }}{% endif %}{% if totals.sample_interval > 1 %}{% dot %}estimated from 1 in {{ totals.sample_interval|breakable }} visits{% endif %}{% if observed_at %}{% dot %}{% include "partials/_reading_age.html" with at=observed_at only %}{% endif %}{% if coverage.expected_days and not coverage.complete %}{% dot %}{{ coverage.covered_days|breakable }} of {{ coverage.expected_days|breakable }} days read so far, the rest still loading{% endif %}
-    </p>
-
-    <div class="breakdown-grid">
+    <div class="section-flow">
       {% for panel in breakdowns %}
         {% section panel.label %}
-          {% if panel.rows %}
-            <ol class="bar-list">
-              {% for row in panel.rows %}
-                <li class="bar-row">
-                  <meter class="bar-track" min="0" max="100" value="{{ row.share }}" aria-hidden="true"></meter>
-                  <span class="bar-label" title="{{ row.value }}">{{ row.value|breakable }}</span>
-                  <span class="bar-value">{{ row.pageviews|breakable }}</span>
-                </li>
-              {% endfor %}
-            </ol>
-          {% endif %}
+          {% if panel.rows %}{% include "partials/_share_list.html" with rows=panel.rows only %}{% endif %}
         {% empty %}No data in this window.
         {% endsection %}
       {% endfor %}
@@ -41,21 +24,15 @@
 
     {% section "Page speed" %}
       {% if vitals_measured %}
-      <dl class="vitals-strip">
-        {% for key, metric in vitals.items %}
-          <div class="vital">
-            <dt>{% if key == "lcp" %}Loading (LCP){% elif key == "inp" %}Responsiveness (INP){% elif key == "cls" %}Layout shift (CLS){% else %}{{ key|upper|breakable }}{% endif %}</dt>
-            <dd>
-              {% if metric.percent is None %}
-                <span class="muted">not enough visits to measure</span>
-              {% else %}
-                <span class="vital-rate{% if metric.passing %} is-passing{% endif %}">{{ metric.percent|floatformat:"-1" }}<span class="unit">%</span></span>
-                <span class="muted">{{ metric.good|breakable }} of {{ metric.total|breakable }} good</span>
-              {% endif %}
-            </dd>
-          </div>
+      {% facts layout="band" %}
+        {% for label, metric in vitals_named %}
+          {% if metric.percent is None %}
+            {% fact label value="" detail="Not enough visits to measure" %}
+          {% else %}
+            {% fact label tone=metric.passing|yesno:"good,attention" %}{{ metric.percent|floatformat:"-1" }}%{% detail %}{{ metric.good|breakable }} of {{ metric.total|measured:"good" }}{% endfact %}
+          {% endif %}
         {% endfor %}
-      </dl>
+      {% endfacts %}
       {% endif %}
     {% empty %}Not enough visits to measure.
     {% endsection %}

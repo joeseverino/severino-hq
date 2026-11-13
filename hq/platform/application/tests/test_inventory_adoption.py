@@ -34,6 +34,7 @@ from ..report_testing import refused_part
 from ..security import cli_principal
 from ..sweep import record_sweep
 from .inventory_records import A_PROXY, A_REWRITE, ANOTHER, a_sweep
+from .markup import select
 
 
 class AdoptionTests(TestCase):
@@ -126,6 +127,13 @@ class AdoptionWebTests(TestCase):
 
         self.assertContains(response, "app.example.com")
         self.assertTrue(ManagedResource.objects.filter(kind="adguard.rewrite").exists())
+
+    def test_an_unmanaged_name_s_row_offers_to_manage_it(self):
+        response = self.client.get(reverse("control_plane:services"))
+
+        adopt_url = reverse("control_plane:adopt", kwargs={"hostname": "app.example.com"})
+        (button,) = select(response, "formaction", adopt_url)
+        self.assertTrue(any("row-actions" in ancestor.classes for ancestor in button.ancestors))
 
     def test_adopting_from_the_page_creates_the_declaration(self):
         response = self.client.post(

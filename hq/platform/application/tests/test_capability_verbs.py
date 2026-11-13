@@ -14,6 +14,7 @@ EXEMPT = {
     ),
     "dashboard.machine.select": "its button is on the machine's page, the 'on' of a switch, so it leaves the machine out",
     "infrastructure.resource.adopt": "its button stands beside the record it acts on, so it leaves the record out",
+    "infrastructure.service.adopt": "its button stands in the service's row, so it leaves the service out",
     "tailnet.reach.allow": "its button is on the certificate's page and says where the change lands",
 }
 

@@ -9,8 +9,10 @@ from django.views import View
 from django.views.generic import DetailView, ListView
 
 from hq.platform.application.action_links import READ_NOW_CAPABILITY, command_url
+from hq.platform.application.approval_review import asked_by
 from hq.platform.application.approvals import DESTRUCTIVE_EFFECT
 from hq.platform.application.capabilities import capability_registry, capability_words
+from hq.platform.application.doors import NOBODY
 from hq.platform.application.entity_links import kind_label, record_name, web_url
 from hq.platform.application.infrastructure import (
     declared_machines,
@@ -22,7 +24,7 @@ from hq.platform.application.infrastructure import (
 from hq.platform.application.integration_specs import requested as requested_note
 from hq.platform.application.inventory import service_hostnames
 from hq.platform.application.labels import field_label
-from hq.platform.application.pages import PageAction, PageMixin, PageVisit, page_context
+from hq.platform.application.pages import PageAction, PageMixin, page_context
 from hq.platform.application.payload_words import value_words
 from hq.platform.application.refusal_status import refuse
 from hq.platform.application.relationships import relationships_for
@@ -44,9 +46,9 @@ from hq.platform.application.resource_context import (
 from hq.platform.application.resource_operations import (
     ACTION_CAPABILITY,
     HISTORY_WINDOW,
+    asked_by as operations_asked_by,
     changes,
     operation_summary,
-    requested_by,
     resource_history,
     supervision,
 )
@@ -55,6 +57,7 @@ from hq.platform.application.security import safe_next, web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.topology_model import RELATIONS
 from hq.platform.application.ui import counted
+from hq.platform.application.visit_refresh import page_visit
 from hq.platform.application.web_writes import execute_posted, refusal_response, refused
 from hq.platform.application.whereabouts import whereabouts
 from hq.platform.core.templatetags.nav_tags import returning_to
@@ -266,15 +269,17 @@ class InfrastructureListView(PageMixin, ListView):
             # The name the row's link shows, and the line under it.
             resource.shown_name = record_name(resource.kind, resource.spec, resource.key)
             resource.summary = record_summary(resource, resource.shown_name)
+        listed = changes(OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12)
+        who = operations_asked_by(listed)
         context["changes"] = [
             {
                 "resource": operation.resource.key,
                 "action": operation.get_action_display(),
-                "summary": operation_summary(operation),
-                "by": requested_by(operation),
+                "summary": (summary := operation_summary(operation, who.get(str(operation.pk), NOBODY))),
+                "by": summary["by"],
                 "at": operation.created_at,
             }
-            for operation in changes(OperationRequest.objects.select_related("resource")[:HISTORY_WINDOW], 12)
+            for operation in listed
         ]
         context["provider_catalog"] = describe_providers()
         context["records"] = record_list(
@@ -423,6 +428,9 @@ class InfrastructureDetailView(PageMixin, DetailView):
         )
         if console:
             actions.insert(0, PageAction(provider.console_label, console, primary=not drifted))
+        if gap := capabilities.write_gap:
+            # Beside the verbs it holds back: what they need, at the step that gives it.
+            actions.append(PageAction(gap.needs, gap.setup_url, title=gap.reason))
         if capabilities.offered.edit_url:
             actions.append(
                 PageAction(
@@ -453,7 +461,7 @@ class InfrastructureDetailView(PageMixin, DetailView):
         context = super().get_context_data(**kwargs)
         capabilities = self.capabilities
         context["capabilities"] = capabilities
-        context["page_visit"] = PageVisit("resource", self.object.key)
+        context["page_visit"] = page_visit("resource", self.object.key)
         context["controller"] = controller_summary(capabilities.actions, verb_words)
         derived = self.derived
         context["status"] = record_status(self.object, health=derived.health, newest=newest_reading(self.object.kind))
@@ -483,7 +491,9 @@ class InfrastructureDetailView(PageMixin, DetailView):
         context["removal_pending"] = capabilities.removal_pending
         # A change a credential asked for that nobody has answered, said on the
         # page an operator opens when a declaration has not moved.
-        context["awaiting_approval"] = derived.awaiting_approval
+        # Each said as who asked for it, from the audit row that opened it.
+        asked = asked_by(derived.awaiting_approval)
+        context["awaiting_approval"] = tuple(asked.get(str(held.pk), NOBODY) for held in derived.awaiting_approval)
         # Nothing for a container: its panel is the sweep's answer and a
         # container declares identity and nothing else.
         context["readout_rows"] = (

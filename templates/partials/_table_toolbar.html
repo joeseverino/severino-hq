@@ -1,31 +1,27 @@
-<form class="table-toolbar" method="get" data-table-toolbar>
-  <input class="table-search" type="search" name="q" value="{{ table.query }}" placeholder="{{ table.search_placeholder }}" aria-label="{{ table.search_placeholder }}">
-  <div class="table-filters" aria-label="Table filters">
-    {% for filter in table.filters %}
-      <div class="table-filter-menu">
-        <button type="button" popovertarget="table-filter-{{ filter.name }}">{{ filter.label|breakable }}{% if filter.selected_count %} <span class="filter-count">{{ filter.selected_count|breakable }}</span>{% endif %}</button>
-        <div class="table-filter-options" id="table-filter-{{ filter.name }}" popover>
-          {% for option in filter.options %}
-            <label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label|breakable }}</label>
-          {% endfor %}
-        </div>
+{% filter_bar filtered=table.active_count clear="?" data_table_toolbar=True %}
+  <input type="search" name="q" value="{{ table.query }}" placeholder="{{ table.search_placeholder }}" aria-label="{{ table.search_placeholder }}">
+  {% for filter in table.filters %}
+    <div class="table-filter-menu">
+      <button type="button" popovertarget="table-filter-{{ filter.name }}">{{ filter.label|breakable }}{% if filter.selected_count %} <span class="filter-count">{{ filter.selected_count|breakable }}</span>{% endif %}</button>
+      <div class="table-filter-options" id="table-filter-{{ filter.name }}" popover>
+        {% for option in filter.options %}
+          <label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label|breakable }}</label>
+        {% endfor %}
       </div>
-    {% endfor %}
-    {% for toggle in table.toggles %}
-      <label class="table-toggle"><input type="checkbox" name="{{ toggle.name }}" value="1"{% if toggle.selected %} checked{% endif %}> {{ toggle.label|breakable }}</label>
-    {% endfor %}
-    {% if table.sorts %}
-      <label class="table-sort">Sort
-        <select name="sort">
-          {% if table.query %}<option value="_relevance"{% if table.selected_sort == "_relevance" %} selected{% endif %}>Relevance</option>{% endif %}
-          {% for sort in table.sorts %}<option value="{{ sort.value }}"{% if sort.value == table.selected_sort %} selected{% endif %}>{{ sort.label }}</option>{% endfor %}
-        </select>
-      </label>
-    {% endif %}
-    <button class="btn" type="submit">Filter</button>
-    {% if table.active_count %}<a class="btn ghost" href="?">Clear filters</a>{% endif %}
-  </div>
-</form>
+    </div>
+  {% endfor %}
+  {% for toggle in table.toggles %}
+    <label class="table-toggle"><input type="checkbox" name="{{ toggle.name }}" value="1"{% if toggle.selected %} checked{% endif %}> {{ toggle.label|breakable }}</label>
+  {% endfor %}
+  {% if table.sorts %}
+    <label class="table-sort">Sort
+      <select name="sort">
+        {% if table.query %}<option value="_relevance"{% if table.selected_sort == "_relevance" %} selected{% endif %}>Relevance</option>{% endif %}
+        {% for sort in table.sorts %}<option value="{{ sort.value }}"{% if sort.value == table.selected_sort %} selected{% endif %}>{{ sort.label }}</option>{% endfor %}
+      </select>
+    </label>
+  {% endif %}
+{% endfilter_bar %}
 <div class="table-selection" data-table-selection aria-live="polite" hidden>
   <strong><span data-selection-count>0</span> selected</strong>
   <button class="btn ghost" type="button" data-copy-selected>Copy IDs</button>

@@ -9,6 +9,7 @@ from django.db import transaction
 from pydantic import ConfigDict, with_config
 
 from hq.platform.core.audit import audit_connection, audit_operation
+from hq.platform.core.tracing import note, span
 lazy from hq.platform.core.doorbell import ask_soon
 
 from .answer_fields import Permitted, Pinned, RequiredPermissions, SchemaVersion
@@ -42,7 +43,7 @@ from .integration_specs import (
 from .integrations import integration_graph
 from .labels import human_label
 from .projection import QueryRefusal
-from .refusal_status import Refusal, next_call, refusal_of, refuse
+from .refusal_status import Refusal, next_call, refusal_of, refuse, refused
 from .security import (
     CLI_INTERFACE,
     Capability,
@@ -80,10 +81,10 @@ def authorize_capability(spec: CapabilitySpec, principal: Principal) -> None:
 
 
 class CapabilitySummary(TypedDict):
-    """One registry entry as an index names it: what it is and whether the caller may run it, without its schema."""
+    """One command as the index lists it: what it does and whether you may run it, without its schema."""
 
-    name: Annotated[str, Describe("The command's dotted name, which running it takes.")]
-    label: Annotated[str, Describe("What a person calls the command.")]
+    name: Annotated[str, Describe("The command's dotted name, which you run it by.")]
+    label: Annotated[str, Describe("The command's name, as HQ's pages show it.")]
     summary: Annotated[str, Describe("What the command does, in a sentence.")]
     effect: Annotated[str, Describe(ended(f"What running it does: {listed(EFFECT_MEANINGS)}"))]
     resource: Annotated[
@@ -99,14 +100,14 @@ class CapabilityDescription(CapabilitySummary):
     verb: Annotated[str, Describe("What its button says.")]
     variants: Annotated[
         dict[str, str],
-        Describe("What its button says in each of its modes, by the mode's name, where one button cannot say all."),
+        Describe("What its button says in each mode, by mode name, where one label cannot fit every mode."),
     ]
     required_capabilities: RequiredPermissions
     target: Annotated[
         str | None,
         Describe(f"What names the record it acts on: {listed(TARGET_KINDS)}; null for a command that takes none."),
     ]
-    target_label: Annotated[str, Describe("What a person calls the record it acts on; empty for none.")]
+    target_label: Annotated[str, Describe("The type of record it acts on, as HQ's pages name it; empty for none.")]
     target_help: Annotated[str, Describe("What to send as the target, in a sentence; empty for none.")]
     target_query: Annotated[
         dict[str, str | int | float | bool],
@@ -114,7 +115,7 @@ class CapabilityDescription(CapabilitySummary):
     ]
     execution_notes: Annotated[list[str], Describe("What running it does, step by step, a sentence each.")]
     target_initial_fields: Annotated[
-        list[str], Describe("The fields of its command filled in from the target's record, to be changed from there.")
+        list[str], Describe("The command's fields filled in from the target's record, which you may change.")
     ]
     input_schema: Annotated[dict[str, Any], Describe("The JSON Schema of the command it takes as `payload`.")]
 
@@ -135,7 +136,7 @@ def _narrowed(name: str, resource: str) -> list[CapabilitySpec]:
     if name and not DOTTED_NAME.match(name):
         raise InvalidCapabilityQuery("capabilities: name is a dotted capability name or a prefix of one.")
     if resource and resource not in graph.resources:
-        raise InvalidCapabilityQuery("That list name matches nothing HQ serves; describe_resources names each one.")
+        raise InvalidCapabilityQuery("HQ has no list by that name. describe_resources names each one.")
     return [
         spec
         for spec in graph.capabilities.values()
@@ -154,9 +155,7 @@ class CapabilityCatalog(TypedDict):
     """What ``describe_capabilities`` answers."""
 
     schema_version: CapabilitiesVersion
-    capabilities: Annotated[
-        list[CapabilityDescription], Describe("Each command asked for that the caller's interface can run.")
-    ]
+    capabilities: Annotated[list[CapabilityDescription], Describe("Each command asked for that you can run from here.")]
 
 
 def describe_capabilities(*, principal: Principal, name: str = "", resource: str = "") -> CapabilityCatalog:
@@ -254,12 +253,38 @@ def run_capability(
     key sent in the command.
     """
 
+    with span(f"capability {name}", **{"hq.capability": name, "hq.interface": principal.interface}):
+        ran = _named_run(
+            name,
+            payload,
+            principal=principal,
+            target=target,
+            expected_updated_at=expected_updated_at,
+            idempotency_key=idempotency_key,
+        )
+        failed = refused(ran.answer)
+        note(
+            **{"hq.ok": not failed, "hq.replayed": ran.replayed},
+            **({"error.type": refusal_of(ran.answer).code} if failed else {}),
+        )
+        return ran
+
+
+def _named_run(
+    name: str,
+    payload: dict[str, Any],
+    *,
+    principal: Principal,
+    target: str | int | None,
+    expected_updated_at: str | None,
+    idempotency_key: str | None,
+) -> Ran:
     spec = capability_registry().get(name)
     if spec is None:
         return Ran(
             refuse(
                 "unknown_capability",
-                f"Unknown capability {name!r}. describe_capabilities lists the ones this caller may run.",
+                f"Unknown capability {name!r}. describe_capabilities lists the ones you may run.",
                 {"next": next_call("describe_capabilities")},
             )
         )
@@ -312,8 +337,8 @@ def _authorized_run(
         return Ran(
             refuse(
                 "idempotency_key_required",
-                "A retry key is required for capabilities that change state: send a new one as "
-                "payload.idempotency_key, and the same one again when you retry this change.",
+                "A capability that changes something needs an idempotency key. Send a new "
+                "payload.idempotency_key, and the same one when you retry this change.",
                 {"field": "payload.idempotency_key"},
             )
         )
@@ -378,7 +403,7 @@ def _retry_key(spec: CapabilitySpec, payload: dict[str, Any], sent: str | None) 
         return "", payload
     keys = {_valid_key(given) for given in (sent, payload.get(IDEMPOTENCY_FIELD))} - {""}
     if len(keys) > 1:
-        raise InvalidIdempotencyKey("Two different retry keys were sent with one request.")
+        raise InvalidIdempotencyKey("The request sent two different idempotency keys.")
     key = keys.pop() if keys else ""
     rest = {name: value for name, value in payload.items() if name != IDEMPOTENCY_FIELD}
     if declares_idempotency_key(spec.command_type):

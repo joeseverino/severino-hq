@@ -1,18 +1,22 @@
 """An insight must keep its next step when it reaches a human or machine queue."""
 
 import json
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
+from hq.platform.application.card_items import Insight
 from hq.platform.application.dashboard import work_queue
 from hq.platform.application.derivation_testing import uncached
 from hq.platform.application.plugins import gather_attention
 from hq.platform.application.tests.markup import hrefs, select, with_class, within
-from hq.platform.application.ui import DomainOverview, Insight
+from hq.platform.application.ui import DomainOverview
 from hq.platform.application.workflow_contracts import ActionLink
 from hq.platform.application.workflows import claim_resolution_plan
+from hq_sdk.testing import plain
 
 
 class DashboardQueueTests(TestCase):
@@ -99,7 +103,24 @@ class DashboardQueueTests(TestCase):
         (card,) = select(response, "data-triage-routes")
         self.assertEqual(card.attrs.get("aria-label"), "Needs you")
         inside = within(response, "data-triage-routes")
-        self.assertEqual([element for element in inside if element.tag in {"h1", "h2", "h3", "h4", "h5", "h6"}], [])
+        # A row's urgency opens what raised it in a popover, titled as a dialog is; that is no heading row.
+        headings = [
+            element
+            for element in inside
+            if element.tag in {"h1", "h2", "h3", "h4", "h5", "h6"}
+            and not any("popover" in ancestor.attrs for ancestor in element.ancestors)
+        ]
+        self.assertEqual(headings, [])
+
+    def test_the_urgent_card_names_a_rows_urgency_to_a_screen_reader_alone(self):
+        # The card is in the urgent tone, so a row's word for it is no second mark; the queue page shows it.
+        for path, shown in (("/", False), ("/action-items/", True)):
+            with self.subTest(path=path):
+                marks = [
+                    mark for mark in with_class(self.client.get(path), "is-mark") if "pill-serious" in mark.classes
+                ]
+                self.assertTrue(marks)
+                self.assertEqual(any("visually-hidden" not in mark.classes for mark in marks), shown)
 
     def test_a_queue_with_nothing_urgent_is_only_the_count(self):
         calm = [item for item in work_queue() if item["status"] != "serious"]
@@ -148,6 +169,10 @@ class DashboardQueueTests(TestCase):
         from hq.domains.control_plane.models import ProviderInventory
 
         ask = f'action="{reverse("control_plane:visit")}"'
+        # A controller that reached this HQ a moment ago, to take what is asked.
+        heartbeat = Path(tempfile.mkdtemp()) / "heartbeat"
+        heartbeat.touch()
+        self.enterContext(override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(heartbeat)))
         for age, asks in ((timedelta(0), False), (timedelta(hours=3), True)):
             with self.subTest(age=age):
                 ProviderInventory.objects.update_or_create(
@@ -199,7 +224,7 @@ class DashboardQueueTests(TestCase):
         set_aside(self.user, [item["key"] for item in items], aside=True, current=items)
         response = self.client.get("/")
         self.assertEqual((response.context["action_queue_count"], response.context["aside_count"]), (0, 2))
-        self.assertContains(response, "2 dismissed")
+        self.assertIn("2 dismissed", plain(response.content))
 
     def test_empty_filtered_queue_offers_a_way_back(self):
         response = self.client.get("/action-items/", {"q": "not an existing item"})

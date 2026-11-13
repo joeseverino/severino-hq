@@ -11,7 +11,8 @@ if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
   const CLOSE_DELAY_MS = 240;
   // The panels hover opened and no press has kept since.
   const hovered = new WeakSet();
-  document.querySelectorAll(".nav-group").forEach((group) => {
+  // eslint-disable-next-line no-restricted-syntax -- the chrome, which no fragment holds
+  document.querySelectorAll(".primary-nav [data-menu]").forEach((group) => {
     const panel = group.querySelector(":scope > [popover]");
     const button = group.querySelector(":scope > [popovertarget]");
     let timer;
@@ -51,20 +52,23 @@ document.addEventListener("change", (event) => {
 // Dense pages provide only stable section metadata and ordinary fragment
 // targets. HQ marks the section currently being read; links and history still
 // work as plain HTML when this enhancement is unavailable. The chrome's heights
-// are the stylesheet's (`--site-header-height`, `--page-nav-height`).
+// are the stylesheet's (`--site-header-height`, `--page-nav-height`). A map an
+// answer brings in (a search's groups) is marked as the one it replaced was.
 (() => {
-  const navigation = document.querySelector("[data-page-navigation]");
-  if (!navigation) return;
-
-  const links = [...navigation.querySelectorAll("[data-page-nav-link]")];
-  const sections = links
-    .map((link) => document.getElementById(link.hash.slice(1)))
-    .filter(Boolean);
+  // Each map on the page -> the link it last brought into its row's view.
+  const maps = new Map();
   let frame = null;
 
-  /* eslint-disable no-restricted-syntax -- which section is under the reading line, and the current link scrolled into its list: CSS scroll markers (`:target-current`) answer this in Chromium alone, and WebKit has none */
-  const update = () => {
-    frame = null;
+  // A link is brought into the row's view by the row alone: `container:
+  // "nearest"` never moves the page, which update() runs beside while a
+  // person scrolls it. Focus needs this too, since Chromium leaves a focused
+  // link that is partly in view where it is.
+  const reveal = (link) => link.scrollIntoView({ block: "nearest", inline: "nearest", container: "nearest" });
+
+  /* eslint-disable no-restricted-syntax -- which section is under the reading line: CSS scroll markers (`:target-current`) answer this in Chromium alone, and WebKit has none */
+  const mark = (navigation) => {
+    const links = [...navigation.querySelectorAll("[data-page-nav-link]")];
+    const sections = links.map((link) => document.getElementById(link.hash.slice(1))).filter(Boolean);
     // Where the nav sticks is the header's height, resolved by the stylesheet.
     const threshold =
       parseFloat(getComputedStyle(navigation).insetBlockStart)
@@ -85,11 +89,8 @@ document.addEventListener("change", (event) => {
     links.forEach((link) => {
       if (current && link.hash === `#${current.id}`) {
         link.setAttribute("aria-current", "location");
-        const list = link.closest(".page-nav-list");
-        const linkRect = link.getBoundingClientRect();
-        const listRect = list.getBoundingClientRect();
-        if (linkRect.left < listRect.left) list.scrollLeft -= listRect.left - linkRect.left;
-        if (linkRect.right > listRect.right) list.scrollLeft += linkRect.right - listRect.right;
+        if (maps.get(navigation) !== link) reveal(link);
+        maps.set(navigation, link);
       } else {
         link.removeAttribute("aria-current");
       }
@@ -97,20 +98,35 @@ document.addEventListener("change", (event) => {
   };
   /* eslint-enable no-restricted-syntax */
 
+  const update = () => {
+    frame = null;
+    maps.forEach((_, navigation) => {
+      if (navigation.isConnected) mark(navigation);
+      else maps.delete(navigation);
+    });
+  };
   const schedule = () => {
     if (frame === null) frame = window.requestAnimationFrame(update);
   };
   window.addEventListener("scroll", schedule, { passive: true });
   window.addEventListener("resize", schedule);
   window.addEventListener("hashchange", schedule);
-  schedule();
+
+  hqFragment.each("[data-page-navigation]", (navigation) => {
+    maps.set(navigation, null);
+    navigation.addEventListener("focusin", (event) => {
+      const link = event.target.closest("[data-page-nav-link]");
+      if (link) reveal(link);
+    });
+    schedule();
+  });
 })();
 
 // Dismissing a queue row, or restoring one, happens in place: the row's own
 // button posts as it would without script, and the row answers at once
 // instead of the whole queue being composed and drawn again. A dismissed row
 // becomes one quiet line with the way back; the counts over it and the
-// header's follow. "Dismiss all" and a family's "Dismiss these" stay ordinary
+// header's follow. "Dismiss all" and a family's "Dismiss" stay ordinary
 // posts, since what they cover is the server's to say.
 document.addEventListener("click", (event) => {
   const button = event.target.closest("[data-triage] button[formaction]");
@@ -197,15 +213,13 @@ document.addEventListener("submit", (event) => {
 
 // Choosing what a command acts on loads that record's current values into
 // the form, by asking for the same page with the choice in its address.
-document.querySelectorAll("form[data-command-hydrate-target]").forEach((form) => {
-  const target = form.elements.namedItem("__target");
-  if (!(target instanceof HTMLSelectElement)) return;
-  target.addEventListener("change", () => {
-    if (!target.value) return;
-    const url = new URL(window.location.href);
-    url.searchParams.set("target", target.value);
-    window.location.assign(url);
-  });
+document.addEventListener("change", (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLSelectElement) || target.name !== "__target") return;
+  if (!target.form?.matches("[data-command-hydrate-target]") || !target.value) return;
+  const url = new URL(window.location.href);
+  url.searchParams.set("target", target.value);
+  window.location.assign(url);
 });
 
 // Modals. A trigger is always a real link to a page that does the same job, so
@@ -221,18 +235,19 @@ document.addEventListener("click", (event) => {
   dialog.showModal();
 });
 
-document.querySelectorAll("dialog.modal").forEach((dialog) => {
-  // The dialog element is the backdrop's hit target; its content sits in an
-  // inner panel, so a click landing on the dialog itself was outside the panel.
-  dialog.addEventListener("click", (event) => {
-    if (event.target === dialog) dialog.close();
-  });
+// The dialog element is the backdrop's hit target; its content sits in an
+// inner panel, so a click landing on the dialog itself was outside the panel.
+// Asked of the document, so a dialog a fragment brings in closes the same way.
+document.addEventListener("click", (event) => {
+  if (event.target instanceof HTMLDialogElement && event.target.matches("dialog.modal")) event.target.close();
 });
 
 // The command center is an operator palette over the same authorization-aware
 // discovery used by the full search page. The normal GET form remains the
 // fallback: without JavaScript, or with no palette choice active, Enter searches
-// every record scope as usual.
+// every record scope as usual. The results inside it are its own to answer,
+// and it binds them again each time.
+// eslint-disable-next-line no-restricted-syntax -- the frame's dialog, which no fragment holds
 document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   const dialog = form.closest("dialog");
   const input = form.querySelector("[data-command-center-input]");
@@ -298,13 +313,13 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
   // The header search is the visible doorway into this same search surface.
   // It stays a normal GET form for progressive enhancement; with JS, clicking
   // it opens the richer palette and carries over any query already present.
-  document.querySelectorAll("[data-command-center-open]").forEach((opener) => {
-    opener.addEventListener("click", (event) => {
-      const openerInput = opener.querySelector("input[name=q]");
-      if (openerInput?.value.trim()) input.value = openerInput.value;
-      if (!open()) return;
-      event.preventDefault();
-    });
+  document.addEventListener("click", (event) => {
+    const opener = event.target.closest("[data-command-center-open]");
+    if (!opener) return;
+    const openerInput = opener.querySelector("input[name=q]");
+    if (openerInput?.value.trim()) input.value = openerInput.value;
+    if (!open()) return;
+    event.preventDefault();
   });
 
   document.addEventListener("keydown", (event) => {
@@ -342,32 +357,40 @@ document.querySelectorAll("[data-command-center-form]").forEach((form) => {
 // Dropzones. The file input already is the click and drop target, so this adds
 // only what the browser will not: the drag highlight, and telling the operator
 // which files are staged before they commit to importing them.
-document.querySelectorAll("[data-dropzone]").forEach((zone) => {
-  const input = zone.querySelector("input[type=file]");
-  const chosen = zone.querySelector("[data-dropzone-files]");
-  if (!input) return;
-
-  const highlight = (on) => zone.classList.toggle("is-dragging", on);
+// Asked of the document, so a zone a fragment brings in works the same way.
+(() => {
+  const zoneOf = (event) => {
+    const zone = event.target.closest?.("[data-dropzone]");
+    return zone?.querySelector("input[type=file]") ? zone : null;
+  };
   ["dragenter", "dragover"].forEach((type) =>
-    zone.addEventListener(type, (event) => {
+    document.addEventListener(type, (event) => {
+      const zone = zoneOf(event);
+      if (!zone) return;
       event.preventDefault();
-      highlight(true);
+      zone.classList.add("is-dragging");
     }),
   );
-  zone.addEventListener("dragleave", (event) => {
+  document.addEventListener("dragleave", (event) => {
     // Crossing between the zone and its own children fires dragleave; only a
     // pointer that has actually left should drop the highlight.
-    if (!zone.contains(event.relatedTarget)) highlight(false);
+    const zone = zoneOf(event);
+    if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove("is-dragging");
   });
-  zone.addEventListener("drop", (event) => {
+  document.addEventListener("drop", (event) => {
+    const zone = zoneOf(event);
+    if (!zone) return;
     event.preventDefault();
-    highlight(false);
+    zone.classList.remove("is-dragging");
+    const input = zone.querySelector("input[type=file]");
     input.files = event.dataTransfer.files;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
-
-  if (!chosen) return;
-  input.addEventListener("change", () => {
+  document.addEventListener("change", (event) => {
+    const zone = zoneOf(event);
+    const input = event.target;
+    const chosen = zone?.querySelector("[data-dropzone-files]");
+    if (!chosen || !input.matches("input[type=file]")) return;
     const files = Array.from(input.files || []);
     chosen.replaceChildren(
       ...files.map((file) => {
@@ -378,7 +401,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
     );
     chosen.hidden = files.length === 0;
   });
-});
+})();
 
 // Tooltips, for chart marks and anything else carrying data-tip. The SVG
 // <title> element is the browser's own tooltip: it waits a second or two,
@@ -461,9 +484,7 @@ document.querySelectorAll("[data-dropzone]").forEach((zone) => {
 (() => {
   const moment = "input:is([type=date], [type=time], [type=datetime-local])";
   const mark = (input) => input.toggleAttribute("data-empty", !input.value);
-  const markWithin = (root) => root.querySelectorAll(moment).forEach(mark);
-  markWithin(document);
-  document.addEventListener("hq:fragment", (event) => markWithin(event.target));
+  hqFragment.each(moment, mark);
   for (const type of ["input", "change"]) {
     document.addEventListener(type, (event) => {
       if (event.target.matches?.(moment)) mark(event.target);
@@ -522,7 +543,7 @@ document.addEventListener("click", (event) => {
 // A form that is about to do something says so on the button that does it.
 // The consequence is declared by the provider and rendered onto the field, so
 // this reads it rather than knowing which fields matter.
-document.querySelectorAll("form.form").forEach((form) => {
+hqFragment.each("form.form", (form) => {
   const effects = form.querySelectorAll("[data-change-effect]");
   if (!effects.length) return;
   const submit = form.querySelector('button[type="submit"], .form-actions button');

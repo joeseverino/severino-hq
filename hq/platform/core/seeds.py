@@ -117,6 +117,39 @@ def _estate(owner) -> None:
             demo(owner)
 
 
+def _read_empty(owner) -> None:
+    """The example estate the moment its Docker environment answered a read
+    with no containers, so the claim HQ makes about that is drawn."""
+
+    _estate(owner)
+    example_estate.docker.read_empty()
+
+
+def _reading(owner) -> None:
+    """The example estate with every connection only reading, as an HQ whose
+    credentials may not make changes runs: each page that offers a change
+    says what it needs instead."""
+
+    _estate(owner)
+    apps.get_model("control_plane", "ProviderConnection").objects.update(manages=False)
+
+
+def _rescanned(owner) -> None:
+    """The example estate once a later Refresh found the commit adopted, so
+    the procedures page has nothing to adopt."""
+
+    _estate(owner)
+    example_estate.automation.rescanned(owner)
+
+
+def _scanning(owner) -> None:
+    """The example estate while a Refresh is under way, so the procedures
+    page follows a scan."""
+
+    _estate(owner)
+    example_estate.automation.scanning(owner)
+
+
 @contextmanager
 def seeded_by_hand(path: str, *, at: datetime) -> Iterator[None]:
     """Each audit event the block records, written as the set's owner made it
@@ -148,6 +181,10 @@ _SET_UP = frozendict({"SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS": "1"})
 SEEDS: dict[str, Seed] = {
     "showcase": Seed(_estate, frozendict({**_SET_UP, "SEVERINO_POSTURE": "advanced"})),
     "standard": Seed(_estate, _SET_UP),
+    "reading": Seed(_reading, _SET_UP),
+    "read-empty": Seed(_read_empty, _SET_UP),
+    "rescanned": Seed(_rescanned, _SET_UP),
+    "scanning": Seed(_scanning, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

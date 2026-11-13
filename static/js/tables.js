@@ -323,8 +323,7 @@
   // around it already carries (a title the server wrote, a tip) is left alone.
   const CUT_TITLE = "data-cut-title";
   // A chart's table is read whole and never opens a row.
-  const marksCuts = (table) => table.parentElement?.matches(`${REGION}:not([data-chart])`)
-    && !table.parentElement.parentElement?.classList.contains("chart-data");
+  const marksCuts = (table) => table.parentElement?.matches(`${REGION}:not([data-chart])`);
   const plainText = (el) => el.textContent.replace(/[\u00ad\u200b\u2060]/g, "").replace(/\s+/g, " ").trim();
   const hoverText = (el) => {
     const said = el.closest(`[title]:not([${CUT_TITLE}]), [data-tip]`);

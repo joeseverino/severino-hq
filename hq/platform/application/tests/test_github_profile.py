@@ -1,8 +1,10 @@
 import json
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -10,11 +12,18 @@ from hq.platform.application.plugin_testing import form_keyed
 from hq.platform.core.models import AuditLog, LinkedAccount
 
 from .. import github_profile
-from ..asks import READ_WAITING
+from ..asks import REFRESHING
 from ..capabilities import capability_registry, execute_capability
 from ..security import Capability, Principal
 from .markup import hrefs, select, text
 from .sentinel import SENTINEL
+
+
+def tips(response):
+    """The lines every tooltip on the page says on hover."""
+
+    return [line for element in select(response, "data-tip") for line in element.attrs["data-tip"].splitlines()]
+
 
 PROFILE = {
     "login": "example-user",
@@ -67,12 +76,19 @@ def hold(profile=PROFILE, *, at=None, **fields):
     return snapshot
 
 
+# A controller that reached this HQ a moment ago, so a read asked of it is waiting on it.
+HEARTBEAT = Path(tempfile.mkdtemp()) / "heartbeat"
+HEARTBEAT.touch()
+ARRIVED = override_settings(SEVERINO_CONTROLLER_HEARTBEAT=str(HEARTBEAT))
+
+
 def operator():
     from ..security import cli_principal
 
     return cli_principal()
 
 
+@ARRIVED
 class PlanTests(TestCase):
     """HQ holds the profile's clock: the controller reads when the plan says."""
 
@@ -204,6 +220,7 @@ class NoOutboundReadTests(TestCase):
         self.assertFalse(hasattr(github_profile, "refresh"))
 
 
+@ARRIVED
 class PageTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user("operator", is_staff=True)
@@ -280,7 +297,7 @@ class PageTests(TestCase):
         self.assertIn(capability_registry()[github_profile.READ_NOW].requested("@example-user"), text(response))
         self.assertContains(response, "data-ask-status=")
         self.assertTrue(select(response, "aria-disabled", "true"))
-        self.assertContains(response, READ_WAITING)
+        self.assertContains(response, REFRESHING)
 
     def test_the_status_says_when_the_read_landed_or_was_refused(self):
         LinkedAccount.objects.create(user=self.user, provider="github", login="example-user")
@@ -307,7 +324,7 @@ class PageTests(TestCase):
         response = self.client.get(reverse("watching"))
 
         self.assertIn("@example-user", text(response))
-        self.assertContains(response, "This is your GitHub account, according to your sign-in.")
+        self.assertIn("This is your GitHub account, according to your sign-in.", tips(response))
         self.assertIn("https://github.com/example-user?tab=followers", hrefs(response))
         self.assertContains(response, "v1.2.0")
         self.assertContains(response, "CVE-2026-0001")
@@ -386,7 +403,7 @@ class AppProofTests(TestCase):
 
         response = self.client.get(reverse("watching"))
 
-        self.assertContains(response, "HQ's GitHub App is installed on it.")
+        self.assertIn("HQ's GitHub App is installed on it.", tips(response))
         self.assertContains(response, "reading 1 of your repositories")
         self.assertContains(response, "(private)")
         self.assertNotContains(response, "someone-else/thing")

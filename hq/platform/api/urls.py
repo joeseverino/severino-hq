@@ -2,9 +2,11 @@
 
 from django.urls import path
 
+from hq.platform.application.security import API_NAMESPACE
+
 from . import views
 
-app_name = "hq_api"
+app_name = API_NAMESPACE
 urlpatterns = [
     path("v2/", views.root, name="root"),
     path("v2/openapi.json", views.openapi, name="openapi"),

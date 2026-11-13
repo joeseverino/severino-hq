@@ -1,5 +1,6 @@
 """The topology workspace and the drill-in for one node."""
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, override
@@ -18,6 +19,7 @@ from hq.platform.application.security import web_principal
 from hq.platform.application.timestamps import moment
 from hq.platform.application.topology import derive_topology
 from hq.platform.application.topology_lenses import (
+    QUIET_KINDS,
     apply_lens,
     apply_trace,
     kept_on_the_map,
@@ -37,10 +39,19 @@ _LANE_NOUNS: dict[str, tuple[str, str, str]] = {
     "dependency": ("Not in HQ", "thing not in HQ", "things not in HQ"),
 }
 
+# The view that draws every card, the main lanes' context too; and each view
+# the map's select offers, by the value it sends as `lens`.
+EVERYTHING = "everything"
+
+
+def _views() -> tuple[tuple[str, str], ...]:
+    return (("", "Main lanes"), (EVERYTHING, "Everything"), *((lens.name, lens.label) for lens in topology_lenses()))
+
+
 # The ways to follow links from one card, by the direction in the URL.
 _TRACE_DIRECTIONS = (
-    ("inbound", "What depends on this"),
-    ("outbound", "What this depends on"),
+    ("inbound", "Dependents"),
+    ("outbound", "Dependencies"),
     ("both", "Both"),
 )
 
@@ -64,27 +75,47 @@ def _lane(kind: str, items: list[dict[str, Any]]) -> dict[str, Any]:
 
 @dataclass(frozen=True, slots=True)
 class _Lanes:
-    """The map's cards by lane, how many were left out, and the focused one."""
+    """The map's cards by lane, what was held back by lane, and the focused one."""
 
     groups: tuple[dict[str, Any], ...]
     shown: int
     left_out: int
+    # Each lane's held-back cards, counted in its nouns: a quiet lane whole,
+    # and in any other only the cards nothing links to.
+    held: tuple[str, ...]
     # The focused node's body, drawn once in the panel below the lanes rather
     # than inside its card.
     detail: dict[str, Any] | None
 
     @classmethod
     def of(cls, items: list[dict[str, Any]], *, everything: bool, focus: str) -> _Lanes:
-        drawn = [item for item in items if everything or kept_on_the_map(item["node"].kind, item["degree"])]
+        drawn: list[dict[str, Any]] = []
+        held: Counter[str] = Counter()
+        for item in items:
+            if everything or kept_on_the_map(item["node"].kind, item["degree"]):
+                drawn.append(item)
+            else:
+                held[item["node"].kind] += 1
         by_kind: dict[str, list[dict[str, Any]]] = {}
         for item in drawn:
             by_kind.setdefault(item["node"].kind, []).append(item)
         return cls(
             groups=tuple(_lane(kind, cards) for kind, cards in by_kind.items()),
             shown=len(drawn),
-            left_out=len(items) - len(drawn),
+            left_out=held.total(),
+            held=tuple(_held(kind, count) for kind, count in held.items()),
             detail=next((item for item in drawn if focus and item["node"].id == focus), None),
         )
+
+
+def _held(kind: str, count: int) -> str:
+    """A lane's held-back cards, counted: a quiet lane's every card, another's
+    unlinked ones."""
+
+    _, noun, plural = _lane_nouns(kind)
+    if kind in QUIET_KINDS:
+        return counted(count, noun, plural)
+    return counted(count, f"{noun} with no links", f"{plural} with no links")
 
 
 def _reset_url(lens_name: str) -> str:
@@ -114,8 +145,8 @@ class TopologyView(PageMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         asked = self.request.GET
-        active_lens = lens_for(asked.get("lens", "").strip())
-        lens_name = active_lens.name if active_lens else ""
+        view = asked.get("lens", "").strip()
+        active_lens = lens_for(view)
         topology = derive_topology(principal=web_principal(self.request.user), request=self.request)
         if active_lens is not None:
             topology = apply_lens(topology, active_lens)
@@ -125,33 +156,50 @@ class TopologyView(PageMixin, TemplateView):
             direction=asked.get("direction", "both").strip(),
             depth=asked.get("depth", "2").strip(),
         )
-        # The whole map leaves its quiet lanes and unlinked cards out until
-        # asked. A view or a trace is already a question, and shows its answer.
-        lanes = _Lanes.of(
-            self.node_items(topology, lens_name, trace),
-            everything=bool(active_lens or trace or asked.get("all")),
-            focus=trace.focus if trace else "",
-        )
         context.update(
             topology=topology,
+            **self.drawn(topology, active_lens=active_lens, trace=trace, everything=view == EVERYTHING),
+        )
+        return context
+
+    @classmethod
+    def drawn(
+        cls, topology, *, active_lens=None, trace: TopologyTrace | None = None, everything: bool = False
+    ) -> dict[str, Any]:
+        """What the page draws of a topology already narrowed by its view and
+        its trace, which the component catalog draws the map from too."""
+
+        view = active_lens.name if active_lens else EVERYTHING if everything else ""
+        # The main lanes hold the quiet lanes and unlinked cards back until
+        # asked. A lens or a trace is already a question, and shows its answer.
+        lanes = _Lanes.of(
+            cls.node_items(topology, view, trace),
+            everything=bool(active_lens or trace or everything),
+            focus=trace.focus if trace else "",
+        )
+        return dict(
             topology_groups=lanes.groups,
+            # The map's kind filter: a toggle for each lane, every one shown.
+            topology_kinds=tuple(
+                {"value": group["kind"], "label": group["label"], "checked": True} for group in lanes.groups
+            ),
             # Passed rather than written into the template: the window is one
             # number, and a page that restates it drifts from the query that
             # produced the figures the moment either changes.
             traffic_window_days=HOST_TRAFFIC_DAYS,
             topology_detail=lanes.detail,
-            topology_left_out=lanes.left_out,
-            # "N of M shown": the cards drawn, out of every card, the left-out
-            # ones too.
+            # The cards drawn, out of every card the view holds, those held
+            # back too, and what is held back.
             topology_shown=lanes.shown,
             topology_total=lanes.left_out + lanes.shown,
-            topology_everything=bool(asked.get("all")) and not (active_lens or trace),
-            topology_lenses=topology_lenses(),
+            topology_held=lanes.held,
+            topology_more=f"{reverse('control_plane:topology')}?{urlencode({'lens': EVERYTHING})}#map",
+            topology_views=_views(),
+            topology_view=view,
             active_lens=active_lens,
-            trace_reset_url=_reset_url(lens_name),
-            **self._trace_context(topology, trace, lens_name),
+            trace_reset_url=_reset_url(view),
+            **cls._trace_context(topology, trace, view),
         )
-        return context
 
     @classmethod
     def _trace_context(cls, topology, trace: TopologyTrace | None, lens_name: str) -> dict[str, Any]:
@@ -187,11 +235,19 @@ class TopologyView(PageMixin, TemplateView):
             "topology_trace_focus": by_id.get(trace.focus),
             "topology_trace_label": dict(_TRACE_DIRECTIONS).get(trace.direction, ""),
             "trace_direction_links": tuple(
-                {"name": name, "label": label, "url": cls._trace_url(trace.focus, name, lens_name, trace.depth)}
+                {
+                    "label": label,
+                    "url": cls._trace_url(trace.focus, name, lens_name, trace.depth),
+                    "current": name == trace.direction,
+                }
                 for name, label in _TRACE_DIRECTIONS
             ),
             "trace_depth_links": tuple(
-                {"depth": depth, "url": cls._trace_url(trace.focus, trace.direction, lens_name, depth)}
+                {
+                    "depth": depth,
+                    "url": cls._trace_url(trace.focus, trace.direction, lens_name, depth),
+                    "current": depth == trace.depth,
+                }
                 for depth in range(1, 6)
             ),
         }

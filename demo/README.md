@@ -9,7 +9,7 @@ as HQ; no page is made for the demo alone.
 | Command | What it does |
 | --- | --- |
 | `mise run demo:build [seed]` | Seeds a throwaway database, signs in, follows every link from the dashboard and saves each page to `var/demo` (another seed: `var/demo-<seed>`). |
-| `mise run browser:demo` | Builds, then serves `var/demo` over plain HTTP and checks it in WebKit (below). Part of the `browser` gate, so every pull request runs it. |
+| `mise run browser:demo` | Builds, then serves `var/demo` over plain HTTP and checks it in WebKit (below), or in the engine `HQ_BROWSER_ENGINE` names. Part of the `browser` gate, so every pull request runs it, and in Chromium as `browser:demo-chromium`. |
 | `mise run dev:scratch --demo [seed]` | Builds that seed and serves it on loopback, on a port the system picks; the log names the address. |
 | `mise run dev:look --docs` | Builds the showcase and redraws every screenshot in the docs from it in WebKit, each framed as `SHOTS` in `demo/screenshot.py` declares, so none shows a real HQ. Run it after a change to a page one shows. |
 
@@ -31,6 +31,27 @@ as HQ; no page is made for the demo alone.
 The example estate lives in `hq/`, not here, because `seed` and the suite
 run inside the image, which `demo/` is not copied into. `seed` refuses a
 database that already holds records rather than merging into it.
+
+The example estate holds every state a page can draw, for development and the
+tests: failed scans and runs, held requests, findings. The demo's first glance
+is a healthy homelab, so `first_glance.py` has the estate's owner settle it
+after it is seeded and before a page is saved, through the capabilities and
+controller reports HQ's own pages use. It:
+
+- adopts the commit a later Refresh reads;
+- declines the agent's held requests except its DNS change;
+- lets the worker finish what waits, and runs again each playbook whose newest
+  run did not finish;
+- has the controller's next sweep find the machine restarted, room on its root
+  and the failing service fixed;
+- files the dropped-in receipt against its expense;
+- dismisses everything on Needs you except four things left on purpose: an
+  image update, an image run by tag alone, a certificate to renew and the
+  agent's held DNS change.
+
+History stays: a failed run is still in Jobs and on its machine, and what was
+dismissed is under Dismissed on Needs you. Only the showcase and standard sets
+are settled, and only in the demo build.
 
 Everything in the seeds is `example.*` and private address ranges; tailnet
 addresses are derived from the range HQ declares, never written out.
@@ -84,7 +105,7 @@ laptop the demo was rendered for. `as_production()` sets HQ's
 `partials/_example_connection.html` then marks each of those places as an
 example connection. The wording lives in HQ; the demo only says it is a copy.
 
-The same setting puts About this demo in the bottom left corner of every
+The same setting puts About the demo in the bottom left corner of every
 page, a control that opens a dialog drawn by `partials/_demo_about.html`:
 what the demo is, links to the pages worth trying, links into this
 repository, who made it and the day the pages were saved. Without script the control is
@@ -104,8 +125,8 @@ so Scalar does not offer GitHub Pages as one.
   typing in the list's own search says the demo can't, leaving the page and
   what was typed in place.
 - Every page that draws a class or script hook no earlier page drew (so
-  each template is loaded at least once), and the main pages, load in WebKit
-  with no console error and nothing from another site. On the main pages
+  each template is loaded at least once), and the main pages, load with no
+  console error and nothing from another site. On the main pages
   Reset demo is in the user menu and the Demo data switch is locked on.
 - Every page is drawn in the reader's color scheme.
 - Every script on every page is a same-origin file its policy runs: a static
@@ -115,7 +136,11 @@ so Scalar does not offer GitHub Pages as one.
   the connection panel passing, and only the four things left to do on
   purpose (an image update, an image run by tag alone, a certificate to
   renew and an agent's request held for approval), each offering a way to do
-  it.
+  it, and nothing else waiting on Needs you. A machine's page names no
+  finding but those four.
+- Playbooks and Jobs show no warning, error or failed scan, and a playbook
+  Playbooks links has a run a person approved that finished, each task's
+  outcome beside it.
 - Every expense has its receipt.
 - Every place that describes the reader's connection says it is an example.
 - No line ends in a separator with nothing after it.
@@ -125,14 +150,14 @@ so Scalar does not offer GitHub Pages as one.
   runs past it at 402 and 1360px.
 - A machine's addresses read as one list that fits.
 - A dismissal survives a reload until Reset demo clears it.
-- About this demo stays in the bottom left corner at 390, 402, 820 and
+- About the demo stays in the bottom left corner at 390, 402, 820 and
   1360px, the dashboard, a list and the queue end with room for it so no
   control is left under it, and it opens the dialog by keyboard, which
   Escape closes. The dialog is read whole without scrolling on a 1360 by
   800 window and a 402px phone. Each thing to try in it is a page of the
   demo and each other link a file in this repository or its author, and it
   says the day the pages were saved, as HQ writes a day.
-- The command center opens from About this demo and from ⌘K with what it
+- The command center opens from About the demo and from ⌘K with what it
   offers, finds something as each word its box suggests is typed, and
   answers a word the demo has no search for about that word, in the palette
   and on the search page.
@@ -155,6 +180,7 @@ repository's Pages settings. `demo/` is not copied into the Docker image.
 | Path | What it is |
 | --- | --- |
 | `build.py` | The crawl (a test, so it gets its own database). |
+| `first_glance.py` | The estate settled for a first-time visitor, and the things it leaves to do on purpose. |
 | `demo.js` | The script the demo adds to each page. |
 | `demo-theme.js` | Runs first: the chosen theme, and the saved copy of an address with a query. |
 | `check.py` | The checks above; plain unittest, no Django. |

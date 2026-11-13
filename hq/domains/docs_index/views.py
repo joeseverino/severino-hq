@@ -181,14 +181,12 @@ class DocsDetailView(PageMixin, DetailView):
 class DocsCreateView(DocsPage, RecordFormMixin, CreateView):
     page_title = "New document"
     form_class = DocumentationRecordForm
-    template_name = "docs_index/docs_form.html"
 
 
 class DocsUpdateView(DocsPage, RecordFormMixin, UpdateView):
     page_title = "Edit document"
     model = DocumentationRecord
     form_class = DocumentationRecordForm
-    template_name = "docs_index/docs_form.html"
     slug_field = "doc_id"
     slug_url_kwarg = "doc_id"
 

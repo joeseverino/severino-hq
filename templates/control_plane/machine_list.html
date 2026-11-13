@@ -7,8 +7,8 @@ one by hand would create a row that means nothing until one of those is true
 anyway, and would go on meaning nothing after it stopped being.
 {% endcomment %}
 
-{% if machines %}<p class="muted">{{ machines|length|counted:"machine" }}: {% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}</p>{% endif %}
-{% table_region "Machines" room="shared" %}
+{% if state_counts|length > 1 %}<p class="muted">{% for count, state in state_counts %}{{ count|breakable }} {{ state|breakable:forloop }}{% if not forloop.last %} {% endif %}{% endfor %}</p>{% endif %}
+{% table_region "Machines" room="shared" empty="No machines yet." remedy=page.remedy %}
   <table class="data-table">
     <thead>
       <tr>
@@ -23,7 +23,7 @@ anyway, and would go on meaning nothing after it stopped being.
       {% for machine in machines %}
         <tr>
           <td>
-            <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} <span class="tag" title="{{ role.detail }}">{{ role.label|breakable }}</span>{% endfor %}
+            <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}
             {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role|breakable }}</span>{% endif %}
           </td>
           <td>
@@ -31,7 +31,7 @@ anyway, and would go on meaning nothing after it stopped being.
           </td>
           <td>
             {% if machine.containers %}
-              {{ machine.running|breakable }} of {{ machine.containers|length }} running
+              {{ machine.running|breakable }} of {{ machine.containers|length|measured:"running" }}
             {% elif not machine.containers_visible %}
               <span class="muted" title="No connection reads containers.">Not visible</span>
             {% endif %}
@@ -40,7 +40,7 @@ anyway, and would go on meaning nothing after it stopped being.
             {% if machine.runs_hq %}{{ hq_label|breakable }}{% if machine.hostnames %}<br>{% endif %}{% endif %}
             {% comment %}Two names and a count: a machine serving ten would make its row ten lines tall. Its page lists them all.{% endcomment %}
             {% for hostname in machine.hostnames|slice:":2" %}{% entity "service"|entity_of:hostname %}{% if not forloop.last %}<br>{% endif %}{% endfor %}
-            {% if machine.hostnames|length > 2 %}<br><a class="muted" href="{{ machine.link.url }}#names">+{{ machine.hostnames|length|add:"-2"|breakable }} more</a>{% endif %}
+            {% if machine.hostnames|length > 2 %}<br><a class="muted" href="{{ machine.link.url }}#names">+{{ machine.hostnames|length|add:"-2"|measured:"more" }}</a>{% endif %}
           </td>
           <td>
             {% comment %}
@@ -50,8 +50,6 @@ anyway, and would go on meaning nothing after it stopped being.
             {% status machine.state.0 tone=machine.state.1 %}{% if machine.state_since %}<br><span class="muted">since {{ machine.state_since|breakable }}</span>{% endif %}
           </td>
         </tr>
-      {% empty %}
-        <tr><td colspan="5">{% include "partials/_empty_state.html" with message="No machines yet." remedy=page.remedy %}</td></tr>
       {% endfor %}
     </tbody>
   </table>

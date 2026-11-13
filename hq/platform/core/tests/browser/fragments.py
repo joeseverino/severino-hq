@@ -8,6 +8,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.template import Context, Template
+from django.template.loader import render_to_string
 from django.test import Client
 from django.urls import reverse
 
@@ -17,11 +18,17 @@ from hq.platform.core.tests.browser.probes.settle import SETTLE
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
+# fragment.js, with the empty notices it clones, which base.html draws on
+# every page HQ serves.
+_FRAGMENT_JS = f'<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>' + render_to_string(
+    "partials/_notice_frames.html"
+)
+
 # A region that polls and names its parts, a disclosure and a menu, a
 # placeholder behind a closed disclosure, and one whose address answers a
 # whole page.
 _FRAGMENT_PROBE = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 <section data-fragment="/probe-strip/" data-fragment-poll="1">
 <details data-fragment-part="first"><summary>First</summary>as drawn</details>
@@ -41,7 +48,7 @@ _PROBE_STRIP = """<section data-fragment="/probe-strip/"{poll}>
 # A form answered in place whose submitting button shares a field's name,
 # between that field and another.
 _FORM_PROBE = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 <form action="/probe-sent/" data-fragment-target="sent">
 <input name="key" value="field">
@@ -51,9 +58,28 @@ _FORM_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 <div id="sent" data-fragment="/probe-sent/">waiting</div>
 </main></body></html>"""
 
+# One write form per kind of answer, each drawn with the tag every write form
+# carries its retry key from, answered in place.
+_KEYED_ANSWERS = ("ok", "refused", "broken", "lost")
+
+
+def _keyed_probe():
+    form = (
+        '{% load write_tags %}<form method="post" action="/probe-keyed/{answer}/" data-fragment-target="sent">'
+        '{% write_token %}<button data-probe="{answer}">Send</button></form>'
+    )
+    forms = "".join(Template(form.replace("{answer}", answer)).render(Context({})) for answer in _KEYED_ANSWERS)
+    return f"""<!doctype html><html><head><title>Probe</title>
+{_FRAGMENT_JS}
+</head><body><main>
+{forms}
+<div id="sent" data-fragment="/probe-sent/">waiting</div>
+</main></body></html>"""
+
+
 # A region that asks to add its answers to history, which nothing restores.
 _PUSH_PROBE = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 <div id="pushed" data-fragment data-fragment-links data-fragment-history="push">
 <a data-probe="push" href="/probe-push/?turn=2">Next</a>
@@ -81,7 +107,7 @@ def _dialog_probe():
         Context({"slot": slot})
     )
     return f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 </head><body><main>
 <button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
 {dialog}
@@ -104,7 +130,7 @@ def _asking_dialog_probe():
     )
     return (
         f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 <script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
 </head><body><main>
 <button type="button" data-probe="open" command="show-modal" commandfor="modal-probe">Open</button>
@@ -115,25 +141,27 @@ def _asking_dialog_probe():
     )
 
 
-# A page about one thing: the content draws its ask and the note beside it,
-# first as last read and then as it is now.
+# A page about one thing: the content draws its ask, and the page's own head
+# its note, first as last read and then as it is now.
 _ASKING_HEAD = """<main class="content" id="content">
-<header class="page-head"><h1>Probe</h1></header>
+{head}
 <p data-probe="said">{said}</p>
 {control}
 </main>"""
 
 
 def _asking_head_probe():
+    visit = PageVisit("page", "example")
+    head = render_to_string("partials/_page_head.html", {"page": {"title": "Probe"}, "page_visit": visit})
     control = Template('{% include "partials/_visit_refresh.html" with visit=visit %}').render(
-        Context({"visit": PageVisit("page", "example")})
+        Context({"visit": visit})
     )
     scripts = f"""<!doctype html><html><head><title>Probe</title>
-<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+{_FRAGMENT_JS}
 <script defer src="{settings.STATIC_URL}js/ask.js" nonce="{NONCE}"></script>
 </head><body>"""
     return [
-        scripts + _ASKING_HEAD.format(said=said, control=control) + "</body></html>"
+        scripts + _ASKING_HEAD.format(head=head, said=said, control=control) + "</body></html>"
         for said in ("as last read", "as it is now")
     ]
 
@@ -177,10 +205,22 @@ _ROWS = """{% load action_tags %}{% if said %}<ul class="messages"><li class="ms
 {% post_button "Mark" "/probe-rows/aside/" value="mark" %}</div>
 {% post_button "Quiet" "/probe-rows/quiet/" value="quiet" %}
 {% post_button "Broken" "/probe-rows/broken/" value="broken" %}
+{% post_button "Refused" "/probe-rows/refused/" value="refused" %}
+{% post_button "Declined" "/probe-rows/declined/" value="declined" %}
 <a data-probe="link" href="/probe-rows/?again=1">Again</a>
 <form method="post" action="/probe-rows/plain/"><button data-probe="plain">Send</button></form>
 {% for line in lines %}<p>An example line after {{ line }}.</p>{% endfor %}"""
 _MAIN = re.compile(r"(<main\b[^>]*>).*?(</main>)", re.DOTALL)
+
+# Why the server refused a press: drawn among the messages of the page it
+# sent the press on to, and as the whole answer to one it answered itself.
+_REFUSED = "Example refused: its connection only reads."
+_DECLINED = "Example declined: it needs a connection that manages."
+# Another page, saying the refusal among its messages. Read again, it would
+# not: a message is said once.
+_ELSEWHERE = """<!doctype html><html><head><title>Elsewhere</title></head><body>
+<main class="content" id="elsewhere"><ul class="messages"><li>{% notice tone="error" %}{{ refused }}{% endnotice %}</li></ul></main>
+</body></html>"""
 
 # What each press leaves of the rows.
 _PRESSED = {("ABC", "C", "up"): "ACB", ("ABC", "B", "up"): "BAC", ("ABC", "B", "delete"): "AC"}
@@ -279,6 +319,13 @@ class FragmentBrowserTests(BrowserGate):
             row = parts.path.removeprefix("/probe-rows/").strip("/")
             if row == "broken":
                 return route.fulfill(status=500, body="Example failure")
+            if row == "refused":
+                # Refused, and answered with another page that says why: what
+                # a redirect elsewhere answers, which a route cannot send.
+                return self.fulfill(route, Template(_ELSEWHERE).render(Context({"refused": _REFUSED})))
+            if row == "declined":
+                # Refused, answered with the sentence alone (``refusal_response``).
+                return route.fulfill(status=409, content_type="text/plain; charset=utf-8", body=_DECLINED)
             if row == "quiet":
                 # What a view gives a script that asks with nothing to show.
                 return route.fulfill(status=204)
@@ -287,6 +334,19 @@ class FragmentBrowserTests(BrowserGate):
             elif row != "plain":
                 self.order = _PRESSED[(self.order, row, fields["action"])]
         return self.fulfill(route, self.rows[self.order])
+
+    def answer_keyed(self, route, answer):
+        """What a write answers: HQ's answer, a refusal, a failure of the
+        server's own, or none at all."""
+
+        self.posted.append((answer, _posted(route.request)))
+        if answer == "lost":
+            return route.abort()
+        if answer == "broken":
+            return route.fulfill(status=500, body="Example failure")
+        if answer == "refused":
+            return route.fulfill(status=400, content_type="text/plain; charset=utf-8", body="Example refused.")
+        return self.fulfill(route, _FIXED["/probe-sent/"])
 
     @override
     def respond(self, route):
@@ -297,6 +357,10 @@ class FragmentBrowserTests(BrowserGate):
         self.asked.append((address, part))
         if parts.path.startswith("/probe-rows/"):
             return self.answer_rows(route, parts)
+        if parts.path == "/probe-keyed-form/":
+            return self.fulfill(route, _keyed_probe())
+        if parts.path.startswith("/probe-keyed/"):
+            return self.answer_keyed(route, parts.path.removeprefix("/probe-keyed/").strip("/"))
         if (fixed := _FIXED.get(parts.path)) is not None:
             return self.fulfill(route, fixed)
         if parts.path == "/probe-strip/":
@@ -405,6 +469,26 @@ class FragmentBrowserTests(BrowserGate):
         self.assertEqual(self.page.evaluate(_ROWS_SHOWN), "ABC")
         self.assertEqual(self.page.evaluate(_SAID), ["That could not be sent."])
 
+    def test_a_press_refused_and_sent_on_to_another_page_says_why_where_it_was_pressed(self):
+        self.page.goto(f"{ORIGIN}/probe-rows/", wait_until="load")
+        self.page.evaluate("() => { window.kept = true; }")
+        self.page.get_by_role("button", name="Refused").click()
+        self.page.wait_for_function(f"() => ({_SAID})().length > 0")
+
+        self.assertTrue(self.page.evaluate("() => window.kept === true"))
+        self.assertTrue(self.page.url.endswith("/probe-rows/"))
+        self.assertEqual(self.page.evaluate(_ROWS_SHOWN), "ABC")
+        self.assertEqual(self.page.evaluate(_SAID), [_REFUSED])
+
+    def test_a_press_refused_with_a_sentence_says_that_sentence(self):
+        self.page.goto(f"{ORIGIN}/probe-rows/", wait_until="load")
+        self.page.evaluate("() => { window.kept = true; }")
+        self.page.get_by_role("button", name="Declined").click()
+        self.page.wait_for_function(f"() => ({_SAID})().length > 0")
+
+        self.assertTrue(self.page.evaluate("() => window.kept === true"))
+        self.assertEqual(self.page.evaluate(_SAID), [_DECLINED])
+
     def test_the_content_answers_no_link_or_form_of_its_own(self):
         """The page's content is a region only for presses: its own links and
         forms lead where they lead, as they did."""
@@ -511,7 +595,7 @@ class FragmentBrowserTests(BrowserGate):
     def test_a_pages_note_says_what_its_ask_waits_for_and_the_ask_outlives_the_swap(self):
         self.visit = _VISIT_LIVE
         self.page.goto(f"{ORIGIN}/probe-asking-head/", wait_until="load")
-        note = "#content > [data-ask-note]"
+        note = SELECTORS["page_note"]
         self.page.evaluate(
             "(note) => { document.querySelector('[data-ask]').kept = true; document.querySelector(note).was = true; }",
             note,
@@ -559,3 +643,32 @@ class FragmentBrowserTests(BrowserGate):
             self.page.evaluate("() => document.querySelector('[data-probe=\"push\"]').click()")
         self.assertTrue(self.page.url.endswith("/probe-push/?turn=2"))
         self.assertFalse(self.page.evaluate("() => window.kept === true"))
+
+    def test_a_write_form_takes_a_new_key_once_hq_has_answered_and_keeps_it_when_none_did(self):
+        for answer, spent in (("ok", True), ("refused", True), ("broken", False), ("lost", False)):
+            with self.subTest(answer):
+                self.start()
+                self.page.goto(f"{ORIGIN}/probe-keyed-form/", wait_until="load")
+                key = f'form[action="/probe-keyed/{answer}/"] input[name="__retry_key"]'
+                before = self.page.locator(key).input_value()
+                self.page.locator(f'[data-probe="{answer}"]').click()
+                if spent:
+                    self.page.wait_for_function(
+                        "([key, was]) => document.querySelector(key).value !== was", arg=[key, before]
+                    )
+                # Over once the server has seen it and the page has settled.
+                self.page.wait_for_function("() => document.readyState === 'complete'")
+                self.page.evaluate(SETTLE)
+                after = self.page.locator(key).input_value()
+
+                ((_, fields),) = [entry for entry in self.posted if entry[0] == answer]
+                self.assertEqual(fields["__retry_key"], before)
+                if spent:
+                    self.assertRegex(after, r"^web:[0-9a-f]{48}$")
+                else:
+                    self.assertEqual(after, before)
+                if answer == "lost":
+                    # Chromium logs the post the route aborted as a failed
+                    # load: the test's own doing, as a failed status is
+                    # (gate's _FAILED_ANSWER).
+                    self.refusals = [heard for heard in self.refusals if "Failed to load resource: net::" not in heard]

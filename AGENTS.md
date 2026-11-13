@@ -5,48 +5,51 @@ agents alike. Setup, tasks and layout: [Development](docs/Development.md).
 
 ## Start here
 
-1. Run `git status --short`; preserve unrelated work. `git fetch` and compare
-   with your brief's base, or `origin/main` without one, before designing:
-   work lands from more than one place, and the mechanism you need may already
-   exist there.
-2. Ready is the [definition of done](#definition-of-done).
+1. Run `git status --short` and keep any unrelated work. Before designing,
+   `git fetch` and compare with the branch your work lands on (`origin/main`
+   by default): the mechanism you need may already exist there.
+2. Done, for a piece and for the branch it lands on, is the
+   [definition of done](#definition-of-done).
 
 mise prints the tasks live, so this file does not list them:
 
 | To see | Run |
 | --- | --- |
 | the verbs to start from, each with when to reach for it | `mise tasks` |
-| the steps they run, each runnable by the name a verdict gives it | `mise tasks --hidden` |
+| the steps they run, each runnable by the name a gate's output gives it | `mise tasks --hidden` |
 | what a task takes, without running it | `mise tasks info <task>` |
 | the examples a task carries (`dev:look`'s) | `mise run <task> --help` |
 
 What the listing does not say:
 
-- `fast` selects through Python imports and app names, so a rule held only by
-  a string or a template needs `check`.
+- `fast` selects through Python imports, app names and the paths a module
+  names, and runs every walk of the tree the change reaches (each on any
+  change, unless its class declares what it reads with `@reads`), so only a
+  test that finds a file by a name computed as it runs needs `check`.
 - A new test is proven to fail without the fix by `mise run test --at <base>
   <labels>`, never by a base worktree, snapshot or checkout made by hand.
-- An agent runs `dev:scratch` in its own worktree, never `dev`.
+- In a worktree of your own, try a change on `dev:scratch`, a throwaway
+  server, never on `dev`, the main checkout's server on real data.
 
 A CI job is named for the task it runs (`lint`, `test`, `browser`, `build`,
 `scan`), so a gate goes in its job's file under `mise-tasks/`
 (`mise-tasks/lint.toml` for `lint:*`), never in a workflow.
 
-The composed suite (`mise run test --composed`, run as the image runs it) is where the
-host and its extensions first meet, which CI cannot reach. It loads the set
-the gitignored `mise.local.toml` names. A worktree Claude Code makes gets a
-copy of the main checkout's through `.worktreeinclude`. It names the extensions' main checkouts, so composing an
-extension worktree instead is
+The composed suite (`mise run test --composed`) runs the host and its
+extensions together, as the image runs them. CI cannot run it, since it
+needs the extensions' checkouts. It loads the set the gitignored
+`mise.local.toml` names. A worktree Claude Code makes gets a copy of that
+file through `.worktreeinclude`, so it composes the extensions' main
+checkouts. To compose an extension worktree instead, set
 [one variable on the command line](docs/Development.md#the-extension-set).
 
-A test that reads the repository rather than running the product carries
-`@tag("source")` and runs only in `lint:source` (`mise run lint:source
-<labels>` for some), since no image ships those files; one that walks a
-tree also carries `tree` (`test_tree_tag.py` says when). The suite runs in
-parallel on WAL SQLite through `hq/platform/core/test_runner.py`: read it
-before changing the test database. A new host domain:
-[New Domain](docs/New-Domain.md).
-The project's agent and skills, and a pass: [AI](docs/AI.md).
+A test that reads the repository's files carries `@tag("source")`, since no
+image ships those files. It runs only in `lint:source` (`mise run lint:source
+<labels>` for some). One that walks a tree also carries `tree`
+(`test_tree_tag.py` says when). The suite runs in parallel on WAL SQLite
+through `hq/platform/core/test_runner.py`: read it before changing the test
+database. Adding a host domain: [New Domain](docs/New-Domain.md). How agents
+build and operate HQ: [AI and HQ](docs/AI.md).
 
 ## Architecture in one minute
 
@@ -81,9 +84,10 @@ this design exists for:
 - the host runs with none installed;
 - the two are developed on independent schedules.
 
-Runtime-supplied composition metadata is the only place the real installed
-set meets the host; two tests in `hq/platform/application/tests/test_plugins.py`
-keep it that way, and one that fails has found a coupling.
+The real installed set reaches the host only through composition metadata
+supplied at runtime. Two tests in
+`hq/platform/application/tests/test_plugins.py` keep it that way, and one that
+fails has found a coupling.
 
 Generic integration policy belongs here; domain meaning belongs in its own
 package. An abstraction with one domain-specific caller stays in that domain
@@ -97,15 +101,16 @@ until a genuine shared contract appears.
 | HTTP, CLI, MCP, or view parsing/rendering | adapter calling that service |
 | Plugin-facing primitive | implementation in HQ plus export from `hq_sdk` |
 | Repeated layout or interaction | shared partial/CSS/JS primitive |
-| Plugin identity or domain semantics | private plugin repository |
+| Plugin identity or domain semantics | the extension, in its own repository |
 | Cross-plugin compatibility | generic composition check in HQ |
 
 A provider is named once, in `ADMITTED`
-(`hq/domains/control_plane/provider_adapters/__init__.py`); everything else
+(`hq/domains/control_plane/provider_adapters/__init__.py`). Everything else
 derives from its adapter's `DEFINITIONS` and `CONNECTIONS` and its readings
 module, and `test_admission.py` there holds that to be enough. Its Go half in
 `controller/providers/` is handed its connection as a typed value
-(`r.Supplied.For`), never a setting by name ([Providers](docs/Architecture.md#providers)).
+(`r.Supplied.For`), never a setting by name
+([Providers](docs/Architecture.md#providers)).
 
 Tests live in each package's `tests/` directory. When a definition moves,
 retarget every `mock.patch` that named its old home, since a patch of a name
@@ -133,9 +138,10 @@ architecture test, a glob) fails when its path matches nothing.
   in whole cents, exact integers, and rounds there, as
   `business_use.deductible` does: SQLite holds a decimal as a double, where a
   half cent is inexact. A test holds it to `quantize_money` over every cent.
-- A change to `hq_sdk`'s shape (`hq_sdk/contract.json`) is a fleet change:
-  decide whether `PLUGIN_API_VERSION` moves, and give a new export a case in
-  `tests/sdk_consumer/consumer.py` ([Plugins](docs/Plugins.md)).
+- A change to `hq_sdk`'s shape (`hq_sdk/contract.json`) reaches every
+  extension: decide whether `PLUGIN_API_VERSION` moves, and give a new
+  export a case in `tests/sdk_consumer/consumer.py`
+  ([Plugins](docs/Plugins.md)).
 - The shared mechanisms (a list view's table, a command's link, the derived
   files, plugin imports) are held by the architecture tests, the
   `lint:drift-*` gates and `hq_sdk.validation`, whose failures name the one
@@ -193,25 +199,35 @@ adding UI; grow a primitive rather than styling a page.
   The structural bar (`lint:structural`) fails a new near-duplicate pair
   outside tests, and its baseline never grows to pass. The other questions
   and the graph engine's traps: [Structural Gate](docs/Structural-Gate.md).
-  Index the checkout you work in before asking it anything.
+  Index the checkout you work in before asking the graph anything.
 - An extension's use of `hq_sdk` is an import from another repository, so the
   graph has no edge for it: a change to `hq_sdk.capabilities`, `hq_sdk.ui` or
   `hq_sdk.audit` reads as safe here. Grep the extension checkouts.
 
 ## Definition of done
 
-"Ready" means `mise run check --release` exits 0, or `mise run check --release
---remote` for a pushed commit: every CI gate, the composed suite with the extension set
-required, and read-only checks of the deploy host (`hq-host check`,
-[Deployment](docs/Deployment.md)). `--skip-host` exits 2, never 0, and so does
-a host whose release nothing verified; the check says how to verify it.
+A piece of work is done when `mise run fast` passes on its tip, with the
+tests its change touches (`mise run test <labels>`). A change to what a page
+shows also needs `mise run dev:look` on each page its templates draw.
+
+The whole-tree runs belong to the branch the work lands on. A change to what
+pages draw is followed there by `mise run dev:look --rule survey all` in
+WebKit and in Chromium (`--engine`), since a shared sheet or part reaches
+pages the change never named.
+The browser suite and the release check run once before the branch ships.
+
+That branch is ready when `mise run check --release` exits 0, or
+`mise run check --release --remote` for a pushed commit: every CI gate, the
+composed suite with the extension set required, and read-only checks of the
+deploy host (`hq-host check`, [Deployment](docs/Deployment.md)). `--skip-host`
+exits 2, never 0, and so does a host whose release nothing verified; the check
+says how to verify it.
 
 - Tests cover success, denial, invalid input, and the regression class where
   applicable, not only the happy path.
-- A change to templates or CSS passes `mise run browser` and is walked in a
-  real browser through the workflow it serves.
+- A change to templates or CSS is walked in a real browser through the
+  workflow it serves, and the branch it lands on passes `mise run browser`.
 - Docs change when a supported contract changes.
 - No private identifiers, generated artifacts, secrets, or unrelated edits
   enter the diff.
-- A push or a deploy waits for an explicit ask; committing follows the
-  orchestrating session's rules.
+- A push or a deploy waits for an explicit ask.

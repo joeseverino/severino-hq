@@ -82,9 +82,100 @@ class PagesTests(SimpleTestCase):
         self.assertEqual(task.estate_path("estate/audit"), "/audit/")
         self.assertEqual(task.estate_path("estate"), "/")
 
+    def test_a_page_of_any_kind_keeps_its_query(self):
+        # A path copied from the address bar may come without its leading slash.
+        containers = reverse("control_plane:containers")
+        asked = ["control_plane:containers?q=hq", f"{containers.strip('/')}/?q=docker", f"{containers}?q=x"]
+
+        self.assertEqual(
+            task.pages(asked, self.EVERY), [f"{containers}?q=hq", f"{containers}?q=docker", f"{containers}?q=x"]
+        )
+
+    FINDINGS = ("control_plane:findings", "hq_api:findings")
+
+    def test_a_word_is_the_one_estate_page_whose_path_it_ends(self):
+        contacts, containers = reverse("contacts:list"), reverse("control_plane:containers")
+
+        every = [*self.EVERY, containers]
+
+        self.assertEqual(task.pages(["contacts", "containers?q=hq"], every), [contacts, f"{containers}?q=hq"])
+
+    def test_a_word_that_ends_several_estate_pages_or_none_is_refused_with_the_nearest(self):
+        # status ends a route's path, but no estate page's.
+        with self.assertRaises(PageRefused) as refused:
+            task.pages(["findings", "contactz", "status"], [*self.EVERY, *map(reverse, self.FINDINGS)])
+        said = str(refused.exception)
+
+        self.assertIn("No page findings; type one of these instead:", said)
+        for route in self.FINDINGS:
+            self.assertIn(f"\n  {task.estate_name(reverse(route))} (the estate's {route})", said)
+        self.assertIn(
+            "No page contactz; type one of these instead:\n  estate/contacts (the estate's contacts:list)", said
+        )
+        self.assertIn("No page status", said)
+
     def test_a_page_known_by_name_is_named_as_nearest_where_it_is_one(self):
         with self.assertRaisesMessage(PageRefused, "\n  dense/services (a page by name)"):
             task.pages(["dense/service"], self.EVERY, ["dense/services"])
+
+
+class _Drawing:
+    """An estate whose pages each draw the templates given them, recording what was read."""
+
+    def __init__(self, linked, entries, unlinked, followed):
+        self.drawn = {**linked, **unlinked, **followed}
+        self._linked, self._entries, self._followed = list(linked), entries, list(followed)
+        self.read: list[str] = []
+
+    def linked(self):
+        return self._linked
+
+    def at(self, address):
+        self.read.append(address)
+        return task.Drawn(frozenset(self.drawn[address])) if address in self.drawn else None
+
+    def entries(self):
+        self.read.append("entries")
+        return [(name, task.Drawn(frozenset(drawn))) for name, drawn in self._entries.items()]
+
+    def followed(self):
+        self.read.append("followed")
+        return self._followed
+
+
+@tag("source")
+class TemplatePagesTests(SimpleTestCase):
+    def estate(self):
+        return _Drawing(
+            linked={reverse("contacts:list"): ["contacts/contact_list.html"]},
+            entries={"part/example": ["partials/_example_part.html"]},
+            unlinked={reverse("calendar:entry_new"): ["calendars/_example_fields.html"]},
+            followed={reverse("contacts:delete", args=[1]): ["contacts/contact_confirm_delete.html"]},
+        )
+
+    def test_a_template_reaches_the_page_or_the_catalog_entry_that_draws_it(self):
+        cases = {
+            "contacts/contact_list.html": reverse("contacts:list"),
+            "_example_part.html": "part/example",
+            "calendars/_example_fields.html": reverse("calendar:entry_new"),
+            "contacts/contact_confirm_delete.html": reverse("contacts:delete", args=[1]),
+        }
+        for template, page in cases.items():
+            with self.subTest(template=template):
+                self.assertEqual(task.pages([f"template:{template}"], [], records=self.estate()), [page])
+
+    def test_a_template_a_linked_page_draws_reads_nothing_past_it(self):
+        estate = self.estate()
+
+        task.pages(["template:contacts/contact_list.html"], [], records=estate)
+
+        self.assertEqual(estate.read, [reverse("contacts:list")])
+
+    def test_a_template_nothing_draws_is_refused_with_the_nearest_any_page_draws(self):
+        with self.assertRaises(PageRefused) as refused:
+            task.pages(["template:_example_fieldz.html"], [], records=self.estate())
+
+        self.assertIn("\n  template:calendars/_example_fields.html", str(refused.exception))
 
 
 def _git(*args: str, cwd: Path) -> str:

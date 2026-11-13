@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
@@ -19,6 +20,8 @@ var rootPrograms = map[string][]string{
 	},
 	"github.com/joeseverino/severino-hq/controller/cmd/hq-edge": {
 		"github.com/joeseverino/severino-hq/controller",
+		// born reads when the restart flag was made with statx, which syscall lacks.
+		"golang.org/x/sys",
 	},
 }
 
@@ -27,7 +30,10 @@ func TestARootProgramLinksOnlyTheModulesItUses(t *testing.T) {
 	for program, allowed := range rootPrograms {
 		t.Run(program[strings.LastIndex(program, "/")+1:], func(t *testing.T) {
 			t.Parallel()
-			out, err := exec.CommandContext(t.Context(), "go", "list", "-deps", "-f", "{{with .Module}}{{.Path}}{{end}}", program).Output()
+			list := exec.CommandContext(t.Context(), "go", "list", "-deps", "-f", "{{with .Module}}{{.Path}}{{end}}", program)
+			// A root program runs on a Linux host, so its Linux build is the one judged.
+			list.Env = append(os.Environ(), "GOOS=linux")
+			out, err := list.Output()
 			if err != nil {
 				t.Fatalf("go list %s: %v", program, err)
 			}

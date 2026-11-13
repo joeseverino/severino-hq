@@ -1,0 +1,43 @@
+# An empty line is the empty state part, or a section's {% empty %}. It is
+# read by its opening words, so it finds one spelling of an empty line: a
+# muted <p>, <span>, <td>, <li> or <dd> that opens on No, Nothing, None or
+# There is no. The fix moves a muted <p> whose words are plain; any other is
+# moved by hand.
+id: hand-drawn-empty-line
+language: html
+severity: error
+message: An empty line drawn by hand, where the empty state part draws it.
+note: Write {% include "partials/_empty_state.html" with message="..." %}, or a {% section %}'s {% empty %}.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  pattern: $EMPTY
+  has:
+    kind: start_tag
+    all:
+      - has:
+          kind: tag_name
+          regex: ^(?:p|span|td|li|dd)$
+      - has:
+          kind: attribute
+          regex: '^class="muted"$'
+    precedes:
+      kind: text
+      regex: '^(?:No|Nothing|None|There (?:is|are) no)\b'
+rewriters:
+  - id: line
+    rule:
+      pattern: <p class="muted">$MESSAGE</p>
+    constraints:
+      MESSAGE:
+        kind: text
+        not:
+          regex: '[{}"]'
+    fix: '{% include "partials/_empty_state.html" with message="$MESSAGE" %}'
+transform:
+  MOVED:
+    rewrite:
+      rewriters: [line]
+      source: $EMPTY
+fix: $MOVED

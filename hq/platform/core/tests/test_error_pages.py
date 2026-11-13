@@ -33,7 +33,7 @@ class ServerErrorTests(SimpleTestCase):
 
         body = server_error(request).content.decode()
 
-        self.assertIn("under request id 0123abcd", text(body))
+        self.assertIn("request id is 0123abcd", text(body))
         self.assertIn("0123abcd", texts(body, "code"))
 
 
@@ -49,7 +49,7 @@ class RefusalTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(texts(response, "title"), ["Not allowed · Severino HQ"])
-        self.assertIn("You can't open this", text(response))
+        self.assertIn("Access denied", text(response))
         self.assertTrue(with_class(response, "brand"))
         self.assertNotContains(response, "manage_example", status_code=403)
 
@@ -60,7 +60,7 @@ class RefusalTests(TestCase):
         response = client.post("/theme/", {"theme": "dark"})
 
         self.assertEqual(response.status_code, 403)
-        self.assertContains(response, "That form is out of date", status_code=403)
+        self.assertContains(response, "Form expired", status_code=403)
         self.assertContains(response, "Nothing was saved.", status_code=403)
         self.assertNotIn("CSRF", text(response))
 
@@ -75,4 +75,4 @@ class NotFoundTests(TestCase):
         if anonymous.status_code == 404:
             self.assertNotContains(anonymous, 'placeholder="Find anything"', status_code=404)
         self.assertContains(signed_in, 'placeholder="Find anything"', status_code=404)
-        self.assertContains(signed_in, "That page isn't here", status_code=404)
+        self.assertContains(signed_in, "Page not found", status_code=404)

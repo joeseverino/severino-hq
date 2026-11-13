@@ -90,9 +90,7 @@ class EntryRecord(TypedDict):
     location: CalendarEntryLocation
     notes: Notes
     repeat: CalendarEntryRepeat
-    repeat_label: Annotated[
-        str, Describe("How it repeats, as a person says it, such as `Every 2 weeks on Mon`; empty for once.")
-    ]
+    repeat_label: Annotated[str, Describe("How it repeats, in words, such as `Every 2 weeks on Mon`; empty for once.")]
     interval: CalendarEntryInterval
     weekdays: CalendarEntryWeekdays
     repeat_until: Annotated[str | None, Describe("The last day it repeats, an ISO 8601 date; null for no last day.")]

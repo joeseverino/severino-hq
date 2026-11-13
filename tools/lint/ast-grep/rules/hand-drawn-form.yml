@@ -1,0 +1,21 @@
+# A form that writes is the form part, which draws its fields, errors, busy
+# state and retry key, or a post button for a single verb. No fix: the part
+# draws the view's form object, which a template does not name.
+id: hand-drawn-form
+language: html
+severity: error
+message: A form that writes drawn by hand, where the form part draws it.
+note: Write {% include "partials/_form.html" %}, or {% post_button %} for a single verb.
+files:
+  - "**/templates/**/*.html"
+rule:
+  kind: element
+  has:
+    kind: start_tag
+    all:
+      - has:
+          kind: tag_name
+          regex: (?i)^form$
+      - has:
+          kind: attribute
+          regex: '(?i)(?:^|\})method=["'']?post\b'

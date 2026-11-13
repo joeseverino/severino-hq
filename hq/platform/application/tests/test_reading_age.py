@@ -5,6 +5,8 @@ from pathlib import Path
 
 from django.test import SimpleTestCase, tag
 
+from hq.platform.application.tests.reads import reads
+
 from .facts import TOP, Import, imports, scan
 from .source import template_files
 
@@ -231,6 +233,7 @@ OWN_WORDING = re.compile(r"\bread\b[^{<]{0,4}\{\{[^}]*\|(?:ago|ago_short|when:\"
 
 
 @tag("source", "tree")
+@reads("**/templates/**")
 class OneWordingTests(SimpleTestCase):
     def test_a_page_says_a_readings_age_through_the_partial(self):
         """Each page worded it its own way ("read 5 minutes ago", "as of",

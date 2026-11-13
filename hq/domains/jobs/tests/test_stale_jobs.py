@@ -41,7 +41,7 @@ class StaleJobPageTests(TestCase):
 
         self.assertEqual(page.status_code, 200)
         self.assertIn(Job.State.LOST.label, text(page))
-        self.assertEqual(page.context["failed_last"], ["Example gone"])
+        self.assertEqual(page.context["ended_badly"], [(Job.State.LOST.label, ["Example gone"])])
         self.assertUnchanged(before)
 
     def test_its_status_says_it_stopped_without_writing(self):

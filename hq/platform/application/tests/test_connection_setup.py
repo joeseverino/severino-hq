@@ -5,6 +5,7 @@ from django.utils.html import escape
 
 from hq.domains.control_plane.connection_kinds import CONNECTION_KINDS
 from hq.domains.control_plane.credential_reads import observer_permissions
+from hq.domains.control_plane.permissions import Cloudflare
 
 from ..connection_setup import setups
 from .host_only import host_only
@@ -45,9 +46,9 @@ class SetupTests(TestCase):
         dns = self.by_provider()["cloudflare_dns"]
         api = self.by_provider()["cloudflare_api"]
 
-        self.assertIn("DNS Write (zone)", dns.permissions)
-        # Its reads, and D1 Write for the contact inbox's changes.
-        self.assertEqual(set(api.permissions), {*observer_permissions("cloudflare_api"), "D1 Write (account)"})
+        self.assertIn(Cloudflare.DNS_WRITE, dns.permissions)
+        # Its reads, and D1 Edit for the contact inbox's changes.
+        self.assertEqual(set(api.permissions), {*observer_permissions("cloudflare_api"), Cloudflare.D1_EDIT})
         self.assertEqual(api.mint, "mise run mint:cloudflare")
 
     def test_a_coarse_login_lists_no_permissions(self):

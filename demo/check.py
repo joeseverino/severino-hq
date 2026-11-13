@@ -15,7 +15,7 @@ from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit
 
 from demo.serve import serving
 from hq.platform.core.tests.browser.uncaught import Uncaught
-from hq.platform.core.tests.browser.widths import PHONE_SCREEN
+from hq.platform.core.tests.browser.widths import PHONE_SCREEN, WIDTHS
 
 # Where demo:build saved it. This file doesn't import Django.
 OUT = Path(os.environ.get("HQ_DEMO_OUT") or Path(__file__).resolve().parents[1] / "var" / "demo")
@@ -27,11 +27,41 @@ _ADDRESS = re.compile(r'(?:href|src|data-[\w-]+-url)="(/[^"#?]*)')
 # The main pages, including the one with cards to dismiss.
 _VISITED = ("/", "/hq/", "/infrastructure/findings/", "/action-items/", "/infrastructure/", "/connection/")
 # What a healthy homelab never says on its dashboard.
-_ALARMS = ("No reading yet", "Not set up yet", "not fully set up", "not answering", " failed", "not confirmed")
-# The showcase leaves four things to do on purpose (an image update, an image
-# run by tag alone, a certificate to renew, an agent's request to approve);
-# anything more is the seed missing a reading.
-_MOST_ITEMS = 4
+_ALARMS = ("No reading yet", "Not configured", "not fully set up", "not answering", " failed", "not confirmed")
+# Each thing the demo leaves to do on purpose, its queue key by where it is on
+# Needs you, as demo/first_glance.py declares them and demo/build.py saves them.
+_ON_PURPOSE = OUT / "__fragments__" / "on-purpose.json"
+
+
+class _OpenItems(HTMLParser):
+    """The id of each queue item on a page outside the part that holds what was dismissed."""
+
+    def __init__(self):
+        super().__init__()
+        self.ids: list[str] = []
+        self._aside: list[str] = []
+        self._depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        found = {name: value or "" for name, value in attrs}
+        if self._aside:
+            self._depth += tag == self._aside[0]
+        elif "data-set-aside" in found:
+            self._aside, self._depth = [tag], 1
+        elif "data-attention-item" in found:
+            self.ids.append(found.get("id", ""))
+
+    def handle_endtag(self, tag):
+        if self._aside and tag == self._aside[0]:
+            self._depth -= 1
+            if not self._depth:
+                self._aside = []
+
+
+def _open_items(page: str) -> list[str]:
+    parser = _OpenItems()
+    parser.feed(page)
+    return parser.ids
 
 
 _MARK = re.compile(r'\sclass="([^"]*)"|\s(data-[\w-]+)')
@@ -69,11 +99,25 @@ def _anchors(page: str) -> list[tuple[dict[str, str], tuple[str, ...]]]:
 
 
 _ROOT = Path(__file__).resolve().parents[1]
-# The pages of a list demo/build.py saves, from its first (its _MOST_PAGES_OF_A_LIST).
-_MOST_PAGES_OF_A_LIST = 6
-# The widths HQ's browser gate reads (WIDTHS in core/tests/browser/widths.py), and a small phone's.
-_WIDTHS = (390, 402, 820, 1360)
-# About this demo floats in the bottom left corner, over some of the page at
+# The engine the demo is drawn in, named as HQ's browser gates name it.
+_ENGINE = os.environ.get("HQ_BROWSER_ENGINE", "webkit")
+
+
+def _engine(playwright):
+    if _ENGINE not in {"chromium", "firefox", "webkit"}:
+        raise ValueError("HQ_BROWSER_ENGINE must be chromium, firefox, or webkit.")
+    return getattr(playwright, _ENGINE)
+
+
+def _most_pages() -> int:
+    """The pages of a list demo/build.py saves, from its first."""
+
+    return json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["most_pages"]
+
+
+# The widths HQ's browser gate reads, and a small phone's.
+_WIDTHS = (390, *WIDTHS)
+# About the demo floats in the bottom left corner, over some of the page at
 # almost every scroll stop; what it promises is to leave none of it there.
 # Read at the page's end: the room below the content, against the room the
 # chip and its inset take (from its top down), and each control still under
@@ -135,7 +179,7 @@ def _queries_linked(here: str, page: str) -> set[str]:
         asked = dict(pairs)
         if not pairs or "sort" in asked or not asked.get("page", "1").isdigit():
             continue
-        if int(asked.get("page", "1")) > _MOST_PAGES_OF_A_LIST or (OUT / address.path.lstrip("/")).is_file():
+        if int(asked.get("page", "1")) > _most_pages() or (OUT / address.path.lstrip("/")).is_file():
             continue
         keys.add(f"{address.path}?{urlencode(pairs)}")
     return keys
@@ -158,7 +202,7 @@ def _pages_linked(here: str, page: str) -> list[str]:
         for href in re.findall(r'href="([^"]+)"', nav):
             address = urlsplit(urljoin(here, unescape(href)))
             pairs = sorted((name, value) for name, value in parse_qsl(address.query) if value)
-            if pairs and int(dict(pairs).get("page", "1")) <= _MOST_PAGES_OF_A_LIST:
+            if pairs and int(dict(pairs).get("page", "1")) <= _most_pages():
                 keys.append(f"{address.path}?{urlencode(pairs)}")
     return keys
 
@@ -241,10 +285,59 @@ class DemoSiteTests(unittest.TestCase):
         for alarm in _ALARMS:
             with self.subTest(alarm=alarm):
                 self.assertNotIn(alarm, dashboard)
-        items = (OUT / "action-items" / "index.html").read_text(encoding="utf-8").count('class="attention-title"')
-        self.assertLessEqual(items, _MOST_ITEMS)
+        on_purpose = json.loads(_ON_PURPOSE.read_text(encoding="utf-8"))
+        self.assertTrue(on_purpose, "the demo leaves something to do on purpose")
+        items = _open_items((OUT / "action-items" / "index.html").read_text(encoding="utf-8"))
+        self.assertEqual(sorted(items), sorted(on_purpose))
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
-        self.assertEqual(re.findall(r'class="conn-layer conn-layer-(?!holds")(\w+)"', connection), [])
+        self.assertEqual(re.findall(r'class="ladder-rung" data-state="(?!holds")([\w-]+)"', connection), [])
+
+    def test_a_machine_s_page_shows_only_what_is_left_on_purpose(self):
+        # Each finding a machine's page names, by the queue key it draws, is
+        # one of the things the demo leaves to do.
+        kept = set(json.loads(_ON_PURPOSE.read_text(encoding="utf-8")).values())
+        machines = sorted((OUT / "infrastructure" / "machines").glob("*/index.html"))
+        self.assertTrue(machines, "the demo has machines")
+        for page in machines:
+            with self.subTest(machine=page.parent.name):
+                lines = _visible_lines(page.read_text(encoding="utf-8"))
+                found = {line for line in lines if re.fullmatch(r"hq\.[\w.]+:finding:\S+", line)}
+                self.assertEqual(sorted(found - kept), [])
+
+    def test_the_playbooks_open_healthy_with_an_approved_run_finished(self):
+        # Playbooks and Jobs say nothing failed or alarming at first glance:
+        # no warning or error notice and no failed scan. A playbook Playbooks
+        # links has a run a person approved that finished, each task's outcome
+        # beside it.
+        for path in ("infrastructure/playbooks", "jobs"):
+            with self.subTest(path=path):
+                # A <template> is a frame a script fills, never drawn as it stands.
+                page = re.sub(
+                    r"<template\b.*?</template>",
+                    "",
+                    (OUT / path / "index.html").read_text(encoding="utf-8"),
+                    flags=re.DOTALL,
+                )
+                marks = {mark for classes, hook in _MARK.findall(page) for mark in (classes.split() or [hook])}
+                self.assertFalse(marks & {"notice-warning", "notice-error", "data-scan-failed"})
+        playbooks = (OUT / "infrastructure" / "playbooks" / "index.html").read_text(encoding="utf-8")
+        runs = sorted(set(re.findall(r'href="(/commands/[^"/]+\.run/)"', playbooks)))
+        self.assertTrue(runs, "Playbooks links each playbook's runs")
+        # Each run's own page says who asked and who approved it, and how it ended.
+        approved = []
+        for path in runs:
+            page = (OUT / path.strip("/") / "index.html").read_text(encoding="utf-8")
+            for run in sorted(set(re.findall(r'href="(/jobs/runs/[^"/]+/)"', page))):
+                shown = (OUT / run.strip("/") / "index.html").read_text(encoding="utf-8")
+                tones = {mark for classes, _ in _MARK.findall(shown) for mark in classes.split()}
+                if (
+                    "approved by" in shown
+                    and "Finished" in shown
+                    and "pill-good" in tones
+                    and "pill-serious" not in tones
+                ):
+                    approved.append(run)
+        self.assertTrue(approved, "a playbook's runs hold one approved and finished")
 
     def test_a_list_s_toolbar_filters_and_says_what_it_cannot_search(self):
         # A filter ticked in a list's toolbar, which sends the order the list
@@ -256,7 +349,7 @@ class DemoSiteTests(unittest.TestCase):
         lists = json.loads((OUT / "__fragments__" / "variants.json").read_text(encoding="utf-8"))["sorts"]
         self.assertTrue(lists, "the demo has lists with a toolbar")
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 900})
             for path in sorted(lists):
                 with self.subTest(path=path):
@@ -313,7 +406,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 900})
             page.goto(self.origin + "/infrastructure/connections/", wait_until="networkidle")
             row = page.locator("tbody [data-ask]").first
@@ -323,7 +416,7 @@ class DemoSiteTests(unittest.TestCase):
             self.assertIn("demo", note.inner_text())
             self.assertEqual(page.locator("#content > .messages").count(), 0, "said once, in the row")
             page.goto(self.origin + "/", wait_until="networkidle")
-            refresh = page.locator(".glance-refresh").first
+            refresh = page.locator("button[form=glance-refresh]").first
             panel = refresh.locator("xpath=ancestor::*[@popover][1]")
             page.locator(f'[popovertarget="{panel.get_attribute("id")}"]').click()
             refresh.click()
@@ -356,19 +449,25 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_each_thing_to_do_offers_a_way_to_do_it(self):
         queue = (OUT / "action-items" / "index.html").read_text(encoding="utf-8")
-        rows = re.split(r"<tr [^>]*data-attention-item", queue)[1:]
-        self.assertEqual(len(rows), _MOST_ITEMS)
+        open_items = set(_open_items(queue))
+        rows = [
+            row
+            for row in re.split(r"<tr\b", queue)
+            if re.match(r'[^>]*\sid="([^"]+)"[^>]*data-attention-item', row)
+            and re.match(r'[^>]*\sid="([^"]+)"', row).group(1) in open_items
+        ]
+        self.assertEqual(len(rows), len(open_items))
         # One of them is the change the example agent asked for, held for a person.
         self.assertEqual(len([row for row in rows if 'href="/audit/approval/' in row]), 1)
         for row in rows:
-            title = re.search(r'class="attention-title"[^>]*>([^<]*)', row)
+            title = re.search(r'class="attention-title[^"]*"[^>]*>([^<]*)', row)
             with self.subTest(item=title.group(1) if title else row[:80]):
                 actions = re.search(r'class="attention-actions[^"]*">(.*?)</div>', row, re.DOTALL)
                 self.assertTrue(actions and re.search(r"<(?:a|button)\b", actions.group(1)))
 
     def test_what_describes_the_reader_says_it_is_an_example(self):
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("This is an example connection, not yours.", connection)
+        self.assertIn("Not your connection.", connection)
         dashboard = (OUT / "index.html").read_text(encoding="utf-8")
         # The dashboard's connection reading; the menu's line links to the panel above.
         self.assertEqual(dashboard.count('<span class="example-connection">example connection</span>'), 1)
@@ -391,7 +490,8 @@ class DemoSiteTests(unittest.TestCase):
             any(lately.fullmatch(line) for row in agents for line in _lines(row)),
             "an agent was seen within the hour",
         )
-        refused = re.search(r"<strong>(\d+)</strong> refused in the last day", page)
+        # The count is the value of the fact its words label.
+        refused = re.search(r">refused in the last day<.*?<dd\b[^>]*>(?:<[^>]+>)*(\d+)<", page, re.DOTALL)
         self.assertTrue(refused and int(refused.group(1)) > 0, "a refusal is counted")
 
     def test_every_page_is_drawn_in_the_reader_s_scheme(self):
@@ -410,7 +510,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page()
             errors, elsewhere = [], []
             at = [""]
@@ -467,12 +567,12 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             for width in _WIDTHS:
                 page = browser.new_page(viewport={"width": width, "height": 700})
                 page.goto(self.origin + "/", wait_until="load")
                 with self.subTest(width=width):
-                    control = page.get_by_role("link", name="About this demo")
+                    control = page.get_by_role("link", name="About the demo")
                     for stop in (
                         "0",
                         "document.documentElement.scrollHeight / 2",
@@ -494,7 +594,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             for width in _WIDTHS:
                 page = browser.new_page(viewport={"width": width, "height": 700})
                 for path in ("/", "/infrastructure/containers/", "/action-items/"):
@@ -511,12 +611,12 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             for width, height in ((1360, 800), PHONE_SCREEN):
                 page = browser.new_page(viewport={"width": width, "height": height})
                 page.goto(self.origin + "/", wait_until="load")
                 with self.subTest(width=width, height=height):
-                    page.get_by_role("link", name="About this demo").click()
+                    page.get_by_role("link", name="About the demo").click()
                     dialog = page.locator("#modal-demo-about")
                     self.assertTrue(dialog.evaluate("dialog => dialog.open"))
                     overflow = dialog.evaluate("dialog => dialog.scrollHeight - dialog.clientHeight")
@@ -529,25 +629,25 @@ class DemoSiteTests(unittest.TestCase):
         trigger.focus()
         page.keyboard.press("Enter")
         self.assertTrue(dialog.evaluate("dialog => dialog.open"), "Enter opens it")
-        self.assertTrue(dialog.get_by_role("heading", name="About this demo").is_visible())
+        self.assertTrue(dialog.get_by_role("heading", name="About the demo").is_visible())
         page.keyboard.press("Escape")
         self.assertFalse(dialog.evaluate("dialog => dialog.open"), "Escape closes it")
 
     def test_the_command_center_answers_what_is_typed(self):
-        # About this demo's Find anything and ⌘K open it; it lists what it
+        # About the demo's Find anything and ⌘K open it; it lists what it
         # offers, answers a word as it is typed, and a word the demo has no
         # search for is answered as HQ answers one nothing matches, in the
         # palette and after Enter, about the word typed.
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page(viewport={"width": 1360, "height": 800})
             page.goto(self.origin + "/", wait_until="networkidle")
             for opening in ("about", "keys"):
                 with self.subTest(opening=opening):
                     if opening == "about":
-                        page.get_by_role("link", name="About this demo").click()
+                        page.get_by_role("link", name="About the demo").click()
                         offered = self._answer_to(
                             page,
                             page.locator("#modal-demo-about").get_by_role("link", name="Find anything").click,
@@ -610,16 +710,16 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page()
             page.goto(self.origin + "/", wait_until="networkidle")
-            homelab = page.locator('.glance-panel[data-fragment-part^="machine-"]')
+            homelab = page.locator('.reading[data-fragment-part^="machine-"]')
             self.assertTrue(homelab.first.is_visible(), "the homelab's reading is on the dashboard")
             self.assertTrue(homelab.first.locator('a[href="/infrastructure/containers/"]').count())
-            weather = page.locator('.glance-panel[data-fragment-part="weather"]')
+            weather = page.locator('.reading[data-fragment-part="weather"]')
             self.assertTrue(weather.is_visible(), "the forecast is on the dashboard")
-            self.assertIn("°", weather.locator(".glance-lead").inner_text())
-            self.assertTrue(weather.locator(".glance-hours li").count())
+            self.assertIn("°", weather.locator(".reading-lead").inner_text())
+            self.assertTrue(weather.locator(".tile-strip li").count())
             for width in (402, 1360):
                 page.set_viewport_size({"width": width, "height": 900})
                 with self.subTest(width=width):
@@ -630,9 +730,9 @@ class DemoSiteTests(unittest.TestCase):
     def _lines_past_their_reading(page) -> list[str]:
         """Each reading's quiet line that runs past the reading it is under."""
 
-        return page.locator(".dash-readings .glance-caption").evaluate_all(
+        return page.locator(".readings .reading-lines").evaluate_all(
             """lines => lines.filter(line => {
-                const own = line.closest('.glance-panel, .dash-reading').getBoundingClientRect();
+                const own = line.closest('.reading').getBoundingClientRect();
                 return line.getBoundingClientRect().right > own.right + 1;
             }).map(line => line.textContent.trim())"""
         )
@@ -648,7 +748,7 @@ class DemoSiteTests(unittest.TestCase):
         )
         self.assertTrue(machines)
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             for width in (402, 1360):
                 page = browser.new_page(viewport={"width": width, "height": 900})
                 for path in machines:
@@ -688,7 +788,7 @@ class DemoSiteTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         with sync_playwright() as playwright:
-            browser = playwright.webkit.launch()
+            browser = _engine(playwright).launch()
             page = browser.new_page()
             page.goto(self.origin + "/action-items/", wait_until="load")
             row = page.locator("[data-attention-item]:has([data-triage] button)").first

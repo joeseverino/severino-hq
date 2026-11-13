@@ -1,0 +1,12 @@
+{% comment %}
+Messages: what a post said of how it went, first in the page's content
+(base.html), each line a notice of its message's tone. fragment.js finds the
+list by its class to add a line an answer in place brings.
+{% endcomment %}
+{% if messages %}
+  <ul class="messages">
+    {% for message in messages %}
+      <li>{% notice tone=message.level_tag %}{{ message.message|breakable }}{% endnotice %}</li>
+    {% endfor %}
+  </ul>
+{% endif %}

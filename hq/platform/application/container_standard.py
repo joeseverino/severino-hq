@@ -145,7 +145,7 @@ STANDARD: tuple[Check, ...] = (
         "no-docker-socket",
         "No Docker socket",
         _socket_held,
-        "Anything holding the Docker socket can start a container as root with any mount, even when the socket is mounted read-only.",
+        "The Docker socket can start a root container with any mount, even mounted read-only.",
         "Put a socket proxy that allows only the calls it needs between it and the socket.",
         serious=True,
         unmet="Holds the Docker socket",

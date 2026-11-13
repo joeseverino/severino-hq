@@ -41,6 +41,16 @@
                 "type": "string"
               }
             }
+          },
+          {
+            "name": "attempt",
+            "in": "query",
+            "required": false,
+            "description": "The claimant's name for this claim. A claim retried with the same name is answered the operation it already leased.",
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            }
           }
         ],
         "responses": {
@@ -173,6 +183,64 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Material"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "The action was refused or failed.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/renew": {
+      "post": {
+        "operationId": "renew",
+        "summary": "Extend a claimed operation's lease, and say whether to go on.",
+        "x-bridge-action": "renew",
+        "parameters": [
+          {
+            "name": "controller-id",
+            "in": "query",
+            "required": true,
+            "description": "The reporting controller.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "operation",
+            "in": "query",
+            "required": true,
+            "description": "Operation id.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "lease-seconds",
+            "in": "query",
+            "required": false,
+            "description": "Lease length in seconds, from now.",
+            "schema": {
+              "$ref": "#/components/schemas/LeaseSeconds"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The action's answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Renewal"
                 }
               }
             }
@@ -793,6 +861,10 @@
           "result": {
             "description": "The provider's last result for this operation, as Django stored it.",
             "x-go-type": "any"
+          },
+          "correlation": {
+            "description": "The asker's own id for finding it later; empty for none.",
+            "type": "string"
           }
         },
         "additionalProperties": false,
@@ -809,7 +881,8 @@
           "claimed_by",
           "lease_expires_at",
           "attempt_count",
-          "result"
+          "result",
+          "correlation"
         ],
         "description": "A queued or claimed operation, as serialize_operation emits it."
       },
@@ -897,6 +970,11 @@
             "$ref": "#/components/schemas/Verification",
             "description": "The operation's action's verification policy, when it declares one.",
             "x-go-type-skip-optional-pointer": false
+          },
+          "input": {
+            "$ref": "#/components/schemas/RunInput",
+            "description": "What a claimed run binds to; a claim of any other work, and a peek, carry none.",
+            "x-go-type-skip-optional-pointer": false
           }
         },
         "additionalProperties": false,
@@ -904,7 +982,56 @@
           "ok",
           "operation"
         ],
-        "description": "The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one."
+        "description": "The next operation (claim/peek). schema_version and resource accompany an operation whose contract resolved; unresolvable explains one that did not (peek only); verification is the action's declared verification policy, when it has one; input is what a claimed run binds to."
+      },
+      "RunInput": {
+        "type": "object",
+        "properties": {
+          "generation": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The procedure record's generation the run was asked of, which its report names."
+          },
+          "operation": {
+            "type": "string",
+            "description": "The manifest's id."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$",
+            "description": "The reviewed commit the run was asked of."
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The run's parameters, as the manifest's input type validated them."
+          },
+          "hosts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The machines it runs on, as HQ resolved them."
+          },
+          "correlation": {
+            "type": "string",
+            "description": "The asker's own id for finding it later; empty for none."
+          },
+          "approved_by": {
+            "type": "string",
+            "description": "The person who approved a held run; absent for one nobody held."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "generation",
+          "operation",
+          "revision",
+          "parameters",
+          "hosts",
+          "correlation"
+        ],
+        "description": "What a claimed run binds to, as it was asked for and approved."
       },
       "Material": {
         "type": "object",
@@ -984,6 +1111,19 @@
           },
           "message": {
             "type": "string"
+          },
+          "events": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/RunEvent"
+            },
+            "description": "A run's task outcomes; an operation other than a run reports none."
+          },
+          "catalog": {
+            "$ref": "#/components/schemas/SourceCatalog",
+            "description": "What a scan of an automation source found; an operation other than a scan reports none.",
+            "x-go-type-skip-optional-pointer": false
           }
         },
         "additionalProperties": false,
@@ -991,6 +1131,77 @@
           "success",
           "observed_generation"
         ]
+      },
+      "RunEvent": {
+        "type": "object",
+        "properties": {
+          "host": {
+            "type": "string",
+            "maxLength": 253
+          },
+          "task": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "changed",
+              "failed",
+              "skipped",
+              "unreachable"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 500
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "host",
+          "task",
+          "outcome",
+          "message"
+        ],
+        "description": "One task's outcome on one machine, in a run's report."
+      },
+      "Renewal": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "continue": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "enum": [
+              "",
+              "Held",
+              "Cancelled"
+            ],
+            "description": "Why the claimant stops: its asker is held by the pause or a block, or the operation was cancelled. Empty while it goes on."
+          },
+          "lease_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "x-go-type-skip-optional-pointer": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "ok",
+          "continue",
+          "reason",
+          "lease_expires_at"
+        ],
+        "description": "A renewed lease. continue false tells the claimant to stop; a held operation's lease is still extended so it can report what it did."
       },
       "ConnectionRecord": {
         "type": "object",
@@ -2182,6 +2393,238 @@
           "JobStateRunning"
         ]
       },
+      "SourceCatalog": {
+        "type": "object",
+        "description": "The procedures an automation source's repository declares at the tip of its default branch, as the automation worker read them without running any: HQ stores it as a proposal and judges it.",
+        "properties": {
+          "branch": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "revision": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "verification": {
+            "$ref": "#/components/schemas/CommitVerification"
+          },
+          "procedures": {
+            "type": "array",
+            "maxItems": 200,
+            "items": {
+              "$ref": "#/components/schemas/ScannedProcedure"
+            }
+          },
+          "files": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "$ref": "#/components/schemas/ScannedFile"
+            }
+          },
+          "unpinned": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "$ref": "#/components/schemas/UnpinnedPath"
+            }
+          },
+          "reaches": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/RunnerReach"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "branch",
+          "revision",
+          "verification",
+          "procedures",
+          "files",
+          "unpinned",
+          "reaches"
+        ]
+      },
+      "CommitVerification": {
+        "type": "object",
+        "description": "Whether GitHub verified the commit's signature, and the GitHub account that committed it.",
+        "properties": {
+          "verified": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 40
+          },
+          "committer": {
+            "type": "string",
+            "maxLength": 39
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "verified",
+          "reason",
+          "committer"
+        ]
+      },
+      "ScannedProcedure": {
+        "type": "object",
+        "description": "One sidecar and the playbook of the same name beside it: the sidecar as parsed, the play's title and assertions, each role's argument spec, and what could not be read.",
+        "properties": {
+          "sidecar": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "playbook": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "declaration": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "x-go-type": "any",
+            "description": "The sidecar as YAML read it, unjudged; null when it could not be read."
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "roles": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/ScannedRole"
+            }
+          },
+          "preconditions": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "verification": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          },
+          "problems": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "string",
+              "maxLength": 500
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "sidecar",
+          "playbook",
+          "declaration",
+          "title",
+          "roles",
+          "preconditions",
+          "verification",
+          "problems"
+        ]
+      },
+      "ScannedRole": {
+        "type": "object",
+        "description": "A role a procedure's plays list, and its main entry point's argument spec as ansible-doc read it.",
+        "properties": {
+          "role": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "argument_spec": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "additionalProperties": true,
+            "x-go-type": "any",
+            "description": "Null when the role declares none or could not be found."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "argument_spec"
+        ]
+      },
+      "ScannedFile": {
+        "type": "object",
+        "description": "A file of the repository, by its path and the git object id that names its content.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "object": {
+            "type": "string",
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "object"
+        ]
+      },
+      "UnpinnedPath": {
+        "type": "object",
+        "description": "A path Ansible would read beyond a playbook and its roles: a configuration, plugins or shared variables.",
+        "properties": {
+          "path": {
+            "type": "string",
+            "maxLength": 4096
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "config",
+              "plugins",
+              "variables"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "kind"
+        ]
+      },
+      "RunnerReach": {
+        "type": "object",
+        "description": "One login the automation worker has: the machine it reaches, by its name in HQ, and the privilege profile the login is. Never its address, user or key.",
+        "properties": {
+          "machine": {
+            "type": "string",
+            "maxLength": 253
+          },
+          "profile": {
+            "type": "string",
+            "maxLength": 160
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "machine",
+          "profile"
+        ]
+      },
       "AdGuardClientRecord": {
         "properties": {
           "connection_ref": {
@@ -2993,7 +3436,7 @@
       },
       "FailureClass": {
         "type": "string",
-        "description": "Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.",
+        "description": "Why a read got no usable answer: refused, the wrong service answered, or nothing answered. Empty when unclassified.",
         "enum": [
           "",
           "credential",
@@ -3658,6 +4101,93 @@
         },
         "type": "object"
       },
+      "HostEdgeRebootRecord": {
+        "additionalProperties": false,
+        "description": "Whether an edge waits on a restart: the host.edge_reboot reading's record for each edge, read the same way by its receiver's reboot operation and handed over its SSH transport.",
+        "properties": {
+          "pending": {
+            "description": "Whether /run/reboot-required is there: an update waits on a restart.",
+            "type": "boolean"
+          },
+          "since": {
+            "default": "",
+            "description": "When the flag was first written, when one is there; empty when none is.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "packages": {
+            "default": [],
+            "description": "The packages /run/reboot-required.pkgs names as waiting on it, each once.",
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9+.-]{1,99}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "scheduled_action": {
+            "default": "",
+            "description": "What logind's ScheduledShutdown will do (reboot, poweroff, halt); empty when nothing is scheduled.",
+            "pattern": "^(?:|[a-z][a-z0-9-]{0,31})$",
+            "type": "string"
+          },
+          "scheduled_at": {
+            "default": "",
+            "description": "When logind will do it; empty when nothing is scheduled.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "read_at": {
+            "description": "When root read the flag and asked logind.",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "type": "string"
+          },
+          "connection_ref": {
+            "description": "The edge's SSH transport, which names the machine it reads.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pending",
+          "read_at",
+          "connection_ref"
+        ],
+        "type": "object"
+      },
+      "HostFilesystemRecord": {
+        "additionalProperties": false,
+        "description": "One real filesystem on the controller's machine, as statfs(2) states it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs or zfs mount the machine shows, one per device, and sends where it is mounted and its space; no device, option or file name.",
+        "properties": {
+          "mount": {
+            "description": "Where the filesystem is mounted, the name you find it by.",
+            "maxLength": 255,
+            "pattern": "^/[ -{}~]*$",
+            "type": "string"
+          },
+          "free_bytes": {
+            "description": "f_bavail: the bytes a process that is not root can still write.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total_bytes": {
+            "description": "f_blocks: the filesystem's size in bytes.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "read_at": {
+            "description": "When root asked the kernel.",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "mount",
+          "free_bytes",
+          "total_bytes",
+          "read_at"
+        ],
+        "type": "object"
+      },
       "HostFirewallRecord": {
         "properties": {
           "record": {
@@ -3736,6 +4266,54 @@
         ],
         "type": "object",
         "description": "One host.perimeter record: Open-port test."
+      },
+      "HostRebootRecord": {
+        "additionalProperties": false,
+        "description": "Whether the controller's machine waits on a restart: the host.reboot reading's one record. Root reads the flag the packaging system leaves in /run/reboot-required and the packages it lists beside it, and asks logind for the shutdown scheduled, if one is; no other file or property.",
+        "properties": {
+          "pending": {
+            "description": "Whether /run/reboot-required is there: an update waits on a restart.",
+            "type": "boolean"
+          },
+          "since": {
+            "default": "",
+            "description": "When the flag was first written, when one is there; empty when none is.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "packages": {
+            "default": [],
+            "description": "The packages /run/reboot-required.pkgs names as waiting on it, each once.",
+            "items": {
+              "pattern": "^[a-z0-9][a-z0-9+.-]{1,99}$",
+              "type": "string"
+            },
+            "maxItems": 64,
+            "type": "array"
+          },
+          "scheduled_action": {
+            "default": "",
+            "description": "What logind's ScheduledShutdown will do (reboot, poweroff, halt); empty when nothing is scheduled.",
+            "pattern": "^(?:|[a-z][a-z0-9-]{0,31})$",
+            "type": "string"
+          },
+          "scheduled_at": {
+            "default": "",
+            "description": "When logind will do it; empty when nothing is scheduled.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "read_at": {
+            "description": "When root read the flag and asked logind.",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pending",
+          "read_at"
+        ],
+        "type": "object"
       },
       "HostRenderStatusRecord": {
         "description": "One secret renderer's account of its own runs, or why it has none. It holds no secret, no vault or item name and no connection ref: times, versions, counts and short words.",
@@ -3975,7 +4553,7 @@
       },
       "HostUnitRecord": {
         "additionalProperties": false,
-        "description": "One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.",
+        "description": "One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships and of each other service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.",
         "properties": {
           "unit": {
             "description": "Id: the unit's name.",
@@ -4019,13 +4597,13 @@
           },
           "main_code": {
             "default": 0,
-            "description": "ExecMainCode: how the main process of the last run ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
+            "description": "ExecMainCode: how the last run's main process ended, as the kernel's code (1 exited, 2 killed, 3 dumped).",
             "minimum": 0,
             "type": "integer"
           },
           "main_status": {
             "default": 0,
-            "description": "ExecMainStatus: the exit status or signal number of the main process of the last run.",
+            "description": "ExecMainStatus: the exit status or signal of the last run's main process.",
             "minimum": 0,
             "type": "integer"
           },
@@ -4071,6 +4649,23 @@
             "maxLength": 255,
             "pattern": "^(?:|(?:[A-Za-z0-9:_.@-]|\\\\x[0-9a-f]{2})+\\.(?:service|socket|mount|automount|swap|target|path|timer|slice))$",
             "type": "string"
+          },
+          "restarts": {
+            "default": 0,
+            "description": "NRestarts: how often systemd restarted the service on its own since it was last started deliberately or reset.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "active_at": {
+            "default": "",
+            "description": "ActiveEnterTimestamp: when the unit last became active, on this boot.",
+            "pattern": "^(?:|[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)$",
+            "type": "string"
+          },
+          "foreign": {
+            "default": false,
+            "description": "A service the repository does not ship, read because systemd has restarted it on its own.",
+            "type": "boolean"
           },
           "read_at": {
             "description": "When the launcher asked systemd.",
@@ -4990,6 +5585,8 @@
           "adguard.dns",
           "adguard.query_summary",
           "adguard.rewrite",
+          "automation.operation",
+          "automation.source",
           "caddy.route",
           "cloudflare.access_app",
           "cloudflare.access_service_token",
@@ -5007,8 +5604,11 @@
           "github.dependency_run",
           "github.profile",
           "github.repository",
+          "host.edge_reboot",
+          "host.filesystem",
           "host.firewall",
           "host.perimeter",
+          "host.reboot",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -5050,6 +5650,8 @@
           "ResourceKindAdGuardDNS",
           "ResourceKindAdGuardQuerySummary",
           "ResourceKindAdGuardRewrite",
+          "ResourceKindAutomationOperation",
+          "ResourceKindAutomationSource",
           "ResourceKindCaddyRoute",
           "ResourceKindCloudflareAccessApp",
           "ResourceKindCloudflareAccessServiceToken",
@@ -5067,8 +5669,11 @@
           "ResourceKindGitHubDependencyRun",
           "ResourceKindGitHubProfile",
           "ResourceKindGitHubRepository",
+          "ResourceKindHostEdgeReboot",
+          "ResourceKindHostFilesystem",
           "ResourceKindHostFirewall",
           "ResourceKindHostPerimeter",
+          "ResourceKindHostReboot",
           "ResourceKindHostRenderStatus",
           "ResourceKindHostTailnetLock",
           "ResourceKindHostUnit",
@@ -5130,8 +5735,11 @@
           "github.dependency_run",
           "github.profile",
           "github.repository",
+          "host.edge_reboot",
+          "host.filesystem",
           "host.firewall",
           "host.perimeter",
+          "host.reboot",
           "host.render_status",
           "host.tailnet_lock",
           "host.unit",
@@ -5175,8 +5783,11 @@
           "SweptGitHubDependencyRun",
           "SweptGitHubProfile",
           "SweptGitHubRepository",
+          "SweptHostEdgeReboot",
+          "SweptHostFilesystem",
           "SweptHostFirewall",
           "SweptHostPerimeter",
+          "SweptHostReboot",
           "SweptHostRenderStatus",
           "SweptHostTailnetLock",
           "SweptHostUnit",

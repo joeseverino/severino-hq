@@ -208,6 +208,12 @@ def sent(body, headers):
     return page
 
 
+class SentFile(bytes):
+    """A file HQ answered (a picture a page draws), carrying its headers."""
+
+    headers: dict[str, str]
+
+
 # A nonce as a policy names it, and a script tag as a browser serializes it
 # once parsed: emptied, so a page cannot read its nonce back out of the markup.
 _NONCE_SOURCE = re.compile(r"'nonce-([^']+)'")
@@ -228,9 +234,12 @@ def answered(response):
     """A test client's answer as the browser is to receive it: its body and
     every header but its length, which Playwright counts from the body."""
 
-    return sent(
-        response.content.decode(), {name: value for name, value in response.items() if name != "Content-Length"}
-    )
+    headers = {name: value for name, value in response.items() if name != "Content-Length"}
+    if response.get("Content-Type", "").startswith("image/"):
+        file = SentFile(response.getvalue())
+        file.headers = headers
+        return file
+    return sent(response.content.decode(), headers)
 
 
 # HQ's policy takes a style only from a sheet of its own origin, and a page a
@@ -391,6 +400,8 @@ class BrowserGate(SimpleTestCase):
     playwright: Playwright
     browser: Browser
     context: BrowserContext | None
+    # Whether the context open runs the page's script, as ``start`` started it.
+    runs_script = False
 
     @classmethod
     def render(cls):
@@ -450,6 +461,7 @@ class BrowserGate(SimpleTestCase):
         self.close_context()
         test = getattr(self, self._testMethodName, None)
         options.setdefault("java_script_enabled", getattr(test, "scripted", self.scripted))
+        self.runs_script = options["java_script_enabled"]
         # Scripts asked for while this is a list wait in it, unanswered.
         self.held = None
         self.context = self.browser.new_context(**options)
@@ -520,6 +532,9 @@ class BrowserGate(SimpleTestCase):
         its own, for a page HQ answered, or HQ's policy, for one put together
         by a test."""
 
+        if isinstance(page, SentFile):
+            route.fulfill(headers=page.headers, body=bytes(page))
+            return
         if isinstance(page, Sent):
             route.fulfill(headers=page.headers, body=str(page))
             return
@@ -670,11 +685,11 @@ class BrowserGate(SimpleTestCase):
         """What the layout invariants find on the page as loaded, by check:
         every one the gates hold on a page as a reader has it."""
 
-        return self.checked(geometry_probes(path, width))
+        return self.checked(geometry_probes())
 
     def table_defects_at_every_width(self):
-        """What the table checks (`TABLE_CHECKS`) find on the loaded page at
-        some window width from the narrowest phone up, as it was resized and
+        """What the table checks (`Check(table=True)`) find on the loaded page
+        at some window width from the narrowest phone up, as it was resized and
         with every row a reader can open opened, and whether opening them
         moved what stayed closed, by check, each finding with the first width
         it was found at; the page is left at the width it was loaded at, its
@@ -792,7 +807,7 @@ class BrowserGate(SimpleTestCase):
         found = self.checked(
             {
                 "stand in": (STAND_IN, SELECTORS["vendored"]),
-                **geometry_probes(path, width),
+                **geometry_probes(),
                 **palette_probes(),
                 "put back": (PUT_BACK, None),
             }

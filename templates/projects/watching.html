@@ -12,19 +12,35 @@ would be a page about anybody.
 {% elif not profile %}
   {% include "partials/_empty_state.html" with message="Not read from GitHub yet." only %}
 {% else %}
-  <div class="gh-profile">
-    {% if profile.avatar %}<img class="gh-avatar" src="{{ profile.avatar }}" alt="" width="64" height="64">{% endif %}
-    <div class="gh-identity">
-      <p class="gh-name">{{ profile.name|default:profile.login|breakable }}<span class="gh-verified" tabindex="0" data-tip="This is your GitHub account, according to your sign-in.{% if app_repositories %}&#10;HQ's GitHub App is installed on it.{% endif %}">{% include "partials/_icon.html" with name="check-circle" %}<span class="visually-hidden">This is your GitHub account, according to your sign-in.</span></span></p>
-      <div>{% entity profile.url|outside label="@"|add:profile.login %}</div>
-      {% if profile.bio %}<p>{{ profile.bio|breakable }}</p>{% endif %}
-    </div>
-    <dl class="gh-stats">
-      <div><dt>Followers</dt><dd>{% entity profile.url|add:"?tab=followers"|outside label=profile.followers %}</dd></div>
-      <div><dt>Following</dt><dd>{% entity profile.url|add:"?tab=following"|outside label=profile.following %}</dd></div>
-      <div><dt>Public repos</dt><dd>{% entity profile.url|add:"?tab=repositories"|outside label=profile.public_repos %}</dd></div>
-      <div><dt>Starred</dt><dd>{% entity profile.url|add:"?tab=stars"|outside label=profile.starred %}</dd></div>
-    </dl>
+  <div class="section-flow">
+  {% card label="Your GitHub profile" %}
+    {% include "partials/_identity.html" with picture=profile.avatar name=profile.name|default:profile.login handle="@"|add:profile.login url=profile.url badge="Your account" tone="good" tip=account_tip about=profile.bio only %}
+    {% facts layout="band" label="On GitHub" %}
+      {% fact "Followers" %}{% entity profile.url|add:"?tab=followers"|outside label=profile.followers %}{% endfact %}
+      {% fact "Following" %}{% entity profile.url|add:"?tab=following"|outside label=profile.following %}{% endfact %}
+      {% fact "Public repos" %}{% entity profile.url|add:"?tab=repositories"|outside label=profile.public_repos %}{% endfact %}
+      {% fact "Starred" %}{% entity profile.url|add:"?tab=stars"|outside label=profile.starred %}{% endfact %}
+    {% endfacts %}
+  {% endcard %}
+  {% section "Your GitHub account" %}
+  {% facts %}
+    {% if profile.since %}{% fact "On GitHub since" %}{{ profile.since|when:"day" }}{% endfact %}{% endif %}
+    {% if profile.company %}{% fact "Company" value=profile.company %}{% endif %}
+    {% if profile.location %}{% fact "Location" value=profile.location %}{% endif %}
+    {% if profile.website|web_url %}{% fact "Website" %}{% entity profile.website|outside label=profile.website|cut:"https://" %}{% endfact %}{% endif %}
+    {% if profile.social %}{% fact "X" value="@"|add:profile.social %}{% endif %}
+    {% fact "Open to work" %}{% if profile.hireable %}Yes, on the profile{% else %}Not shown{% endif %}{% endfact %}
+    {% if profile.public_gists %}{% fact "Public gists" value=profile.public_gists %}{% endif %}
+    {% fact "HQ's GitHub App" %}<span class="prose">
+      {% if app_repositories %}
+        Installed, reading {{ app_repositories|length }} of your repositories:
+        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% dot %}{% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}
+      {% else %}
+        <span class="muted">Not reading any repository this account owns.</span>
+      {% endif %}
+    </span>{% endfact %}
+  {% endfacts %}
+  {% endsection %}
   </div>
 
   {% section "Starred" count=profile.watched|length %}
@@ -54,25 +70,6 @@ would be a page about anybody.
   {% aside %}<span class="count">Newest first{% dot %}{% include "partials/_reading_age.html" with at=profile.observed_at only %}</span>
   {% endsection %}
 
-  {% section "Your GitHub account" %}
-  <dl class="github-facts account-facts">
-    {% if profile.since %}<div><dt>On GitHub since</dt><dd>{{ profile.since|when:"day" }}</dd></div>{% endif %}
-    {% if profile.company %}<div><dt>Company</dt><dd>{{ profile.company|breakable }}</dd></div>{% endif %}
-    {% if profile.location %}<div><dt>Location</dt><dd>{{ profile.location|breakable }}</dd></div>{% endif %}
-    {% if profile.website|web_url %}<div><dt>Website</dt><dd>{% entity profile.website|outside label=profile.website|cut:"https://" %}</dd></div>{% endif %}
-    {% if profile.social %}<div><dt>X</dt><dd>@{{ profile.social|breakable }}</dd></div>{% endif %}
-    <div><dt>Open to work</dt><dd>{% if profile.hireable %}Yes, on the profile{% else %}Not shown{% endif %}</dd></div>
-    {% if profile.public_gists %}<div><dt>Public gists</dt><dd>{{ profile.public_gists|breakable }}</dd></div>{% endif %}
-    <div><dt>HQ's GitHub App</dt><dd class="prose">
-      {% if app_repositories %}
-        Installed, reading {{ app_repositories|length }} of your repositories:
-        {% for item in app_repositories %}{% if item.project %}<a href="{{ item.project.get_absolute_url }}">{{ item.repo.short|breakable }}</a>{% else %}{% entity item.repo.url|outside label=item.repo.short %}{% endif %}{% if item.repo.private %} <span class="muted">(private)</span>{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% dot %}{% entity "https://github.com/settings/installations"|outside label="Manage on GitHub" %}
-      {% else %}
-        <span class="muted">Not reading any repository this account owns.</span>
-      {% endif %}
-    </dd></div>
-  </dl>
-  {% endsection %}
 {% endif %}
 </div>
 {% endblock %}

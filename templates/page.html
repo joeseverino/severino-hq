@@ -13,7 +13,7 @@ readings when it is opened (partials/_visit_refresh.html).
 {% include "partials/_page_head.html" %}
 {% if page.navigation %}{% include "partials/_page_navigation.html" with navigation=page.navigation %}{% endif %}
 {% block page %}{% endblock %}
-{% if built_from %}<p class="page-foot">Built from {% entity built_from %}</p>{% endif %}
+{% if built_from %}<p class="section-foot">Built from {% entity built_from %}</p>{% endif %}
 {% for dialog in page.dialogs %}{% include "partials/_modal.html" with id=dialog.id title=dialog.title lede=dialog.lede body_template=dialog.body_template %}{% endfor %}
 {% if page_visit %}{% include "partials/_visit_refresh.html" with visit=page_visit %}{% endif %}
 {% endblock %}

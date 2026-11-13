@@ -1,0 +1,56 @@
+[
+  {
+    "event": "runner_on_ok",
+    "event_data": {
+      "host": "example-host-01",
+      "task": "Validating arguments against arg spec 'main' - Report one mount",
+      "task_action": "ansible.builtin.validate_argument_spec",
+      "resolved_action": "ansible.builtin.validate_argument_spec",
+      "res": {
+        "changed": false,
+        "msg": "The arg spec validation passed"
+      }
+    }
+  },
+  {
+    "event": "runner_on_ok",
+    "event_data": {
+      "host": "example-host-01",
+      "task": "Read the mount's use",
+      "task_action": "ansible.builtin.debug",
+      "resolved_action": "ansible.builtin.debug",
+      "res": {
+        "changed": false,
+        "msg": "/",
+        "_ansible_verbose_always": true
+      }
+    }
+  },
+  {
+    "event": "runner_on_failed",
+    "event_data": {
+      "host": "example-host-01",
+      "task": "Validating arguments against arg spec 'main' - Report one mount",
+      "task_action": "ansible.builtin.validate_argument_spec",
+      "resolved_action": "ansible.builtin.validate_argument_spec",
+      "res": {
+        "changed": false,
+        "exception": "(traceback unavailable)",
+        "msg": "Validation of arguments failed:\nargument 'depth' is of type str and we were unable to convert to int: \"'many'\" cannot be converted to an int",
+        "argument_spec_data": {
+          "mount": {
+            "type": "path",
+            "default": "/"
+          },
+          "depth": {
+            "type": "int",
+            "default": 1
+          }
+        },
+        "argument_errors": [
+          "argument 'depth' is of type str and we were unable to convert to int: \"'many'\" cannot be converted to an int"
+        ]
+      }
+    }
+  }
+]

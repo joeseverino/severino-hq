@@ -7,6 +7,8 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 from mcp_types import methods
 
+from hq.platform.application.tests.reads import reads
+
 from .source import source_files
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -64,6 +66,7 @@ def missing(root: Path, text: str) -> list[str]:
 
 
 @tag("source", "tree")
+@reads("**/*.md", lists=("**",))
 class DocumentPathTests(SimpleTestCase):
     def test_a_path_that_is_not_there_is_named(self):
         text = "Read `docs/Design.md`, `hq/nowhere.py:thing` and `tests/browser/widths.py`, in `var/gate/`."

@@ -1,0 +1,8 @@
+id: hand-drawn-change-table
+valid:
+  - '{% change_table preview %}'
+  - '{% table_region "Rules" %}<table class="data-table"></table>{% endtable_region %}'
+  - '<p>A compare= in words.</p>'
+invalid:
+  - '{% table_region "Changes" compare=True %}<table class="data-table"></table>{% endtable_region %}'
+  - '<div>{% table_region label compare=shown.compares %}<table class="data-table"></table>{% endtable_region %}</div>'

@@ -24,6 +24,20 @@ HOST = ("hq", "hq_sdk")
 # these suffixes (the Recording Installed Projects specification), so the
 # directory names alone say what is installed and at which version.
 _METADATA = (".dist-info", ".egg-info")
+# What ``booted_code`` took, once per process; None until it is first asked.
+recorded: str | None = None
+
+
+def booted_code() -> str:
+    """The identity of the code this process started with, taken once.
+
+    A process keeps running the modules it imported when the files under it
+    change, so a key it stores under stays the one it started with."""
+
+    global recorded
+    if recorded is None:
+        recorded = running_code()
+    return recorded
 
 
 def running_code() -> str:

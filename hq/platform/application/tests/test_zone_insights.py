@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from django.test import SimpleTestCase
 
-from ..zone_insights import _mid_sentence, email
+from ..zone_insights import _edge_certificates, email
 
 
 def record(record_type, name, content, priority=None):
@@ -26,7 +26,14 @@ class EmailCardTests(SimpleTestCase):
         self.assertIn("A null MX says it takes no mail.", card.detail)
 
 
-class MidSentenceTests(SimpleTestCase):
-    def test_a_word_is_lowercased_and_an_acronym_kept(self):
-        self.assertEqual(_mid_sentence("Behind Access"), "behind Access")
-        self.assertEqual(_mid_sentence("DNS lookups"), "DNS lookups")
+class EdgeCertificateCardTests(SimpleTestCase):
+    def test_a_certificate_uploaded_to_a_proxy_is_counted_apart_from_the_issuers(self):
+        edge = tuple(
+            SimpleNamespace(issuer=issuer, expires="2030-01-01T00:00:00+00:00")
+            for issuer in ("Let's Encrypt", "uploaded")
+        )
+
+        detail = _edge_certificates(edge).detail
+
+        self.assertIn("Issued by Let's Encrypt.", detail)
+        self.assertIn("1 certificate uploaded.", detail)

@@ -7,9 +7,10 @@ from unittest import mock
 from django.test import SimpleTestCase, TestCase
 
 from .. import plugins
+from ..card_items import Insight, Kpi
 from ..plugin_testing import installed, providers_derived_again, sibling
 from ..plugins import PLUGIN_API_VERSION, PluginIntegration, PluginManifest
-from ..ui import DomainOverview, Insight, Kpi
+from ..ui import DomainOverview
 
 LOGGER = "severino.composition"
 EVENT = "composition.source.unreadable"
@@ -96,6 +97,22 @@ class UnreadableSiblingTests(SimpleTestCase):
 
         self.assertEqual(by_source["example.broken"].read_capabilities, ("example.broken.read",))
 
+    def test_two_items_under_one_key_are_one_the_worst_and_the_rest_of_the_source_stays(self):
+        # Two certificates for one name, read under one key: the queue knows an
+        # item by its key, so it keeps the worse and says why the other went.
+        later = Insight("attention", "Example", "Lapses in ten days", "10", "", key="certificate:example.com")
+        sooner = replace(later, status="serious", title="Lapsed")
+        other = Insight("attention", "Example", "Something else", "1", "", key="other")
+        self.installed(PluginIntegration(), PluginIntegration(attention=lambda: (later, other, sooner)))
+
+        with self.assertLogs(LOGGER, "ERROR") as logs:
+            gathered = [entry["item"] for entry in plugins.plugin_attention_items()]
+
+        self.assertEqual(sorted(item.title for item in gathered), ["Lapsed", "Something else"])
+        (record,) = logs.records
+        self.assertIn("example.broken", record.getMessage())
+        self.assertIn("example.broken:certificate:example.com", record.getMessage())
+
     def test_dashboard_sections_carry_an_unreadable_sibling_as_one_card(self):
         unreadable = self.cards(broken)
 
@@ -139,6 +156,15 @@ class KitNamesARefusedAnswerTests(TestCase):
             found = providers_derived_again(manifest.id)
 
         self.assertEqual({line.partition(":")[0] for line in found}, {"attention", "dashboard", "overview"})
+
+    def test_the_kit_names_a_provider_giving_two_items_one_key(self):
+        manifest, contribution = sibling(identifier="example.repeated", name="Repeated")
+        repeated = replace(contribution, attention=lambda: (GOOD_ITEM, replace(GOOD_ITEM, value="2")))
+
+        with installed((manifest, repeated)):
+            found = providers_derived_again(manifest.id)
+
+        self.assertEqual([line.partition(":")[0] for line in found], ["attention"])
 
     def test_the_kit_names_nothing_of_a_well_formed_provider(self):
         overview = DomainOverview("Example", "/example/", (Kpi("Good reading", 1),))

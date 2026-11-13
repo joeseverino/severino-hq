@@ -1,7 +1,7 @@
 """dev:look reads what it was asked only from its task, reads --css as a file
 from the checkout and --probe as a probe module's, reports page by page, shoots a dialog open as a reader
-opens it, and compares against a base in a worktree it always removes, keeping
-the base's shots."""
+opens it, and matches findings against a base's (test_look_base.py looks at
+the base)."""
 
 import io
 import os
@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, redirect_stderr
 from pathlib import Path
 from unittest import mock
 
@@ -18,8 +18,9 @@ from django.test import SimpleTestCase, TestCase, override_settings, tag
 from hq.platform.core import seeds
 
 from . import look, look_report, look_tables
-from .browser import stress
+from .browser import stress, survey
 from .browser.probes import boxes
+from .browser.selectors import SELECTORS
 
 ASKED = {"usage_pages": "example"}
 
@@ -123,14 +124,21 @@ class AskedFirstTests(SimpleTestCase):
         The base names no commit, so a look at it first would be refused for that instead.
         """
 
-        for kept in ("clock_at", "asked"):
+        for kept in ("clock_at", "asked", "tree", "tree_store"):
             self.addCleanup(lambda kept=kept: kept in vars(look.Look) and delattr(look.Look, kept))
         environment = {**ASKED, "usage_base": "example-missing", "usage_seed": "showcase", **asked}
+        printed = io.StringIO()
         with (
             mock.patch.dict(os.environ, environment, clear=True),
-            self.assertRaisesMessage(AssertionError, said),
+            redirect_stderr(printed),
+            self.assertRaises(SystemExit) as exited,
         ):
             look.Look.setUpClass()
+        look.Look.doClassCleanups()
+        # A usage error, as the early check's, never a failure of the look's class.
+        self.assertEqual(exited.exception.code, 64)
+        self.assertIn(said, printed.getvalue())
+        return printed.getvalue()
 
     def test_a_rule_that_does_not_exist_is_refused_with_the_rules_that_do_before_the_base_is_looked_at(self):
         self.refused_before_the_base(
@@ -232,7 +240,7 @@ class _Inputs:
         self.said.append(("key", key))
 
     def evaluate(self, script, arg=None):
-        if script == look._OPEN_ONCE:
+        if script == survey.OPEN_ONCE:
             self.rounds += 1
             self.said.append(("batch", "disclosures"))
             return self.rounds == 1
@@ -277,7 +285,7 @@ class _Drawing:
         pass
 
     def evaluate(self, script, _arg=None):
-        if script == look._OPEN_ONCE:
+        if script == survey.OPEN_ONCE:
             self.rounds += 1
             self.pressed.add("disclosures")
             return self.rounds == 1
@@ -419,7 +427,7 @@ class _Dialogs:
         self.at, self.hovered = (0, 0), None
 
     def named(self, openers):
-        return next(dialog for dialog in self.open if look._OPENERS.format(id=dialog) == openers)
+        return next(dialog for dialog in self.open if SELECTORS["dialog_opener"].format(id=dialog) == openers)
 
     def evaluate(self, script, arg=None):
         if script == look._DIALOGS:
@@ -566,6 +574,25 @@ class ReportTests(SimpleTestCase):
         self.assertIn("example/three", verdict)
         self.assertNotIn("example/two", verdict)
         self.assertIn("holds", look_report.verdict_line("survey", {("example/two", 402): []}))
+
+    def test_the_verdict_counts_the_pages_and_widths_judged(self):
+        held = {key: [] for key in self.FOUND}
+        for found in (held, self.FOUND):
+            with self.subTest(failed=found is self.FOUND):
+                verdict = look_report.verdict_line("survey", found)
+                self.assertIn(" 3 pages at 2 widths (402, 1360)", verdict)
+
+    def test_a_line_names_each_page_and_width_with_its_first_finding_inline_and_where_they_are_kept(self):
+        lines = look_report.found_lines(self.FOUND, lambda name, width: f"var/look/{name}-{width}.txt")
+        self.assertEqual(len(lines), 2)
+        one, three = lines
+        self.assertTrue(one.startswith("example/one at 402: "), lines)
+        # The finding as found, its check's name first, so the failure needs no file opened.
+        self.assertIn("overflow: a box past the edge", one)
+        self.assertIn("var/look/example/one-402.txt", one)
+        self.assertIn("overlap: two names", three)
+        self.assertNotIn("frames: a frame", three, "the first finding, and the rest in the file")
+        self.assertIn("2 found", three)
 
     def test_against_a_base_only_new_findings_fail_and_fixed_ones_are_named(self):
         base = {
@@ -764,18 +791,6 @@ class ReportTests(SimpleTestCase):
         self.assertIn("example-ref: (not measured)", look_report.beside("example-ref", "a", None))
 
 
-@tag("source")
-class BandTests(SimpleTestCase):
-    def test_a_tall_page_is_cut_into_window_sized_bands_that_cover_it_once(self):
-        bands = look._bands(2000, 900)
-        self.assertEqual(bands, [(0, 900), (900, 900), (1800, 200)])
-        self.assertEqual(sum(height for _, height in bands), 2000)
-
-    def test_a_page_the_window_holds_is_not_cut(self):
-        self.assertEqual(look._bands(900, 900), [])
-        self.assertEqual(look._bands(400, 900), [])
-
-
 class _Pages:
     """The look's walk over pages, with each look keeping what had been said
     by the time it began."""
@@ -835,78 +850,6 @@ class ProgressTests(SimpleTestCase):
         self.assertEqual(sink.getvalue(), "Looking at example at 402\ndone\n")
 
 
-@tag("source", "tree")
-class WorktreeTests(SimpleTestCase):
-    def test_a_report_names_the_commit_it_was_looked_at(self):
-        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
-            checkout = _repository(Path(folder))
-            head = _git("rev-parse", "--short", "HEAD", cwd=checkout).strip()
-            self.assertEqual(look._commit("HEAD"), head)
-            (checkout / "page.txt").write_text("changed\n", encoding="utf-8")
-            self.assertEqual(look._commit("HEAD"), f"{head} with uncommitted changes")
-            self.assertIn("unknown", look._commit("example-missing"))
-
-    def test_the_base_is_looked_at_under_this_trees_test_files(self):
-        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
-            checkout = _repository(Path(folder))
-            Path(checkout, "hq", "tests").mkdir(parents=True)
-            Path(checkout, "hq", "tests", "test_new.py").write_text("new\n", encoding="utf-8")
-            seen = {}
-
-            def relay(_command, _sink, _ref, cwd, env):
-                seen["test"] = Path(cwd, "hq", "tests", "test_new.py").read_text(encoding="utf-8")
-                seen["database"] = env.get("SEVERINO_TEST_DATABASE_PATH")
-                seen["css"] = env.get("usage_css")
-                Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
-
-            with (
-                mock.patch.dict(
-                    os.environ,
-                    {**ASKED, "usage_css": "main { color: red }", "SEVERINO_TEST_DATABASE_PATH": "var/example.sqlite3"},
-                    clear=True,
-                ),
-                mock.patch.object(look, "LENS", ()),
-                mock.patch.object(look, "this_run", lambda: checkout / "var" / "look" / "example-run"),
-                mock.patch.object(look, "_relay", relay),
-                mock.patch("sys.stdout", new_callable=io.StringIO),
-            ):
-                self.assertEqual(look._look_at("HEAD", "survey", 0.0), ({}, {}, {}))
-            self.assertEqual(seen["test"], "new\n")
-            self.assertIsNone(seen["database"], "the base migrates a database of its own")
-            self.assertEqual(seen["css"], "", "the base is drawn as its tree draws, without --css")
-
-    def test_the_base_shoots_into_this_runs_folder_so_its_shots_outlive_its_worktree(self):
-        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
-            checkout = _repository(Path(folder))
-            run = checkout / "var" / "look" / "example-run"
-            run.mkdir(parents=True)
-
-            def relay(_command, _sink, _ref, cwd, env):
-                self.assertFalse(Path(env["usage_shots_into"]).is_relative_to(cwd))
-                Path(env["usage_shots_into"]).mkdir()
-                Path(env["usage_shots_into"], "example-402.png").write_bytes(b"base")
-                Path(env["usage_found_into"]).write_text("[]", encoding="utf-8")
-
-            with (
-                mock.patch.dict(os.environ, ASKED, clear=True),
-                mock.patch.object(look, "LENS", ()),
-                mock.patch.object(look, "this_run", lambda: run),
-                mock.patch.object(look, "_relay", relay),
-                mock.patch("sys.stdout", new_callable=io.StringIO),
-            ):
-                look._look_at("HEAD", "survey", 0.0)
-            self.assertEqual((run / look.BASE_OUT / "example-402.png").read_bytes(), b"base")
-
-    def test_a_base_that_names_nothing_is_refused(self):
-        with tempfile.TemporaryDirectory() as folder, override_settings(BASE_DIR=folder):
-            _repository(Path(folder))
-            with (
-                mock.patch.dict(os.environ, ASKED, clear=True),
-                self.assertRaisesMessage(AssertionError, "--base example-missing"),
-            ):
-                look._look_at("example-missing", "survey", 0.0)
-
-
 class _Unanswered:
     """A look whose estate page answered 404, closing with no rule and no base."""
 
@@ -918,6 +861,7 @@ class _Unanswered:
         self.unanswered_pages = {"estate/example": 404}
         # The tree the run began on, unchanged at its close.
         self.tree = "example-tree"
+        self.tree_store, self.base_unfit = None, ""
 
 
 @tag("source")
@@ -927,7 +871,7 @@ class UnansweredTests(SimpleTestCase):
             tempfile.TemporaryDirectory() as folder,
             override_settings(BASE_DIR=folder),
             mock.patch.object(look, "this_run", lambda: Path(folder, "var", "look", "example-run")),
-            mock.patch.object(look, "tree_of", lambda _root: "example-tree"),
+            mock.patch.object(look, "changed_since", lambda *_: []),
             mock.patch.dict(os.environ, ASKED, clear=True),
             mock.patch("sys.stdout", new_callable=io.StringIO) as said,
         ):

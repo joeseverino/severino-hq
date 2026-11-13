@@ -24,7 +24,13 @@ from hq.platform.core.tests.browser.gate import add_css, served_sheet, tab_key, 
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.boxes import ANY_SCROLLER, MAP, SIDEWAYS, SMALL_TARGETS
 from hq.platform.core.tests.browser.probes.palette import BUTTON_EDGES
-from hq.platform.core.tests.browser.probes.parts import READINGS, SPILLED_LABELS, WRAPPED, reading_problems
+from hq.platform.core.tests.browser.probes.parts import (
+    DIALOGS_WITHOUT_OPENERS,
+    READINGS,
+    SPILLED_LABELS,
+    WRAPPED,
+    reading_problems,
+)
 from hq.platform.core.tests.browser.probes.settle import KEPT_SELECTORS, PRESS_EVERY_SHOWN, SETTLE
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
 from hq.platform.core.tests.browser.probes.tables import (
@@ -47,6 +53,7 @@ from hq.platform.core.tests.browser.probes.tables import (
     ROW_ACTIONS_TABLES,
     ROW_ARRIVES,
     ROW_TOGGLE_TABLES,
+    ROW_TOGGLE_VALUES,
     ROW_TOGGLES,
     SORT_BY,
     TABLES_THAT_DO_NOT_FIT,
@@ -58,6 +65,7 @@ from hq.platform.core.tests.browser.probes.text import (
     BROKEN_WORDS,
     BROKEN_WORDS_IN_TEXT,
     CHIPS_PAST_THEIR_PAINT,
+    IDENTIFIER,
     OVERLAPPING_TEXT,
     TOUCHING_TEXT,
 )
@@ -65,7 +73,6 @@ from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import ORIGIN
 from hq.platform.core.tests.browser.stress import ALL_PAGES
-from hq.platform.core.tests.browser.survey import _IDENTIFIER
 from hq.platform.core.tests.browser.widths import NARROWEST, PHONE_SCREEN, TARGET_MIN, WIDE, WIDTHS, viewport
 from hq.platform.core.tests.test_browser_fixtures import PAGES
 
@@ -277,6 +284,22 @@ def others(rows, opened):
     return rows[:opened] + rows[opened + 1 :]
 
 
+# Each count of a strip: whether its number and its words share one line and
+# the count takes no second, whether it is a link, and the top of its line.
+_COUNTS_STRIP = """(strip, [cell, valued, labeled]) => ({counts: [...strip.children].filter(fact => fact.matches(cell)).map(fact => {
+  const value = fact.querySelector(valued).getBoundingClientRect();
+  const label = fact.querySelector(labeled).getBoundingClientRect();
+  const box = fact.getBoundingClientRect();
+  const line = Math.max(value.height, label.height);
+  return {
+    text: fact.textContent.trim(),
+    phrase: label.top < value.bottom && value.top < label.bottom && box.height < line * 1.5,
+    linked: Boolean(fact.querySelector(`${valued} a[href]`)),
+    top: Math.round(box.top),
+  };
+})})"""
+
+
 class ComponentLayoutTests(LayoutBrowserTests):
     """Rules with a setup of their own: one page, probe or control each."""
 
@@ -406,25 +429,25 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.pages = {
             **self.pages,
             "band-fact-probe": probe(
-                '<h3 class="eyebrow">Example heading over the band</h3><div class="fact-band">'
-                '{% band_fact icon="search" label="An example label long enough to crowd its value" %}'
-                '<strong><a href="#example">An example value that has to wrap</a></strong>{% endband_fact %}'
-                '{% band_fact icon="shield" label="Example" %}<strong>One</strong>{% endband_fact %}</div>'
+                '<h3 class="eyebrow">Example heading over the band</h3>{% facts layout="band" %}'
+                '{% fact "An example label long enough to crowd its value" icon="search" %}'
+                '<a href="#example">An example value that has to wrap</a>{% endfact %}'
+                '{% fact "Example" value="One" icon="shield" %}{% endfacts %}'
             ),
         }
         for width in (NARROWEST, PHONE_SCREEN[0]):
             with self.subTest(width=width):
                 self.open("band-fact-probe", width)
                 fact, label, lines = self.page.evaluate(
-                    """([band, label]) => {
+                    """([band, label, value]) => {
                   const fact = document.querySelector(band);
                   const edges = (r) => [r.top, r.bottom];
                   const words = document.createRange();
-                  words.selectNodeContents(fact.querySelector('strong a'));
+                  words.selectNodeContents(fact.querySelector(`${value} a`));
                   return [edges(fact.getBoundingClientRect()), edges(fact.querySelector(label).getBoundingClientRect()),
                     [...words.getClientRects()].map(edges)];
                 }""",
-                    [SELECTORS["band_fact"], SELECTORS["band_label"]],
+                    [SELECTORS["band_fact"], SELECTORS["band_label"], SELECTORS["fact_value"]],
                 )
                 self.assertGreater(len({top for top, _bottom in lines}), 1, "the value wraps")
                 self.assertGreaterEqual(min(top for top, _bottom in lines), fact[0])
@@ -518,34 +541,93 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.page.mouse.move(0, 0)
         self.assertEqual((chosen(), shown(), ringed()), ([2], [2], []))
 
+    def test_each_kind_of_dialog_opener_is_found_for_its_dialog(self):
+        """A dialog opened by any opener the modal contract allows is one the
+        gates and dev:look can open: a link the page's wiring intercepts, a
+        control that names its dialog, and the platform's own invoker, bare."""
+
+        openers = {
+            "example-link": '<a href="/" data-modal-open="example-link">Link</a>',
+            "example-named": '<a href="/" aria-haspopup="dialog" aria-controls="modal-example-named">Named</a>',
+            "example-invoker": '<button type="button" command="show-modal" commandfor="modal-example-invoker">Invoker</button>',
+        }
+        dialog = '{%% include "partials/_modal.html" with id="%s" title="Example" %%}'
+        self.pages = {
+            **self.pages,
+            "openers-probe": probe("".join(opener + dialog % name for name, opener in openers.items())),
+        }
+        self.open("openers-probe", WIDE)
+
+        for name in openers:
+            with self.subTest(name):
+                self.assertEqual(self.page.locator(SELECTORS["dialog_opener"].format(id=name)).count(), 1)
+        said = self.page.evaluate(DIALOGS_WITHOUT_OPENERS, [SELECTORS["dialog"], SELECTORS["dialog_opener"]])
+        self.assertEqual(said, [])
+
+    def test_about_text_opens_from_the_keyboard_and_gives_focus_back(self):
+        """The about button is reached by the key for every control, opens
+        its dialog with Enter and no script, and Escape closes it with focus
+        back on the button."""
+
+        self.pages = {
+            **self.pages,
+            "about-probe": probe(
+                render_to_string(
+                    "partials/_about.html",
+                    {"id": "example", "title": "Example notes", "body_template": "partials/_empty_state.html"},
+                )
+            ),
+        }
+        self.open("about-probe", WIDE)
+        dialog = self.page.locator(SELECTORS["dialog"])
+        focused_opener = "() => document.activeElement?.getAttribute('commandfor')"
+
+        self.page.keyboard.press(tab_key(self.browser))
+        self.assertEqual(self.page.evaluate(focused_opener), "modal-example")
+        self.page.keyboard.press("Enter")
+        self.assertTrue(dialog.evaluate("(dialog) => dialog.open"))
+        self.page.keyboard.press("Escape")
+        self.assertFalse(dialog.evaluate("(dialog) => dialog.open"))
+        self.assertEqual(self.page.evaluate(focused_opener), "modal-example")
+
     @with_script
     def test_a_rows_ask_says_its_sentence_on_the_line_its_row_opens_to(self):
-        """A row's Refresh that fails says its word in the row, which keeps
-        its height, and its sentence on the row's open line, where a phone
-        with no title to hover reads it."""
+        """A row's Refresh that fails, pressed in its row or on its open line
+        once its column has left, keeps the row's height and says its
+        sentence on the row's open line, where a phone with no title to hover
+        reads it."""
 
-        # Where the column of actions stays: one that leaves takes its ask to
-        # the open line whole, where its note says the sentence itself.
+        # A column of actions that leaves takes its ask to the open line
+        # whole, where it is pressed and its note says the sentence itself.
         for width in (820, WIDE):
             with self.subTest(width=width):
                 self.open("connections", width)
-                pressed = [
-                    button
-                    for button in self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]").all()
-                    if button.is_visible()
-                ]
-                self.assertTrue(pressed, "no row's ask to press")
-                button = pressed[0]
-                row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
+                row = (
+                    self.page.locator(SELECTORS["row_ask"])
+                    .first.evaluate_handle("(ask) => ask.closest('tr')")
+                    .as_element()
+                )
+                button = row.query_selector(SELECTORS["ask_button"])
+                opened = not button.is_visible()
+                if opened:
+                    row.query_selector(SELECTORS["row_toggle"]).click()
+                    button = row.evaluate_handle(
+                        "(row, button) => row.nextElementSibling?.querySelector(button)", SELECTORS["ask_button"]
+                    ).as_element()
+                    self.assertTrue(
+                        button and button.is_visible(), "the row's ask is on neither its row nor its open line"
+                    )
+                control = button.evaluate_handle("(button, ask) => button.closest(ask)", SELECTORS["ask"])
                 tall = row.bounding_box()["height"]
                 button.click()
-                self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="failed"]')
+                self.page.wait_for_function("(control) => control.dataset.askState === 'failed'", arg=control)
                 self.assertLessEqual(row.bounding_box()["height"], tall + 1)
-                row.query_selector(SELECTORS["row_toggle"]).click()
+                if not opened:
+                    row.query_selector(SELECTORS["row_toggle"]).click()
                 said = row.evaluate(
                     "(row, why) => { const shown = row.nextElementSibling?.querySelector(why);"
                     " return shown?.checkVisibility() ? shown.textContent : null; }",
-                    SELECTORS["ask_why"],
+                    SELECTORS["ask_note"] if opened else SELECTORS["ask_why"],
                 )
                 self.assertIsNotNone(said, "the open line says nothing of the ask")
                 self.assertIn(button.get_attribute("title"), said)
@@ -553,13 +635,16 @@ class ComponentLayoutTests(LayoutBrowserTests):
     @with_script
     def test_a_rows_ask_that_succeeds_drops_the_failure_it_last_said(self):
         """A row whose last refresh failed carries the failure as its button's
-        title; pressed again and done, the title says what the button is for."""
+        title; pressed again and done, the title says what the button is for.
+        Its result shows in a region beside it, so the control the press drew
+        is still the one on the page."""
 
         failed = Ask(
             "Refresh",
             "/example/ask/",
             Standing(asks.FAILED, "The example could not be read."),
             title="Read the example again.",
+            refresh="[data-example-region]",
         )
         self.pages = {
             **self.pages,
@@ -568,8 +653,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
                 '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
                 "<tr><td>A</td>"
                 '<td>{% include "partials/_ask.html" with ask=ask %}</td></tr></tbody></table>{% endtable_region %}'
+                "<div data-example-region><p>An example line.</p></div>"
                 '<form id="hq-post" method="post" hidden></form>'
                 '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
+                '{% include "partials/_notice_frames.html" %}'
                 '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
                 ask=failed,
             ),
@@ -581,6 +668,42 @@ class ComponentLayoutTests(LayoutBrowserTests):
         button.press("Enter")
         self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="done"]')
         self.assertEqual(button.get_attribute("title"), "Read the example again.")
+
+    @with_script
+    def test_an_ask_among_a_rows_actions_keeps_them_on_one_line(self):
+        """An ask before another of a row's actions leaves that action on the
+        row's first line beside it, and what the ask says once pressed comes
+        on the line the cell keeps under them, so the row grows no taller."""
+
+        self.pages = {
+            **self.pages,
+            "ask-actions-probe": probe(
+                '{% table_region "Things" %}<table class="data-table"><thead><tr>'
+                '{% table_heading "Name" gutter=True %}{% table_heading "Act" hidden=True %}</tr></thead><tbody>'
+                '<tr><td>A</td><td class="row-actions">{% include "partials/_ask.html" with ask=ask %}'
+                '<a class="btn ghost compact" href="/example/remove/">Remove</a></td></tr></tbody></table>'
+                "{% endtable_region %}"
+                '<form id="hq-post" method="post" hidden></form>'
+                '<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>'
+                '{% include "partials/_notice_frames.html" %}'
+                '<script defer src="{{ static }}js/ask.js" nonce="{{ nonce }}"></script>',
+                ask=Ask("Refresh", "/example/ask/", title="Read the example again.", compact=True),
+            ),
+            "example/ask": json.dumps(Standing(asks.FAILED, "The example could not be read.").as_json()),
+        }
+        for width in (PHONE_SCREEN[0], WIDE):
+            with self.subTest(width=width):
+                self.open("ask-actions-probe", width)
+                button = self.page.locator(f"{SELECTORS['row_ask']} [data-ask-button]")
+                remove = self.page.get_by_role("link", name="Remove")
+                middles = [box["y"] + box["height"] / 2 for box in (button.bounding_box(), remove.bounding_box())]
+                self.assertLessEqual(abs(middles[0] - middles[1]), 1.5)
+                row = button.evaluate_handle("(button) => button.closest('tr')").as_element()
+                tall = row.bounding_box()["height"]
+                button.press("Enter")
+                self.page.wait_for_selector(f'{SELECTORS["row_ask"]}[data-ask-state="failed"]')
+                self.assertTrue(self.page.locator(SELECTORS["ask_note"]).first.is_visible())
+                self.assertLessEqual(row.bounding_box()["height"], tall + 1)
 
     @with_script
     def test_an_opened_row_keeps_its_words_in_their_cells(self):
@@ -632,22 +755,62 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """The hit area a small control hangs beside itself widens what it
         scrolls, never what it says; a word wider than its control spills."""
 
-        self.open(next(iter(PAGES)), WIDE)
-        widened = self.page.evaluate("""() => {
-          const star = document.createElement('button');
-          star.className = 'pin-toggle example-star';
-          star.textContent = '☆';
+        from hq.platform.core.tests.browser.catalog import CATALOG
+
+        self.pages = {**self.pages, "pin-probe": CATALOG["part/service-pin"].page("part/service-pin")}
+        self.open("pin-probe", WIDE)
+        star = SELECTORS["favorite_star"]
+        widened = self.page.evaluate(
+            """(star) => {
           const word = document.createElement('button');
           word.className = 'example-word';
           word.textContent = 'example label';
           word.style.setProperty('width', '2rem');
           word.style.setProperty('white-space', 'nowrap');
-          document.querySelector('main').append(star, word);
-          return star.scrollWidth > star.clientWidth;
-        }""")
+          const main = document.querySelector('main');
+          main.append(word);
+          const drawn = main.querySelector(star);
+          return drawn.scrollWidth > drawn.clientWidth;
+        }""",
+            star,
+        )
         self.assertTrue(widened)
-        found = self.page.evaluate(SPILLED_LABELS, "main :is(.example-star, .example-word)")
+        found = self.page.evaluate(SPILLED_LABELS, f"main :is({star}, .example-word)")
         self.assertEqual([spilled.split(" holds ")[0] for spilled in found], ["button.example-word"])
+
+    def test_a_word_before_a_name_in_a_cell_shares_the_name_s_line(self):
+        """The word a cell sets before a name ("on" a machine under a row's
+        name, "Created" a record in a cell of free text) stays on the line
+        the name opens, never alone above it."""
+
+        from hq.platform.core.templatetags.value_tags import breakable
+
+        host = breakable("example-primary-container-host-with-a-long-name")
+        record = breakable("an-example-proxy-host-with-a-deliberately-long-name")
+        self.pages = {
+            **self.pages,
+            "word-before-a-name-probe": probe(
+                '<div class="table-scroll" style="inline-size: 20rem"><table class="data-table"><thead><tr>'
+                '<th class="row-gutter">Name</th><th>Change</th></tr></thead><tbody><tr>'
+                '<td class="row-gutter"><strong data-cell="name">example.com</strong><br>'
+                f'<span class="muted">on <a href="#" data-entity="Machine">{host}</a></span></td>'
+                f'<td class="cell-data" data-cell="data">Created {record} from a request</td>'
+                "</tr></tbody></table></div>"
+            ),
+        }
+        self.open("word-before-a-name-probe", PHONE_SCREEN[0])
+        lines = self.page.evaluate(
+            """() => [...document.querySelectorAll('main td')].map((cell) => {
+              // The line under the row's name, and the cell of free text.
+              const box = cell.querySelector('br')?.nextElementSibling ?? cell;
+              const words = document.createRange();
+              words.selectNodeContents(box.firstChild);
+              const word = [...words.getClientRects()].find((r) => r.width);
+              const name = [...(box.querySelector('[data-entity]') ?? box.firstElementChild).getClientRects()].find((r) => r.width);
+              return [box.firstChild.data.trim(), Math.abs(word.top - name.top) < word.height / 2];
+            })"""
+        )
+        self.assertEqual(lines, [["on", True], ["Created", True]])
 
     @with_script
     def test_a_column_holds_out_for_the_longest_part_its_cut_names_cannot_break(self):
@@ -886,7 +1049,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             ],
         )
 
-        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
+        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, IDENTIFIER) if "example-" in line]
         self.assertEqual(len(found), 1, found)
         self.assertIn("example-loose", found[0])
 
@@ -912,7 +1075,7 @@ class ComponentLayoutTests(LayoutBrowserTests):
             ],
         )
 
-        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, _IDENTIFIER) if "example-" in line]
+        found = [line for line in self.page.evaluate(BROKEN_WORDS_IN_TEXT, IDENTIFIER) if "example-" in line]
         self.assertEqual([line for line in found if "example-digest" in line], [])
         self.assertTrue(any("example-word" in line for line in found), found)
 
@@ -1283,12 +1446,30 @@ class ComponentLayoutTests(LayoutBrowserTests):
                     self.assertEqual({len(row) for row in rows}, {1})
                     self.assertEqual({round(row[0]["left"]) for row in rows}, {round(rows[0][0]["left"])})
 
+    def test_the_dashboards_counts_are_one_line_that_wraps_between_counts(self):
+        """Each count reads as one phrase, its number then its words on one
+        line, a link where it has an address; the strip is one line where the
+        counts fit and wraps between counts, never inside one, on a phone."""
+
+        for width in (PHONE_SCREEN[0], 820, WIDE, 1900):
+            with self.subTest(width=width):
+                self.open("dashboard", width)
+                strip = self.page.locator(SELECTORS["dashboard_counts"]).evaluate(
+                    _COUNTS_STRIP, [SELECTORS["band_fact_cell"], SELECTORS["fact_value"], SELECTORS["fact_label"]]
+                )
+                self.assertGreater(len(strip["counts"]), 2)
+                self.assertEqual([count for count in strip["counts"] if not count["phrase"]], [])
+                self.assertEqual([count for count in strip["counts"] if not count["linked"]], [])
+                if width >= WIDE:
+                    self.assertEqual(len({count["top"] for count in strip["counts"]}), 1, strip)
+
     @with_script
     def test_a_row_toggle_is_owed_only_to_what_a_reader_cannot_see(self):
         """Every row the server made openable has its toggle in the HTML, in
         the cell that names it, and shows it only while the row holds
         something back: a column that left a table wider than its box, with
-        something in it, a part of a list it folds, or a value cut short,
+        something in it, a part of a list it folds, or a value cut short (a
+        run of parts' rest past its line's room, never one whose parts all show),
         which opens its row only where the gutter is kept already. A narrow
         box keeps it for every table whose rows open, since touch has no
         hover title; a wide one only for a table with something else to open. A dash in a dropped column says
@@ -1297,10 +1478,10 @@ class ComponentLayoutTests(LayoutBrowserTests):
         withholds. Whether a value is cut is measured, so script is on.
         """
 
-        self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES)}
+        self.pages = {**self.pages, "row-toggle-probe": probe(ROW_TOGGLE_TABLES, **ROW_TOGGLE_VALUES)}
         shown_at = {
-            PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter"},
-            1280: {"folded", "cut-in-a-kept-gutter"},
+            PHONE_SCREEN[0]: {"dropped", "cut", "folded", "cut-in-a-kept-gutter", "line-cut"},
+            1280: {"folded", "cut-in-a-kept-gutter", "line-cut"},
         }
         for width, expected in shown_at.items():
             with self.subTest(width=width):
@@ -1701,6 +1882,119 @@ class ComponentLayoutTests(LayoutBrowserTests):
         shown = self.page.evaluate(COLUMNS_SHOWN)
         self.assertNotIn("Read from", shown)
         self.assertNotIn("Logins", shown)
+
+    @with_script
+    def test_a_name_a_cell_cuts_is_drawn_whole_on_its_line_where_its_cell_has_room(self):
+        """A one-token name cut by a box of its own (a bare name, a cell's
+        line, a link, a kept line an icon opens), in a cell with room to spare, draws every part on its
+        one line uncut, in a box at least as wide as what it draws. A box
+        sized by its own measure is short wherever an engine measures it a
+        fraction short of the parts it lays out, and then the last part
+        leaves the line and only its ellipsis shows. Read in every engine, at
+        each density a screen has, and again with the box measured as nothing,
+        as an engine that mismeasures it most would: the track never reads
+        the box's own measure."""
+
+        from hq.platform.core.templatetags.value_tags import breakable, cell_line
+
+        shapes = ("example-connect", "example2-proxy", "example2-proxy-web", "example-id", "example-hq", "example-a1")
+        names = [f"/opt/apps/{name}" for name in shapes]
+        icon = render_to_string("partials/_icon.html", {"name": "deploy"}).strip()
+        cells = [
+            *(breakable(name) for name in names),
+            *(cell_line(name) for name in names),
+            *(f'<a data-entity href="/example/">{breakable(name)}</a>' for name in names),
+            *(
+                f'<span class="kept-line">{icon} {breakable(name)}</span>'
+                for name in [*names, "2024.12.1-ubu2404-ls48"]
+            ),
+        ]
+        rows = "".join(f"<tr><td>{cell}</td><td>Example</td></tr>" for cell in cells)
+        self.pages = {
+            **self.pages,
+            "name-room-probe": probe(
+                '<div class="table-scroll"><table class="data-table"><thead><tr><th>Directory</th><th>State</th></tr>'
+                f"</thead><tbody>{rows}</tbody></table></div>"
+            ),
+        }
+        short = """([boxes, whole]) => {
+          const found = [];
+          const range = document.createRange();
+          let read = 0;
+          for (const box of document.querySelectorAll(boxes)) {
+            if (!box.checkVisibility()) continue;
+            read += 1;
+            const top = box.getClientRects()[0].top;
+            const parts = [...box.querySelectorAll(whole)];
+            const pad = getComputedStyle(box);
+            range.selectNodeContents(box);
+            const inside = box.getBoundingClientRect().width - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
+            const spare = inside - range.getBoundingClientRect().width;
+            const off = parts.filter((part) => part.getBoundingClientRect().top > top + 1 || part.scrollWidth > part.clientWidth);
+            if (off.length || spare < 0)
+              found.push(`${box.textContent} spares ${spare.toFixed(2)}px, ${off.length} of its parts off its line or cut`);
+          }
+          return {read, found};
+        }"""
+        for scale, mismeasured in ((1, False), (1.5, False), (2, False), (1, True)):
+            with self.subTest(scale=scale, mismeasured=mismeasured):
+                self.start(java_script_enabled=True, device_scale_factor=scale)
+                self.open("name-room-probe", WIDE)
+                if mismeasured:
+                    add_css(self.page, ".cut { contain: inline-size; }")
+                self.page.evaluate(SETTLE)
+                drawn = self.page.evaluate(short, [SELECTORS["name_cut"], SELECTORS["part"]])
+                self.assertGreater(drawn["read"], 0)
+                self.assertEqual(drawn["found"], [])
+
+    @with_script
+    def test_an_icon_a_kept_line_opens_stays_beside_its_name_inside_its_cell(self):
+        """A kept line an icon opens, its column held short of the icon and
+        the name together, keeps the icon on the name's first line and both
+        inside the cell, the name cut there: a name the line cuts is as wide
+        as what the line holds out for, never wider than the room its first
+        line leaves it beside the icon."""
+
+        from hq.platform.core.templatetags.value_tags import breakable
+
+        icon = render_to_string("partials/_icon.html", {"name": "deploy"}).strip()
+        names = ("2024.12.1-ubu2404-ls48", "/opt/apps/example2-proxy-web", "example-connect")
+        rows = "".join(
+            f'<tr><td><span class="kept-line">{icon} {breakable(name)}</span></td><td>Example</td></tr>'
+            for name in names
+        )
+        self.pages = {
+            **self.pages,
+            "hang-probe": probe(
+                '<div class="table-scroll"><table class="data-table"><thead><tr><th>Update</th><th>State</th></tr>'
+                f"</thead><tbody>{rows}</tbody></table></div>"
+            ),
+        }
+        placed = """([lines, mark, name]) => [...document.querySelectorAll(lines)].flatMap((line) => {
+          const cell = line.closest('td');
+          const pad = getComputedStyle(cell);
+          const edge = cell.getBoundingClientRect().right - parseFloat(pad.paddingRight) + 0.5;
+          const icon = line.querySelector(mark).getBoundingClientRect();
+          const token = line.querySelector(name);
+          const first = token.getClientRects()[0];
+          const found = [];
+          if (Math.max(icon.right, token.getBoundingClientRect().right, line.getBoundingClientRect().right) > edge)
+            found.push(`${token.textContent} runs past its cell`);
+          if (icon.bottom <= first.top || icon.top >= first.bottom) found.push(`${token.textContent} leaves its icon`);
+          return found;
+        })"""
+        self.start(java_script_enabled=True)
+        for hold in ("4em", "7em", "9em", "11em"):
+            with self.subTest(hold=hold):
+                self.open("hang-probe", WIDE)
+                add_css(self.page, f".data-table {{ --hold: {hold}; }}")
+                self.page.evaluate(SETTLE)
+                self.assertEqual(
+                    self.page.evaluate(
+                        placed, [SELECTORS["kept_line"], SELECTORS["line_icon"], SELECTORS["line_name"]]
+                    ),
+                    [],
+                )
 
     @with_script
     def test_a_table_whose_content_widens_after_its_fit_gives_way_again(self):

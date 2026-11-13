@@ -34,6 +34,12 @@ class Lifecycle(StrEnum):
     def needs_attention(self) -> bool:
         return _SAID[self].attention
 
+    @property
+    def tone(self) -> str:
+        """The tone its word is drawn in."""
+
+        return _SAID[self].tone
+
 
 @dataclass(frozen=True, slots=True)
 class _Said:
@@ -41,18 +47,21 @@ class _Said:
     # Whether a person has to act: stale evidence, missing access, a failed
     # probe, a refused credential, a connection gone from its report.
     attention: bool = False
+    # Working is good, out of date is to be noticed, a failure is serious,
+    # and a connection never tested is neither.
+    tone: str = "neutral"
 
 
 _SAID = {
     Lifecycle.CONFIGURED: _Said("Added"),
     Lifecycle.UNPROBED: _Said("Not tested"),
-    Lifecycle.REACHABLE: _Said("Working"),
-    Lifecycle.READY: _Said("Working"),
-    Lifecycle.UNREACHABLE: _Said("Not answering", attention=True),
-    Lifecycle.UNAUTHORIZED: _Said("Permission missing", attention=True),
-    Lifecycle.STALE: _Said("Out of date", attention=True),
-    Lifecycle.REVOKED: _Said("Credential refused", attention=True),
-    Lifecycle.UNREPORTED: _Said("No longer reported", attention=True),
+    Lifecycle.REACHABLE: _Said("Working", tone="good"),
+    Lifecycle.READY: _Said("Working", tone="good"),
+    Lifecycle.UNREACHABLE: _Said("Not answering", attention=True, tone="serious"),
+    Lifecycle.UNAUTHORIZED: _Said("Permission missing", attention=True, tone="serious"),
+    Lifecycle.STALE: _Said("Out of date", attention=True, tone="attention"),
+    Lifecycle.REVOKED: _Said("Credential refused", attention=True, tone="serious"),
+    Lifecycle.UNREPORTED: _Said("No longer reported", attention=True, tone="serious"),
 }
 
 # The states in which the connection works.

@@ -12,6 +12,7 @@ from hq.domains.control_plane.bridge_actions import ACTIONS
 from hq.platform.application.domains import host_records
 from hq.platform.application.resource_capabilities import LIFECYCLE_VERBS
 from hq.platform.application.tests.apart import apart
+from hq.platform.application.tests.reads import reads
 
 from .operation_bindings import bindings
 
@@ -70,6 +71,7 @@ def bound_names(found: list[list[str]]) -> dict[str, list[str]]:
 
 
 @tag("source", "tree")
+@reads("**/*.py")
 class OperationTitleTests(SimpleTestCase):
     def test_every_operation_this_checkout_binds_has_a_declared_title(self):
         names = bound_names(apart(bindings, ROOT))

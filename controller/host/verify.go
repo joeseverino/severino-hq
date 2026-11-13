@@ -196,17 +196,23 @@ func compareTrees(want, have string) ([]string, error) {
 	return drift, nil
 }
 
+// files is every file under dir by its name there, each read beneath dir.
 func files(dir string) (map[string][]byte, error) {
+	tree, err := os.OpenRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	defer tree.Close()
 	found := map[string][]byte{}
-	err := filepath.WalkDir(dir, func(path string, entry fs.DirEntry, err error) error {
+	err = fs.WalkDir(tree.FS(), ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil || entry.IsDir() {
 			return err
 		}
-		data, err := os.ReadFile(path)
+		data, err := tree.ReadFile(name)
 		if err != nil {
 			return err
 		}
-		found[strings.TrimPrefix(path, dir+"/")] = data
+		found[name] = data
 		return nil
 	})
 	return found, err

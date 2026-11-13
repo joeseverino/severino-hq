@@ -227,7 +227,7 @@ type PinKind = Annotated[str, Describe("The type of thing whose pins changed, su
 
 
 class PinsChanged(TypedDict):
-    """Which type of thing the call changed the person's pins of."""
+    """Which type of thing the call changed your pins of."""
 
     ok: Literal[True]
     kind: PinKind

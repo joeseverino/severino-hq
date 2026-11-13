@@ -19,10 +19,12 @@ from hq.platform.core.tests.browser.probes.settle import PAINTED
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.serving import NONCE, ORIGIN
 
-# A page of HQ's sheets and app.js, with the form a post_button posts.
+# A page of HQ's sheets and app.js, after the fragment.js it builds on, with
+# the form a post_button posts.
 _PAGE = """{% load stylesheet_tags %}<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>{{ title }}</title>
-{% stylesheets %}<script defer src="{{ static }}js/app.js" nonce="{{ nonce }}"></script></head>
+{% stylesheets %}<script defer src="{{ static }}js/fragment.js" nonce="{{ nonce }}"></script>
+<script defer src="{{ static }}js/app.js" nonce="{{ nonce }}"></script></head>
 <body><main class="content">{{ content }}</main>
 <form id="hq-post" method="post" hidden></form></body></html>"""
 

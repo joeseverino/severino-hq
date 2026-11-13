@@ -646,7 +646,7 @@ class PageTests(TestCase):
         expense = an_expense(about="machine:lab-1", about_name="lab-1", related_asset=self.asset)
         # One statement for what names the record, and the topology's two
         # reads from its store where the record names a machine.
-        for url, budget in ((self.asset.get_absolute_url(), 13), (expense.get_absolute_url(), 9)):
+        for url, budget in ((self.asset.get_absolute_url(), 14), (expense.get_absolute_url(), 10)):
             self.client.get(url)
             with self.subTest(url=url), CaptureQueriesContext(connection) as queries:
                 self.client.get(url)

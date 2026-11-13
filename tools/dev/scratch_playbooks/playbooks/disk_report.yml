@@ -1,0 +1,17 @@
+# A run's inventory reaches each machine over ssh; the play's own vars, which
+# outrank the inventory's, run it on this machine instead.
+- name: Report a mount's use
+  hosts: all
+  gather_facts: false
+  vars:
+    ansible_connection: local
+  pre_tasks:
+    - name: The mount point is an absolute path
+      ansible.builtin.assert:
+        that: mount is abs
+  roles:
+    - disk
+  post_tasks:
+    - name: The report names the mount's size and use
+      ansible.builtin.assert:
+        that: used.stdout_lines | length > 1

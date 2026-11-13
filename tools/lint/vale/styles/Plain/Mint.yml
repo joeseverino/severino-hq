@@ -1,8 +1,11 @@
-extends: existence
-message: "'%s' is HQ's own word; say 'issue'"
+extends: substitution
+message: "Say '%s' in place of '%s', HQ's own word"
 level: error
 ignorecase: true
 nonword: true
 scope: [shown, ~comment & ~code]
-tokens:
-  - '(?<![\w-])(?:mint(?:s|ed|ing)?)(?![\w-])'
+swap:
+  '(?<![\w-])mints(?![\w-])': issues
+  '(?<![\w-])minted(?![\w-])': issued
+  '(?<![\w-])minting(?![\w-])': issuing
+  '(?<![\w-])mint(?![\w-])': issue

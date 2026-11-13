@@ -10,7 +10,7 @@ import io
 import re
 from urllib.parse import parse_qs, urlsplit
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tokens import DEVICE_SCOPE
 from hq.platform.core.tests.task import Usage
@@ -209,3 +209,51 @@ class KeyTests(SimpleTestCase):
 class PermissionBodyTests(SimpleTestCase):
     def test_a_permission_without_commands_is_written_without_a_description(self):
         self.assertEqual(Permission("read", "Read").body(), {"key": "read", "name": "Read"})
+
+
+@tag("source")
+class MachineGrantTests(SimpleTestCase):
+    def test_only_requested_machine_permissions_change_without_replacing_catalog(self):
+        grants = [
+            {
+                "api": {"id": API_ID},
+                "userDelegatedAccess": True,
+                "userDelegatedPermissionIds": ["old-read"],
+                "clientPermissionIds": ["old-manage_infrastructure"],
+            }
+        ]
+        run = Wired(
+            PocketId(permissions=("read", "manage_infrastructure", DEVICE_SCOPE), grants=grants),
+            written(machine_grant=CLIENT, permissions="read"),
+        )
+        self.assertIsNone(run.refused)
+        self.assertEqual(run.fake.sent("PUT", f"/apis/{API_ID}/permissions"), [])
+        (put,) = run.fake.sent("PUT", f"/apis/{API_ID}/clients/{CLIENT}")
+        self.assertEqual(
+            put.json,
+            {
+                "clientAccess": True,
+                "clientPermissionIds": ["old-read"],
+                "userDelegatedAccess": True,
+                "userDelegatedPermissionIds": ["old-read"],
+            },
+        )
+        self.assertNotIn(KEY, run.out + run.err)
+
+    def test_unknown_duplicate_and_device_permissions_never_write(self):
+        for scopes in ("read,unknown", "read,read", DEVICE_SCOPE, "read,"):
+            with self.subTest(scopes=scopes):
+                run = Wired(
+                    PocketId(permissions=("read", DEVICE_SCOPE)), written(machine_grant=CLIENT, permissions=scopes)
+                )
+                self.assertIsNotNone(run.refused)
+                self.assertEqual([c for c in run.fake.calls if c.method == "PUT"], [])
+
+    def test_an_own_device_client_is_not_reused_for_an_agent(self):
+        grants = [{"api": {"id": API_ID}, "userDelegatedPermissionIds": [f"old-{DEVICE_SCOPE}"]}]
+        run = Wired(
+            PocketId(permissions=("read", DEVICE_SCOPE), grants=grants),
+            written(machine_grant=CLIENT, permissions="read"),
+        )
+        self.assertIsNotNone(run.refused)
+        self.assertEqual([c for c in run.fake.calls if c.method == "PUT"], [])

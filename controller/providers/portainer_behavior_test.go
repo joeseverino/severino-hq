@@ -93,7 +93,7 @@ func portainerRegistry(t *testing.T, base string, extra runtime.Environment) *Re
 	env := extra
 	env.ID = "hq-node"
 	r := New(env, supplied(apiTokenConnection(runtime.ConnectionProviderPortainer, "portainer-example", base, "synthetic")), client)
-	r.Resolve = func(string) (string, error) { return "192.0.2.100", nil }
+	r.Resolve = func(context.Context, string) (string, error) { return "192.0.2.100", nil }
 	return r
 }
 

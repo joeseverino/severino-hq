@@ -28,9 +28,24 @@ const SchemaVersion = 2
 // MaxBytes bounds a document on read.
 const MaxBytes = 1 << 20
 
+// RunnerRole is the role of an SSH transport the automation worker reaches a
+// machine through (hq_runner/connections.py reads the same word). Its account
+// takes a shell, where the controller's readers speak to the hq-controller
+// forced command, so it is never the controller's to dial or to hold.
+const RunnerRole = "runner"
+
+// ReadProfile is the privilege profile of a runner transport whose login
+// reads and escalates to nothing: a procedure that names no privilege runs
+// through it. Any other profile is a procedure's privilege, by its name.
+const ReadProfile = "read"
+
 var (
 	refPattern  = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
 	namePattern = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+	// A machine as HQ names it, and a profile as a procedure names its
+	// privilege (DOTTED_NAME in hq/platform/application/contracts.py).
+	machinePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,252}$`)
+	profilePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
 )
 
 // ValidRef reports whether ref is a connection reference.
@@ -197,8 +212,19 @@ func (c Connection) validate(index int) error {
 			return invalid("connection %d has an empty or multi-line value", index)
 		}
 	}
+	if transport := c.SSHTransport; transport != nil && transport.Role == RunnerRole {
+		if !machinePattern.MatchString(transport.Machine) || !profilePattern.MatchString(transport.Profile) {
+			return invalid("runner connection %d names no machine or no profile", index)
+		}
+	} else if transport != nil && (transport.Machine != "" || transport.Profile != "") {
+		return invalid("connection %d names a machine or a profile and is no runner's", index)
+	}
 	return nil
 }
+
+// Reach is one login the automation worker has to a machine: the machine by
+// its name in HQ, and the privilege profile the login is.
+type Reach struct{ Machine, Profile string }
 
 // Validate refuses a document either side could misread. Messages name a
 // connection by position, never by value. A document with no connection is
@@ -209,6 +235,9 @@ func (d Document) Validate() error {
 		return invalid("schema version %d is not %d", d.SchemaVersion, SchemaVersion)
 	}
 	refs := map[string]bool{}
+	// One login per machine and profile, so which key a run uses never
+	// depends on order.
+	reaches := map[Reach]bool{}
 	for index, connection := range d.Connections {
 		if err := connection.validate(index); err != nil {
 			return err
@@ -217,6 +246,13 @@ func (d Document) Validate() error {
 			return invalid("connection %d repeats a ref", index)
 		}
 		refs[connection.Ref] = true
+		if transport := connection.SSHTransport; transport != nil && transport.Role == RunnerRole {
+			reach := Reach{transport.Machine, transport.Profile}
+			if reaches[reach] {
+				return invalid("runner connection %d repeats a machine and profile", index)
+			}
+			reaches[reach] = true
+		}
 	}
 	return nil
 }

@@ -14,6 +14,7 @@ from pathlib import Path
 from django.test import SimpleTestCase, tag
 
 from hq.platform.application.tests.facts import imports, scan
+from hq.platform.application.tests.tree import SUITE
 from hq.platform.core.tests.test_settings_env import REPO_ROOT, subprocess_env
 
 # How many modules each start loads, the host alone as production starts it
@@ -27,8 +28,6 @@ SETUP_BUDGET = 500
 ON_FIRST_MCP_REQUEST = ("mcp", "mcp_types", "opentelemetry", "sse_starlette")
 # Loaded by what validates a command or reads a provider, never by django.setup.
 AFTER_SETUP = ("pydantic", "pydantic_core")
-# Every Python file of the repository: a class anywhere may be made at start.
-PYTHON_ROOTS = ("hq", "hq_sdk", "demo", "tools", "tests")
 PROBE = "import json, sys; {start}; print(json.dumps(sorted(sys.modules)))"
 
 
@@ -133,7 +132,8 @@ def lazy_names_in_class_annotations(*paths: Path, root: Path = REPO_ROOT) -> lis
 class LazyImportAnnotationTests(SimpleTestCase):
     def test_no_class_annotation_names_a_lazy_import(self):
         self.assertEqual(
-            lazy_names_in_class_annotations(*(REPO_ROOT / root for root in PYTHON_ROOTS)),
+            # Every Python package of the repository: a class anywhere may be made at start.
+            lazy_names_in_class_annotations(*(REPO_ROOT / root for root in SUITE)),
             [],
             "import an annotation-only name under `if TYPE_CHECKING:`; one also used at run time, by its module",
         )
