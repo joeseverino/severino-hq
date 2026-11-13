@@ -51,18 +51,39 @@ BOXES = """([readings, content, ask]) => [
 BOXES_ARGS = [SELECTORS["readings"], SELECTORS["content"], SELECTORS["ask"]]
 
 # The page laid out again from nothing, its markup and its script's state as
-# they stand. The gates hold a page's face back until asked for
-# (`serving.in_the_face`), so a page is first laid out in the next face of the
-# stack, and an engine may keep a measure from that layout (a row a pixel
-# shorter in WebKit on Linux) that the same markup swapped in afresh does not
-# have. A reader's browser draws the face from the first paint or never, so a
-# landing is compared with the layout that browser has.
+# they stand. An engine may keep a measure from the layout a page came by in
+# steps (the next face of the stack before its own, which the gates hold back
+# until asked for, `serving.in_the_face`; rows swapped into a table already
+# laid out) that the same markup laid out whole does not have, a row a pixel
+# off in WebKit on Linux. A landing moves nothing when what it brought lays
+# out as what was drawn did, so both are measured laid out whole.
 LAID_OUT_AFRESH = """() => {
   const root = document.documentElement;
   root.style.setProperty('display', 'none');
   root.getBoundingClientRect();
   root.style.removeProperty('display');
 }"""
+
+# Every element's size, unrounded, with its parent's place: what a failure
+# names, since a box that grew says only that something in it did.
+SIZES = """(content) => {
+  const all = [...document.querySelectorAll(`${content} *`)];
+  const place = new Map(all.map((element, at) => [element, at]));
+  return all.map((element) => {
+    const box = element.getBoundingClientRect();
+    const said = element.textContent.trim().replace(/\\s+/g, ' ').slice(0, 30);
+    return [`${element.tagName.toLowerCase()}.${element.className} ${box.width}x${box.height} "${said}"`,
+      place.get(element.parentElement) ?? -1];
+  });
+}"""
+
+
+def _innermost(before, after):
+    """The elements whose size differs and that hold no other that does."""
+
+    differ = {at for at, (was, now) in enumerate(zip(before, after, strict=False)) if was[0] != now[0]}
+    holding = {after[at][1] for at in differ}
+    return [f"{before[at][0]} -> {after[at][0]}" for at in sorted(differ - holding)][:12]
 
 
 def _current(context):
@@ -215,6 +236,7 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
                     self.page.evaluate(LAID_OUT_AFRESH)
                     self.page.evaluate(SETTLE)
                     drawn = self.page.evaluate(BOXES, BOXES_ARGS)
+                    sizes = self.page.evaluate(SIZES, SELECTORS["content"])
                     self.press()
                     self.page.wait_for_function(_BUSY)
                     self.settle()
@@ -224,7 +246,15 @@ class PressedRefreshBrowserTests(ExampleEstateGate):
                     self.in_flight.settle(f"{path} at {width}px, landed")
                     self.settle()
                     self.assertTrue(self.page.evaluate(_STILL_DRAWN), "loaded the page again")
-                    self.assertEqual(self.page.evaluate(BOXES, BOXES_ARGS), drawn, "moved once landed")
+                    as_swapped = self.page.evaluate(BOXES, BOXES_ARGS)
+                    self.page.evaluate(LAID_OUT_AFRESH)
+                    self.page.evaluate(SETTLE)
+                    grew = _innermost(sizes, self.page.evaluate(SIZES, SELECTORS["content"]))
+                    self.assertEqual(
+                        self.page.evaluate(BOXES, BOXES_ARGS),
+                        drawn,
+                        f"moved once landed (as swapped: {as_swapped}; what differs: {grew})",
+                    )
                     self.assertFalse(self.page.locator(SELECTORS["head_offer"]).count(), "offered the reading")
                     self.assertTrue(self.redrawn, "drew nothing in place")
                     self.assertEqual(self.unanswered, [])
