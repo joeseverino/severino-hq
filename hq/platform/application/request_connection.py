@@ -18,7 +18,7 @@ from . import tailnet
 from .freshness import PAGE_VISIT, freshness
 from .labels import dotted, human_bytes
 from .reach import network_of, on_link_networks
-from .request_channel import Channel, channel_for_request, displayed_client_ip, forwarded_chain
+from .request_channel import Channel, channel_for_request, displayed_client_ip, encryption, forwarded_chain
 from .request_identity import Identity, identity_of
 from .request_layers import Layer, ServingDeviceResolution, admission_layers
 from .ui import MISSING, counted
@@ -170,11 +170,7 @@ class Connection:
 
     @property
     def transport(self) -> str:
-        """The encryption this request can actually prove."""
-
-        if self.channel.id == "tailnet":
-            return "WireGuard + TLS" if self.secure_transport else "WireGuard only"
-        return "TLS" if self.secure_transport else "Encryption not confirmed"
+        return encryption(self.channel, self.secure_transport)
 
     @property
     def transport_path(self) -> str:

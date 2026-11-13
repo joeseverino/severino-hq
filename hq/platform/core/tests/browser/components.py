@@ -1538,7 +1538,9 @@ class ComponentLayoutTests(LayoutBrowserTests):
         """tables.js titles a cut value where its row's toggle does not show,
         and takes the title away once the value is whole (its box widened)
         and once its row opens, so no title outlives its cut; closed again,
-        the row's value is titled again."""
+        the row's value is titled again. A window resized is measured as its
+        tables are fitted, so the frames that draw the new width carry the
+        titles it needs, with no wait for the resizing to settle."""
 
         self.pages = {**self.pages, "titled-probe": probe(TITLED_CUTS)}
         self.open("titled-probe", PHONE_SCREEN[0])
@@ -1546,7 +1548,8 @@ class ComponentLayoutTests(LayoutBrowserTests):
         self.assertIn("narrows", self.page.evaluate(TITLED_ROWS))
 
         self.page.set_viewport_size(viewport(WIDE))
-        self.page.wait_for_function(f"() => ({TITLED_ROWS})().join() === 'opens'")
+        self.page.evaluate(SETTLE)
+        self.assertEqual(self.page.evaluate(TITLED_ROWS), ["opens"])
 
         toggle = self.page.locator("main " + SELECTORS["row_toggle"])
         toggle.evaluate("(button) => button.click()")

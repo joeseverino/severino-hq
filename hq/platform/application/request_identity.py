@@ -15,6 +15,9 @@ lazy from . import agent_devices
 lazy from .agent_devices import DeviceStanding
 lazy from .security import AGENT_SURFACES, Principal
 
+# The agreement single sign-on proves: the tailnet owner is the account it signed in.
+SSO_LINK = "SSO-signed principal link"
+
 
 @dataclass(frozen=True, slots=True)
 class Identity:
@@ -86,7 +89,7 @@ class Identity:
         if tailnet in self.session_principals:
             return "exact principal"
         if tailnet == self.provider_principal.strip().casefold():
-            return "SSO-signed principal link"
+            return SSO_LINK
         return ""
 
     @property

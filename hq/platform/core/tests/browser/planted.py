@@ -13,6 +13,7 @@ from hq.platform.application.pages import Page, PageAction
 from hq.platform.core.tests.browser.gate import add_css, with_script
 from hq.platform.core.tests.browser.layout import LayoutBrowserTests
 from hq.platform.core.tests.browser.probes.shifts import CLS_LIMIT, LAYOUT_SHIFTS
+from hq.platform.core.tests.browser.probes.tables import TABLES
 from hq.platform.core.tests.browser.reading import probe
 from hq.platform.core.tests.browser.selectors import SELECTORS
 from hq.platform.core.tests.browser.widths import WIDE
@@ -628,6 +629,14 @@ _SHIFTS = {
     'margin-block-start: 420px">Example</div><div data-vendored style="grid-area: 1 / 1; block-size: 800px"></div></div>',
 }
 
+# A page whose one table waits in a closed disclosure, as a chart's table of
+# figures does: drawn by nothing until it opens.
+_FOLDED = "planted/a-table-in-a-closed-disclosure"
+_FOLDED_TABLE = (
+    '<details><summary>Example figures</summary><div class="table-scroll"><table class="data-table">'
+    "<thead><tr><th>Example</th></tr></thead><tbody><tr><td>Example</td></tr></tbody></table></div></details>"
+)
+
 
 def _said(finding):
     """A finding as a value a set holds: the audit's are dicts."""
@@ -657,6 +666,7 @@ class PlantedBrowserTests(LayoutBrowserTests):
             _CAPS: probe(_CAPPED),
             _UNEVEN: probe(_UNEVENED),
             _RESTS: probe(_RESTED),
+            _FOLDED: probe(_FOLDED_TABLE),
             **{name: probe(markup) for name, markup in _SHIFTS.items()},
         }
 
@@ -708,6 +718,13 @@ class PlantedBrowserTests(LayoutBrowserTests):
         found = self.found(_RESTS, Plant("")).get("cut beside room", [])
         self.assertTrue([said for said in found if '"example-capped' in said], found)
         self.assertFalse([said for said in found if '"example-full' in said], found)
+
+    def test_a_page_whose_only_table_is_folded_away_holds_the_table_rule(self):
+        """A table in a closed disclosure is one the table probe skips as
+        undrawn, never one it failed to find."""
+
+        self.open(_FOLDED, WIDE)
+        self.tables_scroll_inside_their_own_container(_FOLDED, self.page.evaluate(TABLES))
 
     def shifted(self, name, *, removed, given=(SELECTORS["vendored"], CLS_LIMIT)):
         """What the layout shift check finds once ``name``'s part has moved up
