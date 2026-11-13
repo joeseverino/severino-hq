@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, OperationRequest, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.capabilities import execute_capability
 from hq.platform.application.contact_submissions import (
     DELETE,
@@ -288,7 +289,7 @@ class ReadOnlyConnectionTests(TestCase):
 
         for url, page in self._pages():
             with self.subTest(url=url):
-                self.assertIn("D1 Write (account)", page)
+                self.assertIn(Cloudflare.D1_EDIT, page)
 
     def test_a_managing_connection_offers_every_change(self):
         _manages()

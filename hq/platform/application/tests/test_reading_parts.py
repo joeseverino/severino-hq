@@ -11,6 +11,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
+from hq.domains.control_plane.permissions import Cloudflare
 from hq.domains.control_plane.reading_parts import clean_refused_parts, parts_of
 
 from ..credential_sight import PARTIAL, credential_sight
@@ -26,7 +27,7 @@ from ..topology import derive_topology
 ACCOUNT = "0123abcd"
 REDIRECT = "cloudflare.redirect"
 AUTH = "Cloudflare refused the request: Authentication error"
-MISSING = "Single Redirect Read (zone)"
+MISSING = Cloudflare.SINGLE_REDIRECT_READ
 PHRASE = f"Redirect rules not read: missing {MISSING}"
 
 

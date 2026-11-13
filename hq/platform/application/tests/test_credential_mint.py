@@ -14,6 +14,7 @@ from django.utils import timezone
 from hq.domains.control_plane.credential_reads import MINTERS, observer_permissions
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.permissions import Tailscale
 from hq.domains.control_plane.provider_adapters.contracts import CREDENTIAL_REFUSAL, PERMISSION_REFUSAL
 from tests.mise_tasks import body, mise_tasks
 
@@ -269,7 +270,7 @@ class MintCommandTests(TestCase):
 
         fix = credential_fixes()["example-tailnet"]
 
-        self.assertEqual(fix.missing, ("users:read",))
+        self.assertEqual(fix.missing, (Tailscale.USERS_READ,))
         self.assertEqual(
             fix.command,
             "TAILSCALE_BOOTSTRAP_CLIENT_ID='op://Operator Vault/Tailscale bootstrap/username' "

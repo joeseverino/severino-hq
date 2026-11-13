@@ -51,6 +51,25 @@ _FORM_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 <div id="sent" data-fragment="/probe-sent/">waiting</div>
 </main></body></html>"""
 
+# One write form per kind of answer, each drawn with the tag every write form
+# carries its retry key from, answered in place.
+_KEYED_ANSWERS = ("ok", "refused", "broken", "lost")
+
+
+def _keyed_probe():
+    form = (
+        '{% load write_tags %}<form method="post" action="/probe-keyed/{answer}/" data-fragment-target="sent">'
+        '{% write_token %}<button data-probe="{answer}">Send</button></form>'
+    )
+    forms = "".join(Template(form.replace("{answer}", answer)).render(Context({})) for answer in _KEYED_ANSWERS)
+    return f"""<!doctype html><html><head><title>Probe</title>
+<script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
+</head><body><main>
+{forms}
+<div id="sent" data-fragment="/probe-sent/">waiting</div>
+</main></body></html>"""
+
+
 # A region that asks to add its answers to history, which nothing restores.
 _PUSH_PROBE = f"""<!doctype html><html><head><title>Probe</title>
 <script defer src="{settings.STATIC_URL}js/fragment.js" nonce="{NONCE}"></script>
@@ -307,6 +326,19 @@ class FragmentBrowserTests(BrowserGate):
                 self.order = _PRESSED[(self.order, row, fields["action"])]
         return self.fulfill(route, self.rows[self.order])
 
+    def answer_keyed(self, route, answer):
+        """What a write answers: HQ's answer, a refusal, a failure of the
+        server's own, or none at all."""
+
+        self.posted.append((answer, _posted(route.request)))
+        if answer == "lost":
+            return route.abort()
+        if answer == "broken":
+            return route.fulfill(status=500, body="Example failure")
+        if answer == "refused":
+            return route.fulfill(status=400, content_type="text/plain; charset=utf-8", body="Example refused.")
+        return self.fulfill(route, _FIXED["/probe-sent/"])
+
     @override
     def respond(self, route):
         request = route.request
@@ -316,6 +348,10 @@ class FragmentBrowserTests(BrowserGate):
         self.asked.append((address, part))
         if parts.path.startswith("/probe-rows/"):
             return self.answer_rows(route, parts)
+        if parts.path == "/probe-keyed-form/":
+            return self.fulfill(route, _keyed_probe())
+        if parts.path.startswith("/probe-keyed/"):
+            return self.answer_keyed(route, parts.path.removeprefix("/probe-keyed/").strip("/"))
         if (fixed := _FIXED.get(parts.path)) is not None:
             return self.fulfill(route, fixed)
         if parts.path == "/probe-strip/":
@@ -598,3 +634,27 @@ class FragmentBrowserTests(BrowserGate):
             self.page.evaluate("() => document.querySelector('[data-probe=\"push\"]').click()")
         self.assertTrue(self.page.url.endswith("/probe-push/?turn=2"))
         self.assertFalse(self.page.evaluate("() => window.kept === true"))
+
+    def test_a_write_form_takes_a_new_key_once_hq_has_answered_and_keeps_it_when_none_did(self):
+        for answer, spent in (("ok", True), ("refused", True), ("broken", False), ("lost", False)):
+            with self.subTest(answer):
+                self.start()
+                self.page.goto(f"{ORIGIN}/probe-keyed-form/", wait_until="load")
+                key = f'form[action="/probe-keyed/{answer}/"] input[name="__retry_key"]'
+                before = self.page.locator(key).input_value()
+                self.page.locator(f'[data-probe="{answer}"]').click()
+                if spent:
+                    self.page.wait_for_function(
+                        "([key, was]) => document.querySelector(key).value !== was", arg=[key, before]
+                    )
+                # Over once the server has seen it and the page has settled.
+                self.page.wait_for_function("() => document.readyState === 'complete'")
+                self.page.evaluate(SETTLE)
+                after = self.page.locator(key).input_value()
+
+                ((_, fields),) = [entry for entry in self.posted if entry[0] == answer]
+                self.assertEqual(fields["__retry_key"], before)
+                if spent:
+                    self.assertRegex(after, r"^web:[0-9a-f]{48}$")
+                else:
+                    self.assertEqual(after, before)

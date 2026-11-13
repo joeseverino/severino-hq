@@ -469,9 +469,16 @@ func (c *Controller) readings(ctx context.Context, run string) ([]string, error)
 					return nil, err
 				}
 			}
+			// Empty when nothing restarts; absent when systemd did not say.
+			if state, err := c.Restarting(ctx, units); err == nil {
+				if err := give("units-restarting", state, "/run/severino-hq/units-restarting"); err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
-	args = append(args, "--env", "SEVERINO_HOST_UNITS=/run/severino-hq/units")
+	args = append(args, "--env", "SEVERINO_HOST_UNITS=/run/severino-hq/units",
+		"--env", "SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting")
 
 	// The last dependency run's outcome, once there has been one.
 	if info, err := os.Lstat(c.DependencyRun); err == nil && info.Mode().IsRegular() {

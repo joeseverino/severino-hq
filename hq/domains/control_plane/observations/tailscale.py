@@ -2,6 +2,7 @@
 
 from hq.platform.application.labels import dotted
 
+from ..permissions import Tailscale
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 # The routes that make a device an exit node: everything, in both families.
@@ -46,8 +47,10 @@ class TailnetSettingsRecord(ObservationRecord):
 # Settings a scope other than feature_settings:read governs, by Tailscale's own
 # key, each a part: Tailscale nulls one the credential may not see.
 SETTING_PARTS = {
-    "httpsEnabled": ReadingPart("https", "HTTPS certificates setting", ("networking_settings:read",)),
-    "aclsExternallyManagedOn": ReadingPart("acl_management", "Policy file management setting", ("policy_file:read",)),
+    "httpsEnabled": ReadingPart("https", "HTTPS certificates setting", (Tailscale.NETWORKING_SETTINGS_READ,)),
+    "aclsExternallyManagedOn": ReadingPart(
+        "acl_management", "Policy file management setting", (Tailscale.POLICY_FILE_READ,)
+    ),
 }
 
 
@@ -76,7 +79,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "tailscale",
         "Tailnet DNS",
         TailnetDnsRecord,
-        requires=("dns:read",),
+        requires=(Tailscale.DNS_READ,),
         addresses=_resolvers,
         title=_dns_title,
         relation="Tailnet DNS settings",
@@ -87,7 +90,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Tailnet settings",
         TailnetSettingsRecord,
         requires=(
-            "feature_settings:read",
+            Tailscale.FEATURE_SETTINGS_READ,
             *(name for part in SETTING_PARTS.values() for name in part.requires),
         ),
         parts=tuple(SETTING_PARTS.values()),
@@ -99,7 +102,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "tailscale",
         "Tailnet user",
         TailnetUserRecord,
-        requires=("users:read",),
+        requires=(Tailscale.USERS_READ,),
         title=lambda record: str(record.get("display_name") or record.get("login_name") or ""),
         relation="Owner",
     ),

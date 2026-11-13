@@ -1716,13 +1716,16 @@ type HostTailnetLockRecord struct {
 	TrustedKeys   int      `json:"trusted_keys,omitempty"`
 }
 
-// HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.
+// HostUnitRecord One systemd unit on the controller's machine, as `systemctl show` states it: the host.unit reading's record. The launcher asks systemd for exactly these properties of the units the repository ships and of each other service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words, an instant in UTC or the unit file's own title for a person to read; none is a path, a command line or an environment.
 type HostUnitRecord struct {
 	// Activates Unit: the unit a timer or path starts.
 	Activates string `json:"activates,omitempty"`
 
 	// Active ActiveState: active, inactive, activating, deactivating, failed and the like.
 	Active string `json:"active"`
+
+	// ActiveAt ActiveEnterTimestamp: when the unit last became active, on this boot.
+	ActiveAt string `json:"active_at,omitempty"`
 
 	// Condition ConditionResult: yes or no, whether the unit's conditions held when last checked. A start whose conditions do not hold is skipped without failing.
 	Condition string `json:"condition,omitempty"`
@@ -1735,6 +1738,9 @@ type HostUnitRecord struct {
 
 	// FileState UnitFileState: whether the unit file is enabled, static or disabled. Absent for a unit with no file.
 	FileState string `json:"file_state,omitempty"`
+
+	// Foreign A service the repository does not ship, read because systemd has restarted it on its own.
+	Foreign bool `json:"foreign,omitempty"`
 
 	// LastTriggerAt LastTriggerUSec: when a timer last started its unit.
 	LastTriggerAt string `json:"last_trigger_at,omitempty"`
@@ -1753,6 +1759,9 @@ type HostUnitRecord struct {
 
 	// ReadAt When the launcher asked systemd.
 	ReadAt string `json:"read_at"`
+
+	// Restarts NRestarts: how often systemd restarted the service on its own since it was last started deliberately or reset.
+	Restarts int `json:"restarts,omitempty"`
 
 	// Result Result: success, or why the last run failed (exit-code, signal, timeout and the like).
 	Result string `json:"result,omitempty"`

@@ -12,6 +12,7 @@ from pydantic import BaseModel, BeforeValidator, ConfigDict, PlainSerializer, Va
 lazy from hq.platform.application.json_schemas import json_schema
 lazy from hq.platform.application.timestamps import moment
 
+from ..permissions import Permission
 lazy from . import OBSERVATIONS
 
 
@@ -51,7 +52,7 @@ class ReadingPart:
 
     name: str
     label: str
-    requires: tuple[str, ...] = ()
+    requires: tuple[Permission, ...] = ()
     provider: str = ""
 
 
@@ -90,8 +91,8 @@ class ObservationSpec:
     provider: str
     label: str
     record: type[ObservationRecord]
-    # The permissions the read needs, each one exact name the provider uses.
-    requires: tuple[str, ...] = ()
+    # The permissions the read needs, from its provider's table (``permissions``).
+    requires: tuple[Permission, ...] = ()
     # The parts it is read in, each with the subset of ``requires`` it needs,
     # where one part can be refused while the others read.
     parts: tuple[ReadingPart, ...] = ()
@@ -263,8 +264,8 @@ def registry(specs: tuple[ObservationSpec, ...]) -> Mapping[str, ObservationSpec
     for spec in specs:
         if spec.kind in found:
             raise ValueError(f"Duplicate observation kind {spec.kind!r}.")
-        if any(not name.strip() or ";" in name for name in spec.requires):
-            raise ValueError(f"{spec.kind!r}: requires is a tuple of permission names.")
+        if not all(isinstance(name, Permission) for name in spec.requires):
+            raise ValueError(f"{spec.kind!r}: requires names members of its provider's permissions table.")
         if spec.facet and spec.facet not in READING_FACETS:
             raise ValueError(f"{spec.kind!r}: unknown facet {spec.facet!r}.")
         if spec.read_by not in READERS:

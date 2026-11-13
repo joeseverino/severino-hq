@@ -51,7 +51,7 @@ declaration's machinery: the controller's actions are the buttons above, and
         <dt>Renews</dt><dd>{% if renewal_at %}From {{ renewal_at|when:"day" }}, {% endif %}{{ resolved_spec.renewal_window_days|counted:"day" }} before it expires</dd>
       </dl>
       <h3>Names</h3>
-      <p>{% for domain in resolved_spec.domains %}<span class="tag">{{ domain|breakable }}</span>{% endfor %}</p>
+      <p>{% for domain in resolved_spec.domains %}{% status domain chip=True %}{% endfor %}</p>
     {% endsection %}
     {% section "Installed on" %}
       {% if display_consumers %}

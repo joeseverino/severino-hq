@@ -133,7 +133,13 @@ def _jobs(snapshot: Any) -> tuple[tuple[WorkUnit, ...], str]:
     unread = _unread(snapshot, "HQ's background jobs")
     if unread:
         return (), unread
-    units = [unit_state(record) for record in snapshot.records or () if isinstance(record, dict)]
+    # A service another package installs is in the reading for its restarts
+    # alone; it is not one of HQ's jobs.
+    units = [
+        unit
+        for record in snapshot.records or ()
+        if isinstance(record, dict) and not (unit := unit_state(record)).foreign
+    ]
     by_name = {unit.unit: unit for unit in units}
     # A socket that starts a new instance per connection names no one unit it
     # starts, so it stands as itself.

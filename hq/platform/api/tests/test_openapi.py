@@ -29,6 +29,7 @@ from hq.platform.core.models import AuditLog
 from hq.platform.core.test_runner import no_default_role
 
 from .. import openapi, views
+from ..components import Components
 from ..testing import Contract, ContractClient
 from .tokens import ISSUER, OTHER_KEY, RESOURCE, _serving, _token
 
@@ -134,7 +135,7 @@ class DocumentTests(SimpleTestCase):
             name = operation.get("x-hq-resource")
             if not name or "x-hq-identifier" in operation:
                 continue
-            expected = openapi._Components().hoist(_list_parameters(resources[name]["operations"]["list"]))
+            expected = Components().hoist(_list_parameters(resources[name]["operations"]["list"]))
             written = [_named(self.document, parameter) for parameter in operation["parameters"]]
             parameters = {parameter["name"]: parameter for parameter in written if parameter["name"] != "fields"}
             self.assertEqual(set(parameters), set(expected.get("properties", {})))
@@ -193,7 +194,7 @@ class DocumentTests(SimpleTestCase):
         )
         self.assertEqual(
             _resolved(self.document, self.document["components"]["schemas"]["ProjectUpdateRequest"]),
-            _resolved(self.document, openapi._Components().hoist(views.request_schema(spec))),
+            _resolved(self.document, Components().hoist(views.request_schema(spec))),
         )
 
     def test_every_retry_key_is_the_one_the_header_takes(self):
@@ -305,7 +306,7 @@ class DocumentTests(SimpleTestCase):
                     self.assertFalse(operation["summary"].endswith("."))
 
     def test_local_schema_definitions_are_hoisted_under_their_own_names(self):
-        components = openapi._Components()
+        components = Components()
         hoisted = components.hoist(
             {
                 "type": "object",
@@ -318,7 +319,7 @@ class DocumentTests(SimpleTestCase):
         self.assertIn("Record", components.schemas)
 
     def test_two_definitions_meaning_different_things_under_one_name_fail_the_build(self):
-        components = openapi._Components()
+        components = Components()
         components.hoist({"$defs": {"Record": {"type": "object"}}})
 
         with self.assertRaisesRegex(openapi.OpenAPIError, "Record"):

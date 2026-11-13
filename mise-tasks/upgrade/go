@@ -1,0 +1,15 @@
+#!/bin/sh
+#MISE description="When asked to update the controller's Go modules now, ahead of Renovate's week: each direct require and each go.mod tool's module to its newest release, then go mod tidy; mise run fix after, for the code a tool generates"
+#MISE dir="controller"
+
+# `go get <module>@latest` moves that module, and its dependencies only as far
+# as it requires. `go get -u` (and `go get -u tool`) moves every module those
+# depend on as well, past the versions a tool is built and tested with.
+set -eu
+
+modules="$(go list -m -f '{{if not (or .Main .Indirect)}}{{.Path}}@latest{{end}}' all)
+$(go list -f '{{.Module.Path}}@latest' tool | sort -u)"
+# Module paths hold no whitespace, so the shell's split is the list.
+# shellcheck disable=SC2086
+go get ${modules}
+go mod tidy

@@ -1172,7 +1172,7 @@ DNS-01 uses its own least-privilege connection.
 | Part | What it does | Grant |
 |---|---|---|
 | The `cloudflare.contact_submission` reading | reads every database holding the table | D1 Read |
-| The `cloudflare.contact_inbox` declaration | carries HQ's reviews and deletions for the controller to apply | D1 Write, and the connection must manage |
+| The `cloudflare.contact_inbox` declaration | carries HQ's reviews and deletions for the controller to apply | D1 Edit (D1 Write in the API), and the connection must manage |
 
 The records are people's names, addresses and messages, so the reading is
 `withheld`. The generic readings resource counts them and lists none, and only

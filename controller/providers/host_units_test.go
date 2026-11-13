@@ -291,3 +291,76 @@ func TestHostUnitsLeaveOutATitleTheContractRefuses(t *testing.T) {
 		})
 	}
 }
+
+// A service HQ does not ship, read because systemd keeps restarting it, as
+// `systemctl show` prints one waiting out its RestartSec.
+const hostUnitRestarting = `Id=example-upload.service
+Description=Journal Remote Upload Service
+LoadState=loaded
+UnitFileState=disabled
+ActiveState=activating
+SubState=auto-restart
+Result=exit-code
+ExecMainCode=1
+ExecMainStatus=1
+InactiveExitTimestamp=@1767323100
+InactiveEnterTimestamp=@1767323160
+ActiveEnterTimestamp=@1767323101
+NRestarts=4127
+`
+
+func hostUnitsRestarting(t *testing.T, restarting string) ([]any, error) {
+	t.Helper()
+	env := runtime.Environment{HostUnits: writeHostUnits(t, hostUnitsShown), HostRestartingUnits: restarting}
+	return New(env, supplied(), &fakeHTTP{}).hostUnits(t.Context())
+}
+
+// The services systemd restarted are read beside the shipped set, each
+// marked as one HQ does not ship and carrying its count and when it last
+// became active.
+func TestHostUnitsCarryEachServiceSystemdKeepsRestarting(t *testing.T) {
+	records, err := hostUnitsRestarting(t, writeHostUnits(t, hostUnitRestarting))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 4 {
+		t.Fatalf("records %+v", records)
+	}
+	for _, record := range records[:3] {
+		if record.(runtime.HostUnitRecord).Foreign {
+			t.Errorf("a shipped unit is marked foreign: %+v", record)
+		}
+	}
+	upload := records[3].(runtime.HostUnitRecord)
+	if !upload.Foreign || upload.Restarts != 4127 || upload.ActiveAt != "2026-01-02T03:05:01Z" || upload.Sub != "auto-restart" {
+		t.Errorf("restarting %+v", upload)
+	}
+}
+
+// None restarting is an empty answer; a launcher that names the file and
+// mounted none could not ask, which is a failed read, never "none".
+func TestHostUnitsSayWhenSystemdWasNotAskedWhatRestarts(t *testing.T) {
+	records, err := hostUnitsRestarting(t, writeHostUnits(t, ""))
+	if err != nil || len(records) != 3 {
+		t.Fatalf("nothing restarting: %d records, %v", len(records), err)
+	}
+	absent := filepath.Join(t.TempDir(), "units-restarting")
+	if records, err := hostUnitsRestarting(t, absent); err == nil || strings.Contains(err.Error(), absent) {
+		t.Errorf("an unmounted answer read as %+v, %v", records, err)
+	}
+}
+
+// A service of another package whose name or words the contract does not
+// admit is passed over, and the units HQ ships are still read; one the
+// shipped set already holds is not read twice.
+func TestAServiceTheContractRefusesLeavesTheShippedUnitsRead(t *testing.T) {
+	refused := strings.Replace(hostUnitRestarting, "example-upload.service", "example/upload.service", 1)
+	again := "Id=severino-hq-backup.service\nLoadState=loaded\nActiveState=active\nSubState=running\nNRestarts=3\n"
+	records, err := hostUnitsRestarting(t, writeHostUnits(t, refused+"\n"+again+"\n"+hostUnitRestarting))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 4 || records[0].(runtime.HostUnitRecord).Foreign || records[3].(runtime.HostUnitRecord).Unit != "example-upload.service" {
+		t.Errorf("records %+v", records)
+	}
+}

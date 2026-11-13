@@ -10,9 +10,13 @@
   templates drift the moment one gains a column, and the difference shows up as
   one page quietly missing what the other shows.
 
-  Expects: `sections`: an iterable of ServiceSection.
+  Expects: `sections`: an iterable of ServiceSection; `spans_row`, True for
+  the ones that take a flow's whole row, False for the short ones. A page
+  draws the first ahead of its short sections and the second among them, so
+  its flow paints in the order it reads (docs/Design.md, "Sibling sections
+  flow").
 {% endcomment %}
-{% for section in sections %}
+{% for section in sections %}{% if section.spans_row == spans_row %}
 {% comment %}
 Folded, the heading is the toggle and its count says what is behind it. A
 separate "Show all" under the heading reads as a control belonging to nothing.
@@ -49,4 +53,4 @@ separate "Show all" under the heading reads as a control belonging to nothing.
     </details>
   {% endfor %}
 {% endsection %}
-{% endfor %}
+{% endif %}{% endfor %}

@@ -30,7 +30,7 @@ ObservationSpec(
     "cloudflare_api",
     "Pages project",
     PagesProjectRecord,
-    requires=("Cloudflare Pages Read (account)",),
+    requires=(Cloudflare.PAGES_READ,),
     hostnames=lambda record: (*record.get("domains", ()), record.get("subdomain", "")),
     title=lambda record: record.get("name", ""),
     relation="Served by Pages project",
@@ -204,21 +204,35 @@ failed read that keeps the last one and says why.
 are in [Secrets](Secrets.md#how-hq-reads-it).
 
 `host.unit` is the state of every systemd unit the repository ships
-(`SEVERINO_HOST_UNITS`): one record per unit. The set is derived, never listed:
-`Reported` in `controller/host/readings.go` walks `deploy/systemd` in the
-root-owned tree. It takes each shipped unit that is not a template, and each
-instance of a shipped template that a shipped file starts through `Unit=` or
-`OnFailure=`, so a unit added to the directory is read once installed. The
-launcher asks `systemctl show` for a fixed list of properties
-(`UnitProperties` in `controller/host/layout.go`) and mounts what it printed. The
-controller keeps exactly those properties and refuses a value that is not a
+(`SEVERINO_HOST_UNITS`), and of every other service systemd keeps restarting
+(`SEVERINO_HOST_RESTARTING_UNITS`): one record per unit. The shipped set is
+derived, never listed: `Reported` in `controller/host/readings.go` walks
+`deploy/systemd` in the root-owned tree. It takes each shipped unit that is not
+a template, and each instance of a shipped template that a shipped file starts
+through `Unit=` or `OnFailure=`, so a unit added to the directory is read once
+installed. The launcher asks `systemctl show` for a fixed list of properties
+(`UnitProperties` in `controller/host/layout.go`) and mounts what it printed.
+The controller keeps exactly those properties and refuses a value that is not a
 unit name, a systemd state word, a number or an instant. The one property of
 words is `Description`, the title the unit file gives it, read so a page names
 a unit as a person reads it rather than by a name systemd escapes
-(`run-severino\x2dhq\x2dsecrets.mount`). The repository writes every title,
-and the contract admits one only as printable ASCII on one line, bounded, with
-no slash, equals sign or bar; any other is left out, and the page shows the
-unit's name. `HostUnitRecord` in
+(`run-severino\x2dhq\x2dsecrets.mount`). The repository writes every shipped
+unit's title and another package a restarting service's, and the contract
+admits one only as printable ASCII on one line, bounded, with no slash, equals
+sign or bar; any other is left out, and the page shows the unit's name.
+
+The second file is the same answer for each loaded service outside the shipped
+set whose `NRestarts` is above zero (`Restarting` in the same file asks systemd
+for every `*.service` it holds and keeps those), so a loop in a unit HQ does
+not ship is seen. systemd counts only its own restarts since the unit was last
+started deliberately, and a start or `systemctl reset-failed` sets the count
+back to zero. The file is empty when nothing restarts and absent when systemd
+did not answer, which the controller reads as a failed read, never as none.
+Its records carry `foreign`, set from the file they came from. A service there
+whose name or words the contract does not admit is passed over, never a
+refusal of the shipped units.
+
+`HostUnitRecord` in
 the bridge contract is emitted from the model of that name
 (`hq/domains/control_plane/observations/host.py`): it holds no command line, environment or path, and a
 unit that is not installed is a record saying so. Each record carries when it
@@ -234,11 +248,14 @@ rule by `test_no_rule_measures_an_aged_reading_from_now`).
 |---|---|---|
 | `unit-failed` | systemd holds a unit as failed; names its result and exit status | serious; attention when every failed unit is one a timer, path or socket starts again |
 | `unit-not-installed` | a shipped unit is not loaded (not found, masked), its file is disabled, or a timer, path, socket or mount is not active | serious |
+| `unit-restarting` | systemd has restarted a service on its own at least ten times since it was last started, and it is not up: waiting to restart, starting, or active for less than ten minutes when read. Ten is above systemd's default start limit of five, so a service restarting faster than that is stopped and failed, `unit-failed`'s to say | serious |
 | `timer-stalled` | an active timer is not running its unit. Nothing is scheduled, it was more than two hours behind its own next elapse when read, its unit's condition did not hold, or its unit had been starting for more than two hours | serious |
 | `unit-state-unread` | the launcher mounted no answer, or the answer was refused, or the reading is too old to judge | attention |
 
-The rules name no unit. A renderer whose own status says its run failed is
-`render-failing`'s to report, with the failure's class, so `unit-failed` leaves
+The rules name no unit. `unit-not-installed` judges only the shipped set:
+deploying HQ sets up none of a restarting service another package installed,
+whose file may well be disabled. `unit-failed` judges both. A renderer whose
+own status says its run failed is `render-failing`'s to report, with the failure's class, so `unit-failed` leaves
 that unit out and one failure is one finding. `host.render_status` stays a
 reading of its own for what systemd cannot know: why a render failed, when the
 installed files were last confirmed, and whether Connect is syncing.
@@ -710,7 +727,7 @@ each workflow and each local composite action (`.github/actions/*/action.yml`),
 and the commit each tag or branch names now. It also names each workflow
 called from another repository (`owner/repo/.github/workflows/x.yml@ref`).
 
-It uses the same token with `contents: read` and resolves each action and tag
+It uses the same token with Contents: Read-only and resolves each action and tag
 once per sweep: a commit read for one repository serves the rest, and a ref
 one repository could not read is asked again by the next. A repository with no
 `.github/workflows` (GitHub answers 404) has nothing to pin, which is not a
@@ -805,13 +822,19 @@ connection acts, and HQ manages through it only when its item says so
 ([Adoption](#adoption)). Probing is how HQ learns what a credential can read: a
 refused kind is a missing permission.
 
-`requires` on each reading is a tuple of exact permission names, as the minting
-tasks use them: Cloudflare as `<permission group name> (<account|zone>)`,
-Tailscale as the bare scope name; a part names its subset in `parts`.
+`requires` on each reading is a tuple of members of its provider's table in
+`hq.domains.control_plane.permissions`, and a part names its subset in
+`parts`. A member reads the way the provider's own screen names the
+permission, where the operator grants it, with the API's name beside it where
+the two differ (Cloudflare's dashboard says `D1 Edit` for the API's
+`D1 Write`); each table cites the provider's documentation it follows. The
+registry refuses a permission written as text, and a source test refuses one
+spelled anywhere outside the tables.
 `tools/cloudflare-observer-permissions.txt` and
-`tools/tailscale-observer-scopes.txt` hold every reading's `requires` plus
-the reads in `hq.domains.control_plane.credential_reads` that are not readings
-yet; a test keeps them equal. Minting is in
+`tools/tailscale-observer-scopes.txt` hold the API name of every reading's
+`requires` plus the reads in `hq.domains.control_plane.credential_reads` that
+are not readings yet, as the minting tasks resolve them; a test keeps them
+equal. Minting is in
 [Secrets](Secrets.md#minting-observer-credentials).
 
 ### What a credential can see

@@ -48,14 +48,17 @@
 {% endif %}
 
 {% comment %}
-  How the machine stands on the tailnet, then what else HQ holds about it, in
-  one flow so a short section stands beside another. Each band after the
-  tailnet's is a section the registry produced, rendered through the shared
-  renderer, so a section HQ gains later appears here without this template learning anything about it. How it
-  relates comes last: it is the tallest of the short ones, so it is the one
-  left to take a row of its own rather than standing beside a short card.
+  What HQ holds about the machine and how it stands on the tailnet, in one
+  flow so a short section stands beside another. The registry's bands are
+  sections rendered through the shared renderer, so a section HQ gains later
+  appears here without this template learning anything about it. The ones
+  that take the whole row come first, then the tailnet and the short ones,
+  which share rows in the order they are read. How it relates comes last: it
+  is the tallest of the short ones, so it is the one left to take a row of
+  its own rather than standing beside a short card.
 {% endcomment %}
 <div class="section-flow">
+{% include "partials/_page_sections.html" with spans_row=True %}
 {% if machine.presence %}
 {% section "Tailnet" %}
   {% include "partials/_problems.html#rest" with rest=problems_in.tailnet %}
@@ -163,7 +166,7 @@
   {% endif %}
 {% endif %}
 
-{% include "partials/_page_sections.html" %}
+{% include "partials/_page_sections.html" with spans_row=False %}
 {% referenced_by "machine" machine.name cards=True %}
 {% include "partials/_relationships.html" %}
 </div>

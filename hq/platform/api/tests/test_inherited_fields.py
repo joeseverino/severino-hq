@@ -13,6 +13,7 @@ from hq.platform.application.command_fields import Describe
 from hq.platform.application.json_schemas import json_schemas
 
 from .. import openapi
+from ..components import Components
 from .test_described_once import described_once
 
 _URI = "urn:example:document"
@@ -98,7 +99,7 @@ class FieldMaskTests(SimpleTestCase):
     def test_a_masked_component_promises_no_field_whichever_schema_writes_it_first(self):
         for first in ("record", "row"):
             with self.subTest(first=first):
-                components = openapi._Components()
+                components = Components()
                 if first == "record":
                     components.typed({"ExampleRecord": ExampleRecord})
                     components.mask("ExampleRow")

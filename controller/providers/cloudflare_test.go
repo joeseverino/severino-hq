@@ -638,6 +638,67 @@ func TestCloudflareAccountModelsAndDetailCalls(t *testing.T) {
 	}
 }
 
+// cloudflareRegistrations is List Registrations answered a page at a time, in
+// the shape of the example at
+// https://developers.cloudflare.com/api/resources/registrar/subresources/registrations/methods/list/
+// with a second page reached through result_info.cursor.
+const cloudflareRegistrations = "testdata/cloudflare-registrar-registrations.json"
+
+// Each zone carries what the registrar holds for it, from every page; a zone
+// the registrar does not hold carries an empty registration.
+func TestZoneRegistrationIsTheRegistrarsAnswer(t *testing.T) {
+	data, err := os.ReadFile(cloudflareRegistrations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pages []json.RawMessage
+	if err := json.Unmarshal(data, &pages); err != nil || len(pages) != 2 {
+		t.Fatalf("%s: %d pages: %v", cloudflareRegistrations, len(pages), err)
+	}
+	named := func(id, name string) any {
+		return map[string]any{"id": id, "name": name, "account": map[string]any{"id": "acct"}, "status": "active"}
+	}
+	r, _ := newCloudflare(t, map[string]http.HandlerFunc{
+		"GET /accounts": answer([]any{map[string]any{"id": "acct"}}),
+		"GET /accounts/acct/registrar/registrations": func(w http.ResponseWriter, request *http.Request) {
+			page := pages[0]
+			if request.URL.Query().Get("cursor") != "" {
+				page = pages[1]
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(page)
+		},
+		"GET /zones": answer([]any{named("zone1", "example.com"), named("zone2", "example.org"), named("zone3", "example.net")}),
+	})
+	records, err := r.cloudflareZoneInventory(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]map[string]any{}
+	for _, record := range records {
+		raw, err := json.Marshal(record)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var zone struct {
+			Zone         string         `json:"zone"`
+			Registration map[string]any `json:"registration"`
+		}
+		if err := json.Unmarshal(raw, &zone); err != nil {
+			t.Fatal(err)
+		}
+		got[zone.Zone] = zone.Registration
+	}
+	want := map[string]map[string]any{
+		"example.com": {"expires_at": "2026-01-15", "auto_renew": true, "locked": true, "status": "active", "registrar": "Cloudflare"},
+		"example.org": {"expires_at": "", "auto_renew": false, "locked": false, "status": "transfer_pending", "registrar": "Cloudflare"},
+		"example.net": {},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("registrations %v, want %v", got, want)
+	}
+}
+
 func TestCloudflareDeleteAppliesOnlyWhenRequested(t *testing.T) {
 	for _, apply := range []bool{false, true} {
 		t.Run(strconv.FormatBool(apply), func(t *testing.T) {

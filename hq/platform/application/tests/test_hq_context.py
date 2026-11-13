@@ -186,6 +186,22 @@ class ProjectionTests(TestCase):
             [("", "Listening"), ("", "Mounted")],
         )
 
+    def test_a_service_hq_does_not_ship_is_not_one_of_its_jobs(self):
+        """The reading holds another package's service for its restarts;
+        HQ's jobs are the units it ships."""
+
+        estate()
+        store(
+            UNIT_KIND,
+            *units(),
+            {
+                "unit": "example-upload.service", "load": "loaded", "active": "activating",
+                "sub": "auto-restart", "restarts": 40, "foreign": True, "read_at": stamp(),
+            },
+        )  # fmt: skip
+
+        self.assertNotIn("example-upload.service", [job.unit for job in self.context().work.jobs])
+
     def test_a_trigger_names_what_it_starts_and_only_in_words_the_cell_beside_it_lacks(self):
         estate()
         base = {"load": "loaded", "file_state": "enabled", "read_at": stamp()}

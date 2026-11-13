@@ -3,6 +3,7 @@
 from django.test import TestCase
 
 from hq.domains.control_plane.models import ManagedResource
+from hq.domains.control_plane.permissions import Cloudflare
 
 from ..adoption_testing import connection
 from ..resource_capabilities import resource_capabilities
@@ -219,7 +220,7 @@ class WhatAChangeLacksTests(TestCase):
 
         gap = _gap("cloudflare.contact_inbox")
 
-        self.assertIn("D1 Write (account)", gap.needs)
+        self.assertIn(Cloudflare.D1_EDIT, gap.needs)
         self.assertIn(EVIDENCE_DETAILS["unknown"], gap.reason)
 
     def test_a_connection_whose_changes_need_no_permission_names_only_its_flag(self):

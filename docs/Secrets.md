@@ -514,7 +514,7 @@ take the bootstrap credential from the environment. Without `--store` they print
 create nothing: a secret goes into 1Password and nowhere else.
 
 - `mise run mint:cloudflare` needs a bootstrap token with API Tokens
-  Write. It resolves the names in `tools/cloudflare-observer-permissions.txt`
+  Edit (API Tokens Write in the API). It resolves the names in `tools/cloudflare-observer-permissions.txt`
   and creates a user-owned token with an expiry and optional client IP ranges.
   `--list-groups` prints the current names.
 - `mise run mint:tailscale` creates an OAuth client with the scopes in

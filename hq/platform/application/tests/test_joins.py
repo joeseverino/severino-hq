@@ -17,6 +17,7 @@ from hq.domains.control_plane.certificate_authorities import authority_name
 from hq.domains.control_plane.dns_lookup import LookupNotFound, LookupUnavailable
 from hq.domains.control_plane.models import ManagedResource, ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations.public_registry import ADDRESS_KIND, DOMAIN_KIND
+from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.core.tests.estate_sizes import assert_cost_does_not_grow, distinct
 from hq_sdk.testing import plain
 
@@ -288,7 +289,7 @@ class RegistrationFallbackTests(TestCase):
         self.assertIn("80 days", card.value)
         self.assertIn("Example Registrar", card.detail)
         self.assertFalse(card.concern)
-        self.assertIn("Domains Read (account)", card.note)
+        self.assertIn(Cloudflare.REGISTRAR_DOMAINS_READ, card.note)
         self.assertIn("Authentication error", card.note_title)
 
     def test_a_registrar_name_ending_in_a_period_ends_the_sentence(self):
@@ -325,7 +326,7 @@ class RegistrationFallbackTests(TestCase):
         response = self.client.get(reverse("zones:detail", kwargs={"zone": "example.com"}))
 
         card = registration(find_zone("example.com"))
-        self.assertIn("Domains Read (account)", card.note)
+        self.assertIn(Cloudflare.REGISTRAR_DOMAINS_READ, card.note)
         self.assertIn(card.note, text(response))
         self.assertTrue(select(response, "title", "Cloudflare refused the request: Forbidden"))
 

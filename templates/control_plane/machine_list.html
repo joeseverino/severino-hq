@@ -23,7 +23,7 @@ anyway, and would go on meaning nothing after it stopped being.
       {% for machine in machines %}
         <tr>
           <td>
-            <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} <span class="tag" title="{{ role.detail }}">{{ role.label|breakable }}</span>{% endfor %}
+            <strong>{% entity machine.link %}</strong>{% for role in machine.roles %} {% status role.label chip=True title=role.detail %}{% endfor %}
             {% if machine.role %}<br><span class="muted table-clamp" title="{{ machine.role }}">{{ machine.role|breakable }}</span>{% endif %}
           </td>
           <td>

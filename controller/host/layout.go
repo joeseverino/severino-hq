@@ -107,12 +107,14 @@ var Renderers = []struct{ Name, Status string }{
 }
 
 // UnitProperties is what the controller asks systemd of each unit: its
-// title, states, the last run's result and exit, and instants, as `systemctl
+// title, states, the last run's result and exit, how often systemd restarted
+// it, and instants, as `systemctl
 // show` names them. None holds a command line, an environment or a path.
 var UnitProperties = []string{
 	"Id", "Description", "LoadState", "UnitFileState", "ActiveState", "SubState", "Result",
 	"ExecMainCode", "ExecMainStatus", "InactiveExitTimestamp", "InactiveEnterTimestamp",
 	"ConditionResult", "ConditionTimestamp", "LastTriggerUSec", "NextElapseUSecRealtime", "Unit",
+	"NRestarts", "ActiveEnterTimestamp",
 }
 
 // Volume is a named docker volume and where the container mounts it. The

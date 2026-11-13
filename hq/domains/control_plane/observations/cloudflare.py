@@ -12,6 +12,7 @@ from typing import Any
 from ..certificate_authorities import authority_name
 from ..consoles import cloudflare_dashboard, cloudflare_zero_trust
 from ..names import normalized_hostname
+from ..permissions import Cloudflare
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 CONTACT_SUBMISSION_KIND = "cloudflare.contact_submission"
@@ -206,7 +207,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "cloudflare_api",
         "Pages project",
         PagesProjectRecord,
-        requires=("Cloudflare Pages Read (account)",),
+        requires=(Cloudflare.PAGES_READ,),
         hostnames=lambda record: _present(record.get("domains") or (), record.get("subdomain")),
         title=lambda record: str(record.get("name", "")),
         relation="Served by Pages project",
@@ -219,8 +220,8 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "cloudflare_api",
         "D1 database",
         D1DatabaseRecord,
-        requires=("D1 Read (account)",),
-        parts=(ReadingPart("file_size", "Database size", ("D1 Read (account)",)),),
+        requires=(Cloudflare.D1_READ,),
+        parts=(ReadingPart("file_size", "Database size", (Cloudflare.D1_READ,)),),
         title=lambda record: str(record.get("name", "")),
         relation="Backed by D1 database",
         console=lambda record: cloudflare_dashboard(record, "workers", "d1", "databases", str(record.get("uuid", ""))),
@@ -230,7 +231,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "cloudflare_api",
         "Contact message",
         ContactSubmissionRecord,
-        requires=("D1 Read (account)",),
+        requires=(Cloudflare.D1_READ,),
         title=lambda record: f"Message #{record.get('id', '')}",
         relation="Received through the contact form",
         withheld=True,
@@ -241,7 +242,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Access application",
         AccessAppRecord,
         short_label="Cloudflare Access",
-        requires=("Access: Apps Read (account)", "Access: Policies Read (account)"),
+        requires=(Cloudflare.ACCESS_APPS_READ, Cloudflare.ACCESS_POLICIES_READ),
         hostnames=lambda record: _present(
             record.get("domain", "").split("/", 1)[0],
             record.get("destinations") or (),
@@ -258,8 +259,8 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "cloudflare_api",
         "Access service token",
         AccessServiceTokenRecord,
-        requires=("Access: Service Tokens Read (account)", "Access: Apps Read (account)"),
-        parts=(ReadingPart("apps", "Applications admitting it", ("Access: Apps Read (account)",)),),
+        requires=(Cloudflare.ACCESS_SERVICE_TOKENS_READ, Cloudflare.ACCESS_APPS_READ),
+        parts=(ReadingPart("apps", "Applications admitting it", (Cloudflare.ACCESS_APPS_READ,)),),
         title=lambda record: str(record.get("name", "")),
         relation="Let in by service token",
         expires=lambda record: str(record.get("expires_at", "")),
@@ -269,10 +270,10 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "cloudflare_api",
         "Tunnel",
         TunnelRecord,
-        requires=("Cloudflare Tunnel Read (account)",),
+        requires=(Cloudflare.TUNNEL_READ,),
         parts=(
-            ReadingPart("configuration", "Tunnel ingress", ("Cloudflare Tunnel Read (account)",)),
-            ReadingPart("connections", "Tunnel connections", ("Cloudflare Tunnel Read (account)",)),
+            ReadingPart("configuration", "Tunnel ingress", (Cloudflare.TUNNEL_READ,)),
+            ReadingPart("connections", "Tunnel connections", (Cloudflare.TUNNEL_READ,)),
         ),
         hostnames=_ingress_hosts,
         addresses=_origin_addresses,
@@ -289,7 +290,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "cloudflare_api",
         "Edge certificate",
         EdgeCertificateRecord,
-        requires=("Zone Read (zone)", "SSL and Certificates Read (zone)"),
+        requires=(Cloudflare.ZONE_READ, Cloudflare.SSL_AND_CERTIFICATES_READ),
         hostnames=lambda record: _present(record.get("hosts") or ()),
         title=lambda record: str(record.get("zone", "")),
         relation="Covered by edge certificate",
@@ -308,13 +309,13 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "Redirect",
         RedirectRecord,
         requires=(
-            "Zone Read (zone)",
-            "Single Redirect Read (zone)",
-            "Page Rules Read (zone)",
+            Cloudflare.ZONE_READ,
+            Cloudflare.SINGLE_REDIRECT_READ,
+            Cloudflare.PAGE_RULES_READ,
         ),
         parts=(
-            ReadingPart("rules", "Redirect rules", ("Single Redirect Read (zone)",)),
-            ReadingPart("page_rules", "Page rules", ("Page Rules Read (zone)",)),
+            ReadingPart("rules", "Redirect rules", (Cloudflare.SINGLE_REDIRECT_READ,)),
+            ReadingPart("page_rules", "Page rules", (Cloudflare.PAGE_RULES_READ,)),
         ),
         hostnames=lambda record: _present(record.get("hostnames") or ()) if record.get("enabled", True) else (),
         title=_redirect_title,

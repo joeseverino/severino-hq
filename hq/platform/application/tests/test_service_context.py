@@ -480,3 +480,40 @@ class EmptyColumnTests(SimpleTestCase):
         for fields in ({"id": "Not an id!", "label": "Example"}, {"id": "example", "label": "  "}):
             with self.subTest(**fields), self.assertRaises(ValueError):
                 ServiceSection(columns=(), records=(), **fields)
+
+
+def _rows(width, *, folded=False):
+    return ServiceSection(
+        id="example",
+        label="Example",
+        columns=tuple(f"Column {n}" for n in range(width)),
+        records=(tuple(Cell(f"value {n}") for n in range(width)),),
+        folded=folded,
+    )
+
+
+class SpansRowTests(SimpleTestCase):
+    def test_a_fold_and_a_table_of_four_columns_take_the_row(self):
+        for section in (_rows(4), _rows(6), _rows(2, folded=True)):
+            with self.subTest(columns=len(section.columns), folded=section.folded):
+                self.assertTrue(section.spans_row)
+
+    def test_a_table_of_three_columns_shares_a_row(self):
+        self.assertFalse(_rows(3).spans_row)
+
+
+@tag("source")
+class SpansRowSourceTests(SimpleTestCase):
+    def test_the_flow_takes_a_whole_row_from_the_columns_the_section_counts(self):
+        """The stylesheet and the page that orders its sections by width read
+        a table as wide from one column count."""
+
+        import re
+
+        from hq.platform.core.stylesheets import STATIC
+
+        from ..service_context import ROW_COLUMNS
+
+        css = (STATIC / "css" / "app" / "layout.css").read_text(encoding="utf-8")
+        wide = re.findall(r"\.section-flow > section:has\(table > thead > tr > :nth-child\((\d+)\)\)", css)
+        self.assertEqual(wide, [str(ROW_COLUMNS)])

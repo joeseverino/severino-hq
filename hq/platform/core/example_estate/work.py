@@ -296,7 +296,8 @@ def _ran(kind, ago, work):
 
 
 def units():
-    """systemd's word on each unit HQ ships, and the last credentials render."""
+    """systemd's word on each unit HQ ships and on a service it keeps
+    restarting, and the last credentials render."""
 
     found = [
         {
@@ -358,7 +359,25 @@ def units():
         }
         for service, last in started.items()
     )
-    store(UNIT_KIND, *({**unit, "title": TITLES[unit["unit"]]} for unit in found))
+    # A service HQ does not ship that systemd has kept restarting for days,
+    # read beside HQ's own units because it restarts.
+    looping = {
+        "unit": "example-upload.service",
+        "title": "Example log upload",
+        "load": "loaded",
+        "file_state": "enabled",
+        "active": "activating",
+        "sub": "auto-restart",
+        "result": "exit-code",
+        "main_code": 1,
+        "main_status": 1,
+        "restarts": 8641,
+        "active_at": stamp(timedelta(seconds=40)),
+        "ended_at": stamp(timedelta(seconds=10)),
+        "foreign": True,
+        "read_at": stamp(),
+    }
+    store(UNIT_KIND, *({**unit, "title": TITLES[unit["unit"]]} for unit in found), looping)
     store(
         RENDER_STATUS_KIND,
         {

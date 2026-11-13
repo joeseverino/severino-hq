@@ -116,10 +116,11 @@ class HostRenderStatusRecord(ObservationRecord):
 
 
 # A unit's name, one of systemd's state words, an instant in UTC and the
-# title its unit file gives it. A title is the one field of words, and the
-# repository writes each one, since only the units it ships are asked about:
-# printable ASCII on one line, without a slash or an equals sign, so no path or
-# assignment can stand in it, nor the bar HQ's fact rows keep between fields. The
+# title its unit file gives it. A title is the one field of words, written by
+# the repository for a unit it ships and by another package for a service read
+# because it restarts, so it is admitted only as printable ASCII on one line,
+# without a slash or an equals sign, so no path or assignment can stand in it,
+# nor the bar HQ's fact rows keep between fields. The
 # controller reads each pattern from this record's schema in the bridge
 # contract and checks it first. A name may carry systemd's \xNN escape, which
 # a unit named for a path uses for a dash in it (run-a\x2db.mount).
@@ -160,8 +161,8 @@ OptionalUnitText = Annotated[str, Field(pattern=_or_blank(UNIT_TEXT), max_length
 class HostUnitRecord(ObservationRecord):
     """One systemd unit on the controller's machine, as `systemctl show` states
     it: the host.unit reading's record. The launcher asks systemd for exactly
-    these properties of the units the repository ships, and the controller
-    reports no other. Each string is a unit name, one of systemd's state words,
+    these properties of the units the repository ships and of each other
+    service systemd has restarted, and the controller reports no other. Each string is a unit name, one of systemd's state words,
     an instant in UTC or the unit file's own title for a person to read; none
     is a path, a command line or an environment.
     """
@@ -221,6 +222,18 @@ class HostUnitRecord(ObservationRecord):
         default="", description="NextElapseUSecRealtime: when a timer with a calendar schedule next elapses."
     )
     activates: OptionalUnitName = Field(default="", description="Unit: the unit a timer or path starts.")
+    restarts: int = Field(
+        default=0,
+        ge=0,
+        description="NRestarts: how often systemd restarted the service on its own since it was last started deliberately or reset.",
+    )
+    active_at: OptionalUnitInstant = Field(
+        default="", description="ActiveEnterTimestamp: when the unit last became active, on this boot."
+    )
+    foreign: bool = Field(
+        default=False,
+        description="A service the repository does not ship, read because systemd has restarted it on its own.",
+    )
     read_at: UnitInstant = Field(description="When the launcher asked systemd.")
 
 

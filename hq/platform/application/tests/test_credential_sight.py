@@ -12,6 +12,7 @@ from hq.domains.control_plane.connection_kinds import CONNECTION_CREDENTIALS, CO
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
 from hq.domains.control_plane.observations import OBSERVATIONS, ObservationRecord, ObservationSpec
 from hq.domains.control_plane.observations.contract import registry
+from hq.domains.control_plane.permissions import Cloudflare, Tailscale
 from hq.domains.control_plane.provider_adapters.contracts import (
     CREDENTIAL_REFUSAL,
     PERMISSION_REFUSAL,
@@ -43,7 +44,7 @@ EXAMPLE = ObservationSpec(
     "cloudflare_api",
     "Pages project",
     ExampleRecord,
-    requires=("Pages Read (account)",),
+    requires=(Cloudflare.PAGES_READ,),
 )
 
 
@@ -433,7 +434,7 @@ class CredentialSightPageTests(TestCase):
         api = rows["example-api"].sight
         self.assertFalse([sight.remedy for sight in api.sights if sight.remedy])
         (tailnet_user,) = [sight for sight in rows["example-tailnet"].sight.sights if sight.kind == "tailscale.user"]
-        self.assertIn("users:read", tailnet_user.remedy)
+        self.assertIn(Tailscale.USERS_READ, tailnet_user.remedy)
         said = text(response)
         self.assertIn(tailnet_user.remedy, said)
         readable = {sight.kind for sight in rows["example-ssh"].sight.sights if sight.state == READABLE}

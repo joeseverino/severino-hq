@@ -236,6 +236,17 @@ PLANTS = {
         '<span style="display: inline-block; block-size: 4rem">Example</span>{% endsection %}'
         '{% section "Example two" head="above" %}<p>Example</p>{% endsection %}</div>'
     ),
+    # A flow whose first member the stylesheet paints after the second.
+    "flows in reading order": Plant(
+        '<div class="section-flow"><section style="order: 1"><p>Example</p></section>'
+        "<section><p>Example two</p></section></div>"
+    ),
+    # A wide member (anything not a section) written between two short ones,
+    # splitting two that would share a row.
+    "flows share their rows": Plant(
+        '<div class="section-flow"><section><p>Example</p></section><p>Example across the row</p>'
+        "<section><p>Example two</p></section></div>"
+    ),
     # A frame stopped at its words' width in the page's column.
     "frames span their column": Plant('<div class="card" style="inline-size: fit-content">Example</div>'),
     # A head that spreads its items, a marker set before its heading.
@@ -328,6 +339,13 @@ PLANTS = {
     ),
 }
 
+_FLOWS = (
+    '<div class="section-flow"><p>Example across the row</p>'
+    + "".join(f"<section><p>Example {n}</p></section>" for n in range(5))
+    + '</div><div class="section-flow"><section><p>Example</p></section><section><p>Example two</p></section>'
+    "<p>Example across the row</p></div>"
+)
+
 # What a check passes that is close to what it finds: the case its plant
 # differs from, so a check that finds everything is caught as surely as one
 # that finds nothing.
@@ -348,6 +366,11 @@ PASSES = {
         '{% facts layout="band" %}{% fact "Example rules" value=0 %}{% fact "Example held" value=2 %}'
         '{% fact "Example refused" value=13 %}{% endfacts %}'
     ),
+    # A wide member ahead of five short ones that wrap onto a second row, and
+    # two short ones sharing a row ahead of a wide one, the last short one of
+    # each alone with nothing after it to share its row.
+    "flows in reading order": Plant(_FLOWS),
+    "flows share their rows": Plant(_FLOWS),
     # A frame across its column, and frames that share a row.
     "frames span their column": Plant(
         '<div class="card">Example</div><div style="display: flex; gap: 1rem">'

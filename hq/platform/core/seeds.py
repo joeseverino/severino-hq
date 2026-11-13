@@ -117,6 +117,14 @@ def _estate(owner) -> None:
             demo(owner)
 
 
+def _read_empty(owner) -> None:
+    """The example estate the moment its Docker environment answered a read
+    with no containers, so the claim HQ makes about that is drawn."""
+
+    _estate(owner)
+    example_estate.docker.read_empty()
+
+
 def _reading(owner) -> None:
     """The example estate with every connection only reading, as an HQ whose
     credentials may not make changes runs: each page that offers a change
@@ -158,6 +166,7 @@ SEEDS: dict[str, Seed] = {
     "showcase": Seed(_estate, frozendict({**_SET_UP, "SEVERINO_POSTURE": "advanced"})),
     "standard": Seed(_estate, _SET_UP),
     "reading": Seed(_reading, _SET_UP),
+    "read-empty": Seed(_read_empty, _SET_UP),
     # A fresh install: its one signed-up user, and nothing else.
     "empty": Seed(lambda _owner: None),
     # Years of records, to measure pages at the size they grow to.

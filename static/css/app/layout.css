@@ -47,13 +47,15 @@
    width a chart keeps its scale. */
 .section-flow, .domain-charts { --flow-basis: 22rem; display: flex; flex-wrap: wrap; gap: var(--layout-gap); margin: 0 0 var(--stack-gap); }
 .domain-charts { --flow-basis: 30rem; }
-.section-flow > *, .domain-charts > * { flex: 1 1 var(--flow-basis); min-width: 0; margin: 0; order: 1; }
+.section-flow > *, .domain-charts > * { flex: 1 1 var(--flow-basis); min-width: 0; margin: 0; }
 /* What is not a section or a card (a fold, a paragraph) and a section holding
-   a table of four columns or more take the whole row, ahead of the short
-   ones, which collect after them to share rows rather than each sitting
-   beside the gap a wide one leaves. */
+   a table of four columns or more take the whole row. The markup puts them
+   ahead of the short ones, which collect after them to share rows rather
+   than each sitting beside the gap a wide one leaves. The flow paints in the
+   markup's order, so what is read and where the keyboard goes is what is
+   drawn: nothing here reorders a member. */
 .section-flow > :not(section, article, figure.section),
-.section-flow > section:has(table > thead > tr > :nth-child(4)) { flex-basis: 100%; order: 0; }
+.section-flow > section:has(table > thead > tr > :nth-child(4)) { flex-basis: 100%; }
 /* A card or section of facts grows no wider than what it holds, so standing
    alone in its flow, or alone on a row the others wrapped off, it keeps its
    pairs together at the row's start rather than stretching its labels and

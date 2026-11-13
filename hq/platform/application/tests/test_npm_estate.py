@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from hq.domains.control_plane.models import ManagedResource
 from hq.domains.control_plane.observations import OBSERVATIONS
+from hq.domains.control_plane.permissions import NginxProxyManager
 from hq.platform.application.tests.markup import text
 
 from ..derived_reads import get_reading, serialize_path
@@ -295,6 +296,6 @@ class DeliveryTests(TestCase):
         found = get_reading("npm.certificate")
 
         self.assertEqual(found["requires"], list(OBSERVATIONS["npm.certificate"].requires))
-        self.assertIn("certificates: view", found["requires"])
+        self.assertIn(NginxProxyManager.CERTIFICATES_VIEW, found["requires"])
         self.assertNotIn("PRIVATE", str(found))
         self.assertEqual(found["items"][0]["name"], "example wildcard")

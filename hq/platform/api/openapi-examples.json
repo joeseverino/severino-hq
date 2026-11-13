@@ -258,12 +258,12 @@
               "affected_scopes": [],
               "evidence": [
                 {
-                  "label": "Container",
-                  "value": "nginx-proxy-manager"
+                  "label": "Service",
+                  "value": "example-upload.service"
                 }
               ],
-              "explanation": "A tag can later name a different build. Pin it by digest.",
-              "id": "claim:727c884d159f86c2",
+              "explanation": "systemd starts it again each time it stops, and it does not stay up.",
+              "id": "claim:351586e64bf742f3",
               "investigations": [
                 {
                   "capability": "",
@@ -275,7 +275,7 @@
                   "recommended": false,
                   "refusal": "",
                   "target": "",
-                  "url": "/infrastructure/topology/?focus=machine%3Adocker-host-01#trace"
+                  "url": "/infrastructure/topology/?focus=controller%3Ae61d92aae82ff989#trace"
                 }
               ],
               "no_help_reason": null,
@@ -283,35 +283,35 @@
                 {
                   "capability": "",
                   "effect": "read",
-                  "label": "Open",
+                  "label": "Open Infrastructure",
                   "method": "GET",
                   "name": "open",
                   "reason": "",
                   "recommended": false,
                   "refusal": "",
                   "target": "",
-                  "url": "/infrastructure/machines/docker-host-01/"
+                  "url": "/infrastructure/connections/"
                 }
               ],
               "operator_steps": [
                 {
-                  "command": "docker compose up -d --force-recreate nginx-proxy-manager",
-                  "label": "On docker-host-01, in the compose project that runs nginx-proxy-manager, recreate it",
+                  "command": "ssh example-controller \"sudo systemctl reset-failed example-upload.service\"",
+                  "label": "Once it is fixed, clear its restart count",
                   "notes": []
                 }
               ],
               "remedies": [],
-              "rule": "container-image-unpinned",
-              "scope": null,
-              "severity": "attention",
+              "rule": "unit-restarting",
+              "scope": "host.unit",
+              "severity": "serious",
               "since": null,
-              "subject": "machine:docker-host-01",
-              "title": "nginx-proxy-manager on docker-host-01 runs jc21/nginx-proxy-manager:2.12.1 by tag alone",
+              "subject": "controller:e61d92aae82ff989",
+              "title": "\u201cExample log upload\u201d keeps restarting on example-controller",
               "workflow": {
-                "id": "resolve:claim:727c884d159f86c2",
+                "id": "resolve:claim:351586e64bf742f3",
                 "label": "Next steps",
                 "outcome": {
-                  "claim_id": "claim:727c884d159f86c2",
+                  "claim_id": "claim:351586e64bf742f3",
                   "kind": "claim_absent",
                   "label": ""
                 },
@@ -328,7 +328,7 @@
                         "recommended": false,
                         "refusal": "",
                         "target": "",
-                        "url": "/infrastructure/findings/?rule=container-image-unpinned"
+                        "url": "/infrastructure/findings/?rule=unit-restarting"
                       }
                     ],
                     "label": "Check again",
@@ -343,11 +343,12 @@
           "rule": null,
           "schema_version": 2,
           "summary": {
-            "findings": 3,
-            "returned": 3,
+            "findings": 4,
+            "returned": 4,
             "severities": {
               "attention": 2,
-              "neutral": 1
+              "neutral": 1,
+              "serious": 1
             },
             "truncated": false
           }
@@ -1317,7 +1318,7 @@
     "responses": {
       "200": {
         "data": {
-          "count": 8,
+          "count": 9,
           "items": [
             {
               "action": "Review docs",
@@ -1330,7 +1331,7 @@
             }
           ],
           "next": null,
-          "total": 8,
+          "total": 9,
           "truncated": false
         },
         "ok": true

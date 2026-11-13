@@ -2,38 +2,38 @@
 
 A registered reading states its own ``requires``; the reads below run through
 a credential but are not registered readings yet, and each entry leaves this
-list when its read becomes one. Cloudflare entries are ``<permission group
-name> (<account|zone>)``, Tailscale entries bare scope names.
+list when its read becomes one. Each name is a member of its provider's table
+in ``permissions``.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass
 
 from .observations import OBSERVATIONS
+from .permissions import Cloudflare, Permission, Tailscale
 lazy from .providers import PROVIDERS
-
-# What the zone sweep's registrar read needs: expiry and auto-renew.
-REGISTRAR_READ = "Registrar: Domains Read (account)"
 
 # Reads an observer credential needs that neither a registered reading nor a
 # resource kind's declared parts state: what the sweep asks for on the way to
 # them. Everything else is derived from those declarations.
-UNREGISTERED_READS: Mapping[str, tuple[tuple[str, str], ...]] = frozendict(
+UNREGISTERED_READS: Mapping[str, tuple[tuple[Permission, str], ...]] = frozendict(
     {
         "cloudflare_api": (
-            ("Account Settings Read (account)", "The account and its analytics sites"),
-            ("Account Analytics Read (account)", "Site analytics"),
+            (Cloudflare.ACCOUNT_SETTINGS_READ, "The account and its analytics sites"),
+            (Cloudflare.ACCOUNT_ANALYTICS_READ, "Site analytics"),
         ),
         "tailscale": (
-            ("devices:core:read", "Tailnet devices"),
-            ("devices:routes:read", "Advertised and approved routes"),
-            ("policy_file:read", "Tailnet policy"),
+            (Tailscale.DEVICES_CORE_READ, "Tailnet devices"),
+            (Tailscale.DEVICES_ROUTES_READ, "Advertised and approved routes"),
+            (Tailscale.POLICY_FILE_READ, "Tailnet policy"),
+            # The policy read needs it beside devices:core:read, the scopes table says.
+            (Tailscale.DEVICES_POSTURE_ATTRIBUTES_READ, "Tailnet policy"),
         ),
     }
 )
 
 
-def observer_permissions(provider: str) -> tuple[str, ...]:
+def observer_permissions(provider: str) -> tuple[Permission, ...]:
     """Every read permission this provider's observer credential needs, sorted.
 
     What its readings require, what the parts of resource kinds read through it

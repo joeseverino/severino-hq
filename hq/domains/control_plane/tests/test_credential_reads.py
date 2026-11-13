@@ -24,11 +24,11 @@ def listed(name: str) -> tuple[str, ...]:
 @tag("source")
 class ObserverPermissionFileTests(SimpleTestCase):
     def assert_matches(self, provider: str, filename: str) -> None:
-        wanted = observer_permissions(provider)
+        wanted = sorted(name.api for name in observer_permissions(provider))
         found = listed(filename)
         self.assertEqual(
             sorted(found),
-            list(wanted),
+            wanted,
             f"{filename} must list exactly the reads {provider} needs.",
         )
         self.assertEqual(len(found), len(set(found)), f"{filename} repeats a line.")
@@ -43,7 +43,7 @@ class ObserverPermissionFileTests(SimpleTestCase):
         """The minting task resolves "<name> (<account|zone>)" and nothing else."""
 
         for name in observer_permissions("cloudflare_api"):
-            self.assertRegex(name, r"^\S.* \((account|zone)\)$")
+            self.assertRegex(name.api, r"^\S.* \((account|zone)\)$")
 
     def test_tailscale_reads_are_read_scopes(self):
         for name in observer_permissions("tailscale"):

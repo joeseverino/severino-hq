@@ -251,11 +251,13 @@ answers, or at an address no known machine holds.
 What else HQ holds about this name. Each band is a section the registry produced,
 rendered through the shared renderer, so a section HQ gains later appears here
 without this template learning anything about it, and the machine page renders
-the same shape from the same file. How it relates comes last, as on the
-machine page.
+the same shape from the same file. The bands that take the whole row come
+first, so the short ones after them share rows in the order they are read. How
+it relates comes last, as on the machine page.
 {% endcomment %}
 <div class="section-flow">
-{% include "partials/_page_sections.html" %}
+{% include "partials/_page_sections.html" with spans_row=True %}
+{% include "partials/_page_sections.html" with spans_row=False %}
 {% referenced_by "service" service.hostname cards=True %}
 {% include "partials/_relationships.html" %}
 </div>

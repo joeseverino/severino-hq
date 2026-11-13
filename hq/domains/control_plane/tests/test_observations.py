@@ -14,6 +14,7 @@ from hq.domains.control_plane.observations import (
     Stamp,
     registry,
 )
+from hq.domains.control_plane.permissions import Cloudflare
 from hq.platform.application.inventory import record_inventory
 from hq.platform.application.security import cli_principal
 from hq.platform.application.tests.sentinel import SENTINEL
@@ -53,6 +54,10 @@ class ContractTests(SimpleTestCase):
             sorted(k for k, s in OBSERVATIONS.items() if s.read_by == "hq"),
         )
 
+    def test_a_permission_written_as_text_is_refused(self):
+        with self.assertRaises(ValueError):
+            registry((ObservationSpec("example.thing", "example", "Thing", Named, requires=("Zone Read (zone)",)),))
+
     def test_a_facet_and_a_reader_are_from_their_vocabularies(self):
         with self.assertRaises(ValueError):
             registry((ObservationSpec("example.thing", "example", "Thing", Named, facet="x"),))
@@ -63,17 +68,17 @@ class ContractTests(SimpleTestCase):
 class PartTests(SimpleTestCase):
     """A part needs no more than its reading declares, and is named once."""
 
-    def spec(self, *parts, requires=("Read (zone)",), provider="example"):
+    def spec(self, *parts, requires=(Cloudflare.ZONE_READ,), provider="example"):
         return ObservationSpec("example.thing", provider, "Thing", Named, requires=requires, parts=parts)
 
     def test_a_part_within_the_readings_permissions_registers(self):
-        found = registry((self.spec(ReadingPart("half", "Half", ("Read (zone)",))),))
+        found = registry((self.spec(ReadingPart("half", "Half", (Cloudflare.ZONE_READ,))),))
 
         self.assertEqual(found["example.thing"].parts[0].name, "half")
 
     def test_a_part_needing_more_than_its_reading_is_refused(self):
         with self.assertRaises(ValueError):
-            registry((self.spec(ReadingPart("half", "Half", ("Write (zone)",))),))
+            registry((self.spec(ReadingPart("half", "Half", (Cloudflare.DNS_WRITE,))),))
 
     def test_parts_are_named_once_and_never_blank(self):
         with self.assertRaises(ValueError):

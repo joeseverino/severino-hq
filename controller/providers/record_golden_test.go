@@ -91,6 +91,7 @@ var admittedMembers = map[string]any{
 	"HostUnitRecord.ConditionAt":             instant,
 	"HostUnitRecord.LastTriggerAt":           instant,
 	"HostUnitRecord.NextElapseAt":            instant,
+	"HostUnitRecord.ActiveAt":                instant,
 	"HostUnitRecord.ReadAt":                  instant,
 }
 

@@ -67,6 +67,21 @@ def failed(unit: str = SERVICE, **said) -> dict:
     return service(unit, **{"active": "failed", "sub": "failed", "result": "exit-code", "main_status": 3, **said})
 
 
+FOREIGN = "example-upload.service"
+
+
+def looping(unit: str = FOREIGN, **said) -> dict:
+    """A service HQ does not ship that systemd keeps restarting, waiting out its
+    RestartSec, as the controller reports one."""
+
+    return {
+        "unit": unit, "title": "Example upload", "load": "loaded", "file_state": "disabled",
+        "active": "activating", "sub": "auto-restart", "result": "exit-code", "main_code": 1,
+        "main_status": 1, "restarts": 4127, "active_at": stamp(timedelta(minutes=1)),
+        "ended_at": stamp(timedelta(seconds=30)), "foreign": True, "read_at": stamp(), **said,
+    }  # fmt: skip
+
+
 def sweep(*records, **fields) -> None:
     """The reading as a sweep stores it, through the schema."""
 
@@ -122,15 +137,15 @@ class RecordTests(SimpleTestCase):
                 self.assertEqual(SPEC.clean([service(**{field: value})]), ([], 1))
 
     def test_the_reading_holds_no_secret(self):
-        """Every field is a unit name, a state word, a number or an instant,
-        but the unit file's title, which is words and never a path or an
-        assignment."""
+        """Every field is a unit name, a state word, a number, a flag or an
+        instant, but the unit file's title, which is words and never a path or
+        an assignment."""
 
         declared = contract()["components"]["schemas"]["HostUnitRecord"]
         self.assertFalse(declared["additionalProperties"])
         for name, schema in declared["properties"].items():
             with self.subTest(field=name):
-                self.assertTrue(schema["type"] == "integer" or schema.get("pattern"), "free text")
+                self.assertTrue(schema["type"] in ("integer", "boolean") or schema.get("pattern"), "free text")
                 self.assertNotRegex(name, r"exec|environment|credential|path|command")
         # Description is the one field of words; a second waits on a decision.
         words = {"title"}
@@ -464,6 +479,84 @@ class UnreadTests(TestCase):
         self.assertEqual(len(raised("unit-failed")), 1)
 
 
+class RestartingTests(TestCase):
+    def setUp(self):
+        tailnet_connection()
+
+    def test_a_service_systemd_keeps_restarting_is_serious(self):
+        sweep(service(), looping())
+
+        (finding,) = raised("unit-restarting")
+
+        self.assertEqual(finding["severity"], "serious")
+        self.assertIn("“Example upload”", finding["title"])
+        evidence = {item["label"]: item["value"] for item in finding["evidence"]}
+        self.assertEqual(evidence["Service"], FOREIGN)
+        self.assertIn("4,127", evidence["Restarted"])
+        self.assertEqual({name: len(found) for name, found in every_rule().items() if found}, {"unit-restarting": 1})
+
+    def test_the_commands_read_its_log_and_clear_its_count(self):
+        sweep(looping())
+
+        with projection_scope():
+            (finding,) = [
+                found
+                for found in derive_findings(derive_topology(principal=EVERYTHING), principal=EVERYTHING)
+                if found.rule == "unit-restarting"
+            ]
+
+        self.assertEqual(
+            [step.command for step in finding.steps],
+            [
+                f'ssh example-controller "sudo journalctl -u {FOREIGN} -n 50 --no-pager"',
+                f'ssh example-controller "sudo systemctl reset-failed {FOREIGN}"',
+            ],
+        )
+
+    def test_a_service_up_only_minutes_since_its_last_restart_is_still_looping(self):
+        sweep(looping(active="active", sub="running", active_at=stamp(timedelta(minutes=2))))
+
+        self.assertEqual(len(raised("unit-restarting")), 1)
+
+    def test_a_service_that_restarted_and_then_stayed_up_raises_nothing(self):
+        sweep(looping(active="active", sub="running", active_at=stamp(timedelta(days=3))))
+
+        self.assertEqual(every_rule(), NOTHING)
+
+    def test_a_shipped_service_restarted_a_few_times_is_not_a_loop(self):
+        sweep(looping(SERVICE, restarts=3, foreign=False))
+
+        self.assertEqual(raised("unit-restarting"), [])
+
+    def test_up_minutes_is_measured_from_the_reading_not_from_now(self):
+        """A service read two minutes after it came up, in a reading taken
+        an hour ago, had not settled when it was read."""
+
+        sweep(
+            looping(
+                active="active",
+                sub="running",
+                active_at=stamp(timedelta(minutes=62)),
+                read_at=stamp(timedelta(hours=1)),
+            )
+        )
+
+        self.assertEqual(len(raised("unit-restarting")), 1)
+
+    def test_a_looping_service_that_failed_is_one_finding(self):
+        sweep(looping(active="failed", sub="failed", result="start-limit-hit"))
+
+        self.assertEqual({name: len(found) for name, found in every_rule().items() if found}, {"unit-failed": 1})
+
+    def test_a_disabled_service_hq_does_not_ship_is_not_called_not_set_up(self):
+        sweep(looping(active="active", sub="running", active_at=stamp(timedelta(days=3))))
+
+        self.assertEqual(raised("unit-not-installed"), [])
+        sweep(looping(SERVICE, foreign=False, active="active", sub="running", active_at=stamp(timedelta(days=3))))
+
+        self.assertEqual(len(raised("unit-not-installed")), 1)
+
+
 class QueueTests(TestCase):
     def test_each_finding_reaches_the_action_queue_and_offers_a_read(self):
         tailnet_connection()
@@ -471,6 +564,7 @@ class QueueTests(TestCase):
             failed(),
             timer(sub="elapsed", next_elapse_at=""),
             timer("severino-hq-example-off.timer", active="inactive", sub="dead"),
+            looping(),
             error="1 record did not match the reading's schema",
         )
 
@@ -515,6 +609,10 @@ class FactTests(SimpleTestCase):
             TIMER,
             "2026-01-02T04:00:00Z",
             "",
+            "",
+            "12",
+            "2026-01-02T03:05:30Z",
+            "yes",
         )
 
         key, value = unit.fact

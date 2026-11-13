@@ -59,6 +59,11 @@ class Cell:
         return cls(link.label, link.url, external=link.external, muted=muted, link=link)
 
 
+# The columns from which a section's table takes the whole row of a flow
+# (layout.css, `.section-flow`); test_service_context holds the two to one.
+ROW_COLUMNS = 4
+
+
 @dataclass(frozen=True, slots=True)
 class ServiceSection:
     """One band under a service: a heading, columns, and rows of cells.
@@ -94,6 +99,14 @@ class ServiceSection:
         if self.records and len(keep) < len(self.columns):
             object.__setattr__(self, "columns", tuple(self.columns[i] for i in keep))
             object.__setattr__(self, "records", tuple(tuple(row[i] for i in keep) for row in self.records))
+
+    @property
+    def spans_row(self) -> bool:
+        """Whether it takes the whole row of the flow it is drawn in: a fold,
+        or a table too wide to share one. A page writes these ahead of the
+        short ones, which then collect to share rows."""
+
+        return self.folded or len(self.columns) >= ROW_COLUMNS
 
 
 def filled_columns(width: int, records: tuple[tuple[Cell, ...], ...]) -> tuple[int, ...]:

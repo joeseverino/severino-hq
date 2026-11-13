@@ -17,6 +17,7 @@ from pydantic.json_schema import SkipJsonSchema
 lazy from hq.platform.application.moments import when
 lazy from hq.platform.application.timestamps import moment
 
+from ..permissions import GitHub
 from .contract import ObservationRecord, ObservationSpec, ReadingPart, Stamp
 
 PROVIDER = "github_app"
@@ -28,22 +29,23 @@ FULL_READ_EVERY = timedelta(hours=1)
 
 # Refusable one at a time: a private repository on a free plan has no code
 # scanning, and that should not hide its pull requests.
-CODE_SCANNING = ReadingPart("code_scanning", "Code scanning alerts", requires=("code scanning alerts: read",))
-DEPENDABOT = ReadingPart("dependabot", "Dependabot alerts", requires=("Dependabot alerts: read",))
-# GitHub calls this secret scanning. Named for what it finds, leaked credentials,
-# because this vocabulary reaches the topology, which carries no such word.
+CODE_SCANNING = ReadingPart("code_scanning", "Code scanning alerts", requires=(GitHub.CODE_SCANNING_ALERTS_READ,))
+DEPENDABOT = ReadingPart("dependabot", "Dependabot alerts", requires=(GitHub.DEPENDABOT_ALERTS_READ,))
+# GitHub calls this secret scanning, and its permission keeps GitHub's name. The
+# part is named for what it finds, leaked credentials, because this vocabulary
+# reaches the topology, which carries no such word.
 LEAKED_CREDENTIALS = ReadingPart(
-    "leaked_credentials", "Leaked credential alerts", requires=("leaked credential alerts: read",)
+    "leaked_credentials", "Leaked credential alerts", requires=(GitHub.SECRET_SCANNING_ALERTS_READ,)
 )
-BRANCH_RULES = ReadingPart("branch_rules", "Branch rules", requires=("administration: read",))
-ENVIRONMENTS = ReadingPart("environments", "Environments", requires=("administration: read",))
-RUNNERS = ReadingPart("runners", "Self-hosted runners", requires=("administration: read",))
-IMAGES = ReadingPart("images", "Container images", requires=("packages: read",))
-ACCESS = ReadingPart("access", "Access and Actions policy", requires=("administration: read",))
-VARIABLES = ReadingPart("variables", "Actions variables", requires=("Actions variables: read",))
+BRANCH_RULES = ReadingPart("branch_rules", "Branch rules", requires=(GitHub.ADMINISTRATION_READ,))
+ENVIRONMENTS = ReadingPart("environments", "Environments", requires=(GitHub.ADMINISTRATION_READ,))
+RUNNERS = ReadingPart("runners", "Self-hosted runners", requires=(GitHub.ADMINISTRATION_READ,))
+IMAGES = ReadingPart("images", "Container images", requires=(GitHub.PACKAGES_READ,))
+ACCESS = ReadingPart("access", "Access and Actions policy", requires=(GitHub.ADMINISTRATION_READ,))
+VARIABLES = ReadingPart("variables", "Actions variables", requires=(GitHub.VARIABLES_READ,))
 # Each workflow's ``uses:`` lines and the commit each tag names now: what a
 # pinning fix replaces them with.
-WORKFLOW_PINS = ReadingPart("workflow_pins", "Workflow action pins", requires=("contents: read",))
+WORKFLOW_PINS = ReadingPart("workflow_pins", "Workflow action pins", requires=(GitHub.CONTENTS_READ,))
 PARTS = (
     CODE_SCANNING,
     DEPENDABOT,
@@ -343,18 +345,18 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         "GitHub repository",
         RepositoryRecord,
         requires=(
-            "metadata: read",
-            "contents: read",
-            "checks: read",
-            "pull requests: read",
-            "actions: read",
-            "deployments: read",
-            "code scanning alerts: read",
-            "Dependabot alerts: read",
-            "leaked credential alerts: read",
-            "administration: read",
-            "packages: read",
-            "Actions variables: read",
+            GitHub.METADATA_READ,
+            GitHub.CONTENTS_READ,
+            GitHub.CHECKS_READ,
+            GitHub.PULL_REQUESTS_READ,
+            GitHub.ACTIONS_READ,
+            GitHub.DEPLOYMENTS_READ,
+            GitHub.CODE_SCANNING_ALERTS_READ,
+            GitHub.DEPENDABOT_ALERTS_READ,
+            GitHub.SECRET_SCANNING_ALERTS_READ,
+            GitHub.ADMINISTRATION_READ,
+            GitHub.PACKAGES_READ,
+            GitHub.VARIABLES_READ,
         ),
         parts=PARTS,
         title=lambda record: str(record.get("repository", "")),
@@ -380,12 +382,12 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         DependencyRunRecord,
         # The token handed to the run: the App's Renovate grant.
         requires=(
-            "contents: write",
-            "pull requests: write",
-            "issues: write",
-            "commit statuses: write",
-            "workflows: write",
-            "Dependabot alerts: read",
+            GitHub.CONTENTS_WRITE,
+            GitHub.PULL_REQUESTS_WRITE,
+            GitHub.ISSUES_WRITE,
+            GitHub.COMMIT_STATUSES_WRITE,
+            GitHub.WORKFLOWS_WRITE,
+            GitHub.DEPENDABOT_ALERTS_READ,
         ),
         title=lambda record: str(record.get("owner", "")),
         relation="Dependency updates of",

@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from hq.domains.control_plane.models import ProviderConnection, ProviderInventory
+from hq.domains.control_plane.permissions import Tailscale
 from hq.platform.application.plugin_testing import form_keyed
 
 from ..connection_context import ConnectionsContext, connections_context
@@ -256,7 +257,7 @@ class ConnectionProjectionTests(TestCase):
 
         self.assertEqual(
             rows["example-tailnet"]["would_also_see"],
-            ["Would also see Tailnet user with users:read"],
+            [f"Would also see Tailnet user with {Tailscale.USERS_READ}"],
         )
         sights = {read["sight"]["kind"]: read["sight"] for read in rows["example-tailnet"]["reads"] if read["sight"]}
         self.assertEqual(sights["tailscale.device"]["freshness"], "current")
@@ -264,7 +265,7 @@ class ConnectionProjectionTests(TestCase):
     def test_the_page_renders_the_projection(self):
         response = self.client.get(reverse("control_plane:connections"))
 
-        self.assertIn("Would also see Tailnet user with users:read", text(response))
+        self.assertIn(f"Would also see Tailnet user with {Tailscale.USERS_READ}", text(response))
         self.assertContains(response, "Reached over the internet")
         self.assertContains(response, "Refresh all")
         self.assertTrue(select(response, "formaction", "/infrastructure/connections/read/?connection_ref=example-host"))

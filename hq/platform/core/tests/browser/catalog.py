@@ -16,6 +16,7 @@ from django.utils.html import escape
 
 from hq.platform.application import calendar
 from hq.platform.application.calendar import CalendarEvent, CalendarSource, calendar_month
+from hq.platform.application.card_items import Kpi, ListRow
 from hq.platform.application.drawings import AllocationBar, Share, Trend
 from hq.platform.application.entity_links import EntityLink
 from hq.platform.application.pages import Page, PageAction
@@ -23,7 +24,6 @@ from hq.platform.application.ui import (
     ActivityCalendar,
     CalendarDay,
     ChartSeries,
-    Kpi,
     line_chart,
     stacked_bar_chart,
 )
@@ -239,8 +239,8 @@ CATALOG = {
         "{% endtable_region %}{% endcard %}"
     ),
     # Sibling sections in the flow: two, three and four narrow ones share a
-    # row as far as the box holds them, and a wide one takes the row ahead of
-    # the narrow ones it was written among.
+    # row as far as the box holds them, and a wide one, written ahead of the
+    # narrow ones, takes the row before they share theirs.
     "part/flow-two": Entry(_flow(("Example identity", _NARROW), ("Example link", _NARROW))),
     "part/flow-three": Entry(
         _flow(("Example identity", _NARROW), ("Example link", _NARROW), ("Example path", _NARROW))
@@ -253,7 +253,7 @@ CATALOG = {
             ("Example device", _NARROW),
         )
     ),
-    "part/flow-wide": Entry(_flow(("Example identity", _NARROW), ("Example hosts", _WIDE), ("Example link", _NARROW))),
+    "part/flow-wide": Entry(_flow(("Example hosts", _WIDE), ("Example identity", _NARROW), ("Example link", _NARROW))),
     # The section part ({% section %}) in each state a page can give it; a new
     # option of the tag comes with an entry here (test_catalog's source check).
     "part/section-bare": Entry(
@@ -432,6 +432,75 @@ CATALOG = {
             ]
         },
     ),
+    # A whole's figure as a section leads with it, the line under it saying
+    # how it moved in its tone, its parts under it with their legend, and
+    # the changes beside it each in the tone of the way it went.
+    "part/figure-toned": Entry(
+        '{% section "Example net worth" %}{% include "partials/_kpi_grid.html" with featured=True %}{% endsection %}',
+        {
+            "items": [
+                Kpi(
+                    "Example net worth",
+                    "$15,500.00",
+                    "+$1,240.00 in the last 30 days",
+                    url="/example/accounts/",
+                    detail_tone="good",
+                    drawing=AllocationBar(
+                        "Example assets by kind",
+                        (
+                            Share("Cash", 4200, 1, url="/example/?type=cash", detail="$4,200.00"),
+                            Share("Investments", 12800, 3, url="/example/?type=investment", detail="$12,800.00"),
+                            Share("Owed", 1500, 2, url="/example/?type=owed", detail="-$1,500.00", tone="attention"),
+                        ),
+                    ),
+                ),
+                Kpi("Since yesterday", "+$120.00", tone="good"),
+                Kpi("Available credit", "$8,000.00", tone="neutral"),
+                Kpi("Unrealized gain", "−$40.00", tone="attention"),
+            ]
+        },
+    ),
+    # Figures in a row of their own, as a report's year draws them: a line
+    # that counts records leading to them, a figure that is its page's link,
+    # one at zero, and a mark before a label.
+    "part/figure-linked-line": Entry(
+        '{% include "partials/_kpi_grid.html" %}',
+        {
+            "items": [
+                Kpi("Example expenses", "$1,204.50", "12 example expenses", detail_url="/example/expenses/"),
+                Kpi("Example docs due", 3, url="/example/docs/", icon="page"),
+                Kpi("Example assets", 0, "$0.00 total", is_zero=True),
+            ]
+        },
+    ),
+    # A list of records, each row's actions ending its line: one that cannot
+    # be pressed, glyphs named by their titles, and a word; a row with a
+    # state, a line of meta and a day, and one leaving HQ.
+    "part/record-list-actions": Entry(
+        '{% section "Example groups" %}{% include "partials/_record_list.html" %}{% endsection %}',
+        {
+            "rows": [
+                ListRow(
+                    "Example savings",
+                    detail="3 example accounts",
+                    actions=(
+                        PageAction("↑", "/example/group/", method="post", value="up", title="Move up", disabled=True),
+                        PageAction("↓", "/example/group/", method="post", value="down", title="Move down"),
+                        PageAction("Remove", "/example/group/", method="post", value="delete", danger=True),
+                    ),
+                ),
+                ListRow(
+                    "Example checking",
+                    url="/example/checking/",
+                    status="attention",
+                    badge="Needs review",
+                    meta="2 example accounts",
+                    at=date(2026, 11, 2),
+                ),
+                ListRow("Example docs", url="https://example.com/", external=True),
+            ]
+        },
+    ),
     # A month with days gone by, each kind of entry on them: their words are
     # still links a reader follows, so they read as text in play does.
     "part/month-gone-by": Entry(
@@ -516,6 +585,12 @@ CATALOG = {
         '{% section "Example changes" %}<p>{% status "+$120.00" tone="good" pill=False %}'
         ' {% status "−$40.00" tone="attention" pill=False %} {% status "−$900.00" tone="serious" pill=False %}'
         ' {% status "$0.00" tone="neutral" pill=False %}</p>{% endsection %}'
+    ),
+    # The names a record carries, as chips beside its name: each as written.
+    "status/chip": Entry(
+        '{% section "Example project" %}<p><strong>example-app</strong> {% status "django" chip=True %}'
+        '{% status "example.com" chip=True %}{% status "Reverse proxy" chip=True title="An example role" %}</p>'
+        "{% endsection %}"
     ),
     # Each chart partial, its head a section's: the heading, the line under
     # it, and its legend or a month's controls beside them; its data a folded

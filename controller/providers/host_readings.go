@@ -59,7 +59,9 @@ func (r *Registry) admitHostReadings() {
 	r.reader(runtime.ResourceKindHostRenderStatus, r.hostRenderStatus)
 	r.readsHeld(runtime.ResourceKindHostRenderStatus, func() bool { return r.Env.RenderStatus != "" })
 	r.reader(runtime.ResourceKindHostUnit, r.hostUnits)
-	r.readsHeld(runtime.ResourceKindHostUnit, func() bool { return r.Env.HostUnits != "" })
+	// Both answers are one reading: the shipped units and the services
+	// systemd keeps restarting.
+	r.readsHeld(runtime.ResourceKindHostUnit, func() bool { return r.Env.HostUnits != "" || r.Env.HostRestartingUnits != "" })
 	r.reader(runtime.ResourceKindHostTailnetLock, r.hostTailnetLock)
 	r.readsHeld(runtime.ResourceKindHostTailnetLock, func() bool { return r.Env.TailnetLock != "" })
 }

@@ -53,6 +53,9 @@ type Environment struct {
 	RenderStatus string `env:"SEVERINO_RENDER_STATUS"`
 	// HostUnits is what `systemctl show` printed for the shipped units.
 	HostUnits string `env:"SEVERINO_HOST_UNITS"`
+	// HostRestartingUnits is what it printed for the services outside that
+	// set that systemd has restarted on its own.
+	HostRestartingUnits string `env:"SEVERINO_HOST_RESTARTING_UNITS"`
 	// UnitSocket is where root's `hq-host unit --serve` answers on the
 	// machine the controller runs on: the one way a run asks a container's
 	// systemd unit to stop, start or restart.

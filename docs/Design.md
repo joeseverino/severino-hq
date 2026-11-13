@@ -627,7 +627,9 @@ sentence case (`labels.sentence`), whatever its source wrote: Docker's
 and a declared resource's health state ("healthy", "drifted") takes the tone
 every page draws it in. Several parts are one label (`{% status "HQ expects"
 desired tone="serious" %}`); `href`, `title`, `tip`, `css` and `data_*` say
-the rest. No template or module writes a pill by hand. With `pill=False` it
+the rest. No template or module writes a pill by hand. With `chip=True` it
+is one of a record's names (a technology, a domain, a role) as a neutral chip,
+said as written and taking no tone, so no template writes a `.tag` by hand. With `pill=False` it
 is the state's words in its tone, as a headline or a line of text says a
 state, and the sentence that says what a state means takes the same tone
 beside it: a record's title line is "Working · Matches HQ's config.", both
@@ -958,7 +960,10 @@ spans the column once the flow holds one to a row. *Gate:* `lists across an
 empty frame` in the layout survey.
 
 A row of a record list (`.list-rows`) reads as one line: its meta follows its
-name a gap after, never at the row's far side across an empty middle.
+name a gap after, never at the row's far side across an empty middle. What can
+be done to the record ends its line: `ListRow.actions`, each a `PageAction`,
+drawn as compact controls, a POST through `post_button`, a glyph named aloud
+by its `title`, and one that cannot be pressed as `disabled`.
 
 A pair whose value is a list of names (`.address-list`, or a `.code-list` of
 two or more) takes a row of its own. So it never wraps beside another pair and
@@ -992,7 +997,15 @@ pair in a dialog and on a page. A part that needs more room before it shares
 a row sets a wider basis on itself (the connection panel's route), and a run
 of narrower cards a narrower one on the flow. A wide one (a table of four
 columns or more, a fold, anything that is not a section or card) goes across
-the row, and the short ones are collected after it to share rows. No page
+the row. The flow paints its members in the order the markup holds them, so
+what is read aloud and where the keyboard goes is what is drawn (WCAG 1.3.2,
+2.4.3): nothing reorders them. A page therefore writes its wide ones ahead of
+its short ones, which collect after them to share rows rather than one
+standing beside the gap a wide one leaves. Registry sections say which they
+are (`ServiceSection.spans_row`), and `partials/_page_sections.html` draws one
+kind per pass, `spans_row=True` ahead of a page's short sections and `False`
+among them. *Gate:* `flows in reading order` and `flows share their rows` in
+the layout survey. No page
 writes an auto-fit grid of its own for this: `lint:css` refuses
 `repeat(auto-fit` and `repeat(auto-fill` outside the parts that lay out
 something else inside themselves (`flowGrids` in
@@ -1073,6 +1086,10 @@ side by side when space permits; empty contributors take no space.
   `partials/_dots.html` draws either, wherever it stands.
 - `Trend`, recent readings oldest first, drawn as a line where the card has
   room, each reading saying what it is when pointed at.
+- `AllocationBar`, the parts of a whole, drawn under the figure and its line
+  as a bar with its legend set one under another (`partials/_allocation.html`),
+  each part linking where it has a page. In a card the line and the parts
+  share the line's row, so the figures beside it keep their lines level.
 
 and an `icon`, a mark from `partials/_icon.html` before the label, on figures
 only: headings carry none. A drawing repeats what the value and its note
@@ -1083,6 +1100,16 @@ that runs out shows the date, not a bar across an invented span.
 In a card, a row of figures shares its lines: labels start level and values
 stand level however a label wraps, and a label wraps beside its mark, never
 under it.
+
+A figure that is itself a change takes `tone`, a status tone its value is
+drawn in, featured or not, so a rise and a fall never read alike; a figure
+that is a level says how it moved in its line, which takes `detail_tone` the
+same way. `detail_url` links the line where it counts things with a page of
+their own ("12 expenses"). It needs a `detail`, since a link is said by its
+words, and like dots or legend rows that lead on it moves the figure's own
+link from the cell to its value. The three supporting figures of a featured
+row size their values to their own column, so amounts never run into each
+other on a phone.
 
 **A saved copy never says "you" about someone else.** Anything that describes
 the reader's own connection includes `partials/_example_connection.html`. On a live

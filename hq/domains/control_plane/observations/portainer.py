@@ -15,11 +15,10 @@ from pydantic.json_schema import SkipJsonSchema
 from hq.platform.application.labels import dotted
 lazy from hq.platform.application.timestamps import moment
 
+from ..permissions import Portainer
 from .contract import ObservationRecord, ObservationSpec, Stamp, container_key
 
 PROVIDER = "portainer"
-# The API key acts as its user; the user must be granted each environment.
-ENVIRONMENT_ACCESS = "environment access"
 
 ENVIRONMENT_KIND = "portainer.environment"
 NETWORK_KIND = "portainer.network"
@@ -280,7 +279,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "Docker environment",
         EnvironmentRecord,
-        requires=(ENVIRONMENT_ACCESS,),
+        requires=(Portainer.ENVIRONMENT_ACCESS,),
         hostnames=_host,
         addresses=lambda record: tuple(value for value in (str(record.get("address", "") or ""),) if value),
         title=lambda record: str(record.get("name", "")),
@@ -291,7 +290,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "Docker network",
         NetworkRecord,
-        requires=(ENVIRONMENT_ACCESS,),
+        requires=(Portainer.ENVIRONMENT_ACCESS,),
         hostnames=_host,
         addresses=_machine,
         title=lambda record: str(record.get("name", "")),
@@ -306,7 +305,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "Volumes and mounts",
         VolumeRecord,
-        requires=(ENVIRONMENT_ACCESS,),
+        requires=(Portainer.ENVIRONMENT_ACCESS,),
         hostnames=_host,
         addresses=_machine,
         title=_volume_title,
@@ -318,7 +317,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "Docker image",
         ImageRecord,
-        requires=(ENVIRONMENT_ACCESS,),
+        requires=(Portainer.ENVIRONMENT_ACCESS,),
         hostnames=_host,
         addresses=_machine,
         title=image_title,
@@ -331,7 +330,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "Container settings",
         RuntimeRecord,
-        requires=(ENVIRONMENT_ACCESS,),
+        requires=(Portainer.ENVIRONMENT_ACCESS,),
         hostnames=_host,
         addresses=_machine,
         title=lambda record: str(record.get("container", "")),
@@ -344,7 +343,7 @@ OBSERVATIONS: tuple[ObservationSpec, ...] = (
         PROVIDER,
         "Compose project",
         StackRecord,
-        requires=(ENVIRONMENT_ACCESS,),
+        requires=(Portainer.ENVIRONMENT_ACCESS,),
         hostnames=_host,
         addresses=_machine,
         title=lambda record: str(record.get("name", "")),

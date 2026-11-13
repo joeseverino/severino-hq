@@ -58,6 +58,7 @@ An OAuth client in the Tailscale admin console, under Settings, Trust credential
 Permissions, and no others:
 
 - `devices:core:read`
+- `devices:posture_attributes:read`
 - `devices:routes:read`
 - `dns:read`
 - `feature_settings:read`
@@ -112,14 +113,14 @@ Permissions, and no others:
 - `Access: Service Tokens Read (account)`
 - `Account Analytics Read (account)`
 - `Account Settings Read (account)`
-- `Cloudflare Pages Read (account)`
+- `Cloudflare Pages Read (account; API: Pages Read)`
 - `Cloudflare Tunnel Read (account)`
+- `D1 Edit (account; API: D1 Write)`
 - `D1 Read (account)`
-- `D1 Write (account)`
 - `Page Rules Read (zone)`
 - `Registrar: Domains Read (account)`
 - `SSL and Certificates Read (zone)`
-- `Single Redirect Read (zone)`
+- `Single Redirect Read (zone; API: Dynamic URL Redirects Read)`
 - `Zone Read (zone)`
 - `Zone Settings Read (zone)`
 
@@ -164,23 +165,23 @@ A GitHub App on your account; mise run wire-github-app records its ID and stores
 
 Permissions, and no others:
 
-- `Actions variables: read`
-- `Dependabot alerts: read`
-- `actions: read`
-- `administration: read`
-- `checks: read`
-- `code scanning alerts: read`
-- `commit statuses: write`
-- `contents: read`
-- `contents: write`
-- `deployments: read`
-- `issues: write`
-- `leaked credential alerts: read`
-- `metadata: read`
-- `packages: read`
-- `pull requests: read`
-- `pull requests: write`
-- `workflows: write`
+- `Actions: Read-only`
+- `Administration: Read-only`
+- `Checks: Read-only`
+- `Code scanning alerts: Read-only (API: security_events)`
+- `Commit statuses: Read & write (API: statuses)`
+- `Contents: Read & write`
+- `Contents: Read-only`
+- `Dependabot alerts: Read-only (API: vulnerability_alerts)`
+- `Deployments: Read-only`
+- `Issues: Read & write`
+- `Metadata: Read-only`
+- `Packages: Read-only`
+- `Pull requests: Read & write`
+- `Pull requests: Read-only`
+- `Secret scanning alerts: Read-only`
+- `Variables: Read-only (API: actions_variables)`
+- `Workflows: Read & write`
 
 Store it as an item of any type:
 

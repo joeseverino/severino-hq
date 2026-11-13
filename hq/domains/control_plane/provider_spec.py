@@ -32,6 +32,7 @@ lazy from hq.platform.application.timestamps import moment
 
 from .names import in_zone
 from .observations.contract import ReadingPart
+from .permissions import Permission
 
 
 @cache
@@ -139,7 +140,7 @@ class ConnectionKind:
     create_url: str = ""
     # Permissions a scoped credential needs to change what HQ manages through
     # it, beside the reads its readings declare (``observer_permissions``).
-    writes: tuple[str, ...] = ()
+    writes: tuple[Permission, ...] = ()
     # What connecting it gives the owner, in one line of his own words: the
     # Connections page offers it by this, never by the names of its kinds.
     gives: str = ""

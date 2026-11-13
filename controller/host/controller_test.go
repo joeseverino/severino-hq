@@ -30,7 +30,7 @@ var launchVariables = []string{
 	"HQ_CONTROLLER_RUN", "SEVERINO_BRIDGE_SOCKET", "HQ_CONTROLLER_CONNECTIONS",
 	"HQ_CONTROLLER_SSH_DIR", "HQ_ACME_DIR", "HQ_SEAL_DIR", "HQ_CONTROLLER_IMAGE", "SEVERINO_HQ_SOURCE_REPOSITORY",
 	"HQ_CONTROLLER_CA_FILE", "SEVERINO_TAILNET_STATUS", "SEVERINO_TAILNET_LOCK",
-	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS",
+	"SEVERINO_HOST_FIREWALL", "SEVERINO_RENDER_STATUS", "SEVERINO_HOST_UNITS", "SEVERINO_HOST_RESTARTING_UNITS",
 	"HQ_CONTROLLER_OUT", "SEVERINO_DEPENDENCY_RUN", "SEVERINO_UNIT_SOCKET", "HQ_CONTROLLER_GRANTS",
 }
 
@@ -292,6 +292,7 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 	for _, want := range []string{
 		"SEVERINO_RENDER_STATUS=hq=/run/severino-hq/render-status/hq.json",
 		"SEVERINO_HOST_UNITS=/run/severino-hq/units",
+		"SEVERINO_HOST_RESTARTING_UNITS=/run/severino-hq/units-restarting",
 		"SEVERINO_TAILNET_LOCK=/run/severino-hq/tailnet-lock.json",
 	} {
 		if !slices.Contains(envs, want) {
@@ -299,7 +300,7 @@ func TestReadingsAreNamedWhetherOrNotTheyCouldBeTaken(t *testing.T) {
 		}
 	}
 	for target := range l.mounted {
-		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || target == "/run/severino-hq/units" || target == "/run/severino-hq/tailnet-lock.json" {
+		if strings.HasPrefix(target, "/run/severino-hq/render-status/") || target == "/run/severino-hq/units" || target == "/run/severino-hq/units-restarting" || target == "/run/severino-hq/tailnet-lock.json" {
 			t.Errorf("%s was mounted with nothing to mount", target)
 		}
 	}

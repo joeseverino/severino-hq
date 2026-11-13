@@ -11,8 +11,8 @@ import re
 from functools import partial
 
 from hq.domains.control_plane.certificate_authorities import UPLOADED
-from hq.domains.control_plane.credential_reads import REGISTRAR_READ
 from hq.domains.control_plane.names import in_zone, normalized_hostname
+from hq.domains.control_plane.permissions import Cloudflare
 from hq.domains.control_plane.provider_adapters.cloudflare import caa_parts
 from hq.domains.control_plane.provider_adapters.contracts import PERMISSION_REFUSAL
 from hq.domains.control_plane.provider_adapters.tls import (
@@ -576,7 +576,7 @@ def _registrar_note(refused: str, refusal: str) -> tuple[str, str]:
     if not refused:
         return "", ""
     if refusal == PERMISSION_REFUSAL:
-        return f"Add {REGISTRAR_READ} to see auto-renew.", refused
+        return f"Add {Cloudflare.REGISTRAR_DOMAINS_READ} to see auto-renew.", refused
     return f"Registrar not read: {refused}", ""
 
 
