@@ -8,6 +8,10 @@ It adds no capability, no domain model and no business rule. Every command
 comes from `hq/platform/application/capabilities.py` and every read from
 `hq/platform/application/resources.py`.
 
+To call it, read [Setting up a client](#setting-up-a-client), then
+[Using it](#using-it). [Contract tooling](#contract-tooling) is for changing
+it, and its [MCP tools](#mcp-tools) section for the door agents use.
+
 ```
 hq/platform/application/tokens.py   verify a token HQ did not issue, for every door
 hq/platform/api/views.py            the transport
@@ -32,9 +36,9 @@ A web operator holds every capability HQ has. A token holds less:
 | Any client's | an agent, here as on `/api/mcp/` | the permissions the token was granted, never widened, within the role of the person who signed it in, if one did ([Security](Security.md#agents)) |
 | A client an administrator gave the `own_device` permission | a person's own device | its granted permissions uncapped, those held for a person in the browser included; the Agents pause does not stop it |
 
-An agent's call from a tailnet device does nothing until the person it acts
-for approves that device for its client on the Agents page: until then it is
-a 403 `device_awaiting_approval`, and from a device a person blocked a 403
+An agent's call from a tailnet device does nothing until the person it acts for
+approves that device for its client on the Agents page. Until then it is a 403
+`device_awaiting_approval`. From a device a person blocked it is a 403
 `device_blocked`, while the client's other devices run. Where the deployment
 has a tailnet, a call no tailnet device sent (from loopback, or an address no
 peer holds) is a 403 `device_unknown`, and one tailscaled could not answer for
@@ -106,10 +110,10 @@ reusing a client registered as a person's own device. Without the admin key it
 changes nothing.
 
 The permission keys are HQ's capability names on purpose. A mapping table
-between the two systems would be a third home for the authorization model and
-the first thing to go stale when a plugin adds a capability, which is why the
-list is written from the catalog and never typed. HQ keeps no admin key:
-Pocket ID's admin keys carry no scopes, so one could do anything.
+between the two systems would be a third home for the authorization model, and
+the first to go stale when an extension adds a capability. So the list is
+written from the catalog, never typed. HQ keeps no admin key: Pocket ID's admin
+keys carry no scopes, so one could do anything.
 
 Then in **Administration → OIDC Clients**, add a client per automation, with
 the client credentials grant enabled. One client per automation, not one shared
@@ -153,6 +157,24 @@ whatever the rules say, since no rule may allow it. The rules themselves are in
 
 A person's own device is no agent: it stands as its person. So the `/agents/`
 rules do not reach it, and nothing it asks for is held.
+
+### Reading a hold and a playbook's run
+
+A held call's `approval.id` reads where it stands at
+`GET /v2/resources/approvals/<id>/` (MCP: `get_resource` of `approvals`, or
+`hq://approvals/{id}`): `done`, `said`, the `operation` its approved call
+queued, and once done the call's `answer`, as a task's `result` reads it
+([below](#held-changes-as-mcp-tasks)). A playbook's run reads at
+`GET /v2/resources/runs/<operation_id>/` by the `operation.id` its answer
+carried, and lists at `/v2/resources/runs/` by `playbook`, `machine`,
+`correlation` and `state`.
+
+- Each is a read under the caller's own `read` grant.
+- A hold is its asker's alone (`approvals.asked_by`, as a task is): another
+  caller's id answers `not_found`, as an id nothing holds does.
+- A run shows what Jobs shows of it: its machines, who asked and approved it,
+  its worker while one runs it, and each task's host, name, outcome and
+  message (`run_reads`), never the rest of the worker's report.
 
 ## Using it
 
@@ -218,7 +240,7 @@ dotted snake_case:
 registered name to these patterns, and the composed suite holds every
 installed extension's. A capability's verb is one of the `VERBS` declared
 there, so a new verb joins on purpose. A rename moves the rows HQ keeps under
-the old name through `hq_sdk.migrations` ([Plugins](Plugins.md#renaming-a-capability)).
+the old name through `hq_sdk.migrations` ([Extensions](Plugins.md#renaming-a-capability)).
 
 ### The reference
 
@@ -227,18 +249,18 @@ a vendored viewer (`static/vendor/scalar`, pinned in `UPSTREAM`). It is a
 reference, not a client:
 
 - **Structure** is the document's own tags, nothing page-specific. Each
-  operation stands in the section of the domain that serves it, the host's
-  core and every extension alike: the domain that declares it, else the
-  domain whose nav item is its page, else, for a command, the domain of the
-  resource it acts on (`_Tags` in `openapi.py`). Only the API's own routes,
-  which serve every domain (the root, the catalogs, this document and the
-  generic `{name}` forms), are the API domain's (`hq.api`, System > API). It
-  is where a client starts, so its group leads and it leads its group. The
-  rest stand in the order of HQ's navigation, each domain in the group the bar
-  draws its page in (an extension may place a host page in its own group): a
-  group (`kind: nav`) where its first domain is, each domain under it by `parent`, a domain outside every
-  group in its own place. A domain named as its group is that group's
-  section, with the others under it. A group says what it is for.
+  operation stands in the section of the domain that serves it, the host's core
+  and every extension alike (`_Tags` in `openapi.py`). That is the domain that
+  declares it, else the domain whose nav item is its page, else, for a command,
+  the domain of the resource it acts on. Only the API's own routes, which serve
+  every domain (the root, the catalogs, this document and the generic `{name}`
+  forms), are the API domain's (`hq.api`, System > API). It is where a client
+  starts, so its group leads and it leads its group. The rest stand in the
+  order of HQ's navigation, each domain in the group the bar draws its page in,
+  which an extension may set for a host page. A group (`kind: nav`) stands
+  where its first domain is, each domain under it by `parent`, and a domain
+  outside every group in its own place. A domain named as its group is that
+  group's section, with the others under it. A group says what it is for.
   `info.version` and the paths say the version, so no tag repeats it.
 - **Appearance** is HQ's tokens, handed to the viewer's theme variables by
   `static/css/api-reference.css`. That sheet holds no color, size or face of
@@ -271,7 +293,7 @@ Each capability description includes the domain `input_schema` and the complete
 HTTP `request_schema`, including target and optimistic-concurrency fields,
 unknown-field rejection, and whether an idempotency key is required. Clients
 can therefore generate and validate requests from the deployed composition's
-actual registry. A plugin does not maintain a parallel API document.
+actual registry. An extension keeps no API document of its own.
 
 The envelope (`payload`, `target`, `expected_updated_at`) is one type,
 `CallEnvelope` in `hq/platform/application/call_envelope.py`, and
@@ -279,13 +301,13 @@ The envelope (`payload`, `target`, `expected_updated_at`) is one type,
 `payload` (required where the command has a required field) and the target
 typed by its kind. `target_help` describes the target. An integer target is a
 number or its digits, and `expected_updated_at` is a date and time, the
-target's `updated_at` as it was read. The capability runner reads every
-door's target and `expected_updated_at` with it once the caller's authority
-is settled, so the API, MCP, `hq_call` and `hq_sdk` refuse one off that shape
-alike, `invalid_input` with the same sentence, and a caller who may not run
-the capability is refused `forbidden` whatever it sent. Before that, the API
-refuses a body's own form: a field the envelope does not name, a `payload`
-that is not an object, or a field sent as `null`.
+target's `updated_at` as it was read. The capability runner reads every door's
+target and `expected_updated_at` with it once the caller's authority is
+settled. So the API, MCP, `hq_call` and `hq_sdk` refuse one off that shape
+alike, `invalid_input` with the same sentence. A caller who may not run the
+capability is refused `forbidden` whatever it sent. Before that, the API
+refuses a body's own form: a field the envelope does not name, a `payload` that
+is not an object, or a field sent as `null`.
 
 A write to a record that exists (an update, or an upsert of one already
 there) sets the fields its `payload` holds, and every field it leaves out
@@ -306,7 +328,7 @@ giving clients a stable way to connect discovery, reads, and available writes.
 
 Targeted capabilities may also publish `target_label`, `target_help`,
 `target_query`, `execution_notes` and `target_initial_fields`
-([Plugins](Plugins.md#the-integration)). They are presentation metadata;
+([Extensions](Plugins.md#the-integration)). They are presentation metadata;
 `target` remains the machine identifier contract.
 
 Resource descriptions follow the same rule. A `ResourceSpec` declares its
@@ -392,11 +414,11 @@ Every adapter reads `fields` beside the query, so no resource query may declare
 a field called `fields`. The registry refuses one at startup.
 
 A masked answer validates against the OpenAPI document. A document cannot say
-an answer's shape follows a query parameter, so each record and row schema,
-and every part a mask can reach inside one at any depth, lists no `required`
-key; each field it names keeps its type and stays closed to keys it does not
-name. A part shared with another answer reads the same there. The test client
-validates every answer it receives, masked ones included.
+an answer's shape follows a query parameter. So each record and row schema, and
+every part a mask can reach inside one at any depth, lists no `required` key.
+Each field it names keeps its type and stays closed to keys it does not name. A
+part shared with another answer reads the same there. The test client validates
+every answer it receives, masked ones included.
 
 A list read is one page. `truncated` says more follow it, and `next` is
 `{"cursor": …}`: sent back as `cursor` (`?cursor=` over HTTP, and an argument
@@ -430,12 +452,12 @@ Connection descriptions are generated by `describe_connections` from
 the complete static family catalog, with a token-specific `permitted` flag.
 
 A connection's instances are the `connections` resource
-(`/resources/connections/`, `list_resource` and `get_resource` on MCP),
-only for families the token may inspect. Their state includes ability
-availability, granted and missing scope names, targets, dependencies, status,
-and an ISO 8601 observation time. It never contains secret material. URL userinfo, query strings, and fragments are
-rejected before a controller endpoint is stored, and again at the output
-contract for plugin-provided instances.
+(`/resources/connections/`, `list_resource` and `get_resource` on MCP), only
+for families the token may inspect. Their state includes ability availability,
+granted and missing scope names, targets, dependencies, status, and an ISO 8601
+observation time. It never contains secret material. URL userinfo, query
+strings, and fragments are rejected before a controller endpoint is stored, and
+again at the output contract for instances an extension provides.
 
 Scope coverage reports availability but never synthesizes an unregistered
 operation. Adding a credential changes readiness and scope state, never the
@@ -503,7 +525,7 @@ second executor; every mutation still names and enters a registered capability.
 
 MCP's `get_findings` answers the same findings in a shape of its own
 (`hq/platform/mcp/finding_actions.py`, `schema_version` 3), since an agent
-cannot follow a web path: every action is a tool call, `{label, tool,
+cannot follow a web path. Every action is a tool call, `{label, tool,
 arguments}`, built from what the finding holds and never read out of a URL.
 
 | Action | Call |
@@ -536,22 +558,46 @@ version replaces the old one rather than running beside it.
 
 ### Errors
 
-Always `{"ok": false, "error": {"code", "message", "details", "retry_after"}}`, the last two only where they apply: `retry_after` is the whole seconds until asking again can succeed, on a refusal whose code waits (`rate_limited`, `too_many_calls`), and the `Retry-After` header repeats it. The document declares both only at that status. A refusal the caller gets past by a call or a field it did not make says which in `details`. `details.next` is the call that finds what was missing: an MCP tool and its `arguments`, which the API serves as the route of that name. That is `describe_capabilities` for an unknown capability, or `list_resource` for a record no identifier matched, beside `details.identifier`, the field its kind is addressed by. `details.closest` is the call that reads each of up to three nearest the value asked for: for that record, the `get_resource` of each record near its identifier on the first page of its kind's list read as the caller, so it never names one the caller could not list; for a resource name HQ does not serve (`unknown_resource`, the same refusal on both doors), the `describe_resources` of each resource named near it. A type of managed record sent as a resource's name (`cloudflare.dns_record`) is answered with `details.next` the `infrastructure` list narrowed by that `kind`, and a type of reading (`adguard.client`) its read from `readings`. `details.field` is the argument to send (`payload.idempotency_key`, `target`). `details.scope` is the permission an `insufficient_scope` refusal needed: the token lacks it and its person holds it, so granting it to the client in the identity provider and signing in again gets the call through, and the 403's `WWW-Authenticate` repeats it as `scope` (RFC 6750 section 3.1). A permission the person's role lacks, or one no token can hold, stays `forbidden`. Branch on the
-status; the code says which cause. A code has one status wherever it is
-answered. `CODES` in `hq/platform/application/refusal_status.py` declares
-each code once, with what it means, its status, the doors that can answer it
-and whether it waits, and every list of codes is derived from it. Each
-operation's response for a status lists the codes it answers there as its
-`code` field's `const` or `enum`. A capability's operation lists only what
-its declaration lets it answer: `target_required` or `target_not_allowed` by
-whether it takes a target, and the retry key's and a held change's codes only
-for a change. What a handler raises on its own (`not_found`, `conflict`,
-`precondition`) no capability declares, so every one lists those. Operations
-answering the same codes share one response, named in words: what every
-endpoint answers at a status is the status (`Forbidden`), one code alone is
-that code (`InvalidInput`), and any other set is the kind of call that answers
-exactly it, then the status (`ReadForbidden`, `UntargetedChangeBadRequest`,
-`ResourceReadNotFound`, `AnyCallNotFound` for a call by any name). Every refusal of a grant or a
+Always `{"ok": false, "error": {"code", "message", "details", "retry_after"}}`,
+the last two only where they apply: `retry_after` is the whole seconds until
+asking again can succeed, on a refusal whose code waits (`rate_limited`,
+`too_many_calls`), and the `Retry-After` header repeats it. The document
+declares both only at that status. A refusal the caller gets past by a call or
+a field it did not make says which in `details`. `details.next` is the call
+that finds what was missing: an MCP tool and its `arguments`, which the API
+serves as the route of that name. That is `describe_capabilities` for an
+unknown capability, or `list_resource` for a record no identifier matched,
+beside `details.identifier`, the field its kind is addressed by.
+`details.closest` is the call that reads each of up to three nearest the value
+asked for. For a record, it is the `get_resource` of each record near its
+identifier on the first page of its kind's list read as the caller, so it never
+names one the caller could not list. For a resource name HQ does not serve
+(`unknown_resource`, the same refusal on both doors), it is the
+`describe_resources` of each resource named near it. A type of managed record
+sent as a resource's name (`cloudflare.dns_record`) is answered with
+`details.next` the `infrastructure` list narrowed by that `kind`, and a type of
+reading (`adguard.client`) its read from `readings`. `details.field` is the
+argument to send (`payload.idempotency_key`, `target`). `details.scope` is the
+permission an `insufficient_scope` refusal needed: the token lacks it and its
+person holds it. Granting it to the client in the identity provider and signing
+in again gets the call through. The 403's `WWW-Authenticate` repeats it as
+`scope` (RFC 6750 section 3.1). A permission the person's role lacks, or one no
+token can hold, stays `forbidden`. Branch on the status; the code says which
+cause. A code has one status wherever it is answered. `CODES` in
+`hq/platform/application/refusal_status.py` declares each code once, with what
+it means, its status, the doors that can answer it and whether it waits, and
+every list of codes is derived from it. Each operation's response for a status
+lists the codes it answers there as its `code` field's `const` or `enum`. A
+capability's operation lists only what its declaration lets it answer:
+`target_required` or `target_not_allowed` by whether it takes a target, and the
+retry key's and a held change's codes only for a change. What a handler raises
+on its own (`not_found`, `conflict`, `precondition`) no capability declares, so
+every one lists those. Operations answering the same codes share one response,
+named in words. What every endpoint answers at a status is named for the status
+(`Forbidden`), and one code alone for that code (`InvalidInput`). Any other set
+is named for the kind of call that answers exactly it, then the status
+(`ReadForbidden`, `UntargetedChangeBadRequest`, `ResourceReadNotFound`,
+`AnyCallNotFound` for a call by any name). Every refusal of a grant or a
 policy, on any endpoint, is recorded once in the audit log as `Denied`.
 
 An `invalid_input` message names every offending field and why, in one
@@ -662,8 +708,8 @@ In an automation client:
 
 The client secret sits in the automation client. That is a real exposure and
 the reason it receives only `example.write`: someone who extracts it can run
-that one plugin capability, but cannot read unrelated records, touch a project,
-or delete anything.
+that one extension capability, but cannot read unrelated records, touch a
+project, or delete anything.
 
 ## Contract tooling
 
@@ -678,17 +724,17 @@ Resource filters emit individual query parameters; an unknown one is refused
 `mise run lint:openapi` installs the locked Redocly from `tools/lint` and
 validates every description against the specification.
 
-`mise run lint:openapi-breaking` compares `hq-api.openapi.json` with the
-base's copy (fast's base; in CI the commit the change lands on) through
-oasdiff, and fails on each change that breaks a client: a removed path,
-operation or response field, a parameter or request field made required, a
-narrowed enum, a changed type. Each line it prints is oasdiff's account of one
-break. A deliberate break is admitted by copying that line into
+`mise run lint:openapi-breaking` compares `hq-api.openapi.json` with the base's
+copy (fast's base; in CI the commit the change lands on) through oasdiff. It
+fails on each change that breaks a client: a removed path, operation or
+response field, a parameter or request field made required, a narrowed enum, a
+changed type. Each line it prints is oasdiff's account of one break. A
+deliberate break is admitted by copying that line into
 `hq/platform/api/hq-api.breaking-exemptions.md`, oasdiff's own `--err-ignore`
 file, followed by `Reason:` and why clients can take it; an entry with no
-reason fails the gate. Once the change is on main the entry matches nothing
-and is deleted. The controller's two documents are left out, since both of
-their ends ship in one image.
+reason fails the gate. Once the change is on main the entry matches nothing and
+is deleted. The controller's two documents are left out, since both of their
+ends ship in one image.
 
 ### The document
 
@@ -727,36 +773,36 @@ building the OpenAPI document.
 Each tool's `inputSchema` is generated from one Pydantic model, built from the
 handler's signature. A call is validated by that same model before entering
 application code, and `mise run lint` holds the written document to it. A
-resource tool's `name` takes only the resources the registry serves, which
-are the ones the document's paths serve.
-What each resource holds and each filter's type and choices are
-`describe_resources`' answer, so the list carries the kinds as the schema's
-enum, the names of each kind's filters in `list_resource`'s description, and,
-for `get_resource`'s, the field each is addressed by, never the catalog
-itself. The filters are read from each kind's query model (`list_filters` in
-`hq/platform/application/resources.py`), so an extension's kind is described
-as it declares itself.
-With no `name`, `describe_resources` lists every kind with the `filters` its
-list narrows by, without `limit` and `cursor`, which page it; with one, as `/api/v2/resources/?name=` does, that kind with
-its list's `query_schema`, the filters alone, and beside it `paging`, the
-schema of the `limit` and `cursor` the list takes: `list_resource`'s own
+resource tool's `name` takes only the resources the registry serves, which are
+the ones the document's paths serve. What each resource holds and each filter's
+type and choices are `describe_resources`' answer. So the list carries the
+kinds as the schema's enum, the names of each kind's filters in
+`list_resource`'s description, and the field each is addressed by in
+`get_resource`'s. It never carries the catalog itself. The filters are read
+from each kind's query model (`list_filters` in
+`hq/platform/application/resources.py`), so an extension's kind is described as
+it declares itself. With no `name`, `describe_resources` lists every kind with
+the `filters` its list narrows by, leaving out `limit` and `cursor`, which page
+it. With one, as `/api/v2/resources/?name=` does, it answers that kind with its
+list's `query_schema`, the filters alone. Beside it is `paging`, the schema of
+the `limit` and `cursor` the list takes. Those are `list_resource`'s own
 arguments, which it refuses inside `filters`, and the machine API's query
-parameters beside the filters. A filter that takes only some values (a
-status, a dimension, a resource kind, an action item's source) declares them
-as a `Literal` read from where they are declared, a model's choices or a
-registry. The schema then lists them as its enum. `paging`'s `limit` declares
-the most a page may ask for (`MAX_PAGE_SIZE`, unless its kind declares another).
-A value outside them is a refusal naming the field, through either door.
-`get_topology` and `get_findings` take their read's query model
-(`TopologyQuery`, `FindingsQuery`) as their argument model, the one
-`/api/v2/topology/` and `/api/v2/findings/` read their query string by and
-the document lists as their parameters: a choice (a lens, a direction, a
-rule, a severity) is a `Literal` read from where it is declared, and a bound
-(`depth`, `limit`) is the model's, so both doors publish one schema and refuse
-one input in one sentence. What an absent `limit` means is each door's own:
-the API answers every finding, and `get_findings` the most severe few
-(`finding_actions.FIRST_FINDINGS`), since each carries its evidence and every
-call that acts on it, its `summary` counting every one.
+parameters beside the filters. A filter that takes only some values (a status,
+a dimension, a resource kind, an action item's source) declares them as a
+`Literal` read from where they are declared, a model's choices or a registry.
+The schema then lists them as its enum. `paging`'s `limit` declares the most a
+page may ask for (`MAX_PAGE_SIZE`, unless its kind declares another). A value
+outside them is a refusal naming the field, through either door. `get_topology`
+and `get_findings` take their read's query model (`TopologyQuery`,
+`FindingsQuery`) as their argument model. It is the one `/api/v2/topology/` and
+`/api/v2/findings/` read their query string by, and the document lists as their
+parameters. A choice (a lens, a direction, a rule, a severity) is a `Literal`
+read from where it is declared, and a bound (`depth`, `limit`) is the model's.
+So both doors publish one schema and refuse one input in one sentence. What an
+absent `limit` means is each door's own: the API answers every finding, and
+`get_findings` the most severe few (`finding_actions.FIRST_FINDINGS`), since
+each carries its evidence and every call that acts on it, its `summary`
+counting every one.
 
 Unknown arguments, mistyped values and stringified JSON objects are rejected.
 Validation errors do not include rejected input values. Authorization and
@@ -772,72 +818,69 @@ internals, and an upgrade is held by the registration and validation tests.
 Each tool's entry carries a `title` for a person, declared beside its handler
 (`hq/platform/mcp/services.py`) and listed as the tool's own `title`, which a
 client shows before `annotations.title`, so the annotations carry the hints
-alone.
-Every tool but `execute_capability` and `export_year_summary` is
+alone. Every tool but `execute_capability` and `export_year_summary` is
 `readOnlyHint` and closed-world (`openWorldHint: false`), which a client may
-use to call reads without asking or side by side, and a test calls each one
-and holds it to writing no row. `export_year_summary` records the export in
-the audit log and includes only public and internal documentation, including
-the document IDs linked from content. Browser downloads retain the complete
+use to call reads without asking or side by side, and a test calls each one and
+holds it to writing no row. `export_year_summary` records the export in the
+audit log and includes only public and internal documentation, including the
+document IDs linked from content. Browser downloads retain the complete
 documentation index. The export is closed-world, `idempotentHint` and not
-`destructiveHint`, and never `readOnlyHint`. `execute_capability` runs any capability, so it states the
-spec's worst case for a write (`destructiveHint` and `openWorldHint`), and
-`idempotentHint`, because every call that changes anything carries a retry key:
-one without `idempotency_key` in its payload is refused with
-`idempotency_key_required`, after authority, by the same rule the API applies
-to its header ([Safe retries](#safe-retries)), and a repeat with the same key
-returns the first answer. A client
-may then repeat a call the connection lost.
+`destructiveHint`, and never `readOnlyHint`. `execute_capability` runs any
+capability, so it states the spec's worst case for a write (`destructiveHint`
+and `openWorldHint`). It also states `idempotentHint`, because every call that
+changes anything carries a retry key. A call without `idempotency_key` in its
+payload is refused with `idempotency_key_required`, after authority, by the
+same rule the API applies to its header ([Safe retries](#safe-retries)). A
+repeat with the same key returns the first answer. A client may then repeat a
+call the connection lost.
 
-Every tool lists an `outputSchema`: an object, `anyOf` the tool's success
-and the refusal envelope (`ok: false`, `error.code`, `error.message`). The
-spec has every structured result meet the schema, with no exception for
-`isError`, and HQ's refusals carry `structuredContent`, so the success shape
-alone would be broken by every refusal. The success is the handler's return
-annotation, the TypedDict the application returns
-(`hq/platform/mcp/services.py`), and the API document's `data` for the same
-read is that type too, so the two doors describe one answer, but for the
-shapes that are MCP's own: `get_findings` (`finding_actions.AgentFindings`), `dashboard_snapshot`
+Every tool lists an `outputSchema`: an object, `anyOf` the tool's success and
+the refusal envelope (`ok: false`, `error.code`, `error.message`). The spec has
+every structured result meet the schema, with no exception for `isError`, and
+HQ's refusals carry `structuredContent`, so the success shape alone would be
+broken by every refusal. The success is the handler's return annotation, the
+TypedDict the application returns (`hq/platform/mcp/services.py`). The API
+document's `data` for the same read is that type too, so the two doors describe
+one answer. The exceptions are the shapes that are MCP's own: `get_findings`
+(`finding_actions.AgentFindings`), `dashboard_snapshot`
 (`dashboard_answer.AgentSnapshot`) and `describe_capabilities`
-(`capability_answer`). `describe_capabilities` answers in two levels, as an
-API catalog is read: with no `name` and no `resource`, an index of each
+(`capability_answer`). `describe_capabilities` answers in two levels, as an API
+catalog is read. With no `name` and no `resource`, it is an index of each
 capability's name, label, summary, effect, resource and `permitted`, without
-its schema; narrowed, each entry in full, as `/api/v2/capabilities/` answers
-it, but with the definitions its `input_schema`s share held once in the
-answer's root `$defs`, which each `#/$defs/<name>` there points to. The API
-answers every entry in full with each schema whole, since its readers index
-one entry's schema alone and its document and recorded examples hold that
-shape. `dashboard_snapshot` answers what needs doing: the figures, the
-cards, the priority queue's first page, with `priority_count` counting it
-whole, and the docs due a review. For the whole queue and each other list
-the page shows (the recent activity, the active projects, the draft and
-published content), its `lists` names the `recent_activity` or
-`list_resource` call that reads it, and leaves out one the caller may not
-read. Every domain, an extension's too, raises items into the queue, so
-`list_resource` answers `action_items` a page of
-`dashboard_answer.ACTION_ITEMS_PAGE` when no `limit` is sent, `next.cursor`
-reading the rest; the API's page is every list's default, since what an
-absent `limit` means is each door's own. `ok` is the
-door's own: the API wraps each answer in `Ok`, and a tool's answer is the
-type alone, its refusal saying `ok: false` beside `error`. A capability's
-result is its runner's answer, so `execute_capability` alone carries `ok:
-true`.
+its schema. Narrowed, it is each entry in full, as `/api/v2/capabilities/`
+answers it. The definitions the entries' `input_schema`s share are held once in
+the answer's root `$defs`, which each `#/$defs/<name>` there points to. The API
+answers every entry in full with each schema whole, since its readers index one
+entry's schema alone and its document and recorded examples hold that shape.
+`dashboard_snapshot` answers what needs doing: the figures, the cards, the
+priority queue's first page, with `priority_count` counting it whole, and the
+docs due a review. For the whole queue and each other list the page shows (the
+recent activity, the active projects, the draft and published content), its
+`lists` names the `recent_activity` or `list_resource` call that reads it, and
+leaves out one the caller may not read. Every domain, an extension's too,
+raises items into the queue, so `list_resource` answers `action_items` a page
+of `dashboard_answer.ACTION_ITEMS_PAGE` when no `limit` is sent, `next.cursor`
+reading the rest; the API's page is every list's default, since what an absent
+`limit` means is each door's own. `ok` is the door's own: the API wraps each
+answer in `Ok`, and a tool's answer is the type alone, its refusal saying `ok:
+false` beside `error`. A capability's result is its runner's answer, so
+`execute_capability` alone carries `ok: true`.
 
-Each schema is a document of its own and cannot reference another tool's:
-its definitions are written out where they are used, without titles or
-descriptions (`shapes.answer_schema`). A tool's shape is open, since a
-client validates each answer by it as it comes and a field the answer gains
-must not break the client; only a type declared with `extra="forbid"` is
-closed (`get_findings`'), so a field its serializer adds fails the
-output-shape tests until it is declared. A part the application writes from a
-dataclass (`json_schemas.Written`, a topology node or a finding's operator steps) is
+Each schema is a document of its own and cannot reference another tool's: its
+definitions are written out where they are used, without titles or descriptions
+(`shapes.answer_schema`). A tool's shape is open, since a client validates each
+answer by it as it comes, and a field the answer gains must not break the
+client. Only a type declared with `extra="forbid"` is closed (`get_findings`'),
+so a field its serializer adds fails the output-shape tests until it is
+declared. A part the application writes from a dataclass
+(`json_schemas.Written`, a topology node or a finding's operator steps) is
 typed whole in the API document and left an object in the tool's shape. The
-SDK's client checks a success against the schema and never a refusal, so
-`test_output_shapes.py` calls every tool both ways on the showcase's data,
-checks each answer with the client's own validator, holds each success, its
+SDK's client checks a success against the schema and never a refusal. So
+`test_output_shapes.py` calls every tool both ways on the showcase's data and
+checks each answer with the client's own validator. It holds each success, its
 left-out fields restored to their defaults, to its handler's type through
-Pydantic, so a required key an answer lacks fails, and fails a field a shape
-names that no answer holds or leaves out.
+Pydantic, so a required key an answer lacks fails. It also fails a field a
+shape names that no answer holds or leaves out.
 
 A success leaves out each field that holds its default, as protobuf's JSON
 mapping does, so an answer costs an agent only what it says. A field's
@@ -855,51 +898,51 @@ API answers every field: it encodes its answers itself (`views._json`), its
 readers (Shortcuts, scripts) index each key, and its document and recorded
 examples hold each one.
 
-`mise run audit:mcp --base <ref>` measures what the listings cost and what
-an agent's first request costs a served process. It reports the tools/list
-answer's bytes and approximate tokens, each tool's part, the bytes of the
-prompt, resource and resource template lists, each tool's answer on the
-standard data set with the share of it that is empty values and repeated
-text, and the server's load and first answers. The API document and the SDK are named apart, host alone and composed.
-A stage after those makes as many slow calls at once as the agent limits let
-every agent make, and the same calls one after another. For each it reports the
-resident and traced memory while they are in flight, and the threads and calls
-at the peak.
+`mise run audit:mcp --base <ref>` measures what the listings cost and what an
+agent's first request costs a served process. It reports the tools/list
+answer's bytes and approximate tokens, each tool's part, and the bytes of the
+prompt, resource and resource template lists. It reports each tool's answer on
+the standard data set, with the share of it that is empty values and repeated
+text, and the server's load and first answers. The API document and the SDK are
+named apart, host alone and composed. A stage after those makes as many slow
+calls at once as the agent limits let every agent make, and the same calls one
+after another. For each it reports the resident and traced memory while they
+are in flight, and the threads and calls at the peak.
 
 tools/list names a caller only the tools it may run. Each tool declares who
-that is beside its handler (`@tool(..., requires=...)`, an access from `hq/platform/application/access.py`, in
-`hq/platform/mcp/services.py`), and the binding refuses a call by the same
-rule, `forbidden`, before the handler runs, so the list and the refusal never
-disagree. The catalogs (`describe_capabilities`, `describe_resources`,
-`describe_connections`) are listed to everyone, since each says `permitted`
-of every entry. `list_resource` and `get_resource` are listed to a caller who
-may read some kind each serves, and `execute_capability` to one who may run
-some capability: a change is held for a person only after its caller's grant
-is checked, so a caller without one has nothing to ask for. prompts/list and
-resources/list follow the same rule: each prompt and fixed view declares its
-access beside it (`requires` in `hq/platform/mcp/prompts.py` and
-`hq/platform/mcp/resources.py`), is listed only to a caller it admits, and
-`prompts/get` and `resources/read` refuse by it. The Agents page lists as an
-operator's own device, the widest caller, so it shows every tool.
+that is beside its handler (`@tool(..., requires=...)`, an access from
+`hq/platform/application/access.py`, in `hq/platform/mcp/services.py`), and the
+binding refuses a call by the same rule, `forbidden`, before the handler runs,
+so the list and the refusal never disagree. The catalogs
+(`describe_capabilities`, `describe_resources`, `describe_connections`) are
+listed to everyone, since each says `permitted` of every entry. `list_resource`
+and `get_resource` are listed to a caller who may read some kind each serves,
+and `execute_capability` to one who may run some capability. A change is held
+for a person only after its caller's grant is checked, so a caller without one
+has nothing to ask for. prompts/list and resources/list follow the same rule.
+Each prompt and fixed view declares its access beside it (`requires` in
+`hq/platform/mcp/prompts.py` and `hq/platform/mcp/resources.py`) and is listed
+only to a caller it admits. `prompts/get` and `resources/read` refuse by it.
+The Agents page lists as an operator's own device, the widest caller, so it
+shows every tool.
 
 Each list says how long it stays fresh, through the SDK's cache hints
 (`CACHE_HINTS` in `hq/platform/mcp/server.py`). tools/list, prompts/list and
 resources/list change with a release or the caller's grant, so a client may
 keep them for ten minutes, privately, since only a caller that signed in
-reaches them. A client that holds a `subscriptions/listen` stream hears
-sooner: HQ sends it `notifications/tools/list_changed` when its tools change,
-through a grant change at its admission or its person's role change. The ack
-honors only `toolsListChanged`, since prompts and resources change only with
-a release. A stream opens under the brakes a tool call is under, is held back
-its events while its agent is paused, blocked or on an unapproved device and
-given them once the brake lifts, ends when its token expires, and counts
-against its agent's open streams
-([How much an agent may ask](AI.md#how-much-an-agent-may-ask)). A client
-without a stream keeps its list for up to those ten minutes, so what a new
-grant opens appears when it lists again, and what a revoked grant opened
-stays listed until then while every use of it is refused. The list
-resources/templates/list is the caller's grants and
-records, so it is stale at once.
+reaches them. A client that holds a `subscriptions/listen` stream hears sooner:
+HQ sends it `notifications/tools/list_changed` when its tools change, through a
+grant change at its admission or its person's role change. The ack honors only
+`toolsListChanged`, since prompts and resources change only with a release. A
+stream opens under the brakes a tool call is under. Its events are held back
+while its agent is paused, blocked or on an unapproved device, and sent once
+the brake lifts. It ends when its token expires, and counts against its agent's
+open streams ([How much an agent may ask](AI.md#how-much-an-agent-may-ask)). A
+client without a stream keeps its list for up to those ten minutes. What a new
+grant opens appears when it lists again, and what a revoked grant opened stays
+listed until then, while every use of it is refused. The list
+resources/templates/list is the caller's grants and records, so it is stale at
+once.
 
 ### MCP prompts and resources
 
@@ -946,9 +989,9 @@ Security properties:
   may not read is neither listed as a template nor read.
 - The brake on agents applies to `prompts/get` and `resources/read` as it does
   to a tool call. Outside a tool call no result carries a refusal, so it is a
-  protocol error: `-32602` for invalid input or a record not found, `-32603`
-  for a failure, whose text stays in the log, and `-32600` otherwise, each
-  with HQ's code in `data.code` (`forbidden`, `agents_paused`). The lists are
+  protocol error, with HQ's code in `data.code` (`forbidden`, `agents_paused`).
+  It is `-32602` for invalid input or a record not found, `-32603` for a
+  failure, whose text stays in the log, and `-32600` otherwise. The lists are
   not braked, as the tool list is not, so a paused agent keeps its connection.
 - The held requests are the caller's own, or every one for a person, as the
   action queue carries them to that caller, with the request's fields and not
@@ -975,10 +1018,10 @@ capabilities. A client that declares nothing keeps the held answer.
 | Lapsed unanswered, or overtaken by a change to what it acts on | `completed`, `result` a tool error coded `expired` or `stale` |
 
 Every answer carries a `statusMessage`, since a client shows the last one it
-was sent: the sentence the approval card and the audit log say the hold by
-(`approval_review.asked`), then where it stands, with the review page's absolute
-address while it waits (`hq_self.site_url`, built from the declared site
-host, never from the request).
+was sent. It is the sentence the approval card and the audit log say the hold
+by (`approval_review.asked`), then where it stands. While it waits, it adds the
+review page's absolute address (`hq_self.site_url`, built from the declared
+site host, never from the request).
 
 A decline, a lapse, an overtaken hold and a failed apply are tool errors, not
 `failed`. The extension's specification keeps `failed` for "a JSON-RPC error
@@ -986,12 +1029,12 @@ during execution" and says it "MUST NOT be used for non-JSON-RPC errors"
 (tasks.extensions.modelcontextprotocol.io, specification, `Task` status). HQ
 answers every other refusal as a tool error.
 
-While a person decides, `pollIntervalMs` is 30,000, the longest interval
-Claude Code honors: a person answers in minutes or hours, so a sooner poll
-only reads the same hold again, and `ttlMs` is the hold's own window, from its
-request to its expiry. Once it is settled, the controller applies it in
-seconds, so the poll is 2,000 ms, and `ttlMs` is null: HQ keeps every settled
-hold, so the task never lapses while its change applies.
+While a person decides, `pollIntervalMs` is 30,000, the longest interval Claude
+Code honors. A person answers in minutes or hours, so a sooner poll only reads
+the same hold again. `ttlMs` is the hold's own window, from its request to its
+expiry. Once it is settled, the controller applies it in seconds, so the poll
+is 2,000 ms, and `ttlMs` is null: HQ keeps every settled hold, so the task
+never lapses while its change applies.
 
 Security properties:
 

@@ -2,7 +2,7 @@ id: hand-drawn-figure
 valid:
   - '{% include "partials/_kpi_grid.html" with kpis=kpis %}'
   - '<div class="kpis"></div>'
-  - '<p class="figure-hero">3</p>'
+  - '<p class="kpi-note">3</p>'
 invalid:
   - '<div class="kpi"></div>'
   - '<div class="kpi-grid"><div>A</div></div>'

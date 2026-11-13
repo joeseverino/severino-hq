@@ -423,7 +423,7 @@ func (r *Registry) uploadedDelete(ctx context.Context, spec TLSCertificateSpec, 
 		}
 		slices.Sort(named)
 		if len(named) > 0 {
-			return Result{}, &ProviderError{Message: "NPM holds " + strings.Join(named, ", ") + ", but HQ has no record of installing it, so it was not removed; remove it in NPM if it is HQ's, then remove this again"}
+			return Result{}, &ProviderError{Message: "NPM holds " + strings.Join(named, ", ") + ", which HQ has no record of installing, so HQ left it. If it is HQ's, delete it in NPM, then remove this again"}
 		}
 		return Result{Changed: false, Status: CertificateRemoval{Removed: true}, Conditions: []Condition{condition(runtime.ConditionReady, "Absent", "No such certificate in NPM.")}, Message: "Certificate was already absent from NPM."}, nil
 	}

@@ -154,32 +154,6 @@
 .count { color: var(--muted); font-size: var(--text-xs); font-weight: 500; font-variant-numeric: tabular-nums; }
 :is(h2, h3) > .count { font-size: .8em; }
 
-/* Rich plugins emit data; HQ owns how a domain workspace is composed. Keeping
-   this layout in the host means every present and future private domain gets
-   the same rhythm without shipping its own near-copy of the shell. */
-.domain-stack { display: grid; gap: calc(var(--stack-gap) * 1.5); }
-.domain-stack > * { min-width: 0; }
-.domain-stack > section { display: grid; gap: var(--space-6); }
-/* The section's gap spaces its parts; their own stack margins would double it. */
-.domain-stack > section > * { margin-block: 0; }
-.domain-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--layout-gap);
-}
-.domain-head h2 {
-  margin: 0;
-  color: var(--ink);
-  font-size: var(--text-2xl);
-  font-weight: 650;
-  letter-spacing: -.01em;
-}
-.domain-head-copy { min-width: 0; }
-.domain-head-copy .eyebrow { display: block; margin-bottom: var(--space-2); }
-.domain-head-copy p { margin: var(--space-2) 0 0; }
-.domain-head > a { flex: 0 0 auto; }
-
 /* Activity calendar: one month of plan against execution. */
 /* The calendar. A source's color is one custom property, so a dot, a line, a
    bar and a swatch all read it the same way. */

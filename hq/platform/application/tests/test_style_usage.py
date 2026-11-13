@@ -86,22 +86,10 @@ def unused_style_classes(css: str, sources: Iterable[tuple[str, str]], public: C
     )
 
 
-# Published classes nothing draws, each to be deleted with its rules or drawn
-# by the example extension; this only falls.
+# Published classes only an extension outside this repository draws, each to
+# be drawn by the example extension or deleted once none does; this only falls.
 UNDRAWN = frozenset(
     {
-        "chart-card",
-        "danger-link",
-        "domain-head",
-        "domain-head-copy",
-        "domain-stack",
-        "field-row",
-        "figure-hero",
-        "figure-hero-note",
-        "figure-stats",
-        "finding-evidence",
-        "pie-chart",
-        "pie-row",
         "print-footer",
         "print-only",
         "prose-list",
@@ -116,7 +104,6 @@ UNDRAWN = frozenset(
         "route-marker",
         "route-scale",
         "route-swatch",
-        "section-period",
     }
 )
 

@@ -56,7 +56,7 @@ refresh does, daily and whenever a sweep finds a new image, and the band says wh
                       {% for finding in standing.urgent|slice:":3" %}
                         <li>{% status finding.severity tone="serious" %} {% entity finding.url|outside label=finding.id %} <code>{{ finding.package|breakable }}</code> {% include "partials/_change.html" with from=finding.installed to=finding.fixed|join:", " %}</li>
                       {% endfor %}
-                      {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3"|measured:"more" }} on <a href="{{ group.containers.0.url }}#supply-chain">its page</a></li>{% endif %}
+                      {% if standing.urgent|length > 3 %}<li class="muted">and {{ standing.urgent|length|add:"-3"|measured:"more" }} on <a href="{{ group.containers.0.url }}#supply-chain">the container's page</a></li>{% endif %}
                     {% endstack_list %}
                   {% endif %}
                 </div>

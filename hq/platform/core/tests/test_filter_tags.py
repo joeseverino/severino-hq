@@ -61,7 +61,7 @@ class FilterBarTagTests(SimpleTestCase):
         (summary,) = select(html, "role", "status")
         self.assertIn("Held back: 30 readings, 47 records with no links.", summary.words)
         (more,) = elements(html, "a")
-        self.assertEqual((more.words, more.attrs["href"]), ("Show them", "/example/?view=all"))
+        self.assertEqual((more.words, more.attrs["href"]), ("Show all", "/example/?view=all"))
 
     def test_a_count_with_no_total_and_a_hold_with_no_way_to_it_are_refused(self):
         for source in (

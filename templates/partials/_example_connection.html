@@ -4,4 +4,4 @@ reader's connection describes the example visit the copy was rendered for. Every
 that describes "you" includes this, so the copy never states it as the
 reader's. It asks the setting itself, so it works inside an ``only`` include.
 ``notice`` for a panel, the short mark otherwise.
-{% endcomment %}{% load value_tags %}{% rendered_copy as copy %}{% if copy %}{% if notice %}{% notice title="This is an example connection, not yours." %}The demo was saved from an example laptop on an example tailnet; this page is a saved copy.{% endnotice %}{% else %}<span class="example-connection">example connection</span>{% endif %}{% endif %}
+{% endcomment %}{% load value_tags %}{% rendered_copy as copy %}{% if copy %}{% if notice %}{% notice title="Example connection" %}Not your connection. The demo was saved from an example laptop on an example tailnet; this page is a saved copy.{% endnotice %}{% else %}<span class="example-connection">example connection</span>{% endif %}{% endif %}

@@ -42,8 +42,8 @@ button named for what it does. How it is built belongs to the API reference.
   record's values, for a command that saves defaults, says so (`saves_blanks`).
   {% endcomment %}
   {% if saves_blanks %}
-    {% notice tone="warning" title="A blank field is saved blank" data_command_blanks=True %}
-      <p>Every field replaces what the record holds, as you submit it. To change one field, use the record's own edit page{% if resource_url %}, from <a href="{{ resource_url }}">{{ resource_label|breakable:"." }}</a>{% else %}.{% endif %}</p>
+    {% notice tone="warning" title="Blanks are saved" data_command_blanks=True %}
+      <p>Every field replaces what the record holds as you submit it, a blank one included. To change one field, use the record's own edit page{% if resource_url %}, from <a href="{{ resource_url }}">{{ resource_label|breakable:"." }}</a>{% else %}.{% endif %}</p>
     {% endnotice %}
   {% endif %}
 
@@ -56,8 +56,8 @@ button named for what it does. How it is built belongs to the API reference.
       <p>That page hands this command what it needs. <a href="{{ starting_page.1 }}">Open {{ starting_page.0|breakable }}</a></p>
     {% title %}Start from {{ starting_page.0|breakable }}{% endnotice %}
   {% elif starts_on_its_page %}
-    {% notice title="Start from the page of what it acts on" data_command_start=True %}
-      <p>That page sends it for you.</p>
+    {% notice title="Record page only" data_command_start=True %}
+      <p>Open the record this command acts on. Its page sends the command for you.</p>
     {% endnotice %}
   {% endif %}
 

@@ -13,7 +13,7 @@ Decisions only while pending.
   {% if entry.held.decision_note %}<p class="approval-reason">{{ entry.held.decision_note|breakable }}</p>{% endif %}
 
   {% if entry.warnings %}
-    {% notice tone="warning" title="What this affects" %}
+    {% notice tone="warning" title="Impact" %}
       <ul>{% for warning in entry.warnings %}<li>{{ warning|breakable }}</li>{% endfor %}</ul>
     {% endnotice %}
   {% endif %}

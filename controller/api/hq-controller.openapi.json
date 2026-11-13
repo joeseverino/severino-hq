@@ -3436,7 +3436,7 @@
       },
       "FailureClass": {
         "type": "string",
-        "description": "Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.",
+        "description": "Why a read got no usable answer: refused, the wrong service answered, or nothing answered. Empty when unclassified.",
         "enum": [
           "",
           "credential",
@@ -4159,7 +4159,7 @@
         "description": "One real filesystem on the controller's machine, as statfs(2) states it: the host.filesystem reading's record. Root reads each ext4, xfs, btrfs or zfs mount the machine shows, one per device, and sends where it is mounted and its space; no device, option or file name.",
         "properties": {
           "mount": {
-            "description": "Where the filesystem is mounted, the name a person finds it by.",
+            "description": "Where the filesystem is mounted, the name you find it by.",
             "maxLength": 255,
             "pattern": "^/[ -{}~]*$",
             "type": "string"

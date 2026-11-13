@@ -445,7 +445,7 @@ reads the last, then formats as the lint gates read:
    generated from them;
 4. `docs/Connections.md`, from what the providers declare;
 5. the JSON Schema of a procedure's sidecar, from the model HQ validates one
-   with ([Declaring a procedure](Architecture.md#declaring-a-procedure));
+   with ([Declaring a playbook](Architecture.md#declaring-a-playbook));
 6. the served font, cut to the characters HQ prints.
 
 It then lowers each count in `tools/lint/stylelint-suppressions.json` and

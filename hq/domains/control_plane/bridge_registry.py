@@ -105,9 +105,8 @@ def _enumerations() -> dict[str, dict[str, Any]]:
             blank="RefusalUnclassified",
         ),
         "FailureClass": _enumeration(
-            "Why a read got no usable answer: a refusal, an address that answered as "
-            "something other than the API, or nothing answering. Empty when "
-            "unclassified.",
+            "Why a read got no usable answer: refused, the wrong service answered, or "
+            "nothing answered. Empty when unclassified.",
             ("", *FAILURES),
             "FailureClass",
             blank="FailureClassUnclassified",
@@ -297,9 +296,8 @@ def connections_document() -> dict[str, Any]:
     connection = {
         "type": "object",
         "description": (
-            "One connection: its reference, the provider it is for, whether HQ may "
-            "change things through it, where its credential is kept, and its settings "
-            "under the one shape it arrived in."
+            "One connection: its reference, provider, credential store and settings, "
+            "and whether HQ may change things through it."
         ),
         "properties": {
             "ref": {"type": "string"},
@@ -314,8 +312,8 @@ def connections_document() -> dict[str, Any]:
     store = {
         "type": "object",
         "description": (
-            "Where a connection's credential is kept, as references only: the vault, "
-            "the item, and the bootstrap item a replacement is minted with."
+            "References to a connection's credential: its vault, its item, and the "
+            "bootstrap item that mints a replacement."
         ),
         "properties": {
             "vault": {"type": "string"},

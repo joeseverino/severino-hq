@@ -167,7 +167,7 @@ ACTIONS: tuple[Action, ...] = (
     Action("sweep-due", "The controller asked which readings are due", _sweep_due),
     Action("glance-plan", "The controller asked which panels to refresh", _glance_plan),
     Action("glance", "The controller refreshed the dashboard", _recorded(record_dashboard_observations)),
-    Action("renew", "A worker kept its lease on queued work", _renew),
+    Action("renew", "A worker said it is still on queued work", _renew),
     Action("report", "The controller said how queued work ended", _report),
     Action("registry", "The controller read what each provider declares", _registry),
     Action("job", "The controller ran scheduled work", _job),

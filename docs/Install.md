@@ -65,7 +65,7 @@ ruleset before they can publish anything.
    the extensions to compose; `{"extensions": []}` composes the host alone.
    To take one out of production later, move its id to `retired`: a deploy
    refuses an image that drops an extension production runs unless it is named
-   there. How an extension is admitted is in [Plugins](Plugins.md#composition).
+   there. How an extension is admitted is in [Extensions](Plugins.md#composition).
 4. Create the `production` environment with yourself as a required reviewer.
 5. Add a `main` ruleset requiring the **Ready** check, with GitHub Actions
    as its expected source.

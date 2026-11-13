@@ -8,7 +8,7 @@ reports a catalog over the bridge (``SourceCatalog``). HQ holds each sidecar
 to ``ProcedureDeclaration``, the model it has one home in, and stores the
 catalog with every way a procedure falls short. A proposal is never adopted
 and never runnable. How the scan reads a repository: docs/Architecture.md,
-"Refreshing the procedures".
+"Refreshing the playbooks".
 """
 
 import json

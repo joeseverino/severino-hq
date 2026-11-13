@@ -52,7 +52,7 @@ of its repository instead: the production deploy, and the repository's alerts.
       {% elif standing.checked or standing.source %}
         <small>{% if standing.findings %}{{ standing.findings|length|measured:"lower" }}, in {% endif %}{% if standing.checked %}{{ standing.checked.checked|counted:"package,packages" }}{% endif %}{% if standing.checked and standing.source %} and {% endif %}{% if standing.source %}<span class="nowrap">{% entity standing.source|add:"/security/advisories"|outside label="the repository" %}</span>{% endif %}</small>
       {% else %}
-        <small>The image does not say where its source is.{% if edit_url %} <a href="{{ edit_url }}">Name its source repository</a>{% endif %}</small>
+        <small>The image does not say where its source is.{% if edit_url %} <a href="{{ edit_url }}">Name the source</a>{% endif %}</small>
       {% endif %}
     {% endfact %}
   {% endif %}

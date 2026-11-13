@@ -368,7 +368,7 @@ class DemoSiteTests(unittest.TestCase):
 
     def test_what_describes_the_reader_says_it_is_an_example(self):
         connection = (OUT / "connection" / "index.html").read_text(encoding="utf-8")
-        self.assertIn("This is an example connection, not yours.", connection)
+        self.assertIn("Not your connection.", connection)
         dashboard = (OUT / "index.html").read_text(encoding="utf-8")
         # The dashboard's connection reading; the menu's line links to the panel above.
         self.assertEqual(dashboard.count('<span class="example-connection">example connection</span>'), 1)

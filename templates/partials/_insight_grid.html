@@ -15,13 +15,15 @@ Each item accepts:
   url      optional; makes the card a link
 
 `status` drives a pill that always carries its own text, so state is never
-communicated by color alone.
+communicated by color alone. The pill is the eyebrow, drawn only where it
+says something new: an eyebrow and status the card before already showed, or
+an eyebrow its own title holds, is left out.
 {% endcomment %}
 <div class="insight-grid"{% if label %} role="group" aria-label="{{ label }}"{% endif %}>
   {% for item in items %}
     <article class="insight-card">
       <div class="insight-head">
-        {% if item.eyebrow %}{% status item.eyebrow tone=item.status|default:"neutral" %}{% endif %}
+        {% ifchanged item.eyebrow item.status %}{% if item.eyebrow and item.eyebrow|lower not in item.title|lower %}{% status item.eyebrow tone=item.status|default:"neutral" %}{% endif %}{% endifchanged %}
         {% if item.value %}<strong class="insight-value">{{ item.value|breakable }}</strong>{% endif %}
       </div>
       {% comment %}

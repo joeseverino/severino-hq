@@ -196,10 +196,8 @@
    they keep the face's own digits and the cell no wider than they need. */
 .toned:has(> .icon) { font-variant-numeric: normal; }
 
-/* A finding stated once, with its arithmetic underneath. The claim is what
-   gets read; the numbers are what make it checkable. */
+/* A finding: the one claim a reading makes, stated once. */
 .finding { margin: var(--space-1) 0 var(--space-1); font-size: var(--text-lg); font-weight: 600; line-height: 1.4; }
-.finding-evidence { margin: 0 0 var(--space-7); font-size: var(--text-xs); }
 
 /* A route, drawn from its own points. No basemap, so the line carries
    everything: shape for where, color for how fast. */

@@ -259,7 +259,6 @@ form[aria-busy="true"] button[aria-disabled="true"] { cursor: progress; opacity:
 .tile-strip li { display: grid; align-content: start; justify-items: center; gap: 1px; font-size: var(--text-3xs); color: var(--muted); }
 .tile-strip strong { color: var(--ink); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
 .tile-strip small { color: var(--accent); font-weight: 600; }
-.section-period { margin-left: var(--space-3); color: var(--muted-2); font-weight: 500; letter-spacing: 0; }
 .empty-value { color: var(--muted-2); }
 
 }

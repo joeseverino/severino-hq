@@ -47,9 +47,9 @@ class ControlPlaneConfig(AppConfig):
         # Who asked for a connection to be read now, and when.
         register_audit(ReadRequest, "Read request", connection=lambda request: request.connection_ref)
         # What a Refresh found in the automation source, under the source's key.
-        register_audit(SourceProposal, "Automation proposal", subject=lambda proposal: proposal.operation.resource.key)
+        register_audit(SourceProposal, "Playbook scan result", subject=lambda proposal: proposal.operation.resource.key)
         # Which commit of it became the catalog HQ runs from, and who adopted it.
-        register_audit(AdoptedCatalog, "Adopted procedures", subject=_source_key)
+        register_audit(AdoptedCatalog, "Adopted playbooks", subject=_source_key)
 
 
 def _source_key(_catalog) -> str:

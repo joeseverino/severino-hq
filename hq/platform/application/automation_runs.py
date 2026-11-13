@@ -3,7 +3,7 @@ catalog is asked through, and the operation it queues for the automation worker.
 
 A run passes HQ's one capability checkpoint like any command, and nothing runs
 here. What it binds to, and what its approval is measured against:
-docs/Architecture.md, "Running a procedure".
+docs/Architecture.md, "Running a playbook".
 """
 
 import hashlib
@@ -108,11 +108,14 @@ type Hosts = Annotated[
     Names("machines"),
     Describe("The machines to run it on.", api="Each by its name in HQ."),
 ]
+# The longest correlation id a run keeps, and the pattern of one: printable, no spaces.
+CORRELATION_LONGEST = 200
+CORRELATION_PATTERN = r"^[!-~]*$"
 type Correlation = Annotated[
     StrictStr,
-    Field(max_length=200, pattern=r"^[!-~]*$"),
+    Field(max_length=CORRELATION_LONGEST, pattern=CORRELATION_PATTERN),
     Describe(
-        "Your own id to find this run by later, such as an investigation's. Up to 200 "
+        f"Your own id to find this run by later, such as an investigation's. Up to {CORRELATION_LONGEST} "
         "printable characters, no spaces. Kept with the run."
     ),
 ]
@@ -483,6 +486,19 @@ def about(manifest: OperationManifest, generation: str, principal: Principal) ->
     return CommandAbout(label="Playbook", facts=facts, sections=tuple(section for section in sections if section))
 
 
+def _reviewed_notes(manifest: OperationManifest) -> tuple[str, ...]:
+    """What the adopted catalog says a run checks before it works, how it
+    shows it worked, and how a failed one is recovered, for an agent to read
+    before it asks, as a person reads them on the command's page."""
+
+    said = (
+        ("Before it works, the playbook checks:", manifest.preconditions),
+        ("It shows it worked when:", manifest.verification),
+        ("If it fails:", manifest.recovery),
+    )
+    return tuple(f"{lead} {_statements(statements)}" for lead, statements in said if statements)
+
+
 def _capability(manifest: OperationManifest, generation: str) -> CapabilitySpec:
     name = capability_name(manifest.id)
     longest = ApprovalRequest._meta.get_field("capability").max_length
@@ -507,6 +523,7 @@ def _capability(manifest: OperationManifest, generation: str) -> CapabilitySpec:
             "Find each machine named, and refuse one the playbook is not written for.",
             "Refuse while another run waits or works on this playbook or on one of those machines.",
             "Queue it once, and HQ runs it with Ansible outside this request.",
+            *_reviewed_notes(manifest),
         ),
         label=run_title(manifest.id),
         verb=OperationRequest.Action.RUN.label,

@@ -177,9 +177,9 @@ def audit_selectors(source: str) -> set[str]:
 class SelectorExtractionTests(SimpleTestCase):
     def test_tokens_are_classes_ids_and_attribute_names(self):
         self.assertEqual(
-            tokens('figure.chart-card > #main [data-tip="a.b"], td.num-col'),
+            tokens('figure.example-card > #main [data-tip="a.b"], td.num-col'),
             {
-                ("class", "chart-card"),
+                ("class", "example-card"),
                 ("class", "num-col"),
                 ("id", "main"),
                 ("attribute", "data-tip"),
@@ -188,13 +188,13 @@ class SelectorExtractionTests(SimpleTestCase):
 
     def test_audit_queries_and_class_lists_are_read(self):
         source = (
-            "document.querySelectorAll('.card, figure.chart-card');"
+            "document.querySelectorAll('.card, figure.example-card');"
             "el.closest(\"[data-chart]\"); row.classList.contains('two-col');"
             "const rule = 'not.a.selector';"
         )
         self.assertEqual(
             audit_selectors(source),
-            {".card, figure.chart-card", "[data-chart]", ".two-col"},
+            {".card, figure.example-card", "[data-chart]", ".two-col"},
         )
 
     def test_a_removed_class_is_reported(self):

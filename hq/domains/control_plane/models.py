@@ -15,6 +15,7 @@ from hq.platform.application.labels import dotted
 from hq.platform.core.models import TimestampedModel
 from hq.platform.core.rules import Rule, one_of, singleton
 lazy from hq.domains.control_plane.provider_adapters.contracts import FAILURES, REFUSALS
+lazy from hq.platform.application.approval_review import title as approval_title
 lazy from hq.platform.application.capabilities import capability_title
 lazy from hq.platform.application.security import subject_parts
 
@@ -548,14 +549,14 @@ class OperationRequest(TimestampedModel):
                 condition=~models.Q(state="claimed")
                 | (~models.Q(claimed_by="") & models.Q(lease_expires_at__isnull=False)),
                 name="operation_claimed_names_its_claim",
-                violation_error_message="A claimed operation names its controller and its lease.",
+                violation_error_message="A claimed operation names its controller and when its claim ends.",
                 field="state",
             ),
             Rule(
                 condition=~models.Q(state="queued")
                 | models.Q(claimed_by="", claimed_at__isnull=True, lease_expires_at__isnull=True),
                 name="operation_queued_has_no_claim",
-                violation_error_message="A queued operation is claimed by nobody.",
+                violation_error_message="A queued operation has no claim.",
                 field="state",
             ),
             Rule(
@@ -662,13 +663,13 @@ class AdoptedCatalog(TimestampedModel):
 
 
 class ApprovalState(models.TextChoices):
-    PENDING = "pending", "Waiting for a person"
-    APPROVED = "approved", "Approved and applied"
+    PENDING = "pending", "Pending"
+    APPROVED = "approved", "Approved"
     REJECTED = "rejected", "Rejected"
-    EXPIRED = "expired", "Lapsed unanswered"
+    EXPIRED = "expired", "Expired"
     # Decided by nobody: the thing it described changed underneath it, so
     # the approval that was asked for no longer covers what would happen.
-    STALE = "stale", "Superseded by a later change"
+    STALE = "stale", "Superseded"
 
 
 class ApprovalRequest(TimestampedModel):
@@ -772,9 +773,8 @@ class ApprovalRequest(TimestampedModel):
 
     @override
     def __str__(self) -> str:
-        subject = self.target or self.resource_key
         # Who asked and who decided are the row's Who, never its title.
-        return f"{capability_title(self.capability)}{f' on {subject}' if subject else ''}"
+        return approval_title(self)
 
 
 class AddressReading(models.Model):

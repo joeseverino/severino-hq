@@ -1,7 +1,7 @@
 """The JSON Schema of a procedure's sidecar, written from ``ProcedureDeclaration``
 so a repository of playbooks lints its sidecars against the contract HQ holds
 them to. Where it is published and how a repository reads it:
-docs/Architecture.md, "Declaring a procedure".
+docs/Architecture.md, "Declaring a playbook".
 """
 
 import json

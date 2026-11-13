@@ -676,6 +676,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         # work, and Adopt makes a scan result the adopted playbooks.
         integration=PluginIntegration(
             capabilities=_provider("hq.platform.application.automation_adoption:capability_specs"),
+            resources=_provider("hq.platform.application.run_reads:resources"),
         ),
         apps=("hq.domains.jobs",),
         mounts=(Mount("jobs/", "hq.domains.jobs.urls"),),
@@ -704,6 +705,7 @@ HOST_DOMAINS: tuple[DomainDescriptor, ...] = (
         integration=PluginIntegration(
             attention=_provider("hq.platform.application.attention:waiting_for_approval"),
             attention_url=_provider("hq.platform.application.attention:approval_queue"),
+            resources=_provider("hq.platform.application.held_reads:resources"),
         ),
     ),
     DomainDescriptor(

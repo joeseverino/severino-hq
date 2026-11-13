@@ -7,14 +7,17 @@ answers are read on the data set the showcase serves, as JSON leaves HQ.
 """
 
 import json
+from datetime import timedelta
 from typing import Any, TypedDict
 
 from django.core.exceptions import ImproperlyConfigured
 from django.core.serializers.json import DjangoJSONEncoder
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 from jsonschema import Draft202012Validator
 
 from hq.domains.calendars.models import Entry
+from hq.domains.control_plane.models import ApprovalRequest
 from hq.platform.application.field_masks import WHOLE_RECORD
 from hq.platform.application.integration_specs import ResourceSpec
 from hq.platform.application.integration_validation import validate_resource_spec
@@ -101,6 +104,17 @@ class RecordTypeTests(TestCase):
         identifiers["service.paths"] = identifiers["services"][:2]
         # The agenda lists every source's events; a read of one is of your own.
         identifiers["calendar"] = [str(uid) for uid in Entry.objects.values_list("uid", flat=True)[:3]]
+        # A held request is read by its asker alone, so the reader asks one.
+        held = ApprovalRequest.objects.create(
+            capability="project.create",
+            payload={"name": "Held"},
+            content_fingerprint="0" * 64,
+            requested_actor=READER.actor,
+            requested_interface=READER.interface,
+            requested_person_key=READER.person_key,
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+        identifiers["approvals"] = [str(held.pk)]
         read: set[str] = set()
         for name, spec in registry.items():
             if not spec.detail_handler:

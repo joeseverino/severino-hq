@@ -865,6 +865,11 @@ on its line, then `{% endcomment %}` on the shape's own line before it. A
 mark no shape needs any more fails the check, so the marks only fall.
 `PLUGIN_API_VERSION` 11 retires `{% section_head %}`, whose head
 `{% section %}` draws, and publishes `partials/_icon.html`.
+`PLUGIN_API_VERSION` 12 retires the classes a page drew by hand before the
+shared parts drew it: `chart-card`, `danger-link`, `domain-head`,
+`domain-head-copy`, `domain-stack`, `field-row`, `figure-hero`,
+`figure-hero-note`, `figure-stats`, `finding-evidence`, `pie-chart`, `pie-row`
+and `section-period`.
 
 A notice is `{% notice tone=... title=... %}body{% endnotice %}`, with a
 title the page composes as its `{% title %}` part after the body
@@ -951,7 +956,7 @@ A test that posts a form without opening its page first sends
 
 Host tags: `{% arrow %}`, `{% card %}`, `{% dot %}`, `{% empty_value %}`, `{% entity %}`, `{% fact %}`, `{% facts %}`, `{% filter_bar %}`, `{% notice %}`, `{% outside_link %}`, `{% post_button %}`, `{% reference %}`, `{% referenced_by %}`, `{% row_actions %}`, `{% row_editor %}`, `{% row_group %}`, `{% row_toggle %}`, `{% section %}`, `{% status %}`, `{% table_heading %}`, `{% table_region %}`, `{% words %}`, `{% write_token %}`. Host filters: `|ago`, `|breakable[:arg]`, `|counted:arg`, `|day`, `|measured:arg`, `|money[:arg]`, `|or_empty`, `|outside`, `|readout`, `|span`, `|web_url`, `|when[:arg]`. Django's own tags and filters, and `{% load %}` of `static` or the extension's own libraries.
 
-Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `btn`, `cell-data`, `cell-part`, `cell-whole`, `chart-axis`, `chart-card`, `chart-legend`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `danger-link`, `data-table`, `date-col`, `domain-charts`, `domain-head`, `domain-head-copy`, `domain-stack`, `errors`, `eyebrow`, `field`, `field-row`, `figure-hero`, `figure-hero-note`, `figure-stats`, `finding`, `finding-evidence`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `muted`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `pie-chart`, `pie-row`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `section-period`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
+Classes: `actions-col`, `address-list`, `allocation`, `allocation-legend`, `btn`, `cell-data`, `cell-part`, `cell-whole`, `chart-axis`, `chart-legend`, `code-list`, `compact`, `compact-table`, `count`, `danger`, `data-table`, `date-col`, `domain-charts`, `errors`, `eyebrow`, `field`, `finding`, `form`, `form-actions`, `ghost`, `help`, `icon-link`, `inline`, `key-col`, `keyboard-only`, `list-rows`, `muted`, `name-line`, `narrow-more`, `narrow-only`, `nowrap`, `one-line`, `optional-col`, `page-lede`, `primary`, `print-footer`, `print-only`, `prose-list`, `route-band-1`, `route-band-2`, `route-band-3`, `route-band-4`, `route-band-5`, `route-frame`, `route-line`, `route-map`, `route-marker`, `route-scale`, `route-swatch`, `row-actions`, `row-below`, `row-empty`, `row-group`, `row-gutter`, `row-less`, `row-main`, `row-meta`, `row-more`, `save-bar`, `section-flow`, `section-foot`, `split`, `stacked`, `subtle-link`, `table-clamp`, `table-scroll`, `tight-col`, `two-col`, `visually-hidden`, `whole`.
 
 Script hooks: `data-chart`, `data-sort`, `data-submit-busy`, `data-submit-label`, `data-submit-status`, `data-tip`.
 

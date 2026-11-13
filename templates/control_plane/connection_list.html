@@ -142,8 +142,8 @@ part's heading shows only when there is more than one.
 {% endif %}
 
 {% if connections.unlabeled %}
-  {% notice tone="warning" title="HQ does not know what these are" %}
-    <p>{% for view in connections.unlabeled %}{% with mark=forloop.last|then:".|," %}{{ view.instance.label|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Add a <code>provider</code> field to the item in 1Password, then press {% words "infrastructure.controller.refresh" "all" %}.</p>
+  {% notice tone="warning" title="Unknown connections" %}
+    <p>HQ cannot tell which service these are for: {% for view in connections.unlabeled %}{% with mark=forloop.last|then:".|," %}{{ view.instance.label|breakable:mark }}{% endwith %}{% if not forloop.last %} {% endif %}{% endfor %} Add a <code>provider</code> field to the item in 1Password, then press {% words "infrastructure.controller.refresh" "all" %}.</p>
   {% endnotice %}
 {% endif %}
 

@@ -14,11 +14,8 @@ from mcp.shared.exceptions import MCPError
 from mcp_types.version import MODERN_PROTOCOL_VERSIONS
 from pydantic import Field
 
-from hq.domains.control_plane.models import ApprovalRequest, OperationRequest
 from hq.platform.application import approval_review, approvals
-from hq.platform.application.held_answer import applying
-from hq.platform.application.refusal_status import refusal_of, refuse
-from hq.platform.application.resource_operations import serialize_operation
+from hq.platform.application.held_reads import standing
 from hq.platform.application.security import Principal
 
 IDENTIFIER = "io.modelcontextprotocol/tasks"
@@ -27,9 +24,6 @@ IDENTIFIER = "io.modelcontextprotocol/tasks"
 POLL_INTERVAL_MS = 30_000
 # The controller applies a change in seconds, so an approved one is read again soon.
 APPLYING_POLL_INTERVAL_MS = 2_000
-
-# An operation still to finish, so the call it answers is not yet done.
-_UNFINISHED = frozenset({OperationRequest.State.QUEUED, OperationRequest.State.CLAIMED})
 
 # The one answer for an id this caller did not ask for, whether or not it exists.
 _UNKNOWN = "No task of this caller has that id."
@@ -104,7 +98,8 @@ def _task(held: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
 
     approval = approvals.serialize_approval(held)
     settled = approvals.outcome(held)
-    answer, said = _standing(held, settled, approval["review_url"])
+    now = standing(held)
+    answer, said = now.answer, now.said
     task: dict[str, Any] = {
         "taskId": approval["id"],
         "status": "working" if answer is None else "completed",
@@ -118,28 +113,3 @@ def _task(held: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
         "statusMessage": f"{approval_review.asked(held)}. {said}",
     }
     return task, answer
-
-
-def _standing(held: Any, settled: dict[str, Any] | None, review_url: str) -> tuple[dict[str, Any] | None, str]:
-    """The call's answer, None until it is done, and the sentence saying where it stands."""
-
-    if settled is None:
-        return None, f"It waits for approval in HQ, at {review_url}."
-    if held.state != ApprovalRequest.State.APPROVED:
-        return settled, refusal_of(settled).message
-    queued = applying(held)
-    if queued is None:
-        return settled, "It was approved in HQ, and it is done."
-    field, operation = queued
-    if operation.state in _UNFINISHED:
-        return None, f"It was approved in HQ, at {review_url}, and HQ is applying it now."
-    # The call's own answer, carrying its operation as it ended.
-    ended = {**settled, field: serialize_operation(operation)}
-    if operation.state == OperationRequest.State.SUCCEEDED:
-        return ended, "It was approved in HQ, and it is applied."
-    failed = refuse(
-        "operation_failed",
-        "This change was approved in HQ, but applying it failed. `details` holds the operation.",
-        ended,
-    )
-    return failed, "It was approved in HQ, but applying it failed."

@@ -32,7 +32,7 @@ func (s APIToken) Format(state fmt.State, _ rune) { _, _ = io.WriteString(state,
 // one redacted.
 func (s APIToken) LogValue() slog.Value { return redactedLog(s) }
 
-// Connection One connection: its reference, the provider it is for, whether HQ may change things through it, where its credential is kept, and its settings under the one shape it arrived in.
+// Connection One connection: its reference, provider, credential store and settings, and whether HQ may change things through it.
 type Connection struct {
 	// ACME The settings a connection of the acme shape arrives with.
 	ACME *ACME `json:"acme,omitempty"`
@@ -58,7 +58,7 @@ type Connection struct {
 	// SSHTransport The settings a connection of the ssh_transport shape arrives with.
 	SSHTransport *SSHTransport `json:"ssh_transport,omitempty"`
 
-	// Store Where a connection's credential is kept, as references only: the vault, the item, and the bootstrap item a replacement is minted with.
+	// Store References to a connection's credential: its vault, its item, and the bootstrap item that mints a replacement.
 	Store Store `json:"store"`
 }
 
@@ -137,7 +137,7 @@ func (s ServiceAccount) Format(state fmt.State, _ rune) { _, _ = io.WriteString(
 // one redacted.
 func (s ServiceAccount) LogValue() slog.Value { return redactedLog(s) }
 
-// Store Where a connection's credential is kept, as references only: the vault, the item, and the bootstrap item a replacement is minted with.
+// Store References to a connection's credential: its vault, its item, and the bootstrap item that mints a replacement.
 type Store struct {
 	Bootstrap string `json:"bootstrap,omitempty"`
 	Item      string `json:"item"`

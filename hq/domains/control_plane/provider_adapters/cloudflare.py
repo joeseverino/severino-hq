@@ -162,8 +162,8 @@ class CloudflareDNSRecordSpec(ProviderModel):
         max_length=2048,
         title="Value",
         description=(
-            "An IP address for A and AAAA; a hostname for CNAME and MX; quoted text for TXT; "
-            'for CAA, such as 0 issue "letsencrypt.org".'
+            "An IP address for A and AAAA, a hostname for CNAME and MX, quoted text for TXT. "
+            'For CAA, a value such as 0 issue "letsencrypt.org".'
         ),
     )
     priority: int | None = Field(

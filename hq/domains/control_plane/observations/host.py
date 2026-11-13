@@ -257,7 +257,7 @@ class HostFilesystemRecord(ObservationRecord):
     mount: str = Field(
         pattern=FILESYSTEM_MOUNT,
         max_length=FILESYSTEM_MOUNT_LENGTH,
-        description="Where the filesystem is mounted, the name a person finds it by.",
+        description="Where the filesystem is mounted, the name you find it by.",
     )
     free_bytes: int = Field(ge=0, description="f_bavail: the bytes a process that is not root can still write.")
     total_bytes: int = Field(ge=0, description="f_blocks: the filesystem's size in bytes.")

@@ -138,8 +138,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 .chart-labels .chart-tick { text-anchor: end; transform: translateX(calc(-1 * var(--space-3))); }
 /* Every label is centered on its point, the ends too: anchored inward they would overlap their neighbors; the drawing keeps a strip either side for the overhang. Its line sits on the frame's bottom edge. */
 .chart-labels .chart-category { text-anchor: middle; transform: translateY(-.5em); }
-/* A figure an extension frames as a card of its own: <figure> carries a UA margin of 1em 40px, which would inset it from the grid. */
-.chart-card { margin: 0 0 var(--stack-gap); }
 /* A picture of a document (a receipt's scan or photo), whose size HQ does not
    store: its box is a page's shape at most most of a screen tall, drawn
    before the picture arrives so nothing moves when it does, and the picture
@@ -204,12 +202,6 @@ span.row-actions { display: inline-flex; flex-wrap: wrap; gap: var(--space-2) va
 /* stylelint-disable-next-line hq/faded-text -- a chart's marks */
 .chart-mark { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; opacity: .55; }
 .chart-mark-label { font-size: var(--text-3xs); font-weight: 600; }
-/* A share-of-one drawing, sized to itself: under `.bar-chart`'s width:100% a square viewBox would take its own width in height. */
-.pie-chart { display: block; inline-size: min(100%, 260px); block-size: auto; flex: none; }
-/* Legend beside the circle, centered together: stacked, a square pie in a wide card leaves a band of empty card. */
-.pie-row { display: flex; align-items: center; justify-content: center; gap: var(--space-10); flex-wrap: wrap; margin: var(--space-2) 0 var(--space-4); }
-.pie-row .chart-legend { flex-direction: column; align-items: flex-start; gap: var(--space-3); margin: 0; }
-.pie-chart path, .pie-chart circle { stroke: var(--surface); stroke-width: 2; paint-order: stroke; }
 .control-label { color: var(--muted); font-size: var(--text-xs); font-weight: 500; }
 .compact-table { box-shadow: none; }
 .relation-source { margin: var(--space-2) 0 0; color: var(--muted); font-size: var(--text-sm); }

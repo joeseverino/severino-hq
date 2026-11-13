@@ -21,7 +21,8 @@ the deployment.
 {% elif review.preview %}
 {% section "Scan result" lede=review_said id="procedures-proposal" edge=review.widens|yesno:"attention," %}
   {% if review.widens %}
-    {% notice tone="warning" title="This commit gives its playbooks more access" %}
+    {% notice tone="warning" title="More access" %}
+      <p>This commit gives its playbooks more access:</p>
       <ul>{% for widening in review.widens %}<li>{{ widening|breakable }}</li>{% endfor %}</ul>
     {% endnotice %}
   {% endif %}

@@ -51,7 +51,7 @@ REFRESHING = "Refreshing…"
 # could not draw in place, with the link that loads it.
 REFRESHED = "Refreshed just now."
 NEWER_READING = "A newer reading is in."
-SHOW_NEWER = "Show it"
+SHOW_NEWER = "Show the reading"
 # What a read asked of the controller says when none is arriving to take it;
 # while one is on its way, it says REFRESHING.
 READ_UNTAKEN = "Cannot refresh: {absent}"

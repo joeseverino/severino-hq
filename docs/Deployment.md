@@ -24,11 +24,11 @@ waits on a schedule.
 Each CI job is named for the `mise` task it runs, so the gates are declared
 once, as tasks in their job's file under [`mise-tasks/`](../mise-tasks) ([Development](Development.md)).
 
-Production runs the composed image (`ghcr.io/OWNER/REPO/composition`, with
-your repository's owner and name in lowercase), never the host image alone. How Compose admits, fingerprints and assembles
-the extensions is in [Plugins](Plugins.md#composition). It stamps the released
-commit into the image (`SEVERINO_HQ_REVISION`), so production reports the
-commit it runs.
+Production runs the composed image (`ghcr.io/OWNER/REPO/composition`, with your
+repository's owner and name in lowercase), never the host image alone. How
+Compose admits, fingerprints and assembles the extensions is in
+[Extensions](Plugins.md#composition). It stamps the released commit into the image
+(`SEVERINO_HQ_REVISION`), so production reports the commit it runs.
 
 Each release also pins the automation worker's image, the Dockerfile's
 `runner` stage, which CI builds, publishes and signs beside the host image
@@ -89,11 +89,11 @@ When a pull request merges, the push to `main` asks
 `tools/pipeline/proven-on-pr.sh` whether the pull request already proved it.
 That takes three things: its last CI run passed, its host image and worker
 image each carry a `dev.severino.hq.tree` label equal to the pushed commit's
-tree, and each is signed by that run. With all three, Build promotes both images by digest to
-the commit's tag, and Lint, Test and Browser
-are skipped when that run left none of them out
-([What a pull request runs](Development.md#what-a-pull-request-runs)). Short
-of all three, every gate runs again.
+tree, and each is signed by that run. With all three, Build promotes both
+images by digest to the commit's tag, and Lint, Test and Browser are skipped
+when that run left none of them out ([What a pull request
+runs](Development.md#what-a-pull-request-runs)). Short of all three, every gate
+runs again.
 
 ### Where a change stands
 
@@ -408,7 +408,7 @@ nothing. `hq-host deploy`:
    image (pulled again by digest if the host no longer has it).
 3. Prunes unused images, checks free space, pulls, and refuses the image if it
    drops an extension the running release carries that its composition does
-   not declare retired ([Plugins](Plugins.md#composition)). The public log
+   not declare retired ([Extensions](Plugins.md#composition)). The public log
    says how many; `/var/log/severino-hq/extensions.log` says which.
 4. Copies the image's own `hq-host` out, so every step after the pull is the
    new release's code.

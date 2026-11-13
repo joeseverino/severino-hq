@@ -19,7 +19,7 @@ option says: docs/Design.md, "One filter bar".
   </div>
   {% if shown or summary %}<p class="filter-bar-summary" role="status">
     {% if shown %}<span data-filter-bar-shown>{{ shown|breakable }}</span> of {{ total|measured:"shown" }}.{% endif %}
-    {% if held %}Held back: {% for phrase in held %}{% if forloop.last %}{{ phrase|breakable:"." }}{% else %}{{ phrase|breakable:forloop }}{% endif %} {% endfor %}<a href="{{ more }}">Show them</a>{% endif %}
+    {% if held %}Held back: {% for phrase in held %}{% if forloop.last %}{{ phrase|breakable:"." }}{% else %}{{ phrase|breakable:forloop }}{% endif %} {% endfor %}<a href="{{ more }}">Show all</a>{% endif %}
     {{ summary|safe }}
   </p>{% endif %}
 </form></search>

@@ -331,6 +331,44 @@ def work_kinds(*, now: datetime | None = None) -> list[WorkKind]:
     return sorted(latest.values(), key=lambda found: found.title.casefold())
 
 
+def playbook_runs(
+    *,
+    playbook: str = "",
+    host: str = "",
+    correlation: str = "",
+    state: tuple[str, ...] = (),
+    now: datetime | None = None,
+) -> QuerySet:
+    """The runs of a playbook that match, never a scan, each annotated with
+    how it is seen and what it is called, for ``run_row``.
+
+    ``playbook`` is a procedure's id, ``host`` a machine's canonical name,
+    ``correlation`` the id its asker sent, and ``state`` a ``JobState`` value
+    as seen; each left empty keeps every run.
+    """
+
+    found = (
+        OperationRequest.objects.filter(action=OperationRequest.Action.RUN)
+        .select_related("resource")
+        .annotate(seen=run_seen_state(now or timezone.now()), title=_run_title())
+    )
+    if playbook:
+        found = found.filter(resource__key=resource_key(playbook))
+    if host:
+        found = found.filter(pk__in=OperationHost.objects.filter(host=host).values("operation"))
+    if correlation:
+        found = found.filter(input__correlation=correlation)
+    if state:
+        found = found.filter(seen__in=state)
+    return found
+
+
+def run_row(operation: OperationRequest, now: datetime | None = None) -> WorkRun:
+    """A run read through ``playbook_runs`` as the row every list of work draws."""
+
+    return _run_row(operation, JobState(operation.seen), operation.title, now or timezone.now())
+
+
 def run_hosts() -> list[str]:
     """Each machine a run has acted on, by its canonical name, A to Z: a scan acts on none."""
 

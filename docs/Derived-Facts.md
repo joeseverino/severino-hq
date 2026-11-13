@@ -4,6 +4,11 @@ HQ learns the estate from its connections. An operator adds credentials; HQ
 reads what they can see, joins it, and says where each fact came from. Nothing
 HQ can read is typed in.
 
+This page is for someone adding a reading, or tracing where a fact on a page
+came from. Start with [Readings](#readings), the rules every reading keeps.
+The sections after it each take one kind of fact, and [Adoption](#adoption)
+says when HQ may act on what it read.
+
 ## Kinds of fact
 
 | | Where it lives | Who writes it |
@@ -59,9 +64,9 @@ Rules:
 - **A release that changes what a record may hold reads it again.** A kind's
   `ObservationSpec.fingerprint` hashes its schema and which of its names the
   bridge declares. The boot (`cadence.request_boot_reads`) asks a read of each
-  kind HQ holds whose fingerprint moved since the last boot, and of every
-  held kind when none is stored, so records stored under an older contract
-  are replaced, not served as current. The fingerprint is stored as the boot
+  kind HQ holds whose fingerprint moved since the last boot, or of every held
+  kind when none is stored. So records stored under an older contract are
+  replaced, never served as current. The fingerprint is stored as the boot
   asks, however the request ends, since a held record its schema refuses is
   never carried: the controller's next sweep reads it in full
   (`github_repositories.plan`).
@@ -76,17 +81,17 @@ Rules:
   provider has none.
 - **A partial read says so, as a part.** A reading read in pieces declares them
   in `parts` (`ReadingPart(name, label, requires)`, each `requires` a subset of
-  the reading's); a resource kind declares them on its provider
-  (`ProviderSpec.parts`: a zone's TLS posture and registration, the tailnet
-  policy's settings, DNS and services). A reader that cannot read one calls
-  `refuse(ctx, part, connectionRef, scope, err)` or `refuseAt(..., address,
-  err)` (`controller/providers/provider.go`); the sweep reports the kind's
-  `refused_parts` beside its records and HQ stores them
+  the reading's). A resource kind declares them on its provider
+  (`ProviderSpec.parts`), such as a zone's TLS posture and registration, or the
+  tailnet policy's settings, DNS and services. A reader that cannot read one
+  calls `refuse(ctx, part, connectionRef, scope, err)` or `refuseAt(...,
+  address, err)` (`controller/providers/provider.go`); the sweep reports the
+  kind's `refused_parts` beside its records and HQ stores them
   (`hq.domains.control_plane.reading_parts`). A refused part is never a record
   or a field, so no count includes it. The whole kind on one zone or one
   machine (`scope` its name, `address` its address) is the part `""`. A refused
-  part reads **Partly read** in credential sight, its permissions join the
-  missing-permissions finding and the mint, it is an unreadable fact on every
+  part reads **Partly read** in credential sight, and its permissions join the
+  missing-permissions finding and the mint. It is an unreadable fact on every
   subject it could hide something about, and a path hop that depends on it says
   "<part> not read: missing <permissions>". The sweep's result (`kinds`) uses
   the same words, and `Not connected` for a kind no connection reads.
@@ -106,10 +111,10 @@ Rules:
   `ProviderSpec.console`: a tailnet device links to the Tailscale admin console
   by its tailnet address.
 - **A reading can depend on what fronts a name.** `fronted_by` names a resource
-  kind whose record must front a hostname for the reading to join it by name:
-  an edge certificate serves a name only through a proxied Cloudflare record,
-  which says so through `ProviderSpec.fronts`. A zone subject is not narrowed: a
-  domain holds its certificates whatever each record does.
+  kind whose record must front a hostname for the reading to join it by name.
+  An edge certificate, for one, serves a name only through a proxied Cloudflare
+  record, which says so through `ProviderSpec.fronts`. A zone subject is not
+  narrowed: a domain holds its certificates whatever each record does.
 - **A reading can say what it supplies.** `facet` is a service facet
   (`runtime`, `dns`, `proxy`, `certificate`) or `registration` or `network`: an
   edge certificate supplies a name's certificate, a Pages project its runtime,
@@ -127,10 +132,10 @@ Rules:
   hands one hostname on (a tunnel's ingress service). `restricts` marks a gate
   in front of what it names (Cloudflare Access, an NPM access list).
 - **A reading can speak for its connection.** `facts` returns `(key, value)`
-  pairs that land on the connection's topology node (a record naming no
-  connection speaks for every connection of its provider), where a finding
-  rule reads them: AdGuard's filtering off, a plain upstream, a rewritten name
-  nobody looked up.
+  pairs that land on the connection's topology node, where a finding rule reads
+  them: AdGuard's filtering off, a plain upstream, a rewritten name nobody
+  looked up. A record naming no connection speaks for every connection of its
+  provider.
 - **One reader per kind, one kind per reader.** The contract tests enforce both
   directions. `read_by` is `controller` for a reading taken through a
   credential, and `hq` for one HQ takes itself from a keyless public registry
@@ -217,19 +222,19 @@ unit name, a systemd state word, a number or an instant. The one property of
 words is `Description`, the title the unit file gives it, read so a page names
 a unit as a person reads it rather than by a name systemd escapes
 (`run-severino\x2dhq\x2dsecrets.mount`). The repository writes every shipped
-unit's title and another package a restarting service's, and the contract
-admits one only as printable ASCII on one line, bounded, with no slash, equals
-sign or bar; any other is left out, and the page shows the unit's name.
+unit's title, and another package a restarting service's. The contract admits
+one only as bounded, printable ASCII on one line, with no slash, equals sign or
+bar. Any other is left out, and the page shows the unit's name.
 
 The second file is the same answer for each loaded service outside the shipped
-set whose `NRestarts` is above zero (`Restarting` in the same file asks systemd
-for every `*.service` it holds and keeps those), so a loop in a unit HQ does
-not ship is seen. systemd counts only its own restarts since the unit was last
-started deliberately, and a start or `systemctl reset-failed` sets the count
-back to zero. The file is empty when nothing restarts and absent when systemd
-did not answer, which the controller reads as a failed read, never as none.
-Its records carry `foreign`, set from the file they came from. A service there
-whose name or words the contract does not admit is passed over, never a
+set whose `NRestarts` is above zero, so a loop in a unit HQ does not ship is
+seen. (`Restarting` in the same file asks systemd for every `*.service` it
+holds and keeps those.) systemd counts only its own restarts since the unit was
+last started deliberately, and a start or `systemctl reset-failed` sets the
+count back to zero. The file is empty when nothing restarts and absent when
+systemd did not answer, which the controller reads as a failed read, never as
+none. Its records carry `foreign`, set from the file they came from. A service
+there whose name or words the contract does not admit is passed over, never a
 refusal of the shipped units.
 
 `HostUnitRecord` in
@@ -349,7 +354,7 @@ the topology's reading edges read `readings()`. Each kind's inventory is read
 once per page, not once per subject.
 
 A kind that could not be read and could join the subject appears as not
-readable (`unreadable_labels`), with its reason; a kind no connection could
+readable (`unreadable_labels`), with its reason. A kind no connection could
 read (`connected` false on its inventory row) yields nothing, since it is not a
 failed read.
 
@@ -551,12 +556,12 @@ the topology's own node and edge code, once per projection, without what only
 the topology page needs (health, actions, traffic).
 `relationships.relationships_for(node_id)` returns one node's edges in both
 directions, grouped by the phrase each says from that node: a service "Runs on"
-a machine, the machine "Serves" it, from one edge.
-`topology_model.RELATIONS` states each structural edge kind's phrase, inverse
-and rank once; a reading edge takes its phrase from the reading's `relation`
-and its rank from its facet (`READING_RANKS`), so what serves a name comes first
-and an overlay with no facet (Access) last. Each item is a linked entity, with
-the connection that read it and when.
+a machine, the machine "Serves" it, from one edge. `topology_model.RELATIONS`
+states each structural edge kind's phrase, inverse and rank once. A reading
+edge takes its phrase from the reading's `relation` and its rank from its facet
+(`READING_RANKS`). So what serves a name comes first, and an overlay with no
+facet (Access) last. Each item is a linked entity, with the connection that
+read it and when.
 
 A declared container is a subject keyed by `contract.container_key`, so every
 Docker reading that names it (its networks, mounts, image, runtime and compose
@@ -787,8 +792,8 @@ each workflow and each local composite action (`.github/actions/*/action.yml`),
 and the commit each tag or branch names now. It also names each workflow
 called from another repository (`owner/repo/.github/workflows/x.yml@ref`).
 
-It uses the same token with Contents: Read-only and resolves each action and tag
-once per sweep: a commit read for one repository serves the rest, and a ref
+It uses the same token with Contents: Read-only and resolves each action and
+tag once per sweep. A commit read for one repository serves the rest, and a ref
 one repository could not read is asked again by the next. A repository with no
 `.github/workflows` (GitHub answers 404) has nothing to pin, which is not a
 failed read.
@@ -815,16 +820,17 @@ request reads GitHub.
 
 ### Dependency updates
 
-A project opted in by `project.dependency_updates.set` has its repository updated
-by Renovate once a day and when somebody asks (`project.dependency_updates.run`).
+A project opted in by `project.dependency_updates.set` has its repository
+updated by Renovate once a day and when somebody asks
+(`project.dependency_updates.run`).
 `hq.platform.application.dependency_updates.plan` hands the controller the
 opted-in repositories, grouped by owner, whether a run is due, and
 `last_started_at`, the latest run HQ holds. When one is due the controller
-mints one installation token per owner, naming exactly that owner's
+mints one installation token per owner. Each names exactly that owner's
 repositories and exactly the Renovate grant (`DependencyUpdates` in
-`controller/host/grant.go`, held to `deploy/github-apps.json`),
-and writes them, mode 0600, to `dependency-updates.json` in the directory root
-gives the pass as `HQ_CONTROLLER_OUT`:
+`controller/host/grant.go`, held to `deploy/github-apps.json`). It writes them,
+mode 0600, to `dependency-updates.json` in the directory root gives the pass as
+`HQ_CONTROLLER_OUT`:
 
 ```json
 {"version":1,"runs":[{"owner":"example","repositories":["example/app"],"token":"…","expires_at":"2030-01-01T00:00:00Z"}]}
@@ -883,19 +889,17 @@ connection acts, and HQ manages through it only when its item says so
 refused kind is a missing permission.
 
 `requires` on each reading is a tuple of members of its provider's table in
-`hq.domains.control_plane.permissions`, and a part names its subset in
-`parts`. A member reads the way the provider's own screen names the
-permission, where the operator grants it, with the API's name beside it where
-the two differ (Cloudflare's dashboard says `D1 Edit` for the API's
-`D1 Write`); each table cites the provider's documentation it follows. The
-registry refuses a permission written as text, and a source test refuses one
-spelled anywhere outside the tables.
-`tools/cloudflare-observer-permissions.txt` and
+`hq.domains.control_plane.permissions`, and a part names its subset in `parts`.
+A member reads the way the provider's own screen names the permission, where
+the operator grants it. The API's name stands beside it where the two differ
+(Cloudflare's dashboard says `D1 Edit` for the API's `D1 Write`). Each table
+cites the provider's documentation it follows. The registry refuses a
+permission written as text, and a source test refuses one spelled anywhere
+outside the tables. `tools/cloudflare-observer-permissions.txt` and
 `tools/tailscale-observer-scopes.txt` hold the API name of every reading's
 `requires` plus the reads in `hq.domains.control_plane.credential_reads` that
 are not readings yet, as the minting tasks resolve them; a test keeps them
-equal. Minting is in
-[Secrets](Secrets.md#minting-observer-credentials).
+equal. Minting is in [Secrets](Secrets.md#minting-observer-credentials).
 
 ### What a credential can see
 
@@ -904,11 +908,11 @@ reading it feeds and every resource kind a sweep reads. A kind with an
 `unobserved_reason` is read by no sweep and is not listed. Each kind is one of:
 
 - **Readable**, with its record count and age.
-- **Refused**. The controller reports `refusal` on the kind: `permission` when
-  the provider refused one permission, and the page offers "Add <requires> to
-  see <label>"; `credential` when it refused the credential itself (invalid,
-  expired, locked out, used from a refused location), and the row says so once
-  for the connection.
+- **Refused**. The controller reports `refusal` on the kind. It is `permission`
+  when the provider refused one permission, and the page offers "Add <requires>
+  to see <label>". It is `credential` when the provider refused the credential
+  itself (invalid, expired, locked out, used from a refused location), and the
+  row says so once for the connection.
 - **Partly read**: read, with a declared part refused; the missing permissions
   and the parts they would show are named.
 - **Could not be read**: the read failed for another reason, shown with its

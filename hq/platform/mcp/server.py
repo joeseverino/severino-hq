@@ -62,7 +62,9 @@ INSTRUCTIONS = "\n\n".join(
         (
             'A change may answer `status: "awaiting_approval"`. That is not a refusal: nothing was written, '
             "and an operator approves or rejects it in HQ's web interface. Repeating the call returns the "
-            "same request. Report `approval.id` to the user you act for, and stop."
+            "same request. Report `approval.id` to the user you act for, and stop. Later, `get_resource` of "
+            "`approvals` reads where it stands by that id, and `get_resource` of `runs` reads a playbook's "
+            "run by its `operation.id`."
         ),
         (
             "Every capability that changes something takes an `idempotency_key` in its payload. Send a new "

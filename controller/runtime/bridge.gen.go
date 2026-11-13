@@ -1412,7 +1412,7 @@ type ConnectionRecord struct {
 	// ExpiresAt Credential expiry the probe read, when it read one.
 	ExpiresAt string `json:"expires_at,omitempty"`
 
-	// Failure Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.
+	// Failure Why a read got no usable answer: refused, the wrong service answered, or nothing answered. Empty when unclassified.
 	Failure  FailureClass `json:"failure,omitempty"`
 	Manages  bool         `json:"manages"`
 	OK       bool         `json:"ok"`
@@ -1494,7 +1494,7 @@ type DependencyUpdatesPlan struct {
 	Owners        []DependencyUpdatesOwner `json:"owners"`
 }
 
-// FailureClass Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.
+// FailureClass Why a read got no usable answer: refused, the wrong service answered, or nothing answered. Empty when unclassified.
 type FailureClass string
 
 // ForcedRead An operator's pending read request.
@@ -1762,7 +1762,7 @@ type HostFilesystemRecord struct {
 	// FreeBytes f_bavail: the bytes a process that is not root can still write.
 	FreeBytes int `json:"free_bytes"`
 
-	// Mount Where the filesystem is mounted, the name a person finds it by.
+	// Mount Where the filesystem is mounted, the name you find it by.
 	Mount string `json:"mount"`
 
 	// ReadAt When root asked the kernel.
@@ -2306,7 +2306,7 @@ type RefusedPart struct {
 	Part   ReadingPartName `json:"part"`
 	Reason string          `json:"reason"`
 
-	// Refusal Why a read got no usable answer: a refusal, an address that answered as something other than the API, or nothing answering. Empty when unclassified.
+	// Refusal Why a read got no usable answer: refused, the wrong service answered, or nothing answered. Empty when unclassified.
 	Refusal FailureClass `json:"refusal"`
 	Scope   string       `json:"scope"`
 }

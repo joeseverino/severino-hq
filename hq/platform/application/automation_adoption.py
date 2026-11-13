@@ -7,7 +7,7 @@ input type and the spec a held run is measured against are built from
 (``automation_runs``), and its digest is the generation each process checks
 its commands against, so an adoption reaches every process at its next
 request without a restart. How a commit is judged, and what holds an
-adoption for a person: docs/Architecture.md, "Adopting the procedures".
+adoption for a person: docs/Architecture.md, "Adopting the playbooks".
 
 Security properties:
 

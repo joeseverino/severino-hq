@@ -7,10 +7,6 @@
 
 @layer components {
 
-/* A field and its button on one line: the field takes the room. */
-.field-row { display: flex; gap: var(--space-4); align-items: center; margin-top: var(--space-6); }
-.field-row > input { flex: 1; min-width: 0; }
-
 /* ── Data table ─────────────────────────────────────────────────── */
 
 /* min-width: 0, or a grid or flex ancestor sizes to the table and the overflow escapes the card. */
@@ -340,30 +336,6 @@ a.scope-chip:hover, a:hover > .scope-chip { color: var(--ink); border-color: var
 .allocation-legend i { inline-size: 9px; block-size: 9px; border-radius: 2px; flex: none; align-self: center; }
 .allocation-legend b { font-weight: 650; font-feature-settings: "tnum"; }
 .allocation-legend > * > span { color: var(--muted); }
-
-/* Supporting figures under a hero, label under value, so three read as one row of facts rather than more legend entries. */
-.figure-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6) var(--space-12);
-  margin: var(--space-8) 0 0;
-  padding-top: var(--space-7);
-  border-top: 1px solid var(--line-2);
-}
-.figure-stats > span { display: inline-flex; flex-direction: column; gap: var(--space-1); }
-.figure-stats b { font-size: var(--text-lg); font-weight: 650; font-feature-settings: "tnum"; }
-.figure-stats i { font-style: normal; color: var(--muted); font-size: var(--text-xs); }
-
-/* One number a page is built around; tabular so it does not reflow as it changes. */
-.figure-hero {
-  font-size: clamp(32px, 4.4vw, 44px);
-  font-weight: 660;
-  letter-spacing: -.022em;
-  line-height: 1.05;
-  font-feature-settings: "tnum";
-  margin: 0;
-}
-.figure-hero-note { margin: var(--space-3) 0 0; font-size: var(--text-sm); color: var(--muted); font-feature-settings: "tnum"; }
 
 /* A table in a narrow box (`--box`, tables.js): rows get the room a control needs, and a column's `narrow-more` waits in the line beneath the row. */
 @container style(--box: narrow) {

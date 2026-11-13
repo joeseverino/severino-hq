@@ -387,6 +387,58 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "getApprovalsV2Forbidden": {
+        "dataValue": {
+          "error": {
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getApprovalsV2NotFound": {
+        "dataValue": {
+          "error": {
+            "code": "not_found",
+            "details": {
+              "identifier": "id"
+            },
+            "message": "No held request of yours has that id."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getApprovalsV2OK": {
+        "dataValue": {
+          "data": {
+            "answer": {},
+            "asks": "example-automation wants to carry out the playbook example.service_restart",
+            "capability": "automation.example.service_restart.run",
+            "content_fingerprint": "b6a89f32118450a586acc5756910731655bd71fb60990a8193ebb9b5bc27baac",
+            "done": false,
+            "expires_at": "2026-01-16T09:30:00+00:00",
+            "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
+            "operation": "",
+            "reason": "",
+            "requested_actor": "example-automation",
+            "requested_at": "2026-01-15T09:30:00+00:00",
+            "requested_interface": "api",
+            "resource_key": "automation-example-service_restart",
+            "resource_kind": "automation.operation",
+            "review_url": "https://hq.example.com/audit/approval/5da6c038-f78f-583a-b073-5da59683c5b1/",
+            "said": "It waits for approval in HQ, at https://hq.example.com/audit/approval/5da6c038-f78f-583a-b073-5da59683c5b1/.",
+            "state": "pending",
+            "target": ""
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "getAssetsV2OK": {
         "dataValue": {
           "data": {
@@ -864,7 +916,7 @@
                 "reason": "Reconciled",
                 "state": "healthy"
               },
-              "id": "5da6c038-f78f-583a-b073-5da59683c5b1",
+              "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
               "in_sync": true,
               "key": "forgejo-dns",
               "kind": "adguard.rewrite",
@@ -1132,6 +1184,46 @@
             "remedy": "",
             "requires": [],
             "state": "readable"
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getRunsV2Forbidden": {
+        "dataValue": {
+          "error": {
+            "code": "insufficient_scope",
+            "details": {
+              "scope": "read"
+            },
+            "message": "api principal 'example-automation' lacks 'read': its token does not carry it. Grant 'read' to the client 'example-automation' in Pocket ID, then sign in again."
+          },
+          "ok": false
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
+      "getRunsV2OK": {
+        "dataValue": {
+          "data": {
+            "approved_by": "",
+            "by": "example-agent (agent)",
+            "capability": "automation.example.package_upgrade.run",
+            "correlation": "",
+            "created_at": "2026-01-15T09:29:00+00:00",
+            "duration_seconds": null,
+            "events": [],
+            "finished_at": null,
+            "headline": "Waiting\u2026",
+            "hosts": [
+              "macbook-pro-16"
+            ],
+            "lease_until": null,
+            "operation_id": "330b177e-3075-5811-9fba-835493beb091",
+            "playbook": "example.package_upgrade",
+            "started_at": null,
+            "state": "queued",
+            "state_label": "Waiting",
+            "worker": ""
           },
           "ok": true
         },
@@ -2501,6 +2593,38 @@
         },
         "summary": "Recorded by HQ's test suite."
       },
+      "listRunsV2OK": {
+        "dataValue": {
+          "data": {
+            "count": 9,
+            "items": [
+              {
+                "approved_by": "",
+                "by": "example-agent (agent)",
+                "capability": "automation.example.package_upgrade.run",
+                "correlation": "",
+                "created_at": "2026-01-15T09:29:00+00:00",
+                "duration_seconds": null,
+                "finished_at": null,
+                "headline": "Waiting\u2026",
+                "hosts": [
+                  "macbook-pro-16"
+                ],
+                "operation_id": "330b177e-3075-5811-9fba-835493beb091",
+                "playbook": "example.package_upgrade",
+                "started_at": null,
+                "state": "queued",
+                "state_label": "Waiting"
+              }
+            ],
+            "next": null,
+            "total": 9,
+            "truncated": false
+          },
+          "ok": true
+        },
+        "summary": "Recorded by HQ's test suite."
+      },
       "listSearchV2OK": {
         "dataValue": {
           "data": {
@@ -2900,14 +3024,14 @@
               "capability": "project.create",
               "content_fingerprint": "6c9ba16f74000dd99ad2ac8841847ddd5d8537ac700937d8cae8327f35afbcfd",
               "expires_at": "2026-01-16T09:30:00+00:00",
-              "id": "43708c02-7e78-5196-bc3a-45ca0445f068",
+              "id": "69f54f70-cd66-5001-b486-bb8dbb36e914",
               "reason": "",
               "requested_actor": "example-automation",
               "requested_at": "2026-01-15T09:30:00+00:00",
               "requested_interface": "api",
               "resource_key": "",
               "resource_kind": "projects",
-              "review_url": "https://hq.example.com/audit/approval/43708c02-7e78-5196-bc3a-45ca0445f068/",
+              "review_url": "https://hq.example.com/audit/approval/69f54f70-cd66-5001-b486-bb8dbb36e914/",
               "state": "pending",
               "target": ""
             },
@@ -3470,6 +3594,15 @@
           "type": "integer"
         }
       },
+      "IdLookup": {
+        "description": "The `id` to read it for.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
       "IdempotencyKey": {
         "in": "header",
         "name": "Idempotency-Key",
@@ -3507,6 +3640,15 @@
       },
       "NodeLookup": {
         "description": "The `node` to read it for.",
+        "in": "path",
+        "name": "identifier",
+        "required": true,
+        "schema": {
+          "type": "string"
+        }
+      },
+      "OperationIdIdentifier": {
+        "description": "The record's `operation_id`, as each item of the list carries it.",
         "in": "path",
         "name": "identifier",
         "required": true,
@@ -10746,6 +10888,72 @@
         ],
         "type": "object"
       },
+      "HeldRequestRecord": {
+        "additionalProperties": false,
+        "description": "A held request you asked for: what it asks, where it stands, and once done what the call answered.",
+        "properties": {
+          "answer": {
+            "description": "What the call answered once done: its command's own answer, carrying its work as it ended, or a refusal coded `declined`, `expired`, `stale` or `operation_failed`; empty until then.",
+            "type": "object"
+          },
+          "asks": {
+            "description": "What it asks, in the sentence its card in HQ says.",
+            "type": "string"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/HeldRequest/properties/capability"
+          },
+          "content_fingerprint": {
+            "$ref": "#/components/schemas/HeldRequest/properties/content_fingerprint"
+          },
+          "done": {
+            "description": "Whether it is settled: declined, lapsed or overtaken, or approved and its work ended.",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "$ref": "#/components/schemas/HeldRequest/properties/expires_at"
+          },
+          "id": {
+            "$ref": "#/components/schemas/HeldRequest/properties/id"
+          },
+          "operation": {
+            "description": "The id of the work its call queued once approved, which `runs` reads a playbook's run by; empty while it waits, or for a call that queued nothing.",
+            "type": "string"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/HeldRequest/properties/reason"
+          },
+          "requested_actor": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_actor"
+          },
+          "requested_at": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_at"
+          },
+          "requested_interface": {
+            "$ref": "#/components/schemas/HeldRequest/properties/requested_interface"
+          },
+          "resource_key": {
+            "$ref": "#/components/schemas/HeldRequest/properties/resource_key"
+          },
+          "resource_kind": {
+            "$ref": "#/components/schemas/HeldRequest/properties/resource_kind"
+          },
+          "review_url": {
+            "$ref": "#/components/schemas/HeldRequest/properties/review_url"
+          },
+          "said": {
+            "description": "Where it stands, in a sentence.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/HeldRequest/properties/state"
+          },
+          "target": {
+            "$ref": "#/components/schemas/HeldRequest/properties/target"
+          }
+        },
+        "type": "object"
+      },
       "HopCheckPart": {
         "additionalProperties": false,
         "properties": {
@@ -15725,6 +15933,77 @@
         },
         "type": "object"
       },
+      "RunRecord": {
+        "additionalProperties": false,
+        "description": "One run whole: its row, the worker's lease while it holds it, and each task's outcome.",
+        "properties": {
+          "approved_by": {
+            "$ref": "#/components/schemas/RunRow/properties/approved_by"
+          },
+          "by": {
+            "$ref": "#/components/schemas/RunRow/properties/by"
+          },
+          "capability": {
+            "$ref": "#/components/schemas/RunRow/properties/capability"
+          },
+          "correlation": {
+            "$ref": "#/components/schemas/RunRow/properties/correlation"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/RunRow/properties/created_at"
+          },
+          "duration_seconds": {
+            "$ref": "#/components/schemas/RunRow/properties/duration_seconds"
+          },
+          "events": {
+            "description": "Each task's outcome on each machine, in the order the worker ran them.",
+            "items": {
+              "$ref": "#/components/schemas/RunTask"
+            },
+            "type": "array"
+          },
+          "finished_at": {
+            "$ref": "#/components/schemas/RunRow/properties/finished_at"
+          },
+          "headline": {
+            "$ref": "#/components/schemas/RunRow/properties/headline"
+          },
+          "hosts": {
+            "$ref": "#/components/schemas/RunRow/properties/hosts"
+          },
+          "lease_until": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When that worker must next report, or HQ reads the run as stopped; null unless one runs it."
+          },
+          "operation_id": {
+            "$ref": "#/components/schemas/RunRow/properties/operation_id"
+          },
+          "playbook": {
+            "$ref": "#/components/schemas/RunRow/properties/playbook"
+          },
+          "started_at": {
+            "$ref": "#/components/schemas/RunRow/properties/started_at"
+          },
+          "state": {
+            "$ref": "#/components/schemas/RunRow/properties/state"
+          },
+          "state_label": {
+            "$ref": "#/components/schemas/RunRow/properties/state_label"
+          },
+          "worker": {
+            "description": "The worker running it now; empty unless one is.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
       "RunRequested": {
         "additionalProperties": false,
         "description": "A dependency update run, asked for now.",
@@ -15743,6 +16022,114 @@
           "requested",
           "asked_at"
         ],
+        "type": "object"
+      },
+      "RunRow": {
+        "additionalProperties": false,
+        "properties": {
+          "approved_by": {
+            "description": "Who approved it; empty for a run that needed no approval.",
+            "type": "string"
+          },
+          "by": {
+            "description": "Who asked for it, as Jobs names them.",
+            "type": "string"
+          },
+          "capability": {
+            "description": "The command it was asked for through, by name.",
+            "type": "string"
+          },
+          "correlation": {
+            "description": "The correlation id its asker sent; empty when it sent none.",
+            "type": "string"
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/AskedAt"
+          },
+          "duration_seconds": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How long it worked for; null until it ends."
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When it ended; null while it waits or works."
+          },
+          "headline": {
+            "description": "What it is doing or how it ended, in a sentence.",
+            "type": "string"
+          },
+          "hosts": {
+            "description": "The machines it acts on, each by its name in HQ.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "operation_id": {
+            "description": "The run's id: the `operation.id` its command answered, which a read of one names.",
+            "type": "string"
+          },
+          "playbook": {
+            "description": "The id of the playbook it runs, which the `playbook` filter takes.",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When a worker took it up; null while it waits."
+          },
+          "state": {
+            "description": "Where it stands, as Jobs shows it: `queued`, `running`, `succeeded`, `failed` or `lost`. `lost` is a run whose worker stopped reporting.",
+            "type": "string"
+          },
+          "state_label": {
+            "description": "That state in the words HQ's pages say it in.",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "RunTask": {
+        "additionalProperties": false,
+        "description": "One task's outcome on one machine, as the worker reported it.",
+        "properties": {
+          "host": {
+            "description": "The machine the task ran on, as the playbook's inventory names it.",
+            "type": "string"
+          },
+          "message": {
+            "description": "What the task said; empty when it said nothing.",
+            "type": "string"
+          },
+          "outcome": {
+            "description": "How it ended: `ok`, `changed`, `skipped`, `failed` or `unreachable`.",
+            "type": "string"
+          },
+          "task": {
+            "description": "The task, by its name in the playbook.",
+            "type": "string"
+          }
+        },
         "type": "object"
       },
       "SchemaVersion": {
@@ -23741,6 +24128,110 @@
         "x-hq-resource": "analytics"
       }
     },
+    "/api/v2/resources/approvals/{identifier}/": {
+      "get": {
+        "description": "A change you asked for that waits for approval, by the `approval.id` its answer carried.",
+        "operationId": "getApprovalsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdLookup"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getApprovalsV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/HeldRequestRecord"
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getApprovalsV2Forbidden"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenRefusal"
+                }
+              }
+            },
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getApprovalsV2NotFound"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ResourceReadNotFoundRefusal"
+                }
+              }
+            },
+            "description": "Not Found."
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Held requests: one by id",
+        "tags": [
+          "hq.approvals"
+        ],
+        "x-hq-identifier": "id",
+        "x-hq-resource": "approvals"
+      }
+    },
     "/api/v2/resources/assets/": {
       "get": {
         "description": "Assets and their safe cross-domain relationships.",
@@ -26589,6 +27080,277 @@
         "x-hq-resource": "request.path"
       }
     },
+    "/api/v2/resources/runs/": {
+      "get": {
+        "description": "Every run of a playbook: its machines, who asked and approved it, its state and each task's outcome.",
+        "operationId": "listRunsV2",
+        "parameters": [
+          {
+            "description": "Only the runs of the playbook with this id; absent, every one.",
+            "explode": true,
+            "in": "query",
+            "name": "playbook",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "pattern": "^[a-z][a-z0-9_]*(?:\\.[a-z][a-z0-9_]*)*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the runs on the machine with this name, as `machines` names it; absent, every machine.",
+            "explode": true,
+            "in": "query",
+            "name": "machine",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 253,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the runs asked for with this correlation id; absent, every run.",
+            "explode": true,
+            "in": "query",
+            "name": "correlation",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 200,
+                  "minLength": 1,
+                  "pattern": "^[!-~]*$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "style": "form"
+          },
+          {
+            "description": "Only the runs in this state, as Jobs shows it; absent, every state.",
+            "explode": true,
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "queued",
+                    "running",
+                    "succeeded",
+                    "failed",
+                    "lost"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "style": "form"
+          },
+          {
+            "$ref": "#/components/parameters/PageLimit"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/listRunsV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/ResourceCollection"
+                        }
+                      ],
+                      "properties": {
+                        "items": {
+                          "items": {
+                            "$ref": "#/components/schemas/RunRow"
+                          },
+                          "type": "array"
+                        }
+                      }
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbook runs: the list",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-resource": "runs"
+      }
+    },
+    "/api/v2/resources/runs/{identifier}/": {
+      "get": {
+        "description": "One of the records Playbook runs lists, found by its `operation_id`.",
+        "operationId": "getRunsV2",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/OperationIdIdentifier"
+          },
+          {
+            "$ref": "#/components/parameters/Fields"
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getRunsV2OK"
+                  }
+                },
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/RunRecord"
+                    },
+                    "ok": {
+                      "$ref": "#/components/schemas/Outcome",
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "data"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Success."
+          },
+          "400": {
+            "$ref": "#/components/responses/InvalidInput"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "examples": {
+                  "recorded": {
+                    "$ref": "#/components/examples/getRunsV2Forbidden"
+                  }
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenRefusal"
+                }
+              }
+            },
+            "description": "Forbidden.",
+            "headers": {
+              "WWW-Authenticate": {
+                "$ref": "#/components/headers/InsufficientScopeWWWAuthenticate"
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/ResourceReadNotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/ResourceReadMethodNotAllowed"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        },
+        "summary": "Playbook runs: one by operation id",
+        "tags": [
+          "hq.jobs"
+        ],
+        "x-hq-identifier": "operation_id",
+        "x-hq-resource": "runs"
+      }
+    },
     "/api/v2/resources/search/": {
       "get": {
         "description": "Machines, services and domains, then records, matching a query.",
@@ -27174,6 +27936,7 @@
                 "readings",
                 "receipts",
                 "request.path",
+                "runs",
                 "search",
                 "services",
                 "tailnet",
@@ -27262,6 +28025,7 @@
             "required": true,
             "schema": {
               "enum": [
+                "approvals",
                 "assets",
                 "calendar",
                 "connections",
@@ -27274,6 +28038,7 @@
                 "projects",
                 "readings",
                 "relationships",
+                "runs",
                 "service.paths",
                 "services",
                 "upgrades"
@@ -27671,6 +28436,12 @@
       "kind": "nav",
       "name": "hq.search",
       "summary": "Search"
+    },
+    {
+      "description": "Changes held until an operator approves them.",
+      "kind": "nav",
+      "name": "hq.approvals",
+      "summary": "Waiting for approval"
     }
   ]
 }

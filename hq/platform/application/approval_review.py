@@ -361,6 +361,17 @@ def _named(held: ApprovalRequest) -> str:
     return (item_name(read) if isinstance(read, dict) else "") or held.target
 
 
+def title(held: ApprovalRequest) -> str:
+    """What the audit log calls ``held``: its command, and what it acts on as a
+    reader knows it, the record it names or the machines a run is bound to
+    (``automation_runs.run_subject``). The key HQ files it under links the
+    record and is never its title."""
+
+    hosts = held.baseline.get("hosts")
+    on = _named(held) if held.target else ", ".join(map(str, hosts)) if isinstance(hosts, list) else ""
+    return f"{capabilities.capability_title(held.capability)}{f' on {on}' if on else ''}"
+
+
 def _wanted(spec, held: ApprovalRequest) -> str:
     if spec is None:
         phrase = lower_first(human_label(held.capability))

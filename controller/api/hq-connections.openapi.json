@@ -10,7 +10,7 @@
     "schemas": {
       "Connection": {
         "type": "object",
-        "description": "One connection: its reference, the provider it is for, whether HQ may change things through it, where its credential is kept, and its settings under the one shape it arrived in.",
+        "description": "One connection: its reference, provider, credential store and settings, and whether HQ may change things through it.",
         "properties": {
           "ref": {
             "type": "string"
@@ -90,7 +90,7 @@
       },
       "Store": {
         "type": "object",
-        "description": "Where a connection's credential is kept, as references only: the vault, the item, and the bootstrap item a replacement is minted with.",
+        "description": "References to a connection's credential: its vault, its item, and the bootstrap item that mints a replacement.",
         "properties": {
           "vault": {
             "type": "string"

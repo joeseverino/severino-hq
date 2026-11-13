@@ -19,9 +19,9 @@ four domains behind a click and then need a second one to go anywhere.
 {% problems_about as problems %}{% include "partials/_problems.html" %}
 
 {% if not public_dns_enabled %}
-  {% notice tone="info" title="Public DNS changes are off" %}
+  {% notice tone="info" title="Read-only records" %}
     <p>
-      These records are read-only. Set
+      Public DNS changes are off, so HQ does not change these records. Set
       <code>SEVERINO_INFRASTRUCTURE_ENABLE_PUBLIC_DNS</code> to allow changes.
     </p>
   {% endnotice %}
